@@ -22,41 +22,22 @@
  *
  ******************************************************************************/
 
-$icon-font-path: '../fonts/';
-
-// bower:scss
-@import "../../bower_components/bootstrap-sass/assets/stylesheets/_bootstrap.scss";
-// endbower
-
-@import "variables";
-@import "typography";
-@import "navigation";
-@import "buttons";
-@import "badgets_labels";
-@import "sidebar";
-@import "base";
-@import "metismenu";
-@import "media";
-
-// Clear layout on print mode
-@media print {
-  nav.navbar-static-side {
-    display: none;
-  }
-
-  #page-wrapper {
-    margin: 0;
-  }
+#quick-vis {
+  display: none;
 }
 
-@import "editor";
-@import "import";
-@import "import-detail";
-@import "grid";
-@import "splitter";
-@import "visualisation";
-@import "quick-vis";
+.quick-vis-canvas {
+  //background: #0b97c4;
+  /// drgaon, alumina, ibco
+  ///variant calling, join calling
+  /// genomics england
+  // broad instruture, terra, GACK
+}
 
-.btn:disabled {
-  cursor: default;
+.quick-vis-controls {
+  padding-top: 35px;
+}
+
+#_qvis_frm_draw {
+  margin: 20px 0 20px 0;
 }
