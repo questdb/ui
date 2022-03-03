@@ -8,12 +8,29 @@ Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 
 Cypress.Commands.add("getGridRow", () => cy.get(".qg-r"));
 
-Cypress.Commands.add("runQuery", (query) =>
+Cypress.Commands.add("typeQuery", (query) =>
   cy
     .get(".monaco-editor")
     .first()
     .click()
     .focused()
     .type("{ctrl}a")
-    .type(`${query}{ctrl}{enter}`)
+    .type(`${query}`)
 );
+
+Cypress.Commands.add("runQuery", (query) =>
+  cy.typeQuery(query).type("{ctrl}{enter}")
+);
+
+Cypress.Commands.add("selectQuery", (n) =>
+  cy
+    .contains("Example queries")
+    .first()
+    .click()
+    .get('[class^="QueryPicker__Wrapper"] [class^="Row__Wrapper"]')
+    .eq(n)
+    .wait(50)
+    .click()
+);
+
+Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor textarea"));
