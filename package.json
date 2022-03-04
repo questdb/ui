@@ -1,8 +1,17 @@
 {
   "name": "ui",
-  "packageManager": "yarn@3.1.1",
+  "packageManager": "yarn@3.2.0",
   "private": true,
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "@types/node": "^17.0.21",
+    "eslint": "^8.10.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.5.1",
+    "ts-node": "^10.6.0",
+    "typescript": "^4.6.2"
+  }
 }
