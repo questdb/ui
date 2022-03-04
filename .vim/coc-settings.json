@@ -1,0 +1,16 @@
+{
+  "tsserver.tsdk": ".yarn/sdks/typescript/lib",
+  "eslint.packageManager": "yarn",
+  "eslint.nodePath": ".yarn/sdks",
+  "prettier.semi": false,
+  "prettier.prettierPath": ".yarn/sdks/prettier",
+  "workspace.workspaceFolderCheckCwd": false,
+  "coc.preferences.formatOnSaveFiletypes": [
+    "json",
+    "css",
+    "javascript",
+    "typescript",
+    "typescriptreact"
+  ],
+  "eslint.format.enable": true
+}
