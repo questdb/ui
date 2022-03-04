@@ -1,5 +1,11 @@
 {
   "compilerOptions": {
-    "esModuleInterop": true
+    "target": "ESNext",
+    "lib": ["dom", "esnext"],
+    "esModuleInterop": true,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "types": ["node"]
   }
 }
