@@ -2,7 +2,7 @@
 
 /**
  * These tests work only if `questdb/ui/assets/console-configuration.json`
- * has the same `savedconsoleConfiguration.savedQueries` as the `consoleConfiguration` in this file.
+ * has the same `.savedQueries` as does the `consoleConfiguration` in this file.
  *
  * This is required, because currently questdb/ui does not have a programmatic way to inject this data in test
  * environment
