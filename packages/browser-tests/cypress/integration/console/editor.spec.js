@@ -66,4 +66,12 @@ describe("questdb editor", () => {
     const expected = `--a\n\n${queries[0]}\n`;
     cy.getEditor().should("have.value", expected).snapshot();
   });
+
+  it("query 8", () => {
+    cy.typeQuery(`--a{enter}--b{enter}{enter}--c`);
+    cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`); // go to line 2
+    cy.selectQuery(0);
+    const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
+    cy.getEditor().should("have.value", expected).snapshot();
+  });
 });
