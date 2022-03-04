@@ -1,13 +1,5 @@
 /// <reference types="cypress" />
 
-/**
- * These tests work only if `questdb/ui/assets/console-configuration.json`
- * has the same `.savedQueries` as does the `consoleConfiguration` in this file.
- *
- * This is required, because currently questdb/ui does not have a programmatic way to inject this data in test
- * environment
- */
-
 const consoleConfiguration = {
   savedQueries: [
     { name: "query 1", value: "select * from telemetry" },
@@ -21,6 +13,14 @@ const consoleConfiguration = {
 
 describe("appendQuery", () => {
   beforeEach(() => {
+    cy.intercept(
+      {
+        method: "GET",
+        url: "http://localhost:9999/assets/console-configuration.json",
+      },
+      consoleConfiguration
+    ).as("getConsoleConfiguration");
+
     cy.visit("http://localhost:9999");
   });
 
