@@ -1,19 +1,19 @@
 /// <reference types="cypress" />
 
-const consoleConfiguration = {
-  savedQueries: [
-    { name: "query 1", value: "first query" },
-    { name: "query 1", value: "second query" },
-    {
-      name: "query 1",
-      value: "multi\nline\nquery",
-    },
-  ],
-};
-
-const queries = consoleConfiguration.savedQueries.map((query) => query.value);
-
 describe("appendQuery", () => {
+  const consoleConfiguration = {
+    savedQueries: [
+      { name: "query 1", value: "first query" },
+      { name: "query 1", value: "second query" },
+      {
+        name: "query 1",
+        value: "multi\nline\nquery",
+      },
+    ],
+  };
+
+  const queries = consoleConfiguration.savedQueries.map((query) => query.value);
+
   beforeEach(() => {
     cy.intercept(
       {
@@ -44,7 +44,7 @@ describe("appendQuery", () => {
     cy.getEditor().should("have.value", expected).snapshot();
   });
 
-  it.only("should correctly append and select query after multiple inserts", () => {
+  it("should correctly append and select query after multiple inserts", () => {
     cy.selectQuery(1);
     cy.selectQuery(2);
     cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
@@ -92,13 +92,16 @@ describe("appendQuery", () => {
 });
 
 describe("autocomplete", () => {
-  it("should work when tables list is empty", () => {
+  beforeEach(() => {
     Cypress.on("uncaught:exception", (err) => {
       // this error can be safely ignored
       if (err.message.includes("ResizeObserver loop limit exceeded")) {
         return false;
       }
     });
+  });
+
+  it("should work when tables list is empty", () => {
     cy.visit("http://localhost:9999");
     cy.typeQuery("select * from tel");
     cy.getAutocomplete().should("not.contain", "telemetry");
@@ -109,5 +112,19 @@ describe("autocomplete", () => {
     cy.getAutocomplete().should("contain", "my_secrets");
     cy.clearEditor();
     cy.runQuery('drop table "my_secrets"');
+  });
+
+  it("should work when tables list is not empty", () => {
+    cy.visit("http://localhost:9999");
+    cy.runQuery('create table "my_secrets" ("secret" string)');
+    cy.runQuery('create table "my_publics" ("public" string)');
+    cy.reload();
+    cy.typeQuery("select * from ");
+    cy.getAutocomplete().should("not.contain", "telemetry");
+    cy.getAutocomplete().should("contain", "my_secrets");
+    cy.getAutocomplete().should("contain", "my_publics");
+    cy.clearEditor();
+    cy.runQuery('drop table "my_secrets"');
+    cy.runQuery('drop table "my_publics"');
   });
 });
