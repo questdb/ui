@@ -18,9 +18,10 @@ Cypress.Commands.add("typeQuery", (query) =>
     .type(`${query}`)
 );
 
-Cypress.Commands.add("runQuery", (query) =>
-  cy.typeQuery(query).type("{ctrl}{enter}")
-);
+Cypress.Commands.add("runQuery", (query) => {
+  cy.intercept("/exec*").as("exec");
+  return cy.typeQuery(query).type("{ctrl}{enter}").wait("@exec");
+});
 
 Cypress.Commands.add("selectQuery", (n) =>
   cy
