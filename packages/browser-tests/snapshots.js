@@ -53,12 +53,5 @@ module.exports = {
     "should correctly append and select query after multiple inserts": {
       "1": "<textarea data-mprt=\"6\"\n  class=\"inputarea monaco-mouse-cursor-text\"\n  wrap=\"off\"\n  autocorrect=\"off\"\n  autocapitalize=\"off\"\n  autocomplete=\"off\"\n  spellcheck=\"false\"\n  aria-label=\"Editor content;Press Alt+F1 for Accessibility Options.\"\n  tabindex=\"0\"\n  role=\"textbox\"\n  aria-roledescription=\"editor\"\n  aria-multiline=\"true\"\n  aria-haspopup=\"false\"\n  aria-autocomplete=\"both\"\n  style=\"font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace; font-weight: normal; font-size: 14px; font-feature-settings: &quot;liga&quot; 0, &quot;calt&quot; 0; line-height: 19px; letter-spacing: 0px; top: 38px; left: 169px; width: 1px; height: 1px;\"></textarea>"
     }
-  },
-  "Editor": {
-    "appendQuery": {
-      "should correctly append and select query after multiple inserts": {
-        "1": "<textarea data-mprt=\"6\"\n  class=\"inputarea monaco-mouse-cursor-text\"\n  wrap=\"off\"\n  autocorrect=\"off\"\n  autocapitalize=\"off\"\n  autocomplete=\"off\"\n  spellcheck=\"false\"\n  aria-label=\"Editor content;Press Alt+F1 for Accessibility Options.\"\n  tabindex=\"0\"\n  role=\"textbox\"\n  aria-roledescription=\"editor\"\n  aria-multiline=\"true\"\n  aria-haspopup=\"false\"\n  aria-autocomplete=\"both\"\n  style=\"font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace; font-weight: normal; font-size: 14px; font-feature-settings: &quot;liga&quot; 0, &quot;calt&quot; 0; line-height: 19px; letter-spacing: 0px; top: 38px; left: 169px; width: 1px; height: 1px;\"></textarea>"
-      }
-    }
   }
 }
