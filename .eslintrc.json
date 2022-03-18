@@ -3,5 +3,8 @@
   "plugins": ["prettier"],
   "rules": {
     "prettier/prettier": ["warn"]
+  },
+  "env": {
+    "es6": true
   }
 }
