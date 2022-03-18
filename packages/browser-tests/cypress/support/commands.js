@@ -23,6 +23,8 @@ Cypress.Commands.add("runQuery", (query) => {
   return cy.typeQuery(query).type("{ctrl}{enter}").wait("@exec");
 });
 
+Cypress.Commands.add("clearEditor", () => cy.typeQuery("{ctrl}a{backspace}"));
+
 Cypress.Commands.add("selectQuery", (n) =>
   cy
     .contains("Example queries")
@@ -35,3 +37,7 @@ Cypress.Commands.add("selectQuery", (n) =>
 );
 
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor textarea"));
+
+Cypress.Commands.add("getAutocomplete", () =>
+  cy.get('[widgetid="editor.widget.suggestWidget"]')
+);
