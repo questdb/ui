@@ -128,3 +128,25 @@ describe("autocomplete", () => {
     cy.runQuery('drop table "my_publics"');
   });
 });
+
+describe("errors", () => {
+  before(() => {
+    cy.visit("http://localhost:9999");
+  });
+
+  beforeEach(() => {
+    cy.clearEditor();
+  });
+
+  it("should mark '(200000)' as error", () => {
+    const query = `create table test (\ncol symbol index CAPACITY (200000)`;
+    cy.runQuery(query);
+    cy.getErrorMarker().snapshot();
+  });
+
+  it("should mark 'telemetry' as error", () => {
+    const query = `CREATE TABLE 'telemetry' (id LONG256)`;
+    cy.runQuery(query);
+    cy.getErrorMarker().snapshot();
+  });
+});
