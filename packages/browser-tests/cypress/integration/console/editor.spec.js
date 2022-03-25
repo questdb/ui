@@ -128,3 +128,15 @@ describe("autocomplete", () => {
     cy.runQuery('drop table "my_publics"');
   });
 });
+
+describe("errors", () => {
+  it.only("should work when tables list is empty", () => {
+    cy.visit("http://localhost:9999");
+    const query = `
+create table test (
+ts timestamp,
+col symbol index CAPACITY (200000),
+) timestamp (ts) partition by hour;{downArrow}{backspace}`.trim();
+    cy.runQuery(query);
+  });
+});
