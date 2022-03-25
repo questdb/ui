@@ -130,13 +130,23 @@ describe("autocomplete", () => {
 });
 
 describe("errors", () => {
-  it.only("should work when tables list is empty", () => {
+  before(() => {
     cy.visit("http://localhost:9999");
-    const query = `
-create table test (
-ts timestamp,
-col symbol index CAPACITY (200000),
-) timestamp (ts) partition by hour;{downArrow}{backspace}`.trim();
+  });
+
+  beforeEach(() => {
+    cy.clearEditor();
+  });
+
+  it("should mark '(200000)' as error", () => {
+    const query = `create table test (\ncol symbol index CAPACITY (200000)`;
     cy.runQuery(query);
+    cy.getErrorMarker().snapshot();
+  });
+
+  it("should mark 'telemetry' as error", () => {
+    const query = `CREATE TABLE 'telemetry' (id LONG256)`;
+    cy.runQuery(query);
+    cy.getErrorMarker().snapshot();
   });
 });
