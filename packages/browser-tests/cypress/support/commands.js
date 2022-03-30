@@ -6,7 +6,7 @@ Cypress.Commands.add("getGrid", () =>
 
 Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 
-Cypress.Commands.add("getGridRow", () => cy.get(".qg-r"));
+Cypress.Commands.add("getGridRow", (n) => cy.get(".qg-r").eq(n));
 
 Cypress.Commands.add("typeQuery", (query) =>
   cy

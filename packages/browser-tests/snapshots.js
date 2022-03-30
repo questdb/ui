@@ -52,14 +52,20 @@ module.exports = {
     },
     "should correctly append and select query after multiple inserts": {
       "1": "<textarea data-mprt=\"6\"\n  class=\"inputarea monaco-mouse-cursor-text\"\n  wrap=\"off\"\n  autocorrect=\"off\"\n  autocapitalize=\"off\"\n  autocomplete=\"off\"\n  spellcheck=\"false\"\n  aria-label=\"Editor content;Press Alt+F1 for Accessibility Options.\"\n  tabindex=\"0\"\n  role=\"textbox\"\n  aria-roledescription=\"editor\"\n  aria-multiline=\"true\"\n  aria-haspopup=\"false\"\n  aria-autocomplete=\"both\"\n  style=\"font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace; font-weight: normal; font-size: 14px; font-feature-settings: &quot;liga&quot; 0, &quot;calt&quot; 0; line-height: 19px; letter-spacing: 0px; top: 38px; left: 169px; width: 1px; height: 1px;\"></textarea>"
+    },
+    "should correctly append and select query when position is first line which is not empty": {
+      "1": "<textarea data-mprt=\"6\"\n  class=\"inputarea monaco-mouse-cursor-text\"\n  wrap=\"off\"\n  autocorrect=\"off\"\n  autocapitalize=\"off\"\n  autocomplete=\"off\"\n  spellcheck=\"false\"\n  aria-label=\"Editor content;Press Alt+F1 for Accessibility Options.\"\n  tabindex=\"0\"\n  role=\"textbox\"\n  aria-roledescription=\"editor\"\n  aria-multiline=\"true\"\n  aria-haspopup=\"false\"\n  aria-autocomplete=\"both\"\n  style=\"font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace; font-weight: normal; font-size: 14px; font-feature-settings: &quot;liga&quot; 0, &quot;calt&quot; 0; line-height: 19px; letter-spacing: 0px; top: 38px; left: 160px; width: 1px; height: 1px;\"></textarea>"
+    },
+    "should correctly append and select query when position is first line which is not empty and there's more content after": {
+      "1": "<textarea data-mprt=\"6\"\n  class=\"inputarea monaco-mouse-cursor-text\"\n  wrap=\"off\"\n  autocorrect=\"off\"\n  autocapitalize=\"off\"\n  autocomplete=\"off\"\n  spellcheck=\"false\"\n  aria-label=\"Editor content;Press Alt+F1 for Accessibility Options.\"\n  tabindex=\"0\"\n  role=\"textbox\"\n  aria-roledescription=\"editor\"\n  aria-multiline=\"true\"\n  aria-haspopup=\"false\"\n  aria-autocomplete=\"both\"\n  style=\"font-family: SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace; font-weight: normal; font-size: 14px; font-feature-settings: &quot;liga&quot; 0, &quot;calt&quot; 0; line-height: 19px; letter-spacing: 0px; top: 38px; left: 160px; width: 1px; height: 1px;\"></textarea>"
     }
   },
   "errors": {
-    "should work when tables list is empty": {
-      "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:252px;width:67px;height:19px;\"></div>"
-    },
     "should mark 'telemetry' as error": {
       "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:109px;width:93px;height:19px;\"></div>"
+    },
+    "should mark '(200000)' as error": {
+      "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:252px;width:67px;height:19px;\"></div>"
     }
   }
 }

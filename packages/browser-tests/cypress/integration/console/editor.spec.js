@@ -61,6 +61,20 @@ describe("appendQuery", () => {
     cy.getEditor().should("have.value", expected).snapshot();
   });
 
+  it("should correctly append and select query when position is first line which is not empty", () => {
+    cy.typeQuery(`--a`);
+    cy.selectQuery(0);
+    const expected = `--a\n\n${queries[0]}\n`;
+    cy.getEditor().should("have.value", expected).snapshot();
+  });
+
+  it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
+    cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`);
+    cy.selectQuery(0);
+    const expected = `--a\n\n${queries[0]}\n\n--b`;
+    cy.getEditor().should("have.value", expected).snapshot();
+  });
+
   it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}`);
     cy.selectQuery(0);
@@ -88,6 +102,26 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
     cy.getEditor().should("have.value", expected).snapshot();
+  });
+});
+
+describe("&query URL param", () => {
+  beforeEach(() => {
+    Cypress.on("uncaught:exception", (err) => {
+      // this error can be safely ignored
+      if (err.message.includes("ResizeObserver loop limit exceeded")) {
+        return false;
+      }
+    });
+  });
+
+  it("should append and select query", () => {
+    cy.visit("http://localhost:9999");
+    cy.clearEditor();
+    cy.runQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
+    const query = encodeURIComponent("select x+1 from long_sequence(1)");
+    cy.visit(`http://localhost:9999/?query=${query}&executeQuery=true`);
+    cy.getGridRow(0).should("contain", "2");
   });
 });
 
