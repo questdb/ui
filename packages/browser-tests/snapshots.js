@@ -65,7 +65,15 @@ module.exports = {
       "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:109px;width:93px;height:19px;\"></div>"
     },
     "should mark '(200000)' as error": {
-      "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:252px;width:67px;height:19px;\"></div>"
+      "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:235px;width:67px;height:19px;\"></div>"
+    }
+  },
+  "&query URL param": {
+    "should append and select single line query": {
+      "1": "<div class=\"qg-r qg-r-active\"\n  tabindex=\"0\"\n  style=\"top: 0px; height: 28px; display: flex;\">\n  <div class=\"qg-c qg-w0 qg-c-active\">2</div>\n</div>"
+    },
+    "should append and select multiline query": {
+      "1": "<div class=\"qg-r qg-r-active\"\n  tabindex=\"0\"\n  style=\"top: 0px; height: 28px; display: flex;\">\n  <div class=\"qg-c qg-w0 qg-c-active\">2</div>\n</div>"
     }
   }
 }

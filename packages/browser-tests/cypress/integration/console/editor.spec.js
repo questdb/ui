@@ -1,5 +1,7 @@
 /// <reference types="cypress" />
 
+const baseUrl = "http://localhost:9999"
+
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
@@ -18,12 +20,12 @@ describe("appendQuery", () => {
     cy.intercept(
       {
         method: "GET",
-        url: "http://localhost:9999/assets/console-configuration.json",
+        url: `${baseUrl}/assets/console-configuration.json`,
       },
       consoleConfiguration
     ).as("getConsoleConfiguration");
 
-    cy.visit("http://localhost:9999");
+    cy.visit(baseUrl);
   });
 
   it("should append and select query", () => {
@@ -115,13 +117,21 @@ describe("&query URL param", () => {
     });
   });
 
-  it("should append and select query", () => {
-    cy.visit("http://localhost:9999");
+  it("should append and select single line query", () => {
+    cy.visit(baseUrl);
     cy.clearEditor();
     cy.runQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
-    cy.visit(`http://localhost:9999/?query=${query}&executeQuery=true`);
-    cy.getGridRow(0).should("contain", "2");
+    cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
+    cy.getGridRow(0).should("contain", "2").snapshot();
+  });
+
+  it("should append and select multiline query", () => {
+    cy.visit(baseUrl);
+    cy.runQuery(`select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${'{upArrow}'.repeat(5)}`);
+    const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
+    cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
+    cy.getGridRow(0).should("contain", "2").snapshot();
   });
 });
 
@@ -136,7 +146,7 @@ describe("autocomplete", () => {
   });
 
   it("should work when tables list is empty", () => {
-    cy.visit("http://localhost:9999");
+    cy.visit(baseUrl);
     cy.typeQuery("select * from tel");
     cy.getAutocomplete().should("not.contain", "telemetry");
     cy.getAutocomplete().should("contain", "TABLE");
@@ -149,7 +159,7 @@ describe("autocomplete", () => {
   });
 
   it("should work when tables list is not empty", () => {
-    cy.visit("http://localhost:9999");
+    cy.visit(baseUrl);
     cy.runQuery('create table "my_secrets" ("secret" string)');
     cy.runQuery('create table "my_publics" ("public" string)');
     cy.reload();
@@ -165,7 +175,7 @@ describe("autocomplete", () => {
 
 describe("errors", () => {
   before(() => {
-    cy.visit("http://localhost:9999");
+    cy.visit(baseUrl);
   });
 
   beforeEach(() => {
