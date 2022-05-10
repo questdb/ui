@@ -2,7 +2,7 @@ import React from "react";
 
 type Level = 1 | 2 | 3 | 4 | 5;
 
-type Props = {
+export type Props = {
   level: Level;
   children?: React.ReactNode;
 };
