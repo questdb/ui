@@ -22,19 +22,27 @@ export type Props = {
   prefixIcon?: React.ReactNode;
 };
 
-const Prefix = styled.div`
+const Prefix = styled.div<{ disabled?: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-right: 0.5rem;
+  filter: ${({ disabled }) => (disabled ? "grayscale(100%)" : "none")};
+  opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
 `;
 
 export const Button: React.FunctionComponent<Props> = React.forwardRef(
-  ({ as, children, prefixIcon, ...props }, ref) => {
+  ({ as, children, prefixIcon, disabled, ...props }, ref) => {
     const type = as === "button" ? { type: "button" } : {};
     return (
-      <StyledButton ref={ref} as={as ?? "button"} {...props} {...type}>
-        {prefixIcon && <Prefix>{prefixIcon}</Prefix>}
+      <StyledButton
+        ref={ref}
+        as={as ?? "button"}
+        disabled={disabled}
+        {...props}
+        {...type}
+      >
+        {prefixIcon && <Prefix disabled={disabled}>{prefixIcon}</Prefix>}
         {children}
       </StyledButton>
     );
