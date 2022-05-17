@@ -3524,6 +3524,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@storybook/manager-webpack5", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
             ["@storybook/react", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
             ["@storybook/testing-library", "npm:0.0.11"],\
+            ["@styled-icons/remix-line", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:10.18.0"],\
             ["@types/node", "npm:17.0.33"],\
             ["@types/react", "npm:17.0.2"],\
             ["@types/react-dom", "npm:17.0.17"],\
@@ -6163,6 +6164,62 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             "@types/react",\
             "react-dom",\
             "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@styled-icons/remix-line", [\
+        ["npm:10.18.0", {\
+          "packageLocation": "./.yarn/cache/@styled-icons-remix-line-npm-10.18.0-3ac055e198-c8b3ac1743.zip/node_modules/@styled-icons/remix-line/",\
+          "packageDependencies": [\
+            ["@styled-icons/remix-line", "npm:10.18.0"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:10.18.0", {\
+          "packageLocation": "./.yarn/__virtual__/@styled-icons-remix-line-virtual-1da6a0f118/0/cache/@styled-icons-remix-line-npm-10.18.0-3ac055e198-c8b3ac1743.zip/node_modules/@styled-icons/remix-line/",\
+          "packageDependencies": [\
+            ["@styled-icons/remix-line", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:10.18.0"],\
+            ["@babel/runtime", "npm:7.17.9"],\
+            ["@styled-icons/styled-icon", "virtual:1da6a0f118900d997545cbdc6b6ae8749df1508c11a4038ce2c5d730ed767be1eeb8fe4cc58749b21404326909557cf02710408d39ba06c6932b164fed92dc39#npm:10.6.3"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/styled-components", "npm:5.1.25"],\
+            ["react", "npm:17.0.2"],\
+            ["styled-components", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:5.3.5"]\
+          ],\
+          "packagePeers": [\
+            "@types/react",\
+            "@types/styled-components",\
+            "react",\
+            "styled-components"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@styled-icons/styled-icon", [\
+        ["npm:10.6.3", {\
+          "packageLocation": "./.yarn/cache/@styled-icons-styled-icon-npm-10.6.3-fc5c43d548-6c60797f77.zip/node_modules/@styled-icons/styled-icon/",\
+          "packageDependencies": [\
+            ["@styled-icons/styled-icon", "npm:10.6.3"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:1da6a0f118900d997545cbdc6b6ae8749df1508c11a4038ce2c5d730ed767be1eeb8fe4cc58749b21404326909557cf02710408d39ba06c6932b164fed92dc39#npm:10.6.3", {\
+          "packageLocation": "./.yarn/__virtual__/@styled-icons-styled-icon-virtual-a9e5c850fc/0/cache/@styled-icons-styled-icon-npm-10.6.3-fc5c43d548-6c60797f77.zip/node_modules/@styled-icons/styled-icon/",\
+          "packageDependencies": [\
+            ["@styled-icons/styled-icon", "virtual:1da6a0f118900d997545cbdc6b6ae8749df1508c11a4038ce2c5d730ed767be1eeb8fe4cc58749b21404326909557cf02710408d39ba06c6932b164fed92dc39#npm:10.6.3"],\
+            ["@babel/runtime", "npm:7.17.9"],\
+            ["@emotion/is-prop-valid", "npm:0.8.8"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/styled-components", "npm:5.1.25"],\
+            ["react", "npm:17.0.2"],\
+            ["styled-components", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:5.3.5"]\
+          ],\
+          "packagePeers": [\
+            "@types/react",\
+            "@types/styled-components",\
+            "react",\
+            "styled-components"\
           ],\
           "linkType": "HARD"\
         }]\
