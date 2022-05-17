@@ -1471,7 +1471,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.0.0, @babel/runtime@npm:^7.10.2, @babel/runtime@npm:^7.12.5, @babel/runtime@npm:^7.14.8, @babel/runtime@npm:^7.17.8, @babel/runtime@npm:^7.3.1, @babel/runtime@npm:^7.5.0, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.7.2, @babel/runtime@npm:^7.7.6, @babel/runtime@npm:^7.8.4":
+"@babel/runtime@npm:^7.0.0, @babel/runtime@npm:^7.10.2, @babel/runtime@npm:^7.10.5, @babel/runtime@npm:^7.12.5, @babel/runtime@npm:^7.14.8, @babel/runtime@npm:^7.17.8, @babel/runtime@npm:^7.3.1, @babel/runtime@npm:^7.5.0, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.7.2, @babel/runtime@npm:^7.7.6, @babel/runtime@npm:^7.8.4":
   version: 7.17.9
   resolution: "@babel/runtime@npm:7.17.9"
   dependencies:
@@ -1673,7 +1673,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@emotion/is-prop-valid@npm:0.8.8, @emotion/is-prop-valid@npm:^0.8.6":
+"@emotion/is-prop-valid@npm:0.8.8, @emotion/is-prop-valid@npm:^0.8.6, @emotion/is-prop-valid@npm:^0.8.7":
   version: 0.8.8
   resolution: "@emotion/is-prop-valid@npm:0.8.8"
   dependencies:
@@ -2143,6 +2143,7 @@ __metadata:
     "@storybook/manager-webpack5": ^6.4.22
     "@storybook/react": ^6.4.22
     "@storybook/testing-library": ^0.0.11
+    "@styled-icons/remix-line": ^10.18.0
     "@types/node": ^17.0.31
     "@types/react": 17.0.33
     "@types/react-dom": 17.0.17
@@ -3595,6 +3596,32 @@ __metadata:
     react: ^16.8.0 || ^17.0.0
     react-dom: ^16.8.0 || ^17.0.0
   checksum: acc403f6f98b61f202b4cf3fd054696089d27c025d7630c413ab564f3a477239398258a3be075b23df504a064f4f31310ce6d19cdb3fdb859e53b701f2090a65
+  languageName: node
+  linkType: hard
+
+"@styled-icons/remix-line@npm:^10.18.0":
+  version: 10.18.0
+  resolution: "@styled-icons/remix-line@npm:10.18.0"
+  dependencies:
+    "@babel/runtime": ^7.10.5
+    "@styled-icons/styled-icon": ^10.6.0
+  peerDependencies:
+    react: "*"
+    styled-components: "*"
+  checksum: c8b3ac1743e779c57fd87eca0d92332bd552b9692b781e237d3ae1cd6db838d47df3cc2b4ad49b2aeccc97b5f9917ff1169fd3b7c0cd444c67dfea56b620c220
+  languageName: node
+  linkType: hard
+
+"@styled-icons/styled-icon@npm:^10.6.0":
+  version: 10.6.3
+  resolution: "@styled-icons/styled-icon@npm:10.6.3"
+  dependencies:
+    "@babel/runtime": ^7.10.5
+    "@emotion/is-prop-valid": ^0.8.7
+  peerDependencies:
+    react: "*"
+    styled-components: ">=4.1.0 <6"
+  checksum: 6c60797f77446843205f8d218b5308d23b065c2db57fcf648216cb4cdaaf66763425b75d90379aa3facfaa913c2d0a50e3bd847c4bcdbbaa2add1a83d5a4caaf
   languageName: node
   linkType: hard
 
