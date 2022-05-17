@@ -1,5 +1,7 @@
 import React from "react";
 
+import { permutate } from "../../utils/permutate";
+import { permutateDecorator } from "../../utils/permutate-decorator";
 import { Heading } from "./";
 import type { Props } from "./";
 
@@ -8,18 +10,14 @@ export default {
   component: Heading,
 };
 
-const Template = (args: Props) => (
-  <Heading children={`Level ${args.level}`} {...args} />
-);
+const Template = (args: Props) => <Heading {...args} />;
 
-type Story = {
-  (args: Props): JSX.Element;
-  args?: Props;
+const permutations = permutate({ level: [1, 2, 3, 4, 5, 6] });
+
+export const All = Template.bind({});
+
+All.args = {
+  children: "Heading",
 };
 
-export const Level1: Story = Template.bind({});
-
-Level1.args = {
-  level: 1,
-  children: "Level 1",
-};
+All.decorators = [permutateDecorator(permutations)];
