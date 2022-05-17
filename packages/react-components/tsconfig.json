@@ -15,6 +15,11 @@
     "isolatedModules": true,
     "jsx": "react"
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/*.stories.ts", "**/*.stories.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx",
+    "src/utils/**/*.ts",
+    "src/utils/**/*.tsx"
+  ]
 }
