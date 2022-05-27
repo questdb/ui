@@ -9,13 +9,7 @@ Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 Cypress.Commands.add("getGridRow", (n) => cy.get(".qg-r").eq(n));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy
-    .get(".monaco-editor")
-    .first()
-    .click()
-    .focused()
-    .type("{ctrl}a")
-    .type(`${query}`)
+  cy.get(".monaco-editor").first().click().focused().type("{ctrl}a").type(query)
 );
 
 Cypress.Commands.add("runQuery", (query) => {
@@ -43,3 +37,9 @@ Cypress.Commands.add("getAutocomplete", () =>
 );
 
 Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
+
+Cypress.Commands.add("F9", () =>
+  cy.getEditor().trigger("keydown", {
+    keyCode: 120,
+  })
+);
