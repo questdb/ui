@@ -223,5 +223,10 @@ describe("running query with F9", () => {
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;{upArrow}{upArrow}{end}{leftArrow}"
     ).F9();
     cy.getGridRow(0).should("contain", "3");
+    cy.clearEditor();
+    cy.typeQuery(
+      "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2{upArrow}{upArrow}{end}{leftArrow}"
+    ).F9();
+    cy.getGridRow(0).should("contain", "3");
   });
 });
