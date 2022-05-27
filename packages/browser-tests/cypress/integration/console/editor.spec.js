@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999"
+const baseUrl = "http://localhost:9999";
 
 describe("appendQuery", () => {
   const consoleConfiguration = {
@@ -128,7 +128,11 @@ describe("&query URL param", () => {
 
   it("should append and select multiline query", () => {
     cy.visit(baseUrl);
-    cy.runQuery(`select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${'{upArrow}'.repeat(5)}`);
+    cy.runQuery(
+      `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
+        5
+      )}`
+    );
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
     cy.getGridRow(0).should("contain", "2").snapshot();
@@ -148,8 +152,7 @@ describe("autocomplete", () => {
   it("should work when tables list is empty", () => {
     cy.visit(baseUrl);
     cy.typeQuery("select * from tel");
-    cy.getAutocomplete().should("not.contain", "telemetry");
-    cy.getAutocomplete().should("contain", "TABLE");
+    cy.getAutocomplete().should("not.be.visible");
     cy.clearEditor();
     cy.runQuery('create table "my_secrets" ("secret" string)');
     cy.typeQuery("select * from my_");
@@ -192,5 +195,33 @@ describe("errors", () => {
     const query = `CREATE TABLE 'telemetry' (id LONG256)`;
     cy.runQuery(query);
     cy.getErrorMarker().snapshot();
+  });
+});
+
+describe("running query with F9", () => {
+  beforeEach(() => {
+    Cypress.on("uncaught:exception", (err) => {
+      // this error can be safely ignored
+      if (err.message.includes("ResizeObserver loop limit exceeded")) {
+        return false;
+      }
+    });
+  });
+
+  it("should execute correct query, when text cursor is on query which has no semicolon", () => {
+    cy.visit(baseUrl);
+    cy.typeQuery("select * from long_sequence(1)").F9();
+    cy.getGridRow(0).should("contain", "1");
+    cy.clearEditor();
+    cy.typeQuery(`select * from long_sequence(2);{leftArrow}`).F9();
+    cy.wait(100).getGridRow(1).should("contain", "2");
+  });
+
+  it("should execute correct query, when multiple queries exist", () => {
+    cy.visit(baseUrl);
+    cy.typeQuery(
+      "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;{upArrow}{upArrow}{end}{leftArrow}"
+    ).F9();
+    cy.getGridRow(0).should("contain", "3");
   });
 });
