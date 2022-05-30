@@ -177,7 +177,7 @@ describe("autocomplete", () => {
   });
 
   describe.only("columns", () => {
-    it("should work when tables list is empty", () => {
+    it("should display columns autocomplete for trivial select query", () => {
       cy.visit(baseUrl);
       cy.runQuery(
         'create table if not exists "socks" ("fabric" string, "size" int)'
