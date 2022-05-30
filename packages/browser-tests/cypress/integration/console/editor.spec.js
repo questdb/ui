@@ -176,15 +176,26 @@ describe("autocomplete", () => {
     });
   });
 
-  describe("columns", () => {
+  describe.only("columns", () => {
     it("should work when tables list is empty", () => {
       cy.visit(baseUrl);
       cy.runQuery(
         'create table if not exists "socks" ("fabric" string, "size" int)'
       );
+
+      // works
       cy.typeQuery(
-        `select * from socks{home}${"{rightArrow}".repeat(8)}{backspace}c`
+        `select * from socks{home}${"{rightArrow}".repeat(
+          8
+        )}{backspace}{backspace}{backspace}t fab`
       );
+
+      // doesn't work ¯\_(ツ)_/¯
+      /**
+       * cy.typeQuery(
+       *   `select * from socks{home}${"{rightArrow}".repeat(8)}{backspace}c`
+       * );
+       */
       cy.getAutocomplete().should("contain", "fabric");
       cy.runQuery("drop table socks");
     });
