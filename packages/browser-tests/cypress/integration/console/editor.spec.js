@@ -149,30 +149,45 @@ describe("autocomplete", () => {
     });
   });
 
-  it("should work when tables list is empty", () => {
-    cy.visit(baseUrl);
-    cy.typeQuery("select * from tel");
-    cy.getAutocomplete().should("not.be.visible");
-    cy.clearEditor();
-    cy.runQuery('create table "my_secrets" ("secret" string)');
-    cy.typeQuery("select * from my_");
-    cy.getAutocomplete().should("contain", "my_secrets");
-    cy.clearEditor();
-    cy.runQuery('drop table "my_secrets"');
+  describe("tables", () => {
+    it("should work when tables list is empty", () => {
+      cy.visit(baseUrl);
+      cy.typeQuery("select * from tel");
+      cy.getAutocomplete().should("not.contain", "telemetry");
+      cy.clearEditor();
+      cy.runQuery('create table "my_secrets" ("secret" string)');
+      cy.typeQuery("select * from my_");
+      cy.getAutocomplete().should("contain", "my_secrets");
+      cy.clearEditor();
+      cy.runQuery('drop table "my_secrets"');
+    });
+
+    it("should work when tables list is not empty", () => {
+      cy.visit(baseUrl);
+      cy.runQuery('create table if not exists "my_secrets" ("secret" string)');
+      cy.runQuery('create table if not exists "my_publics" ("public" string)');
+      cy.typeQuery("select * from ");
+      cy.getAutocomplete().should("not.contain", "telemetry");
+      cy.getAutocomplete().should("contain", "my_secrets");
+      cy.getAutocomplete().should("contain", "my_publics");
+      cy.clearEditor();
+      cy.runQuery('drop table "my_secrets"');
+      cy.runQuery('drop table "my_publics"');
+    });
   });
 
-  it("should work when tables list is not empty", () => {
-    cy.visit(baseUrl);
-    cy.runQuery('create table "my_secrets" ("secret" string)');
-    cy.runQuery('create table "my_publics" ("public" string)');
-    cy.reload();
-    cy.typeQuery("select * from ");
-    cy.getAutocomplete().should("not.contain", "telemetry");
-    cy.getAutocomplete().should("contain", "my_secrets");
-    cy.getAutocomplete().should("contain", "my_publics");
-    cy.clearEditor();
-    cy.runQuery('drop table "my_secrets"');
-    cy.runQuery('drop table "my_publics"');
+  describe("columns", () => {
+    it("should work when tables list is empty", () => {
+      cy.visit(baseUrl);
+      cy.runQuery(
+        'create table if not exists "socks" ("fabric" string, "size" int)'
+      );
+      cy.typeQuery(
+        `select * from socks{home}${"{rightArrow}".repeat(8)}{backspace}c`
+      );
+      cy.getAutocomplete().should("contain", "fabric");
+      cy.runQuery("drop table socks");
+    });
   });
 });
 

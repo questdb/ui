@@ -33,7 +33,7 @@ Cypress.Commands.add("selectQuery", (n) =>
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor textarea"));
 
 Cypress.Commands.add("getAutocomplete", () =>
-  cy.get('[widgetid="editor.widget.suggestWidget"]')
+  cy.get(".editor-widget.suggest-widget .tree")
 );
 
 Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
