@@ -192,10 +192,10 @@ describe("autocomplete", () => {
 
       // doesn't work ¯\_(ツ)_/¯
       /**
-       * cy.typeQuery(
-       *   `select * from socks{home}${"{rightArrow}".repeat(8)}{backspace}c`
-       * );
-       */
+      cy.typeQuery(
+        `select * from socks{home}${"{rightArrow}".repeat(8)}{backspace}fab`
+      );
+      */
       cy.getAutocomplete().should("contain", "fabric");
       cy.runQuery("drop table socks");
     });
