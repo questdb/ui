@@ -35,7 +35,7 @@ import styled from "styled-components"
 
 import { TransitionDuration } from "../../components"
 import { ModalId } from "../../consts"
-import { actions, selectors } from "store"
+import { actions, selectors } from "../../store"
 
 import PowerUser from "./PowerUser"
 

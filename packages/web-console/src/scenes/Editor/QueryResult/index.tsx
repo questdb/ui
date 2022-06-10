@@ -30,8 +30,8 @@ import {
   Text,
   TransitionDuration,
 } from "../../../components"
-import { color } from "utils"
-import { Timings } from "utils/questdb"
+import { color } from "../../../utils"
+import { Timings } from "../../../utils/questdb"
 
 type Props = Timings &
   Readonly<{

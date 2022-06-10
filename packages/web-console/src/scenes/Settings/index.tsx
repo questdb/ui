@@ -33,7 +33,7 @@ import {
 } from "../../components"
 import { Settings2 } from "styled-icons/evaicons-solid"
 import { Popup } from "styled-icons/entypo"
-import { color } from "utils"
+import { color } from "../../utils"
 
 const PaneWrapper = styled.div`
   display: flex;

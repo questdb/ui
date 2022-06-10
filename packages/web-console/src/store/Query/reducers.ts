@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { QueryAction, QueryAT, QueryStateShape } from "types"
+import { QueryAction, QueryAT, QueryStateShape } from "../../types"
 
 export const initialState: QueryStateShape = {
   notifications: [],

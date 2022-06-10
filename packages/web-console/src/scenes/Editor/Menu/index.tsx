@@ -51,8 +51,8 @@ import {
   useKeyPress,
   useScreenSize,
 } from "../../../components"
-import { actions, selectors } from "store"
-import { color } from "utils"
+import { actions, selectors } from "../../../store"
+import { color } from "../../../utils"
 
 import QueryPicker from "../QueryPicker"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"

@@ -24,8 +24,8 @@
 
 import React, { useCallback, useContext } from "react"
 import { SwitchButton } from "../../../../components"
-import { LocalStorageContext } from "providers/LocalStorageProvider"
-import { StoreKey } from "utils/localStorage/types"
+import { LocalStorageContext } from "../../../../providers/LocalStorageProvider"
+import { StoreKey } from "../../../../utils/localStorage/types"
 
 const Toggler = () => {
   const { isNotificationEnabled, updateSettings } =

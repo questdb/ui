@@ -25,7 +25,7 @@
 import { ReactNode } from "react"
 import styled from "styled-components"
 
-import { color } from "utils"
+import { color } from "../../utils"
 
 type Props = Readonly<{
   children: ReactNode

@@ -38,8 +38,8 @@ import Settings from "../Settings"
 import SideMenu from "../SideMenu"
 import Schema from "../Schema"
 import Sidebar from "../Sidebar"
-import { useLocalStorage } from "providers/LocalStorageProvider"
-import { EditorProvider, QuestProvider } from "providers"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { EditorProvider, QuestProvider } from "../../providers"
 import { StoreKey } from "../../utils/localStorage/types"
 
 const Console = styled.div`

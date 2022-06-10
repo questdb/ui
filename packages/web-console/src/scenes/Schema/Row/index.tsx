@@ -41,7 +41,7 @@ import {
   IconWithTooltip,
 } from "../../../components"
 import type { TextProps } from "../../../components"
-import { color } from "utils"
+import { color } from "../../../utils"
 import { useEditor } from "../../../providers"
 
 type Props = Readonly<{

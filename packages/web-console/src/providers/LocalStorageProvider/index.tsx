@@ -28,8 +28,8 @@ import React, {
   useState,
   useContext,
 } from "react"
-import { getValue, setValue } from "utils/localStorage"
-import { StoreKey } from "utils/localStorage/types"
+import { getValue, setValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
 import { parseBoolean, parseInteger } from "./utils"
 import { LocalConfig, SettingsType } from "./types"
 
