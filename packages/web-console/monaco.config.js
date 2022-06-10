@@ -22,28 +22,39 @@
  *
  ******************************************************************************/
 
+const path = require("path")
+const pnp = require("pnpapi")
+const monacoPath = pnp.resolveToUnqualified("monaco-editor", __filename)
+const getPath = (...p) => path.join(monacoPath, ...p)
+
 module.exports = {
   assetCopyPatterns: [
     {
-      from: "node_modules/monaco-editor/min/vs/loader.js",
+      from: getPath("min", "vs", "loader.js"),
       to: "assets/vs/loader.js",
     },
     {
-      from: "node_modules/monaco-editor/min/vs/editor/editor.main.js",
+      from: getPath("min", "vs", "editor", "editor.main.js"),
       to: "assets/vs/editor/editor.main.js",
     },
     {
-      from: "node_modules/monaco-editor/min/vs/editor/editor.main.nls.js",
+      from: getPath("min", "vs", "editor", "editor.main.nls.js"),
       to: "assets/vs/editor/editor.main.nls.js",
     },
     {
-      from: "node_modules/monaco-editor/min/vs/editor/editor.main.css",
+      from: getPath("min", "vs", "editor", "editor.main.css"),
       to: "assets/vs/editor/editor.main.css",
     },
-    { from: "node_modules/monaco-editor/min/vs/base", to: "assets/vs/base" },
+    {
+      from: getPath("min", "vs", "base"),
+      to: "assets/vs/base",
+    },
   ],
 
   sourceMapCopyPatterns: [
-    { from: "node_modules/monaco-editor/min-maps/vs/", to: "min-maps/vs" },
+    {
+      from: getPath("min-maps", "vs", ""),
+      to: "min-maps/vs",
+    },
   ],
 }
