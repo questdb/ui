@@ -3,11 +3,13 @@
   "version": "0.0.1",
   "license": "Apache-2.0",
   "description": "QuestDB Console",
+  "files": [
+    "dist"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/questdb/ui.git"
   },
-  "private": true,
   "engines": {
     "node": ">=16.13.1"
   },
