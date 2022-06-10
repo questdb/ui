@@ -1,11 +1,11 @@
 {
-  "name": "questdb-console",
+  "name": "@questdb/web-console",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "description": "QuestDB Console",
   "repository": {
     "type": "git",
-    "url": "https://github.com/questdb/questdb.git"
+    "url": "https://github.com/questdb/ui.git"
   },
   "private": true,
   "engines": {
@@ -19,8 +19,7 @@
     "postbuild": "node post-build.js",
     "start": "webpack-dev-server --progress",
     "start:prod": "cross-env NODE_ENV=production webpack-dev-server --progress",
-    "analyze-bundle": "cross-env ANALYZE=true NODE_ENV=production webpack-cli --display-reasons",
-    "prepare": "cd .. && husky install ui/.husky"
+    "analyze-bundle": "cross-env ANALYZE=true NODE_ENV=production webpack-cli --display-reasons"
   },
   "dependencies": {
     "@babel/runtime-corejs3": "7.10.2",
@@ -130,10 +129,5 @@
     "**/**/*.{js.jsx,js,es6,jsx,ts,tsx,md,yml}": [
       "prettier --config ./prettier.config.js --write ."
     ]
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "npx lint-staged"
-    }
   }
 }
