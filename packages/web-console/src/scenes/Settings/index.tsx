@@ -25,10 +25,15 @@
 import React, { useCallback, useState } from "react"
 import styled from "styled-components"
 import Notifications from "./Notifications"
-import { PaneContent, PaneMenu, Text, PrimaryToggleButton } from "components"
-import { Settings2 } from "@styled-icons/evaicons-solid/Settings2"
-import { Popup } from "@styled-icons/entypo/Popup"
-import { color } from "utils"
+import {
+  PaneContent,
+  PaneMenu,
+  Text,
+  PrimaryToggleButton,
+} from "../../components"
+import { Settings2 } from "styled-icons/evaicons-solid"
+import { Popup } from "styled-icons/entypo"
+import { color } from "../../utils"
 
 const PaneWrapper = styled.div`
   display: flex;

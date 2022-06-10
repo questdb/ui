@@ -23,9 +23,9 @@
  ******************************************************************************/
 
 import React, { useCallback, useContext } from "react"
-import { ContextMenu, MenuItem } from "components/ContextMenu"
-import { QuestContext } from "providers"
-import * as QuestDB from "utils/questdb"
+import { ContextMenu, MenuItem } from "../../../../components/ContextMenu"
+import { QuestContext } from "../../../../providers"
+import * as QuestDB from "../../../../utils/questdb"
 import { formatTableSchemaQueryResult } from "./services"
 import { copyToClipboard } from "../../../../utils"
 

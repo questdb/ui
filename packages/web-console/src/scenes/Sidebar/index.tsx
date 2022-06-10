@@ -25,13 +25,13 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
-import { CodeSSlash } from "@styled-icons/remix-line/CodeSSlash"
-import { Upload2 } from "@styled-icons/remix-line/Upload2"
-import { Settings2 } from "@styled-icons/evaicons-solid/Settings2"
+import { CodeSSlash } from "styled-icons/remix-line"
+import { Upload2 } from "styled-icons/remix-line"
+import { Settings2 } from "styled-icons/evaicons-solid"
 
-import { PopperHover, PrimaryToggleButton, Tooltip } from "components"
-import { selectors } from "store"
-import { color } from "utils"
+import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
+import { selectors } from "../../store"
+import { color } from "../../utils"
 
 const Wrapper = styled.div`
   display: flex;
@@ -109,9 +109,8 @@ const Sidebar = () => {
   useEffect(() => {
     const consolePanel = document.querySelector<HTMLElement>(".js-sql-panel")
     const importPanel = document.querySelector<HTMLElement>(".js-import-panel")
-    const settingsPanel = document.querySelector<HTMLElement>(
-      ".js-settings-panel",
-    )
+    const settingsPanel =
+      document.querySelector<HTMLElement>(".js-settings-panel")
 
     if (!consolePanel || !importPanel || !settingsPanel) {
       return

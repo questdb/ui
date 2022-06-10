@@ -27,7 +27,7 @@ import {
   TelemetryAT,
   TelemetryConfigShape,
   TelemetryRemoteConfigShape,
-} from "types"
+} from "../../types"
 
 const setConfig = (payload: TelemetryConfigShape): TelemetryAction => ({
   payload,

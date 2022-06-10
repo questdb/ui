@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { API } from "consts"
+import { API } from "../consts"
 
 type Error = Readonly<{
   error: true

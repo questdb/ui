@@ -22,8 +22,8 @@
  *
  ******************************************************************************/
 
-import { ModalId } from "consts"
-import { ConsoleConfigShape, ConsoleAction, ConsoleAT } from "types"
+import { ModalId } from "../../consts"
+import { ConsoleConfigShape, ConsoleAction, ConsoleAT } from "../../types"
 
 const bootstrap = (): ConsoleAction => ({
   type: ConsoleAT.BOOTSTRAP,

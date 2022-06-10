@@ -24,7 +24,7 @@
 
 import React, { useCallback } from "react"
 import styled from "styled-components"
-import { PrimaryButton, SecondaryButton } from "components"
+import { PrimaryButton, SecondaryButton } from "../"
 
 type ItemValue = string
 

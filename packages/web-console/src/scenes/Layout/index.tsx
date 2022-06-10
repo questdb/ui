@@ -26,8 +26,8 @@ import React, { useCallback, useEffect } from "react"
 import { createPortal } from "react-dom"
 import styled from "styled-components"
 
-import { Splitter, useScreenSize } from "components"
-import { BusEvent } from "consts"
+import { Splitter, useScreenSize } from "../../components"
+import { BusEvent } from "../../consts"
 
 import Editor from "../Editor"
 import Footer from "../Footer"
@@ -38,8 +38,8 @@ import Settings from "../Settings"
 import SideMenu from "../SideMenu"
 import Schema from "../Schema"
 import Sidebar from "../Sidebar"
-import { useLocalStorage } from "providers/LocalStorageProvider"
-import { EditorProvider, QuestProvider } from "providers"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { EditorProvider, QuestProvider } from "../../providers"
 import { StoreKey } from "../../utils/localStorage/types"
 
 const Console = styled.div`
@@ -60,11 +60,8 @@ const Layout = () => {
   const sideMenuNode = document.getElementById("sideMenu")
   const modalNode = document.getElementById("modal")
   const { sm } = useScreenSize()
-  const {
-    editorSplitterBasis,
-    resultsSplitterBasis,
-    updateSettings,
-  } = useLocalStorage()
+  const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
+    useLocalStorage()
 
   const handleEditorSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)

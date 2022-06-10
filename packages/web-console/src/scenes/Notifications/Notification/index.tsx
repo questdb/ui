@@ -24,8 +24,8 @@
 
 import React from "react"
 import { CSSTransition } from "react-transition-group"
-import { TransitionDuration } from "components"
-import { NotificationShape, NotificationType } from "types"
+import { TransitionDuration } from "../../../components"
+import { NotificationShape, NotificationType } from "../../../types"
 import { SuccessNotification } from "./SuccessNotification"
 import { ErrorNotification } from "./ErrorNotification"
 import { InfoNotification } from "./InfoNotification"

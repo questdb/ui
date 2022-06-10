@@ -25,11 +25,11 @@
 import React, { forwardRef, Ref, useCallback, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import { Close } from "@styled-icons/remix-line/Close"
+import { Close } from "styled-icons/remix-line"
 
-import { SecondaryButton, Text } from "components"
-import { actions, selectors } from "store"
-import { color, fetchApi } from "utils"
+import { SecondaryButton, Text } from "../../../components"
+import { actions, selectors } from "../../../store"
+import { color, fetchApi } from "../../../utils"
 
 import EmailInput from "./EmailInput"
 

@@ -25,12 +25,12 @@
 import React from "react"
 import styled from "styled-components"
 import { Wrapper, SideContent, Content } from "../styles"
-import { NotificationShape } from "types"
-import { CheckmarkOutline } from "@styled-icons/evaicons-outline/CheckmarkOutline"
-import { Zap } from "@styled-icons/boxicons-solid/Zap"
-import { color } from "utils"
+import { NotificationShape } from "../../../../types"
+import { CheckmarkOutline } from "styled-icons/evaicons-outline"
+import { Zap } from "styled-icons/boxicons-solid"
+import { color } from "../../../../utils"
 import { Timestamp } from "../Timestamp"
-import { IconWithTooltip } from "components"
+import { IconWithTooltip } from "../../../../components"
 
 const CheckmarkOutlineIcon = styled(CheckmarkOutline)`
   color: ${color("draculaGreen")};
