@@ -119,10 +119,23 @@ module.exports = {
   output: {
     filename: "qdb.js",
     publicPath: ASSET_PATH,
+    path: path.resolve(__dirname, "dist"),
   },
   resolve: {
     extensions: [".ts", ".tsx", ".js"],
-    modules: [path.resolve("./src"), path.resolve("./node_modules")],
+    // @TODO: adding temporarily, remove them later 'cause they're more pain than help
+    alias: {
+      components: path.resolve(__dirname, "src/components"),
+      consts: path.resolve(__dirname, "src/consts"),
+      partials: path.resolve(__dirname, "src/partials"),
+      providers: path.resolve(__dirname, "src/providers"),
+      scenes: path.resolve(__dirname, "src/scenes"),
+      store: path.resolve(__dirname, "src/store"),
+      styles: path.resolve(__dirname, "src/styles"),
+      theme: path.resolve(__dirname, "src/theme"),
+      types: path.resolve(__dirname, "src/types"),
+      utils: path.resolve(__dirname, "src/utils"),
+    },
   },
   module: {
     rules: [
@@ -155,7 +168,7 @@ module.exports = {
     all: false,
     chunks: true,
     env: true,
-    errors: !isProdBuild,
+    errors: true,
     errorDetails: true,
   },
 }
