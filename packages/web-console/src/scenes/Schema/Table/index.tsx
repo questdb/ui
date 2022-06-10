@@ -26,7 +26,7 @@ import React, { useEffect, useState, useRef } from "react"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled from "styled-components"
-import { Loader4 } from "@styled-icons/remix-line/Loader4"
+import { Loader4 } from "styled-icons/remix-line"
 import { Tree, collapseTransition, spinAnimation } from "components"
 import type { TreeNode, TreeNodeRenderParams } from "components"
 import { ContextMenuTrigger } from "components/ContextMenu"
@@ -91,21 +91,24 @@ const Loader = styled(Loader4)`
   ${spinAnimation};
 `
 
-const columnRender = ({
-  column,
-  designatedTimestamp,
-}: {
-  column: QuestDB.Column
-  designatedTimestamp: string
-}) => ({ toggleOpen }: TreeNodeRenderParams) => (
-  <Row
-    {...column}
-    designatedTimestamp={designatedTimestamp}
-    kind="column"
-    name={column.column}
-    onClick={() => toggleOpen()}
-  />
-)
+const columnRender =
+  ({
+    column,
+    designatedTimestamp,
+  }: {
+    column: QuestDB.Column
+    designatedTimestamp: string
+  }) =>
+  ({ toggleOpen }: TreeNodeRenderParams) =>
+    (
+      <Row
+        {...column}
+        designatedTimestamp={designatedTimestamp}
+        kind="column"
+        name={column.column}
+        onClick={() => toggleOpen()}
+      />
+    )
 
 const Table = ({
   description,

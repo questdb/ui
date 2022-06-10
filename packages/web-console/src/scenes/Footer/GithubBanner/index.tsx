@@ -23,8 +23,7 @@
  ******************************************************************************/
 import React from "react"
 import styled from "styled-components"
-import { Close } from "@styled-icons/remix-line/Close"
-import { Star } from "@styled-icons/remix-fill/Star"
+import { Close, Star } from "styled-icons/remix-line"
 
 import { Link } from "components"
 import { color } from "utils"

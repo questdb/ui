@@ -27,14 +27,14 @@ import React, { useCallback, useEffect, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
-import { Add } from "@styled-icons/remix-line/Add"
-import { Close as _CloseIcon } from "@styled-icons/remix-line/Close"
-import { Menu as _MenuIcon } from "@styled-icons/remix-fill/Menu"
-import { Play } from "@styled-icons/remix-line/Play"
-import { Stop } from "@styled-icons/remix-line/Stop"
-import { Database2 } from "@styled-icons/remix-line/Database2"
-import { HelpCircle } from "@styled-icons/boxicons-regular/HelpCircle"
-import { Slack } from "@styled-icons/boxicons-logos/Slack"
+import { Add } from "styled-icons/remix-line"
+import { Close as _CloseIcon } from "styled-icons/remix-line"
+import { Menu as _MenuIcon } from "styled-icons/remix-fill"
+import { Play } from "styled-icons/remix-line"
+import { Stop } from "styled-icons/remix-line"
+import { Database2 } from "styled-icons/remix-line"
+import { HelpCircle } from "styled-icons/boxicons-regular"
+import { Slack } from "styled-icons/boxicons-logos"
 
 import {
   ErrorButton,
@@ -171,11 +171,8 @@ const Menu = () => {
   const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const { sm } = useScreenSize()
-  const {
-    resultsSplitterBasis,
-    exampleQueriesVisited,
-    updateSettings,
-  } = useLocalStorage()
+  const { resultsSplitterBasis, exampleQueriesVisited, updateSettings } =
+    useLocalStorage()
 
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())

@@ -35,9 +35,12 @@ import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import { Database2 } from "@styled-icons/remix-line/Database2"
-import { Loader3 } from "@styled-icons/remix-line/Loader3"
-import { Refresh } from "@styled-icons/remix-line/Refresh"
+import {
+  Database2,
+  Loader3,
+  Refresh,
+  ArrowLeftCircle,
+} from "styled-icons/remix-line"
 
 import {
   PaneContent,
@@ -57,7 +60,6 @@ import * as QuestDB from "utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { BusEvent } from "../../consts"
-import { ArrowLeftCircle } from "@styled-icons/remix-line/ArrowLeftCircle"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 
