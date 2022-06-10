@@ -26,7 +26,7 @@ import { Epic, ofType } from "redux-observable"
 import { filter, map, switchMap, switchMapTo, tap } from "rxjs/operators"
 import { NEVER, of, timer } from "rxjs"
 
-import { actions } from "store"
+import { actions } from "../../store"
 import {
   BootstrapAction,
   ConsoleConfigShape,
@@ -35,10 +35,10 @@ import {
   RefreshAuthTokenAction,
   StoreAction,
   StoreShape,
-} from "types"
-import { fromFetch } from "utils"
-import { getValue, setValue } from "utils/localStorage"
-import { StoreKey } from "utils/localStorage/types"
+} from "../../types"
+import { fromFetch } from "../../utils"
+import { getValue, setValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
 
 type AuthPayload = Readonly<
   Partial<{

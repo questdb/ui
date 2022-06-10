@@ -22,13 +22,12 @@
  *
  ******************************************************************************/
 
-import { ModalId } from "consts"
 import {
   ConsoleConfigShape,
   ConsoleAction,
   ConsoleAT,
   ConsoleStateShape,
-} from "types"
+} from "../../types"
 
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,

@@ -25,10 +25,7 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
-import { Download2 } from "@styled-icons/remix-line/Download2"
-import { Grid } from "@styled-icons/remix-line/Grid"
-import { PieChart } from "@styled-icons/remix-line/PieChart"
-import { Refresh } from "@styled-icons/remix-line/Refresh"
+import { Download2, Grid, PieChart, Refresh } from "styled-icons/remix-line"
 
 import {
   PaneContent,
@@ -40,11 +37,11 @@ import {
   Text,
   Tooltip,
   useScreenSize,
-} from "components"
-import { BusEvent } from "consts"
-import { selectors } from "store"
-import { color } from "utils"
-import * as QuestDB from "utils/questdb"
+} from "../../components"
+import { BusEvent } from "../../consts"
+import { selectors } from "../../store"
+import { color } from "../../utils"
+import * as QuestDB from "../../utils/questdb"
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;

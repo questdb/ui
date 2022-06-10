@@ -33,9 +33,9 @@ import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 
-import { TransitionDuration } from "components"
-import { ModalId } from "consts"
-import { actions, selectors } from "store"
+import { TransitionDuration } from "../../components"
+import { ModalId } from "../../consts"
+import { actions, selectors } from "../../store"
 
 import PowerUser from "./PowerUser"
 

@@ -25,7 +25,7 @@
 import React from "react"
 import styled from "styled-components"
 import Toggler from "./Toggler"
-import { color } from "utils"
+import { color } from "../../../utils"
 
 const Wrapper = styled.div`
   display: flex;

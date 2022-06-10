@@ -24,8 +24,8 @@
 
 import styled from "styled-components"
 
-import { Color } from "types"
-import { color } from "utils"
+import { Color } from "../../types"
+import { color } from "../../utils"
 
 export const Toast = styled.div<{ borderColor: Color }>`
   position: relative;

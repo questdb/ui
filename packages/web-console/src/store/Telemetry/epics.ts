@@ -26,8 +26,8 @@ import { Epic, ofType } from "redux-observable"
 import { delay, filter, map, switchMap, withLatestFrom } from "rxjs/operators"
 import { from, NEVER, of } from "rxjs"
 
-import { API, ModalId, TelemetryTable } from "consts"
-import { actions, selectors } from "store"
+import { API, ModalId, TelemetryTable } from "../../consts"
+import { actions, selectors } from "../../store"
 import {
   BootstrapAction,
   ConsoleAction,
@@ -40,10 +40,10 @@ import {
   TelemetryAT,
   TelemetryConfigShape,
   TelemetryRemoteConfigShape,
-} from "types"
+} from "../../types"
 
-import { fromFetch } from "utils"
-import * as QuestDB from "utils/questdb"
+import { fromFetch } from "../../utils"
+import * as QuestDB from "../../utils/questdb"
 
 const quest = new QuestDB.Client()
 

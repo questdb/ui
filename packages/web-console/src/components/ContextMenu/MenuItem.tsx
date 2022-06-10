@@ -25,7 +25,7 @@
 import React, { PropsWithChildren } from "react"
 import styled from "styled-components"
 import { MenuItem as ReactMenuItem, MenuItemProps } from "react-contextmenu"
-import { color } from "utils"
+import { color } from "../../utils"
 
 const StyledMenuItem = styled(ReactMenuItem)`
   color: ${color("draculaForeground")};

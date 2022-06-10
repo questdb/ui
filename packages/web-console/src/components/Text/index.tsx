@@ -26,7 +26,7 @@ import React, { ReactNode } from "react"
 import styled, { css } from "styled-components"
 
 import type { Color, FontSize } from "types"
-import { color } from "utils"
+import { color } from "../../utils"
 
 type FontStyle = "normal" | "italic"
 type Transform = "capitalize" | "lowercase" | "uppercase"

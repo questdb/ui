@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React, { createContext, PropsWithChildren } from "react"
-import * as QuestDB from "utils/questdb"
+import * as QuestDB from "../utils/questdb"
 
 const questClient = new QuestDB.Client()
 

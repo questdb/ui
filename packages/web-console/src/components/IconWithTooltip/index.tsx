@@ -1,5 +1,5 @@
 import React, { ReactNode } from "react"
-import { PopperHover, Tooltip, Placement } from "components"
+import { PopperHover, Tooltip, Placement } from "../"
 
 type Props = {
   icon: ReactNode

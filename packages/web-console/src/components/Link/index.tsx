@@ -25,8 +25,8 @@
 import React from "react"
 import styled from "styled-components"
 
-import type { Color } from "types"
-import { color } from "utils"
+import type { Color } from "../../types"
+import { color } from "../../utils"
 
 import { Text, textStyles, TextProps } from "../Text"
 

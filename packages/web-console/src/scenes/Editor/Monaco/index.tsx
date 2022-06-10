@@ -15,13 +15,13 @@ import {
   setErrorMarker,
   clearModelMarkers,
 } from "./utils"
-import { PaneContent, Text } from "components"
+import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
-import { BusEvent } from "consts"
-import { ErrorResult } from "utils/questdb"
-import * as QuestDB from "utils/questdb"
-import { NotificationType } from "types"
+import { BusEvent } from "../../../consts"
+import { ErrorResult } from "../../../utils/questdb"
+import * as QuestDB from "../../../utils/questdb"
+import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
 import Loader from "../Loader"
 import styled from "styled-components"
@@ -68,10 +68,8 @@ const MonacoEditor = () => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
-  const [
-    schemaCompletionHandle,
-    setSchemaCompletionHandle,
-  ] = useState<IDisposable>()
+  const [schemaCompletionHandle, setSchemaCompletionHandle] =
+    useState<IDisposable>()
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))

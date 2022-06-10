@@ -31,7 +31,7 @@ import {
   NotificationType,
   QueryAction,
   QueryAT,
-} from "types"
+} from "../../types"
 
 const setTables = (payload: Table[]): QueryAction => ({
   payload: {

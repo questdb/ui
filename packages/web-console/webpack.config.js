@@ -119,10 +119,10 @@ module.exports = {
   output: {
     filename: "qdb.js",
     publicPath: ASSET_PATH,
+    path: path.resolve(__dirname, "dist"),
   },
   resolve: {
     extensions: [".ts", ".tsx", ".js"],
-    modules: [path.resolve("./src"), path.resolve("./node_modules")],
   },
   module: {
     rules: [
@@ -155,7 +155,7 @@ module.exports = {
     all: false,
     chunks: true,
     env: true,
-    errors: !isProdBuild,
+    errors: true,
     errorDetails: true,
   },
 }

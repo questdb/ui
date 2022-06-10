@@ -23,16 +23,15 @@
  ******************************************************************************/
 
 import { useContext } from "react"
-import { StoreKey } from "utils/localStorage/types"
-import { LocalStorageContext } from "providers/LocalStorageProvider"
+import { StoreKey } from "../../../utils/localStorage/types"
+import { LocalStorageContext } from "../../../providers/LocalStorageProvider"
 import { editor } from "monaco-editor"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 export const usePreferences = () => {
-  const { queryText, editorCol, editorLine, updateSettings } = useContext(
-    LocalStorageContext,
-  )
+  const { queryText, editorCol, editorLine, updateSettings } =
+    useContext(LocalStorageContext)
 
   const loadPreferences = (editor: IStandaloneCodeEditor) => {
     if (queryText) {

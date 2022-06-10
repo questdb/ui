@@ -33,9 +33,9 @@ import React, {
   useState,
 } from "react"
 import styled, { createGlobalStyle, css } from "styled-components"
-import { DragIndicator } from "@styled-icons/material/DragIndicator"
+import { DragIndicator } from "styled-icons/material"
 
-import { color } from "utils"
+import { color } from "../../utils"
 
 const PreventUserSelectionHorizontal = createGlobalStyle`
   html {
@@ -192,9 +192,8 @@ export const Splitter = ({
         const clientPosition =
           direction === "horizontal" ? "clientX" : "clientY"
         const coordinate = direction === "horizontal" ? "x" : "y"
-        const offset = splitter.current.parentElement.getBoundingClientRect()[
-          coordinate
-        ]
+        const offset =
+          splitter.current.parentElement.getBoundingClientRect()[coordinate]
         let position = 0
 
         if (window.TouchEvent && event.nativeEvent instanceof TouchEvent) {
