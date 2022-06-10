@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import styled from "styled-components"
-import { bezierTransition } from "components"
+import { bezierTransition } from "../../../components"
 import { color } from "utils"
 
 export const Wrapper = styled.div`

@@ -52,7 +52,7 @@ import {
   Text,
   Tooltip,
   VirtualList,
-} from "components"
+} from "../../components"
 import { actions, selectors } from "store"
 import { color, ErrorResult } from "utils"
 import * as QuestDB from "utils/questdb"

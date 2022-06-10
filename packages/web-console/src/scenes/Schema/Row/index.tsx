@@ -39,8 +39,8 @@ import {
   Text,
   TransitionDuration,
   IconWithTooltip,
-} from "components"
-import type { TextProps } from "components"
+} from "../../../components"
+import type { TextProps } from "../../../components"
 import { color } from "utils"
 import { useEditor } from "../../../providers"
 

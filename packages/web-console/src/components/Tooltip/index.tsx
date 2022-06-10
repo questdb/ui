@@ -25,7 +25,7 @@
 import React, { ReactNode, Ref } from "react"
 import styled, { css } from "styled-components"
 
-import { Text } from "components"
+import { Text } from "../"
 import { color } from "utils"
 
 type Props = Readonly<{

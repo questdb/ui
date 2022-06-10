@@ -125,7 +125,6 @@ module.exports = {
     extensions: [".ts", ".tsx", ".js"],
     // @TODO: adding temporarily, remove them later 'cause they're more pain than help
     alias: {
-      components: path.resolve(__dirname, "src/components"),
       consts: path.resolve(__dirname, "src/consts"),
       partials: path.resolve(__dirname, "src/partials"),
       providers: path.resolve(__dirname, "src/providers"),

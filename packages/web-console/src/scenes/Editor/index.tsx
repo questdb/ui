@@ -25,7 +25,7 @@
 import React, { CSSProperties, forwardRef, Ref } from "react"
 import styled from "styled-components"
 
-import { PaneWrapper } from "components"
+import { PaneWrapper } from "../../components"
 
 import Monaco from "./Monaco"
 import Menu from "./Menu"

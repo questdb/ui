@@ -26,7 +26,7 @@ import { Epic, ofType } from "redux-observable"
 import { delay, filter, map, switchMap, withLatestFrom } from "rxjs/operators"
 import { from, NEVER, of } from "rxjs"
 
-import { API, ModalId, TelemetryTable } from "consts"
+import { API, ModalId, TelemetryTable } from "../../consts"
 import { actions, selectors } from "store"
 import {
   BootstrapAction,

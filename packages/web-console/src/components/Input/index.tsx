@@ -25,7 +25,7 @@
 import React, { ComponentProps, forwardRef, Ref } from "react"
 import styled from "styled-components"
 
-import { ButtonProps, getButtonSize } from "components"
+import { ButtonProps, getButtonSize } from "../"
 import { color } from "utils"
 
 type Type = "text" | "number"

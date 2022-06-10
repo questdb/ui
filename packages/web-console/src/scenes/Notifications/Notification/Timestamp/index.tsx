@@ -24,7 +24,7 @@
 
 import React from "react"
 import styled from "styled-components"
-import { Text } from "components"
+import { Text } from "../../../../components"
 import { format } from "date-fns/fp"
 
 type Props = {

@@ -27,7 +27,7 @@ import React, { useCallback, useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import * as QuestDB from "utils/questdb"
 import { ClipboardCopy } from "styled-icons/heroicons-outline"
-import { SecondaryButton } from "components"
+import { SecondaryButton } from "../../../components"
 import { formatVersion } from "./services"
 import { copyToClipboard } from "../../../utils"
 

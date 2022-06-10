@@ -36,7 +36,7 @@ import {
   createGlobalFadeTransition,
   ScreenSizeProvider,
   TransitionDuration,
-} from "components"
+} from "./components"
 import { actions, rootEpic, rootReducer } from "store"
 import { StoreAction, StoreShape } from "types"
 

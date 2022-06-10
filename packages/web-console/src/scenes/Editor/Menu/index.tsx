@@ -50,7 +50,7 @@ import {
   TransparentButton,
   useKeyPress,
   useScreenSize,
-} from "components"
+} from "../../../components"
 import { actions, selectors } from "store"
 import { color } from "utils"
 
