@@ -27,7 +27,7 @@ import styled from "styled-components"
 import { Wrapper, Content, SideContent } from "../styles"
 import { Timestamp } from "../Timestamp"
 import { NotificationShape } from "types"
-import { CloseOutline } from "@styled-icons/evaicons-outline/CloseOutline"
+import { CloseOutline } from "styled-icons/evaicons-outline"
 import { color } from "utils"
 
 const CloseOutlineIcon = styled(CloseOutline)`

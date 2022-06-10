@@ -24,14 +24,14 @@
 
 import React, { MouseEvent, ReactNode, useCallback } from "react"
 import styled from "styled-components"
-import { Rocket } from "@styled-icons/boxicons-regular/Rocket"
-import { SortDown } from "@styled-icons/boxicons-regular/SortDown"
-import { RightArrow } from "@styled-icons/boxicons-regular/RightArrow"
-import { CheckboxBlankCircle } from "@styled-icons/remix-line/CheckboxBlankCircle"
-import { CodeSSlash } from "@styled-icons/remix-line/CodeSSlash"
-import { Information } from "@styled-icons/remix-line/Information"
-import { Table as TableIcon } from "@styled-icons/remix-line/Table"
-import { PieChart } from "@styled-icons/remix-line/PieChart"
+import { Rocket } from "styled-icons/boxicons-regular"
+import { SortDown } from "styled-icons/boxicons-regular"
+import { RightArrow } from "styled-icons/boxicons-regular"
+import { CheckboxBlankCircle } from "styled-icons/remix-line"
+import { CodeSSlash } from "styled-icons/remix-line"
+import { Information } from "styled-icons/remix-line"
+import { Table as TableIcon } from "styled-icons/remix-line"
+import { PieChart } from "styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 
 import {

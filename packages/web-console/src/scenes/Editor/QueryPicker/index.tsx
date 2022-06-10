@@ -24,8 +24,7 @@
 
 import React, { forwardRef, Ref, useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import { DownArrowSquare } from "@styled-icons/boxicons-solid/DownArrowSquare"
-import { UpArrowSquare } from "@styled-icons/boxicons-solid/UpArrowSquare"
+import { DownArrowSquare, UpArrowSquare } from "styled-icons/boxicons-solid"
 
 import { Text, useKeyPress } from "components"
 import type { Query, QueryGroup } from "types"
