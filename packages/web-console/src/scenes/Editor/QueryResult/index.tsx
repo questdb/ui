@@ -25,7 +25,11 @@
 import React from "react"
 import styled from "styled-components"
 
-import { collapseTransition, Text, TransitionDuration } from "components"
+import {
+  collapseTransition,
+  Text,
+  TransitionDuration,
+} from "../../../components"
 import { color } from "utils"
 import { Timings } from "utils/questdb"
 

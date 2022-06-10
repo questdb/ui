@@ -27,7 +27,7 @@ import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { Close } from "styled-icons/remix-line"
 
-import { SecondaryButton, Text } from "components"
+import { SecondaryButton, Text } from "../../../components"
 import { actions, selectors } from "store"
 import { color, fetchApi } from "utils"
 

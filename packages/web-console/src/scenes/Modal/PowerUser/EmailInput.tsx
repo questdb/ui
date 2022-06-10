@@ -24,7 +24,7 @@
 
 import React, { ChangeEvent, useCallback, useState } from "react"
 
-import { Input } from "components"
+import { Input } from "../../../components"
 
 type Props = Readonly<{
   dirty: boolean

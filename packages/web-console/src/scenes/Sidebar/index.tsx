@@ -29,7 +29,7 @@ import { CodeSSlash } from "styled-icons/remix-line"
 import { Upload2 } from "styled-icons/remix-line"
 import { Settings2 } from "styled-icons/evaicons-solid"
 
-import { PopperHover, PrimaryToggleButton, Tooltip } from "components"
+import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
 import { selectors } from "store"
 import { color } from "utils"
 

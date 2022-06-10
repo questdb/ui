@@ -28,7 +28,7 @@ import { CSSTransition } from "react-transition-group"
 import styled, { createGlobalStyle } from "styled-components"
 import { Github } from "styled-icons/remix-fill"
 
-import { Link, Text, TransitionDuration } from "components"
+import { Link, Text, TransitionDuration } from "../../components"
 import { selectors } from "store"
 
 import GithubBanner from "./GithubBanner"

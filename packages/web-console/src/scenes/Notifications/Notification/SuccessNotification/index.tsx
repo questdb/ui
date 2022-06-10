@@ -30,7 +30,7 @@ import { CheckmarkOutline } from "styled-icons/evaicons-outline"
 import { Zap } from "styled-icons/boxicons-solid"
 import { color } from "utils"
 import { Timestamp } from "../Timestamp"
-import { IconWithTooltip } from "components"
+import { IconWithTooltip } from "../../../../components"
 
 const CheckmarkOutlineIcon = styled(CheckmarkOutline)`
   color: ${color("draculaGreen")};

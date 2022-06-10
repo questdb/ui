@@ -25,7 +25,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react"
 import Row from "../../scenes/Schema/Row"
 import styled from "styled-components"
-import { WrapWithIf } from "components"
+import { WrapWithIf } from "../"
 
 export type TreeNodeKind = "column" | "table" | "folder"
 

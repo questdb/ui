@@ -37,8 +37,8 @@ import {
   Text,
   Tooltip,
   useScreenSize,
-} from "components"
-import { BusEvent } from "consts"
+} from "../../components"
+import { BusEvent } from "../../consts"
 import { selectors } from "store"
 import { color } from "utils"
 import * as QuestDB from "utils/questdb"

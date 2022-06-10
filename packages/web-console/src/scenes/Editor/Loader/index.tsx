@@ -26,7 +26,7 @@ import React, { useEffect, useRef, useState } from "react"
 import { CSSTransition } from "react-transition-group"
 import styled, { keyframes } from "styled-components"
 
-import { TransitionDuration } from "components"
+import { TransitionDuration } from "../../../components"
 import { color } from "utils"
 
 type Props = Readonly<{

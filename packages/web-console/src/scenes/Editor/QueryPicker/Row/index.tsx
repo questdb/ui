@@ -26,7 +26,7 @@ import React from "react"
 import styled, { css } from "styled-components"
 import { FileCode } from "styled-icons/remix-line"
 
-import { Text, TransitionDuration } from "components"
+import { Text, TransitionDuration } from "../../../../components"
 import type { Query } from "types"
 import { color } from "utils"
 
