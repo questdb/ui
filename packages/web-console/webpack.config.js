@@ -29,7 +29,6 @@ const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin")
 const HtmlWebpackPlugin = require("html-webpack-plugin")
 const MiniCssExtractPlugin = require("mini-css-extract-plugin")
 const Webpack = require("webpack")
-const AnalyzerPlugin = require("webpack-bundle-analyzer").BundleAnalyzerPlugin
 
 const monacoConfig = require("./monaco.config")
 require("dotenv").config()
@@ -72,7 +71,8 @@ const basePlugins = [
 const devPlugins = [
   new ForkTsCheckerWebpackPlugin({
     eslint: {
-      enabled: true,
+      // @TODO
+      enabled: false,
       files: "./src/**/*.ts[x]",
     },
   }),
@@ -150,11 +150,7 @@ module.exports = {
       ...(isProdBuild ? [] : devLoaders),
     ],
   },
-  plugins: [
-    ...basePlugins,
-    ...(isProdBuild ? prodPlugins : devPlugins),
-    ...(runBundleAnalyzer ? [new AnalyzerPlugin({ analyzerPort: 9998 })] : []),
-  ],
+  plugins: [...basePlugins, ...(isProdBuild ? prodPlugins : devPlugins)],
   stats: {
     all: false,
     chunks: true,

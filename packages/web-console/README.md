@@ -8,8 +8,7 @@
 
 ## Local development
 
-Make sure that QuestDB is running, please check the instructions
-[here](../README.md)
+Make sure that QuestDB is running, please check the instructions [here](https://github.com/questdb/questdb/blob/master/README.md)
 
 1. Install the dependencies with `npm install`
 2. Start the development web server with `npm start`
