@@ -59,11 +59,5 @@ module.exports = {
         parser: "yaml",
       },
     },
-    {
-      files: "*.hbs",
-      options: {
-        parser: "glimmer",
-      },
-    },
   ],
 }
