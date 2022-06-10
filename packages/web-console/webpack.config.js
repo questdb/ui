@@ -33,11 +33,12 @@ const Webpack = require("webpack")
 const monacoConfig = require("./monaco.config")
 require("dotenv").config()
 
-const PORT = 9999
-const BACKEND_PORT = 9000
-const isProdBuild = process.env.NODE_ENV === "production"
-const runBundleAnalyzer = process.env.ANALYZE
-const ASSET_PATH = process.env.ASSET_PATH || "/"
+const config = {
+  port: 9999,
+  backendUrl: "http://127.0.0.1:9000",
+  assetPath: process.env.ASSET_PATH || "/",
+  isProduction: process.env.NODE_ENV === "production",
+}
 
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = "development"
@@ -107,18 +108,18 @@ module.exports = {
     compress: true,
     host: "localhost",
     hot: false,
-    port: PORT,
+    port: config.port,
     proxy: {
       context: ["/imp", "/exp", "/exec", "/chk"],
-      target: `http://localhost:${BACKEND_PORT}/`,
+      target: config.backendUrl,
     },
   },
-  devtool: isProdBuild ? false : "eval-source-map",
-  mode: isProdBuild ? "production" : "development",
+  devtool: config.isProduction ? false : "eval-source-map",
+  mode: config.isProduction ? "production" : "development",
   entry: "./src/index",
   output: {
     filename: "qdb.js",
-    publicPath: ASSET_PATH,
+    publicPath: config.assetPath,
     path: path.resolve(__dirname, "dist"),
   },
   resolve: {
@@ -147,10 +148,13 @@ module.exports = {
         test: /\.s[ac]ss$/i,
         use: [MiniCssExtractPlugin.loader, "css-loader", "sass-loader"],
       },
-      ...(isProdBuild ? [] : devLoaders),
+      ...(config.isProduction ? [] : devLoaders),
     ],
   },
-  plugins: [...basePlugins, ...(isProdBuild ? prodPlugins : devPlugins)],
+  plugins: [
+    ...basePlugins,
+    ...(config.isProduction ? prodPlugins : devPlugins),
+  ],
   stats: {
     all: false,
     chunks: true,
