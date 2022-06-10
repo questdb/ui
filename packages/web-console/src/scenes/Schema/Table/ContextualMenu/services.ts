@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import * as QuestDB from "utils/questdb"
+import * as QuestDB from "../../../../utils/questdb"
 import { trim } from "ramda"
 import { formatSql } from "../../../../utils"
 

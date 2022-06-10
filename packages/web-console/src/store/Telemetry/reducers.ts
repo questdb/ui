@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { TelemetryAction, TelemetryAT, TelemetryStateShape } from "types"
+import { TelemetryAction, TelemetryAT, TelemetryStateShape } from "../../types"
 
 const yearOffset = 24 * 60 * 60 * 1000 * 31 * 12
 

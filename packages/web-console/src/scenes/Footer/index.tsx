@@ -29,7 +29,7 @@ import styled, { createGlobalStyle } from "styled-components"
 import { Github } from "styled-icons/remix-fill"
 
 import { Link, Text, TransitionDuration } from "../../components"
-import { selectors } from "store"
+import { selectors } from "../../store"
 
 import GithubBanner from "./GithubBanner"
 import BuildVersion from "./BuildVersion"

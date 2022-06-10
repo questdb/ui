@@ -26,7 +26,7 @@ import styled from "styled-components"
 import { Close, Star } from "styled-icons/remix-line"
 
 import { Link } from "../../../components"
-import { color } from "utils"
+import { color } from "../../../utils"
 
 type Props = Readonly<{
   onClick: () => void

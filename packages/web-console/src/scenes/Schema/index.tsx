@@ -53,9 +53,9 @@ import {
   Tooltip,
   VirtualList,
 } from "../../components"
-import { actions, selectors } from "store"
-import { color, ErrorResult } from "utils"
-import * as QuestDB from "utils/questdb"
+import { actions, selectors } from "../../store"
+import { color, ErrorResult } from "../../utils"
+import * as QuestDB from "../../utils/questdb"
 
 import Table from "./Table"
 import LoadingError from "./LoadingError"

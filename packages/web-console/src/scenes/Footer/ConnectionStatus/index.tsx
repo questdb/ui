@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import styled from "styled-components"
-import { color } from "utils"
+import { color } from "../../../utils"
 import { BusEvent } from "../../../consts"
 import { Text } from "../../../components"
 

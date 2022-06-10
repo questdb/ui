@@ -28,8 +28,8 @@ import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 
 import { TransitionDuration } from "../../components"
-import { actions, selectors } from "store"
-import { color } from "utils"
+import { actions, selectors } from "../../store"
+import { color } from "../../utils"
 
 import Schema from "../Schema"
 

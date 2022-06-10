@@ -28,7 +28,7 @@ import {
   ContextMenu as ReactContextMenu,
   ContextMenuProps,
 } from "react-contextmenu"
-import { color } from "utils"
+import { color } from "../../utils"
 
 const StyledContextMenu = styled(ReactContextMenu)`
   z-index: 100;

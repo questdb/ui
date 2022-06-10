@@ -123,18 +123,6 @@ module.exports = {
   },
   resolve: {
     extensions: [".ts", ".tsx", ".js"],
-    // @TODO: adding temporarily, remove them later 'cause they're more pain than help
-    alias: {
-      consts: path.resolve(__dirname, "src/consts"),
-      partials: path.resolve(__dirname, "src/partials"),
-      providers: path.resolve(__dirname, "src/providers"),
-      scenes: path.resolve(__dirname, "src/scenes"),
-      store: path.resolve(__dirname, "src/store"),
-      styles: path.resolve(__dirname, "src/styles"),
-      theme: path.resolve(__dirname, "src/theme"),
-      types: path.resolve(__dirname, "src/types"),
-      utils: path.resolve(__dirname, "src/utils"),
-    },
   },
   module: {
     rules: [

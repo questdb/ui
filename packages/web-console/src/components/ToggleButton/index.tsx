@@ -25,8 +25,8 @@
 import React, { forwardRef, Ref } from "react"
 import styled, { css } from "styled-components"
 
-import type { Color, FontSize } from "types"
-import { color } from "utils"
+import type { Color, FontSize } from "../../types"
+import { color } from "../../utils"
 
 import { ButtonProps, getButtonSize } from "../Button"
 import { bezierTransition } from "../Transition"

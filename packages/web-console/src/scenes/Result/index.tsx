@@ -39,9 +39,9 @@ import {
   useScreenSize,
 } from "../../components"
 import { BusEvent } from "../../consts"
-import { selectors } from "store"
-import { color } from "utils"
-import * as QuestDB from "utils/questdb"
+import { selectors } from "../../store"
+import { color } from "../../utils"
+import * as QuestDB from "../../utils/questdb"
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;

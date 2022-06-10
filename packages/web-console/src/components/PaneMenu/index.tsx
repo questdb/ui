@@ -24,7 +24,7 @@
 
 import styled from "styled-components"
 
-import { color } from "utils"
+import { color } from "../../utils"
 
 export const PaneMenu = styled.div`
   position: relative;
