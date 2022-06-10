@@ -192,9 +192,8 @@ export const Splitter = ({
         const clientPosition =
           direction === "horizontal" ? "clientX" : "clientY"
         const coordinate = direction === "horizontal" ? "x" : "y"
-        const offset = splitter.current.parentElement.getBoundingClientRect()[
-          coordinate
-        ]
+        const offset =
+          splitter.current.parentElement.getBoundingClientRect()[coordinate]
         let position = 0
 
         if (window.TouchEvent && event.nativeEvent instanceof TouchEvent) {
