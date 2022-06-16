@@ -137,6 +137,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
                 WHERE created > '${new Date(
                   remoteConfig.lastUpdated,
                 ).toISOString()}'
+                LIMIT -10000
             `,
           ),
         )
