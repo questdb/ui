@@ -7,9 +7,6 @@
 This repository is a monorepo hosting the implementation of QuestDB user
 interface and surrounding tooling.
 
-The monorepo is managed by [yarn@3](https://yarnpkg.com/) and uses `pnp`
-as node module linking mechanism.
-
 Currently hosting these packages:
 
 * [`web-console`](./packages/web-console) - the GUI tool, shipped with QuestDB
