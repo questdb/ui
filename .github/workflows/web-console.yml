@@ -2,9 +2,8 @@ name: web-console
 
 on:
   push:
-    # temporarily commenting for initial test
-    # paths:
-      # - packages/web-console/**
+    paths:
+      - packages/web-console/**
     branches-ignore:
       - main
       - refs/tags/*
@@ -22,7 +21,6 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
-
 
       - name: build
         run: yarn workspace @questdb/web-console run build
