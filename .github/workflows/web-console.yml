@@ -16,19 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
+        with:
+          node-version: '16.13.1'
+          cache: 'yarn'
 
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache --check-cache
 
-
-      - uses: actions/cache@v1
-        with:
-          path: ~/.cache/yarn
-          key: ${{ runner.os }}-build-node-modules-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-build-node-modules
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
 
       - name: build
         run: yarn workspace @questdb/web-console run build
