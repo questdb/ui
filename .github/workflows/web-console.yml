@@ -2,8 +2,9 @@ name: web-console
 
 on:
   push:
-    paths:
-      - packages/web-console/**
+    # temporarily commenting for initial test
+    # paths:
+      # - packages/web-console/**
     branches-ignore:
       - main
       - refs/tags/*
