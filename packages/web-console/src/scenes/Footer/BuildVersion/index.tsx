@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { QuestContext } from "../../../providers"
+import { QuestContext } from "providers"
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
