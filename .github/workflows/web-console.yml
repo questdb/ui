@@ -2,14 +2,10 @@ name: web-console
 
 on:
   push:
-    paths:
-      - packages/web-console/**
-    branches-ignore:
-      - main
-      - refs/tags/*
 
 jobs:
   build:
+    name: Build packages/web-console
     runs-on: ubuntu-latest
 
     steps:
@@ -24,3 +20,13 @@ jobs:
 
       - name: build
         run: yarn workspace @questdb/web-console run build
+
+      - name: Publish @questdb/web-console to npm
+        if: github.ref == 'refs/heads/main'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          package: ./packages/web-console/package.json
+          dry-run: true
