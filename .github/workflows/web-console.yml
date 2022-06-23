@@ -25,7 +25,7 @@ jobs:
   publish:
     name: Publish @questdb/web-console
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # if: github.ref == 'refs/heads/main'
     steps:
       # TODO: do not build again for publishing
       # reuse built artifact in this job
