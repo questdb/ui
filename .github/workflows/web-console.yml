@@ -29,4 +29,3 @@ jobs:
           access: public
           check-version: true
           package: ./packages/web-console/package.json
-          dry-run: true
