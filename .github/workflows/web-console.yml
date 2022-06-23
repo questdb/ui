@@ -48,4 +48,8 @@ jobs:
         uses: JS-DevTools/npm-publish@v1
         with:
           token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          greater-version-only: true
+          package: ./packages/web-console/package.json
           dry-run: true
