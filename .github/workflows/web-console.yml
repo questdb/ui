@@ -2,14 +2,11 @@ name: web-console
 
 on:
   push:
-    paths:
-      - packages/web-console/**
-    branches-ignore:
-      - main
-      - refs/tags/*
 
 jobs:
   build:
+    name: Build packages/web-console
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -24,3 +21,31 @@ jobs:
 
       - name: build
         run: yarn workspace @questdb/web-console run build
+
+  publish:
+    name: Publish @questdb/web-console
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # TODO: do not build again for publishing
+      # reuse built artifact in this job
+      - name: Checkout 
+        uses: actions/checkout@v3
+
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16.13.1'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable --immutable-cache
+
+      - name: build @questdb/web-console
+        run: yarn workspace @questdb/web-console run build
+
+      - name: Publish @questdb/web-console to npm
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          dry-run: true
