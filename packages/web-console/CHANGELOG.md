@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add `LIMIT -10000` to telemetry query [bf1fbdb5](https://github.com/questdb/ui/commit/bf1fbdb5ef91a8111330fc8b8cea4a889ebcbca0)
 
+### Fixed
+
+- fix `select build()` being called repeatedly [#2217](https://github.com/questdb/questdb/pull/2217)
+
 ## 0.0.1 - 2022-06-10
 
 ### Changed
