@@ -112,6 +112,17 @@ export type Options = {
   explain?: boolean
 }
 
+const parseJSON = <T extends object>(raw: string): T | null => {
+  try {
+    // remove file separator symbol, as it's not valid a token for JSON.parse
+    return JSON.parse(raw.replace(/\u001C/g, ""))
+  } catch (e) {
+    console.error("Unable to parse JSON returned from QuestDB")
+    console.error(e)
+    return null
+  }
+}
+
 export class Client {
   private readonly _host: string
   private _controllers: AbortController[] = []
@@ -231,7 +242,7 @@ export class Client {
     if (response.ok || response.status === 400) {
       // 400 is only for SQL errors
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
-      const data = (await response.json()) as RawResult
+      const data = parseJSON<RawResult>(await response.text()) as RawResult
 
       bus.trigger(BusEvent.MSG_CONNECTION_OK)
 
