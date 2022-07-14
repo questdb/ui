@@ -38,7 +38,6 @@ echarts.use([LegendComponent, GridComponent])
 // https://stackoverflow.com/questions/7837456/how-to-compare-arrays-in-javascript
 //
 
-// attach the .equals method to Array's prototype to call it on any array
 function arrayEquals(left, right) {
   // if the other array is a falsy value, return
   if (!left || !right) {
@@ -68,17 +67,6 @@ function arrayEquals(left, right) {
 // end of copy paste
 
 $.fn.quickVis = function (msgBus) {
-  var defaults = {
-    minColumnWidth: 60,
-    rowHeight: 28,
-    divCacheSize: 128,
-    viewportHeight: 400,
-    yMaxThreshold: 10000000,
-    maxRowsToAnalyze: 100,
-    bottomMargin: 75,
-    minVpHeight: 120,
-    minDivHeight: 160,
-  }
   var bus = msgBus
   var div = $(this)
   const btnDraw = $("#_qvis_frm_draw")
