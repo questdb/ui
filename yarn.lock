@@ -2697,7 +2697,6 @@ __metadata:
     eslint-plugin-standard: 5.0.0
     file-loader: 6.0.0
     fork-ts-checker-webpack-plugin: 6.1.0
-    glyphicons-halflings: 1.9.1
     handlebars: 4.7.7
     handlebars-loader: 1.7.1
     html-webpack-plugin: ^5.5.0
@@ -10435,13 +10434,6 @@ __metadata:
   version: 0.1.4
   resolution: "globjoin@npm:0.1.4"
   checksum: 0a47d88d566122d9e42da946453ee38b398e0021515ac6a95d13f980ba8c1e42954e05ee26cfcbffce1ac1ee094d0524b16ce1dd874ca52408d6db5c6d39985b
-  languageName: node
-  linkType: hard
-
-"glyphicons-halflings@npm:1.9.1":
-  version: 1.9.1
-  resolution: "glyphicons-halflings@npm:1.9.1"
-  checksum: f96653375304925580ab16de5147ecd4889162d18e8902d190e5bb314efb3d9156d06e5f7b2ac0dd2137585508f48ca92abdc7e99460865a799c5d44a9ca7a59
   languageName: node
   linkType: hard
 
