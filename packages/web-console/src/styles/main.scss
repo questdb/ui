@@ -43,7 +43,6 @@ $fa-font-path: "~@fortawesome/fontawesome-free/webfonts";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_variables";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_mixins";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_normalize";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_print";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_scaffolding";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_type";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_code";
@@ -103,17 +102,6 @@ $spacing-s: 4px !default;
 @import "base";
 @import "metismenu";
 @import "media";
-
-// Clear layout on print mode
-@media print {
-  nav.navbar-static-side {
-    display: none;
-  }
-
-  #page-wrapper {
-    margin: 0;
-  }
-}
 
 @import "editor";
 @import "import";
