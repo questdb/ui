@@ -5234,7 +5234,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/throttle-debounce", "npm:2.1.0"],\
             ["@typescript-eslint/eslint-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.27.1"],\
             ["@typescript-eslint/parser", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.27.1"],\
-            ["ace-builds", "npm:1.4.11"],\
             ["animate.css", "npm:3.7.2"],\
             ["babel-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:8.2.5"],\
             ["babel-plugin-styled-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.0.7"],\
@@ -10234,15 +10233,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["accepts", "npm:1.3.8"],\
             ["mime-types", "npm:2.1.35"],\
             ["negotiator", "npm:0.6.3"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["ace-builds", [\
-        ["npm:1.4.11", {\
-          "packageLocation": "./.yarn/cache/ace-builds-npm-1.4.11-424948fb36-11822e70e8.zip/node_modules/ace-builds/",\
-          "packageDependencies": [\
-            ["ace-builds", "npm:1.4.11"]\
           ],\
           "linkType": "HARD"\
         }]\
