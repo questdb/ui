@@ -34,8 +34,6 @@ const MSG_QUERY_FIND_N_EXEC = "query.build.execute"
 const MSG_ACTIVE_PANEL = "active.panel"
 
 const MSG_EDITOR_FOCUS = "editor.focus"
-const MSG_EDITOR_EXECUTE = "editor.execute"
-const MSG_EDITOR_EXECUTE_ALT = "editor.execute.alt"
 
 const MSG_CHART_DRAW = "chart.draw"
 
@@ -54,8 +52,6 @@ export {
   MSG_ACTIVE_PANEL,
   MSG_QUERY_FIND_N_EXEC,
   MSG_EDITOR_FOCUS,
-  MSG_EDITOR_EXECUTE,
-  MSG_EDITOR_EXECUTE_ALT,
   MSG_CHART_DRAW,
   queryBatchSize,
 }
