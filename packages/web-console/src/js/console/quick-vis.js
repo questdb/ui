@@ -22,6 +22,10 @@
  *
  ******************************************************************************/
 
+import "echarts/lib/chart/bar"
+import "echarts/lib/chart/line"
+import "echarts/lib/component/tooltip"
+import "echarts/lib/component/title"
 import * as echarts from "echarts/lib/echarts"
 import { LegendComponent, GridComponent } from "echarts/components"
 
@@ -66,9 +70,9 @@ function arrayEquals(left, right) {
 
 // end of copy paste
 
-$.fn.quickVis = function (msgBus) {
+export function quickVis(root, msgBus) {
   var bus = msgBus
-  var div = $(this)
+  var div = root
   const btnDraw = $("#_qvis_frm_draw")
   var viewport
   var echart
