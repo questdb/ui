@@ -22,8 +22,6 @@
  *
  ******************************************************************************/
 
-import $ from "jquery"
-
 const queryBatchSize = 1000
 const MSG_QUERY_EXPORT = "query.in.export"
 const MSG_QUERY_EXEC = "query.in.exec"
@@ -41,34 +39,8 @@ const MSG_EDITOR_EXECUTE_ALT = "editor.execute.alt"
 
 const MSG_CHART_DRAW = "chart.draw"
 
-export function toExportUrl(query) {
-  return (
-    window.location.protocol +
-    "//" +
-    window.location.host +
-    "/exp?query=" +
-    encodeURIComponent(query)
-  )
-}
-
 export function setHeight(element, height) {
   element.css("height", height + "px")
-}
-
-export function createEditor(div) {
-  const edit = ace.edit(div)
-  edit.getSession().setMode("ace/mode/questdb")
-  edit.setTheme("ace/theme/dracula")
-  edit.setShowPrintMargin(false)
-  edit.setDisplayIndentGuides(false)
-  edit.setHighlightActiveLine(false)
-  edit.$blockScrolling = Infinity
-
-  $(window).on("resize", function () {
-    edit.resize()
-  })
-
-  return edit
 }
 
 export {

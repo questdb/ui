@@ -59,14 +59,6 @@ body {
   scrollbar-width: thin;
 }
 
-.ace_scrollbar-v {
-  width: 10px !important;
-}
-
-.ace_scrollbar-h {
-  height: 10px !important;
-}
-
 html,
 body {
   height: 100%;
@@ -835,15 +827,6 @@ table.table-mail tr td {
 
 .panel-title {
   font-size: inherit;
-}
-
-.jumbotron {
-  border-radius: 6px;
-  padding: 40px;
-}
-
-.jumbotron h1 {
-  margin-top: 0;
 }
 
 /* COLORS */
