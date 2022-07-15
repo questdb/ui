@@ -24,27 +24,16 @@
 
 import $ from "jquery"
 
-import { setupConsoleController } from "./console-controller"
 import { setupImportController } from "./import-controller"
 
 import "../../styles/main.scss"
-import "./grid"
 import "./import"
 import "./import-detail"
-import "./quick-vis"
 import "./splitter"
 
 let messageBus = $({})
 window.bus = messageBus
 
-$(document).ready(function () {
-  messageBus.trigger("preferences.load")
-
-  const win = $(window)
-  win.trigger("resize")
-})
-
 messageBus.on("react.ready", () => {
-  setupConsoleController(messageBus)
-  setupImportController(messageBus)
+  setupImportController(bus)
 })
