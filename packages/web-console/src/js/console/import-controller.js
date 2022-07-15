@@ -24,10 +24,11 @@
 
 import $ from "jquery"
 
-import * as qdb from "./globals"
+function setHeight(element, height) {
+  element.css("height", height + "px")
+}
 
 let upperHalfHeight = 515
-
 function resize() {
   const footer = $(".footer")
   const importTopPanel = $("#import-top")
@@ -36,8 +37,8 @@ function resize() {
   const h = $(window)[0].innerHeight
   const footerHeight = footer.offsetHeight
 
-  qdb.setHeight(importTopPanel, upperHalfHeight)
-  qdb.setHeight(
+  setHeight(importTopPanel, upperHalfHeight)
+  setHeight(
     importDetail,
     h - footerHeight - upperHalfHeight - importMenu.offsetHeight - 50,
   )

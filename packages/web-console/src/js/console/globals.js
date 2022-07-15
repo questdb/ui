@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 
-export const queryBatchSize = 1000
 export const MSG_QUERY_EXPORT = "query.in.export"
 export const MSG_QUERY_EXEC = "query.in.exec"
 export const MSG_QUERY_CANCEL = "query.in.cancel"
@@ -34,7 +33,3 @@ export const MSG_QUERY_FIND_N_EXEC = "query.build.execute"
 export const MSG_ACTIVE_PANEL = "active.panel"
 export const MSG_EDITOR_FOCUS = "editor.focus"
 export const MSG_CHART_DRAW = "chart.draw"
-
-export function setHeight(element, height) {
-  element.css("height", height + "px")
-}

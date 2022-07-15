@@ -52,7 +52,7 @@ export function grid(root, msgBus) {
   // number of divs in "rows" cache, has to be power of two
   var dc = defaults.divCacheSize
   var dcn = dc - 1
-  var pageSize = qdb.queryBatchSize
+  var pageSize = 1000
   var oneThirdPage = Math.floor(pageSize / 3)
   var twoThirdsPage = oneThirdPage * 2
   var loPage
