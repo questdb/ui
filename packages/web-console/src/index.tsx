@@ -27,52 +27,13 @@ import "./js/console"
 
 import React from "react"
 import ReactDOM from "react-dom"
-import { Provider } from "react-redux"
-import { applyMiddleware, compose, createStore } from "redux"
-import { createEpicMiddleware } from "redux-observable"
-import { ThemeProvider } from "styled-components"
 
-import {
-  createGlobalFadeTransition,
-  ScreenSizeProvider,
-  TransitionDuration,
-} from "./components"
-import { actions, rootEpic, rootReducer } from "./store"
-import { StoreAction, StoreShape } from "./types"
-
-import Layout from "./scenes/Layout"
-import { theme } from "./theme"
-import { LocalStorageProvider } from "./providers/LocalStorageProvider"
-
-const epicMiddleware = createEpicMiddleware<
-  StoreAction,
-  StoreAction,
-  StoreShape
->()
-
-const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
-
-epicMiddleware.run(rootEpic)
-store.dispatch(actions.console.bootstrap())
-
-const FadeReg = createGlobalFadeTransition("fade-reg", TransitionDuration.REG)
-
-const FadeSlow = createGlobalFadeTransition(
-  "fade-slow",
-  TransitionDuration.SLOW,
-)
+import { ScreenSizeProvider } from "./components"
+import { Console } from "./console"
 
 ReactDOM.render(
   <ScreenSizeProvider>
-    <Provider store={store}>
-      <ThemeProvider theme={theme}>
-        <LocalStorageProvider>
-          <FadeSlow />
-          <FadeReg />
-          <Layout />
-        </LocalStorageProvider>
-      </ThemeProvider>
-    </Provider>
+    <Console />
   </ScreenSizeProvider>,
   document.getElementById("root"),
 )
