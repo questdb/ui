@@ -26,7 +26,7 @@ import $ from "jquery"
 
 import * as qdb from "./globals"
 
-$.fn.grid = function (msgBus) {
+export function grid(root, msgBus) {
   var defaults = {
     minColumnWidth: 60,
     rowHeight: 28,
@@ -40,7 +40,7 @@ $.fn.grid = function (msgBus) {
   }
   var bus = msgBus
   var $style
-  var div = $(this)
+  var div = root
   var viewport
   var canvas
   var header
