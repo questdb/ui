@@ -28,6 +28,9 @@ import { useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Grid, PieChart, Refresh } from "styled-icons/remix-line"
 
+import { grid } from "../../js/console/grid"
+import { quickVis } from "../../js/console/quick-vis"
+
 import {
   PaneContent,
   PaneWrapper,
@@ -84,6 +87,11 @@ const Result = () => {
   const [count, setCount] = useState<number | undefined>()
   const { sm } = useScreenSize()
   const result = useSelector(selectors.query.getResult)
+  useEffect(() => {
+    grid($("#grid"), window.bus as unknown as ReturnType<typeof $>)
+    quickVis($("#quick-vis"), window.bus as unknown as ReturnType<typeof $>)
+  }, [])
+
   const handleChartClick = useCallback(() => {
     setSelected("chart")
   }, [])
