@@ -2669,7 +2669,6 @@ __metadata:
     "@types/throttle-debounce": 2.1.0
     "@typescript-eslint/eslint-plugin": ^5.0.0
     "@typescript-eslint/parser": ^5.0.0
-    ace-builds: 1.4.11
     animate.css: 3.7.2
     babel-loader: ^8.2.5
     babel-plugin-styled-components: ^2.0.7
@@ -2697,7 +2696,6 @@ __metadata:
     eslint-plugin-standard: 5.0.0
     file-loader: 6.0.0
     fork-ts-checker-webpack-plugin: 6.1.0
-    glyphicons-halflings: 1.9.1
     handlebars: 4.7.7
     handlebars-loader: 1.7.1
     html-webpack-plugin: ^5.5.0
@@ -5669,13 +5667,6 @@ __metadata:
     mime-types: "npm:~2.1.34"
     negotiator: "npm:0.6.3"
   checksum: 50c43d32e7b50285ebe84b613ee4a3aa426715a7d131b65b786e2ead0fd76b6b60091b9916d3478a75f11f162628a2139991b6c03ab3f1d9ab7c86075dc8eab4
-  languageName: node
-  linkType: hard
-
-"ace-builds@npm:1.4.11":
-  version: 1.4.11
-  resolution: "ace-builds@npm:1.4.11"
-  checksum: 11822e70e84312698a7fdefed730613fb7485be6502a36222d3af6a36ae824fb55967ebb0c48d7b5ff842948d389ee25dcc48c6bafc4be0c69a44d6a8d2a937a
   languageName: node
   linkType: hard
 
@@ -10435,13 +10426,6 @@ __metadata:
   version: 0.1.4
   resolution: "globjoin@npm:0.1.4"
   checksum: 0a47d88d566122d9e42da946453ee38b398e0021515ac6a95d13f980ba8c1e42954e05ee26cfcbffce1ac1ee094d0524b16ce1dd874ca52408d6db5c6d39985b
-  languageName: node
-  linkType: hard
-
-"glyphicons-halflings@npm:1.9.1":
-  version: 1.9.1
-  resolution: "glyphicons-halflings@npm:1.9.1"
-  checksum: f96653375304925580ab16de5147ecd4889162d18e8902d190e5bb314efb3d9156d06e5f7b2ac0dd2137585508f48ca92abdc7e99460865a799c5d44a9ca7a59
   languageName: node
   linkType: hard
 

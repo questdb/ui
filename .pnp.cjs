@@ -5234,7 +5234,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/throttle-debounce", "npm:2.1.0"],\
             ["@typescript-eslint/eslint-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.27.1"],\
             ["@typescript-eslint/parser", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.27.1"],\
-            ["ace-builds", "npm:1.4.11"],\
             ["animate.css", "npm:3.7.2"],\
             ["babel-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:8.2.5"],\
             ["babel-plugin-styled-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.0.7"],\
@@ -5262,7 +5261,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["eslint-plugin-standard", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.0.0"],\
             ["file-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:6.0.0"],\
             ["fork-ts-checker-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:6.1.0"],\
-            ["glyphicons-halflings", "npm:1.9.1"],\
             ["handlebars", "npm:4.7.7"],\
             ["handlebars-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.7.1"],\
             ["html-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.5.0"],\
@@ -10235,15 +10233,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["accepts", "npm:1.3.8"],\
             ["mime-types", "npm:2.1.35"],\
             ["negotiator", "npm:0.6.3"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["ace-builds", [\
-        ["npm:1.4.11", {\
-          "packageLocation": "./.yarn/cache/ace-builds-npm-1.4.11-424948fb36-11822e70e8.zip/node_modules/ace-builds/",\
-          "packageDependencies": [\
-            ["ace-builds", "npm:1.4.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -16309,15 +16298,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/globjoin-npm-0.1.4-a1beb812bf-0a47d88d56.zip/node_modules/globjoin/",\
           "packageDependencies": [\
             ["globjoin", "npm:0.1.4"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["glyphicons-halflings", [\
-        ["npm:1.9.1", {\
-          "packageLocation": "./.yarn/cache/glyphicons-halflings-npm-1.9.1-a68a589ee6-f966533753.zip/node_modules/glyphicons-halflings/",\
-          "packageDependencies": [\
-            ["glyphicons-halflings", "npm:1.9.1"]\
           ],\
           "linkType": "HARD"\
         }]\

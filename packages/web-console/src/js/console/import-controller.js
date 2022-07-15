@@ -31,7 +31,6 @@ let upperHalfHeight = 515
 function resize() {
   const footer = $(".footer")
   const importTopPanel = $("#import-top")
-  const canvasPanel = importTopPanel.find(".ud-canvas")
   const importDetail = $("#import-detail")
   const importMenu = $("#import-menu")[0]
   const h = $(window)[0].innerHeight
@@ -42,9 +41,6 @@ function resize() {
     importDetail,
     h - footerHeight - upperHalfHeight - importMenu.offsetHeight - 50,
   )
-
-  let r1 = importTopPanel[0].getBoundingClientRect()
-  let r2 = canvasPanel[0].getBoundingClientRect()
 }
 
 function splitterResize(x, p) {

@@ -37,7 +37,6 @@ module.exports = {
     "plugin:react-hooks/recommended",
     "plugin:prettier/recommended",
   ],
-  globals: { ace: true },
   parser: "@typescript-eslint/parser",
   parserOptions: {
     ecmaFeatures: {},

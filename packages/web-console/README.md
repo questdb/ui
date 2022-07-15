@@ -7,7 +7,7 @@ Yarn@3 and Webpack.
 
 ## Local development setup
 
-### TL;DR;
+## TL;DR;
 
 ```
 git clone git@github.com/questdb/ui.git
@@ -66,3 +66,23 @@ yarn workspace @questdb/web-console run build
 ```
 
 3. Build process emits static HTML, CSS and JS files in `packages/web-console/dist`
+
+## Run tests
+
+This monorepo contains `browser-tests` package which is used to test
+`web-console` package. `browser-tests` does not yet run as part of
+`web-console` build on CI, but they can be used to test changes locally.
+
+Tests are written with [Cypress](https://www.cypress.io/) E2E framework.
+
+1. start `web-console` local dev environment as explained above in this document.
+2. run tests with
+  ```
+  yarn workspace browser-tests test
+  ```
+
+  or
+
+  ```
+  yarn workspace browser-tests run cypress open
+  ```
