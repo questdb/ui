@@ -29,6 +29,7 @@ import { Provider } from "react-redux"
 import { applyMiddleware, compose, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
 
+import "./js/console"
 import { createGlobalFadeTransition, TransitionDuration } from "./components"
 import { actions, rootEpic, rootReducer } from "./store"
 import { StoreAction, StoreShape } from "./types"
