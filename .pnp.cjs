@@ -5224,6 +5224,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.5"],\
             ["@popperjs/core", "npm:2.4.2"],\
             ["@questdb/sql-grammar", "npm:1.0.9"],\
+            ["@types/jquery", "npm:3.5.1"],\
             ["@types/node", "npm:17.0.41"],\
             ["@types/ramda", "npm:0.27.40"],\
             ["@types/react", "npm:17.0.2"],\
@@ -9151,6 +9152,16 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@types/istanbul-reports", "npm:3.0.1"],\
             ["@types/istanbul-lib-report", "npm:3.0.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@types/jquery", [\
+        ["npm:3.5.1", {\
+          "packageLocation": "./.yarn/cache/@types-jquery-npm-3.5.1-998cae83dd-963cd03a5a.zip/node_modules/@types/jquery/",\
+          "packageDependencies": [\
+            ["@types/jquery", "npm:3.5.1"],\
+            ["@types/sizzle", "npm:2.3.3"]\
           ],\
           "linkType": "HARD"\
         }]\

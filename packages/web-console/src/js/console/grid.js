@@ -26,7 +26,7 @@ import $ from "jquery"
 
 import * as qdb from "./globals"
 
-$.fn.grid = function (msgBus) {
+export function grid(root, msgBus) {
   var defaults = {
     minColumnWidth: 60,
     rowHeight: 28,
@@ -40,7 +40,7 @@ $.fn.grid = function (msgBus) {
   }
   var bus = msgBus
   var $style
-  var div = $(this)
+  var div = root
   var viewport
   var canvas
   var header
@@ -52,7 +52,7 @@ $.fn.grid = function (msgBus) {
   // number of divs in "rows" cache, has to be power of two
   var dc = defaults.divCacheSize
   var dcn = dc - 1
-  var pageSize = qdb.queryBatchSize
+  var pageSize = 1000
   var oneThirdPage = Math.floor(pageSize / 3)
   var twoThirdsPage = oneThirdPage * 2
   var loPage

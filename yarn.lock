@@ -2659,6 +2659,7 @@ __metadata:
     "@monaco-editor/react": ^4.3.1
     "@popperjs/core": 2.4.2
     "@questdb/sql-grammar": 1.0.9
+    "@types/jquery": 3.5.1
     "@types/node": ^17.0.41
     "@types/ramda": 0.27.40
     "@types/react": 16.9.35
@@ -4845,6 +4846,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/jquery@npm:3.5.1":
+  version: 3.5.1
+  resolution: "@types/jquery@npm:3.5.1"
+  dependencies:
+    "@types/sizzle": "*"
+  checksum: 963cd03a5a69ec38009b077c63b5d3590229b83ea40065d14a916de0fa46370bf587ee3c696793751361c41cd3ffeef57fa8ba522be0eeec9187673312bbacae
+  languageName: node
+  linkType: hard
+
 "@types/json-schema@npm:*, @types/json-schema@npm:^7.0.4, @types/json-schema@npm:^7.0.5, @types/json-schema@npm:^7.0.8, @types/json-schema@npm:^7.0.9":
   version: 7.0.11
   resolution: "@types/json-schema@npm:7.0.11"
@@ -5101,7 +5111,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/sizzle@npm:^2.3.2":
+"@types/sizzle@npm:*, @types/sizzle@npm:^2.3.2":
   version: 2.3.3
   resolution: "@types/sizzle@npm:2.3.3"
   checksum: 586a9fb1f6ff3e325e0f2cc1596a460615f0bc8a28f6e276ac9b509401039dd242fa8b34496d3a30c52f5b495873922d09a9e76c50c2ab2bcc70ba3fb9c4e160

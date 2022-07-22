@@ -24,6 +24,7 @@
 
 import "core-js/features/promise"
 import "./js/console"
+import "docsearch.js/dist/cdn/docsearch.min.css"
 
 import React from "react"
 import ReactDOM from "react-dom"
