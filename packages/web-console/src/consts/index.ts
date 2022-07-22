@@ -24,8 +24,6 @@
 
 export enum BusEvent {
   MSG_ACTIVE_PANEL = "active.panel",
-  MSG_EDITOR_EXECUTE = "editor.execute",
-  MSG_EDITOR_EXECUTE_ALT = "editor.execute.alt",
   MSG_EDITOR_FOCUS = "editor.focus",
   MSG_EDITOR_SET = "editor.set",
   MSG_EDITOR_INSERT_COLUMN = "editor.insert.column",
