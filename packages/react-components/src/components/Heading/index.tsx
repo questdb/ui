@@ -5,6 +5,7 @@ type Level = 1 | 2 | 3 | 4 | 5;
 export type Props = {
   level: Level;
   children?: React.ReactNode;
+  dataHook?: string;
 };
 
 const fontSizes: { [key in Level]: string } = {
@@ -15,9 +16,13 @@ const fontSizes: { [key in Level]: string } = {
   5: "1.6rem",
 };
 
-export const Heading = ({ level, children, ...rest }: Props) =>
+export const Heading = ({ level, children, dataHook, ...rest }: Props) =>
   React.createElement(
     `h${level}`,
-    { style: { fontSize: fontSizes[level], margin: 0 }, ...rest },
+    {
+      style: { fontSize: fontSizes[level], margin: 0 },
+      "data-hook": dataHook,
+      ...rest,
+    },
     children
   );
