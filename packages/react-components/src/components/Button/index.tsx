@@ -20,6 +20,7 @@ export type Props = {
   title?: string;
   rounded?: boolean;
   prefixIcon?: React.ReactNode;
+  dataHook?: string;
 };
 
 const Prefix = styled.div<{ disabled?: boolean }>`
@@ -39,6 +40,7 @@ export const Button: React.FunctionComponent<Props> = React.forwardRef(
         ref={ref}
         as={as ?? "button"}
         disabled={disabled}
+        data-hook={props.dataHook}
         {...props}
         {...type}
       >
