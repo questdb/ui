@@ -37,3 +37,10 @@ const permutations = permutate({
 });
 
 All.decorators = [permutateDecorator(permutations)];
+
+export const DataHook = Template.bind({});
+
+DataHook.args = {
+  children: "Button with datahook",
+  dataHook: "hello-world",
+};
