@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.4 - 2022-08-11
+
+### Added
+
+- add `Switch` component
+
 ## 0.0.3 - 2022-08-04 
 
 ### Added
