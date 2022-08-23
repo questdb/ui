@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.3 - 2022-08-23
+
+### Changed
+
+- update CSV import UI with info box about `COPY` command [38584a0a](https://github.com/questdb/ui/commit/038584a0a8e86641628be19f402a540488bb70468)
+
 ## 0.0.2 - 2022-06-23
 
 ### Changed
