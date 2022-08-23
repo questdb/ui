@@ -28,13 +28,11 @@ $drag-drop-border: #c6c6c6;
 .drag-target {
   background-color: #e8e8e8;
   text-align: center;
-  margin-bottom: 30px;
-  border-radius: $border-radius;
 }
 
 .drag-idle {
   border: 1px solid $drag-drop-border;
-  padding: 30px;
+  padding: 40px 0 30px;
 }
 
 .drag-drop {
@@ -42,7 +40,14 @@ $drag-drop-border: #c6c6c6;
   padding: 27px;
 }
 
-// file list
+.import-note {
+  padding: 1rem;
+  font-size: 9pt;
+  border: 1px solid #c6c6c6;
+  border-top: 0;
+  background: #dedede;
+  margin-bottom: 30px;
+}
 
 .ud-canvas {
   position: relative;
@@ -73,8 +78,6 @@ $drag-drop-border: #c6c6c6;
   background-color: #f6f6f6;
 }
 
-$transparent-border: 1px solid transparent;
-
 .ud-cell,
 .ud-header {
   vertical-align: middle;
@@ -82,7 +85,7 @@ $transparent-border: 1px solid transparent;
 
 .ud-cell {
   position: absolute;
-  border: $transparent-border;
+  border: 1px solid transparent;
   padding: 1px 4px 2px 4px;
   overflow: hidden;
   white-space: nowrap;
@@ -107,8 +110,6 @@ $transparent-border: 1px solid transparent;
   -moz-user-select: none; /* Old versions of Firefox */
   -ms-user-select: none; /* Internet Explorer/Edge */
   user-select: none;
-  /* Non-prefixed version, currently
-                                   supported by Chrome, Opera and Firefox */
 }
 
 .ud-c1,
