@@ -28,7 +28,9 @@ import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { SecondaryButton } from "../../../components"
 import { formatCommitHash, formatVersion } from "./services"
-import { ExternalLink } from "styled-icons/remix-line"
+import { ExternalLink, ArrowUpCircle } from "styled-icons/remix-line"
+import { Release } from "../../../utils/questdb";
+import { compare } from "compare-versions";
 
 const Wrapper = styled.div`
   display: flex;
@@ -41,15 +43,28 @@ const Wrapper = styled.div`
   }
 `
 const ReleaseNotesButton = styled(SecondaryButton)`
-  & > :not(:last-child) {
-    margin-right: 0.5rem;
-  }
+  position: relative;
+`
+
+const QuestDBVersion = styled.span`
+  margin-right: 0.5rem;
+`
+
+const UpgradeIcon = styled(ArrowUpCircle)`
+  color: ${({ theme }) => theme.color.draculaGreen};
+`
+
+const NewestRelease = styled.span`
+  color: ${({ theme }) => theme.color.draculaGreen};
+  font-size: ${({ theme }) => theme.fontSize.xs};
 `
 
 const BuildVersion = () => {
   const { quest } = useContext(QuestContext)
   const [buildVersion, setBuildVersion] = useState("")
   const [commitHash, setCommitHash] = useState("")
+  const [upgradeAvailable, setUpgradeAvailable] = useState(false)
+  const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
     void quest.queryRaw("select build", { limit: "0,1000" }).then((result) => {
@@ -62,24 +77,36 @@ const BuildVersion = () => {
     })
   }, [])
 
+  useEffect(() => {
+    if (buildVersion) {
+      void quest.getLatestRelease().then((release: Release) => {
+        setUpgradeAvailable(compare(buildVersion, release.name, "<"));
+        setNewestRelease(release);
+      })
+    }
+  }, [buildVersion])
+
   if (!buildVersion.length && !commitHash.length) return null
+
+  const releaseUrl = (upgradeAvailable && newestRelease) ? newestRelease.html_url : `https://github.com/questdb/questdb${
+    buildVersion
+      ? `/releases/tag/${buildVersion}`
+      : `/commit/${commitHash}`
+  }`
 
   return (
     <Wrapper>
       <a
-        href={`https://github.com/questdb/questdb${
-          buildVersion
-            ? `/releases/tag/${buildVersion}`
-            : `/commit/${commitHash}`
-        }`}
+        href={releaseUrl}
         rel="noopener noreferrer"
         target="_blank"
       >
         <ReleaseNotesButton
           title={`Show ${buildVersion ? "release notes" : "commit details"}`}
         >
-          <span>QuestDB {buildVersion || "Dev"}</span>
-          <ExternalLink size="16px" />
+          <QuestDBVersion>QuestDB {buildVersion || "Dev"}</QuestDBVersion>
+          {upgradeAvailable ? <UpgradeIcon size="18px" /> : <ExternalLink size="16px" />}
+          {newestRelease && <NewestRelease>{newestRelease.name}</NewestRelease>}
         </ReleaseNotesButton>
       </a>
     </Wrapper>

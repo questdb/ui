@@ -112,6 +112,17 @@ export type Options = {
   explain?: boolean
 }
 
+export type Release = {
+  assets: {
+    browser_download_url: string
+    name: string
+    size: number
+  }[]
+  html_url: string
+  name: string
+  published_at: string
+}
+
 export class Client {
   private readonly _host: string
   private _controllers: AbortController[] = []
@@ -301,5 +312,15 @@ export class Client {
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
+  }
+
+  async getLatestRelease() {
+    try {
+      const response: Response = await fetch(`https://api.github.com/repos/questdb/questdb/releases/latest`)
+      return (await response.json()) as Release
+    } catch (error) {
+      // eslint-disable-next-line prefer-promise-reject-errors
+      return await Promise.reject(error)
+    }
   }
 }
