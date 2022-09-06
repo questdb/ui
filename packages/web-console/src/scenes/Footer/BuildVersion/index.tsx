@@ -63,7 +63,6 @@ const BuildVersion = () => {
   const { quest } = useContext(QuestContext)
   const [buildVersion, setBuildVersion] = useState("")
   const [commitHash, setCommitHash] = useState("")
-  const [upgradeAvailable, setUpgradeAvailable] = useState(false)
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
@@ -80,13 +79,14 @@ const BuildVersion = () => {
   useEffect(() => {
     if (buildVersion) {
       void quest.getLatestRelease().then((release: Release) => {
-        setUpgradeAvailable(compare(buildVersion, release.name, "<"));
         setNewestRelease(release);
       })
     }
   }, [buildVersion])
 
   if (!buildVersion.length && !commitHash.length) return null
+
+  const upgradeAvailable = newestRelease && compare(buildVersion, newestRelease.name, "<")
 
   const releaseUrl = (upgradeAvailable && newestRelease) ? newestRelease.html_url : `https://github.com/questdb/questdb${
     buildVersion
@@ -106,7 +106,7 @@ const BuildVersion = () => {
         >
           <QuestDBVersion>QuestDB {buildVersion || "Dev"}</QuestDBVersion>
           {upgradeAvailable ? <UpgradeIcon size="18px" /> : <ExternalLink size="16px" />}
-          {newestRelease && <NewestRelease>{newestRelease.name}</NewestRelease>}
+          {upgradeAvailable && newestRelease && <NewestRelease>{newestRelease.name}</NewestRelease>}
         </ReleaseNotesButton>
       </a>
     </Wrapper>

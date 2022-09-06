@@ -320,7 +320,7 @@ export class Client {
       return (await response.json()) as Release
     } catch (error) {
       // eslint-disable-next-line prefer-promise-reject-errors
-      return await Promise.reject(error)
+      throw error
     }
   }
 }
