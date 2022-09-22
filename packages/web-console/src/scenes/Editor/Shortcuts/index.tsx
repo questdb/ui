@@ -71,12 +71,28 @@ const altOption = platform.isMacintosh || platform.isIOS ? "⌥" : "Alt"
 
 const editorList: ShortcutsList = [
   {
-    keys: [[altOption, ctrlCmd, "Up"]],
+    keys: [[altOption, ctrlCmd, "↑"]],
     title: "Add cursor above",
   },
   {
-    keys: [[altOption, ctrlCmd, "Down"]],
+    keys: [[altOption, ctrlCmd, "↓"]],
     title: "Add cursor below",
+  },
+  {
+    keys: [["⇧", altOption, "↑"]],
+    title: "Copy line up",
+  },
+  {
+    keys: [["⇧", altOption, "↓"]],
+    title: "Copy line down",
+  },
+  {
+    keys: [[altOption, "↑"]],
+    title: "Move line up",
+  },
+  {
+    keys: [[altOption, "↓"]],
+    title: "Move line down",
   },
   {
     keys: [["⇧", altOption, "F"]],
