@@ -60,7 +60,9 @@ const ContextualMenu = ({ name, partitionBy }: Props) => {
   return (
     <ContextMenu id={name} onShow={handleShow}>
       {schema && (
-        <MenuItem onClick={handleCopySchemaToClipboard}>Copy schema</MenuItem>
+        <MenuItem onClick={handleCopySchemaToClipboard}>
+          Copy schema to clipboard
+        </MenuItem>
       )}
       <MenuItem divider />
       <MenuItem>Close</MenuItem>
