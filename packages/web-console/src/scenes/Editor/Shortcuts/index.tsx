@@ -119,7 +119,7 @@ const globalList: ShortcutsList = [
   },
 ]
 
-export const ShortcutsList = ({
+const ShortcutsGroup = ({
   list,
   title,
 }: {
@@ -153,7 +153,7 @@ export const ShortcutsList = ({
 
 export const Shortcuts = () => (
   <Wrapper>
-    <ShortcutsList list={globalList} title="Global shortcuts" />
-    <ShortcutsList list={editorList} title="SQL editor shortcuts" />
+    <ShortcutsGroup list={globalList} title="Global shortcuts" />
+    <ShortcutsGroup list={editorList} title="SQL editor shortcuts" />
   </Wrapper>
 )
