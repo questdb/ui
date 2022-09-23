@@ -36,8 +36,9 @@ type Props = {
 
 const ContextualMenu = ({ name, partitionBy }: Props) => {
   const { quest } = useContext(QuestContext)
+  const [schema, setSchema] = React.useState<string | undefined>()
 
-  const handleCopySchemaToClipboard = useCallback(() => {
+  const handleShow = useCallback(() => {
     void quest.queryRaw(`table_columns('${name}')`).then((result) => {
       if (result.type === QuestDB.Type.DQL && result.count > 0) {
         const formattedResult = formatTableSchemaQueryResult(
@@ -45,16 +46,22 @@ const ContextualMenu = ({ name, partitionBy }: Props) => {
           partitionBy,
           result,
         )
-        copyToClipboard(formattedResult)
+        setSchema(formattedResult)
       }
     })
   }, [quest, name, partitionBy])
 
+  const handleCopySchemaToClipboard = useCallback(() => {
+    if (schema) {
+      copyToClipboard(schema)
+    }
+  }, [schema])
+
   return (
-    <ContextMenu id={name}>
-      <MenuItem onClick={handleCopySchemaToClipboard}>
-        Copy Schema To Clipboard
-      </MenuItem>
+    <ContextMenu id={name} onShow={handleShow}>
+      {schema && (
+        <MenuItem onClick={handleCopySchemaToClipboard}>Copy schema</MenuItem>
+      )}
       <MenuItem divider />
       <MenuItem>Close</MenuItem>
     </ContextMenu>
