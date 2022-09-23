@@ -27,12 +27,15 @@ import React, { useCallback, useEffect, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
-import { Add } from "styled-icons/remix-line"
-import { Close as _CloseIcon } from "styled-icons/remix-line"
+import {
+  Add,
+  Close as _CloseIcon,
+  Command,
+  Database2,
+  Play,
+  Stop,
+} from "styled-icons/remix-line"
 import { Menu as _MenuIcon } from "styled-icons/remix-fill"
-import { Play } from "styled-icons/remix-line"
-import { Stop } from "styled-icons/remix-line"
-import { Database2 } from "styled-icons/remix-line"
 import { HelpCircle } from "styled-icons/boxicons-regular"
 import { Slack } from "styled-icons/boxicons-logos"
 
@@ -55,6 +58,7 @@ import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 
 import QueryPicker from "../QueryPicker"
+import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 
@@ -165,7 +169,8 @@ const MenuLink: React.FunctionComponent<{
 
 const Menu = () => {
   const dispatch = useDispatch()
-  const [popperActive, setPopperActive] = useState<boolean>()
+  const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
+  const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
@@ -177,14 +182,17 @@ const Menu = () => {
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
   }, [dispatch])
-  const handleToggle = useCallback((active) => {
+  const handleQueriesToggle = useCallback((active) => {
     if (!exampleQueriesVisited && active) {
       updateSettings(StoreKey.EXAMPLE_QUERIES_VISITED, true)
     }
-    setPopperActive(active)
+    setQueriesPopperActive(active)
+  }, [])
+  const handleShortcutsToggle = useCallback((active) => {
+    setShortcutsPopperActive(active)
   }, [])
   const handleHidePicker = useCallback(() => {
-    setPopperActive(false)
+    setQueriesPopperActive(false)
   }, [])
   const handleSideMenuButtonClick = useCallback(() => {
     dispatch(actions.console.toggleSideMenu())
@@ -194,7 +202,7 @@ const Menu = () => {
   }, [])
 
   useEffect(() => {
-    setPopperActive(false)
+    setQueriesPopperActive(false)
   }, [escPress])
 
   useEffect(() => {
@@ -255,8 +263,8 @@ const Menu = () => {
 
       {savedQueries.length > 0 && (
         <PopperToggle
-          active={popperActive}
-          onToggle={handleToggle}
+          active={queriesPopperActive}
+          onToggle={handleQueriesToggle}
           trigger={
             <QueryPickerButton firstTimeVisitor={!exampleQueriesVisited}>
               <Add size="18px" />
@@ -281,6 +289,20 @@ const Menu = () => {
         icon={<HelpCircle size="18px" />}
         tooltipText="Go to Web Console help"
       />
+
+      <PopperToggle
+        active={shortcutsPopperActive}
+        onToggle={handleShortcutsToggle}
+        trigger={
+          <MenuButton>
+            <Command size="18px" />
+            <span>Shortcuts</span>
+          </MenuButton>
+        }
+        placement="bottom"
+      >
+        <Shortcuts />
+      </PopperToggle>
 
       <DocsearchInput
         id="docsearch-input"
