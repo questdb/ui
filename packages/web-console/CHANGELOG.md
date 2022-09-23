@@ -14,7 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.5 - 2022-09-23
+
+### Added
+
+- Add popup to show keyboard shortcuts [a3a10c9b](https://github.com/questdb/ui/commit/a3a10c9b8678de761a1e9ce1ab380837d9121e2a)
+
 ## 0.0.4 - 2022-09-06
+
+### Added
 
 - Add info about an available update to QuestDB
 
