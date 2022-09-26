@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.6 - 2022-09-26
+
+### Added
+
+- Added a check for Github API response
+  [28eb409](https://github.com/questdb/ui/commit/28eb409e5b79e0a9e6b675f6f9f01f7a7465cbe0)
+
+### Fixed
+
+- Fixed context menu in Table schema not working in Safari
+  [0aed379](https://github.com/questdb/ui/commit/0aed379873e5cd6b05743aac4a2fcda1d9a1bf2a)
+
 ## 0.0.5 - 2022-09-23
 
 ### Added
