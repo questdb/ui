@@ -29,8 +29,8 @@ import * as QuestDB from "../../../utils/questdb"
 import { SecondaryButton } from "../../../components"
 import { formatCommitHash, formatVersion } from "./services"
 import { ExternalLink, ArrowUpCircle } from "styled-icons/remix-line"
-import { Release } from "../../../utils/questdb";
-import { compare } from "compare-versions";
+import { Release } from "../../../utils/questdb"
+import { compare } from "compare-versions"
 
 const Wrapper = styled.div`
   display: flex;
@@ -79,34 +79,42 @@ const BuildVersion = () => {
   useEffect(() => {
     if (buildVersion) {
       void quest.getLatestRelease().then((release: Release) => {
-        setNewestRelease(release);
+        if (release.name) {
+          setNewestRelease(release)
+        }
       })
     }
   }, [buildVersion])
 
   if (!buildVersion.length && !commitHash.length) return null
 
-  const upgradeAvailable = newestRelease && compare(buildVersion, newestRelease.name, "<")
+  const upgradeAvailable =
+    newestRelease && compare(buildVersion, newestRelease.name, "<")
 
-  const releaseUrl = (upgradeAvailable && newestRelease) ? newestRelease.html_url : `https://github.com/questdb/questdb${
-    buildVersion
-      ? `/releases/tag/${buildVersion}`
-      : `/commit/${commitHash}`
-  }`
+  const releaseUrl =
+    upgradeAvailable && newestRelease
+      ? newestRelease.html_url
+      : `https://github.com/questdb/questdb${
+          buildVersion
+            ? `/releases/tag/${buildVersion}`
+            : `/commit/${commitHash}`
+        }`
 
   return (
     <Wrapper>
-      <a
-        href={releaseUrl}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
+      <a href={releaseUrl} rel="noopener noreferrer" target="_blank">
         <ReleaseNotesButton
           title={`Show ${buildVersion ? "release notes" : "commit details"}`}
         >
           <QuestDBVersion>QuestDB {buildVersion || "Dev"}</QuestDBVersion>
-          {upgradeAvailable ? <UpgradeIcon size="18px" /> : <ExternalLink size="16px" />}
-          {upgradeAvailable && newestRelease && <NewestRelease>{newestRelease.name}</NewestRelease>}
+          {upgradeAvailable ? (
+            <UpgradeIcon size="18px" />
+          ) : (
+            <ExternalLink size="16px" />
+          )}
+          {upgradeAvailable && newestRelease && (
+            <NewestRelease>{newestRelease.name}</NewestRelease>
+          )}
         </ReleaseNotesButton>
       </a>
     </Wrapper>
