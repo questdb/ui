@@ -209,7 +209,7 @@ const MonacoEditor = () => {
     if (query) {
       // Find if the query is already in the editor
       const matches = model?.findMatches(query, true, false, true, null, true)
-      if (matches) {
+      if (matches && matches.length > 0) {
         editor.setSelection(matches[0].range)
         // otherwise, append the query
       } else {
