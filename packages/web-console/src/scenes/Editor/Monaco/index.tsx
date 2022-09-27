@@ -1,4 +1,10 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, {
+  BaseSyntheticEvent,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import Editor, { Monaco, loader } from "@monaco-editor/react"
 import dracula from "./dracula"
 import { editor, IDisposable } from "monaco-editor"
@@ -14,6 +20,7 @@ import {
   Request,
   setErrorMarker,
   clearModelMarkers,
+  getQueryFromCursor,
 } from "./utils"
 import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
@@ -50,6 +57,26 @@ const Content = styled(PaneContent)`
   .monaco-scrollable-element > .scrollbar > .slider {
     background: ${color("draculaSelection")};
   }
+
+  .cursorQueryDecoration {
+    width: 0.2rem !important;
+    background: ${color("draculaGreen")};
+    margin-left: 1.2rem;
+  }
+
+  .cursorQueryGlyph {
+    margin-left: 2rem;
+    margin-top: 0.15rem;
+    z-index: 1;
+    cursor: pointer;
+
+    &:after {
+      content: "◃";
+      font-size: 2.5rem;
+      transform: rotate(180deg) scaleX(0.8);
+      color: ${color("draculaGreen")};
+    }
+  }
 `
 
 enum Command {
@@ -70,6 +97,7 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
+  const decorationsRef = useRef<string[]>([])
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -111,6 +139,14 @@ const MonacoEditor = () => {
     )
 
     monaco.editor.defineTheme("dracula", dracula)
+  }
+
+  const handleEditorClick = (e: BaseSyntheticEvent) => {
+    e.stopPropagation()
+    if (e.target.classList.contains("cursorQueryGlyph")) {
+      editorRef?.current?.focus()
+      toggleRunning()
+    }
   }
 
   const handleEditorDidMount = (
@@ -196,6 +232,57 @@ const MonacoEditor = () => {
         run: () => {
           dispatch(actions.query.cleanupNotifications())
         },
+      })
+
+      editor.onDidChangeCursorPosition(() => {
+        const queryAtCursor = getQueryFromCursor(editor)
+        const model = editor.getModel()
+        if (queryAtCursor && model !== null) {
+          const matches = model.findMatches(
+            queryAtCursor.query,
+            true,
+            false,
+            true,
+            null,
+            true,
+          )
+          if (matches.length > 0) {
+            const cursorMatch = matches.find(
+              (m) => m.range.startLineNumber === queryAtCursor.row + 1,
+            )
+            if (cursorMatch) {
+              decorationsRef.current = editor.deltaDecorations(
+                decorationsRef.current,
+                [
+                  {
+                    range: new monaco.Range(
+                      cursorMatch.range.startLineNumber,
+                      1,
+                      cursorMatch.range.endLineNumber,
+                      1,
+                    ),
+                    options: {
+                      isWholeLine: true,
+                      linesDecorationsClassName: "cursorQueryDecoration",
+                    },
+                  },
+                  {
+                    range: new monaco.Range(
+                      cursorMatch.range.startLineNumber,
+                      1,
+                      cursorMatch.range.startLineNumber,
+                      1,
+                    ),
+                    options: {
+                      isWholeLine: false,
+                      glyphMarginClassName: "cursorQueryGlyph",
+                    },
+                  },
+                ],
+              )
+            }
+          }
+        }
       })
     }
 
@@ -342,7 +429,7 @@ const MonacoEditor = () => {
   }, [tables, monacoRef, editorReady])
 
   return (
-    <Content>
+    <Content onClick={handleEditorClick}>
       <Editor
         beforeMount={handleEditorBeforeMount}
         defaultLanguage={QuestDBLanguageName}
@@ -351,10 +438,12 @@ const MonacoEditor = () => {
           fixedOverflowWidgets: true,
           fontSize: 14,
           fontFamily: theme.fontMonospace,
+          glyphMargin: true,
           renderLineHighlight: "gutter",
           minimap: {
             enabled: false,
           },
+          selectOnLineNumbers: false,
           scrollBeyondLastLine: false,
           tabSize: 2,
         }}
