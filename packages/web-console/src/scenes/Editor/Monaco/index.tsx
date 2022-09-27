@@ -142,7 +142,6 @@ const MonacoEditor = () => {
   }
 
   const handleEditorClick = (e: BaseSyntheticEvent) => {
-    e.stopPropagation()
     if (e.target.classList.contains("cursorQueryGlyph")) {
       editorRef?.current?.focus()
       toggleRunning()
