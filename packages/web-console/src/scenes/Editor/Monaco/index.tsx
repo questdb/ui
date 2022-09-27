@@ -62,6 +62,10 @@ const Content = styled(PaneContent)`
     width: 0.2rem !important;
     background: ${color("draculaGreen")};
     margin-left: 1.2rem;
+
+    &.hasError {
+      background: ${color("draculaRed")};
+    }
   }
 
   .cursorQueryGlyph {
@@ -75,6 +79,19 @@ const Content = styled(PaneContent)`
       font-size: 2.5rem;
       transform: rotate(180deg) scaleX(0.8);
       color: ${color("draculaGreen")};
+    }
+  }
+
+  .errorGlyph {
+    margin-left: 2rem;
+    margin-top: 0.15rem;
+    z-index: 1;
+
+    &:after {
+      content: "•";
+      font-size: 2.5rem;
+      transform: rotate(180deg) scaleX(0.8);
+      color: ${color("draculaRed")};
     }
   }
 `
@@ -98,6 +115,7 @@ const MonacoEditor = () => {
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<string[]>([])
+  const errorRef = useRef<ErrorResult | undefined>()
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -145,6 +163,63 @@ const MonacoEditor = () => {
     if (e.target.classList.contains("cursorQueryGlyph")) {
       editorRef?.current?.focus()
       toggleRunning()
+    }
+  }
+
+  const renderLineMarkings = (
+    monaco: Monaco,
+    editor: IStandaloneCodeEditor,
+  ) => {
+    const queryAtCursor = getQueryFromCursor(editor)
+    const model = editor.getModel()
+    if (queryAtCursor && model !== null) {
+      const matches = model.findMatches(
+        queryAtCursor.query,
+        true,
+        false,
+        true,
+        null,
+        true,
+      )
+      if (matches.length > 0) {
+        const hasError = errorRef.current?.query === queryAtCursor.query
+        const cursorMatch = matches.find(
+          (m) => m.range.startLineNumber === queryAtCursor.row + 1,
+        )
+        if (cursorMatch) {
+          decorationsRef.current = editor.deltaDecorations(
+            decorationsRef.current,
+            [
+              {
+                range: new monaco.Range(
+                  cursorMatch.range.startLineNumber,
+                  1,
+                  cursorMatch.range.endLineNumber,
+                  1,
+                ),
+                options: {
+                  isWholeLine: true,
+                  linesDecorationsClassName: `cursorQueryDecoration ${
+                    hasError ? "hasError" : ""
+                  }`,
+                },
+              },
+              {
+                range: new monaco.Range(
+                  cursorMatch.range.startLineNumber,
+                  1,
+                  cursorMatch.range.startLineNumber,
+                  1,
+                ),
+                options: {
+                  isWholeLine: false,
+                  glyphMarginClassName: "cursorQueryGlyph",
+                },
+              },
+            ],
+          )
+        }
+      }
     }
   }
 
@@ -234,54 +309,7 @@ const MonacoEditor = () => {
       })
 
       editor.onDidChangeCursorPosition(() => {
-        const queryAtCursor = getQueryFromCursor(editor)
-        const model = editor.getModel()
-        if (queryAtCursor && model !== null) {
-          const matches = model.findMatches(
-            queryAtCursor.query,
-            true,
-            false,
-            true,
-            null,
-            true,
-          )
-          if (matches.length > 0) {
-            const cursorMatch = matches.find(
-              (m) => m.range.startLineNumber === queryAtCursor.row + 1,
-            )
-            if (cursorMatch) {
-              decorationsRef.current = editor.deltaDecorations(
-                decorationsRef.current,
-                [
-                  {
-                    range: new monaco.Range(
-                      cursorMatch.range.startLineNumber,
-                      1,
-                      cursorMatch.range.endLineNumber,
-                      1,
-                    ),
-                    options: {
-                      isWholeLine: true,
-                      linesDecorationsClassName: "cursorQueryDecoration",
-                    },
-                  },
-                  {
-                    range: new monaco.Range(
-                      cursorMatch.range.startLineNumber,
-                      1,
-                      cursorMatch.range.startLineNumber,
-                      1,
-                    ),
-                    options: {
-                      isWholeLine: false,
-                      glyphMarginClassName: "cursorQueryGlyph",
-                    },
-                  },
-                ],
-              )
-            }
-          }
-        }
+        renderLineMarkings(monaco, editor)
       })
     }
 
@@ -323,6 +351,7 @@ const MonacoEditor = () => {
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
             setRequest(undefined)
+            errorRef.current = undefined
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
 
@@ -366,6 +395,7 @@ const MonacoEditor = () => {
             }
           })
           .catch((error: ErrorResult) => {
+            errorRef.current = error
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
             dispatch(
@@ -397,6 +427,7 @@ const MonacoEditor = () => {
                   errorRange,
                   error.error,
                 )
+                renderLineMarkings(monacoRef?.current, editorRef?.current)
               }
             }
           })
