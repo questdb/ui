@@ -1,13 +1,9 @@
-import React, {
-  BaseSyntheticEvent,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
+import type { BaseSyntheticEvent } from "react"
 import Editor, { Monaco, loader } from "@monaco-editor/react"
 import dracula from "./dracula"
-import { editor, IDisposable, IRange } from "monaco-editor"
+import { editor } from "monaco-editor"
+import type { IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
 import { usePreferences } from "./usePreferences"
@@ -17,16 +13,16 @@ import {
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
-  Request,
   setErrorMarker,
   clearModelMarkers,
   getQueryFromCursor,
 } from "./utils"
+import type { Request } from "./utils"
 import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
 import { BusEvent } from "../../../consts"
-import { ErrorResult } from "../../../utils/questdb"
+import type { ErrorResult } from "../../../utils/questdb"
 import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
@@ -70,7 +66,6 @@ const Content = styled(PaneContent)`
 
   .cursorQueryGlyph {
     margin-left: 2rem;
-    margin-top: 0.15rem;
     z-index: 1;
     cursor: pointer;
 
