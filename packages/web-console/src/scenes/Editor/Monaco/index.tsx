@@ -7,7 +7,7 @@ import React, {
 } from "react"
 import Editor, { Monaco, loader } from "@monaco-editor/react"
 import dracula from "./dracula"
-import { editor, IDisposable } from "monaco-editor"
+import { editor, IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
 import { usePreferences } from "./usePreferences"
@@ -83,16 +83,13 @@ const Content = styled(PaneContent)`
   }
 
   .errorGlyph {
-    margin-left: 2rem;
-    margin-top: 0.15rem;
+    margin-left: 2.5rem;
+    margin-top: 0.5rem;
     z-index: 1;
-
-    &:after {
-      content: "•";
-      font-size: 2.5rem;
-      transform: rotate(180deg) scaleX(0.8);
-      color: ${color("draculaRed")};
-    }
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+    border-radius: 50%;
+    background: ${color("draculaRed")};
   }
 `
 
@@ -116,6 +113,7 @@ const MonacoEditor = () => {
     useState<IDisposable>()
   const decorationsRef = useRef<string[]>([])
   const errorRef = useRef<ErrorResult | undefined>()
+  const errorRangeRef = useRef<IRange | undefined>()
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -216,6 +214,24 @@ const MonacoEditor = () => {
                   glyphMarginClassName: "cursorQueryGlyph",
                 },
               },
+              ...(errorRangeRef.current &&
+              cursorMatch.range.startLineNumber !==
+                errorRangeRef.current.startLineNumber
+                ? [
+                    {
+                      range: new monaco.Range(
+                        errorRangeRef.current.startLineNumber,
+                        0,
+                        errorRangeRef.current.startLineNumber,
+                        0,
+                      ),
+                      options: {
+                        isWholeLine: false,
+                        glyphMarginClassName: "errorGlyph",
+                      },
+                    },
+                  ]
+                : []),
             ],
           )
         }
@@ -352,8 +368,13 @@ const MonacoEditor = () => {
           .then((result) => {
             setRequest(undefined)
             errorRef.current = undefined
+            errorRangeRef.current = undefined
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
+
+            if (monacoRef?.current && editorRef?.current) {
+              renderLineMarkings(monacoRef.current, editorRef?.current)
+            }
 
             if (result.type === QuestDB.Type.DDL) {
               dispatch(
@@ -420,6 +441,7 @@ const MonacoEditor = () => {
                 request,
                 error.position,
               )
+              errorRangeRef.current = errorRange ?? undefined
               if (errorRange) {
                 setErrorMarker(
                   monacoRef?.current,
