@@ -204,7 +204,7 @@ const MonacoEditor = () => {
     // Insert query, if one is found in the URL
     const params = new URLSearchParams(window.location.search)
     // Support multi-line queries (URL encoded)
-    const query = params.get("query")?.replaceAll("%0A", "\n")
+    const query = params.get("query")
     const model = editor.getModel()
     if (query) {
       // Find if the query is already in the editor
