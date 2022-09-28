@@ -137,6 +137,14 @@ describe("&query URL param", () => {
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
     cy.getGridRow(0).should("contain", "2").snapshot();
   });
+
+  it("should not append query if it already exists in editor", () => {
+    cy.visit(baseUrl);
+    const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
+    cy.runQuery(query);
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
+    cy.getEditor().should("have.value", query);
+  });
 });
 
 describe("autocomplete", () => {
