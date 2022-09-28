@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## Next
+
+### Fixed
+
+- fix duplication issue when loading web console with `?query=some sql&executeQuery=true` multiple time [#33](https://github.com/questdb/ui/pull/33)
+
 ## 0.0.6 - 2022-09-26
 
 ### Added
