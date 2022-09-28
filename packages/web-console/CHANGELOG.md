@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Next
 
+### Added
+
+- Improve visual cues in the query editor. Highlighting active query with green bar, erroneous query with red dot and add run button. [#34](https://github.com/questdb/ui/pull/34)
+
 ### Fixed
 
 - fix duplication issue when loading web console with `?query=some sql&executeQuery=true` multiple time [#33](https://github.com/questdb/ui/pull/33)
