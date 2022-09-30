@@ -37,6 +37,7 @@ import {
   documentRangeFormattingEditProvider,
 } from "./questdb-sql"
 import { color } from "../../../utils"
+import { EditorTabs } from "./editor-tabs"
 
 loader.config({
   paths: {
@@ -45,6 +46,12 @@ loader.config({
 })
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
+
+const Root = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+`
 
 const Content = styled(PaneContent)`
   position: relative;
@@ -95,7 +102,7 @@ enum Command {
 }
 
 const MonacoEditor = () => {
-  const { editorRef, monacoRef, insertTextAtCursor } = useEditor()
+  const { editorRef, monacoRef, insertTextAtCursor, activeFile } = useEditor()
   const { loadPreferences, savePreferences } = usePreferences()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -485,28 +492,33 @@ const MonacoEditor = () => {
   }, [tables, monacoRef, editorReady])
 
   return (
-    <Content onClick={handleEditorClick}>
-      <Editor
-        beforeMount={handleEditorBeforeMount}
-        defaultLanguage={QuestDBLanguageName}
-        onMount={handleEditorDidMount}
-        options={{
-          fixedOverflowWidgets: true,
-          fontSize: 14,
-          fontFamily: theme.fontMonospace,
-          glyphMargin: true,
-          renderLineHighlight: "gutter",
-          minimap: {
-            enabled: false,
-          },
-          selectOnLineNumbers: false,
-          scrollBeyondLastLine: false,
-          tabSize: 2,
-        }}
-        theme="vs-dark"
-      />
-      <Loader show={!!request || !tables} />
-    </Content>
+    <Root>
+      <EditorTabs />
+      <Content onClick={handleEditorClick}>
+        <Editor
+          beforeMount={handleEditorBeforeMount}
+          defaultLanguage={QuestDBLanguageName}
+          defaultValue={activeFile.value}
+          onMount={handleEditorDidMount}
+          options={{
+            fixedOverflowWidgets: true,
+            fontSize: 14,
+            fontFamily: theme.fontMonospace,
+            glyphMargin: true,
+            renderLineHighlight: "gutter",
+            minimap: {
+              enabled: false,
+            },
+            selectOnLineNumbers: false,
+            scrollBeyondLastLine: false,
+            tabSize: 2,
+          }}
+          path={activeFile.name}
+          theme="vs-dark"
+        />
+        <Loader show={!!request || !tables} />
+      </Content>
+    </Root>
   )
 }
 
