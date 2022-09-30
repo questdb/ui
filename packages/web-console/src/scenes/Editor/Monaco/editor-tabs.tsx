@@ -20,11 +20,11 @@ const TabsWrapper = styled.div`
   white-space: nowrap;
 `
 
-const CloseIcon = styled(Close)<{ visible: boolean }>`
+const CloseIcon = styled(Close)<{ $visible: boolean }>`
   margin-left: 1rem;
 
-  ${({ visible }) =>
-    visible
+  ${({ $visible }) =>
+    $visible
       ? `opacity: 1; pointer-events: all;`
       : `opacity: 0; pointer-events: none;`}
 `
@@ -60,7 +60,7 @@ export const EditorTabs = () => {
                   <CloseIcon
                     size="14px"
                     onClick={() => deleteFile(file.name)}
-                    visible={files.length > 1 && activeFile.name === file.name}
+                    $visible={files.length > 1 && activeFile.name === file.name}
                   />
                 </PrimaryToggleButton>
               </ContextMenuTrigger>
