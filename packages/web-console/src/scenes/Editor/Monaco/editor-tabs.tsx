@@ -44,17 +44,17 @@ export const EditorTabs = () => {
     useEditor()
   const inputRef = useRef(null)
 
-  const [fileRenamed, setFileRenamed] = useState<string | undefined>(undefined)
+  const [fileRenamed, setFileRenamed] = useState(false)
   const [filenameChanged, setFilenameChanged] = useState<string | undefined>(
     undefined,
   )
 
   const openRename = () => {
-    setFileRenamed(activeFile.name)
+    setFileRenamed(true)
   }
 
   const handleRenameBlur = () => {
-    setFileRenamed(undefined)
+    setFileRenamed(false)
     if (filenameChanged) {
       setFiles(
         files.map((file) =>
@@ -97,7 +97,7 @@ export const EditorTabs = () => {
                   onClick={() => setActiveFile(file)}
                 >
                   <FileEdit size="14px" />
-                  {fileRenamed === file.name ? (
+                  {fileRenamed && activeFile.name === file.name ? (
                     <FilenameInput
                       autoFocus
                       name="file-name"
