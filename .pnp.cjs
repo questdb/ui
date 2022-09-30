@@ -5310,6 +5310,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["svg-react-loader", "npm:0.4.6"],\
             ["throttle-debounce", "npm:2.2.1"],\
             ["typescript", "patch:typescript@npm%3A4.4.4#~builtin<compat/typescript>::version=4.4.4&hash=7ad353"],\
+            ["usehooks-ts", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.1"],\
             ["webpack", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.72.1"],\
             ["webpack-cli", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.9.2"],\
             ["webpack-dev-server", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.9.2"]\
@@ -25835,6 +25836,32 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "packagePeers": [\
             "@types/react",\
+            "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["usehooks-ts", [\
+        ["npm:2.7.1", {\
+          "packageLocation": "./.yarn/cache/usehooks-ts-npm-2.7.1-2dd640b74e-316e96c141.zip/node_modules/usehooks-ts/",\
+          "packageDependencies": [\
+            ["usehooks-ts", "npm:2.7.1"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.1", {\
+          "packageLocation": "./.yarn/__virtual__/usehooks-ts-virtual-8682827274/0/cache/usehooks-ts-npm-2.7.1-2dd640b74e-316e96c141.zip/node_modules/usehooks-ts/",\
+          "packageDependencies": [\
+            ["usehooks-ts", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.1"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/react-dom", "npm:16.9.8"],\
+            ["react", "npm:17.0.2"],\
+            ["react-dom", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:17.0.2"]\
+          ],\
+          "packagePeers": [\
+            "@types/react-dom",\
+            "@types/react",\
+            "react-dom",\
             "react"\
           ],\
           "linkType": "HARD"\

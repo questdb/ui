@@ -1,6 +1,7 @@
-import React, { useEffect } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import {
+  Input,
   PaneMenu,
   PrimaryToggleButton,
   SecondaryButton,
@@ -12,6 +13,7 @@ import {
 } from "../../../components/ContextMenu"
 import { AddCircle, Close, FileEdit } from "styled-icons/remix-line"
 import { useEditor } from "../../../providers"
+import { useOnClickOutside } from "usehooks-ts"
 
 const TabsWrapper = styled.div`
   display: flex;
@@ -29,19 +31,58 @@ const CloseIcon = styled(Close)<{ $visible: boolean }>`
       : `opacity: 0; pointer-events: none;`}
 `
 
+const FilenameInput = styled(Input)`
+  margin-left: 1rem;
+`
+
 const AddTabButton = styled(SecondaryButton)`
   margin-left: 1rem;
 `
 
 export const EditorTabs = () => {
-  const { activeFile, files, setActiveFile, addNewFile, deleteFile } =
+  const { activeFile, files, setFiles, setActiveFile, addNewFile, deleteFile } =
     useEditor()
+  const inputRef = useRef(null)
+
+  const [fileRenamed, setFileRenamed] = useState<string | undefined>(undefined)
+  const [filenameChanged, setFilenameChanged] = useState<string | undefined>(
+    undefined,
+  )
+
+  const openRename = () => {
+    setFileRenamed(activeFile.name)
+  }
+
+  const handleRenameBlur = () => {
+    setFileRenamed(undefined)
+    if (filenameChanged) {
+      setFiles(
+        files.map((file) =>
+          file.name === activeFile.name
+            ? { ...file, name: filenameChanged }
+            : file,
+        ),
+      )
+    }
+  }
+
+  const handleFilenameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFilenameChanged(event.currentTarget.value)
+  }
+
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      handleRenameBlur()
+    }
+  }
 
   useEffect(() => {
     if (files && !activeFile) {
       setActiveFile(files[0])
     }
   }, [activeFile, files, setActiveFile])
+
+  useOnClickOutside(inputRef, handleRenameBlur)
 
   return (
     <PaneMenu>
@@ -56,7 +97,19 @@ export const EditorTabs = () => {
                   onClick={() => setActiveFile(file)}
                 >
                   <FileEdit size="14px" />
-                  <span>{file.name}</span>
+                  {fileRenamed === file.name ? (
+                    <FilenameInput
+                      autoFocus
+                      name="file-name"
+                      size="sm"
+                      defaultValue={file.name}
+                      onChange={handleFilenameChange}
+                      onKeyDown={handleInputKeyDown}
+                      ref={inputRef}
+                    />
+                  ) : (
+                    <span>{file.name}</span>
+                  )}
                   <CloseIcon
                     size="14px"
                     onClick={() => deleteFile(file.name)}
@@ -65,6 +118,7 @@ export const EditorTabs = () => {
                 </PrimaryToggleButton>
               </ContextMenuTrigger>
               <ContextMenu id={file.name}>
+                <MenuItem onClick={openRename}>Rename</MenuItem>
                 <MenuItem onClick={() => deleteFile(file.name)}>
                   Delete file
                 </MenuItem>

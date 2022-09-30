@@ -2746,6 +2746,7 @@ __metadata:
     svg-react-loader: 0.4.6
     throttle-debounce: 2.2.1
     typescript: ^4.6.2
+    usehooks-ts: ^2.7.1
     webpack: ^5.72.1
     webpack-cli: ^4.9.2
     webpack-dev-server: ^4.6.0
@@ -18304,6 +18305,16 @@ __metadata:
   version: 3.1.1
   resolution: "use@npm:3.1.1"
   checksum: 08a130289f5238fcbf8f59a18951286a6e660d17acccc9d58d9b69dfa0ee19aa038e8f95721b00b432c36d1629a9e32a464bf2e7e0ae6a244c42ddb30bdd8b33
+  languageName: node
+  linkType: hard
+
+"usehooks-ts@npm:^2.7.1":
+  version: 2.7.1
+  resolution: "usehooks-ts@npm:2.7.1"
+  peerDependencies:
+    react: ^16.8.0  || ^17.0.0 || ^18.0.0
+    react-dom: ^16.8.0  || ^17.0.0 || ^18.0.0
+  checksum: 316e96c141c129e5b592a4cfd9e803f62b56d6b22ed76534cc9e95a8d9277d157c4915d0460ae6ca634462ad7c5ef4c41cd439e061ed3932a0563a968a07e221
   languageName: node
   linkType: hard
 
