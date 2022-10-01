@@ -40,8 +40,14 @@ const AddTabButton = styled(SecondaryButton)`
 `
 
 export const EditorTabs = () => {
-  const { activeFile, files, setFiles, setActiveFile, addNewFile, deleteFile } =
-    useEditor()
+  const {
+    activeFile,
+    files,
+    setActiveFile,
+    addNewFile,
+    deleteFile,
+    renameFile,
+  } = useEditor()
   const inputRef = useRef(null)
 
   const [fileRenamed, setFileRenamed] = useState<string | undefined>(undefined)
@@ -49,20 +55,10 @@ export const EditorTabs = () => {
     undefined,
   )
 
-  const openRename = () => {
-    setFileRenamed(activeFile.name)
-  }
-
   const handleRenameBlur = () => {
     setFileRenamed(undefined)
     if (filenameChanged) {
-      setFiles(
-        files.map((file) =>
-          file.name === activeFile.name
-            ? { ...file, name: filenameChanged }
-            : file,
-        ),
-      )
+      renameFile(activeFile.name, filenameChanged)
     }
   }
 
@@ -118,7 +114,9 @@ export const EditorTabs = () => {
                 </PrimaryToggleButton>
               </ContextMenuTrigger>
               <ContextMenu id={file.name}>
-                <MenuItem onClick={openRename}>Rename</MenuItem>
+                <MenuItem onClick={() => setFileRenamed(file.name)}>
+                  Rename
+                </MenuItem>
                 <MenuItem onClick={() => deleteFile(file.name)}>
                   Delete file
                 </MenuItem>

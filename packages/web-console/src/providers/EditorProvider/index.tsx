@@ -28,11 +28,11 @@ type ContextProps = {
   getValue: () => void
   appendQuery: (query: string) => void
   files: File[]
-  setFiles: (files: File[]) => void
   activeFile: File
   setActiveFile: (file: File) => void
   addNewFile: () => void
   deleteFile: (name: string) => void
+  renameFile: (oldName: string, newName: string) => void
 }
 
 const defaultFile = {
@@ -47,11 +47,11 @@ const defaultValues = {
   getValue: () => undefined,
   appendQuery: (query: string) => undefined,
   files: [defaultFile],
-  setFiles: (files: File[]) => undefined,
   activeFile: defaultFile,
   setActiveFile: (file: File) => undefined,
   addNewFile: () => undefined,
   deleteFile: (name: string) => undefined,
+  renameFile: (oldName: string, newName: string) => undefined,
 }
 
 const EditorContext = createContext<ContextProps>(defaultValues)
@@ -72,6 +72,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const deleteFile = (name: string) => {
     setFiles(files.filter((file) => file.name !== name))
+  }
+
+  const renameFile = (oldName: string, newName: string) => {
+    setFiles(
+      files.map((file) =>
+        file.name === oldName ? { ...file, name: newName } : file,
+      ),
+    )
   }
 
   /*
@@ -107,11 +115,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
           }
         },
         files,
-        setFiles,
         activeFile,
         setActiveFile,
         addNewFile,
         deleteFile,
+        renameFile,
       }}
     >
       {children}
