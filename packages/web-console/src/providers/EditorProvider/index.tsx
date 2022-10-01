@@ -76,9 +76,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const renameFile = (oldName: string, newName: string) => {
     setFiles(
-      files.map((file) =>
-        file.name === oldName ? { ...file, name: newName } : file,
-      ),
+      files.map((file) => {
+        file.value = editorRef.current?.getModel()?.getValue() ?? ""
+        return file.name === oldName ? { ...file, name: newName } : file
+      }),
     )
   }
 
