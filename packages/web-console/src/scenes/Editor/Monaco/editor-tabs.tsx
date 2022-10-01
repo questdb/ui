@@ -50,13 +50,13 @@ export const EditorTabs = () => {
   } = useEditor()
   const inputRef = useRef(null)
 
-  const [fileRenamed, setFileRenamed] = useState<string | undefined>(undefined)
+  const [fileRenamed, setFileRenamed] = useState<boolean>(false)
   const [filenameChanged, setFilenameChanged] = useState<string | undefined>(
     undefined,
   )
 
   const handleRenameBlur = () => {
-    setFileRenamed(undefined)
+    setFileRenamed(false)
     if (filenameChanged) {
       renameFile(activeFile.name, filenameChanged)
     }
@@ -93,7 +93,7 @@ export const EditorTabs = () => {
                   onClick={() => setActiveFile(file)}
                 >
                   <FileEdit size="14px" />
-                  {fileRenamed === file.name ? (
+                  {fileRenamed && activeFile.name === file.name ? (
                     <FilenameInput
                       autoFocus
                       name="file-name"
@@ -114,9 +114,7 @@ export const EditorTabs = () => {
                 </PrimaryToggleButton>
               </ContextMenuTrigger>
               <ContextMenu id={file.name}>
-                <MenuItem onClick={() => setFileRenamed(file.name)}>
-                  Rename
-                </MenuItem>
+                <MenuItem onClick={() => setFileRenamed(true)}>Rename</MenuItem>
                 <MenuItem onClick={() => deleteFile(file.name)}>
                   Delete file
                 </MenuItem>
