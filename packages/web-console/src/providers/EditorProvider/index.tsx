@@ -13,11 +13,13 @@ import {
   insertTextAtCursor,
   appendQuery,
 } from "../../scenes/Editor/Monaco/utils"
+import { v4 as uuid } from "uuid"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
-type File = {
-  name: string
+type Buffer = {
+  id: string
+  label: string
   value: string
 }
 
@@ -27,31 +29,34 @@ type ContextProps = {
   insertTextAtCursor: (text: string) => void
   getValue: () => void
   appendQuery: (query: string) => void
-  files: File[]
-  activeFile: File
-  setActiveFile: (file: File) => void
-  addNewFile: () => void
-  deleteFile: (name: string) => void
-  renameFile: (oldName: string, newName: string) => void
+  buffers: Buffer[]
+  activeBuffer: Buffer
+  setActiveBuffer: (buffer: Buffer) => void
+  addBuffer: () => void
+  deleteBuffer: (id: string) => void
+  renameBuffer: (id: string, label: string) => void
 }
 
-const defaultFile = {
-  name: "File 1",
+const makeBuffer = (label: string): Buffer => ({
+  id: uuid(),
+  label,
   value: "",
-}
+})
+
+const defaultBuffer = makeBuffer("Untitled")
 
 const defaultValues = {
   editorRef: null,
   monacoRef: null,
-  insertTextAtCursor: (text: string) => undefined,
+  insertTextAtCursor: () => undefined,
   getValue: () => undefined,
-  appendQuery: (query: string) => undefined,
-  files: [defaultFile],
-  activeFile: defaultFile,
-  setActiveFile: (file: File) => undefined,
-  addNewFile: () => undefined,
-  deleteFile: (name: string) => undefined,
-  renameFile: (oldName: string, newName: string) => undefined,
+  appendQuery: () => undefined,
+  buffers: [],
+  activeBuffer: defaultBuffer,
+  setActiveBuffer: () => undefined,
+  addBuffer: () => undefined,
+  deleteBuffer: () => undefined,
+  renameBuffer: () => undefined,
 }
 
 const EditorContext = createContext<ContextProps>(defaultValues)
@@ -59,27 +64,21 @@ const EditorContext = createContext<ContextProps>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
-  const [activeFile, setActiveFile] = useState<File>(defaultFile)
+  const [activeBuffer, setActiveBuffer] = useState<Buffer>(defaultBuffer)
+  const [buffers, setBuffers] = useState<Buffer[]>([defaultBuffer])
 
-  const [files, setFiles] = useState<File[]>([
-    defaultFile,
-    { name: "File 2", value: "" },
-  ])
-
-  const addNewFile = () => {
-    setFiles([...files, { name: `File ${files.length + 1}`, value: "" }])
+  const addBuffer = () => {
+    setBuffers([...buffers, makeBuffer(`Untitled ${buffers.length + 1}`)])
   }
 
-  const deleteFile = (name: string) => {
-    setFiles(files.filter((file) => file.name !== name))
-  }
+  const deleteBuffer = (id: Buffer["id"]) =>
+    setBuffers(buffers.filter((buffer) => buffer.id !== id))
 
-  const renameFile = (oldName: string, newName: string) => {
-    setFiles(
-      files.map((file) => {
-        file.value = editorRef.current?.getModel()?.getValue() ?? ""
-        return file.name === oldName ? { ...file, name: newName } : file
-      }),
+  const renameBuffer = (id: string, label: string) => {
+    setBuffers(
+      buffers.map((buffer) =>
+        buffer.id === id ? { ...buffer, label } : buffer,
+      ),
     )
   }
 
@@ -87,17 +86,15 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     To avoid re-rendering components that subscribe to this context
     we don't set value via a useState hook
    */
-  const getValue = () => {
-    return editorRef.current?.getValue()
-  }
+  const getValue = () => editorRef.current?.getValue()
 
   useEffect(() => {
-    setActiveFile(files[files.length - 1])
-  }, [files, setActiveFile])
+    setActiveBuffer(buffers[buffers.length - 1])
+  }, [buffers, setActiveBuffer])
 
   useEffect(() => {
     editorRef.current?.focus()
-  }, [activeFile])
+  }, [activeBuffer])
 
   return (
     <EditorContext.Provider
@@ -115,12 +112,12 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             appendQuery(editorRef.current, text)
           }
         },
-        files,
-        activeFile,
-        setActiveFile,
-        addNewFile,
-        deleteFile,
-        renameFile,
+        buffers,
+        activeBuffer,
+        setActiveBuffer,
+        addBuffer,
+        deleteBuffer,
+        renameBuffer,
       }}
     >
       {children}
@@ -128,6 +125,4 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   )
 }
 
-export const useEditor = () => {
-  return useContext(EditorContext)
-}
+export const useEditor = () => useContext(EditorContext)

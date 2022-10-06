@@ -102,7 +102,7 @@ enum Command {
 }
 
 const MonacoEditor = () => {
-  const { editorRef, monacoRef, insertTextAtCursor, activeFile } = useEditor()
+  const { editorRef, monacoRef, insertTextAtCursor, activeBuffer } = useEditor()
   const { loadPreferences, savePreferences } = usePreferences()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -498,7 +498,7 @@ const MonacoEditor = () => {
         <Editor
           beforeMount={handleEditorBeforeMount}
           defaultLanguage={QuestDBLanguageName}
-          defaultValue={activeFile.value}
+          defaultValue={activeBuffer.value}
           onMount={handleEditorDidMount}
           options={{
             fixedOverflowWidgets: true,
@@ -513,7 +513,7 @@ const MonacoEditor = () => {
             scrollBeyondLastLine: false,
             tabSize: 2,
           }}
-          path={activeFile.name}
+          path={activeBuffer.label}
           theme="vs-dark"
         />
         <Loader show={!!request || !tables} />

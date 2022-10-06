@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import {
   Input,
-  PaneMenu,
+  PaneMenu as PaneMenuRaw,
   PrimaryToggleButton,
   SecondaryButton,
 } from "../../../components"
@@ -15,6 +15,11 @@ import { AddCircle, Close, FileEdit } from "styled-icons/remix-line"
 import { useEditor } from "../../../providers"
 import { useOnClickOutside } from "usehooks-ts"
 
+const PaneMenu = styled(PaneMenuRaw)`
+  padding-left: 0;
+  overflow-x: auto;
+`
+
 const TabsWrapper = styled.div`
   display: flex;
   overflow: auto;
@@ -22,13 +27,8 @@ const TabsWrapper = styled.div`
   white-space: nowrap;
 `
 
-const CloseIcon = styled(Close)<{ $visible: boolean }>`
+const CloseIcon = styled(Close)`
   margin-left: 1rem;
-
-  ${({ $visible }) =>
-    $visible
-      ? `opacity: 1; pointer-events: all;`
-      : `opacity: 0; pointer-events: none;`}
 `
 
 const FilenameInput = styled(Input)`
@@ -41,12 +41,12 @@ const AddTabButton = styled(SecondaryButton)`
 
 export const EditorTabs = () => {
   const {
-    activeFile,
-    files,
-    setActiveFile,
-    addNewFile,
-    deleteFile,
-    renameFile,
+    activeBuffer,
+    buffers,
+    setActiveBuffer,
+    addBuffer,
+    deleteBuffer,
+    renameBuffer,
   } = useEditor()
   const inputRef = useRef(null)
 
@@ -58,7 +58,7 @@ export const EditorTabs = () => {
   const handleRenameBlur = () => {
     setFileRenamed(undefined)
     if (filenameChanged) {
-      renameFile(activeFile.name, filenameChanged)
+      renameBuffer(activeBuffer.label, filenameChanged)
     }
   }
 
@@ -73,67 +73,70 @@ export const EditorTabs = () => {
   }
 
   useEffect(() => {
-    if (files && !activeFile) {
-      setActiveFile(files[0])
+    if (buffers && !activeBuffer) {
+      setActiveBuffer(buffers[0])
     }
-  }, [activeFile, files, setActiveFile])
+  }, [activeBuffer, buffers, setActiveBuffer])
 
   useOnClickOutside(inputRef, handleRenameBlur)
 
   return (
     <PaneMenu>
-      {files && activeFile && (
+      {buffers && activeBuffer && (
         <TabsWrapper>
-          {files.map((file) => (
-            <React.Fragment key={`file-${file.name}`}>
-              <ContextMenuTrigger id={file.name}>
+          {buffers.map((buffer) => (
+            <React.Fragment key={buffer.id}>
+              <ContextMenuTrigger id={buffer.id}>
                 <PrimaryToggleButton
-                  key={`file-${file.name}`}
-                  selected={activeFile.name === file.name}
+                  selected={activeBuffer.id === buffer.id}
                   onClick={() => {
-                    setActiveFile(file)
+                    setActiveBuffer(buffer)
                     setFileRenamed(undefined)
                   }}
                 >
                   <FileEdit size="14px" />
-                  {fileRenamed === file.name ? (
+
+                  {fileRenamed === buffer.label ? (
                     <FilenameInput
                       autoFocus
-                      name="file-name"
                       size="sm"
-                      defaultValue={file.name}
+                      defaultValue={buffer.label}
                       onChange={handleFilenameChange}
                       onKeyDown={handleInputKeyDown}
                       ref={inputRef}
                     />
                   ) : (
-                    <span>{file.name}</span>
+                    <span>{buffer.label}</span>
                   )}
-                  <CloseIcon
-                    size="14px"
-                    onClick={() => deleteFile(file.name)}
-                    $visible={files.length > 1 && activeFile.name === file.name}
-                  />
+
+                  {buffers.length > 1 && (
+                    <CloseIcon
+                      size="14px"
+                      onClick={() => deleteBuffer(buffer.id)}
+                    />
+                  )}
                 </PrimaryToggleButton>
               </ContextMenuTrigger>
-              <ContextMenu id={file.name}>
+
+              <ContextMenu id={buffer.id}>
                 <MenuItem
                   onClick={() => {
-                    setActiveFile(file)
-                    setFileRenamed(file.name)
+                    setActiveBuffer(buffer)
+                    setFileRenamed(buffer.label)
                   }}
                 >
                   Rename
                 </MenuItem>
-                <MenuItem onClick={() => deleteFile(file.name)}>
-                  Delete file
+                <MenuItem onClick={() => deleteBuffer(buffer.id)}>
+                  Close
                 </MenuItem>
               </ContextMenu>
             </React.Fragment>
           ))}
         </TabsWrapper>
       )}
-      <AddTabButton onClick={addNewFile}>
+
+      <AddTabButton onClick={addBuffer}>
         <AddCircle size="18px" />
       </AddTabButton>
     </PaneMenu>
