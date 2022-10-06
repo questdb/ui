@@ -54,7 +54,8 @@
     "styled-components": "5.1.1",
     "styled-icons": "10.2.1",
     "throttle-debounce": "2.2.1",
-    "usehooks-ts": "^2.7.1"
+    "usehooks-ts": "^2.7.1",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",
@@ -71,6 +72,7 @@
     "@types/react-transition-group": "4.4.0",
     "@types/styled-components": "5.1.7",
     "@types/throttle-debounce": "2.1.0",
+    "@types/uuid": "^8.3.4",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
     "babel-loader": "^8.2.5",
