@@ -102,7 +102,13 @@ enum Command {
 }
 
 const MonacoEditor = () => {
-  const { editorRef, monacoRef, insertTextAtCursor, activeBuffer } = useEditor()
+  const {
+    editorRef,
+    monacoRef,
+    insertTextAtCursor,
+    activeBuffer,
+    updateBuffer,
+  } = useEditor()
   const { loadPreferences, savePreferences } = usePreferences()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -499,6 +505,9 @@ const MonacoEditor = () => {
           beforeMount={handleEditorBeforeMount}
           defaultLanguage={QuestDBLanguageName}
           defaultValue={activeBuffer.value}
+          onChange={(value) => {
+            updateBuffer(activeBuffer.id, { value })
+          }}
           onMount={handleEditorDidMount}
           options={{
             fixedOverflowWidgets: true,

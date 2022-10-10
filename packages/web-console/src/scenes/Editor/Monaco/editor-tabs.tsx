@@ -46,6 +46,7 @@ const AddTabButton = styled(SecondaryButton)`
 const EditableLabel = ({
   label,
   onChange,
+  onCancel,
   isEditing,
 }: {
   label: string
@@ -65,7 +66,9 @@ const EditableLabel = ({
         autoFocus
         size="sm"
         defaultValue={value}
-        onChange={setValue}
+        onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+          setValue(event.target.value)
+        }
         onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
           if (event.key === "Enter") {
             onChange(value)
