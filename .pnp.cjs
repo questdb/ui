@@ -5257,6 +5257,8 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["cross-env", "npm:7.0.2"],\
             ["css-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.3"],\
             ["date-fns", "npm:2.14.0"],\
+            ["dexie", "npm:3.2.2"],\
+            ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.1"],\
             ["docsearch.js", "npm:2.6.3"],\
             ["dotenv", "npm:10.0.0"],\
             ["echarts", "npm:5.3.2"],\
@@ -13796,6 +13798,41 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/devtools-protocol-npm-0.0.981744-4636a91b0c-609901bff5.zip/node_modules/devtools-protocol/",\
           "packageDependencies": [\
             ["devtools-protocol", "npm:0.0.981744"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["dexie", [\
+        ["npm:3.2.2", {\
+          "packageLocation": "./.yarn/cache/dexie-npm-3.2.2-1acd619fbb-7a21079f7a.zip/node_modules/dexie/",\
+          "packageDependencies": [\
+            ["dexie", "npm:3.2.2"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["dexie-react-hooks", [\
+        ["npm:1.1.1", {\
+          "packageLocation": "./.yarn/cache/dexie-react-hooks-npm-1.1.1-c1b1d9bb04-09e1b1d4eb.zip/node_modules/dexie-react-hooks/",\
+          "packageDependencies": [\
+            ["dexie-react-hooks", "npm:1.1.1"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.1", {\
+          "packageLocation": "./.yarn/__virtual__/dexie-react-hooks-virtual-e1e73de3f2/0/cache/dexie-react-hooks-npm-1.1.1-c1b1d9bb04-09e1b1d4eb.zip/node_modules/dexie-react-hooks/",\
+          "packageDependencies": [\
+            ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.1"],\
+            ["@types/dexie", null],\
+            ["@types/react", "npm:17.0.2"],\
+            ["dexie", "npm:3.2.2"],\
+            ["react", "npm:17.0.2"]\
+          ],\
+          "packagePeers": [\
+            "@types/dexie",\
+            "@types/react",\
+            "dexie",\
+            "react"\
           ],\
           "linkType": "HARD"\
         }]\
