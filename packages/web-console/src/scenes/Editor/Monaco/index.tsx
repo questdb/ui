@@ -503,12 +503,12 @@ const MonacoEditor = () => {
       <Content onClick={handleEditorClick}>
         <Editor
           beforeMount={handleEditorBeforeMount}
+          onMount={handleEditorDidMount}
           defaultLanguage={QuestDBLanguageName}
           defaultValue={activeBuffer.value}
           onChange={(value) => {
             updateBuffer(activeBuffer.id, { value })
           }}
-          onMount={handleEditorDidMount}
           options={{
             fixedOverflowWidgets: true,
             fontSize: 14,

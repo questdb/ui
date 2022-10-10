@@ -13,15 +13,13 @@ import {
   insertTextAtCursor,
   appendQuery,
 } from "../../scenes/Editor/Monaco/utils"
-import { v4 as uuid } from "uuid"
+import { makeBuffer } from "../../store/buffers"
+import { db } from "../../store/db"
+import type { Buffer } from "../../store/buffers"
+
+import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
-
-type Buffer = {
-  id: string
-  label: string
-  value: string
-}
 
 type ContextProps = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null> | null
@@ -32,18 +30,12 @@ type ContextProps = {
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => void
-  addBuffer: () => void
+  addBuffer: () => Promise<Buffer>
   deleteBuffer: (id: string) => void
   updateBuffer: (id: string, payload: Partial<Buffer>) => void
 }
 
-const makeBuffer = (label: string): Buffer => ({
-  id: uuid(),
-  label,
-  value: "",
-})
-
-const defaultBuffer = makeBuffer("Untitled")
+const fallbackBuffer = makeBuffer("SQL")
 
 const defaultValues = {
   editorRef: null,
@@ -52,9 +44,9 @@ const defaultValues = {
   getValue: () => undefined,
   appendQuery: () => undefined,
   buffers: [],
-  activeBuffer: defaultBuffer,
+  activeBuffer: fallbackBuffer,
   setActiveBuffer: () => undefined,
-  addBuffer: () => undefined,
+  addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => undefined,
   updateBuffer: () => undefined,
 }
@@ -64,33 +56,29 @@ const EditorContext = createContext<ContextProps>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
-  const [activeBuffer, setActiveBuffer] = useState<Buffer>(defaultBuffer)
-  const [buffers, setBuffers] = useState<Buffer[]>([defaultBuffer])
+  const buffers = useLiveQuery(() => db.buffers.toArray(), []) ?? [
+    makeBuffer("SQL"),
+  ]
+  const [activeBuffer, setActiveBuffer] = useState<Buffer>(buffers[0])
 
-  const addBuffer: ContextProps["addBuffer"] = () => {
-    setBuffers([...buffers, makeBuffer(`Untitled ${buffers.length + 1}`)])
+  const addBuffer: ContextProps["addBuffer"] = async () => {
+    const label = `Untitled ${buffers.length + 1}`
+    const buffer = makeBuffer(label, label)
+    await db.buffers.add(buffer)
+    return buffer
   }
 
-  const updateBuffer: ContextProps["updateBuffer"] = (id, payload) => {
-    setBuffers(
-      buffers.map((buffer) =>
-        buffer.id === id ? { ...buffer, ...payload } : buffer,
-      ),
-    )
-  }
+  const updateBuffer: ContextProps["updateBuffer"] = (id, payload) =>
+    db.buffers.update(id, payload)
 
   const deleteBuffer: ContextProps["deleteBuffer"] = (id) =>
-    setBuffers(buffers.filter((buffer) => buffer.id !== id))
+    db.buffers.delete(id)
 
   /*
     To avoid re-rendering components that subscribe to this context
     we don't set value via a useState hook
    */
   const getValue = () => editorRef.current?.getValue()
-
-  useEffect(() => {
-    setActiveBuffer(buffers[buffers.length - 1])
-  }, [buffers, setActiveBuffer])
 
   useEffect(() => {
     editorRef.current?.focus()
