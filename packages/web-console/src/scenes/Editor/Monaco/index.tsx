@@ -507,7 +507,7 @@ const MonacoEditor = () => {
           defaultLanguage={QuestDBLanguageName}
           defaultValue={activeBuffer.value}
           onChange={(value) => {
-            updateBuffer(activeBuffer.id, { value })
+            updateBuffer(activeBuffer.id as number, { value })
           }}
           options={{
             fixedOverflowWidgets: true,

@@ -31,11 +31,11 @@ type ContextProps = {
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => void
   addBuffer: () => Promise<Buffer>
-  deleteBuffer: (id: string) => void
-  updateBuffer: (id: string, payload: Partial<Buffer>) => void
+  deleteBuffer: (id: number) => void
+  updateBuffer: (id: number, payload: Partial<Buffer>) => void
 }
 
-const fallbackBuffer = makeBuffer("SQL")
+const fallbackBuffer = { id: 1, ...makeBuffer("SQL") }
 
 const defaultValues = {
   editorRef: null,
@@ -57,15 +57,33 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const buffers = useLiveQuery(() => db.buffers.toArray(), []) ?? [
-    makeBuffer("SQL"),
+    fallbackBuffer,
   ]
   const [activeBuffer, setActiveBuffer] = useState<Buffer>(buffers[0])
 
   const addBuffer: ContextProps["addBuffer"] = async () => {
-    const label = `Untitled ${buffers.length + 1}`
-    const buffer = makeBuffer(label, label)
-    await db.buffers.add(buffer)
-    return buffer
+    const defaultPrefix = "SQL"
+    const currentDefaultTabNumbers = (
+      await db.buffers
+        .filter((buffer) => buffer.label.startsWith("SQL"))
+        .toArray()
+    )
+      .map((buffer) => buffer.label.slice(defaultPrefix.length + 1 /* space */))
+      .filter(Boolean)
+      .map((n) => parseInt(n, 10))
+      .sort()
+
+    const nextNumber = () => {
+      for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
+        if (!currentDefaultTabNumbers.includes(i + 1)) {
+          return i + 1
+        }
+      }
+    }
+
+    const buffer = makeBuffer(`${defaultPrefix} ${nextNumber()}`)
+    const id = await db.buffers.add(buffer)
+    return { id, ...buffer }
   }
 
   const updateBuffer: ContextProps["updateBuffer"] = (id, payload) =>

@@ -25,14 +25,20 @@
 import Dexie from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
+import { makeBuffer } from "./buffers"
 
 export class Storage extends Dexie {
-  buffers!: Table<Buffer>
+  buffers!: Table<Buffer, number>
 
   constructor() {
     super("web-console")
     this.version(1).stores({
-      buffers: "++id, label, value",
+      buffers: "++id, label",
+    })
+
+    // add initial buffer on db creation
+    this.on("populate", () => {
+      this.buffers.add(makeBuffer("SQL"))
     })
   }
 }

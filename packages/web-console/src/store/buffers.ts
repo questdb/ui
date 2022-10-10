@@ -22,16 +22,17 @@
  *
  ******************************************************************************/
 
-import { v4 as uuid } from "uuid"
-
 export type Buffer = {
-  id: string
+  /** auto incremented number by Dexie */
+  id?: number
   label: string
   value: string
 }
 
-export const makeBuffer = (label: string, value?: string): Buffer => ({
-  id: uuid(),
+export const makeBuffer = (
+  label: string,
+  value?: string,
+): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
 })

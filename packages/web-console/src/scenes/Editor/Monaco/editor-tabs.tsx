@@ -90,7 +90,7 @@ export const EditorTabs = () => {
     deleteBuffer,
     updateBuffer,
   } = useEditor()
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   return (
     <PaneMenu>
@@ -98,7 +98,7 @@ export const EditorTabs = () => {
         <TabsWrapper>
           {buffers.map((buffer) => (
             <React.Fragment key={buffer.id}>
-              <ContextMenuTrigger id={buffer.id}>
+              <ContextMenuTrigger id={`${buffer.id}`}>
                 <PrimaryToggleButton
                   selected={activeBuffer.id === buffer.id}
                   onClick={() => {
@@ -112,7 +112,7 @@ export const EditorTabs = () => {
                     isEditing={editingId === buffer.id}
                     label={buffer.label}
                     onChange={(label) => {
-                      updateBuffer(buffer.id, { label })
+                      updateBuffer(buffer.id as number, { label })
                     }}
                     onCancel={() => {
                       setEditingId(null)
@@ -122,17 +122,17 @@ export const EditorTabs = () => {
                   {buffers.length > 1 && (
                     <CloseIcon
                       size="14px"
-                      onClick={() => deleteBuffer(buffer.id)}
+                      onClick={() => deleteBuffer(buffer.id as number)}
                     />
                   )}
                 </PrimaryToggleButton>
               </ContextMenuTrigger>
 
-              <ContextMenu id={buffer.id}>
-                <MenuItem onClick={() => setEditingId(buffer.id)}>
+              <ContextMenu id={`${buffer.id}`}>
+                <MenuItem onClick={() => setEditingId(buffer.id as number)}>
                   Rename
                 </MenuItem>
-                <MenuItem onClick={() => deleteBuffer(buffer.id)}>
+                <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
                   Close
                 </MenuItem>
               </ContextMenu>
@@ -143,9 +143,7 @@ export const EditorTabs = () => {
 
       <AddTabButton
         onClick={async () => {
-          const buffer = await addBuffer()
-          setActiveBuffer(buffer)
-          console.log("add & set active to", buffer)
+          setActiveBuffer(await addBuffer())
         }}
       >
         <AddCircle size="18px" />
