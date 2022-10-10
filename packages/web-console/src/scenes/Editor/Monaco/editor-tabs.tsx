@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useRef, useState } from "react"
 import styled from "styled-components"
 import {
   Input,
@@ -11,7 +11,11 @@ import {
   ContextMenu,
   MenuItem,
 } from "../../../components/ContextMenu"
-import { AddCircle, Close, FileEdit } from "styled-icons/remix-line"
+import {
+  AddCircle,
+  Close,
+  FileEdit as FileEditIcon,
+} from "styled-icons/remix-line"
 import { useEditor } from "../../../providers"
 import { useOnClickOutside } from "usehooks-ts"
 
@@ -39,6 +43,41 @@ const AddTabButton = styled(SecondaryButton)`
   margin-left: 1rem;
 `
 
+const EditableLabel = ({
+  label,
+  onChange,
+  isEditing,
+}: {
+  label: string
+  onChange(label: string): void
+  onCancel(): void
+  isEditing: boolean
+}) => {
+  const [value, setValue] = useState(label)
+
+  const inputRef = useRef(null)
+
+  useOnClickOutside(inputRef, onCancel)
+
+  if (isEditing) {
+    return (
+      <FilenameInput
+        autoFocus
+        size="sm"
+        defaultValue={value}
+        onChange={setValue}
+        onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+          if (event.key === "Enter") {
+            onChange(value)
+          }
+        }}
+        inputRef={inputRef}
+      />
+    )
+  }
+  return <span>{label}</span>
+}
+
 export const EditorTabs = () => {
   const {
     activeBuffer,
@@ -46,39 +85,9 @@ export const EditorTabs = () => {
     setActiveBuffer,
     addBuffer,
     deleteBuffer,
-    renameBuffer,
+    updateBuffer,
   } = useEditor()
-  const inputRef = useRef(null)
-
-  const [fileRenamed, setFileRenamed] = useState<string | undefined>(undefined)
-  const [filenameChanged, setFilenameChanged] = useState<string | undefined>(
-    undefined,
-  )
-
-  const handleRenameBlur = () => {
-    setFileRenamed(undefined)
-    if (filenameChanged) {
-      renameBuffer(activeBuffer.label, filenameChanged)
-    }
-  }
-
-  const handleFilenameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setFilenameChanged(event.currentTarget.value)
-  }
-
-  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      handleRenameBlur()
-    }
-  }
-
-  useEffect(() => {
-    if (buffers && !activeBuffer) {
-      setActiveBuffer(buffers[0])
-    }
-  }, [activeBuffer, buffers, setActiveBuffer])
-
-  useOnClickOutside(inputRef, handleRenameBlur)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   return (
     <PaneMenu>
@@ -91,23 +100,21 @@ export const EditorTabs = () => {
                   selected={activeBuffer.id === buffer.id}
                   onClick={() => {
                     setActiveBuffer(buffer)
-                    setFileRenamed(undefined)
+                    setEditingId(null)
                   }}
                 >
-                  <FileEdit size="14px" />
+                  <FileEditIcon size="14px" />
 
-                  {fileRenamed === buffer.label ? (
-                    <FilenameInput
-                      autoFocus
-                      size="sm"
-                      defaultValue={buffer.label}
-                      onChange={handleFilenameChange}
-                      onKeyDown={handleInputKeyDown}
-                      ref={inputRef}
-                    />
-                  ) : (
-                    <span>{buffer.label}</span>
-                  )}
+                  <EditableLabel
+                    isEditing={editingId === buffer.id}
+                    label={buffer.label}
+                    onChange={(label) => {
+                      updateBuffer(buffer.id, { label })
+                    }}
+                    onCancel={() => {
+                      setEditingId(null)
+                    }}
+                  />
 
                   {buffers.length > 1 && (
                     <CloseIcon
@@ -119,12 +126,7 @@ export const EditorTabs = () => {
               </ContextMenuTrigger>
 
               <ContextMenu id={buffer.id}>
-                <MenuItem
-                  onClick={() => {
-                    setActiveBuffer(buffer)
-                    setFileRenamed(buffer.label)
-                  }}
-                >
+                <MenuItem onClick={() => setEditingId(buffer.id)}>
                   Rename
                 </MenuItem>
                 <MenuItem onClick={() => deleteBuffer(buffer.id)}>

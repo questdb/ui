@@ -34,7 +34,7 @@ type ContextProps = {
   setActiveBuffer: (buffer: Buffer) => void
   addBuffer: () => void
   deleteBuffer: (id: string) => void
-  renameBuffer: (id: string, label: string) => void
+  updateBuffer: (id: string, payload: Partial<Buffer>) => void
 }
 
 const makeBuffer = (label: string): Buffer => ({
@@ -56,7 +56,7 @@ const defaultValues = {
   setActiveBuffer: () => undefined,
   addBuffer: () => undefined,
   deleteBuffer: () => undefined,
-  renameBuffer: () => undefined,
+  updateBuffer: () => undefined,
 }
 
 const EditorContext = createContext<ContextProps>(defaultValues)
@@ -67,20 +67,20 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const [activeBuffer, setActiveBuffer] = useState<Buffer>(defaultBuffer)
   const [buffers, setBuffers] = useState<Buffer[]>([defaultBuffer])
 
-  const addBuffer = () => {
+  const addBuffer: ContextProps["addBuffer"] = () => {
     setBuffers([...buffers, makeBuffer(`Untitled ${buffers.length + 1}`)])
   }
 
-  const deleteBuffer = (id: Buffer["id"]) =>
-    setBuffers(buffers.filter((buffer) => buffer.id !== id))
-
-  const renameBuffer = (id: string, label: string) => {
+  const updateBuffer: ContextProps["updateBuffer"] = (id, payload) => {
     setBuffers(
       buffers.map((buffer) =>
-        buffer.id === id ? { ...buffer, label } : buffer,
+        buffer.id === id ? { ...buffer, ...payload } : buffer,
       ),
     )
   }
+
+  const deleteBuffer: ContextProps["deleteBuffer"] = (id) =>
+    setBuffers(buffers.filter((buffer) => buffer.id !== id))
 
   /*
     To avoid re-rendering components that subscribe to this context
@@ -117,7 +117,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         setActiveBuffer,
         addBuffer,
         deleteBuffer,
-        renameBuffer,
+        updateBuffer,
       }}
     >
       {children}
