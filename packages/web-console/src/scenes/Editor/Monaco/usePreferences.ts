@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { useContext, useState } from "react"
+import { useContext } from "react"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { LocalStorageContext } from "../../../providers/LocalStorageProvider"
 import { editor } from "monaco-editor"
@@ -30,7 +30,7 @@ import { editor } from "monaco-editor"
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 export const usePreferences = () => {
-  const { queryText, editorCol, editorLine, updateSettings } =
+  const { editorCol, editorLine, updateSettings } =
     useContext(LocalStorageContext)
 
   const loadPreferences = (editor: IStandaloneCodeEditor) => {
@@ -40,8 +40,6 @@ export const usePreferences = () => {
   }
 
   const savePreferences = (editor: IStandaloneCodeEditor) => {
-    updateSettings(StoreKey.QUERY_TEXT, editor.getValue())
-
     if (editor.getPosition()) {
       const lineNumber = editor?.getPosition()?.lineNumber
       const columnNumber = editor?.getPosition()?.column

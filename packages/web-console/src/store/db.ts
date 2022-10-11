@@ -48,10 +48,17 @@ export class Storage extends Dexie {
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", () => {
+      // populate intial buffer with value from localStorage, then clear it.
+      // this is to migrate from localStorage to indexedDB
+      const valueFromDeprecatedStorage = getValue(StoreKey.QUERY_TEXT)
+      if (typeof valueFromDeprecatedStorage !== "undefined") {
+        localStorage.removeItem(StoreKey.QUERY_TEXT)
+      }
+
       this.buffers.add(
         makeBuffer({
           label: "SQL",
-          value: getValue(StoreKey.QUERY_TEXT) ?? "",
+          value: valueFromDeprecatedStorage ?? "",
         }),
       )
       this.editor_settings.add({
