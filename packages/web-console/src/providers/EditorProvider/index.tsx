@@ -102,7 +102,9 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       }
     }
 
-    const buffer = makeBuffer(`${fallbackBuffer.label} ${nextNumber()}`)
+    const buffer = makeBuffer({
+      label: `${fallbackBuffer.label} ${nextNumber()}`,
+    })
     const id = await db.buffers.add(buffer)
     setActiveBuffer(buffer)
     return { id, ...buffer }

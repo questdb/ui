@@ -29,12 +29,15 @@ export type Buffer = {
   value: string
 }
 
-export const makeBuffer = (
-  label: string,
-  value?: string,
-): Omit<Buffer, "id"> => ({
+export const makeBuffer = ({
+  label,
+  value,
+}: {
+  label: string
+  value?: string
+}): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
 })
 
-export const fallbackBuffer = { id: 1, ...makeBuffer("SQL") }
+export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }

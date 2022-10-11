@@ -26,6 +26,8 @@ import Dexie from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
 import { makeBuffer, fallbackBuffer } from "./buffers"
+import { StoreKey } from "../utils/localStorage/types"
+import { getValue } from "../utils/localStorage"
 
 type EditorSettings = {
   key: string
@@ -46,7 +48,12 @@ export class Storage extends Dexie {
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", () => {
-      this.buffers.add(makeBuffer("SQL"))
+      this.buffers.add(
+        makeBuffer({
+          label: "SQL",
+          value: getValue(StoreKey.QUERY_TEXT) ?? "",
+        }),
+      )
       this.editor_settings.add({
         key: "activeBufferId",
         value: fallbackBuffer.id,
