@@ -36,3 +36,5 @@ export const makeBuffer = (
   label,
   value: value ?? "",
 })
+
+export const fallbackBuffer = { id: 1, ...makeBuffer("SQL") }

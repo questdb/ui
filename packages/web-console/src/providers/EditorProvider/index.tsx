@@ -13,7 +13,7 @@ import {
   insertTextAtCursor,
   appendQuery,
 } from "../../scenes/Editor/Monaco/utils"
-import { makeBuffer } from "../../store/buffers"
+import { fallbackBuffer, makeBuffer } from "../../store/buffers"
 import { db } from "../../store/db"
 import type { Buffer } from "../../store/buffers"
 
@@ -35,8 +35,6 @@ type ContextProps = {
   updateBuffer: (id: number, payload: Partial<Buffer>) => void
 }
 
-const fallbackBuffer = { id: 1, ...makeBuffer("SQL") }
-
 const defaultValues = {
   editorRef: null,
   monacoRef: null,
@@ -56,19 +54,41 @@ const EditorContext = createContext<ContextProps>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
-  const buffers = useLiveQuery(() => db.buffers.toArray(), []) ?? [
-    fallbackBuffer,
-  ]
-  const [activeBuffer, setActiveBuffer] = useState<Buffer>(buffers[0])
+  const buffers = useLiveQuery(() => db.buffers.toArray(), [])
+  const activeBufferId = useLiveQuery(
+    () => db.editor_settings.where("key").equals("activeBufferId").first(),
+    [],
+    { value: fallbackBuffer.id },
+  )?.value
+
+  const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
+
+  useEffect(() => {
+    if (buffers) {
+      setActiveBufferState(
+        buffers.find((buffer) => buffer.id === activeBufferId) ||
+          fallbackBuffer,
+      )
+    }
+  }, [buffers, activeBufferId])
+
+  const setActiveBuffer = (buffer: Buffer) => {
+    db.editor_settings
+      .where("key")
+      .equals("activeBufferId")
+      .modify({ value: buffer.id })
+    setActiveBufferState(buffer)
+  }
 
   const addBuffer: ContextProps["addBuffer"] = async () => {
-    const defaultPrefix = "SQL"
     const currentDefaultTabNumbers = (
       await db.buffers
-        .filter((buffer) => buffer.label.startsWith("SQL"))
+        .filter((buffer) => buffer.label.startsWith(fallbackBuffer.label))
         .toArray()
     )
-      .map((buffer) => buffer.label.slice(defaultPrefix.length + 1 /* space */))
+      .map((buffer) =>
+        buffer.label.slice(fallbackBuffer.label.length + 1 /* space */),
+      )
       .filter(Boolean)
       .map((n) => parseInt(n, 10))
       .sort()
@@ -81,7 +101,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       }
     }
 
-    const buffer = makeBuffer(`${defaultPrefix} ${nextNumber()}`)
+    const buffer = makeBuffer(`${fallbackBuffer.label} ${nextNumber()}`)
     const id = await db.buffers.add(buffer)
     return { id, ...buffer }
   }
@@ -101,6 +121,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   useEffect(() => {
     editorRef.current?.focus()
   }, [activeBuffer])
+
+  if (!buffers) {
+    return null
+  }
 
   return (
     <EditorContext.Provider
