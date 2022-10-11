@@ -95,22 +95,28 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
     const nextNumber = () => {
       for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
-        if (!currentDefaultTabNumbers.includes(i + 1)) {
-          return i + 1
+        const nextNumber = i + 1
+        if (!currentDefaultTabNumbers.includes(nextNumber)) {
+          return nextNumber
         }
       }
     }
 
     const buffer = makeBuffer(`${fallbackBuffer.label} ${nextNumber()}`)
     const id = await db.buffers.add(buffer)
+    setActiveBuffer(buffer)
     return { id, ...buffer }
   }
 
   const updateBuffer: ContextProps["updateBuffer"] = (id, payload) =>
     db.buffers.update(id, payload)
 
-  const deleteBuffer: ContextProps["deleteBuffer"] = (id) =>
-    db.buffers.delete(id)
+  const deleteBuffer: ContextProps["deleteBuffer"] = async (id) => {
+    editorRef.current?.setValue("")
+    await db.buffers.delete(id)
+    const nextActive = await db.buffers.toCollection().last()
+    setActiveBuffer(nextActive ?? fallbackBuffer)
+  }
 
   /*
     To avoid re-rendering components that subscribe to this context

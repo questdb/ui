@@ -141,11 +141,7 @@ export const EditorTabs = () => {
         </TabsWrapper>
       )}
 
-      <AddTabButton
-        onClick={async () => {
-          setActiveBuffer(await addBuffer())
-        }}
-      >
+      <AddTabButton onClick={addBuffer}>
         <AddCircle size="18px" />
       </AddTabButton>
     </PaneMenu>
