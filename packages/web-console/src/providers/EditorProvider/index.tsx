@@ -22,8 +22,8 @@ import { useLiveQuery } from "dexie-react-hooks"
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 type ContextProps = {
-  editorRef: MutableRefObject<IStandaloneCodeEditor | null> | null
-  monacoRef: MutableRefObject<Monaco | null> | null
+  editorRef: MutableRefObject<IStandaloneCodeEditor | null>
+  monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string) => void
   buffers: Buffer[]
@@ -35,8 +35,8 @@ type ContextProps = {
 }
 
 const defaultValues = {
-  editorRef: null,
-  monacoRef: null,
+  editorRef: { current: null },
+  monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
   appendQuery: () => undefined,
   buffers: [],
@@ -50,8 +50,8 @@ const defaultValues = {
 const EditorContext = createContext<ContextProps>(defaultValues)
 
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
-  const editorRef = useRef<IStandaloneCodeEditor | null>(null)
-  const monacoRef = useRef<Monaco | null>(null)
+  const editorRef = useRef<IStandaloneCodeEditor>(null)
+  const monacoRef = useRef<Monaco>(null)
   const buffers = useLiveQuery(() => db.buffers.toArray(), [])
   const activeBufferId = useLiveQuery(() => bufferStore.getActiveId(), [], {
     value: fallbackBuffer.id,
@@ -111,6 +111,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await setActiveBuffer(nextActive ?? fallbackBuffer)
   }
 
+  // buffers are available after `useLiveQuery` resolves
   if (!buffers) {
     return null
   }

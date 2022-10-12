@@ -38,6 +38,7 @@ import {
 } from "./questdb-sql"
 import { color } from "../../../utils"
 import { EditorTabs } from "./editor-tabs"
+import { registerEditorActions } from "./editor-actions"
 
 loader.config({
   paths: {
@@ -94,12 +95,6 @@ const Content = styled(PaneContent)`
     background: ${color("draculaRed")};
   }
 `
-
-enum Command {
-  EXECUTE = "execute",
-  FOCUS_GRID = "focus_grid",
-  CLEANUP_NOTIFICATIONS = "clean_notifications",
-}
 
 const MonacoEditor = () => {
   const {
@@ -251,91 +246,54 @@ const MonacoEditor = () => {
     editor: IStandaloneCodeEditor,
     monaco: Monaco,
   ) => {
+    monacoRef.current = monaco
+    editorRef.current = editor
     monaco.editor.setTheme("dracula")
+    setEditorReady(true)
 
-    if (monacoRef) {
-      monacoRef.current = monaco
-      setEditorReady(true)
-    }
+    // Support legacy bus events for non-react codebase
+    window.bus.on(BusEvent.MSG_EDITOR_INSERT_COLUMN, (_event, column) => {
+      insertTextAtCursor(column)
+    })
 
-    if (editorRef) {
-      editorRef.current = editor
+    window.bus.on(BusEvent.MSG_QUERY_FIND_N_EXEC, (_event, query: string) => {
+      const text = `${query};`
+      appendQuery(editor, text)
+      toggleRunning()
+    })
 
-      // Support legacy bus events for non-react codebase
-      window.bus.on(BusEvent.MSG_EDITOR_INSERT_COLUMN, (_event, column) => {
-        insertTextAtCursor(column)
-      })
+    window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
+      const matches = editor
+        .getModel()
+        ?.findMatches(query.q, true, false, true, null, true)
+      if (matches) {
+        // TODO: Display a query marker on correct line
+      }
+      toggleRunning(true)
+    })
 
-      window.bus.on(BusEvent.MSG_QUERY_FIND_N_EXEC, (_event, query: string) => {
-        const text = `${query};`
-        appendQuery(editor, text)
-        toggleRunning()
-      })
-
-      window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
-        const matches = editor
-          .getModel()
-          ?.findMatches(query.q, true, false, true, null, true)
-        if (matches) {
-          // TODO: Display a query marker on correct line
+    window.bus.on(
+      BusEvent.MSG_QUERY_EXPORT,
+      (_event, request?: { q: string }) => {
+        if (request) {
+          window.location.href = `/exp?query=${encodeURIComponent(request.q)}`
         }
-        toggleRunning(true)
-      })
+      },
+    )
 
-      window.bus.on(
-        BusEvent.MSG_QUERY_EXPORT,
-        (_event, request?: { q: string }) => {
-          if (request) {
-            window.location.href = `/exp?query=${encodeURIComponent(request.q)}`
-          }
-        },
-      )
+    window.bus.on(BusEvent.MSG_EDITOR_FOCUS, () => {
+      const position = editor.getPosition()
+      if (position) {
+        editor.setPosition({
+          lineNumber: position.lineNumber + 1,
+          column: position?.column,
+        })
+      }
+      editor.focus()
+    })
 
-      window.bus.on(BusEvent.MSG_EDITOR_FOCUS, () => {
-        const position = editor.getPosition()
-        if (position) {
-          editor.setPosition({
-            lineNumber: position.lineNumber + 1,
-            column: position?.column,
-          })
-        }
-        editor.focus()
-      })
-
-      editor.addAction({
-        id: Command.FOCUS_GRID,
-        label: "Focus Grid",
-        keybindings: [monaco.KeyCode.F2],
-        run: () => {
-          window.bus.trigger(BusEvent.GRID_FOCUS)
-        },
-      })
-
-      editor.addAction({
-        id: Command.EXECUTE,
-        label: "Execute command",
-        keybindings: [
-          monaco.KeyCode.F9,
-          monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-        ],
-        run: () => {
-          toggleRunning()
-        },
-      })
-
-      editor.addAction({
-        id: Command.CLEANUP_NOTIFICATIONS,
-        label: "Clear all notifications",
-        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
-        run: () => {
-          dispatch(actions.query.cleanupNotifications())
-        },
-      })
-
-      editor.onDidChangeCursorPosition(() => {
-        renderLineMarkings(monaco, editor)
-      })
-    }
+    registerEditorActions({ editor, monaco, toggleRunning, dispatch })
+    editor.onDidChangeCursorPosition(() => renderLineMarkings(monaco, editor))
 
     loadPreferences(editor)
 
@@ -355,8 +313,7 @@ const MonacoEditor = () => {
       }
     }
 
-    const executeQuery = params.get("executeQuery")
-    if (executeQuery) {
+    if (params.get("executeQuery")) {
       toggleRunning()
     }
   }
