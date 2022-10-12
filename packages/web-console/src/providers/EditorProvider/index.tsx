@@ -65,10 +65,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     )
   }, [buffers, activeBufferId])
 
-  useEffect(() => {
-    editorRef.current?.focus()
-  }, [activeBuffer])
-
   const setActiveBuffer = async (buffer: Buffer) => {
     const currentViewState = editorRef.current?.saveViewState()
     if (currentViewState) {
@@ -77,11 +73,12 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       })
     }
 
+    await bufferStore.setActiveId(buffer.id as number)
+    setActiveBufferState(buffer)
+    editorRef.current?.focus()
     if (buffer.editorViewState) {
       editorRef.current?.restoreViewState(buffer.editorViewState)
     }
-    await bufferStore.setActiveId(buffer.id as number)
-    setActiveBufferState(buffer)
   }
 
   const addBuffer: ContextProps["addBuffer"] = async () => {

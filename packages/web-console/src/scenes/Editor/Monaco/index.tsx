@@ -403,6 +403,7 @@ const MonacoEditor = () => {
           onMount={onMount}
           defaultLanguage={QuestDBLanguageName}
           defaultValue={activeBuffer.value}
+          saveViewState={false}
           onChange={(value) => {
             updateBuffer(activeBuffer.id as number, { value })
           }}
