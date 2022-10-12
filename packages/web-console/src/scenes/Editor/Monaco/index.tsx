@@ -1,3 +1,27 @@
+/*******************************************************************************
+ *     ___                  _   ____  ____
+ *    / _ \ _   _  ___  ___| |_|  _ \| __ )
+ *   | | | | | | |/ _ \/ __| __| | | |  _ \
+ *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
+ *    \__\_\\__,_|\___||___/\__|____/|____/
+ *
+ *  Copyright (c) 2014-2019 Appsicle
+ *  Copyright (c) 2019-2022 QuestDB
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
 import React, { useContext, useEffect, useRef, useState } from "react"
 import type { BaseSyntheticEvent } from "react"
 import Editor, { Monaco, loader } from "@monaco-editor/react"
@@ -32,6 +56,7 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 import { EditorTabs } from "./editor-tabs"
 import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
+import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 
 loader.config({
   paths: {
@@ -115,7 +140,7 @@ const MonacoEditor = () => {
     dispatch(actions.query.toggleRunning(isRefresh))
   }
 
-  const handleEditorBeforeMount = (monaco: Monaco) => {
+  const beforeMount = (monaco: Monaco) => {
     registerLanguageAddons(monaco)
 
     setSchemaCompletionHandle(
@@ -210,55 +235,14 @@ const MonacoEditor = () => {
     }
   }
 
-  const handleEditorDidMount = (
-    editor: IStandaloneCodeEditor,
-    monaco: Monaco,
-  ) => {
+  const onMount = (editor: IStandaloneCodeEditor, monaco: Monaco) => {
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
     setEditorReady(true)
 
     // Support legacy bus events for non-react codebase
-    window.bus.on(BusEvent.MSG_EDITOR_INSERT_COLUMN, (_event, column) => {
-      insertTextAtCursor(column)
-    })
-
-    window.bus.on(BusEvent.MSG_QUERY_FIND_N_EXEC, (_event, query: string) => {
-      const text = `${query};`
-      appendQuery(editor, text)
-      toggleRunning()
-    })
-
-    window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
-      const matches = editor
-        .getModel()
-        ?.findMatches(query.q, true, false, true, null, true)
-      if (matches) {
-        // TODO: Display a query marker on correct line
-      }
-      toggleRunning(true)
-    })
-
-    window.bus.on(
-      BusEvent.MSG_QUERY_EXPORT,
-      (_event, request?: { q: string }) => {
-        if (request) {
-          window.location.href = `/exp?query=${encodeURIComponent(request.q)}`
-        }
-      },
-    )
-
-    window.bus.on(BusEvent.MSG_EDITOR_FOCUS, () => {
-      const position = editor.getPosition()
-      if (position) {
-        editor.setPosition({
-          lineNumber: position.lineNumber + 1,
-          column: position?.column,
-        })
-      }
-      editor.focus()
-    })
+    registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
 
     registerEditorActions({ editor, monaco, toggleRunning, dispatch })
     editor.onDidChangeCursorPosition(() => renderLineMarkings(monaco, editor))
@@ -427,8 +411,8 @@ const MonacoEditor = () => {
       <EditorTabs />
       <Content onClick={handleEditorClick}>
         <Editor
-          beforeMount={handleEditorBeforeMount}
-          onMount={handleEditorDidMount}
+          beforeMount={beforeMount}
+          onMount={onMount}
           defaultLanguage={QuestDBLanguageName}
           defaultValue={activeBuffer.value}
           onChange={(value) => {

@@ -81,7 +81,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         .toArray()
     )
       .map((buffer) =>
-        buffer.label.slice(fallbackBuffer.label.length + 1 /* space */),
+        buffer.label.slice(fallbackBuffer.label.length + /* whitespace */ 1),
       )
       .filter(Boolean)
       .map((n) => parseInt(n, 10))
