@@ -28,17 +28,10 @@ import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
 import Loader from "../Loader"
 import styled from "styled-components"
-import {
-  conf as QuestDBLanguageConf,
-  language as QuestDBLanguage,
-  createQuestDBCompletionProvider,
-  createSchemaCompletionProvider,
-  documentFormattingEditProvider,
-  documentRangeFormattingEditProvider,
-} from "./questdb-sql"
+import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 import { EditorTabs } from "./editor-tabs"
-import { registerEditorActions } from "./editor-actions"
+import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 
 loader.config({
   paths: {
@@ -123,32 +116,7 @@ const MonacoEditor = () => {
   }
 
   const handleEditorBeforeMount = (monaco: Monaco) => {
-    monaco.languages.register({ id: QuestDBLanguageName })
-
-    monaco.languages.setMonarchTokensProvider(
-      QuestDBLanguageName,
-      QuestDBLanguage,
-    )
-
-    monaco.languages.setLanguageConfiguration(
-      QuestDBLanguageName,
-      QuestDBLanguageConf,
-    )
-
-    monaco.languages.registerCompletionItemProvider(
-      QuestDBLanguageName,
-      createQuestDBCompletionProvider(),
-    )
-
-    monaco.languages.registerDocumentFormattingEditProvider(
-      QuestDBLanguageName,
-      documentFormattingEditProvider,
-    )
-
-    monaco.languages.registerDocumentRangeFormattingEditProvider(
-      QuestDBLanguageName,
-      documentRangeFormattingEditProvider,
-    )
+    registerLanguageAddons(monaco)
 
     setSchemaCompletionHandle(
       monaco.languages.registerCompletionItemProvider(

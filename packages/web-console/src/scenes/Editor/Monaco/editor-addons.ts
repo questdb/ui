@@ -28,6 +28,16 @@ import { BusEvent } from "../../../consts"
 import { actions } from "../../../store"
 import { Dispatch } from "redux"
 
+import {
+  conf as QuestDBLanguageConf,
+  language as QuestDBLanguage,
+  createQuestDBCompletionProvider,
+  documentFormattingEditProvider,
+  documentRangeFormattingEditProvider,
+} from "./questdb-sql"
+
+import { QuestDBLanguageName } from "./utils"
+
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
@@ -74,4 +84,33 @@ export const registerEditorActions = ({
       dispatch(actions.query.cleanupNotifications())
     },
   })
+}
+
+export const registerLanguageAddons = (monaco: Monaco) => {
+  monaco.languages.register({ id: QuestDBLanguageName })
+
+  monaco.languages.setMonarchTokensProvider(
+    QuestDBLanguageName,
+    QuestDBLanguage,
+  )
+
+  monaco.languages.setLanguageConfiguration(
+    QuestDBLanguageName,
+    QuestDBLanguageConf,
+  )
+
+  monaco.languages.registerCompletionItemProvider(
+    QuestDBLanguageName,
+    createQuestDBCompletionProvider(),
+  )
+
+  monaco.languages.registerDocumentFormattingEditProvider(
+    QuestDBLanguageName,
+    documentFormattingEditProvider,
+  )
+
+  monaco.languages.registerDocumentRangeFormattingEditProvider(
+    QuestDBLanguageName,
+    documentRangeFormattingEditProvider,
+  )
 }
