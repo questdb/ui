@@ -23,12 +23,14 @@
  ******************************************************************************/
 
 import { db } from "./db"
+import type { editor } from "monaco-editor"
 
 export type Buffer = {
   /** auto incremented number by Dexie */
   id?: number
   label: string
   value: string
+  editorViewState?: editor.ICodeEditorViewState
 }
 
 export const makeBuffer = ({
@@ -40,6 +42,20 @@ export const makeBuffer = ({
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
+  editorViewState: {
+    cursorState: [],
+    contributionsState: [],
+    viewState: {
+      scrollTop: 0,
+      scrollTopWithoutViewZones: 0,
+      scrollLeft: 0,
+      firstPosition: {
+        lineNumber: 0,
+        column: 0,
+      },
+      firstPositionDeltaTop: 0,
+    },
+  },
 })
 
 export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }

@@ -70,6 +70,9 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }, [activeBuffer])
 
   const setActiveBuffer = async (buffer: Buffer) => {
+    if (buffer.editorViewState) {
+      editorRef.current?.restoreViewState(buffer.editorViewState)
+    }
     await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
   }
@@ -104,6 +107,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return { id, ...buffer }
   }
 
+  const updateBuffer: ContextProps["updateBuffer"] = (id, payload) => {
+    const editorViewState = editorRef.current?.saveViewState()
+    bufferStore.update(id, {
+      ...payload,
+      ...(editorViewState ? { editorViewState } : {}),
+    })
+  }
+
   const deleteBuffer: ContextProps["deleteBuffer"] = async (id) => {
     editorRef.current?.setValue("")
     await bufferStore.delete(id)
@@ -136,7 +147,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         setActiveBuffer,
         addBuffer,
         deleteBuffer,
-        updateBuffer: bufferStore.update,
+        updateBuffer,
       }}
     >
       {children}
