@@ -25,7 +25,6 @@ type ContextProps = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null> | null
   monacoRef: MutableRefObject<Monaco | null> | null
   insertTextAtCursor: (text: string) => void
-  getValue: () => void
   appendQuery: (query: string) => void
   buffers: Buffer[]
   activeBuffer: Buffer
@@ -39,7 +38,6 @@ const defaultValues = {
   editorRef: null,
   monacoRef: null,
   insertTextAtCursor: () => undefined,
-  getValue: () => undefined,
   appendQuery: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
@@ -113,8 +111,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await setActiveBuffer(nextActive ?? fallbackBuffer)
   }
 
-  const getValue = () => editorRef.current?.getValue()
-
   if (!buffers) {
     return null
   }
@@ -124,7 +120,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       value={{
         editorRef,
         monacoRef,
-        getValue,
         insertTextAtCursor: (text) => {
           if (editorRef?.current) {
             insertTextAtCursor(editorRef.current, text)
