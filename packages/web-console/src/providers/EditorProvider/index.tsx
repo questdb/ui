@@ -13,7 +13,7 @@ import {
   insertTextAtCursor,
   appendQuery,
 } from "../../scenes/Editor/Monaco/utils"
-import { fallbackBuffer, makeBuffer } from "../../store/buffers"
+import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
 import { db } from "../../store/db"
 import type { Buffer } from "../../store/buffers"
 
@@ -32,7 +32,7 @@ type ContextProps = {
   setActiveBuffer: (buffer: Buffer) => void
   addBuffer: () => Promise<Buffer>
   deleteBuffer: (id: number) => void
-  updateBuffer: (id: number, payload: Partial<Buffer>) => void
+  updateBuffer: (id: number, buffer: Partial<Buffer>) => void
 }
 
 const defaultValues = {
@@ -55,28 +55,24 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const buffers = useLiveQuery(() => db.buffers.toArray(), [])
-  const activeBufferId = useLiveQuery(
-    () => db.editor_settings.where("key").equals("activeBufferId").first(),
-    [],
-    { value: fallbackBuffer.id },
-  )?.value
+  const activeBufferId = useLiveQuery(() => bufferStore.getActiveId(), [], {
+    value: fallbackBuffer.id,
+  })?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
 
   useEffect(() => {
-    if (buffers) {
-      setActiveBufferState(
-        buffers.find((buffer) => buffer.id === activeBufferId) ||
-          fallbackBuffer,
-      )
-    }
+    setActiveBufferState(
+      buffers?.find((buffer) => buffer.id === activeBufferId) || fallbackBuffer,
+    )
   }, [buffers, activeBufferId])
 
-  const setActiveBuffer = (buffer: Buffer) => {
-    db.editor_settings
-      .where("key")
-      .equals("activeBufferId")
-      .modify({ value: buffer.id })
+  useEffect(() => {
+    editorRef.current?.focus()
+  }, [activeBuffer])
+
+  const setActiveBuffer = async (buffer: Buffer) => {
+    await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
   }
 
@@ -106,29 +102,18 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       label: `${fallbackBuffer.label} ${nextNumber()}`,
     })
     const id = await db.buffers.add(buffer)
-    setActiveBuffer(buffer)
+    await setActiveBuffer(buffer)
     return { id, ...buffer }
   }
 
-  const updateBuffer: ContextProps["updateBuffer"] = (id, payload) =>
-    db.buffers.update(id, payload)
-
   const deleteBuffer: ContextProps["deleteBuffer"] = async (id) => {
     editorRef.current?.setValue("")
-    await db.buffers.delete(id)
+    await bufferStore.delete(id)
     const nextActive = await db.buffers.toCollection().last()
-    setActiveBuffer(nextActive ?? fallbackBuffer)
+    await setActiveBuffer(nextActive ?? fallbackBuffer)
   }
 
-  /*
-    To avoid re-rendering components that subscribe to this context
-    we don't set value via a useState hook
-   */
   const getValue = () => editorRef.current?.getValue()
-
-  useEffect(() => {
-    editorRef.current?.focus()
-  }, [activeBuffer])
 
   if (!buffers) {
     return null
@@ -155,7 +140,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         setActiveBuffer,
         addBuffer,
         deleteBuffer,
-        updateBuffer,
+        updateBuffer: bufferStore.update,
       }}
     >
       {children}

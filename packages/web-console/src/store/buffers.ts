@@ -22,6 +22,8 @@
  *
  ******************************************************************************/
 
+import { db } from "./db"
+
 export type Buffer = {
   /** auto incremented number by Dexie */
   id?: number
@@ -41,3 +43,19 @@ export const makeBuffer = ({
 })
 
 export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }
+
+export const bufferStore = {
+  getActiveId: () =>
+    db.editor_settings.where("key").equals("activeBufferId").first(),
+
+  setActiveId: (id: number) =>
+    db.editor_settings
+      .where("key")
+      .equals("activeBufferId")
+      .modify({ value: id }),
+
+  update: (id: number, buffer: Partial<Buffer>) =>
+    db.buffers.update(id, buffer),
+
+  delete: (id: number) => db.buffers.delete(id),
+}
