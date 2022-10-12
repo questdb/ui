@@ -30,7 +30,6 @@ import { editor } from "monaco-editor"
 import type { IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
-import { usePreferences } from "./usePreferences"
 import {
   appendQuery,
   getErrorRange,
@@ -122,7 +121,6 @@ const MonacoEditor = () => {
     activeBuffer,
     updateBuffer,
   } = useEditor()
-  const { loadPreferences, savePreferences } = usePreferences()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
@@ -243,10 +241,9 @@ const MonacoEditor = () => {
 
     // Support legacy bus events for non-react codebase
     registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
+
     registerEditorActions({ editor, monaco, toggleRunning, dispatch })
     editor.onDidChangeCursorPosition(() => renderLineMarkings(monaco, editor))
-
-    loadPreferences(editor)
 
     // Insert query, if one is found in the URL
     const params = new URLSearchParams(window.location.search)
@@ -384,14 +381,6 @@ const MonacoEditor = () => {
       }
     }
   }, [quest, dispatch, running])
-
-  useEffect(() => {
-    const editor = editorRef?.current
-
-    if (running.value && editor) {
-      savePreferences(editor)
-    }
-  }, [running, savePreferences])
 
   useEffect(() => {
     if (editorReady && monacoRef?.current) {
