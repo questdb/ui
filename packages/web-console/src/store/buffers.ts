@@ -33,29 +33,52 @@ export type Buffer = {
   editorViewState?: editor.ICodeEditorViewState
 }
 
+const defaultEditorViewState: editor.ICodeEditorViewState = {
+  cursorState: [
+    {
+      inSelectionMode: false,
+      selectionStart: {
+        lineNumber: 1,
+        column: 1,
+      },
+      position: {
+        lineNumber: 1,
+        column: 1,
+      },
+    },
+  ],
+  contributionsState: [
+    {
+      "editor.contrib.wordHighlighter": false,
+      "editor.contrib.folding": {
+        lineCount: 1,
+        provider: "indent",
+        foldedImports: false,
+      },
+    },
+  ],
+  viewState: {
+    scrollLeft: 0,
+    firstPosition: {
+      lineNumber: 1,
+      column: 1,
+    },
+    firstPositionDeltaTop: 0,
+  },
+}
+
 export const makeBuffer = ({
   label,
   value,
+  editorViewState = defaultEditorViewState,
 }: {
   label: string
   value?: string
+  editorViewState?: editor.ICodeEditorViewState
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
-  editorViewState: {
-    cursorState: [],
-    contributionsState: [],
-    viewState: {
-      scrollTop: 0,
-      scrollTopWithoutViewZones: 0,
-      scrollLeft: 0,
-      firstPosition: {
-        lineNumber: 0,
-        column: 0,
-      },
-      firstPositionDeltaTop: 0,
-    },
-  },
+  editorViewState,
 })
 
 export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }

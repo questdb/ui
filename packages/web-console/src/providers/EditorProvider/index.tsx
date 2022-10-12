@@ -31,7 +31,7 @@ type ContextProps = {
   setActiveBuffer: (buffer: Buffer) => void
   addBuffer: () => Promise<Buffer>
   deleteBuffer: (id: number) => void
-  updateBuffer: (id: number, buffer: Partial<Buffer>) => void
+  updateBuffer: (id: number, buffer: Partial<Buffer>) => Promise<void>
 }
 
 const defaultValues = {
@@ -44,7 +44,7 @@ const defaultValues = {
   setActiveBuffer: () => undefined,
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => undefined,
-  updateBuffer: () => undefined,
+  updateBuffer: () => Promise.resolve(),
 }
 
 const EditorContext = createContext<ContextProps>(defaultValues)
@@ -70,6 +70,13 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }, [activeBuffer])
 
   const setActiveBuffer = async (buffer: Buffer) => {
+    const currentViewState = editorRef.current?.saveViewState()
+    if (currentViewState) {
+      await updateBuffer(activeBuffer.id as number, {
+        editorViewState: currentViewState,
+      })
+    }
+
     if (buffer.editorViewState) {
       editorRef.current?.restoreViewState(buffer.editorViewState)
     }
@@ -107,9 +114,9 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return { id, ...buffer }
   }
 
-  const updateBuffer: ContextProps["updateBuffer"] = (id, payload) => {
+  const updateBuffer: ContextProps["updateBuffer"] = async (id, payload) => {
     const editorViewState = editorRef.current?.saveViewState()
-    bufferStore.update(id, {
+    await bufferStore.update(id, {
       ...payload,
       ...(editorViewState ? { editorViewState } : {}),
     })
