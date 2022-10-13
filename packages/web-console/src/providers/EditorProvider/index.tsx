@@ -88,7 +88,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
     editorRef.current?.focus()
-    if (editorRef.current && monacoRef.current && buffer.value) {
+    if (editorRef.current && monacoRef.current) {
       const model = monacoRef.current?.editor.createModel(
         buffer.value,
         QuestDBLanguageName,
