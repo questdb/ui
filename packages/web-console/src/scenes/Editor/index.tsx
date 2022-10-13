@@ -24,11 +24,10 @@
 
 import React, { CSSProperties, forwardRef, Ref } from "react"
 import styled from "styled-components"
-
 import { PaneWrapper } from "../../components"
-
-import Monaco from "./Monaco"
+import { EditorProvider } from "../../providers"
 import Menu from "./Menu"
+import Monaco from "./Monaco"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -49,7 +48,9 @@ const Editor = ({
 )
 
 const EditorWithRef = (props: Props, ref: Ref<HTMLDivElement>) => (
-  <Editor {...props} innerRef={ref} />
+  <EditorProvider>
+    <Editor {...props} innerRef={ref} />
+  </EditorProvider>
 )
 
 export default forwardRef(EditorWithRef)
