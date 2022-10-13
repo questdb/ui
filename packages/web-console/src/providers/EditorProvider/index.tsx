@@ -32,6 +32,7 @@ type ContextProps = {
   addBuffer: () => Promise<Buffer>
   deleteBuffer: (id: number) => void
   updateBuffer: (id: number, buffer: Partial<Buffer>) => Promise<void>
+  editorReadyHook: (editor: IStandaloneCodeEditor) => void
 }
 
 const defaultValues = {
@@ -45,6 +46,7 @@ const defaultValues = {
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => undefined,
   updateBuffer: () => Promise.resolve(),
+  editorReadyHook: () => undefined,
 }
 
 const EditorContext = createContext<ContextProps>(defaultValues)
@@ -58,31 +60,18 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     [],
   )?.value
 
-  const calledOnce = useRef(false)
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
 
   useEffect(() => {
-    if (calledOnce.current) {
-      return
-    }
-
     if (buffers && activeBufferId) {
-      calledOnce.current = true
       const buffer =
         buffers?.find((buffer) => buffer.id === activeBufferId) ||
         fallbackBuffer
       setActiveBufferState(buffer)
-
-      editorRef.current?.focus()
-      setTimeout(() => {
-        if (buffer.editorViewState) {
-          editorRef.current?.restoreViewState(buffer.editorViewState)
-        }
-      }, 1000)
     }
   }, [buffers, activeBufferId])
 
-  if (!buffers || !activeBufferId) {
+  if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
   }
 
@@ -168,6 +157,12 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         addBuffer,
         deleteBuffer,
         updateBuffer,
+        editorReadyHook: (editor) => {
+          editor.focus()
+          if (activeBuffer.editorViewState) {
+            editor.restoreViewState(activeBuffer.editorViewState)
+          }
+        },
       }}
     >
       {children}

@@ -120,6 +120,7 @@ const MonacoEditor = () => {
     insertTextAtCursor,
     activeBuffer,
     updateBuffer,
+    editorReadyHook,
   } = useEditor()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -239,6 +240,7 @@ const MonacoEditor = () => {
     monaco.editor.setTheme("dracula")
 
     setEditorReady(true)
+    editorReadyHook(editor)
 
     // Support legacy bus events for non-react codebase
     registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
