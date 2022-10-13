@@ -53,17 +53,38 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
   const buffers = useLiveQuery(() => db.buffers.toArray(), [])
-  const activeBufferId = useLiveQuery(() => bufferStore.getActiveId(), [], {
-    value: fallbackBuffer.id,
-  })?.value
+  const activeBufferId = useLiveQuery(
+    () => bufferStore.getActiveId(),
+    [],
+  )?.value
 
+  const calledOnce = useRef(false)
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
 
   useEffect(() => {
-    setActiveBufferState(
-      buffers?.find((buffer) => buffer.id === activeBufferId) || fallbackBuffer,
-    )
+    if (calledOnce.current) {
+      return
+    }
+
+    if (buffers && activeBufferId) {
+      calledOnce.current = true
+      const buffer =
+        buffers?.find((buffer) => buffer.id === activeBufferId) ||
+        fallbackBuffer
+      setActiveBufferState(buffer)
+
+      editorRef.current?.focus()
+      setTimeout(() => {
+        if (buffer.editorViewState) {
+          editorRef.current?.restoreViewState(buffer.editorViewState)
+        }
+      }, 1000)
+    }
   }, [buffers, activeBufferId])
+
+  if (!buffers || !activeBufferId) {
+    return null
+  }
 
   const setActiveBuffer = async (buffer: Buffer) => {
     const currentViewState = editorRef.current?.saveViewState()
@@ -124,11 +145,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await bufferStore.delete(id)
     const nextActive = await db.buffers.toCollection().last()
     await setActiveBuffer(nextActive ?? fallbackBuffer)
-  }
-
-  // buffers are available after `useLiveQuery` resolves
-  if (!buffers) {
-    return null
   }
 
   return (

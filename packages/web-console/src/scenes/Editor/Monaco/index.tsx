@@ -237,11 +237,11 @@ const MonacoEditor = () => {
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
+
     setEditorReady(true)
 
     // Support legacy bus events for non-react codebase
     registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
-
     registerEditorActions({ editor, monaco, toggleRunning, dispatch })
     editor.onDidChangeCursorPosition(() => renderLineMarkings(monaco, editor))
 
