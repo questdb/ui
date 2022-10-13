@@ -32,6 +32,7 @@ import { color } from "../../../utils"
 
 import QueryRow from "./Row"
 import { useEditor } from "../../../providers"
+import { makeBuffer } from "../../../store/buffers"
 
 type Props = {
   hidePicker: () => void
@@ -122,7 +123,7 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
   const [queryList, setQueryList] = useState<
     ReturnType<typeof prepareQueriesList>
   >([])
-  const { appendQuery } = useEditor()
+  const { addBuffer } = useEditor()
 
   useEffect(() => {
     setQueryList(prepareQueriesList(queries))
@@ -131,7 +132,7 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
   const addQuery = useCallback(
     (query: Query) => {
       hidePicker()
-      appendQuery(query.value)
+      addBuffer(makeBuffer({ label: query.name ?? "", value: query.value }))
     },
     [hidePicker],
   )
