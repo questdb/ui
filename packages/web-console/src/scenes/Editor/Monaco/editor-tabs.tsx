@@ -45,40 +45,49 @@ const AddTabButton = styled(SecondaryButton)`
 
 const EditableLabel = ({
   label,
-  onChange,
+  onDoubleClick,
+  onConfirm,
   onCancel,
   isEditing,
 }: {
   label: string
-  onChange(label: string): void
+  onDoubleClick: () => void
+  onConfirm(label: string): void
   onCancel(): void
   isEditing: boolean
 }) => {
   const [value, setValue] = useState(label)
+  const ref = useRef(null)
+  useOnClickOutside(ref, onCancel)
 
-  const inputRef = useRef(null)
-
-  useOnClickOutside(inputRef, onCancel)
-
-  if (isEditing) {
-    return (
-      <FilenameInput
-        autoFocus
-        size="sm"
-        defaultValue={value}
-        onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-          setValue(event.target.value)
+  return (
+    <span
+      ref={ref}
+      onDoubleClick={() => {
+        if (!isEditing) {
+          onDoubleClick()
         }
-        onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-          if (event.key === "Enter") {
-            onChange(value)
+      }}
+    >
+      {isEditing ? (
+        <FilenameInput
+          autoFocus
+          size="sm"
+          defaultValue={value}
+          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+            setValue(event.target.value)
           }
-        }}
-        inputRef={inputRef}
-      />
-    )
-  }
-  return <span>{label}</span>
+          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+            if (event.key === "Enter") {
+              onConfirm(value)
+            }
+          }}
+        />
+      ) : (
+        label
+      )}
+    </span>
+  )
 }
 
 export const EditorTabs = () => {
@@ -96,52 +105,65 @@ export const EditorTabs = () => {
     <PaneMenu>
       {buffers && activeBuffer && (
         <TabsWrapper>
-          {buffers.map((buffer) => (
-            <React.Fragment key={buffer.id}>
-              <ContextMenuTrigger id={`${buffer.id}`}>
-                <PrimaryToggleButton
-                  selected={activeBuffer.id === buffer.id}
-                  onClick={async () => {
-                    await setActiveBuffer(buffer)
-                    setEditingId(null)
-                  }}
-                >
-                  <FileEditIcon size="14px" />
+          {buffers.map((buffer) => {
+            const selected = activeBuffer.id === buffer.id
 
-                  <EditableLabel
-                    isEditing={editingId === buffer.id}
-                    label={buffer.label}
-                    onChange={(label) => {
-                      updateBuffer(buffer.id as number, { label })
-                    }}
-                    onCancel={() => {
-                      setEditingId(null)
-                    }}
-                  />
+            return (
+              <React.Fragment key={buffer.id}>
+                <ContextMenuTrigger id={`${buffer.id}`}>
+                  <PrimaryToggleButton
+                    selected={selected}
+                    onClick={async () => {
+                      // do not set the active buffer if the user is editing the filename
+                      if (editingId !== buffer.id) {
+                        await setActiveBuffer(buffer)
+                      }
 
-                  {buffers.length > 1 && (
-                    <CloseIcon
-                      size="14px"
-                      onClick={(event) => {
-                        // prevent event bubbling from triggering `setActiveBuffer`
-                        event.stopPropagation()
-                        deleteBuffer(buffer.id as number)
+                      // do not reset the editing id if the user is editing the filename
+                      if (!selected) {
+                        setEditingId(null)
+                      }
+                    }}
+                  >
+                    <FileEditIcon size="14px" />
+
+                    <EditableLabel
+                      isEditing={editingId === buffer.id}
+                      label={buffer.label}
+                      onDoubleClick={() => setEditingId(buffer.id as number)}
+                      onConfirm={(label) => {
+                        updateBuffer(buffer.id as number, { label })
+                        setEditingId(null)
+                      }}
+                      onCancel={() => {
+                        setEditingId(null)
                       }}
                     />
-                  )}
-                </PrimaryToggleButton>
-              </ContextMenuTrigger>
 
-              <ContextMenu id={`${buffer.id}`}>
-                <MenuItem onClick={() => setEditingId(buffer.id as number)}>
-                  Rename
-                </MenuItem>
-                <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
-                  Close
-                </MenuItem>
-              </ContextMenu>
-            </React.Fragment>
-          ))}
+                    {buffers.length > 1 && (
+                      <CloseIcon
+                        size="14px"
+                        onClick={(event) => {
+                          // prevent event bubbling from triggering `setActiveBuffer`
+                          event.stopPropagation()
+                          deleteBuffer(buffer.id as number)
+                        }}
+                      />
+                    )}
+                  </PrimaryToggleButton>
+                </ContextMenuTrigger>
+
+                <ContextMenu id={`${buffer.id}`}>
+                  <MenuItem onClick={() => setEditingId(buffer.id as number)}>
+                    Rename
+                  </MenuItem>
+                  <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
+                    Close
+                  </MenuItem>
+                </ContextMenu>
+              </React.Fragment>
+            )
+          })}
         </TabsWrapper>
       )}
 
