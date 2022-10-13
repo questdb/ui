@@ -101,8 +101,8 @@ export const EditorTabs = () => {
               <ContextMenuTrigger id={`${buffer.id}`}>
                 <PrimaryToggleButton
                   selected={activeBuffer.id === buffer.id}
-                  onClick={() => {
-                    setActiveBuffer(buffer)
+                  onClick={async () => {
+                    await setActiveBuffer(buffer)
                     setEditingId(null)
                   }}
                 >

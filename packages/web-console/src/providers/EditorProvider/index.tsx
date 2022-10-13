@@ -28,11 +28,11 @@ type ContextProps = {
   appendQuery: (query: string) => void
   buffers: Buffer[]
   activeBuffer: Buffer
-  setActiveBuffer: (buffer: Buffer) => void
+  setActiveBuffer: (buffer: Buffer) => Promise<void>
   addBuffer: () => Promise<Buffer>
-  deleteBuffer: (id: number) => void
+  deleteBuffer: (id: number) => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
-  editorReadyHook: (editor: IStandaloneCodeEditor) => void
+  editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
 }
 
 const defaultValues = {
@@ -42,11 +42,11 @@ const defaultValues = {
   appendQuery: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
-  setActiveBuffer: () => undefined,
+  setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
-  deleteBuffer: () => undefined,
+  deleteBuffer: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
-  editorReadyHook: () => undefined,
+  editorReadyTrigger: () => undefined,
 }
 
 const EditorContext = createContext<ContextProps>(defaultValues)
@@ -154,7 +154,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         addBuffer,
         deleteBuffer,
         updateBuffer,
-        editorReadyHook: (editor) => {
+        editorReadyTrigger: (editor) => {
           editor.focus()
           if (activeBuffer.editorViewState) {
             editor.restoreViewState(activeBuffer.editorViewState)
