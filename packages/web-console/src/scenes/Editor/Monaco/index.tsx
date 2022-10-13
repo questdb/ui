@@ -31,7 +31,6 @@ import type { IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
 import {
-  appendQuery,
   getErrorRange,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
@@ -121,6 +120,7 @@ const MonacoEditor = () => {
     activeBuffer,
     updateBuffer,
     editorReadyTrigger,
+    addBuffer,
   } = useEditor()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -251,16 +251,8 @@ const MonacoEditor = () => {
     const params = new URLSearchParams(window.location.search)
     // Support multi-line queries (URL encoded)
     const query = params.get("query")
-    const model = editor.getModel()
     if (query) {
-      // Find if the query is already in the editor
-      const matches = model?.findMatches(query, true, false, true, null, true)
-      if (matches && matches.length > 0) {
-        editor.setSelection(matches[0].range)
-        // otherwise, append the query
-      } else {
-        appendQuery(editor, query, { appendAt: "end" })
-      }
+      addBuffer({ value: query })
     }
 
     if (params.get("executeQuery")) {

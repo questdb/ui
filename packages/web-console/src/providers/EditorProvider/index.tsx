@@ -29,7 +29,7 @@ type ContextProps = {
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => Promise<void>
-  addBuffer: () => Promise<Buffer>
+  addBuffer: (buffer?: Partial<Buffer>) => Promise<Buffer>
   deleteBuffer: (id: number) => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
@@ -89,7 +89,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     }
   }
 
-  const addBuffer: ContextProps["addBuffer"] = async () => {
+  const addBuffer: ContextProps["addBuffer"] = async (newBuffer) => {
     const currentDefaultTabNumbers = (
       await db.buffers
         .filter((buffer) => buffer.label.startsWith(fallbackBuffer.label))
@@ -112,7 +112,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     }
 
     const buffer = makeBuffer({
-      label: `${fallbackBuffer.label} ${nextNumber()}`,
+      label: newBuffer?.label ?? `${fallbackBuffer.label} ${nextNumber()}`,
+      ...newBuffer,
     })
     const id = await db.buffers.add(buffer)
     await setActiveBuffer(buffer)
