@@ -122,7 +122,11 @@ export const EditorTabs = () => {
                   {buffers.length > 1 && (
                     <CloseIcon
                       size="14px"
-                      onClick={() => deleteBuffer(buffer.id as number)}
+                      onClick={(event) => {
+                        // prevent event bubbling from triggering `setActiveBuffer`
+                        event.stopPropagation()
+                        deleteBuffer(buffer.id as number)
+                      }}
                     />
                   )}
                 </PrimaryToggleButton>

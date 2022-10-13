@@ -31,7 +31,7 @@ type ContextProps = {
   setActiveBuffer: (buffer: Buffer) => void
   addBuffer: () => Promise<Buffer>
   deleteBuffer: (id: number) => void
-  updateBuffer: (id: number, buffer: Partial<Buffer>) => Promise<void>
+  updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyHook: (editor: IStandaloneCodeEditor) => void
 }
 
@@ -62,12 +62,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
 
+  const ranOnce = useRef(false)
+  // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
-    if (buffers && activeBufferId) {
+    if (!ranOnce.current && buffers && activeBufferId) {
       const buffer =
-        buffers?.find((buffer) => buffer.id === activeBufferId) ||
-        fallbackBuffer
+        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
       setActiveBufferState(buffer)
+      ranOnce.current = true
     }
   }, [buffers, activeBufferId])
 
@@ -76,12 +78,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }
 
   const setActiveBuffer = async (buffer: Buffer) => {
-    const currentViewState = editorRef.current?.saveViewState()
-    if (currentViewState) {
-      await updateBuffer(activeBuffer.id as number, {
-        editorViewState: currentViewState,
-      })
-    }
+    // save current buffer before switching
+    await updateBuffer(activeBuffer.id as number)
 
     await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
@@ -130,7 +128,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }
 
   const deleteBuffer: ContextProps["deleteBuffer"] = async (id) => {
-    editorRef.current?.setValue("")
     await bufferStore.delete(id)
     const nextActive = await db.buffers.toCollection().last()
     await setActiveBuffer(nextActive ?? fallbackBuffer)
