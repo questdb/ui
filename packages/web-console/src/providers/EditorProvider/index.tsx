@@ -12,6 +12,7 @@ import { Monaco } from "@monaco-editor/react"
 import {
   insertTextAtCursor,
   appendQuery,
+  QuestDBLanguageName,
 } from "../../scenes/Editor/Monaco/utils"
 import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
 import { db } from "../../store/db"
@@ -29,7 +30,10 @@ type ContextProps = {
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => Promise<void>
-  addBuffer: (buffer?: Partial<Buffer>) => Promise<Buffer>
+  addBuffer: (
+    buffer?: Partial<Buffer>,
+    options?: { shouldSelectAll?: boolean },
+  ) => Promise<Buffer>
   deleteBuffer: (id: number) => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
@@ -84,12 +88,22 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
     editorRef.current?.focus()
+    if (editorRef.current && monacoRef.current && buffer.value) {
+      const model = monacoRef.current?.editor.createModel(
+        buffer.value,
+        QuestDBLanguageName,
+      )
+      editorRef.current.setModel(model)
+    }
     if (buffer.editorViewState) {
       editorRef.current?.restoreViewState(buffer.editorViewState)
     }
   }
 
-  const addBuffer: ContextProps["addBuffer"] = async (newBuffer) => {
+  const addBuffer: ContextProps["addBuffer"] = async (
+    newBuffer,
+    { shouldSelectAll = false } = {},
+  ) => {
     const currentDefaultTabNumbers = (
       await db.buffers
         .filter((buffer) => buffer.label.startsWith(fallbackBuffer.label))
@@ -112,11 +126,23 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     }
 
     const buffer = makeBuffer({
-      label: newBuffer?.label ?? `${fallbackBuffer.label} ${nextNumber()}`,
       ...newBuffer,
+      label: newBuffer?.label ?? `${fallbackBuffer.label} ${nextNumber()}`,
     })
     const id = await db.buffers.add(buffer)
     await setActiveBuffer(buffer)
+    if (editorRef.current && monacoRef.current && buffer.value) {
+      const model = monacoRef.current?.editor.createModel(
+        buffer.value,
+        QuestDBLanguageName,
+      )
+      editorRef.current.setModel(model)
+
+      if (shouldSelectAll) {
+        editorRef.current?.setSelection(model.getFullModelRange())
+      }
+    }
+
     return { id, ...buffer }
   }
 

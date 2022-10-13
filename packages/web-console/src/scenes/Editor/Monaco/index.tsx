@@ -55,6 +55,7 @@ import { color } from "../../../utils"
 import { EditorTabs } from "./editor-tabs"
 import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
+import { makeBuffer } from "../../../store/buffers"
 
 loader.config({
   paths: {
@@ -234,7 +235,7 @@ const MonacoEditor = () => {
     }
   }
 
-  const onMount = (editor: IStandaloneCodeEditor, monaco: Monaco) => {
+  const onMount = async (editor: IStandaloneCodeEditor, monaco: Monaco) => {
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
@@ -249,10 +250,13 @@ const MonacoEditor = () => {
 
     // Insert query, if one is found in the URL
     const params = new URLSearchParams(window.location.search)
-    // Support multi-line queries (URL encoded)
     const query = params.get("query")
     if (query) {
-      addBuffer({ value: query })
+      await addBuffer(
+        makeBuffer({ label: `${query.substring(0, 10)}...`, value: query }),
+        { shouldSelectAll: true },
+      )
+      window.history.replaceState(null, "", window.location.pathname)
     }
 
     if (params.get("executeQuery")) {
