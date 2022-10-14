@@ -170,7 +170,7 @@ const Schema = ({
       from(quest.showTables()).pipe(startWith(null)),
       of(true).pipe(delay(1000), startWith(false)),
     ).subscribe(
-      ([response, loading]) => {
+      ([response]) => {
         if (response && response.type === QuestDB.Type.DQL) {
           setLoadingError(null)
           errorRef.current = null
