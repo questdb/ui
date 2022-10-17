@@ -10,7 +10,7 @@ Yarn@3 and Webpack.
 ## TL;DR;
 
 ```
-git clone git@github.com/questdb/ui.git
+git clone git@github.com:questdb/ui.git
 cd ui
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 yarn
