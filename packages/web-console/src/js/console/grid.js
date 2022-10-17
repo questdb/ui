@@ -34,7 +34,6 @@ export function grid(root, msgBus) {
     viewportHeight: 400,
     yMaxThreshold: 10000000,
     maxRowsToAnalyze: 100,
-    bottomMargin: 75,
     minVpHeight: 120,
     minDivHeight: 160,
   }
@@ -568,9 +567,12 @@ export function grid(root, msgBus) {
   function resize() {
     if ($("#grid").css("display") !== "none") {
       const wh = window.innerHeight - $(window).scrollTop()
-      vp =
-        Math.round(wh - viewport.getBoundingClientRect().top) -
-        defaults.bottomMargin
+      vp = Math.round(
+        wh -
+          viewport.getBoundingClientRect().top -
+          $('[data-hook="notifications-wrapper"]').height() -
+          $("#footer").height(),
+      )
       vp = Math.max(vp, defaults.minVpHeight)
       rowsInView = Math.floor(vp / rh)
       // viewport.style.height = vp + "px"
@@ -659,7 +661,7 @@ export function grid(root, msgBus) {
           activeRowDown(1)
         }
         break
-      case 34: // arrow down
+      case 34: // page down
         activeRowDown(rowsInView)
         break
       case 39: // arrow right
