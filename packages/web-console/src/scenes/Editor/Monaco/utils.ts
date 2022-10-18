@@ -45,7 +45,7 @@ export const getSelectedText = (
 export const getQueryFromCursor = (
   editor: IStandaloneCodeEditor,
 ): Request | undefined => {
-  const text = editor.getValue()
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
   const position = editor.getPosition()
 
   let row = 0
