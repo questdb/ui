@@ -443,16 +443,12 @@ export const appendQuery = (
     if (position) {
       const newQueryLines = query.split("\n")
 
-      const {
-        prefix,
-        suffix,
-        lineStartOffset,
-        selectStartOffset,
-      } = getTextFixes({
-        appendAt: options.appendAt,
-        model,
-        position,
-      })
+      const { prefix, suffix, lineStartOffset, selectStartOffset } =
+        getTextFixes({
+          appendAt: options.appendAt,
+          model,
+          position,
+        })
 
       const positionInsert = getInsertPosition({
         model,
@@ -546,3 +542,13 @@ export const toTextPosition = (
     column: (row === 0 ? column + request.column : column) + 1,
   }
 }
+
+export const findMatches = (model: editor.ITextModel, needle: string) =>
+  model.findMatches(
+    needle /* searchString */,
+    true /* searchOnlyEditableRange */,
+    false /* isRegex */,
+    true /* matchCase */,
+    null /* wordSeparators */,
+    true /* captureMatches */,
+  ) ?? null
