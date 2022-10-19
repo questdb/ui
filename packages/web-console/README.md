@@ -7,49 +7,79 @@ Yarn@3 and Webpack.
 
 ## Local development setup
 
-## TL;DR;
+You need to do the following steps:
+
+1. Clone the repository
+2. Bootstrap dependencies
+3. Start development server
+4. Run QuestDB in the background
+5. Hack!
+
+The setup is fairly quick!
+
+### 1. Clone the repository
+
+Choose your favorite method to clone this repository to your machine.\
+The repository is about 250MB in size. This is expected, because we use [Yarn@3 with PnP](https://next.yarnpkg.com/features/pnp).\
+Cloning (downloading) takes the most amount of time (~1 minute on a decent network connection).
+
+* clone using SSH:
+  ```
+  git clone git@github.com/questdb/ui.git
+  ```
+
+* or using HTTPS:
+  ```
+  git clone git@github.com/questdb/ui.git
+  ```
+
+* or using [Github CLI](https://cli.github.com/):
+  ```
+  gh repo clone questdb/ui
+  ```
+
+### 2. Bootstrap dependencies
+
+* `node -v` should return `16.13.1`\
+  If it doesn't, you can use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to manage node versions on your machine.\
+  Then run `fnm use` or `nvm use` to set correct `node` version.
+
+* `yarn -v` should return v3 (like `3.2.1`).\
+  If it returns `command not found`, enable `yarn` with by running `corepack enable`.\
+  Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have troubles.
+  
+* run `yarn` to bootstrap dependencies. This should be a quick process (less than a minute).
+
+### 3. Start development server
+
+Initiate a webpack dev server by running this command:
 
 ```
-git clone git@github.com/questdb/ui.git
-cd ui
+yarn workspace @questdb/web-console start
+```
+
+[localhost:9999](http://localhost:9999) should show web console
+
+### 4. Run QuestDB in the background
+
+This package is a GUI for QuestDB but it does not include QuestDB itself.
+GUI will work even without QuestDB, but since it's a tool for
+interacting with QuestDB, you will most likely want QuestDB running in
+the background.
+
+Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.\
+Or, if you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
+
+```
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
-yarn
-yarn workspace @questdb/web-console start
 ```
 
-## Prerequisites
 
-* use node v16.13.1<br>
-  version is specified in [`.nvmrc`](./.nvmrc) file. You can use [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://fnm.vercel.app) to manage node versions on your machine.
-* monorepo is managed with [yarn@3](https://yarnpkg.com/).<br>
-  Follow [official installation guide](https://yarnpkg.com/getting-started/install). It should be enough to run `corepack enable` to have `yarn` enabled.
-* This package is a frontend client for QuestDB. Therefore, it requires
-  a locally running QuestDB instance. Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.<br>
-  If you have docker, then it's simply:
-  ```
-  docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
-  ```
+### 5. Hack!
 
-## Start development environment
+Do your changes. Browser will automatically refresh [localhost:9999](http://localhost:9999).
 
-1. Setup dependencies with yarn:
-
-```
-yarn
-```
-
-2. Start development environment
-
-```
-yarn workspace @questdb/web-console start
-```
-
-3. Open [localhost:9999](http://localhost:9999)
-
-> make sure you have a local QuestDB instance running, as mentioned in
-> "Prerequisites" above.
-
-4. Happy hacking!
+Happy hacking!
 
 ## Run build 
 
