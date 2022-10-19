@@ -44,14 +44,12 @@ Download is what takes the most amount of time (~1 minute on a decent connection
   Then run `fnm use` or `nvm use` to set correct version.
 
 * `yarn -v` should return v3 (like `3.2.1`).\
-  If it returns `command not found`, enable `yarn` with by running `corepack enable`.\
+  If it returns `command not found`, enable `yarn` by running `corepack enable`.\
   Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have trouble.
   
 * run `yarn` to bootstrap dependencies. This should be a quick process (less than a minute).
 
 ### 3. Start development server
-
-Initiate a webpack dev server by running this command:
 
 ```
 yarn workspace @questdb/web-console start
@@ -61,10 +59,10 @@ yarn workspace @questdb/web-console start
 
 ### 4. Run QuestDB in the background
 
-This package is a GUI for QuestDB but it does not include QuestDB itself.\
-GUI will work even without it, but since it's a tool to interact with QuestDB, you most likely need QuestDB running as well.
+This package is a only GUI for QuestDB, it does not include QuestDB itself.\
+GUI will work without it, but since it's a tool to interact with QuestDB, you will need QuestDB as well.
 
-Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.\
+Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.
 
 If you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
 
@@ -74,7 +72,7 @@ docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 
 ### 5. Hack!
 
-Do your changes. Browser will automatically refresh [localhost:9999](http://localhost:9999).
+Do your code changes and browser will automatically refresh [localhost:9999](http://localhost:9999).
 
 Happy hacking!
 
