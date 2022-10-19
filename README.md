@@ -1,9 +1,5 @@
 # QuestDB UI
 
-> Welcome to a WIP repository<br>
-> The code here is not meant for public use.<br>
-> Things are not stable and will change. Beware of dragons!
-
 This repository is a monorepo hosting the implementation of QuestDB user
 interface and surrounding tooling.
 

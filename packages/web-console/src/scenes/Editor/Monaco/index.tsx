@@ -1,7 +1,9 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
+import type { BaseSyntheticEvent } from "react"
 import Editor, { Monaco, loader } from "@monaco-editor/react"
 import dracula from "./dracula"
-import { editor, IDisposable } from "monaco-editor"
+import { editor } from "monaco-editor"
+import type { IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
 import { usePreferences } from "./usePreferences"
@@ -11,15 +13,17 @@ import {
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
-  Request,
   setErrorMarker,
   clearModelMarkers,
+  getQueryFromCursor,
+  findMatches,
 } from "./utils"
+import type { Request } from "./utils"
 import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
 import { BusEvent } from "../../../consts"
-import { ErrorResult } from "../../../utils/questdb"
+import type { ErrorResult } from "../../../utils/questdb"
 import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
@@ -50,6 +54,39 @@ const Content = styled(PaneContent)`
   .monaco-scrollable-element > .scrollbar > .slider {
     background: ${color("draculaSelection")};
   }
+
+  .cursorQueryDecoration {
+    width: 0.2rem !important;
+    background: ${color("draculaGreen")};
+    margin-left: 1.2rem;
+
+    &.hasError {
+      background: ${color("draculaRed")};
+    }
+  }
+
+  .cursorQueryGlyph {
+    margin-left: 2rem;
+    z-index: 1;
+    cursor: pointer;
+
+    &:after {
+      content: "◃";
+      font-size: 2.5rem;
+      transform: rotate(180deg) scaleX(0.8);
+      color: ${color("draculaGreen")};
+    }
+  }
+
+  .errorGlyph {
+    margin-left: 2.5rem;
+    margin-top: 0.5rem;
+    z-index: 1;
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+    border-radius: 50%;
+    background: ${color("draculaRed")};
+  }
 `
 
 enum Command {
@@ -70,6 +107,9 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
+  const decorationsRef = useRef<string[]>([])
+  const errorRef = useRef<ErrorResult | undefined>()
+  const errorRangeRef = useRef<IRange | undefined>()
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -113,6 +153,82 @@ const MonacoEditor = () => {
     monaco.editor.defineTheme("dracula", dracula)
   }
 
+  const handleEditorClick = (e: BaseSyntheticEvent) => {
+    if (e.target.classList.contains("cursorQueryGlyph")) {
+      editorRef?.current?.focus()
+      toggleRunning()
+    }
+  }
+
+  const renderLineMarkings = (
+    monaco: Monaco,
+    editor: IStandaloneCodeEditor,
+  ) => {
+    const queryAtCursor = getQueryFromCursor(editor)
+    const model = editor.getModel()
+    if (queryAtCursor && model !== null) {
+      const matches = findMatches(model, queryAtCursor.query)
+
+      if (matches.length > 0) {
+        const hasError = errorRef.current?.query === queryAtCursor.query
+        const cursorMatch = matches.find(
+          (m) => m.range.startLineNumber === queryAtCursor.row + 1,
+        )
+        if (cursorMatch) {
+          decorationsRef.current = editor.deltaDecorations(
+            decorationsRef.current,
+            [
+              {
+                range: new monaco.Range(
+                  cursorMatch.range.startLineNumber,
+                  1,
+                  cursorMatch.range.endLineNumber,
+                  1,
+                ),
+                options: {
+                  isWholeLine: true,
+                  linesDecorationsClassName: `cursorQueryDecoration ${
+                    hasError ? "hasError" : ""
+                  }`,
+                },
+              },
+              {
+                range: new monaco.Range(
+                  cursorMatch.range.startLineNumber,
+                  1,
+                  cursorMatch.range.startLineNumber,
+                  1,
+                ),
+                options: {
+                  isWholeLine: false,
+                  glyphMarginClassName: "cursorQueryGlyph",
+                },
+              },
+              ...(errorRangeRef.current &&
+              cursorMatch.range.startLineNumber !==
+                errorRangeRef.current.startLineNumber
+                ? [
+                    {
+                      range: new monaco.Range(
+                        errorRangeRef.current.startLineNumber,
+                        0,
+                        errorRangeRef.current.startLineNumber,
+                        0,
+                      ),
+                      options: {
+                        isWholeLine: false,
+                        glyphMarginClassName: "errorGlyph",
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          )
+        }
+      }
+    }
+  }
+
   const handleEditorDidMount = (
     editor: IStandaloneCodeEditor,
     monaco: Monaco,
@@ -139,12 +255,7 @@ const MonacoEditor = () => {
       })
 
       window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
-        const matches = editor
-          .getModel()
-          ?.findMatches(query.q, true, false, true, null, true)
-        if (matches) {
-          // TODO: Display a query marker on correct line
-        }
+        // TODO: Display a query marker on correct line
         toggleRunning(true)
       })
 
@@ -197,6 +308,10 @@ const MonacoEditor = () => {
           dispatch(actions.query.cleanupNotifications())
         },
       })
+
+      editor.onDidChangeCursorPosition(() => {
+        renderLineMarkings(monaco, editor)
+      })
     }
 
     loadPreferences(editor)
@@ -206,9 +321,9 @@ const MonacoEditor = () => {
     // Support multi-line queries (URL encoded)
     const query = params.get("query")
     const model = editor.getModel()
-    if (query) {
+    if (query && model) {
       // Find if the query is already in the editor
-      const matches = model?.findMatches(query, true, false, true, null, true)
+      const matches = findMatches(model, query)
       if (matches && matches.length > 0) {
         editor.setSelection(matches[0].range)
         // otherwise, append the query
@@ -246,8 +361,14 @@ const MonacoEditor = () => {
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
             setRequest(undefined)
+            errorRef.current = undefined
+            errorRangeRef.current = undefined
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
+
+            if (monacoRef?.current && editorRef?.current) {
+              renderLineMarkings(monacoRef.current, editorRef?.current)
+            }
 
             if (result.type === QuestDB.Type.DDL) {
               dispatch(
@@ -289,6 +410,7 @@ const MonacoEditor = () => {
             }
           })
           .catch((error: ErrorResult) => {
+            errorRef.current = error
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
             dispatch(
@@ -313,6 +435,7 @@ const MonacoEditor = () => {
                 request,
                 error.position,
               )
+              errorRangeRef.current = errorRange ?? undefined
               if (errorRange) {
                 setErrorMarker(
                   monacoRef?.current,
@@ -320,6 +443,7 @@ const MonacoEditor = () => {
                   errorRange,
                   error.error,
                 )
+                renderLineMarkings(monacoRef?.current, editorRef?.current)
               }
             }
           })
@@ -351,7 +475,7 @@ const MonacoEditor = () => {
   }, [tables, monacoRef, editorReady])
 
   return (
-    <Content>
+    <Content onClick={handleEditorClick}>
       <Editor
         beforeMount={handleEditorBeforeMount}
         defaultLanguage={QuestDBLanguageName}
@@ -360,10 +484,12 @@ const MonacoEditor = () => {
           fixedOverflowWidgets: true,
           fontSize: 14,
           fontFamily: theme.fontMonospace,
+          glyphMargin: true,
           renderLineHighlight: "gutter",
           minimap: {
             enabled: false,
           },
+          selectOnLineNumbers: false,
           scrollBeyondLastLine: false,
           tabSize: 2,
         }}

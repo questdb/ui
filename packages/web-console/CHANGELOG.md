@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
-## Next
+## 0.0.7 - 2022-09-28
+
+### Added
+
+- Improve visual cues in the query editor. Highlighting active query with green bar, erroneous query with red dot and add run button. [#34](https://github.com/questdb/ui/pull/34)
 
 ### Fixed
 

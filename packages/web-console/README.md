@@ -74,7 +74,6 @@ Or, if you have [`docker`](https://docs.docker.com/get-docker/), then it's simpl
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 ```
 
-
 ### 5. Hack!
 
 Do your changes. Browser will automatically refresh [localhost:9999](http://localhost:9999).
