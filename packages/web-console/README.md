@@ -19,9 +19,8 @@ The setup is fairly quick!
 
 ### 1. Clone the repository
 
-Choose your favorite method to clone this repository to your machine.\
 The repository is about 250MB in size. This is expected, because we use [Yarn@3 with PnP](https://next.yarnpkg.com/features/pnp).\
-Cloning (downloading) takes the most amount of time (~1 minute on a decent network connection).
+Download is what takes the most amount of time (~1 minute on a decent connection).
 
 * clone using SSH:
   ```
@@ -42,11 +41,11 @@ Cloning (downloading) takes the most amount of time (~1 minute on a decent netwo
 
 * `node -v` should return `16.13.1`\
   If it doesn't, you can use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to manage node versions on your machine.\
-  Then run `fnm use` or `nvm use` to set correct `node` version.
+  Then run `fnm use` or `nvm use` to set correct version.
 
 * `yarn -v` should return v3 (like `3.2.1`).\
   If it returns `command not found`, enable `yarn` with by running `corepack enable`.\
-  Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have troubles.
+  Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have trouble.
   
 * run `yarn` to bootstrap dependencies. This should be a quick process (less than a minute).
 
@@ -62,13 +61,12 @@ yarn workspace @questdb/web-console start
 
 ### 4. Run QuestDB in the background
 
-This package is a GUI for QuestDB but it does not include QuestDB itself.
-GUI will work even without QuestDB, but since it's a tool for
-interacting with QuestDB, you will most likely want QuestDB running in
-the background.
+This package is a GUI for QuestDB but it does not include QuestDB itself.\
+GUI will work even without it, but since it's a tool to interact with QuestDB, you most likely need QuestDB running as well.
 
 Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.\
-Or, if you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
+
+If you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
 
 ```
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
