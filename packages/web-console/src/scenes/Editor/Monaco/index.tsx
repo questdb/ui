@@ -16,6 +16,7 @@ import {
   setErrorMarker,
   clearModelMarkers,
   getQueryFromCursor,
+  findMatches,
 } from "./utils"
 import type { Request } from "./utils"
 import { PaneContent, Text } from "../../../components"
@@ -166,14 +167,8 @@ const MonacoEditor = () => {
     const queryAtCursor = getQueryFromCursor(editor)
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
-      const matches = model.findMatches(
-        queryAtCursor.query,
-        true,
-        false,
-        true,
-        null,
-        true,
-      )
+      const matches = findMatches(model, queryAtCursor.query)
+
       if (matches.length > 0) {
         const hasError = errorRef.current?.query === queryAtCursor.query
         const cursorMatch = matches.find(
@@ -260,12 +255,7 @@ const MonacoEditor = () => {
       })
 
       window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
-        const matches = editor
-          .getModel()
-          ?.findMatches(query.q, true, false, true, null, true)
-        if (matches) {
-          // TODO: Display a query marker on correct line
-        }
+        // TODO: Display a query marker on correct line
         toggleRunning(true)
       })
 
@@ -331,9 +321,9 @@ const MonacoEditor = () => {
     // Support multi-line queries (URL encoded)
     const query = params.get("query")
     const model = editor.getModel()
-    if (query) {
+    if (query && model) {
       // Find if the query is already in the editor
-      const matches = model?.findMatches(query, true, false, true, null, true)
+      const matches = findMatches(model, query)
       if (matches && matches.length > 0) {
         editor.setSelection(matches[0].range)
         // otherwise, append the query
