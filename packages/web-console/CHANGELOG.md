@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.8 - 2022-10-19
+
+### Fixed
+
+- Fix broken query marker in editor gutter on Windows [#67](https://github.com/questdb/ui/pull/67)
+- Fix position of highlighted row in results grid, when moving it with keyboard arrow down button [#66](https://github.com/questdb/ui/pull/66)
+
 ## 0.0.7 - 2022-09-28
 
 ### Added

@@ -38,6 +38,7 @@ import {
   setErrorMarker,
   clearModelMarkers,
   getQueryFromCursor,
+  findMatches,
 } from "./utils"
 import type { Request } from "./utils"
 import { PaneContent, Text } from "../../../components"
@@ -167,14 +168,8 @@ const MonacoEditor = () => {
     const queryAtCursor = getQueryFromCursor(editor)
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
-      const matches = model.findMatches(
-        queryAtCursor.query,
-        true,
-        false,
-        true,
-        null,
-        true,
-      )
+      const matches = findMatches(model, queryAtCursor.query)
+
       if (matches.length > 0) {
         const hasError = errorRef.current?.query === queryAtCursor.query
         const cursorMatch = matches.find(

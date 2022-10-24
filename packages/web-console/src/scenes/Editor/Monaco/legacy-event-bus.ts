@@ -46,12 +46,6 @@ export const registerLegacyEventBusEvents = ({
   })
 
   window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
-    const matches = editor
-      .getModel()
-      ?.findMatches(query.q, true, false, true, null, true)
-    if (matches) {
-      // TODO: Display a query marker on correct line
-    }
     toggleRunning(true)
   })
 

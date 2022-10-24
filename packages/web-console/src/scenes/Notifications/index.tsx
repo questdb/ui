@@ -127,7 +127,7 @@ const Notifications = () => {
   }
 
   return (
-    <Wrapper minimized={isMinimized}>
+    <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
       <Menu>
         <Header color="draculaForeground">
           <TerminalBoxIcon size="18px" />
