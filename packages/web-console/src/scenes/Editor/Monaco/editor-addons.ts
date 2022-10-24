@@ -37,11 +37,15 @@ import {
 } from "./questdb-sql"
 
 import { QuestDBLanguageName } from "./utils"
+import type { EditorContext } from "../../../providers/EditorProvider"
+import { bufferStore } from "../../../store/buffers"
 
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
   CLEANUP_NOTIFICATIONS = "clean_notifications",
+  ADD_NEW_TAB = "add_new_tab",
+  CLOSE_ACTIVE_TAB = "close_active_tab",
 }
 
 export const registerEditorActions = ({
@@ -49,11 +53,13 @@ export const registerEditorActions = ({
   monaco,
   toggleRunning,
   dispatch,
+  editorContext,
 }: {
   editor: editor.IStandaloneCodeEditor
   monaco: Monaco
   toggleRunning: (isRefresh?: boolean) => void
   dispatch: Dispatch
+  editorContext: EditorContext
 }) => {
   editor.addAction({
     id: Command.FOCUS_GRID,
@@ -82,6 +88,28 @@ export const registerEditorActions = ({
     keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
     run: () => {
       dispatch(actions.query.cleanupNotifications())
+    },
+  })
+
+  editor.addAction({
+    id: Command.ADD_NEW_TAB,
+    label: "Add new tab",
+    keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
+    run: () => {
+      editorContext.addBuffer()
+    },
+  })
+
+  editor.addAction({
+    id: Command.CLOSE_ACTIVE_TAB,
+    label: "Close current tab",
+    keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyW],
+    run: async () => {
+      const activeId = await bufferStore.getActiveId()
+      if (activeId?.value && typeof activeId?.value === "number") {
+        console.log("deleting ", activeId)
+        editorContext.deleteBuffer(activeId.value)
+      }
     },
   })
 }

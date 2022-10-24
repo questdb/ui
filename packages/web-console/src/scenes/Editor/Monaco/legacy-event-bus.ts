@@ -45,7 +45,7 @@ export const registerLegacyEventBusEvents = ({
     toggleRunning()
   })
 
-  window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
+  window.bus.on(BusEvent.MSG_QUERY_EXEC, () => {
     toggleRunning(true)
   })
 

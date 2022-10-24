@@ -115,6 +115,7 @@ const Content = styled(PaneContent)`
 `
 
 const MonacoEditor = () => {
+  const editorContext = useEditor()
   const {
     editorRef,
     monacoRef,
@@ -123,7 +124,7 @@ const MonacoEditor = () => {
     updateBuffer,
     editorReadyTrigger,
     addBuffer,
-  } = useEditor()
+  } = editorContext
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
@@ -240,7 +241,13 @@ const MonacoEditor = () => {
 
     // Support legacy bus events for non-react codebase
     registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
-    registerEditorActions({ editor, monaco, toggleRunning, dispatch })
+    registerEditorActions({
+      editor,
+      monaco,
+      toggleRunning,
+      dispatch,
+      editorContext,
+    })
     editor.onDidChangeCursorPosition(() => renderLineMarkings(monaco, editor))
 
     // Insert query, if one is found in the URL

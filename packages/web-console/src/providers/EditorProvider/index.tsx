@@ -22,7 +22,7 @@ import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
-type ContextProps = {
+export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
@@ -53,7 +53,7 @@ const defaultValues = {
   editorReadyTrigger: () => undefined,
 }
 
-const EditorContext = createContext<ContextProps>(defaultValues)
+const EditorContext = createContext<EditorContext>(defaultValues)
 
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
@@ -100,7 +100,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     }
   }
 
-  const addBuffer: ContextProps["addBuffer"] = async (
+  const addBuffer: EditorContext["addBuffer"] = async (
     newBuffer,
     { shouldSelectAll = false } = {},
   ) => {
@@ -146,7 +146,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return { id, ...buffer }
   }
 
-  const updateBuffer: ContextProps["updateBuffer"] = async (id, payload) => {
+  const updateBuffer: EditorContext["updateBuffer"] = async (id, payload) => {
     const editorViewState = editorRef.current?.saveViewState()
     await bufferStore.update(id, {
       ...payload,
@@ -154,7 +154,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     })
   }
 
-  const deleteBuffer: ContextProps["deleteBuffer"] = async (id) => {
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
     await bufferStore.delete(id)
     const nextActive = await db.buffers.toCollection().last()
     await setActiveBuffer(nextActive ?? fallbackBuffer)
