@@ -66,6 +66,19 @@ export class Storage extends Dexie {
         value: fallbackBuffer.id,
       })
     })
+
+    // ensure `buffers` table is not empty when DB is ready
+    // user should always have at least one buffer.
+    this.on("ready", async () => {
+      if ((await this.buffers.count()) === 0) {
+        this.buffers.add(
+          makeBuffer({
+            label: "SQL",
+            value: "",
+          }),
+        )
+      }
+    })
   }
 }
 
