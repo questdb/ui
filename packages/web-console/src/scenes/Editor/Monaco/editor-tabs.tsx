@@ -157,9 +157,11 @@ export const EditorTabs = () => {
                   <MenuItem onClick={() => setEditingId(buffer.id as number)}>
                     Rename
                   </MenuItem>
-                  <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
-                    Close
-                  </MenuItem>
+                  {buffers.length > 1 && (
+                    <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
+                      Close
+                    </MenuItem>
+                  )}
                 </ContextMenu>
               </React.Fragment>
             )
