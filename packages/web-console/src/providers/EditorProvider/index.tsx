@@ -82,9 +82,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }
 
   const setActiveBuffer = async (buffer: Buffer) => {
-    // save current buffer before switching
-    await updateBuffer(activeBuffer.id as number)
-
+    if (await bufferStore.getById(activeBuffer.id as number)) {
+      // check if buffer with activeBuffer.id exists, otherwise we might save editor state of a
+      // buffer which is being deleted
+      await updateBuffer(activeBuffer.id as number)
+    }
     await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
     editorRef.current?.focus()
@@ -131,7 +133,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     })
     const id = await db.buffers.add(buffer)
     await setActiveBuffer(buffer)
-    if (editorRef.current && monacoRef.current && buffer.value) {
+    if (
+      editorRef.current &&
+      monacoRef.current &&
+      typeof buffer.value === "string"
+    ) {
       const model = monacoRef.current?.editor.createModel(
         buffer.value,
         QuestDBLanguageName,
@@ -156,8 +162,13 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
     await bufferStore.delete(id)
-    const nextActive = await db.buffers.toCollection().last()
-    await setActiveBuffer(nextActive ?? fallbackBuffer)
+
+    // set new active buffer only when removing currently active buffer
+    const activeBufferId = (await bufferStore.getActiveId())?.value
+    if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
+      const nextActive = await db.buffers.toCollection().last()
+      await setActiveBuffer(nextActive ?? fallbackBuffer)
+    }
   }
 
   return (
