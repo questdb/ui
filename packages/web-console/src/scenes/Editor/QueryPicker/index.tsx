@@ -123,7 +123,7 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
   const [queryList, setQueryList] = useState<
     ReturnType<typeof prepareQueriesList>
   >([])
-  const { addBuffer } = useEditor()
+  const { appendQuery, editorRef, addBuffer } = useEditor()
 
   useEffect(() => {
     setQueryList(prepareQueriesList(queries))
@@ -132,7 +132,12 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
   const addQuery = useCallback(
     (query: Query) => {
       hidePicker()
-      addBuffer(makeBuffer({ label: query.name ?? "", value: query.value }))
+      // add new buffer when current one is not empty
+      if (editorRef.current && editorRef.current.getValue() !== "") {
+        addBuffer(makeBuffer({ label: query.name ?? "", value: query.value }))
+      } else {
+        appendQuery(query.value)
+      }
     },
     [hidePicker],
   )
