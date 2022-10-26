@@ -58,7 +58,11 @@ const EditableLabel = ({
 }) => {
   const [value, setValue] = useState(label)
   const ref = useRef(null)
-  useOnClickOutside(ref, onCancel)
+
+  useOnClickOutside(ref, () => {
+    setValue(label)
+    onCancel()
+  })
 
   return (
     <span
@@ -78,7 +82,7 @@ const EditableLabel = ({
             setValue(event.target.value)
           }
           onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === "Enter") {
+            if (event.key === "Enter" && value.length !== 0) {
               onConfirm(value)
             }
           }}
