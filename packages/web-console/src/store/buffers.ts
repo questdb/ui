@@ -84,6 +84,8 @@ export const makeBuffer = ({
 export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }
 
 export const bufferStore = {
+  getAll: () => db.buffers.toArray(),
+
   getActiveId: () =>
     db.editor_settings.where("key").equals("activeBufferId").first(),
 

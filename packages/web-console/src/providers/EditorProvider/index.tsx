@@ -58,7 +58,7 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
-  const buffers = useLiveQuery(() => db.buffers.toArray(), [])
+  const buffers = useLiveQuery(bufferStore.getAll, [])
   const activeBufferId = useLiveQuery(
     () => bufferStore.getActiveId(),
     [],
