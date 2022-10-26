@@ -105,9 +105,13 @@ export const registerEditorActions = ({
     label: "Close current tab",
     keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyW],
     run: async () => {
+      const buffers = await bufferStore.getAll()
       const activeId = await bufferStore.getActiveId()
-      if (activeId?.value && typeof activeId?.value === "number") {
-        console.log("deleting ", activeId)
+      if (
+        buffers.length > 1 &&
+        activeId?.value &&
+        typeof activeId?.value === "number"
+      ) {
         editorContext.deleteBuffer(activeId.value)
       }
     },
