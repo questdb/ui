@@ -116,6 +116,7 @@ export const EditorTabs = () => {
               <React.Fragment key={buffer.id}>
                 <ContextMenuTrigger id={`${buffer.id}`}>
                   <PrimaryToggleButton
+                    data-hook={`tab-${buffer.id}`}
                     selected={selected}
                     onClick={async () => {
                       // do not set the active buffer if the user is editing the filename

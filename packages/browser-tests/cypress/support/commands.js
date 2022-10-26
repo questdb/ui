@@ -17,7 +17,9 @@ Cypress.Commands.add("runQuery", (query) => {
   return cy.typeQuery(query).type("{ctrl}{enter}").wait("@exec");
 });
 
-Cypress.Commands.add("clearEditor", () => cy.typeQuery("{ctrl}a{backspace}"));
+Cypress.Commands.add("clearEditor", () => {
+  cy.typeQuery("{ctrl}a{backspace}");
+});
 
 Cypress.Commands.add("selectQuery", (n) =>
   cy
@@ -41,5 +43,10 @@ Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
 Cypress.Commands.add("F9", () =>
   cy.getEditor().trigger("keydown", {
     keyCode: 120,
+    force: true,
   })
+);
+
+Cypress.Commands.add("getTab", (nth = 0) =>
+  cy.get("[data-hook^=tab-]").eq(nth)
 );
