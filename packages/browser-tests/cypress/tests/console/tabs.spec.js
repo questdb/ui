@@ -64,35 +64,34 @@ describe("tabs", () => {
     cy.getEditor().should("have.value", tab2);
   });
 
-  it("should add and remove tabs through UI buttons", () => {
-    const query = "-- first tab";
+  it.only("should add and remove tabs with keyboard shortcuts", () => {
+    const query = "-- tab 1";
     cy.typeQuery(query);
     cy.getTabs().should("have.length", 1);
     cy.getTab(1).should("have.text", "SQL");
 
-    const tabs = 5;
+    const query2 = "-- tab 2";
+    cy.typeQuery("{alt}t");
+    cy.typeQuery(query2);
+    cy.getEditor().should("have.value", query2);
+    cy.getTab(2)
+      .should("have.text", "SQL 1")
+      .should("have.attr", "data-active", "true");
+    cy.getTabs().should("have.length", 2);
 
-    // open n tabs, check titles and active status
-    for (let i = 1; i < tabs; i++) {
-      const nth = i + 1;
-      cy.typeQuery("{alt}t");
-      cy.getTab(nth)
-        .should("have.text", `SQL ${i}`)
-        .should("have.attr", "data-active", "true");
-      cy.getTabs().should("have.length", nth);
-    }
-
-    // close previously opened tabs
-    for (let i = tabs; i > 2; i--) {
-      const nth = i - 1;
-      cy.typeQuery("{alt}w");
-      cy.getTab(nth)
-        .should("have.text", `SQL ${nth - 1}`)
-        .should("have.attr", "data-active", "true");
-    }
+    const query3 = "-- tab 3";
+    cy.typeQuery("{alt}t");
+    cy.typeQuery(query3);
+    cy.getEditor().should("have.value", query3);
+    cy.getTab(3)
+      .should("have.text", "SQL 2")
+      .should("have.attr", "data-active", "true");
+    cy.getTabs().should("have.length", 3);
 
     cy.typeQuery("{alt}w");
-    cy.getTabs().should("have.length", 1);
-    cy.getEditor().should("have.value", query);
+    cy.getTab(2)
+      .should("have.text", "SQL 1")
+      .should("have.attr", "data-active", "true");
+    cy.getEditor().should("have.value", query2);
   });
 });
