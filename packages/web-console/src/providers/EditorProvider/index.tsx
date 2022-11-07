@@ -82,7 +82,15 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }
 
   const setActiveBuffer = async (buffer: Buffer) => {
-    if (await bufferStore.getById(activeBuffer.id as number)) {
+    const currentActiveBuffer = await bufferStore.getById(
+      activeBuffer.id as number,
+    )
+    if (currentActiveBuffer) {
+      if (buffer.id === currentActiveBuffer.id) {
+        // early return if trying to set active an already active buffer
+        return
+      }
+
       // check if buffer with activeBuffer.id exists, otherwise we might save editor state of a
       // buffer which is being deleted
       await updateBuffer(activeBuffer.id as number)

@@ -64,7 +64,7 @@ describe("tabs", () => {
     cy.getEditor().should("have.value", tab2);
   });
 
-  it.only("should add and remove tabs with keyboard shortcuts", () => {
+  it("should add and remove tabs with keyboard shortcuts", () => {
     const query = "-- tab 1";
     cy.typeQuery(query);
     cy.getTabs().should("have.length", 1);
