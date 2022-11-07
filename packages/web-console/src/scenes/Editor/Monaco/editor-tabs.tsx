@@ -45,13 +45,11 @@ const AddTabButton = styled(SecondaryButton)`
 
 const EditableLabel = ({
   label,
-  onDoubleClick,
   onConfirm,
   onCancel,
   isEditing,
 }: {
   label: string
-  onDoubleClick: () => void
   onConfirm(label: string): void
   onCancel(): void
   isEditing: boolean
@@ -65,14 +63,7 @@ const EditableLabel = ({
   })
 
   return (
-    <span
-      ref={ref}
-      onDoubleClick={() => {
-        if (!isEditing) {
-          onDoubleClick()
-        }
-      }}
-    >
+    <span ref={ref}>
       {isEditing ? (
         <FilenameInput
           autoFocus
@@ -136,7 +127,6 @@ export const EditorTabs = () => {
                     <EditableLabel
                       isEditing={editingId === buffer.id}
                       label={buffer.label}
-                      onDoubleClick={() => setEditingId(buffer.id as number)}
                       onConfirm={(label) => {
                         updateBuffer(buffer.id as number, { label })
                         setEditingId(null)
