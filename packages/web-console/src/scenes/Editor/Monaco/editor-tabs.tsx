@@ -117,6 +117,7 @@ export const EditorTabs = () => {
                 <ContextMenuTrigger id={`${buffer.id}`}>
                   <PrimaryToggleButton
                     data-hook={`tab-${buffer.id}`}
+                    data-active={selected}
                     selected={selected}
                     onClick={async () => {
                       // do not set the active buffer if the user is editing the filename
@@ -148,6 +149,7 @@ export const EditorTabs = () => {
                     {buffers.length > 1 && (
                       <CloseIcon
                         size="14px"
+                        data-hook={`close-tab-button-${buffer.id}`}
                         onClick={(event) => {
                           // prevent event bubbling from triggering `setActiveBuffer`
                           event.stopPropagation()
@@ -174,7 +176,7 @@ export const EditorTabs = () => {
         </TabsWrapper>
       )}
 
-      <AddTabButton onClick={() => addBuffer()}>
+      <AddTabButton data-hook="add-tab-button" onClick={() => addBuffer()}>
         <AddCircle size="18px" />
       </AddTabButton>
     </PaneMenu>

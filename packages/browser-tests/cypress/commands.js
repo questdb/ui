@@ -47,6 +47,14 @@ Cypress.Commands.add("F9", () =>
   })
 );
 
-Cypress.Commands.add("getTab", (nth = 0) =>
-  cy.get("[data-hook^=tab-]").eq(nth)
+Cypress.Commands.add("getTabs", () => cy.get("[data-hook^=tab-]"));
+
+Cypress.Commands.add("getAddTabButton", () =>
+  cy.get("[data-hook=add-tab-button]")
+);
+
+Cypress.Commands.add("getTab", (nth = 0) => cy.get(`[data-hook^=tab-${nth}]`));
+
+Cypress.Commands.add("getCloseTabButton", (nth = 0) =>
+  cy.get(`[data-hook^=close-tab-button-${nth}]`)
 );
