@@ -24,12 +24,12 @@ Download is what takes the most amount of time (~1 minute on a decent connection
 
 * clone using SSH:
   ```
-  git clone git@github.com/questdb/ui.git
+  git clone git@github.com:questdb/ui.git
   ```
 
 * or using HTTPS:
   ```
-  git clone git@github.com/questdb/ui.git
+  git clone https://github.com/questdb/ui.git
   ```
 
 * or using [Github CLI](https://cli.github.com/):
