@@ -97,13 +97,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     }
     await bufferStore.setActiveId(buffer.id as number)
     setActiveBufferState(buffer)
-    editorRef.current?.focus()
     if (editorRef.current && monacoRef.current) {
-      const model = monacoRef.current?.editor.createModel(
+      const model = monacoRef.current.editor.createModel(
         buffer.value,
         QuestDBLanguageName,
       )
+
       editorRef.current.setModel(model)
+      editorRef.current.focus()
     }
     if (buffer.editorViewState) {
       editorRef.current?.restoreViewState(buffer.editorViewState)

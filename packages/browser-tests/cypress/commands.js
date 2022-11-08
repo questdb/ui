@@ -9,7 +9,12 @@ Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 Cypress.Commands.add("getGridRow", (n) => cy.get(".qg-r").eq(n));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.get(".monaco-editor").first().click().focused().type("{ctrl}a").type(query)
+  cy
+    .get(".monaco-editor[role='code']")
+    .click()
+    .focused()
+    .type("{ctrl}a")
+    .type(query)
 );
 
 Cypress.Commands.add("runQuery", (query) => {

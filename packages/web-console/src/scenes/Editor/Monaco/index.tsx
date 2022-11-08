@@ -235,6 +235,9 @@ const MonacoEditor = () => {
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
+    editor.setModel(
+      monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
+    )
 
     setEditorReady(true)
     editorReadyTrigger(editor)
@@ -402,12 +405,13 @@ const MonacoEditor = () => {
           beforeMount={beforeMount}
           onMount={onMount}
           defaultLanguage={QuestDBLanguageName}
-          defaultValue={activeBuffer.value}
           saveViewState={false}
           onChange={(value) => {
             updateBuffer(activeBuffer.id as number, { value })
           }}
           options={{
+            // initially null, but will be set during onMount with editor.setModel
+            model: null,
             fixedOverflowWidgets: true,
             fontSize: 14,
             fontFamily: theme.fontMonospace,
@@ -420,7 +424,6 @@ const MonacoEditor = () => {
             scrollBeyondLastLine: false,
             tabSize: 2,
           }}
-          path={activeBuffer.label}
           theme="vs-dark"
         />
         <Loader show={!!request || !tables} />
