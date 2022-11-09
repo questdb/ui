@@ -189,4 +189,13 @@ describe("tabs", () => {
       .getEditor()
       .should("have.value", query);
   });
+
+  it("should keep focus on editor after clicking on selected tab", () => {
+    cy.typeQuery("-- hello")
+      .getTab(1)
+      .click()
+      .type(" world")
+      .getEditor()
+      .should("have.value", "-- hello world");
+  });
 });

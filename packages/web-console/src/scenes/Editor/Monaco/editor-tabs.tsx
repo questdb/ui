@@ -166,7 +166,7 @@ export const EditorTabs = () => {
           const selected = activeBuffer.id === buffer.id
 
           return (
-            <>
+            <React.Fragment key={buffer.id}>
               <ContextMenuTrigger id={`${buffer.id}`}>
                 <Tab
                   data-hook={`tab-${buffer.id}`}
@@ -223,7 +223,7 @@ export const EditorTabs = () => {
                   </MenuItem>
                 )}
               </ContextMenu>
-            </>
+            </React.Fragment>
           )
         })}
       </Tabs>
