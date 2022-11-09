@@ -50,7 +50,7 @@ const Tabs = styled.div`
   display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
-  gap: 1rem;
+  gap: 1px;
 `
 
 const Tab = styled(PrimaryToggleButton)`
@@ -60,15 +60,11 @@ const Tab = styled(PrimaryToggleButton)`
   border-top-right-radius: 0.3rem;
 
   background-color: ${({ selected, theme }) =>
-    selected
-      ? theme.color.draculaSelection
-      : theme.color.draculaBackgroundDarker};
+    selected ? theme.color.draculaSelection : theme.color.draculaBackground};
 
   &:hover:not([disabled]) {
     background-color: ${({ selected, theme }) =>
-      selected
-        ? theme.color.draculaSelection
-        : theme.color.draculaBackgroundDarker};
+      selected ? theme.color.draculaSelection : theme.color.draculaBackground};
   }
   &:focus {
     box-shadow: none;
