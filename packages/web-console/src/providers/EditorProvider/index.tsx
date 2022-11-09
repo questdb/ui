@@ -175,6 +175,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
       const nextActive = await db.buffers.toCollection().last()
       await setActiveBuffer(nextActive ?? fallbackBuffer)
+    } else {
+      editorRef.current?.focus()
     }
   }
 

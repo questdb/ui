@@ -173,4 +173,20 @@ describe("tabs", () => {
 
     cy.getTab(1).should("have.attr", "data-active", "true");
   });
+
+  it("should keep focus on editor after closing non active tab", () => {
+    const query = "-- tab 1";
+    const query2 = "-- tab 2";
+    cy.typeQuery("{alt}t")
+      .typeQuery(query)
+      .typeQuery("{alt}t")
+      .getCloseTabButton(1)
+      .click()
+      .typeQuery(query2)
+      .getEditor()
+      .should("have.value", query2)
+      .typeQuery("{alt}w")
+      .getEditor()
+      .should("have.value", query);
+  });
 });
