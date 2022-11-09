@@ -54,7 +54,7 @@ const Tabs = styled.div`
 `
 
 const Tab = styled(PrimaryToggleButton)`
-  padding: 1.5rem 1rem;
+  padding: 0 1rem;
   border: 0;
   border-top-left-radius: 0.3rem;
   border-top-right-radius: 0.3rem;
@@ -98,6 +98,7 @@ const Ellipsis = styled.span`
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+  line-height: 2rem;
 `
 
 const EditableLabel = ({
