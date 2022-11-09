@@ -75,6 +75,7 @@ const Root = styled.div`
 const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
+  padding-top: 0.2rem;
 
   .monaco-scrollable-element > .scrollbar > .slider {
     background: ${color("draculaSelection")};

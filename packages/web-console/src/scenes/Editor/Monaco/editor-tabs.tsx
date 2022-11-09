@@ -26,7 +26,6 @@ import React, { useRef, useState } from "react"
 import styled from "styled-components"
 import {
   Input,
-  PaneMenu as PaneMenuRaw,
   PrimaryToggleButton,
   SecondaryButton,
 } from "../../../components"
@@ -35,24 +34,45 @@ import {
   ContextMenu,
   MenuItem,
 } from "../../../components/ContextMenu"
-import {
-  AddCircle,
-  Close,
-  FileEdit as FileEditIcon,
-} from "styled-icons/remix-line"
+import { Close, FileEdit as FileEditIcon } from "styled-icons/remix-line"
+import { Plus as PlusIcon } from "styled-icons/boxicons-regular/"
 import { useEditor } from "../../../providers"
 import { useOnClickOutside } from "usehooks-ts"
+import { useHorizontalScroll } from "../../../components/Hooks/useHorizontalScroll"
 
-const PaneMenu = styled(PaneMenuRaw)`
-  padding-left: 0;
-  overflow-x: auto;
+const Root = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem 0 0;
 `
 
-const TabsWrapper = styled.div`
+const Tabs = styled.div`
   display: flex;
-  overflow: auto;
-  flex-shrink: 0;
-  white-space: nowrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 1rem;
+`
+
+const Tab = styled(PrimaryToggleButton)`
+  padding: 1.5rem 1rem;
+  border: 0;
+  border-top-left-radius: 0.3rem;
+  border-top-right-radius: 0.3rem;
+
+  background-color: ${({ selected, theme }) =>
+    selected
+      ? theme.color.draculaSelection
+      : theme.color.draculaBackgroundDarker};
+
+  &:hover:not([disabled]) {
+    background-color: ${({ selected, theme }) =>
+      selected
+        ? theme.color.draculaSelection
+        : theme.color.draculaBackgroundDarker};
+  }
+  &:focus {
+    box-shadow: none;
+  }
 `
 
 const CloseIcon = styled(Close)`
@@ -64,7 +84,24 @@ const FilenameInput = styled(Input)`
 `
 
 const AddTabButton = styled(SecondaryButton)`
-  margin-left: 1rem;
+  background: none;
+  border: none;
+  opacity: 0.5;
+
+  &:hover:not([disabled]),
+  &:focus {
+    background: none;
+    box-shadow: none;
+    opacity: 1;
+  }
+`
+
+const Ellipsis = styled.span`
+  display: inline-block;
+  max-width: 30rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 `
 
 const EditableLabel = ({
@@ -103,7 +140,7 @@ const EditableLabel = ({
           }}
         />
       ) : (
-        label
+        <Ellipsis>{label}</Ellipsis>
       )}
     </span>
   )
@@ -119,80 +156,79 @@ export const EditorTabs = () => {
     updateBuffer,
   } = useEditor()
   const [editingId, setEditingId] = useState<number | null>(null)
+  const horizontalScrollRef = useHorizontalScroll(buffers)
 
   return (
-    <PaneMenu>
-      {buffers && activeBuffer && (
-        <TabsWrapper>
-          {buffers.map((buffer) => {
-            const selected = activeBuffer.id === buffer.id
+    <Root>
+      <Tabs ref={horizontalScrollRef}>
+        {buffers.map((buffer) => {
+          const selected = activeBuffer.id === buffer.id
 
-            return (
-              <React.Fragment key={buffer.id}>
-                <ContextMenuTrigger id={`${buffer.id}`}>
-                  <PrimaryToggleButton
-                    data-hook={`tab-${buffer.id}`}
-                    data-active={selected}
-                    selected={selected}
-                    onClick={async () => {
-                      // do not set the active buffer if the user is editing the filename
-                      if (editingId !== buffer.id) {
-                        await setActiveBuffer(buffer)
-                      }
+          return (
+            <>
+              <ContextMenuTrigger id={`${buffer.id}`}>
+                <Tab
+                  data-hook={`tab-${buffer.id}`}
+                  data-active={selected}
+                  selected={selected}
+                  onClick={async () => {
+                    // do not set the active buffer if the user is editing the filename
+                    if (editingId !== buffer.id) {
+                      await setActiveBuffer(buffer)
+                    }
 
-                      // do not reset the editing id if the user is editing the filename
-                      if (!selected) {
-                        setEditingId(null)
-                      }
+                    // do not reset the editing id if the user is editing the filename
+                    if (!selected) {
+                      setEditingId(null)
+                    }
+                  }}
+                >
+                  <FileEditIcon size="14px" />
+
+                  <EditableLabel
+                    isEditing={editingId === buffer.id}
+                    label={buffer.label}
+                    onConfirm={(label) => {
+                      updateBuffer(buffer.id as number, { label })
+                      setEditingId(null)
                     }}
-                  >
-                    <FileEditIcon size="14px" />
+                    onCancel={() => {
+                      setEditingId(null)
+                    }}
+                  />
 
-                    <EditableLabel
-                      isEditing={editingId === buffer.id}
-                      label={buffer.label}
-                      onConfirm={(label) => {
-                        updateBuffer(buffer.id as number, { label })
-                        setEditingId(null)
-                      }}
-                      onCancel={() => {
-                        setEditingId(null)
+                  {buffers.length > 1 && (
+                    <CloseIcon
+                      size="14px"
+                      data-hook={`close-tab-button-${buffer.id}`}
+                      onClick={(event) => {
+                        // prevent event bubbling from triggering `setActiveBuffer`
+                        event.stopPropagation()
+                        deleteBuffer(buffer.id as number)
                       }}
                     />
-
-                    {buffers.length > 1 && (
-                      <CloseIcon
-                        size="14px"
-                        data-hook={`close-tab-button-${buffer.id}`}
-                        onClick={(event) => {
-                          // prevent event bubbling from triggering `setActiveBuffer`
-                          event.stopPropagation()
-                          deleteBuffer(buffer.id as number)
-                        }}
-                      />
-                    )}
-                  </PrimaryToggleButton>
-                </ContextMenuTrigger>
-
-                <ContextMenu id={`${buffer.id}`}>
-                  <MenuItem onClick={() => setEditingId(buffer.id as number)}>
-                    Rename
-                  </MenuItem>
-                  {buffers.length > 1 && (
-                    <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
-                      Close
-                    </MenuItem>
                   )}
-                </ContextMenu>
-              </React.Fragment>
-            )
-          })}
-        </TabsWrapper>
-      )}
+                </Tab>
+              </ContextMenuTrigger>
+
+              <ContextMenu id={`${buffer.id}`}>
+                <MenuItem onClick={() => setEditingId(buffer.id as number)}>
+                  Rename
+                </MenuItem>
+                {buffers.length > 1 && (
+                  <MenuItem onClick={() => deleteBuffer(buffer.id as number)}>
+                    Close
+                  </MenuItem>
+                )}
+              </ContextMenu>
+            </>
+          )
+        })}
+      </Tabs>
 
       <AddTabButton data-hook="add-tab-button" onClick={() => addBuffer()}>
-        <AddCircle size="18px" />
+        <PlusIcon size="16px" />
       </AddTabButton>
-    </PaneMenu>
+    </Root>
   )
 }
