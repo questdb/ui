@@ -23,29 +23,32 @@
  ******************************************************************************/
 
 import { useEffect, useRef } from "react"
-import type { Buffer } from "../../store/buffers"
+import type { RefObject } from "react"
 
-export const useHorizontalScroll = (buffers: Buffer[]) => {
+export const useHorizontalScroll = (
+  inViewRef: RefObject<HTMLButtonElement>,
+) => {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const element = ref.current
 
-    if (element) {
-      element.scrollTo({ left: element.scrollWidth, behavior: "auto" })
+    if (inViewRef.current !== null && element) {
+      inViewRef.current.scrollIntoView({ behavior: "auto" })
     }
-  }, [buffers])
+  }, [inViewRef.current])
 
   useEffect(() => {
     const element = ref.current
 
     if (element) {
       const onWheel = (event: WheelEvent) => {
-        event.preventDefault()
-        if (event.deltaY == 0) {
+        // skip if the user is scrolling vertically
+        if (event.deltaY === 0) {
           return
         }
 
+        event.preventDefault()
         element.scrollTo({
           left: element.scrollLeft + event.deltaY,
           behavior: "auto",

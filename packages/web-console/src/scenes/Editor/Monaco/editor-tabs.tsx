@@ -156,7 +156,8 @@ export const EditorTabs = () => {
     updateBuffer,
   } = useEditor()
   const [editingId, setEditingId] = useState<number | null>(null)
-  const horizontalScrollRef = useHorizontalScroll(buffers)
+  const selectedTabRef = useRef<HTMLButtonElement>(null)
+  const horizontalScrollRef = useHorizontalScroll(selectedTabRef)
 
   return (
     <Root>
@@ -171,6 +172,7 @@ export const EditorTabs = () => {
                   data-hook={`tab-${buffer.id}`}
                   data-active={selected}
                   selected={selected}
+                  ref={selected ? selectedTabRef : null}
                   onClick={async () => {
                     // do not set the active buffer if the user is editing the filename
                     if (editingId !== buffer.id) {
