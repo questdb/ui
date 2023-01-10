@@ -114,7 +114,7 @@ export function grid(root, msgBus) {
           rowContainer.style.display = "flex"
           for (k = 0; k < columns.length; k++) {
             rowContainer.childNodes[k].innerHTML =
-              d[k] !== null ? d[k].toString() : "null"
+              d[k] !== null ? d[k] : nullStrForType(columns[k].type)
           }
         } else {
           rowContainer.style.display = "none"
@@ -137,6 +137,30 @@ export function grid(root, msgBus) {
             "qg-c qg-w" + activeCell
         }
       }
+    }
+  }
+
+  function nullStrForType(type) {
+    switch (type) {
+      case "STRING":
+      case "SYMBOL":
+        return "null"
+
+      case "BYTE":
+      case "SHORT":
+      case "CHAR":
+      case "DATE":
+        return 0
+
+      case "FLOAT":
+      case "DOUBLE":
+        return "NaN"
+
+      case "BOOLEAN":
+        return "False"
+
+      default:
+        return ""
     }
   }
 
@@ -195,7 +219,7 @@ export function grid(root, msgBus) {
       renderViewportNoCompute()
       return
     }
-    $.get("/exec", { query, limit: lo + 1 + "," + hi, nm: true }).done(f)
+    $.get("/exec", {query, limit: lo + 1 + "," + hi, nm: true}).done(f)
   }
 
   function loadPagesDelayed(p1, p2) {
@@ -318,12 +342,12 @@ export function grid(root, msgBus) {
     for (var i = 0; i < colMax.length; i++) {
       rules.push(
         ".qg-w" +
-          i +
-          "{width:" +
-          colMax[i] +
-          "px;" +
-          getColumnAlignment(i) +
-          "}",
+        i +
+        "{width:" +
+        colMax[i] +
+        "px;" +
+        getColumnAlignment(i) +
+        "}",
       )
     }
     rules.push(".qg-r{width:" + totalWidth + "px;}")
@@ -340,12 +364,12 @@ export function grid(root, msgBus) {
     for (var i = 0; i < colMax.length; i++) {
       rules.push(
         ".qg-w" +
-          i +
-          "{width:" +
-          Math.min((colMax[i] * 100) / totalWidth, maxWidhtPct) +
-          "%;" +
-          getColumnAlignment(i) +
-          "}",
+        i +
+        "{width:" +
+        Math.min((colMax[i] * 100) / totalWidth, maxWidhtPct) +
+        "%;" +
+        getColumnAlignment(i) +
+        "}",
       )
     }
     rules.push(".qg-r{width:100%;}")
@@ -393,14 +417,14 @@ export function grid(root, msgBus) {
       var c = columns[i]
       var col = $(
         '<div class="qg-header qg-w' +
-          i +
-          '" data-column-name="' +
-          c.name +
-          '"><span class="qg-header-type">' +
-          c.type.toLowerCase() +
-          '</span><span class="qg-header-name">' +
-          c.name +
-          "</span></div>",
+        i +
+        '" data-column-name="' +
+        c.name +
+        '"><span class="qg-header-type">' +
+        c.type.toLowerCase() +
+        '</span><span class="qg-header-name">' +
+        c.name +
+        "</span></div>",
       )
         .on("click", function (e) {
           bus.trigger(
@@ -569,9 +593,9 @@ export function grid(root, msgBus) {
       const wh = window.innerHeight - $(window).scrollTop()
       vp = Math.round(
         wh -
-          viewport.getBoundingClientRect().top -
-          $('[data-hook="notifications-wrapper"]').height() -
-          $("#footer").height(),
+        viewport.getBoundingClientRect().top -
+        $('[data-hook="notifications-wrapper"]').height() -
+        $("#footer").height(),
       )
       vp = Math.max(vp, defaults.minVpHeight)
       rowsInView = Math.floor(vp / rh)
@@ -714,7 +738,7 @@ export function grid(root, msgBus) {
         }
         cell.cellIndex = k
       }
-      rowDiv.css({ top: -100, height: rh }).appendTo(canvas)
+      rowDiv.css({top: -100, height: rh}).appendTo(canvas)
       rows.push(rowDiv[0])
     }
   }
@@ -745,13 +769,13 @@ export function grid(root, msgBus) {
 
   function publishQuery() {
     if (query) {
-      bus.trigger(qdb.MSG_QUERY_EXPORT, { q: query })
+      bus.trigger(qdb.MSG_QUERY_EXPORT, {q: query})
     }
   }
 
   function refreshQuery() {
     if (query) {
-      bus.trigger(qdb.MSG_QUERY_EXEC, { q: query })
+      bus.trigger(qdb.MSG_QUERY_EXEC, {q: query})
     } else {
       $(".js-query-refresh .fa").removeClass("fa-spin")
     }
