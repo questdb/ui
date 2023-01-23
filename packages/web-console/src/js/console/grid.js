@@ -37,6 +37,7 @@ export function grid(root, msgBus) {
     minVpHeight: 120,
     minDivHeight: 160,
   }
+  const ACTIVE_CELL_CLASS = " qg-c-active";
   var bus = msgBus
   var $style
   var div = root
@@ -60,6 +61,8 @@ export function grid(root, msgBus) {
   var queryTimer
   var dbg
   var downKey = []
+  var visLeftColumn = 0;
+  var visColumnCount = 4;
 
   // viewport height
   var vp = defaults.viewportHeight
@@ -83,11 +86,12 @@ export function grid(root, msgBus) {
   var rows = []
   // active (highlighted) row
   var activeRow = -1
-  // div that is highlighted
+  // row div that is highlighted
   var activeRowContainer
-  // active cell
-  var activeCell = -1
-  var activeCellContainer
+  // index of focused cell with range from 0 to columns.length - 1
+  var focusedCellIndex = -1
+  // DOM container for the focused cell
+  var focusedCellDiv
   // rows in current view
   var rowsInView
 
@@ -112,16 +116,17 @@ export function grid(root, msgBus) {
         var d = rowData[offset]
         if (d) {
           rowContainer.style.display = "flex"
-          for (k = 0; k < columns.length; k++) {
-            rowContainer.childNodes[k].innerHTML =
-              d[k] !== null ? d[k].toString() : "null"
+          for (k = 0; k < visColumnCount; k++) {
+            var dd = d[k + visLeftColumn]
+            rowContainer.childNodes[k].innerHTML = dd !== null ? dd.toString() : "null"
           }
         } else {
           rowContainer.style.display = "none"
         }
         rowContainer.questIndex = n
       } else {
-        for (k = 0; k < columns.length; k++) {
+        // clear grid if there is no row data
+        for (k = 0; k < visColumnCount; k++) {
           rowContainer.childNodes[k].innerHTML = ""
         }
         rowContainer.questIndex = -1
@@ -130,11 +135,10 @@ export function grid(root, msgBus) {
       if (rowContainer === activeRowContainer) {
         if (n === activeRow) {
           rowContainer.className = "qg-r qg-r-active"
-          rowContainer.childNodes[activeCell].className += " qg-c-active"
+          rowContainer.childNodes[focusedCellIndex].className += ACTIVE_CELL_CLASS
         } else {
           rowContainer.className = "qg-r"
-          rowContainer.childNodes[activeCell].className =
-            "qg-c qg-w" + activeCell
+          removeFocusFromCell(rowContainer.childNodes[focusedCellIndex])
         }
       }
     }
@@ -167,12 +171,12 @@ export function grid(root, msgBus) {
 
     var lo
     var hi
-    var f
+    var renderFunc
 
     if (p1 !== p2 && empty(p1) && empty(p2)) {
       lo = p1 * pageSize
       hi = lo + pageSize * (p2 - p1 + 1)
-      f = function (response) {
+      renderFunc = function (response) {
         data[p1] = response.dataset.splice(0, pageSize)
         data[p2] = response.dataset
         renderViewportNoCompute()
@@ -180,14 +184,14 @@ export function grid(root, msgBus) {
     } else if (empty(p1) && (!empty(p2) || p1 === p2)) {
       lo = p1 * pageSize
       hi = lo + pageSize
-      f = function (response) {
+      renderFunc = function (response) {
         data[p1] = response.dataset
         renderViewportNoCompute()
       }
     } else if ((!empty(p1) || p1 === p2) && empty(p2)) {
       lo = p2 * pageSize
       hi = lo + pageSize
-      f = function (response) {
+      renderFunc = function (response) {
         data[p2] = response.dataset
         renderViewportNoCompute()
       }
@@ -195,7 +199,7 @@ export function grid(root, msgBus) {
       renderViewportNoCompute()
       return
     }
-    $.get("/exec", { query, limit: lo + 1 + "," + hi, nm: true }).done(f)
+    $.get("/exec", {query, limit: lo + 1 + "," + hi, nm: true}).done(renderFunc)
   }
 
   function loadPagesDelayed(p1, p2) {
@@ -315,16 +319,23 @@ export function grid(root, msgBus) {
   }
 
   function generatePxWidth(rules) {
+    var left = 0;
+    // calculate CSS and width for all columns even though
+    // we will render only a subset of them
     for (var i = 0; i < colMax.length; i++) {
       rules.push(
         ".qg-w" +
-          i +
-          "{width:" +
-          colMax[i] +
-          "px;" +
-          getColumnAlignment(i) +
-          "}",
+        i +
+        "{width:" +
+        colMax[i] +
+        "px;" +
+        "position: absolute;" +
+        "left:" + left + "px;" +
+        getColumnAlignment(i) +
+        "}",
       )
+      left += colMax[i];
+      console.log("css: " + i);
     }
     rules.push(".qg-r{width:" + totalWidth + "px;}")
     stretched = 2
@@ -340,12 +351,12 @@ export function grid(root, msgBus) {
     for (var i = 0; i < colMax.length; i++) {
       rules.push(
         ".qg-w" +
-          i +
-          "{width:" +
-          Math.min((colMax[i] * 100) / totalWidth, maxWidhtPct) +
-          "%;" +
-          getColumnAlignment(i) +
-          "}",
+        i +
+        "{width:" +
+        Math.min((colMax[i] * 100) / totalWidth, maxWidhtPct) +
+        "%;" +
+        getColumnAlignment(i) +
+        "}",
       )
     }
     rules.push(".qg-r{width:100%;}")
@@ -391,8 +402,13 @@ export function grid(root, msgBus) {
     totalWidth = 0
     for (i = 0; i < columns.length; i++) {
       var c = columns[i]
-      var col = $(
-        '<div class="qg-header qg-w' +
+
+      //
+      // create only limited number of DOM elements
+      //
+      if (i < visColumnCount) {
+        var col = $(
+          '<div class="qg-header qg-w' +
           i +
           '" data-column-name="' +
           c.name +
@@ -401,20 +417,23 @@ export function grid(root, msgBus) {
           '</span><span class="qg-header-name">' +
           c.name +
           "</span></div>",
-      )
-        .on("click", function (e) {
-          bus.trigger(
-            "editor.insert.column",
-            e.currentTarget.getAttribute("data-column-name"),
-          )
-        })
-        .appendTo(header)
-      switch (c.type) {
-        case "STRING":
-        case "SYMBOL":
-          col.addClass("qg-header-l")
-          break
+        )
+          .on("click", function (e) {
+            bus.trigger(
+              "editor.insert.column",
+              e.currentTarget.getAttribute("data-column-name"),
+            )
+          })
+          .appendTo(header)
+
+        switch (c.type) {
+          case "STRING":
+          case "SYMBOL":
+            col.addClass("qg-header-l")
+            break
+        }
       }
+
       w = Math.max(
         defaults.minColumnWidth,
         Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 8),
@@ -460,9 +479,9 @@ export function grid(root, msgBus) {
     hiPage = 0
     downKey = []
     activeRowContainer = null
-    activeCellContainer = null
+    focusedCellDiv = null
     activeRow = 0
-    activeCell = 0
+    focusedCellIndex = 0
   }
 
   function logDebug() {
@@ -481,20 +500,59 @@ export function grid(root, msgBus) {
   }
 
   function activeCellOff() {
-    activeCellContainer.className = "qg-c qg-w" + activeCell
+    removeFocusFromCell(focusedCellDiv)
+  }
+
+  function removeFocusFromCell(div) {
+    div.className = div.className.replace(ACTIVE_CELL_CLASS, "")
+  }
+
+  function rotateViewPortRight(index) {
+    // todo: this is basic, rotate just one column
+    var n = 1
+
+    const rowCount = rows.length;
+    if (rowCount > 0) {
+      const colCount = columns.length;
+      if (colCount > 0) {
+        const t = Math.max(0, Math.floor((y - vp) / rh));
+        const b = Math.min(yMax / rh, Math.ceil((y + vp + vp) / rh));
+
+        for (var i = t; i < b; i++) {
+          renderRow(rows[i & dcn], i)
+        }
+        for (let i = 0; i < rowCount; i++) {
+          const row = rows[i];
+          for (let k = 0; k < n; k++) {
+            const cell = row.childNodes[k];
+            cell.className = "qg-c qg-w" + (visColumnCount + visLeftColumn)
+            // todo: copy new data into this column
+          }
+        }
+      }
+      visLeftColumn += n;
+    }
   }
 
   function activeCellOn(focus) {
-    activeCellContainer = activeRowContainer.childNodes[activeCell]
-    activeCellContainer.className += " qg-c-active"
+    var index = focusedCellIndex - visLeftColumn;
+    var viewportContainerCount = activeRowContainer.childNodes.length;
+
+    // todo: this is not the only condition when we need to rotate right
+    if (index >= viewportContainerCount) {
+      rotateViewPortRight();
+    }
+
+    focusedCellDiv = activeRowContainer.childNodes[index]
+    focusedCellDiv.className += ACTIVE_CELL_CLASS
 
     if (focus) {
       var w
-      w = Math.max(0, activeCellContainer.offsetLeft - 5)
+      w = Math.max(0, focusedCellDiv.offsetLeft - 5)
       if (w < viewport.scrollLeft) {
         viewport.scrollLeft = w
       } else {
-        w = activeCellContainer.offsetLeft + activeCellContainer.clientWidth + 5
+        w = focusedCellDiv.offsetLeft + focusedCellDiv.clientWidth + 5
         if (w > viewport.scrollLeft + viewport.clientWidth) {
           viewport.scrollLeft = w - viewport.clientWidth
         }
@@ -569,9 +627,9 @@ export function grid(root, msgBus) {
       const wh = window.innerHeight - $(window).scrollTop()
       vp = Math.round(
         wh -
-          viewport.getBoundingClientRect().top -
-          $('[data-hook="notifications-wrapper"]').height() -
-          $("#footer").height(),
+        viewport.getBoundingClientRect().top -
+        $('[data-hook="notifications-wrapper"]').height() -
+        $("#footer").height(),
       )
       vp = Math.max(vp, defaults.minVpHeight)
       rowsInView = Math.floor(vp / rh)
@@ -590,48 +648,49 @@ export function grid(root, msgBus) {
     activeRowContainer.className += " qg-r-active"
     activeRow = activeRowContainer.questIndex
 
-    if (activeCellContainer) {
-      activeCellContainer.className = "qg-c qg-w" + activeCell
+    if (focusedCellDiv) {
+      // remove qg-c-active class
+      activeCellOff()
     }
-    activeCellContainer = this
-    activeCell = this.cellIndex
-    activeCellContainer.className += " qg-c-active"
+    focusedCellDiv = this
+    focusedCellIndex = this.cellIndex
+    focusedCellDiv.className += ACTIVE_CELL_CLASS
   }
 
   function activeCellRight() {
-    if (activeCell > -1 && activeCell < columns.length - 1) {
+    if (focusedCellIndex > -1 && focusedCellIndex < columns.length - 1) {
       activeCellOff()
-      activeCell++
+      focusedCellIndex++
       activeCellOn(true)
     }
   }
 
   function activeCellLeft() {
-    if (activeCell > 0) {
+    if (focusedCellIndex > 0) {
       activeCellOff()
-      activeCell--
+      focusedCellIndex--
       activeCellOn(true)
     }
   }
 
   function activeCellHome() {
-    if (activeCell > 0) {
+    if (focusedCellIndex > 0) {
       activeCellOff()
-      activeCell = 0
+      focusedCellIndex = 0
       activeCellOn(true)
     }
   }
 
   function activeCellEnd() {
-    if (activeCell > -1 && activeCell !== columns.length - 1) {
+    if (focusedCellIndex > -1 && focusedCellIndex !== columns.length - 1) {
       activeCellOff()
-      activeCell = columns.length - 1
+      focusedCellIndex = columns.length - 1
       activeCellOn(true)
     }
   }
 
   function unfocusCell() {
-    if (activeCellContainer) {
+    if (focusedCellDiv) {
       activeCellOff()
     }
   }
@@ -705,23 +764,23 @@ export function grid(root, msgBus) {
       if (i === 0) {
         activeRowContainer = rowDiv
       }
-      for (var k = 0; k < columns.length; k++) {
+      for (var k = 0; k < visColumnCount; k++) {
         var cell = $('<div class="qg-c qg-w' + k + '"/>')
           .click(rowClick)
           .appendTo(rowDiv)[0]
         if (i === 0 && k === 0) {
-          activeCellContainer = cell
+          focusedCellDiv = cell
         }
         cell.cellIndex = k
       }
-      rowDiv.css({ top: -100, height: rh }).appendTo(canvas)
+      rowDiv.css({top: -100, height: rh}).appendTo(canvas)
       rows.push(rowDiv[0])
     }
   }
 
   function focusCell() {
-    if (activeCellContainer && activeRowContainer) {
-      activeCellContainer.click()
+    if (focusedCellDiv && activeRowContainer) {
+      focusedCellDiv.click()
       activeRowContainer.focus()
     }
   }
@@ -745,13 +804,13 @@ export function grid(root, msgBus) {
 
   function publishQuery() {
     if (query) {
-      bus.trigger(qdb.MSG_QUERY_EXPORT, { q: query })
+      bus.trigger(qdb.MSG_QUERY_EXPORT, {q: query})
     }
   }
 
   function refreshQuery() {
     if (query) {
-      bus.trigger(qdb.MSG_QUERY_EXEC, { q: query })
+      bus.trigger(qdb.MSG_QUERY_EXEC, {q: query})
     } else {
       $(".js-query-refresh .fa").removeClass("fa-spin")
     }
