@@ -62,7 +62,7 @@ export function grid(root, msgBus) {
   var dbg
   var downKey = []
   var visLeftColumn = 0;
-  var visColumnCount = 4;
+  var visColumnCount = 10;
 
   // viewport height
   var vp = defaults.viewportHeight
@@ -118,7 +118,7 @@ export function grid(root, msgBus) {
           rowContainer.style.display = "flex"
           for (k = 0; k < visColumnCount; k++) {
             var dd = d[k + visLeftColumn]
-            rowContainer.childNodes[k].innerHTML = dd !== null ? dd.toString() : "null"
+            rowContainer.childNodes[(k + visLeftColumn) % visColumnCount].innerHTML = dd !== null ? dd.toString() : "null"
           }
         } else {
           rowContainer.style.display = "none"
@@ -127,7 +127,7 @@ export function grid(root, msgBus) {
       } else {
         // clear grid if there is no row data
         for (k = 0; k < visColumnCount; k++) {
-          rowContainer.childNodes[k].innerHTML = ""
+          rowContainer.childNodes[(k + visLeftColumn) % visLeftColumn].innerHTML = ""
         }
         rowContainer.questIndex = -1
       }
@@ -135,10 +135,10 @@ export function grid(root, msgBus) {
       if (rowContainer === activeRowContainer) {
         if (n === activeRow) {
           rowContainer.className = "qg-r qg-r-active"
-          rowContainer.childNodes[focusedCellIndex].className += ACTIVE_CELL_CLASS
+          rowContainer.childNodes[focusedCellIndex % visColumnCount].className += ACTIVE_CELL_CLASS
         } else {
           rowContainer.className = "qg-r"
-          removeFocusFromCell(rowContainer.childNodes[focusedCellIndex])
+          removeFocusFromCell(rowContainer.childNodes[focusedCellIndex % visColumnCount])
         }
       }
     }
@@ -335,7 +335,6 @@ export function grid(root, msgBus) {
         "}",
       )
       left += colMax[i];
-      console.log("css: " + i);
     }
     rules.push(".qg-r{width:" + totalWidth + "px;}")
     stretched = 2
@@ -366,8 +365,8 @@ export function grid(root, msgBus) {
 
   function createCss() {
     if (data.length > 0) {
-      var viewportWidth = viewport.offsetWidth
-      var f = null
+      const viewportWidth = viewport.offsetWidth;
+      let f = null;
       if (totalWidth < viewportWidth && stretched !== 1) {
         f = generatePctWidth
       } else if (totalWidth > viewportWidth && stretched !== 2) {
@@ -378,10 +377,10 @@ export function grid(root, msgBus) {
         if ($style) {
           $style.remove()
         }
-        $style = $('<style type="text/css" rel="stylesheet"/>').appendTo(
+        $style = $('<style rel="stylesheet"/>').appendTo(
           $("head"),
         )
-        var rules = []
+        const rules = [];
 
         f(rules)
 
@@ -398,40 +397,35 @@ export function grid(root, msgBus) {
 
   function computeColumnWidths() {
     colMax = []
-    var i, k, w
+    let i, k, w;
     totalWidth = 0
     for (i = 0; i < columns.length; i++) {
-      var c = columns[i]
+      const c = columns[i];
 
-      //
-      // create only limited number of DOM elements
-      //
-      if (i < visColumnCount) {
-        var col = $(
-          '<div class="qg-header qg-w' +
-          i +
-          '" data-column-name="' +
-          c.name +
-          '"><span class="qg-header-type">' +
-          c.type.toLowerCase() +
-          '</span><span class="qg-header-name">' +
-          c.name +
-          "</span></div>",
-        )
-          .on("click", function (e) {
-            bus.trigger(
-              "editor.insert.column",
-              e.currentTarget.getAttribute("data-column-name"),
-            )
-          })
-          .appendTo(header)
+      const col = $(
+        '<div class="qg-header qg-w' +
+        i +
+        '" data-column-name="' +
+        c.name +
+        '"><span class="qg-header-type">' +
+        c.type.toLowerCase() +
+        '</span><span class="qg-header-name">' +
+        c.name +
+        "</span></div>",
+      )
+        .on("click", function (e) {
+          bus.trigger(
+            "editor.insert.column",
+            e.currentTarget.getAttribute("data-column-name"),
+          )
+        })
+        .appendTo(header);
 
-        switch (c.type) {
-          case "STRING":
-          case "SYMBOL":
-            col.addClass("qg-header-l")
-            break
-        }
+      switch (c.type) {
+        case "STRING":
+        case "SYMBOL":
+          col.addClass("qg-header-l")
+          break
       }
 
       w = Math.max(
@@ -442,16 +436,16 @@ export function grid(root, msgBus) {
       totalWidth += w
     }
 
-    var max =
+    const max =
       data[0].length > defaults.maxRowsToAnalyze
         ? defaults.maxRowsToAnalyze
-        : data[0].length
-    for (i = 0; i < max; i++) {
-      var row = data[0][i]
-      var sum = 0
+        : data[0].length;
+    for (let i = 0; i < max; i++) {
+      const row = data[0][i];
+      let sum = 0;
       for (k = 0; k < row.length; k++) {
-        var cell = row[k]
-        var str = cell !== null ? cell.toString() : "null"
+        const cell = row[k];
+        const str = cell !== null ? cell.toString() : "null";
         w = Math.max(defaults.minColumnWidth, str.length * 8 + 8)
         colMax[k] = Math.max(w, colMax[k])
         sum += colMax[k]
@@ -482,6 +476,7 @@ export function grid(root, msgBus) {
     focusedCellDiv = null
     activeRow = 0
     focusedCellIndex = 0
+    visLeftColumn = 0;
   }
 
   function logDebug() {
@@ -507,47 +502,87 @@ export function grid(root, msgBus) {
     div.className = div.className.replace(ACTIVE_CELL_CLASS, "")
   }
 
-  function rotateViewPortRight(index) {
-    // todo: this is basic, rotate just one column
-    var n = 1
-
+  function moveViewPortRight() {
     const rowCount = rows.length;
     if (rowCount > 0) {
       const colCount = columns.length;
       if (colCount > 0) {
-        const t = Math.max(0, Math.floor((y - vp) / rh));
-        const b = Math.min(yMax / rh, Math.ceil((y + vp + vp) / rh));
 
-        for (var i = t; i < b; i++) {
-          renderRow(rows[i & dcn], i)
-        }
-        for (let i = 0; i < rowCount; i++) {
-          const row = rows[i];
-          for (let k = 0; k < n; k++) {
-            const cell = row.childNodes[k];
-            cell.className = "qg-c qg-w" + (visColumnCount + visLeftColumn)
-            // todo: copy new data into this column
-          }
+        let t = Math.max(0, Math.floor((y - vp) / rh));
+        let b = Math.min(yMax / rh, Math.ceil((y + vp + vp) / rh));
+        // adjust t,b to back-fill the entire "rows" contents
+        // t,b lands us somewhere in the middle of rows array when adjusted to `dcn`
+        // we want to cover all the rows
+        t -= (t & dcn)
+        b = b - (b & dcn) + dc;
+        // we need these loop indexes to accurately locate data
+        // in the data arrays
+        for (let i = t; i < b; i++) {
+          // locate data for the viewport cell
+          const row = rows[i & dcn];
+          const dataBatch = data[Math.floor(i / pageSize)];
+          const rowIndexInBatch = i % pageSize;
+          const rowData = dataBatch[rowIndexInBatch];
+          const k = visLeftColumn;
+          const cell = row.childNodes[k % visColumnCount];
+          const cellData = rowData[visColumnCount + k];
+          cell.className = "qg-c qg-w" + (visColumnCount + k)
+          cell.innerHTML = cellData !== null ? cellData.toString() : "null"
+          // this is necessary for "click()" to know which cell index has focus
+          cell.cellIndex = (visColumnCount + k)
         }
       }
-      visLeftColumn += n;
+      visLeftColumn += 1;
+    }
+  }
+
+  function moveViewPortLeft() {
+    const rowCount = rows.length;
+    if (rowCount > 0) {
+      const colCount = columns.length;
+      if (colCount > 0) {
+
+        let t = Math.max(0, Math.floor((y - vp) / rh));
+        let b = Math.min(yMax / rh, Math.ceil((y + vp + vp) / rh));
+        // adjust t,b to back-fill the entire "rows" contents
+        // t,b lands us somewhere in the middle of rows array when adjusted to `dcn`
+        // we want to cover all the rows
+        t -= (t & dcn)
+        b = b - (b & dcn) + dc;
+        for (let i = t; i < b; i++) {
+          const row = rows[i & dcn];
+          const dataBatch = data[Math.floor(i / pageSize)];
+          const rowIndexInBatch = i % pageSize;
+          const rowData = dataBatch[rowIndexInBatch];
+          const cell = row.childNodes[Math.abs((visLeftColumn - 1) % visColumnCount)];
+          const cellData = rowData[visLeftColumn - 1];
+          cell.className = "qg-c qg-w" + (visLeftColumn - 1)
+          cell.innerHTML = cellData !== null ? cellData.toString() : "null"
+          cell.cellIndex = visLeftColumn - 1
+        }
+      }
+      visLeftColumn -= 1;
     }
   }
 
   function activeCellOn(focus) {
-    var index = focusedCellIndex - visLeftColumn;
-    var viewportContainerCount = activeRowContainer.childNodes.length;
+    const viewportContainerCount = activeRowContainer.childNodes.length;
 
     // todo: this is not the only condition when we need to rotate right
-    if (index >= viewportContainerCount) {
-      rotateViewPortRight();
+    if (focusedCellIndex - visLeftColumn >= viewportContainerCount) {
+      moveViewPortRight();
+    } else if (focusedCellIndex - visLeftColumn < 0) {
+      console.log("left - focusedCellIndex: " + focusedCellIndex + ", visLeftColumn=" + visLeftColumn);
+      moveViewPortLeft();
     }
 
-    focusedCellDiv = activeRowContainer.childNodes[index]
+    console.log("focusedCellIndex: " + focusedCellIndex + ", visLeftColumn=" + visLeftColumn);
+
+    focusedCellDiv = activeRowContainer.childNodes[focusedCellIndex % visColumnCount]
     focusedCellDiv.className += ACTIVE_CELL_CLASS
 
     if (focus) {
-      var w
+      let w;
       w = Math.max(0, focusedCellDiv.offsetLeft - 5)
       if (w < viewport.scrollLeft) {
         viewport.scrollLeft = w
@@ -653,7 +688,9 @@ export function grid(root, msgBus) {
       activeCellOff()
     }
     focusedCellDiv = this
+    console.log(this)
     focusedCellIndex = this.cellIndex
+    console.log("click: " + focusedCellIndex)
     focusedCellDiv.className += ACTIVE_CELL_CLASS
   }
 
@@ -661,6 +698,7 @@ export function grid(root, msgBus) {
     if (focusedCellIndex > -1 && focusedCellIndex < columns.length - 1) {
       activeCellOff()
       focusedCellIndex++
+      console.log("right: " + focusedCellIndex)
       activeCellOn(true)
     }
   }
@@ -669,6 +707,7 @@ export function grid(root, msgBus) {
     if (focusedCellIndex > 0) {
       activeCellOff()
       focusedCellIndex--
+      console.log("left: " + focusedCellIndex)
       activeCellOn(true)
     }
   }
@@ -771,6 +810,7 @@ export function grid(root, msgBus) {
         if (i === 0 && k === 0) {
           focusedCellDiv = cell
         }
+
         cell.cellIndex = k
       }
       rowDiv.css({top: -100, height: rh}).appendTo(canvas)
