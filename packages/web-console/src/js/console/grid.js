@@ -38,6 +38,12 @@ export function grid(root, msgBus) {
     minDivHeight: 160,
   };
   const ACTIVE_CELL_CLASS = " qg-c-active";
+  const NAV_EVENT_ANY_VERTICAL = 0;
+  const NAV_EVENT_LEFT = 1;
+  const NAV_EVENT_RIGHT = 2;
+  const NAV_EVENT_HOME = 3;
+  const NAV_EVENT_END = 4;
+
   const bus = msgBus;
   let $style;
   const div = root;
@@ -46,6 +52,7 @@ export function grid(root, msgBus) {
   let header;
   let colMax;
   let columns = [];
+  let columnCount = 0;
   let data = [];
   let totalWidth = -1;
   // number of divs in "rows" cache, has to be power of two
@@ -366,7 +373,7 @@ export function grid(root, msgBus) {
     colMax = []
     let i, k, w;
     totalWidth = 0
-    for (i = 0; i < columns.length; i++) {
+    for (i = 0; i < columnCount; i++) {
       const c = columns[i];
 
       const col = $(
@@ -478,8 +485,7 @@ export function grid(root, msgBus) {
   function moveViewPortRight() {
     const rowCount = rows.length;
     if (rowCount > 0) {
-      const colCount = columns.length;
-      if (colCount > 0) {
+      if (columnCount > 0) {
 
         let t = Math.max(0, Math.floor((y - viewportHeight) / rh));
         let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh));
@@ -513,8 +519,7 @@ export function grid(root, msgBus) {
   function moveViewPortLeft() {
     const rowCount = rows.length;
     if (rowCount > 0) {
-      const colCount = columns.length;
-      if (colCount > 0) {
+      if (columnCount > 0) {
 
         let t = Math.max(0, Math.floor((y - viewportHeight) / rh));
         let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh));
@@ -541,20 +546,89 @@ export function grid(root, msgBus) {
     }
   }
 
-  function activeCellOn(focus) {
+  function moveViewPortHome() {
+    const rowCount = rows.length;
+    if (rowCount > 0 && columnCount > 0) {
+      let t = Math.max(0, Math.floor((y - viewportHeight) / rh));
+      let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh));
+      // adjust t,b to back-fill the entire "rows" contents
+      // t,b lands us somewhere in the middle of rows array when adjusted to `dcn`
+      // we want to cover all the rows
+      t -= (t & dcn)
+      b = b - (b & dcn) + dc;
+      for (let i = t; i < b; i++) {
+        const row = rows[i & dcn];
+        const dataBatch = data[Math.floor(i / pageSize)];
+        const rowIndexInBatch = i % pageSize;
+        const rowData = dataBatch[rowIndexInBatch];
+        if (rowData) {
+          for (let j = 0; j < visColumnCount; j++) {
+            const cell = row.childNodes[j];
+            const cellData = rowData[j];
+            cell.className = "qg-c qg-w" + j
+            cell.innerHTML = cellData !== null ? cellData.toString() : "null"
+            cell.cellIndex = j
+          }
+        }
+      }
+      visLeftColumn = 0;
+    }
+  }
+
+  function moveViewPortEnd() {
+    const start = (columnCount - visColumnCount) % visColumnCount;
+    const end = start + visColumnCount;
+    const nextVisLeftColumn = columnCount - visColumnCount;
+
+    if (rows.length > 0 && columnCount > 0) {
+      let t = Math.max(0, Math.floor((y - viewportHeight) / rh));
+      let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh));
+      // adjust t,b to back-fill the entire "rows" contents
+      // t,b lands us somewhere in the middle of rows array when adjusted to `dcn`
+      // we want to cover all the rows
+      t -= (t & dcn)
+      b = b - (b & dcn) + dc;
+      for (let i = t; i < b; i++) {
+        const row = rows[i & dcn];
+        const dataBatch = data[Math.floor(i / pageSize)];
+        const rowIndexInBatch = i % pageSize;
+        const rowData = dataBatch[rowIndexInBatch];
+        if (rowData) {
+          // We need to put cells in the same order, which one would
+          // get scrolling towards the end of row using right arrow, e.g. one cell at a time
+          // This is to make sure scrolling one column left at a time works correctly
+          for (let j = start; j < end; j++) {
+            const cell = row.childNodes[j % visColumnCount];
+            const cellIndex = columnCount - visColumnCount - start + j;
+            const cellData = rowData[cellIndex];
+            cell.className = "qg-c qg-w" + cellIndex
+            cell.innerHTML = cellData !== null ? cellData.toString() : "null"
+            cell.cellIndex = cellIndex
+          }
+        }
+      }
+      visLeftColumn = nextVisLeftColumn;
+    }
+  }
+
+  function activeCellOn(navEvent) {
     const viewportContainerCount = activeRowContainer.childNodes.length;
 
-    // todo: this is not the only condition when we need to rotate right
-    if (focusedCellIndex - visLeftColumn >= viewportContainerCount) {
+    // left/right conditions seem to provide adequate user interaction
+    if (navEvent === NAV_EVENT_RIGHT && focusedCellIndex - visLeftColumn >= viewportContainerCount) {
       moveViewPortRight();
-    } else if (focusedCellIndex - visLeftColumn < 0) {
+    } else if (navEvent === NAV_EVENT_LEFT && focusedCellIndex - visLeftColumn < 0) {
       moveViewPortLeft();
+    } else if (navEvent === NAV_EVENT_HOME && visLeftColumn > 0 && columnCount > visColumnCount) {
+      moveViewPortHome();
+    } else if (navEvent === NAV_EVENT_END && visLeftColumn + visColumnCount < columnCount) {
+      moveViewPortEnd();
     }
 
     focusedCell = activeRowContainer.childNodes[focusedCellIndex % visColumnCount]
     setFocus(focusedCell)
 
-    if (focus) {
+    if (navEvent !== NAV_EVENT_ANY_VERTICAL) {
       let w;
       w = Math.max(0, focusedCell.offsetLeft - 5)
       if (w < viewport.scrollLeft) {
@@ -575,7 +649,7 @@ export function grid(root, msgBus) {
       activeCellOff()
       activeRowContainer = rows[activeRow & dcn]
       activeRowContainer.className = "qg-r qg-r-active"
-      activeCellOn()
+      activeCellOn(NAV_EVENT_ANY_VERTICAL)
       const scrollTop = activeRow * rh - o;
       if (scrollTop < viewport.scrollTop) {
         viewport.scrollTop = Math.max(0, scrollTop)
@@ -590,7 +664,7 @@ export function grid(root, msgBus) {
       activeCellOff()
       activeRowContainer = rows[activeRow & dcn]
       activeRowContainer.className = "qg-r qg-r-active"
-      activeCellOn()
+      activeCellOn(NAV_EVENT_ANY_VERTICAL)
       const scrollTop = activeRow * rh - viewportHeight + rh - o;
       if (scrollTop > viewport.scrollTop) {
         viewport.scrollTop = scrollTop
@@ -633,7 +707,7 @@ export function grid(root, msgBus) {
   function updateVisibleColumnCount() {
     if (totalWidth < viewport.getBoundingClientRect().width) {
       // viewport is wider than total column width
-      visColumnCount = columns.length;
+      visColumnCount = columnCount;
     } else {
       // compute max number of columns that can fit into the viewport
       // the computation checks every column "sequence" in case column
@@ -690,10 +764,10 @@ export function grid(root, msgBus) {
   }
 
   function activeCellRight() {
-    if (focusedCellIndex > -1 && focusedCellIndex < columns.length - 1) {
+    if (focusedCellIndex > -1 && focusedCellIndex < columnCount - 1) {
       activeCellOff()
       focusedCellIndex++
-      activeCellOn(true)
+      activeCellOn(NAV_EVENT_RIGHT)
     }
   }
 
@@ -701,7 +775,7 @@ export function grid(root, msgBus) {
     if (focusedCellIndex > 0) {
       activeCellOff()
       focusedCellIndex--
-      activeCellOn(true)
+      activeCellOn(NAV_EVENT_LEFT)
     }
   }
 
@@ -709,15 +783,15 @@ export function grid(root, msgBus) {
     if (focusedCellIndex > 0) {
       activeCellOff()
       focusedCellIndex = 0
-      activeCellOn(true)
+      activeCellOn(NAV_EVENT_HOME)
     }
   }
 
   function activeCellEnd() {
-    if (focusedCellIndex > -1 && focusedCellIndex !== columns.length - 1) {
+    if (focusedCellIndex > -1 && focusedCellIndex !== columnCount - 1) {
       activeCellOff()
-      focusedCellIndex = columns.length - 1
-      activeCellOn(true)
+      focusedCellIndex = columnCount - 1
+      activeCellOn(NAV_EVENT_END)
     }
   }
 
@@ -826,6 +900,7 @@ export function grid(root, msgBus) {
       query = m.query
       data.push(m.dataset)
       columns = m.columns
+      columnCount = columns.length;
       computeColumnWidths()
       updateVisibleColumnCount()
       addColumns()
