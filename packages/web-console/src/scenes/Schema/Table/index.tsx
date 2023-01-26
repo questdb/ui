@@ -118,6 +118,7 @@ const Table = ({
   name,
   partitionBy,
   expanded = false,
+  walEnabled,
   onChange = () => {},
 }: Props) => {
   const currentName = useRef(name)
@@ -201,7 +202,13 @@ const Table = ({
 
   return (
     <Wrapper _height={columns ? columns.length * 30 : 0}>
-      {!isScrolling && <ContextualMenu name={name} partitionBy={partitionBy} />}
+      {!isScrolling && (
+        <ContextualMenu
+          name={name}
+          partitionBy={partitionBy}
+          walEnabled={walEnabled}
+        />
+      )}
 
       <Tree root={tree} />
     </Wrapper>
