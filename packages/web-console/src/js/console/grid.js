@@ -124,9 +124,7 @@ export function grid(root, msgBus) {
           rowContainer.style.display = "flex"
           for (k = 0; k < visColumnCount; k++) {
             const dd = d[k + visLeftColumn]
-            if (dd) {
-              rowContainer.childNodes[(k + visLeftColumn) % visColumnCount].innerHTML = dd.toString()
-            }
+            setCellData(rowContainer.childNodes[(k + visLeftColumn) % visColumnCount], dd)
           }
         } else {
           rowContainer.style.display = "none"
@@ -331,17 +329,7 @@ export function grid(root, msgBus) {
     // calculate CSS and width for all columns even though
     // we will render only a subset of them
     for (let i = 0; i < colMax.length; i++) {
-      rules.push(
-        ".qg-w" +
-        i +
-        "{width:" +
-        colMax[i] +
-        "px;" +
-        "position: absolute;" +
-        "left:" + left + "px;" +
-        getColumnAlignment(i) +
-        "}",
-      )
+      rules.push(".qg-w" + i + "{width:" + colMax[i] + "px;" + "position: absolute;" + "left:" + left + "px;" + getColumnAlignment(i) + "}",)
       left += colMax[i];
     }
     rules.push(".qg-r{width:" + totalWidth + "px;}")
@@ -352,9 +340,7 @@ export function grid(root, msgBus) {
       if ($style) {
         $style.remove()
       }
-      $style = $('<style rel="stylesheet"/>').appendTo(
-        $("head"),
-      )
+      $style = $('<style rel="stylesheet"/>').appendTo($("head"),)
       const rules = [];
 
       generatePxWidth(rules)
@@ -376,22 +362,9 @@ export function grid(root, msgBus) {
     for (i = 0; i < columnCount; i++) {
       const c = columns[i];
 
-      const col = $(
-        '<div class="qg-header qg-w' +
-        i +
-        '" data-column-name="' +
-        c.name +
-        '"><span class="qg-header-type">' +
-        c.type.toLowerCase() +
-        '</span><span class="qg-header-name">' +
-        c.name +
-        "</span></div>",
-      )
+      const col = $('<div class="qg-header qg-w' + i + '" data-column-name="' + c.name + '"><span class="qg-header-type">' + c.type.toLowerCase() + '</span><span class="qg-header-name">' + c.name + "</span></div>",)
         .on("click", function (e) {
-          bus.trigger(
-            "editor.insert.column",
-            e.currentTarget.getAttribute("data-column-name"),
-          )
+          bus.trigger("editor.insert.column", e.currentTarget.getAttribute("data-column-name"),)
         })
         .appendTo(header);
 
@@ -402,18 +375,12 @@ export function grid(root, msgBus) {
           break
       }
 
-      w = Math.max(
-        defaults.minColumnWidth,
-        Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 8),
-      )
+      w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 8),)
       colMax.push(w)
       totalWidth += w
     }
 
-    const max =
-      data[0].length > defaults.maxRowsToAnalyze
-        ? defaults.maxRowsToAnalyze
-        : data[0].length;
+    const max = data[0].length > defaults.maxRowsToAnalyze ? defaults.maxRowsToAnalyze : data[0].length;
 
     for (let i = 0; i < max; i++) {
       const row = data[0][i];
@@ -502,13 +469,11 @@ export function grid(root, msgBus) {
           const dataBatch = data[Math.floor(i / pageSize)];
           const rowData = dataBatch[i % pageSize];
           if (rowData) {
-            const k = visLeftColumn;
-            const cell = row.childNodes[k % visColumnCount];
-            const cellData = rowData[visColumnCount + k];
-            cell.className = "qg-c qg-w" + (visColumnCount + k)
-            cell.innerHTML = cellData !== null ? cellData.toString() : "null"
-            // this is necessary for "click()" to know which cell index has focus
-            cell.cellIndex = (visColumnCount + k)
+            setCellDataAndAttributes(
+              row.childNodes[visLeftColumn % visColumnCount],
+              rowData[visColumnCount + visLeftColumn],
+              visColumnCount + visLeftColumn
+            )
           }
         }
       }
@@ -534,11 +499,11 @@ export function grid(root, msgBus) {
           const rowIndexInBatch = i % pageSize;
           const rowData = dataBatch[rowIndexInBatch];
           if (rowData) {
-            const cell = row.childNodes[Math.abs((visLeftColumn - 1) % visColumnCount)];
-            const cellData = rowData[visLeftColumn - 1];
-            cell.className = "qg-c qg-w" + (visLeftColumn - 1)
-            cell.innerHTML = cellData !== null ? cellData.toString() : "null"
-            cell.cellIndex = visLeftColumn - 1
+            setCellDataAndAttributes(
+              row.childNodes[Math.abs((visLeftColumn - 1) % visColumnCount)],
+              rowData[visLeftColumn - 1],
+              visLeftColumn - 1
+            )
           }
         }
       }
@@ -563,16 +528,22 @@ export function grid(root, msgBus) {
         const rowData = dataBatch[rowIndexInBatch];
         if (rowData) {
           for (let j = 0; j < visColumnCount; j++) {
-            const cell = row.childNodes[j];
-            const cellData = rowData[j];
-            cell.className = "qg-c qg-w" + j
-            cell.innerHTML = cellData !== null ? cellData.toString() : "null"
-            cell.cellIndex = j
+            setCellDataAndAttributes(row.childNodes[j], rowData[j], j);
           }
         }
       }
       visLeftColumn = 0;
     }
+  }
+
+  function setCellData(cell, cellData) {
+    cell.innerHTML = cellData !== null ? cellData.toString() : "null"
+  }
+
+  function setCellDataAndAttributes(cell, cellData, cellIndex) {
+    cell.className = "qg-c qg-w" + cellIndex
+    cell.cellIndex = cellIndex
+    setCellData(cell, cellData)
   }
 
   function moveViewPortEnd() {
@@ -602,7 +573,7 @@ export function grid(root, msgBus) {
             const cellIndex = columnCount - visColumnCount - start + j;
             const cellData = rowData[cellIndex];
             cell.className = "qg-c qg-w" + cellIndex
-            cell.innerHTML = cellData !== null ? cellData.toString() : "null"
+            setCellData(cell, cellData);
             cell.cellIndex = cellIndex
           }
         }
@@ -732,12 +703,7 @@ export function grid(root, msgBus) {
   function resize() {
     if ($("#grid").css("display") !== "none") {
       const wh = window.innerHeight - $(window).scrollTop()
-      viewportHeight = Math.round(
-        wh -
-        viewport.getBoundingClientRect().top -
-        $('[data-hook="notifications-wrapper"]').height() -
-        $("#footer").height(),
-      )
+      viewportHeight = Math.round(wh - viewport.getBoundingClientRect().top - $('[data-hook="notifications-wrapper"]').height() - $("#footer").height(),)
       viewportHeight = Math.max(viewportHeight, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
       createCss()
