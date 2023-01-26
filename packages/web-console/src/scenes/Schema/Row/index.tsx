@@ -31,7 +31,7 @@ import { CheckboxBlankCircle } from "styled-icons/remix-line"
 import { CodeSSlash } from "styled-icons/remix-line"
 import { Information } from "styled-icons/remix-line"
 import { Table as TableIcon } from "styled-icons/remix-line"
-import { PieChart } from "styled-icons/remix-line"
+import { FileList, PieChart } from "styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 
 import {
@@ -166,6 +166,11 @@ const PieChartIcon = styled(PieChart)`
   margin-right: 0.5rem;
 `
 
+const FileListIcon = styled(FileList)`
+  color: ${color("draculaYellow")};
+  margin-right: 0.5rem;
+`
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -242,6 +247,7 @@ const Row = ({
 
         {kind === "table" && walEnabled && (
           <PartitionByWrapper>
+            <FileListIcon size="14px" />
             <Text color="draculaYellow">WAL</Text>
           </PartitionByWrapper>
         )}
