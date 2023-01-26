@@ -191,6 +191,7 @@ const Table = ({
               name={name}
               onClick={() => toggleOpen()}
               partitionBy={partitionBy}
+              walEnabled={walEnabled}
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
             />

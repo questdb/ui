@@ -54,6 +54,7 @@ type Props = Readonly<{
   name: string
   onClick?: (event: MouseEvent) => void
   partitionBy?: string
+  walEnabled?: boolean
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
@@ -174,6 +175,7 @@ const Row = ({
   indexed,
   name,
   partitionBy,
+  walEnabled,
   onClick,
   suffix,
   tooltip,
@@ -235,6 +237,12 @@ const Row = ({
           <PartitionByWrapper>
             <PieChartIcon size="14px" />
             <Text color="gray2">{partitionBy}</Text>
+          </PartitionByWrapper>
+        )}
+
+        {kind === "table" && walEnabled && (
+          <PartitionByWrapper>
+            <Text color="draculaYellow">WAL</Text>
           </PartitionByWrapper>
         )}
 
