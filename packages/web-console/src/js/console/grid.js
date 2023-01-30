@@ -71,10 +71,15 @@ export function grid(root, msgBus) {
   let visColumnLo = 0;
   // visible column count, e.g. number of columns that is actually rendered in the grid
   let visColumnCount = 10;
+  const visColumnCountExtra = 3;
   // X coordinate of the leftmost visible column
   let visColumnX = 0;
   // width in pixels of all visible columns
   let visColumnWidth = 0;
+  // the viewport width for which we calculated visColumnCount
+  // this variable is used to avoid unnecessary computation when
+  // viewport width does not change
+  let lastKnownViewportWidth = 0;
 
   // viewport height
   let viewportHeight = defaults.viewportHeight;
@@ -332,7 +337,7 @@ export function grid(root, msgBus) {
     let left = 0;
     // calculate CSS and width for all columns even though
     // we will render only a subset of them
-    for (let i = 0; i < columnWidths.length; i++) {
+    for (let i = 0; i < columnCount; i++) {
       rules.push(".qg-w" + i + "{width:" + columnWidths[i] + "px;" + "position: absolute;" + "left:" + left + "px;" + getColumnAlignment(i) + "}",)
       left += columnWidths[i];
     }
@@ -360,6 +365,7 @@ export function grid(root, msgBus) {
   }
 
   function computeColumnWidths() {
+    console.log("widths")
     columnWidths = []
     let i, k, w;
     totalWidth = 0
@@ -422,6 +428,8 @@ export function grid(root, msgBus) {
     activeRow = 0
     focusedCellIndex = 0
     visColumnLo = 0;
+    visColumnCount = 10;
+    lastKnownViewportWidth = 0;
   }
 
   function logDebug() {
@@ -648,27 +656,60 @@ export function grid(root, msgBus) {
   }
 
   function updateVisibleColumnCount() {
-    if (totalWidth < viewport.getBoundingClientRect().width) {
+    const viewportWidth = viewport.getBoundingClientRect().width;
+    if (totalWidth < viewportWidth) {
       // viewport is wider than total column width
       visColumnCount = columnCount;
     } else {
       // compute max number of columns that can fit into the viewport
       // the computation checks every column "sequence" in case column
       // widths are uneven
-      let max = 0;
-      const limit = viewport.getBoundingClientRect().width;
-      for (let i = 0, n = columnWidths.length; i < n; i++) {
-        let count = 0;
-        let sum = columnWidths[i];
-        for (let j = i + 1; j < n; j++, ++count) {
-          sum += columnWidths[j]
-          if (sum > limit) {
-            max = Math.max(max, count)
-            break
+      // let max = 0;
+      // let w = 0
+      // let z1, z2 = -1;
+      // for (let i = 0; i < columnCount; i++) {
+      //   let count = 0;
+      //   let sum = 0;
+      //   for (let j = i; j < columnCount; j++, ++count) {
+      //     sum += columnWidths[j]
+      //     if (sum > viewportWidth) {
+      //       if (max < count) {
+      //         max = count
+      //         w = sum
+      //         z1 = i
+      //         z2 = j
+      //       }
+      //       break
+      //       // max = Math.max(max, count)
+      //     }
+      //   }
+      // }
+      let lo = 0
+      let hi = 0
+      let w = 0
+      let count = 0
+      let x = 0
+      let y = 0
+      let z = 0;
+      while (hi < columnCount) {
+        if (w + columnWidths[hi] > viewportWidth) {
+          if (count < hi - lo + 1) {
+            //
+            count = hi - lo + 1;
+            x = lo;
+            y = hi;
+            z = w;
           }
+          // count = Math.max(count, hi - lo + 1)
+          w -= columnWidths[lo]
+          lo++
+        } else {
+          w += columnWidths[hi]
+          hi++
         }
       }
-      visColumnCount = Math.min(max + 3, columnWidths.length);
+      visColumnCount = Math.min(count + visColumnCountExtra, columnCount)
+      console.log("x:" + x + ",y:" + y + ",z:" + z + ", vpw=" + viewportWidth)
     }
   }
 
@@ -679,6 +720,21 @@ export function grid(root, msgBus) {
       viewportHeight = Math.max(viewportHeight, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
       createCss()
+
+      const viewportWidth = viewport.getBoundingClientRect().width;
+      if (lastKnownViewportWidth !== viewportWidth) {
+        lastKnownViewportWidth = viewportWidth;
+
+        const prevVisColumnCount = visColumnCount
+        updateVisibleColumnCount()
+        console.log("prevVisColumnCount:" + prevVisColumnCount + ", visColumnCount:" + visColumnCount + ", vpw: " + viewportWidth)
+        if (prevVisColumnCount < visColumnCount) {
+          console.log("add columns")
+        } else if (prevVisColumnCount > visColumnCount) {
+          console.log("remove columns")
+        }
+      }
+      // computeVisibleColumnsPosition()
       viewportScroll(true)
     }
   }
