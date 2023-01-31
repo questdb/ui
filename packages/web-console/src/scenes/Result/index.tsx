@@ -187,12 +187,7 @@ const Result = () => {
       </Menu>
 
       <Content>
-        <div id="grid">
-          <div className="qg-header-row" />
-          <div className="qg-viewport">
-            <div className="qg-canvas" />
-          </div>
-        </div>
+        <div id="grid"/>
 
         <div id="quick-vis">
           <div className="quick-vis-controls">

@@ -46,7 +46,7 @@ export function grid(root, msgBus) {
 
   const bus = msgBus
   let $style
-  const div = root
+  const grid = root
   let viewport
   let canvas
   let header
@@ -118,8 +118,8 @@ export function grid(root, msgBus) {
   // last render attempt and repeat is when data is ready
   const pendingRender = {colLo: 0, colHi: 0, nextVisColumnLo: 0, render: false};
 
-  function addRows(n) {
-    r += n
+  function setRowCount(rowCount) {
+    r += rowCount
     yMax = r * rh
     if (yMax < defaults.yMaxThreshold) {
       h = yMax
@@ -365,7 +365,7 @@ export function grid(root, msgBus) {
       if ($style) {
         $style.remove()
       }
-      $style = $('<style rel="stylesheet"/>').appendTo($("head"),)
+      $style = $('<style rel="stylesheet"/>').appendTo($("head"))
       const rules = []
 
       generatePxWidth(rules)
@@ -546,14 +546,20 @@ export function grid(root, msgBus) {
     if (navEvent !== NAV_EVENT_ANY_VERTICAL) {
       const w = Math.max(0, columnOffset)
       if (w < viewport.scrollLeft) {
+        const before = viewport.scrollLeft
         viewport.scrollLeft = w
-        return
+        if (before !== viewport.scrollLeft) {
+          return
+        }
       }
       if (w > viewport.scrollLeft) {
         const w = columnOffset + columnWidth
         if (w > viewport.scrollLeft + viewport.clientWidth) {
+          const before = viewport.scrollLeft
           viewport.scrollLeft = w - viewport.clientWidth
-          return;
+          if (before !== viewport.scrollLeft) {
+            return
+          }
         }
       }
     }
@@ -569,7 +575,7 @@ export function grid(root, msgBus) {
       activeRowContainer = rows[activeRow & dcn]
       activeRowContainer.className = "qg-r qg-r-active"
       activeCellOn(NAV_EVENT_ANY_VERTICAL)
-      const scrollTop = activeRow * rh - o
+      const scrollTop = activeRow * rh - o - 5 // top margin
       if (scrollTop < viewport.scrollTop) {
         viewport.scrollTop = Math.max(0, scrollTop)
       } else {
@@ -588,8 +594,9 @@ export function grid(root, msgBus) {
       activeRowContainer.className = "qg-r qg-r-active"
       activeCellOn(NAV_EVENT_ANY_VERTICAL)
       const scrollTop = activeRow * rh - viewportHeight + rh - o
+      const scrollerHeight = viewport.scrollWidth > lastKnownViewportWidth ? 10 : 0;
       if (scrollTop > viewport.scrollTop) {
-        viewport.scrollTop = scrollTop
+        viewport.scrollTop = scrollTop + scrollerHeight
       } else {
         enableHover()
       }
@@ -653,13 +660,13 @@ export function grid(root, msgBus) {
       clearTimeout(hoverTimer)
     }
     hoverTimer = setTimeout(() => {
-        div.addClass('qg-hover')
+        grid.addClass('qg-hover')
       }, 500
     )
   }
 
   function disableHover() {
-    div.removeClass('qg-hover')
+    grid.removeClass('qg-hover')
   }
 
   function scroll(event) {
@@ -760,13 +767,12 @@ export function grid(root, msgBus) {
   }
 
   function resize() {
-    if (div.css("display") !== "none") {
-      const wh = window.innerHeight - window.scrollY
-      // todo: make this calculation unaware of the surrounding
-      viewportHeight = Math.round(
-        wh - viewport.getBoundingClientRect().top - $('[data-hook="notifications-wrapper"]').height() - $("#footer").height()
-      )
-      viewportHeight = Math.max(viewportHeight, defaults.minVpHeight)
+    if (grid.css("display") !== "none") {
+      viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
+      if (canvas[0].getBoundingClientRect().width > viewport.getBoundingClientRect().width) {
+        // there is horizontal scroller eating into usable viewport height
+        // viewportHeight -= 10; // assume scroller size is 10px
+      }
       rowsInView = Math.floor(viewportHeight / rh)
       createCss()
 
@@ -905,26 +911,32 @@ export function grid(root, msgBus) {
     }
   }
 
-  function setupViewport() {
+  function setupCanvas() {
     for (let i = 0; i < dc; i++) {
-      const rowDiv = $('<div class="qg-r" tabindex="' + i + '"/>')
+      const rowDiv = document.createElement('div')
+      rowDiv.className = 'qg-r'
+      rowDiv.tabIndex = i + i
+
       if (i === 0) {
         activeRowContainer = rowDiv
       }
       for (let k = 0; k < visColumnCount; k++) {
-        const cell = $('<div class="qg-c qg-w' + k + '"/>')
-          .click(rowClick)
-          .appendTo(rowDiv)[0]
+        const cell = document.createElement('div')
+        cell.className = 'qg-c qg-w' + k
+        cell.onclick = rowClick
+        rowDiv.append(cell)
         if (i === 0 && k === 0) {
           focusedCell = cell
         }
-
         cell.cellIndex = k
       }
-      rowDiv.css({top: -100, height: rh}).appendTo(canvas)
-      rows.push(rowDiv[0])
+      rowDiv.style.top = '-100'
+      rowDiv.style.height = rh.toString() + 'px'
+      rows.push(rowDiv)
+      canvas[0].append(rowDiv);
     }
   }
+
 
   function computeVisibleColumnsPosition() {
     // compute left offset
@@ -964,8 +976,8 @@ export function grid(root, msgBus) {
         updateVisibleColumnCount()
         // visible position depends on correctness of visColumnCount value
         computeVisibleColumnsPosition()
-        setupViewport()
-        addRows(m.count)
+        setupCanvas()
+        setRowCount(m.count)
         viewport.scrollTop = 0
         resize()
         focusCell()
@@ -990,12 +1002,22 @@ export function grid(root, msgBus) {
 
   function bind() {
     dbg = $("#debug")
-    header = div.find(".qg-header-row")
-    viewport = div.find(".qg-viewport")[0]
+    header = $('<div/>')
+    header.addClass('qg-header-row')
+    header.appendTo(grid);
+
+    const vp = $('<div/>')
+    vp.addClass('qg-viewport')
+    vp.appendTo(grid)
+    viewport = vp[0]
     viewport.onscroll = scroll
-    canvas = div.find(".qg-canvas")
+
+    canvas = $('<div>')
+    canvas.addClass('qg-canvas')
+    canvas.appendTo(vp)
     canvas.bind("keydown", onKeyDown)
     canvas.bind("keyup", onKeyUp)
+
     $(window).resize(resize)
     bus.on(qdb.MSG_QUERY_DATASET, update)
     bus.on("grid.focus", focusCell)
