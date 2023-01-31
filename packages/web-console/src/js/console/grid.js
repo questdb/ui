@@ -117,6 +117,8 @@ export function grid(root, msgBus) {
   // when render is attempted before data is available, we need to "remember" the
   // last render attempt and repeat is when data is ready
   const pendingRender = {colLo: 0, colHi: 0, nextVisColumnLo: 0, render: false};
+  const scrollerHeight = 10
+  let headerScrollerPlaceholder
 
   function setRowCount(rowCount) {
     r += rowCount
@@ -354,9 +356,10 @@ export function grid(root, msgBus) {
     // we will render only a subset of them
     for (let i = 0; i < columnCount; i++) {
       const w = getColumnWidth(i)
-      rules.push(".qg-w" + i + "{width:" + w + "px;" + "position: absolute;" + "left:" + left + "px;" + getColumnAlignment(i) + "}",)
+      rules.push(".qg-w" + i + "{width:" + w + "px;" + "position: absolute;" + "left:" + left + "px;" + getColumnAlignment(i) + "}")
       left += w
     }
+    rules.push(".qg-w" + columnCount + "{width:" + scrollerHeight + "px;" + "position: absolute;" + "left:" + left + "px;}")
     rules.push(".qg-r{width:" + totalWidth + "px;}")
   }
 
@@ -401,7 +404,10 @@ export function grid(root, msgBus) {
           break
       }
 
-      w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 8),)
+      headerScrollerPlaceholder = $('<div class="qg-header qg-w' + columnCount + '"/>')
+        .appendTo(header)
+
+      w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
       columnOffsets.push(totalWidth)
       columnWidths.push(w)
       totalWidth += w
@@ -532,6 +538,16 @@ export function grid(root, msgBus) {
     }
   }
 
+  function setScrollLeft(scrollLeft, focusedCell) {
+    console.log("setting: " + scrollLeft)
+    const before = viewport.scrollLeft
+    viewport.scrollLeft = scrollLeft
+    header.scrollLeft(scrollLeft);
+    if (before === viewport.scrollLeft) {
+      setFocus(focusedCell)
+    }
+  }
+
   function activeCellOn(navEvent) {
     if (navEvent === NAV_EVENT_HOME && visColumnLo > 0 && columnCount > visColumnCount) {
       renderCells(0, visColumnCount, 0)
@@ -546,20 +562,15 @@ export function grid(root, msgBus) {
     if (navEvent !== NAV_EVENT_ANY_VERTICAL) {
       const w = Math.max(0, columnOffset)
       if (w < viewport.scrollLeft) {
-        const before = viewport.scrollLeft
-        viewport.scrollLeft = w
-        if (before !== viewport.scrollLeft) {
-          return
-        }
+        setScrollLeft(w, focusedCell)
+        return
       }
+
       if (w > viewport.scrollLeft) {
         const w = columnOffset + columnWidth
         if (w > viewport.scrollLeft + viewport.clientWidth) {
-          const before = viewport.scrollLeft
-          viewport.scrollLeft = w - viewport.clientWidth
-          if (before !== viewport.scrollLeft) {
-            return
-          }
+          setScrollLeft(w - viewport.clientWidth, focusedCell)
+          return
         }
       }
     }
@@ -672,8 +683,6 @@ export function grid(root, msgBus) {
   function scroll(event) {
 
     disableHover();
-
-    header.scrollLeft(viewport.scrollLeft)
     renderColumns();
 
     const scrollTop = viewport.scrollTop
