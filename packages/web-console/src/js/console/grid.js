@@ -129,7 +129,7 @@ export function grid(root, msgBus) {
       h = defaults.yMaxThreshold
     }
     M = yMax / h
-    canvas[0].style.height =  (h === 0 ? 1 : h) + 'px'
+    canvas[0].style.height = (h === 0 ? 1 : h) + 'px'
   }
 
   function renderRow(row, rowIndex) {
@@ -416,7 +416,7 @@ export function grid(root, msgBus) {
       h.append(hType, hName)
       h.onclick = broadcastColumnName
 
-      header[0].append(h)
+      header.append(h)
 
       w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
       columnOffsets.push(totalWidth)
@@ -426,7 +426,7 @@ export function grid(root, msgBus) {
 
     headerScrollerPlaceholder = document.createElement('div')
     headerScrollerPlaceholder.className = 'qg-header qg-stub qg-w' + columnCount
-    header[0].append(headerScrollerPlaceholder)
+    header.append(headerScrollerPlaceholder)
 
     columnOffsets.push(totalWidth)
   }
@@ -440,7 +440,7 @@ export function grid(root, msgBus) {
     if ($style) {
       $style.remove()
     }
-    header[0].innerHTML = ''
+    header.innerHTML = ''
     canvas[0].innerHTML = ''
     rows = []
     data = []
@@ -451,7 +451,7 @@ export function grid(root, msgBus) {
     activeRowContainer = null
     focusedCell = null
     activeRow = 0
-    focusedCellIndex = 0
+    focusedCellIndex = -1
     visColumnLo = 0
     visColumnCount = 10
     lastKnownViewportWidth = 0
@@ -477,14 +477,22 @@ export function grid(root, msgBus) {
     removeFocus(focusedCell)
   }
 
+  function removeClass(e, className) {
+    e.className = e.className.replace(className, '')
+  }
+
+  function addClass(e, className) {
+    if (e && !e.className.includes(className)) {
+      e.className += className
+    }
+  }
+
   function removeFocus(cell) {
-    cell.className = cell.className.replace(ACTIVE_CELL_CLASS, "")
+    removeClass(cell, ACTIVE_CELL_CLASS);
   }
 
   function setFocus(cell) {
-    if (cell && !cell.className.includes(ACTIVE_CELL_CLASS)) {
-      cell.className += ACTIVE_CELL_CLASS
-    }
+    addClass(cell, ACTIVE_CELL_CLASS);
   }
 
   function setCellData(cell, cellData) {
@@ -542,6 +550,8 @@ export function grid(root, msgBus) {
           visColumnX -= getColumnWidth(i)
         }
       }
+      console.log('set: '+lo)
+      console.trace()
       visColumnLo = lo
 
       // compute new width
@@ -556,9 +566,15 @@ export function grid(root, msgBus) {
   function setScrollLeft(scrollLeft, focusedCell) {
     const before = viewport.scrollLeft
     viewport.scrollLeft = scrollLeft
-    header[0].scrollLeft = scrollLeft
+    header.scrollLeft = scrollLeft
     if (before === viewport.scrollLeft) {
       setFocus(focusedCell)
+    }
+  }
+
+  function updateFocusedCellFromIndex() {
+    if (focusedCellIndex !== -1) {
+      focusedCell = activeRowContainer.childNodes[focusedCellIndex % visColumnCount]
     }
   }
 
@@ -569,7 +585,8 @@ export function grid(root, msgBus) {
       renderCells(columnCount - visColumnCount, columnCount, columnCount - visColumnCount)
     }
 
-    focusedCell = activeRowContainer.childNodes[focusedCellIndex % visColumnCount]
+    updateFocusedCellFromIndex();
+
     const columnOffset = columnOffsets[focusedCellIndex]
     const columnWidth = columnOffsets[focusedCellIndex + 1] - columnOffset
 
@@ -674,7 +691,7 @@ export function grid(root, msgBus) {
         // compute the new value
         let k = visColumnLo
         let w = visColumnX
-        while (w > vpl) {
+        while (w > vpl && k > 0) {
           w -= getColumnWidth(--k)
         }
 
@@ -702,8 +719,8 @@ export function grid(root, msgBus) {
 
     disableHover();
 
-    if (header[0].scrollLeft !== viewport.scrollLeft) {
-      header[0].scrollLeft = viewport.scrollLeft
+    if (header.scrollLeft !== viewport.scrollLeft) {
+      header.scrollLeft = viewport.scrollLeft
     }
 
     renderColumns();
@@ -773,6 +790,15 @@ export function grid(root, msgBus) {
         count + visColumnCountExtra,
         columnCount
       )
+      // When scroller is positioned to extreme right, window resize pulls left side
+      // of the grid into the view. In other scroller positions right side of the grid is extended first.
+      // The delta is by how much we overshot our column count. If non-zero, we have to reduce `lo`
+      const delta = visColumnLo + visColumnCount - columnCount
+      console.log('computing for: ' + viewportWidth + ', visColumnCount: ' + visColumnCount + ', delta: ' + delta)
+      if (delta > 0 && visColumnLo >= delta) {
+        console.log('set3: ' + visColumnLo)
+        visColumnLo -= delta
+      }
     }
   }
 
@@ -780,7 +806,8 @@ export function grid(root, msgBus) {
     for (let i = 0, n = rows.length; i < n; i++) {
       const row = rows[i];
       for (let j = visColumnCount; j < colCount; j++) {
-        row.childNodes[j].remove()
+        // as we remove, the children shift left
+        row.childNodes[visColumnCount].remove()
       }
     }
     renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
@@ -789,11 +816,18 @@ export function grid(root, msgBus) {
   function appendColumns(colCount) {
     for (let i = 0, n = rows.length; i < n; i++) {
       const row = rows[i];
+      // add extra cells
       for (let j = 0; j < colCount; j++) {
         const div = document.createElement('div')
-        div.className = 'qg-c qg-w' + ((visColumnLo + j) % visColumnCount)
+        // div.className = 'qg-c qg-w' + ((visColumnLo + n + j) % visColumnCount)
         row.append(div)
       }
+
+      // re-index exiting cells
+      for (let j = 0; j < visColumnCount; j++) {
+        row.childNodes[j].className = 'qg-c qg-w' + ((visColumnLo + j) % visColumnCount)
+      }
+
     }
     renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
   }
@@ -827,6 +861,15 @@ export function grid(root, msgBus) {
         } else if (prevVisColumnCount > visColumnCount) {
           removeColumns(prevVisColumnCount);
         }
+
+        // check if the focused cell is visible
+        console.log("focusedCellIndex: " + focusedCellIndex + ", visColumnLo: " + visColumnLo + ", visColumnCount: " + visColumnCount + ", visColumnCountExtra: " + visColumnCountExtra)
+        /*
+                if (focusedCellIndex !== -1 && focusedCellIndex >= visColumnLo + visColumnCount - visColumnCountExtra) {
+                  focusedCellIndex = visColumnLo + visColumnCount  - 1
+                  updateFocusedCellFromIndex();
+                }
+        */
       }
       scroll()
     }
@@ -1043,19 +1086,18 @@ export function grid(root, msgBus) {
 
   function bind() {
     dbg = $("#debug")
-    header = $('<div/>')
-    header.addClass('qg-header-row')
-    header.appendTo(grid);
+    header = document.createElement('div')
+    addClass(header, 'qg-header-row')
 
-    const vp = $('<div/>')
-    vp.addClass('qg-viewport')
-    vp.appendTo(grid)
-    viewport = vp[0]
+    viewport = document.createElement('div')
     viewport.onscroll = scroll
+    addClass(viewport, 'qg-viewport')
+
+    grid[0].append(header, viewport)
 
     canvas = $('<div>')
     canvas.addClass('qg-canvas')
-    canvas.appendTo(vp)
+    viewport.append(canvas[0])
     canvas.bind("keydown", onKeyDown)
     canvas.bind("keyup", onKeyUp)
 
