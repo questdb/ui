@@ -99,6 +99,7 @@ export type Table = {
   name: string
   partitionBy: string
   designatedTimestamp: string
+  walEnabled: boolean
 }
 
 export type Column = {
@@ -161,7 +162,7 @@ export class Client {
     if (result.type === Type.DQL) {
       const { columns, count, dataset, timings } = result
 
-      const parsed = (dataset.map(
+      const parsed = dataset.map(
         (row) =>
           row.reduce(
             (acc: RawData, val: Value, idx) => ({
@@ -170,7 +171,7 @@ export class Client {
             }),
             {},
           ) as RawData,
-      ) as unknown) as T[]
+      ) as unknown as T[]
 
       return {
         columns,
@@ -316,7 +317,9 @@ export class Client {
 
   async getLatestRelease() {
     try {
-      const response: Response = await fetch(`https://api.github.com/repos/questdb/questdb/releases/latest`)
+      const response: Response = await fetch(
+        `https://api.github.com/repos/questdb/questdb/releases/latest`,
+      )
       return (await response.json()) as Release
     } catch (error) {
       // eslint-disable-next-line prefer-promise-reject-errors

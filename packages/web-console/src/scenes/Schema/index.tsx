@@ -157,6 +157,7 @@ const Schema = ({
             onChange={handleChange}
             partitionBy={table.partitionBy}
             refresh={refresh}
+            walEnabled={table.walEnabled}
           />
         )
       }

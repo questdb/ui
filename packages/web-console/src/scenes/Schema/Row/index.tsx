@@ -31,7 +31,7 @@ import { CheckboxBlankCircle } from "styled-icons/remix-line"
 import { CodeSSlash } from "styled-icons/remix-line"
 import { Information } from "styled-icons/remix-line"
 import { Table as TableIcon } from "styled-icons/remix-line"
-import { PieChart } from "styled-icons/remix-line"
+import { FileList, PieChart } from "styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 
 import {
@@ -54,6 +54,7 @@ type Props = Readonly<{
   name: string
   onClick?: (event: MouseEvent) => void
   partitionBy?: string
+  walEnabled?: boolean
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
@@ -165,6 +166,11 @@ const PieChartIcon = styled(PieChart)`
   margin-right: 0.5rem;
 `
 
+const FileListIcon = styled(FileList)`
+  color: ${color("draculaYellow")};
+  margin-right: 0.5rem;
+`
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -174,6 +180,7 @@ const Row = ({
   indexed,
   name,
   partitionBy,
+  walEnabled,
   onClick,
   suffix,
   tooltip,
@@ -235,6 +242,13 @@ const Row = ({
           <PartitionByWrapper>
             <PieChartIcon size="14px" />
             <Text color="gray2">{partitionBy}</Text>
+          </PartitionByWrapper>
+        )}
+
+        {kind === "table" && walEnabled && (
+          <PartitionByWrapper>
+            <FileListIcon size="14px" />
+            <Text color="draculaYellow">WAL</Text>
           </PartitionByWrapper>
         )}
 
