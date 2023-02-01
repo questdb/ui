@@ -129,7 +129,7 @@ export function grid(root, msgBus) {
       h = defaults.yMaxThreshold
     }
     M = yMax / h
-    canvas.css("height", h === 0 ? 1 : h)
+    canvas[0].style.height =  (h === 0 ? 1 : h) + 'px'
   }
 
   function renderRow(row, rowIndex) {
@@ -150,11 +150,11 @@ export function grid(root, msgBus) {
       } else {
         // clear grid if there is no row data
         for (k = 0; k < visColumnCount; k++) {
-          row.childNodes[(k + visColumnLo) % visColumnCount].innerHTML = ""
+          row.childNodes[(k + visColumnLo) % visColumnCount].innerHTML = ''
         }
         row.questIndex = -1
       }
-      row.style.top = rowIndex * rh - o + "px"
+      row.style.top = rowIndex * rh - o + 'px'
       if (row === activeRowContainer) {
         if (rowIndex === activeRow) {
           row.className = "qg-r qg-r-active"
@@ -347,7 +347,6 @@ export function grid(root, msgBus) {
 
   function getColumnWidth(i) {
     return columnOffsets[i + 1] - columnOffsets[i];
-    // return columnWidths[i]
   }
 
   function generatePxWidth(rules) {
@@ -383,6 +382,10 @@ export function grid(root, msgBus) {
     }
   }
 
+  function broadcastColumnName(e) {
+    bus.trigger("editor.insert.column", e.currentTarget.getAttribute("data-column-name"))
+  }
+
   function computeColumnWidths() {
     columnWidths = []
     columnOffsets = []
@@ -391,18 +394,29 @@ export function grid(root, msgBus) {
     for (i = 0; i < columnCount; i++) {
       const c = columns[i]
 
-      const col = $('<div class="qg-header qg-w' + i + '" data-column-name="' + c.name + '"><span class="qg-header-type">' + c.type.toLowerCase() + '</span><span class="qg-header-name">' + c.name + "</span></div>",)
-        .on("click", function (e) {
-          bus.trigger("editor.insert.column", e.currentTarget.getAttribute("data-column-name"),)
-        })
-        .appendTo(header)
+      const h = document.createElement('div');
+      h.className = 'qg-header qg-w' + i
+      h.setAttribute('data-column-name', c.name)
 
       switch (c.type) {
         case "STRING":
         case "SYMBOL":
-          col.addClass("qg-header-l")
+          h.className += ' qg-header-l'
           break
       }
+
+      const hType = document.createElement('span')
+      hType.className = 'qg-header-type'
+      hType.innerHTML = c.type.toLowerCase()
+
+      const hName = document.createElement('span')
+      hName.className = 'qg-header-name'
+      hName.innerHTML = c.name
+
+      h.append(hType, hName)
+      h.onclick = broadcastColumnName
+
+      header[0].append(h)
 
       w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
       columnOffsets.push(totalWidth)
@@ -410,8 +424,9 @@ export function grid(root, msgBus) {
       totalWidth += w
     }
 
-    headerScrollerPlaceholder = $('<div class="qg-header qg-stub qg-w' + columnCount + '"/>')
-      .appendTo(header)
+    headerScrollerPlaceholder = document.createElement('div')
+    headerScrollerPlaceholder.className = 'qg-header qg-stub qg-w' + columnCount
+    header[0].append(headerScrollerPlaceholder)
 
     columnOffsets.push(totalWidth)
   }
@@ -425,8 +440,8 @@ export function grid(root, msgBus) {
     if ($style) {
       $style.remove()
     }
-    header.empty()
-    canvas.empty()
+    header[0].innerHTML = ''
+    canvas[0].innerHTML = ''
     rows = []
     data = []
     query = null
@@ -789,11 +804,7 @@ export function grid(root, msgBus) {
 
   function toggleScrollerPlaceholder() {
     if (headerScrollerPlaceholder) {
-      if (isHorizontalScroller() && isVerticalScroller()) {
-        headerScrollerPlaceholder[0].style.display = 'block'
-      } else {
-        headerScrollerPlaceholder[0].style.display = 'none'
-      }
+      headerScrollerPlaceholder.style.display = isHorizontalScroller() && isVerticalScroller() ? 'block' : 'none'
     }
   }
 
@@ -1048,7 +1059,8 @@ export function grid(root, msgBus) {
     canvas.bind("keydown", onKeyDown)
     canvas.bind("keyup", onKeyUp)
 
-    $(window).resize(resize)
+    window.onresize = resize
+
     bus.on(qdb.MSG_QUERY_DATASET, update)
     bus.on("grid.focus", focusCell)
     bus.on("grid.refresh", refreshQuery)
