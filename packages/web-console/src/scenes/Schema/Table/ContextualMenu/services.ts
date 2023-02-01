@@ -30,6 +30,7 @@ export const formatTableSchemaQueryResult = (
   name: string,
   partitionBy: string,
   result: QuestDB.QueryRawResult,
+  walEnabled: boolean,
 ): string => {
   if (result.type === QuestDB.Type.DQL) {
     let designatedName = null
@@ -81,6 +82,10 @@ export const formatTableSchemaQueryResult = (
 
     if (partitionBy !== "NONE") {
       query += ` PARTITION BY ${partitionBy}`
+    }
+
+    if (walEnabled) {
+      query += " WAL"
     }
 
     return `${formatSql(query)};`
