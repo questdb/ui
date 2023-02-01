@@ -32,9 +32,10 @@ import { copyToClipboard } from "../../../../utils"
 type Props = {
   name: string
   partitionBy: string
+  walEnabled: boolean
 }
 
-const ContextualMenu = ({ name, partitionBy }: Props) => {
+const ContextualMenu = ({ name, partitionBy, walEnabled }: Props) => {
   const { quest } = useContext(QuestContext)
   const [schema, setSchema] = React.useState<string | undefined>()
 
@@ -45,6 +46,7 @@ const ContextualMenu = ({ name, partitionBy }: Props) => {
           name,
           partitionBy,
           result,
+          walEnabled,
         )
         setSchema(formattedResult)
       }
