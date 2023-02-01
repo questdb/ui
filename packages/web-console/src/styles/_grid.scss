@@ -37,8 +37,8 @@
   height: 39px;
   position: relative;
 
-  .qg-header:last-child {
-    margin-right: 10px;
+  .qg-header:nth-last-child(2) {
+    border-right: none !important;
   }
 }
 
@@ -70,6 +70,12 @@
 
 .qg-r-active {
   background-color: #6272a4;
+}
+
+.qg-stub {
+  border: none !important;
+  box-shadow: none !important;
+  height: 100% !important;
 }
 
 .qg-header {

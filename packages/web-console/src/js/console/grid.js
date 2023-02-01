@@ -404,14 +404,14 @@ export function grid(root, msgBus) {
           break
       }
 
-      headerScrollerPlaceholder = $('<div class="qg-header qg-w' + columnCount + '"/>')
-        .appendTo(header)
-
       w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
       columnOffsets.push(totalWidth)
       columnWidths.push(w)
       totalWidth += w
     }
+
+    headerScrollerPlaceholder = $('<div class="qg-header qg-stub qg-w' + columnCount + '"/>')
+      .appendTo(header)
 
     columnOffsets.push(totalWidth)
   }
@@ -539,10 +539,9 @@ export function grid(root, msgBus) {
   }
 
   function setScrollLeft(scrollLeft, focusedCell) {
-    console.log("setting: " + scrollLeft)
     const before = viewport.scrollLeft
     viewport.scrollLeft = scrollLeft
-    header.scrollLeft(scrollLeft);
+    header[0].scrollLeft = scrollLeft
     if (before === viewport.scrollLeft) {
       setFocus(focusedCell)
     }
@@ -556,8 +555,8 @@ export function grid(root, msgBus) {
     }
 
     focusedCell = activeRowContainer.childNodes[focusedCellIndex % visColumnCount]
-    const columnOffset = columnOffsets[focusedCellIndex];
-    const columnWidth = columnOffsets[focusedCellIndex + 1] - columnOffset;
+    const columnOffset = columnOffsets[focusedCellIndex]
+    const columnWidth = columnOffsets[focusedCellIndex + 1] - columnOffset
 
     if (navEvent !== NAV_EVENT_ANY_VERTICAL) {
       const w = Math.max(0, columnOffset)
@@ -595,6 +594,10 @@ export function grid(root, msgBus) {
     }
   }
 
+  function isHorizontalScroller() {
+    return viewport.scrollWidth > lastKnownViewportWidth;
+  }
+
   function activeRowDown(n) {
     if (activeRow > -1 && activeRow < r - 1) {
       disableHover()
@@ -605,9 +608,9 @@ export function grid(root, msgBus) {
       activeRowContainer.className = "qg-r qg-r-active"
       activeCellOn(NAV_EVENT_ANY_VERTICAL)
       const scrollTop = activeRow * rh - viewportHeight + rh - o
-      const scrollerHeight = viewport.scrollWidth > lastKnownViewportWidth ? 10 : 0;
+      const sh = isHorizontalScroller() ? scrollerHeight : 0;
       if (scrollTop > viewport.scrollTop) {
-        viewport.scrollTop = scrollTop + scrollerHeight
+        viewport.scrollTop = scrollTop + sh
       } else {
         enableHover()
       }
@@ -683,6 +686,11 @@ export function grid(root, msgBus) {
   function scroll(event) {
 
     disableHover();
+
+    if (header[0].scrollLeft !== viewport.scrollLeft) {
+      header[0].scrollLeft = viewport.scrollLeft
+    }
+
     renderColumns();
 
     const scrollTop = viewport.scrollTop
@@ -775,19 +783,31 @@ export function grid(root, msgBus) {
     renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
   }
 
-  function resize() {
-    if (grid.css("display") !== "none") {
-      viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
-      if (canvas[0].getBoundingClientRect().width > viewport.getBoundingClientRect().width) {
-        // there is horizontal scroller eating into usable viewport height
-        // viewportHeight -= 10; // assume scroller size is 10px
+  function isVerticalScroller() {
+    return viewport.scrollHeight > viewport.getBoundingClientRect().height;
+  }
+
+  function toggleScrollerPlaceholder() {
+    if (headerScrollerPlaceholder) {
+      if (isHorizontalScroller() && isVerticalScroller()) {
+        headerScrollerPlaceholder[0].style.display = 'block'
+      } else {
+        headerScrollerPlaceholder[0].style.display = 'none'
       }
+    }
+  }
+
+  function resize() {
+    if (grid[0].style.display !== "none") {
+
+      viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
-      createCss()
+      // createCss()
 
       const viewportWidth = viewport.getBoundingClientRect().width
       if (lastKnownViewportWidth !== viewportWidth) {
         lastKnownViewportWidth = viewportWidth
+        toggleScrollerPlaceholder();
 
         const prevVisColumnCount = visColumnCount
         updateVisibleColumnCount()
@@ -988,6 +1008,7 @@ export function grid(root, msgBus) {
         setupCanvas()
         setRowCount(m.count)
         viewport.scrollTop = 0
+        createCss()
         resize()
         focusCell()
       },
