@@ -73,7 +73,6 @@ export function grid(root, msgBus) {
   let visColumnLo = 0
   // visible column count, e.g. number of columns that is actually rendered in the grid
   let visColumnCount = 10
-  const visColumnCountExtra = 3
   // X coordinate of the leftmost visible column
   let visColumnX = 0
   // width in pixels of all visible columns
@@ -550,8 +549,6 @@ export function grid(root, msgBus) {
           visColumnX -= getColumnWidth(i)
         }
       }
-      console.log('set: '+lo)
-      console.trace()
       visColumnLo = lo
 
       // compute new width
@@ -786,18 +783,15 @@ export function grid(root, msgBus) {
 
       // take into account the last stride
       count = Math.max(count, hi - lo + 1)
-      visColumnCount = Math.min(
-        count + visColumnCountExtra,
-        columnCount
-      )
+      visColumnCount = Math.min(count, columnCount)
       // When scroller is positioned to extreme right, window resize pulls left side
       // of the grid into the view. In other scroller positions right side of the grid is extended first.
       // The delta is by how much we overshot our column count. If non-zero, we have to reduce `lo`
       const delta = visColumnLo + visColumnCount - columnCount
-      console.log('computing for: ' + viewportWidth + ', visColumnCount: ' + visColumnCount + ', delta: ' + delta)
       if (delta > 0 && visColumnLo >= delta) {
-        console.log('set3: ' + visColumnLo)
+        const xShift = columnOffsets[visColumnLo + delta] - columnOffsets[visColumnLo]
         visColumnLo -= delta
+        visColumnX -= xShift
       }
     }
   }
@@ -861,15 +855,6 @@ export function grid(root, msgBus) {
         } else if (prevVisColumnCount > visColumnCount) {
           removeColumns(prevVisColumnCount);
         }
-
-        // check if the focused cell is visible
-        console.log("focusedCellIndex: " + focusedCellIndex + ", visColumnLo: " + visColumnLo + ", visColumnCount: " + visColumnCount + ", visColumnCountExtra: " + visColumnCountExtra)
-        /*
-                if (focusedCellIndex !== -1 && focusedCellIndex >= visColumnLo + visColumnCount - visColumnCountExtra) {
-                  focusedCellIndex = visColumnLo + visColumnCount  - 1
-                  updateFocusedCellFromIndex();
-                }
-        */
       }
       scroll()
     }
