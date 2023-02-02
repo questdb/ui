@@ -385,6 +385,23 @@ export function grid(root, msgBus) {
     bus.trigger("editor.insert.column", e.currentTarget.getAttribute("data-column-name"))
   }
 
+  function columnResize(e) {
+    const className = e.target.className;
+    const i1 = className.indexOf('qg-w');
+    let i2 = className.indexOf(' ', i1);
+    if (i2 === -1) {
+      i2 = className.length
+    }
+    const columnIndex = parseInt(className.substr(i1+4,i2))
+    const cl = className.substr(i1, i2)
+
+    let list = document.styleSheets;
+
+    for (let i = 0; i < list.length; i++) {
+      console.log(list.item(i));
+    }
+  }
+
   function computeColumnWidths() {
     columnWidths = []
     columnOffsets = []
@@ -415,7 +432,11 @@ export function grid(root, msgBus) {
       h.append(hType, hName)
       h.onclick = broadcastColumnName
 
-      header.append(h)
+      const handle = document.createElement('div')
+      handle.className = 'qg-drag-handle qg-w' + i
+      handle.draggable = true
+      handle.ondragstart = columnResize
+      header.append(h, handle)
 
       w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
       columnOffsets.push(totalWidth)

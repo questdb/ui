@@ -162,3 +162,15 @@
   background: white;
   border: 1px solid red;
 }
+
+.qg-drag-handle {
+  margin-left: -10px;
+  background-color: transparent;
+  width: 20px !important;
+  height: 32px;
+  z-index: 1;
+}
+
+.qg-drag-handle:hover {
+  cursor: col-resize;
+}
