@@ -34,10 +34,11 @@
 .qg-header-row {
   display: flex;
   overflow: hidden;
-  height: 33px;
+  height: 39px;
+  position: relative;
 
-  .qg-header:last-child {
-    margin-right: 10px;
+  .qg-header:nth-last-child(2) {
+    border-right: none !important;
   }
 }
 
@@ -54,7 +55,7 @@
   right: 0;
 }
 
-.qg-r:hover {
+.qg-hover .qg-r:hover {
   background-color: #44475a;
 }
 
@@ -62,7 +63,7 @@
   outline: none;
 }
 
-.qg-r-active:hover {
+.qg-hover .qg-r-active:hover {
   background-color: #6272a4;
   color: #f8f8f2;
 }
@@ -71,16 +72,22 @@
   background-color: #6272a4;
 }
 
+.qg-stub {
+  border: none !important;
+  box-shadow: none !important;
+  height: 100% !important;
+}
+
 .qg-header {
   display: flex;
   flex-shrink: 0;
   justify-content: flex-end;
   flex-direction: row;
-  padding: 5px 3px 7px;
+  padding: 8px 10px 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  border-bottom: 1px solid #191a21;
+  border-bottom: 2px groove #252b3f;
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-user-select: none; /* Safari */
   -moz-user-select: none; /* Old versions of Firefox */
@@ -89,6 +96,8 @@
   /* Non-prefixed version, currently
                                    supported by Chrome, Opera and Firefox */
   background: #21222c;
+  border-right: 2px groove #252b3f;
+  box-shadow: 4px 1px #252b3f;
 }
 
 .qg-header-name {
@@ -97,11 +106,11 @@
 }
 
 .qg-header-type {
-  font-weight: 700;
-  font-style: italic;
-  margin: 0 7px;
+  margin: 2px 7px;
   color: #6272a4;
-  white-space: nowrap;
+  vertical-align: sub;
+  font-size: x-small;
+  font-style: italic;
 }
 
 .qg-header-l {
@@ -129,7 +138,6 @@
 
 .qg-c:hover {
   box-shadow: inset 0 0 0 2px #8d95a5;
-  border-bottom: 1px solid transparent;
 }
 
 .qg-r-active .qg-c:hover {
@@ -138,7 +146,6 @@
 
 .qg-c-active {
   box-shadow: inset 0 0 0 2px #f8f8f2;
-  border-bottom: 1px solid transparent;
 }
 
 .qg-r-active:hover .qg-c-active,
@@ -152,4 +159,16 @@
   height: 300px;
   background: white;
   border: 1px solid red;
+}
+
+.qg-drag-handle {
+  margin-left: -10px;
+  background-color: transparent;
+  width: 20px !important;
+  height: 32px;
+  z-index: 1;
+}
+
+.qg-drag-handle:hover {
+  cursor: col-resize;
 }
