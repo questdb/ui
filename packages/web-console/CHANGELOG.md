@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.9 - 2023-02-02
+
+### Added
+
+- add icon next to WAL enabled tables [#73](https://github.com/questdb/ui/pull/73)
+- highlight `EXPLAIN` keyword in web console [#74](https://github.com/questdb/ui/pull/73)
+
 ## 0.0.8 - 2022-10-19
 
 ### Fixed
