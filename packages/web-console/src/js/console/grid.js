@@ -53,7 +53,6 @@ export function grid(root, msgBus) {
   let viewport
   let canvas
   let header
-  let columnWidths
   let columnOffsets
   let columns = []
   let columnCount = 0
@@ -122,6 +121,15 @@ export function grid(root, msgBus) {
   const scrollerGirth = defaults.scrollerGirth
   let headerScrollerPlaceholder
 
+  // column resize state
+  let colResizeDragHandle
+  let colResizeDragHandleStartX
+  let colResizeMouseDownX
+  let colResizeColIndex
+  let colResizeColOrigOffset
+  let colResizeColOrigWidth
+  let colResizeOrigMargin
+
   function setRowCount(rowCount) {
     r += rowCount
     yMax = r * rh
@@ -184,7 +192,7 @@ export function grid(root, msgBus) {
   }
 
   function purgeOutlierPages() {
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0, n = data.length; i < n; i++) {
       if ((i < loPage || i > hiPage) && data[i]) {
         delete data[i]
       }
@@ -244,7 +252,7 @@ export function grid(root, msgBus) {
     }, 75)
   }
 
-  function computePages(direction, t, b) {
+  function computeDataPages(direction, t, b) {
     if (t !== t || b !== b) {
       return
     }
@@ -324,7 +332,7 @@ export function grid(root, msgBus) {
     let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh))
 
     if (direction !== 0) {
-      computePages(direction, t, b)
+      computeDataPages(direction, t, b)
     }
 
     if (t === 0) {
@@ -358,24 +366,24 @@ export function grid(root, msgBus) {
     return columnOffsets[i + 1] - columnOffsets[i]
   }
 
-  function createColumnWidthStyleSelector(columnIndex, width, left) {
+  function getColumnWidthStyleSelector(columnIndex, width, left) {
     return '.' + getColumnWidthSelector(columnIndex) + '{width:' + width + 'px;' + 'position: absolute;' + 'left:' + left + 'px;' + getColumnAlignment(columnIndex) + '}'
   }
 
-  function generatePxWidth(rules) {
+  function createColumnWidthStyleRules(rules) {
     let left = 0
     // calculate CSS and width for all columns even though
     // we will render only a subset of them
     for (let i = 0; i < columnCount; i++) {
       const w = getColumnWidth(i)
-      rules.push(createColumnWidthStyleSelector(i, w, left))
+      rules.push(getColumnWidthStyleSelector(i, w, left))
       left += w
     }
-    rules.push(createColumnWidthStyleSelector(columnCount, scrollerGirth, left))
+    rules.push(getColumnWidthStyleSelector(columnCount, scrollerGirth, left))
     rules.push('.qg-r{width:' + totalWidth + 'px;}')
   }
 
-  function createStyle() {
+  function createCellStyle() {
     if (data.length > 0) {
       // replace the stylesheet
       if (style) {
@@ -388,7 +396,7 @@ export function grid(root, msgBus) {
 
       const rules = []
 
-      generatePxWidth(rules)
+      createColumnWidthStyleRules(rules)
 
       rules.push('.qg-c{height:' + rh + 'px;}')
       if (style.styleSheet) {
@@ -403,14 +411,6 @@ export function grid(root, msgBus) {
   function broadcastColumnName(e) {
     bus.trigger('editor.insert.column', e.currentTarget.getAttribute('data-column-name'))
   }
-
-  let colResizeDragHandle
-  let colResizeDragHandleStartX
-  let colResizeMouseDownX
-  let colResizeColIndex
-  let colResizeColOrigOffset
-  let colResizeColOrigWidth
-  let colResizeOrigMargin
 
   function columnResizeStart(e) {
     e.preventDefault()
@@ -460,7 +460,7 @@ export function grid(root, msgBus) {
     if (width > defaults.minColumnWidth) {
       colResizeDragHandle.style.left = (colResizeDragHandleStartX + delta) + 'px'
       updateColumnWidth(colResizeColIndex, width)
-      createStyle()
+      createCellStyle()
     }
   }
 
@@ -473,8 +473,11 @@ export function grid(root, msgBus) {
     colResizeDragHandle.style.marginLeft = colResizeOrigMargin
   }
 
-  function computeColumnWidths() {
-    columnWidths = []
+  function getCellWidth(valueLen) {
+    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 0.9));
+  }
+
+  function createHeaderElements() {
     columnOffsets = []
     let i, w
     totalWidth = 0
@@ -508,9 +511,8 @@ export function grid(root, msgBus) {
       handle.onmousedown = columnResizeStart
       header.append(h, handle)
 
-      w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
+      w = getCellWidth(c.name.length + c.type.length)
       columnOffsets.push(totalWidth)
-      columnWidths.push(w)
       totalWidth += w
     }
 
@@ -634,25 +636,8 @@ export function grid(root, msgBus) {
           pendingRender.render = true
         }
       }
-
-      const lo = Math.max(0, Math.min(nextVisColumnLo, columnCount - visColumnCount))
-      if (visColumnLo < lo) {
-        for (let i = visColumnLo; i < lo; i++) {
-          visColumnX += getColumnWidth(i)
-        }
-      } else {
-        for (let i = lo; i < visColumnLo; i++) {
-          visColumnX -= getColumnWidth(i)
-        }
-      }
-      visColumnLo = lo
-
-      // compute new width
-      let sum = 0
-      for (let i = visColumnLo, n = visColumnLo + visColumnCount; i < n; i++) {
-        sum += getColumnWidth(i)
-      }
-      visColumnWidth = sum
+      visColumnLo = Math.max(0, Math.min(nextVisColumnLo, columnCount - visColumnCount))
+      computeVisibleColumnsPosition()
     }
   }
 
@@ -850,13 +835,13 @@ export function grid(root, msgBus) {
     logDebug()
   }
 
-  function updateVisibleColumnCount() {
+  function computeVisibleColumnWindow() {
     const viewportWidth = viewport.getBoundingClientRect().width
     if (totalWidth < viewportWidth) {
       // viewport is wider than total column width
       visColumnCount = columnCount
       visColumnLo = 0
-      visColumnX = 0
+      computeVisibleColumnsPosition()
     } else {
       let lo = 0
       let hi = 0
@@ -887,14 +872,14 @@ export function grid(root, msgBus) {
       // The delta is by how much we overshot our column count. If non-zero, we have to reduce `lo`
       const delta = visColumnLo + visColumnCount - columnCount
       if (delta > 0 && visColumnLo >= delta) {
-        const xShift = columnOffsets[visColumnLo + delta] - columnOffsets[visColumnLo]
         visColumnLo -= delta
-        visColumnX -= xShift
+        computeVisibleColumnsPosition()
+        // visColumnX -= xShift
       }
     }
   }
 
-  function removeColumns(colCount) {
+  function removeCellElements(colCount) {
     for (let i = 0, n = rows.length; i < n; i++) {
       const row = rows[i]
       for (let j = visColumnCount; j < colCount; j++) {
@@ -905,7 +890,7 @@ export function grid(root, msgBus) {
     renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
   }
 
-  function appendColumns(colCount) {
+  function addCellElements(colCount) {
     for (let i = 0, n = rows.length; i < n; i++) {
       const row = rows[i]
       // add extra cells
@@ -925,7 +910,8 @@ export function grid(root, msgBus) {
   }
 
   function isVerticalScroller() {
-    return viewport.scrollHeight > viewport.getBoundingClientRect().height
+    // bounding rect height is floating point number, may not be exact match for integer
+    return Math.abs(viewport.scrollHeight - viewport.getBoundingClientRect().height) > 0.8
   }
 
   function toggleScrollerPlaceholder() {
@@ -947,11 +933,11 @@ export function grid(root, msgBus) {
         toggleScrollerPlaceholder()
 
         const prevVisColumnCount = visColumnCount
-        updateVisibleColumnCount()
+        computeVisibleColumnWindow()
         if (prevVisColumnCount < visColumnCount) {
-          appendColumns(visColumnCount - prevVisColumnCount)
+          addCellElements(visColumnCount - prevVisColumnCount)
         } else if (prevVisColumnCount > visColumnCount) {
-          removeColumns(prevVisColumnCount)
+          removeCellElements(prevVisColumnCount)
         }
       }
       scroll()
@@ -1087,7 +1073,7 @@ export function grid(root, msgBus) {
     }
   }
 
-  function setupCanvas() {
+  function createRowElements() {
     for (let i = 0; i < dc; i++) {
       const rowDiv = document.createElement('div')
       rowDiv.className = 'qg-r'
@@ -1138,7 +1124,29 @@ export function grid(root, msgBus) {
     }
   }
 
-//noinspection JSUnusedLocalSymbols
+  function computeColumnWidths() {
+    if (data && data.length > 0) {
+      const dataBatch = data[0]
+      const dataBatchLen = dataBatch.length
+      // a little inefficient, but lets traverse
+      let offset = 0
+      console.log(dataBatch)
+      for (let i = 0; i < columnCount; i++) {
+        // this assumes that initial width has been set to the width of the header
+        let w = getColumnWidth(i)
+        for (let j = 0; j < dataBatchLen; j++) {
+          columnOffsets[i] = offset
+          const value = dataBatch[j][i]
+          const str = value !== null ? value.toString() : "null"
+          w = Math.max(w, getCellWidth(str.length))
+        }
+        offset += w
+      }
+      columnOffsets[columnCount] = offset
+      totalWidth = offset;
+    }
+  }
+
   function update(x, m) {
     $('.js-query-refresh .fa').removeClass('fa-spin')
 
@@ -1148,14 +1156,16 @@ export function grid(root, msgBus) {
         data.push(m.dataset)
         columns = m.columns
         columnCount = columns.length
-        computeColumnWidths()
-        updateVisibleColumnCount()
+        createHeaderElements()
+        computeVisibleColumnWindow()
         // visible position depends on correctness of visColumnCount value
         computeVisibleColumnsPosition()
-        setupCanvas()
+        computeColumnWidths()
+        createRowElements()
         setRowCount(m.count)
         viewport.scrollTop = 0
-        createStyle()
+        // makes browser render visuals for the given column widths
+        createCellStyle()
         resize()
         focusCell()
       },
@@ -1189,8 +1199,9 @@ export function grid(root, msgBus) {
     grid[0].append(header, viewport)
 
     canvas = $('<div>')
-    canvas.addClass('qg-canvas')
+    canvas[0].className = 'qg-canvas'
     viewport.append(canvas[0])
+    // we're using jQuery here to handle key bindings
     canvas.bind('keydown', onKeyDown)
     canvas.bind('keyup', onKeyUp)
 
