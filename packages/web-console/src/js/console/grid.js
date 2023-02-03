@@ -385,21 +385,53 @@ export function grid(root, msgBus) {
     bus.trigger("editor.insert.column", e.currentTarget.getAttribute("data-column-name"))
   }
 
-  function columnResize(e) {
+  let draggedColumnSizeHandle
+
+  function columnResizeStart(e) {
+    e.preventDefault()
+    const target = e.target
     const className = e.target.className;
-    const i1 = className.indexOf('qg-w');
-    let i2 = className.indexOf(' ', i1);
+    const i1 = className.indexOf('qg-w')
+    let i2 = className.indexOf(' ', i1)
     if (i2 === -1) {
       i2 = className.length
     }
-    const columnIndex = parseInt(className.substr(i1+4,i2))
-    const cl = className.substr(i1, i2)
+    const columnIndex = parseInt(className.substr(i1 + 4, i2))
+    const clz = className.substr(i1, i2)
+
+    const oldTop = target.getBoundingClientRect().top
+    target.style.position = 'absolute'
+    target.style.top = oldTop + window.scrollY
+    target.style.left = e.pageX + 'px'
+    target.style.backgroundColor = 'red'
+    draggedColumnSizeHandle = target
+
+
 
     let list = document.styleSheets;
 
     for (let i = 0; i < list.length; i++) {
-      console.log(list.item(i));
+      const css = list.item(i);
+      if (css.href === '') {
+        console.log(css)
+      }
     }
+
+    console.log("ok")
+    document.onmousemove = columnResizeDrag
+    document.onmouseup = columnResizeEnd
+  }
+
+  function columnResizeDrag(e) {
+    e.preventDefault()
+
+    draggedColumnSizeHandle.style.left = e.pageX + 'px'
+  }
+
+  function columnResizeEnd(e) {
+    e.preventDefault()
+    document.onmousemove = null
+    document.onmouseup = null
   }
 
   function computeColumnWidths() {
@@ -434,8 +466,7 @@ export function grid(root, msgBus) {
 
       const handle = document.createElement('div')
       handle.className = 'qg-drag-handle qg-w' + i
-      handle.draggable = true
-      handle.ondragstart = columnResize
+      handle.onmousedown = columnResizeStart
       header.append(h, handle)
 
       w = Math.max(defaults.minColumnWidth, Math.ceil((c.name.length + c.type.length) * 8 * 1.2 + 10))
