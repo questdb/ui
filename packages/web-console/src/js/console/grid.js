@@ -36,6 +36,7 @@ export function grid(root, msgBus) {
     maxRowsToAnalyze: 100,
     minVpHeight: 120,
     minDivHeight: 160,
+    scrollerGirth: 10
   }
   const ACTIVE_CELL_CLASS = ' qg-c-active'
   const STYLE_TILE = 'qg-questdb-grid'
@@ -118,7 +119,7 @@ export function grid(root, msgBus) {
   // when render is attempted before data is available, we need to "remember" the
   // last render attempt and repeat is when data is ready
   const pendingRender = {colLo: 0, colHi: 0, nextVisColumnLo: 0, render: false};
-  const scrollerGirth = 10
+  const scrollerGirth = defaults.scrollerGirth
   let headerScrollerPlaceholder
 
   function setRowCount(rowCount) {
