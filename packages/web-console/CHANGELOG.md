@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.10 - 2023-02-03
+
+- grid is virtualized horizontally, fixed bunch of glitches, added column resize, added cell copy to clipboard shortcuts, updated visuals
+
 ## 0.0.9 - 2023-02-02
 
 ### Added
