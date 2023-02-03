@@ -1130,7 +1130,6 @@ export function grid(root, msgBus) {
       const dataBatchLen = dataBatch.length
       // a little inefficient, but lets traverse
       let offset = 0
-      console.log(dataBatch)
       for (let i = 0; i < columnCount; i++) {
         // this assumes that initial width has been set to the width of the header
         let w = getColumnWidth(i)
