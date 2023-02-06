@@ -56,6 +56,7 @@ export function grid(root, msgBus) {
   let columnOffsets
   let columns = []
   let columnCount = 0
+  let timestampIndex = -1
   let data = []
   let totalWidth = -1
   // number of divs in "rows" cache, has to be power of two
@@ -349,8 +350,8 @@ export function grid(root, msgBus) {
     }
   }
 
-  function getColumnAlignment(i) {
-    const col = columns[i]
+  function getColumnAlignment(columnIndex) {
+    const col = columns[columnIndex]
     if (col) {
       switch (col.type) {
         case 'STRING':
@@ -362,12 +363,19 @@ export function grid(root, msgBus) {
     }
   }
 
+  function getColumnColor(columnIndex) {
+    if (columnIndex === timestampIndex) {
+      return 'color: #8be9fd;'
+    }
+    return ''
+  }
+
   function getColumnWidth(i) {
     return columnOffsets[i + 1] - columnOffsets[i]
   }
 
   function getColumnWidthStyleSelector(columnIndex, width, left) {
-    return '.' + getColumnWidthSelector(columnIndex) + '{width:' + width + 'px;' + 'position: absolute;' + 'left:' + left + 'px;' + getColumnAlignment(columnIndex) + '}'
+    return '.' + getColumnWidthSelector(columnIndex) + '{width:' + width + 'px;' + 'position: absolute;' + 'left:' + left + 'px;' + getColumnAlignment(columnIndex) + getColumnColor(columnIndex) + '}'
   }
 
   function createColumnWidthStyleRules(rules) {
@@ -504,7 +512,7 @@ export function grid(root, msgBus) {
       hName.className = 'qg-header-name'
       hName.innerHTML = c.name
 
-      h.append(hType, hName)
+      h.append(hName, hType)
       h.onclick = broadcastColumnName
 
       const handle = document.createElement('div')
@@ -553,6 +561,7 @@ export function grid(root, msgBus) {
     visColumnLo = 0
     visColumnCount = 10
     lastKnownViewportWidth = 0
+    timestampIndex = -1
     enableHover()
   }
 
@@ -1157,6 +1166,7 @@ export function grid(root, msgBus) {
         data.push(m.dataset)
         columns = m.columns
         columnCount = columns.length
+        timestampIndex = m.timestamp
         createHeaderElements()
         computeVisibleColumnWindow()
         // visible position depends on correctness of visColumnCount value

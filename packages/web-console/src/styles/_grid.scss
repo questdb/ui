@@ -31,10 +31,12 @@
   overflow: hidden;
 }
 
+$row-height: 55px;
+
 .qg-header-row {
   display: flex;
   overflow: hidden;
-  height: 39px;
+  height: $row-height;
   position: relative;
 
   .qg-header:nth-last-child(2) {
@@ -79,7 +81,7 @@
 }
 
 .qg-header {
-  padding: 10px 3px 10px 3px;
+  padding: 10px 5px 10px 5px;
   cursor: pointer;
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-user-select: none; /* Safari */
@@ -89,7 +91,7 @@
   /* Non-prefixed version, currently
                                    supported by Chrome, Opera and Firefox */
   background: #21222c;
-  border: thin groove rgb(119, 122, 135);
+  border: thin groove black;
 }
 
 .qg-header-name {
@@ -108,31 +110,15 @@
 }
 
 .qg-header-type {
-  visibility: hidden;
   color: #6272a4;
-  vertical-align: sub;
   font-size: x-small;
   font-style: italic;
   text-overflow: ellipsis;
-
-  width: 120px;
-  background-color: #21222c;
-  text-align: center;
-  border-radius: 6px;
-  border-color: yellow;
-  padding: 5px 0;
-
-  /* Position the tooltip */
-  position: absolute;
-  z-index: 1;
-}
-
-.qg-header:hover .qg-header-type {
-  margin-top: 10px;
-  visibility: visible;
-  animation-delay: -5s;
-  animation: 1s fadeIn;
-  animation-fill-mode: forwards;
+  text-align: right;
+  width: 100%;
+  display: block;
+  margin: 0;
+  padding: 0;
 }
 
 .qg-header-l {
@@ -140,6 +126,10 @@
   flex-direction: row-reverse;
   white-space: nowrap;
   text-overflow: ellipsis;
+
+  .qg-header-type{
+    text-align: left;
+  }
 }
 
 .qg-viewport {
@@ -153,7 +143,7 @@
 }
 
 .qg-c {
-  padding: 4px 3px;
+  padding: 4px 5px 4px 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
@@ -188,7 +178,7 @@
   margin-left: -10px;
   background-color: transparent;
   width: 20px !important;
-  height: 32px;
+  height: $row-height;
   z-index: 1;
 }
 
