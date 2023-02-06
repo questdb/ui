@@ -91,7 +91,11 @@ $row-height: 55px;
   /* Non-prefixed version, currently
                                    supported by Chrome, Opera and Firefox */
   background: #21222c;
-  border: thin groove black;
+  border-left: thin groove black;
+}
+
+.qg-color-timestamp {
+  color: #50fa7b;
 }
 
 .qg-header-name {
@@ -103,6 +107,7 @@ $row-height: 55px;
   text-align: right;
   padding: 0;
   margin: 0;
+  font-size: medium;
 }
 
 .qg-header-l .qg-header-name {
@@ -110,7 +115,7 @@ $row-height: 55px;
 }
 
 .qg-header-type {
-  color: #6272a4;
+  color: #ff79c6;
   font-size: x-small;
   font-style: italic;
   text-overflow: ellipsis;
@@ -149,21 +154,14 @@ $row-height: 55px;
   text-align: right;
 }
 
-.qg-c:hover {
-  box-shadow: inset 0 0 0 2px #8d95a5;
-}
-
-.qg-r-active .qg-c:hover {
-  box-shadow: inset 0 0 0 2px #f8f8f2;
-}
-
-.qg-c-active {
-  box-shadow: inset 0 0 0 2px #f8f8f2;
+.qg-c:hover, .qg-r-active .qg-c:hover, .qg-c-active {
+  box-shadow: inset 0 0 0 2px #f1fa8c;
+  border-radius: 6px;
 }
 
 .qg-r-active:hover .qg-c-active,
 .qg-r-active:hover .qg-c-active:hover {
-  box-shadow: inset 0 0 0 2px #ffb86c;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
 }
 
 #debug {

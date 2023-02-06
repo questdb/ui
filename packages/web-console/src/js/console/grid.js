@@ -36,7 +36,8 @@ export function grid(root, msgBus) {
     maxRowsToAnalyze: 100,
     minVpHeight: 120,
     minDivHeight: 160,
-    scrollerGirth: 10
+    scrollerGirth: 10,
+    timestampColor: '#50fa7b'
   }
   const ACTIVE_CELL_CLASS = ' qg-c-active'
   const STYLE_TILE = 'qg-questdb-grid'
@@ -365,7 +366,7 @@ export function grid(root, msgBus) {
 
   function getColumnColor(columnIndex) {
     if (columnIndex === timestampIndex) {
-      return 'color: #8be9fd;'
+      return 'color: ' + defaults.timestampColor + ';'
     }
     return ''
   }
