@@ -461,6 +461,7 @@ export function grid(root, msgBus) {
       colResizeDragHandle.style.left = (colResizeDragHandleStartX + delta) + 'px'
       updateColumnWidth(colResizeColIndex, width)
       createCellStyle()
+      ensureCellsFillVisibleWindow()
     }
   }
 
@@ -474,7 +475,7 @@ export function grid(root, msgBus) {
   }
 
   function getCellWidth(valueLen) {
-    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 0.9));
+    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 1.2));
   }
 
   function createHeaderElements() {
@@ -920,25 +921,26 @@ export function grid(root, msgBus) {
     }
   }
 
+  function ensureCellsFillVisibleWindow() {
+    toggleScrollerPlaceholder()
+    const prevVisColumnCount = visColumnCount
+    computeVisibleColumnWindow()
+    if (prevVisColumnCount < visColumnCount) {
+      addCellElements(visColumnCount - prevVisColumnCount)
+    } else if (prevVisColumnCount > visColumnCount) {
+      removeCellElements(prevVisColumnCount)
+    }
+  }
+
   function resize() {
     if (grid[0].style.display !== 'none') {
 
       viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
-      // createCss()
-
       const viewportWidth = viewport.getBoundingClientRect().width
       if (lastKnownViewportWidth !== viewportWidth) {
         lastKnownViewportWidth = viewportWidth
-        toggleScrollerPlaceholder()
-
-        const prevVisColumnCount = visColumnCount
-        computeVisibleColumnWindow()
-        if (prevVisColumnCount < visColumnCount) {
-          addCellElements(visColumnCount - prevVisColumnCount)
-        } else if (prevVisColumnCount > visColumnCount) {
-          removeCellElements(prevVisColumnCount)
-        }
+        ensureCellsFillVisibleWindow();
       }
       scroll()
     }
