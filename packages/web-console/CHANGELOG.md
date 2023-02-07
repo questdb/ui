@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.11 - 2023-02-07
+
+- made column type a subtext in column header
+- column header is a little taller
+- new header look and feel
+- new "drag handles"
+- designated timestamp columns is highlighted in green
+- column resize fixed as in when columns get narrower and by that do not fill entire viewport - the virtual cells are re-rendered and subsequent glitches fixed
+- column width is rendered based on first 1000 rows of data
+- column name is using ellipsis when it does not fit in column
+- column resize uses ghost bar to improve resize performance on complicated grids
+
 ## 0.0.10 - 2023-02-03
 
 - grid is virtualized horizontally, fixed bunch of glitches, added column resize, added cell copy to clipboard shortcuts, updated visuals
