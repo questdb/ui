@@ -486,9 +486,6 @@ export function grid(root, msgBus) {
 
     columnResizeGhost.style.visibility = 'hidden';
     columnResizeGhost.style.left = 0;
-    // colResizeDragHandle.style.left = null
-    // colResizeDragHandle.style.backgroundColor = null
-    // colResizeDragHandle.style.marginLeft = colResizeOrigMargin
   }
 
   function getCellWidth(valueLen) {

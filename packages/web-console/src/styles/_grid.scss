@@ -75,8 +75,6 @@ $row-height: 55px;
 }
 
 .qg-stub {
-  border: none !important;
-  box-shadow: none !important;
   height: 100% !important;
 }
 
@@ -124,7 +122,6 @@ $visible-drag-handle-margin: 10px;
   width: $visible-drag-handle-margin * 2 !important;
   height: $row-height;
   z-index: 1;
-  //border: 1px dotted red;
 }
 
 .qg-drag-handle:hover {
@@ -140,10 +137,6 @@ $visible-drag-handle-margin: 10px;
   top: 0;
   left: 0;
   cursor: col-resize;
-}
-
-.qg-color-timestamp {
-  color: #50fa7b;
 }
 
 .qg-header-name, .qg-header-type {
@@ -176,9 +169,6 @@ $visible-drag-handle-margin: 10px;
   .qg-header-type {
     text-align: left;
   }
-}
-
-.qg-header-join {
 }
 
 .qg-viewport {
