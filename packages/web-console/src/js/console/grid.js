@@ -50,7 +50,7 @@ export function grid(root, msgBus) {
 
   const bus = msgBus
   let style
-  const grid = root
+  const grid = root[0]
   let viewport
   let canvas
   let header
@@ -70,7 +70,6 @@ export function grid(root, msgBus) {
   let hiPage
   let query
   let queryTimer
-  let hoverTimer
   let dbg
   let downKey = []
   // index of the leftmost visible column in the grid
@@ -131,6 +130,8 @@ export function grid(root, msgBus) {
   let colResizeColOrigOffset
   let colResizeColOrigWidth
   let colResizeOrigMargin
+
+  let hoverEnabled = true
 
   function setRowCount(rowCount) {
     r += rowCount
@@ -583,6 +584,7 @@ export function grid(root, msgBus) {
 
   function activeCellOff() {
     removeFocus(focusedCell)
+    disableHover()
   }
 
   function removeClass(e, className) {
@@ -699,7 +701,6 @@ export function grid(root, msgBus) {
 
   function activeRowUp(n) {
     if (activeRow > 0) {
-      disableHover()
       activeRow = Math.max(0, activeRow - n)
       activeRowContainer.className = 'qg-r'
       activeCellOff()
@@ -709,8 +710,6 @@ export function grid(root, msgBus) {
       const scrollTop = activeRow * rh - o - 5 // top margin
       if (scrollTop < viewport.scrollTop) {
         viewport.scrollTop = Math.max(0, scrollTop)
-      } else {
-        enableHover()
       }
     }
   }
@@ -721,7 +720,6 @@ export function grid(root, msgBus) {
 
   function activeRowDown(n) {
     if (activeRow > -1 && activeRow < r - 1) {
-      disableHover()
       activeRow = Math.min(r - 1, activeRow + n)
       activeRowContainer.className = 'qg-r'
       activeCellOff()
@@ -732,8 +730,6 @@ export function grid(root, msgBus) {
       const sh = isHorizontalScroller() ? scrollerGirth : 0
       if (scrollTop > viewport.scrollTop) {
         viewport.scrollTop = scrollTop + sh
-      } else {
-        enableHover()
       }
     }
   }
@@ -791,22 +787,20 @@ export function grid(root, msgBus) {
   }
 
   function enableHover() {
-    if (hoverTimer) {
-      clearTimeout(hoverTimer)
+    if (!hoverEnabled) {
+      addClass(grid, 'qg-hover')
+      hoverEnabled = true
     }
-    hoverTimer = setTimeout(() => {
-        grid.addClass('qg-hover')
-      }, 500
-    )
   }
 
   function disableHover() {
-    grid.removeClass('qg-hover')
+    if (hoverEnabled) {
+      removeClass(grid, 'qg-hover')
+      hoverEnabled = false
+    }
   }
 
   function scroll(event) {
-
-    disableHover()
 
     if (header.scrollLeft !== viewport.scrollLeft) {
       header.scrollLeft = viewport.scrollLeft
@@ -841,7 +835,6 @@ export function grid(root, msgBus) {
       renderRows(y - oldY)
     }
 
-    enableHover()
     setFocus(focusedCell)
     logDebug()
   }
@@ -943,7 +936,7 @@ export function grid(root, msgBus) {
   }
 
   function resize() {
-    if (grid[0].style.display !== 'none') {
+    if (grid.style.display !== 'none') {
 
       viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
@@ -1137,6 +1130,7 @@ export function grid(root, msgBus) {
   }
 
   function computeColumnWidths() {
+    const maxWidth = viewport.getBoundingClientRect().width * 0.8
     if (data && data.length > 0) {
       const dataBatch = data[0]
       const dataBatchLen = dataBatch.length
@@ -1149,7 +1143,7 @@ export function grid(root, msgBus) {
           columnOffsets[i] = offset
           const value = dataBatch[j][i]
           const str = value !== null ? value.toString() : "null"
-          w = Math.max(w, getCellWidth(str.length))
+          w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
         }
         offset += w
       }
@@ -1208,7 +1202,10 @@ export function grid(root, msgBus) {
     viewport.onscroll = scroll
     addClass(viewport, 'qg-viewport')
 
-    grid[0].append(header, viewport)
+    grid.append(header, viewport)
+    // when grid is navigated via keyboard, mouse hover is disabled
+    // to not to confuse user. Hover is then re-enabled on mouse move
+    grid.onmousemove = enableHover
 
     canvas = $('<div>')
     canvas[0].className = 'qg-canvas'

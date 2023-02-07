@@ -80,6 +80,10 @@ $row-height: 55px;
   height: 100% !important;
 }
 
+.qg-no-hover {
+  pointer-events: none;
+}
+
 .qg-header {
   padding: 10px 5px 10px 5px;
   cursor: pointer;
@@ -154,7 +158,7 @@ $row-height: 55px;
   text-align: right;
 }
 
-.qg-c:hover, .qg-r-active .qg-c:hover, .qg-c-active {
+.qg-hover .qg-c:hover, .qg-r-active .qg-c:hover, .qg-c-active {
   box-shadow: inset 0 0 0 2px #f1fa8c;
   border-radius: 6px;
 }
