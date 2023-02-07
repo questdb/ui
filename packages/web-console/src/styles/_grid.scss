@@ -27,7 +27,7 @@
   width: 100%;
   flex-direction: column;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  "Courier New", monospace;
   overflow: hidden;
 }
 
@@ -80,10 +80,6 @@ $row-height: 55px;
   height: 100% !important;
 }
 
-.qg-no-hover {
-  pointer-events: none;
-}
-
 .qg-header {
   padding: 10px 5px 10px 5px;
   cursor: pointer;
@@ -95,39 +91,80 @@ $row-height: 55px;
   /* Non-prefixed version, currently
                                    supported by Chrome, Opera and Firefox */
   background: #21222c;
-  border-left: thin groove black;
+}
+
+$visible-drag-handle-margin: 10px;
+
+.qg-header-border {
+  width: 100%;
+  position: absolute;
+  margin-top: 10px;
+  margin-left: $visible-drag-handle-margin;
+  height: 25px;
+  border-left: thin dashed #cac30f;
+}
+
+.qg-header-l .qg-header-border {
+  margin-left: 0 !important;
+}
+
+.qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
+  text-align: left;
+}
+
+.qg-drag-handle-l {
+  margin-left: (-$visible-drag-handle-margin/2) !important;
+}
+
+// drag handle is not inside header element, it is next to it (sibling)
+.qg-drag-handle {
+  // place drag handle so that visible "line" is in the middle of it
+  // to add hysteresis for the drag cursor
+  margin-left: $visible-drag-handle-margin/2;
+  width: $visible-drag-handle-margin * 2 !important;
+  height: $row-height;
+  z-index: 1;
+  //border: 1px dotted red;
+}
+
+.qg-drag-handle:hover {
+  cursor: col-resize;
+}
+
+.qg-col-resize-ghost {
+  position: absolute;
+  width: 4px;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
+  height: 0;
+  background: #f1fa8c;
+  top: 0;
+  left: 0;
+  cursor: col-resize;
 }
 
 .qg-color-timestamp {
   color: #50fa7b;
 }
 
+.qg-header-name, .qg-header-type {
+  display: block;
+  margin-left: $visible-drag-handle-margin + 3;
+  padding: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .qg-header-name {
   font-weight: 700;
   color: #f1fa8c !important;
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: right;
-  padding: 0;
-  margin: 0;
   font-size: medium;
-}
-
-.qg-header-l .qg-header-name {
-  text-align: left;
 }
 
 .qg-header-type {
   color: #ff79c6;
   font-size: x-small;
   font-style: italic;
-  text-overflow: ellipsis;
-  text-align: right;
-  width: 100%;
-  display: block;
-  margin: 0;
-  padding: 0;
 }
 
 .qg-header-l {
@@ -136,9 +173,12 @@ $row-height: 55px;
   white-space: nowrap;
   text-overflow: ellipsis;
 
-  .qg-header-type{
+  .qg-header-type {
     text-align: left;
   }
+}
+
+.qg-header-join {
 }
 
 .qg-viewport {
@@ -174,16 +214,4 @@ $row-height: 55px;
   height: 300px;
   background: white;
   border: 1px solid red;
-}
-
-.qg-drag-handle {
-  margin-left: -10px;
-  background-color: transparent;
-  width: 20px !important;
-  height: $row-height;
-  z-index: 1;
-}
-
-.qg-drag-handle:hover {
-  cursor: col-resize;
 }
