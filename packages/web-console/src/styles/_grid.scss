@@ -27,14 +27,16 @@
   width: 100%;
   flex-direction: column;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  "Courier New", monospace;
   overflow: hidden;
 }
+
+$row-height: 55px;
 
 .qg-header-row {
   display: flex;
   overflow: hidden;
-  height: 39px;
+  height: $row-height;
   position: relative;
 
   .qg-header:nth-last-child(2) {
@@ -73,21 +75,12 @@
 }
 
 .qg-stub {
-  border: none !important;
-  box-shadow: none !important;
   height: 100% !important;
 }
 
 .qg-header {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: flex-end;
-  flex-direction: row;
-  padding: 8px 10px 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 10px 5px 10px 5px;
   cursor: pointer;
-  border-bottom: 2px groove #252b3f;
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-user-select: none; /* Safari */
   -moz-user-select: none; /* Old versions of Firefox */
@@ -96,19 +89,73 @@
   /* Non-prefixed version, currently
                                    supported by Chrome, Opera and Firefox */
   background: #21222c;
-  border-right: 2px groove #252b3f;
-  box-shadow: 4px 1px #252b3f;
+}
+
+$visible-drag-handle-margin: 10px;
+
+.qg-header-border {
+  width: 100%;
+  position: absolute;
+  margin-top: 10px;
+  margin-left: $visible-drag-handle-margin;
+  height: 25px;
+  border-left: thin dashed #cac30f;
+}
+
+.qg-header-l .qg-header-border {
+  margin-left: 0 !important;
+}
+
+.qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
+  text-align: left;
+}
+
+.qg-drag-handle-l {
+  margin-left: (-$visible-drag-handle-margin/2) !important;
+}
+
+// drag handle is not inside header element, it is next to it (sibling)
+.qg-drag-handle {
+  // place drag handle so that visible "line" is in the middle of it
+  // to add hysteresis for the drag cursor
+  margin-left: $visible-drag-handle-margin/2;
+  width: $visible-drag-handle-margin * 2 !important;
+  height: $row-height;
+  z-index: 1;
+}
+
+.qg-drag-handle:hover {
+  cursor: col-resize;
+}
+
+.qg-col-resize-ghost {
+  position: absolute;
+  width: 4px;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
+  height: 0;
+  background: #f1fa8c;
+  top: 0;
+  left: 0;
+  cursor: col-resize;
+}
+
+.qg-header-name, .qg-header-type {
+  display: block;
+  margin-left: $visible-drag-handle-margin + 3;
+  padding: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .qg-header-name {
   font-weight: 700;
   color: #f1fa8c !important;
+  font-size: medium;
 }
 
 .qg-header-type {
-  margin: 2px 7px;
-  color: #6272a4;
-  vertical-align: sub;
+  color: #ff79c6;
   font-size: x-small;
   font-style: italic;
 }
@@ -117,6 +164,11 @@
   text-align: left;
   flex-direction: row-reverse;
   white-space: nowrap;
+  text-overflow: ellipsis;
+
+  .qg-header-type {
+    text-align: left;
+  }
 }
 
 .qg-viewport {
@@ -130,27 +182,20 @@
 }
 
 .qg-c {
-  padding: 4px 3px;
+  padding: 4px 5px 4px 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
 }
 
-.qg-c:hover {
-  box-shadow: inset 0 0 0 2px #8d95a5;
-}
-
-.qg-r-active .qg-c:hover {
-  box-shadow: inset 0 0 0 2px #f8f8f2;
-}
-
-.qg-c-active {
-  box-shadow: inset 0 0 0 2px #f8f8f2;
+.qg-hover .qg-c:hover, .qg-r-active .qg-c:hover, .qg-c-active {
+  box-shadow: inset 0 0 0 2px #f1fa8c;
+  border-radius: 6px;
 }
 
 .qg-r-active:hover .qg-c-active,
 .qg-r-active:hover .qg-c-active:hover {
-  box-shadow: inset 0 0 0 2px #ffb86c;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
 }
 
 #debug {
@@ -159,16 +204,4 @@
   height: 300px;
   background: white;
   border: 1px solid red;
-}
-
-.qg-drag-handle {
-  margin-left: -10px;
-  background-color: transparent;
-  width: 20px !important;
-  height: 32px;
-  z-index: 1;
-}
-
-.qg-drag-handle:hover {
-  cursor: col-resize;
 }

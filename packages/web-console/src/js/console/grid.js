@@ -36,7 +36,9 @@ export function grid(root, msgBus) {
     maxRowsToAnalyze: 100,
     minVpHeight: 120,
     minDivHeight: 160,
-    scrollerGirth: 10
+    scrollerGirth: 10,
+    timestampColor: '#50fa7b',
+    dragHandleWidth: 20,
   }
   const ACTIVE_CELL_CLASS = ' qg-c-active'
   const STYLE_TILE = 'qg-questdb-grid'
@@ -49,13 +51,15 @@ export function grid(root, msgBus) {
 
   const bus = msgBus
   let style
-  const grid = root
+  const grid = root[0]
   let viewport
   let canvas
   let header
+  let columnResizeGhost
   let columnOffsets
   let columns = []
   let columnCount = 0
+  let timestampIndex = -1
   let data = []
   let totalWidth = -1
   // number of divs in "rows" cache, has to be power of two
@@ -68,7 +72,6 @@ export function grid(root, msgBus) {
   let hiPage
   let query
   let queryTimer
-  let hoverTimer
   let dbg
   let downKey = []
   // index of the leftmost visible column in the grid
@@ -120,15 +123,14 @@ export function grid(root, msgBus) {
   const pendingRender = {colLo: 0, colHi: 0, nextVisColumnLo: 0, render: false}
   const scrollerGirth = defaults.scrollerGirth
   let headerScrollerPlaceholder
-
-  // column resize state
-  let colResizeDragHandle
   let colResizeDragHandleStartX
   let colResizeMouseDownX
   let colResizeColIndex
   let colResizeColOrigOffset
   let colResizeColOrigWidth
   let colResizeOrigMargin
+
+  let hoverEnabled = true
 
   function setRowCount(rowCount) {
     r += rowCount
@@ -349,25 +351,32 @@ export function grid(root, msgBus) {
     }
   }
 
-  function getColumnAlignment(i) {
-    const col = columns[i]
-    if (col) {
-      switch (col.type) {
-        case 'STRING':
-        case 'SYMBOL':
-          return 'text-align: left;'
-        default:
-          return ''
-      }
+  function getColumnColor(columnIndex) {
+    if (columnIndex === timestampIndex) {
+      return 'color: ' + defaults.timestampColor + ';'
     }
+    return ''
   }
 
   function getColumnWidth(i) {
     return columnOffsets[i + 1] - columnOffsets[i]
   }
 
-  function getColumnWidthStyleSelector(columnIndex, width, left) {
-    return '.' + getColumnWidthSelector(columnIndex) + '{width:' + width + 'px;' + 'position: absolute;' + 'left:' + left + 'px;' + getColumnAlignment(columnIndex) + '}'
+  function isLeftAligned(columnIndex) {
+    const col = columns[columnIndex]
+    if (col) {
+      switch (col.type) {
+        case 'STRING':
+        case 'SYMBOL':
+          return true
+        default:
+          return false
+      }
+    }
+  }
+
+  function getColumnWidthStyleSelector(columnIndex, width, left, isLeftAligned) {
+    return '.' + getColumnWidthSelector(columnIndex) + '{width:' + width + 'px;' + 'position: absolute;' + 'left:' + left + 'px;' + (isLeftAligned ? 'text-align: left;' : '') + getColumnColor(columnIndex) + '}'
   }
 
   function createColumnWidthStyleRules(rules) {
@@ -376,7 +385,8 @@ export function grid(root, msgBus) {
     // we will render only a subset of them
     for (let i = 0; i < columnCount; i++) {
       const w = getColumnWidth(i)
-      rules.push(getColumnWidthStyleSelector(i, w, left))
+      const la = isLeftAligned(i)
+      rules.push(getColumnWidthStyleSelector(i, w, left, la))
       left += w
     }
     rules.push(getColumnWidthStyleSelector(columnCount, scrollerGirth, left))
@@ -427,19 +437,19 @@ export function grid(root, msgBus) {
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
     colResizeOrigMargin = target.style.marginLeft
 
-    // clear margin to obtain correct drag coordinates and capture mouse down position;
-    // we will be calculating mouse move deltas against the down position.
-
-    target.style.marginLeft = '0px'
-    colResizeDragHandleStartX = target.offsetLeft
+    colResizeDragHandleStartX = target.offsetLeft + defaults.dragHandleWidth / 2
     colResizeMouseDownX = e.clientX
 
-    // style up the drag handle to make it apparent we're resizing column
-    target.style.left = colResizeDragHandleStartX + 'px'
-    // target.style.backgroundColor = 'red'
-    colResizeDragHandle = target
     document.onmousemove = columnResizeDrag
     document.onmouseup = columnResizeEnd
+
+    columnResizeGhost.style.top = target.getBoundingClientRect().top + 'px'
+    columnResizeGhost.style.left = colResizeDragHandleStartX + 'px'
+    columnResizeGhost.style.height = (grid.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0)) + 'px'
+    columnResizeGhost.style.visibility = 'visible';
+
+    // set initial width, in case there is no "drag"
+    colResizeTargetWidth = colResizeColOrigWidth
   }
 
   // updates cell offset array after updating with of one of the columns
@@ -453,14 +463,15 @@ export function grid(root, msgBus) {
     totalWidth = columnOffsets[columnCount]
   }
 
+  let colResizeTargetWidth = 0
+
   function columnResizeDrag(e) {
     e.preventDefault()
     const delta = e.clientX - colResizeMouseDownX
     const width = colResizeColOrigWidth + delta
     if (width > defaults.minColumnWidth) {
-      colResizeDragHandle.style.left = (colResizeDragHandleStartX + delta) + 'px'
-      updateColumnWidth(colResizeColIndex, width)
-      createCellStyle()
+      columnResizeGhost.style.left = (colResizeDragHandleStartX + delta - viewport.scrollLeft) + 'px'
+      colResizeTargetWidth = width
     }
   }
 
@@ -468,31 +479,33 @@ export function grid(root, msgBus) {
     e.preventDefault()
     document.onmousemove = null
     document.onmouseup = null
-    colResizeDragHandle.style.left = null
-    colResizeDragHandle.style.backgroundColor = null
-    colResizeDragHandle.style.marginLeft = colResizeOrigMargin
+
+    updateColumnWidth(colResizeColIndex, colResizeTargetWidth)
+    createCellStyle()
+    ensureCellsFillVisibleWindow()
+
+    columnResizeGhost.style.visibility = 'hidden';
+    columnResizeGhost.style.left = 0;
   }
 
   function getCellWidth(valueLen) {
-    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 0.9));
+    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 1.2));
   }
 
   function createHeaderElements() {
     columnOffsets = []
     let i, w
     totalWidth = 0
+    let lastColLeftAligned = false;
     for (i = 0; i < columnCount; i++) {
       const c = columns[i]
+      const la = isLeftAligned(i)
 
       const h = document.createElement('div')
       h.className = 'qg-header ' + getColumnWidthSelector(i)
       h.setAttribute('data-column-name', c.name)
-
-      switch (c.type) {
-        case 'STRING':
-        case 'SYMBOL':
-          h.className += ' qg-header-l'
-          break
+      if (isLeftAligned(i)) {
+        h.className += ' qg-header-l'
       }
 
       const hType = document.createElement('span')
@@ -503,17 +516,29 @@ export function grid(root, msgBus) {
       hName.className = 'qg-header-name'
       hName.innerHTML = c.name
 
-      h.append(hType, hName)
-      h.onclick = broadcastColumnName
+      if (i > 0) {
+        // drag handle for this column is located on left side of i+1 column (visually). So column
+        // 0 does not have drag handle
+        const handle = document.createElement('div')
+        handle.className = 'qg-drag-handle ' + getColumnWidthSelector(i) + (la ? ' qg-drag-handle-l' : '')
+        // handle.innerHTML = i
+        handle.onmousedown = columnResizeStart
+        header.append(handle)
 
-      const handle = document.createElement('div')
-      handle.className = 'qg-drag-handle ' + getColumnWidthSelector(i)
-      handle.onmousedown = columnResizeStart
-      header.append(h, handle)
+        const hBorderSpan = document.createElement('span')
+        hBorderSpan.className = 'qg-header-border'
+        h.append(hBorderSpan)
+      }
+
+      h.append(hName, hType)
+      h.onclick = broadcastColumnName
+      header.append(h)
 
       w = getCellWidth(c.name.length + c.type.length)
       columnOffsets.push(totalWidth)
       totalWidth += w
+
+      lastColLeftAligned = la
     }
 
     const handle = document.createElement('div')
@@ -552,6 +577,7 @@ export function grid(root, msgBus) {
     visColumnLo = 0
     visColumnCount = 10
     lastKnownViewportWidth = 0
+    timestampIndex = -1
     enableHover()
   }
 
@@ -572,6 +598,7 @@ export function grid(root, msgBus) {
 
   function activeCellOff() {
     removeFocus(focusedCell)
+    disableHover()
   }
 
   function removeClass(e, className) {
@@ -688,7 +715,6 @@ export function grid(root, msgBus) {
 
   function activeRowUp(n) {
     if (activeRow > 0) {
-      disableHover()
       activeRow = Math.max(0, activeRow - n)
       activeRowContainer.className = 'qg-r'
       activeCellOff()
@@ -698,8 +724,6 @@ export function grid(root, msgBus) {
       const scrollTop = activeRow * rh - o - 5 // top margin
       if (scrollTop < viewport.scrollTop) {
         viewport.scrollTop = Math.max(0, scrollTop)
-      } else {
-        enableHover()
       }
     }
   }
@@ -710,7 +734,6 @@ export function grid(root, msgBus) {
 
   function activeRowDown(n) {
     if (activeRow > -1 && activeRow < r - 1) {
-      disableHover()
       activeRow = Math.min(r - 1, activeRow + n)
       activeRowContainer.className = 'qg-r'
       activeCellOff()
@@ -721,8 +744,6 @@ export function grid(root, msgBus) {
       const sh = isHorizontalScroller() ? scrollerGirth : 0
       if (scrollTop > viewport.scrollTop) {
         viewport.scrollTop = scrollTop + sh
-      } else {
-        enableHover()
       }
     }
   }
@@ -780,22 +801,20 @@ export function grid(root, msgBus) {
   }
 
   function enableHover() {
-    if (hoverTimer) {
-      clearTimeout(hoverTimer)
+    if (!hoverEnabled) {
+      addClass(grid, 'qg-hover')
+      hoverEnabled = true
     }
-    hoverTimer = setTimeout(() => {
-        grid.addClass('qg-hover')
-      }, 500
-    )
   }
 
   function disableHover() {
-    grid.removeClass('qg-hover')
+    if (hoverEnabled) {
+      removeClass(grid, 'qg-hover')
+      hoverEnabled = false
+    }
   }
 
   function scroll(event) {
-
-    disableHover()
 
     if (header.scrollLeft !== viewport.scrollLeft) {
       header.scrollLeft = viewport.scrollLeft
@@ -830,7 +849,6 @@ export function grid(root, msgBus) {
       renderRows(y - oldY)
     }
 
-    enableHover()
     setFocus(focusedCell)
     logDebug()
   }
@@ -920,25 +938,26 @@ export function grid(root, msgBus) {
     }
   }
 
+  function ensureCellsFillVisibleWindow() {
+    toggleScrollerPlaceholder()
+    const prevVisColumnCount = visColumnCount
+    computeVisibleColumnWindow()
+    if (prevVisColumnCount < visColumnCount) {
+      addCellElements(visColumnCount - prevVisColumnCount)
+    } else if (prevVisColumnCount > visColumnCount) {
+      removeCellElements(prevVisColumnCount)
+    }
+  }
+
   function resize() {
-    if (grid[0].style.display !== 'none') {
+    if (grid.style.display !== 'none') {
 
       viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
-      // createCss()
-
       const viewportWidth = viewport.getBoundingClientRect().width
       if (lastKnownViewportWidth !== viewportWidth) {
         lastKnownViewportWidth = viewportWidth
-        toggleScrollerPlaceholder()
-
-        const prevVisColumnCount = visColumnCount
-        computeVisibleColumnWindow()
-        if (prevVisColumnCount < visColumnCount) {
-          addCellElements(visColumnCount - prevVisColumnCount)
-        } else if (prevVisColumnCount > visColumnCount) {
-          removeCellElements(prevVisColumnCount)
-        }
+        ensureCellsFillVisibleWindow();
       }
       scroll()
     }
@@ -1125,6 +1144,7 @@ export function grid(root, msgBus) {
   }
 
   function computeColumnWidths() {
+    const maxWidth = viewport.getBoundingClientRect().width * 0.8
     if (data && data.length > 0) {
       const dataBatch = data[0]
       const dataBatchLen = dataBatch.length
@@ -1137,7 +1157,7 @@ export function grid(root, msgBus) {
           columnOffsets[i] = offset
           const value = dataBatch[j][i]
           const str = value !== null ? value.toString() : "null"
-          w = Math.max(w, getCellWidth(str.length))
+          w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
         }
         offset += w
       }
@@ -1155,6 +1175,7 @@ export function grid(root, msgBus) {
         data.push(m.dataset)
         columns = m.columns
         columnCount = columns.length
+        timestampIndex = m.timestamp
         createHeaderElements()
         computeVisibleColumnWindow()
         // visible position depends on correctness of visColumnCount value
@@ -1195,14 +1216,22 @@ export function grid(root, msgBus) {
     viewport.onscroll = scroll
     addClass(viewport, 'qg-viewport')
 
-    grid[0].append(header, viewport)
+
+    grid.append(header, viewport)
+    // when grid is navigated via keyboard, mouse hover is disabled
+    // to not to confuse user. Hover is then re-enabled on mouse move
+    grid.onmousemove = enableHover
 
     canvas = $('<div>')
     canvas[0].className = 'qg-canvas'
-    viewport.append(canvas[0])
     // we're using jQuery here to handle key bindings
     canvas.bind('keydown', onKeyDown)
     canvas.bind('keyup', onKeyUp)
+
+    columnResizeGhost = document.createElement('div')
+    columnResizeGhost.className = 'qg-col-resize-ghost'
+
+    viewport.append(canvas[0], columnResizeGhost)
 
     window.onresize = resize
 
