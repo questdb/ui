@@ -94,12 +94,10 @@ $row-height: 55px;
 $visible-drag-handle-margin: 10px;
 
 .qg-header-border {
-  width: 100%;
   position: absolute;
   margin-top: 10px;
-  margin-left: $visible-drag-handle-margin;
   height: 25px;
-  border-left: thin dashed #cac30f;
+  border-right: thin dashed #cac30f;
 }
 
 .qg-header-l .qg-header-border {
@@ -110,15 +108,12 @@ $visible-drag-handle-margin: 10px;
   text-align: left;
 }
 
-.qg-drag-handle-l {
-  margin-left: (-$visible-drag-handle-margin/2) !important;
-}
 
 // drag handle is not inside header element, it is next to it (sibling)
 .qg-drag-handle {
   // place drag handle so that visible "line" is in the middle of it
   // to add hysteresis for the drag cursor
-  margin-left: $visible-drag-handle-margin/2;
+  margin-left: -$visible-drag-handle-margin / 2;
   width: $visible-drag-handle-margin * 2 !important;
   height: $row-height;
   z-index: 1;
@@ -186,7 +181,6 @@ $visible-drag-handle-margin: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-  margin-left: $visible-drag-handle-margin + 1;
 }
 
 .qg-hover .qg-c:hover, .qg-r-active .qg-c:hover, .qg-c-active {

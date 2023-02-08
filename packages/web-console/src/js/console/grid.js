@@ -525,7 +525,6 @@ export function grid(root, msgBus) {
         // handle.innerHTML = i
         handle.onmousedown = columnResizeStart
         header.append(handle)
-
         const hBorderSpan = document.createElement('span')
         hBorderSpan.className = 'qg-header-border'
         h.append(hBorderSpan)
@@ -545,7 +544,7 @@ export function grid(root, msgBus) {
     const handle = document.createElement('div')
     handle.className = 'qg-drag-handle ' + getColumnWidthSelector(columnCount)
     handle.onmousedown = columnResizeStart
-    header.append(h, handle)
+    header.append(handle)
 
     headerScrollerPlaceholder = document.createElement('div')
     headerScrollerPlaceholder.className = 'qg-header qg-stub ' + getColumnWidthSelector(columnCount)
