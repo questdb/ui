@@ -17,7 +17,9 @@
     "build": "cross-env NODE_ENV=production webpack",
     "postbuild": "node post-build.js",
     "start": "webpack-dev-server --progress",
-    "start:prod": "cross-env NODE_ENV=production webpack-dev-server --progress"
+    "start:prod": "cross-env NODE_ENV=production webpack-dev-server --progress",
+    "test": "jest --watch --runInBand",
+    "test:prod": "jest --ci --runInBand"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "5.13.0",
