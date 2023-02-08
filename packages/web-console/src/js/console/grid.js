@@ -131,6 +131,7 @@ export function grid(root, msgBus) {
   let colResizeOrigMargin
 
   let hoverEnabled = true
+  let recomputeColumnWidthOnResize = false
 
   function setRowCount(rowCount) {
     r += rowCount
@@ -578,6 +579,7 @@ export function grid(root, msgBus) {
     visColumnCount = 10
     lastKnownViewportWidth = 0
     timestampIndex = -1
+    recomputeColumnWidthOnResize = false
     enableHover()
   }
 
@@ -950,8 +952,16 @@ export function grid(root, msgBus) {
   }
 
   function resize() {
-    if (grid.style.display !== 'none') {
+    // If viewport is invisible when grid is updated it is not possible
+    // to calculate column width correctly. When grid becomes visible again, resize()
+    // is called where we continue calculating column widths. resize() can also be
+    // called under many other circumstances, so width calculation is conditional
+    if (recomputeColumnWidthOnResize) {
+      recomputeColumnWidthOnResize = false
+      computeColumnWidths()
+    }
 
+    if (grid.style.display !== 'none') {
       viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
       rowsInView = Math.floor(viewportHeight / rh)
       const viewportWidth = viewport.getBoundingClientRect().width
@@ -1145,7 +1155,9 @@ export function grid(root, msgBus) {
 
   function computeColumnWidths() {
     const maxWidth = viewport.getBoundingClientRect().width * 0.8
-    if (data && data.length > 0) {
+    recomputeColumnWidthOnResize = maxWidth < 0.1
+
+    if (!recomputeColumnWidthOnResize && data && data.length > 0) {
       const dataBatch = data[0]
       const dataBatchLen = dataBatch.length
       // a little inefficient, but lets traverse
