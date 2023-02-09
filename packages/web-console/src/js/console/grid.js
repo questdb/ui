@@ -37,12 +37,9 @@ export function grid(root, msgBus) {
     minVpHeight: 120,
     minDivHeight: 160,
     scrollerGirth: 10,
-    timestampColor: '#50fa7b',
     dragHandleWidth: 20,
   }
-  const ACTIVE_CELL_CLASS = ' qg-c-active'
-  const STYLE_TILE = 'qg-questdb-grid'
-  const COLUMN_WIDTH_SELECTOR_PREFIX = 'qg-w'
+  const ACTIVE_CELL_CLASS = 'qg-c-active'
   const NAV_EVENT_ANY_VERTICAL = 0
   const NAV_EVENT_LEFT = 1
   const NAV_EVENT_RIGHT = 2
@@ -50,7 +47,6 @@ export function grid(root, msgBus) {
   const NAV_EVENT_END = 4
 
   const bus = msgBus
-  let style
   const grid = root[0]
   let viewport
   let canvas
@@ -146,6 +142,7 @@ export function grid(root, msgBus) {
   }
 
   function renderRow(row, rowIndex) {
+    console.trace()
     if (row.questIndex !== rowIndex) {
       const rowData = data[Math.floor(rowIndex / pageSize)]
       let k
@@ -200,10 +197,6 @@ export function grid(root, msgBus) {
         delete data[i]
       }
     }
-  }
-
-  function getColumnWidthSelector(columnIndex) {
-    return COLUMN_WIDTH_SELECTOR_PREFIX + columnIndex
   }
 
   function empty(x) {
@@ -352,13 +345,6 @@ export function grid(root, msgBus) {
     }
   }
 
-  function getColumnColor(columnIndex) {
-    if (columnIndex === timestampIndex) {
-      return 'color: ' + defaults.timestampColor + ';'
-    }
-    return ''
-  }
-
   function getColumnWidth(i) {
     return columnOffsets[i + 1] - columnOffsets[i]
   }
@@ -376,69 +362,32 @@ export function grid(root, msgBus) {
     }
   }
 
-  function getColumnWidthStyleSelector(columnIndex, width, left, isLeftAligned) {
-    return '.' + getColumnWidthSelector(columnIndex) + '{width:' + width + 'px;' + 'position: absolute;' + 'left:' + left + 'px;' + (isLeftAligned ? 'text-align: left;' : '') + getColumnColor(columnIndex) + '}'
-  }
-
-  function createColumnWidthStyleRules(rules) {
-    let left = 0
-    // calculate CSS and width for all columns even though
-    // we will render only a subset of them
-    for (let i = 0; i < columnCount; i++) {
-      const w = getColumnWidth(i)
-      const la = isLeftAligned(i)
-      rules.push(getColumnWidthStyleSelector(i, w, left, la))
-      left += w
-    }
-    rules.push(getColumnWidthStyleSelector(columnCount, scrollerGirth, left))
-    rules.push('.qg-r{width:' + totalWidth + 'px;}')
-  }
-
-  function createCellStyle() {
-    if (data.length > 0) {
-      // replace the stylesheet
-      if (style) {
-        style.remove()
-      }
-
-      style = document.createElement('style')
-      style.title = STYLE_TILE
-      document.head.append(style)
-
-      const rules = []
-
-      createColumnWidthStyleRules(rules)
-
-      rules.push('.qg-c{height:' + rh + 'px;}')
-      if (style.styleSheet) {
-        // IE
-        style.styleSheet.cssText = rules.join(' ')
-      } else {
-        style.appendChild(document.createTextNode(rules.join(' ')))
-      }
-    }
-  }
-
   function broadcastColumnName(e) {
-    bus.trigger('editor.insert.column', e.currentTarget.getAttribute('data-column-name'))
+    // avoid broadcasting fat finger clicks
+    if (colResizeColIndex === -1) {
+      bus.trigger('editor.insert.column', e.currentTarget.getAttribute('data-column-name'))
+    }
+  }
+
+  function colResizeClearTimer() {
+    if (colResizeTimer) {
+      clearTimeout(colResizeTimer)
+      colResizeTimer = undefined
+    }
   }
 
   function columnResizeStart(e) {
     e.preventDefault()
+
+    colResizeClearTimer();
+
     const target = e.target
-    const className = e.target.className
-    const i1 = className.indexOf(COLUMN_WIDTH_SELECTOR_PREFIX)
-    let i2 = className.indexOf(' ', i1)
-    if (i2 === -1) {
-      i2 = className.length
-    }
     // column index is derived from stylesheet selector name
-    colResizeColIndex = parseInt(className.substr(i1 + 4, i2)) - 1
+    colResizeColIndex = target.columnIndex - 1
     colResizeColOrigOffset = columnOffsets[colResizeColIndex]
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
     colResizeOrigMargin = target.style.marginLeft
-
-    colResizeDragHandleStartX = target.offsetLeft + defaults.dragHandleWidth / 2
+    colResizeDragHandleStartX = target.offsetLeft + defaults.dragHandleWidth / 2 - 5
     colResizeMouseDownX = e.clientX
 
     document.onmousemove = columnResizeDrag
@@ -476,17 +425,33 @@ export function grid(root, msgBus) {
     }
   }
 
+  let colResizeTimer
+
   function columnResizeEnd(e) {
     e.preventDefault()
     document.onmousemove = null
     document.onmouseup = null
 
     updateColumnWidth(colResizeColIndex, colResizeTargetWidth)
-    createCellStyle()
+
+    const colLo = colResizeColIndex
+    const j = colLo % visColumnCount
+    const colHi = Math.min(colLo + (visColumnCount - j), columnCount)
+    // update header width
+    header.childNodes[colLo].style.minWidth = colResizeTargetWidth + 'px'
+    renderCells(colLo, colHi, visColumnLo)
     ensureCellsFillVisibleWindow()
 
     columnResizeGhost.style.visibility = 'hidden';
     columnResizeGhost.style.left = 0;
+
+    colResizeTimer = setTimeout(
+      () => {
+        // delay clearing drag end to prevent overlapping header click
+        colResizeColIndex = -1
+      },
+      500
+    )
   }
 
   function getCellWidth(valueLen) {
@@ -494,16 +459,12 @@ export function grid(root, msgBus) {
   }
 
   function createHeaderElements() {
-    columnOffsets = []
-    let i, w
-    totalWidth = 0
-    let lastColLeftAligned = false;
-    for (i = 0; i < columnCount; i++) {
+    for (let i = 0; i < columnCount; i++) {
       const c = columns[i]
-      const la = isLeftAligned(i)
-
       const h = document.createElement('div')
-      h.className = 'qg-header ' + getColumnWidthSelector(i)
+      // h.className = 'qg-header ' + getColumnWidthSelector(i)
+      h.className = 'qg-header'
+      h.style.minWidth = getColumnWidth(i) + 'px'
       h.setAttribute('data-column-name', c.name)
       if (isLeftAligned(i)) {
         h.className += ' qg-header-l'
@@ -521,35 +482,41 @@ export function grid(root, msgBus) {
         // drag handle for this column is located on left side of i+1 column (visually). So column
         // 0 does not have drag handle
         const handle = document.createElement('div')
-        handle.className = 'qg-drag-handle ' + getColumnWidthSelector(i) + (la ? ' qg-drag-handle-l' : '')
-        // handle.innerHTML = i
+        handle.className = 'qg-drag-handle'
+        handle.columnIndex = i
         handle.onmousedown = columnResizeStart
-        header.append(handle)
+        // header.append(handle)
         const hBorderSpan = document.createElement('span')
         hBorderSpan.className = 'qg-header-border'
-        h.append(hBorderSpan)
+        h.append(handle, hBorderSpan)
       }
 
       h.append(hName, hType)
       h.onclick = broadcastColumnName
       header.append(h)
-
-      w = getCellWidth(c.name.length + c.type.length)
-      columnOffsets.push(totalWidth)
-      totalWidth += w
-
-      lastColLeftAligned = la
     }
 
-    const handle = document.createElement('div')
-    handle.className = 'qg-drag-handle ' + getColumnWidthSelector(columnCount)
-    handle.onmousedown = columnResizeStart
-    header.append(handle)
-
     headerScrollerPlaceholder = document.createElement('div')
-    headerScrollerPlaceholder.className = 'qg-header qg-stub ' + getColumnWidthSelector(columnCount)
-    header.append(headerScrollerPlaceholder)
+    headerScrollerPlaceholder.className = 'qg-header qg-stub'
+    headerScrollerPlaceholder.style.width = scrollerGirth + 'px'
+    const lastDragHandle = document.createElement('div')
+    lastDragHandle.className = 'qg-drag-handle'
+    lastDragHandle.onmousedown = columnResizeStart
+    lastDragHandle.columnIndex = columnCount
+    headerScrollerPlaceholder.append(lastDragHandle)
 
+    header.append(headerScrollerPlaceholder)
+  }
+
+  function computeHeaderWidths() {
+    columnOffsets = []
+    totalWidth = 0
+    for (let i = 0; i < columnCount; i++) {
+      const c = columns[i]
+      const w = getCellWidth(c.name.length + c.type.length)
+      columnOffsets.push(totalWidth)
+      totalWidth += w
+    }
     columnOffsets.push(totalWidth)
   }
 
@@ -559,9 +526,6 @@ export function grid(root, msgBus) {
     o = 0
     r = 0
 
-    if (style) {
-      style.remove()
-    }
     header.innerHTML = ''
     canvas[0].innerHTML = ''
     rows = []
@@ -579,6 +543,10 @@ export function grid(root, msgBus) {
     lastKnownViewportWidth = 0
     timestampIndex = -1
     recomputeColumnWidthOnResize = false
+    // -1 means column is not being resized, anything else means user drags resize handle
+    // this is to prevent overlapping events actioning anything accidentally
+    colResizeColIndex = -1
+    colResizeClearTimer()
     enableHover()
   }
 
@@ -603,12 +571,12 @@ export function grid(root, msgBus) {
   }
 
   function removeClass(e, className) {
-    e.className = e.className.replace(className, '')
+    e.className = e.className.replace(className, '').trim()
   }
 
   function addClass(e, className) {
     if (e && !e.className.includes(className)) {
-      e.className += className
+      e.className += ' ' + className
     }
   }
 
@@ -626,8 +594,7 @@ export function grid(root, msgBus) {
 
   function setCellDataAndAttributes(row, rowData, cellIndex) {
     const cell = row.childNodes[cellIndex % visColumnCount]
-    cell.className = 'qg-c ' + getColumnWidthSelector(cellIndex)
-    cell.cellIndex = cellIndex
+    configureCell(cell, cellIndex)
     setCellData(cell, rowData[cellIndex])
   }
 
@@ -649,6 +616,7 @@ export function grid(root, msgBus) {
 
       for (let i = t; i < b; i++) {
         const row = rows[i & dcn]
+        row.style.width = totalWidth + 'px'
         const m = Math.floor(i / pageSize)
         const n = i % pageSize
         let d1
@@ -916,12 +884,14 @@ export function grid(root, msgBus) {
       for (let j = 0; j < colCount; j++) {
         const div = document.createElement('div')
         div.onclick = rowClick
+        div.className = 'qg-c'
         row.append(div)
       }
 
       // re-index exiting cells
       for (let j = 0; j < visColumnCount; j++) {
-        row.childNodes[j].className = 'qg-c ' + getColumnWidthSelector((visColumnLo + j) % visColumnCount)
+        // row.childNodes[j].className = 'qg-c ' + getColumnWidthSelector((visColumnLo + j) % visColumnCount)
+        configureCell(row.childNodes[j], visColumnLo + j)
       }
 
     }
@@ -1101,6 +1071,21 @@ export function grid(root, msgBus) {
     }
   }
 
+  function configureCell(cell, columnIndex) {
+    const left = columnOffsets[columnIndex]
+    cell.style.left = left + 'px'
+    cell.style.width = (columnOffsets[columnIndex + 1] - left) + 'px'
+    cell.style.textAlign = isLeftAligned(columnIndex) ? 'left' : undefined
+    cell.onclick = rowClick
+    if (cell.cellIndex === timestampIndex) {
+      removeClass(cell, 'qg-timestamp')
+    }
+    cell.cellIndex = columnIndex
+    if (columnIndex === timestampIndex) {
+      addClass(cell, 'qg-timestamp')
+    }
+  }
+
   function createRowElements() {
     for (let i = 0; i < dc; i++) {
       const rowDiv = document.createElement('div')
@@ -1112,16 +1097,16 @@ export function grid(root, msgBus) {
       }
       for (let k = 0; k < visColumnCount; k++) {
         const cell = document.createElement('div')
-        cell.className = 'qg-c ' + getColumnWidthSelector(k)
-        cell.onclick = rowClick
+        cell.className = 'qg-c'
+        configureCell(cell, k);
         rowDiv.append(cell)
         if (i === 0 && k === 0) {
           focusedCell = cell
         }
-        cell.cellIndex = k
       }
       rowDiv.style.top = '-100'
       rowDiv.style.height = rh.toString() + 'px'
+      rowDiv.style.width = totalWidth + 'px'
       rows.push(rowDiv)
       canvas[0].append(rowDiv)
     }
@@ -1187,16 +1172,15 @@ export function grid(root, msgBus) {
         columns = m.columns
         columnCount = columns.length
         timestampIndex = m.timestamp
-        createHeaderElements()
+        computeHeaderWidths()
         computeVisibleColumnWindow()
         // visible position depends on correctness of visColumnCount value
         computeVisibleColumnsPosition()
         computeColumnWidths()
+        createHeaderElements()
         createRowElements()
         setRowCount(m.count)
         viewport.scrollTop = 0
-        // makes browser render visuals for the given column widths
-        createCellStyle()
         resize()
         focusCell()
       },
