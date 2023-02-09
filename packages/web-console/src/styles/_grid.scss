@@ -71,7 +71,7 @@ $active-row-background: #323342;
   outline: none;
 }
 
-.qg-c:last-child {
+.qg-last-col {
   border-right: thin dotted #44475a;
 }
 
@@ -88,6 +88,10 @@ $active-row-background: #323342;
   height: 100% !important;
 }
 
+.qg-stub-transparent {
+  background: transparent !important;
+}
+
 .qg-header {
   padding: 10px 5px 10px 5px;
   cursor: pointer;
@@ -102,7 +106,7 @@ $active-row-background: #323342;
 }
 
 $visible-drag-handle-margin: 10px;
-$drag-handle-margin: 4px;
+$drag-handle-margin: 5px;
 
 .qg-header-border {
   position: absolute;

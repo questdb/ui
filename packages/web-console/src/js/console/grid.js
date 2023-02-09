@@ -118,7 +118,7 @@ export function grid(root, msgBus) {
   // last render attempt and repeat is when data is ready
   const pendingRender = {colLo: 0, colHi: 0, nextVisColumnLo: 0, render: false}
   const scrollerGirth = defaults.scrollerGirth
-  let headerScrollerPlaceholder
+  let headerStub
   let colResizeDragHandleStartX
   let colResizeMouseDownX
   let colResizeColIndex
@@ -142,7 +142,6 @@ export function grid(root, msgBus) {
   }
 
   function renderRow(row, rowIndex) {
-    console.trace()
     if (row.questIndex !== rowIndex) {
       const rowData = data[Math.floor(rowIndex / pageSize)]
       let k
@@ -485,7 +484,7 @@ export function grid(root, msgBus) {
         handle.className = 'qg-drag-handle'
         handle.columnIndex = i
         handle.onmousedown = columnResizeStart
-        // header.append(handle)
+
         const hBorderSpan = document.createElement('span')
         hBorderSpan.className = 'qg-header-border'
         h.append(handle, hBorderSpan)
@@ -496,16 +495,19 @@ export function grid(root, msgBus) {
       header.append(h)
     }
 
-    headerScrollerPlaceholder = document.createElement('div')
-    headerScrollerPlaceholder.className = 'qg-header qg-stub'
-    headerScrollerPlaceholder.style.width = scrollerGirth + 'px'
+    headerStub = document.createElement('div')
+    headerStub.className = 'qg-header qg-stub'
+    headerStub.style.width = scrollerGirth + 'px'
+
     const lastDragHandle = document.createElement('div')
     lastDragHandle.className = 'qg-drag-handle'
     lastDragHandle.onmousedown = columnResizeStart
     lastDragHandle.columnIndex = columnCount
-    headerScrollerPlaceholder.append(lastDragHandle)
 
-    header.append(headerScrollerPlaceholder)
+    const hBorderSpan = document.createElement('span')
+    hBorderSpan.className = 'qg-header-border'
+    headerStub.append(lastDragHandle, hBorderSpan)
+    header.append(headerStub)
   }
 
   function computeHeaderWidths() {
@@ -903,14 +905,18 @@ export function grid(root, msgBus) {
     return Math.abs(viewport.scrollHeight - viewport.getBoundingClientRect().height) > 0.8
   }
 
-  function toggleScrollerPlaceholder() {
-    if (headerScrollerPlaceholder) {
-      headerScrollerPlaceholder.style.display = isHorizontalScroller() && isVerticalScroller() ? 'block' : 'none'
+  function configureHeaderStub() {
+    if (headerStub) {
+      if (isHorizontalScroller() && isVerticalScroller()) {
+        removeClass(headerStub, 'qg-stub-transparent')
+      } else {
+        addClass(headerStub, 'qg-stub-transparent')
+      }
     }
   }
 
   function ensureCellsFillVisibleWindow() {
-    toggleScrollerPlaceholder()
+    configureHeaderStub()
     const prevVisColumnCount = visColumnCount
     computeVisibleColumnWindow()
     if (prevVisColumnCount < visColumnCount) {
@@ -928,6 +934,10 @@ export function grid(root, msgBus) {
     if (recomputeColumnWidthOnResize) {
       recomputeColumnWidthOnResize = false
       computeColumnWidths()
+      // set header widths
+      for (let i = 0; i < columnCount; i++) {
+        header.childNodes[i].style.minWidth = getColumnWidth(i) + 'px'
+      }
     }
 
     if (grid.style.display !== 'none') {
@@ -1075,14 +1085,22 @@ export function grid(root, msgBus) {
     const left = columnOffsets[columnIndex]
     cell.style.left = left + 'px'
     cell.style.width = (columnOffsets[columnIndex + 1] - left) + 'px'
+    cell.style.height = defaults.rowHeight + 'px'
     cell.style.textAlign = isLeftAligned(columnIndex) ? 'left' : undefined
     cell.onclick = rowClick
     if (cell.cellIndex === timestampIndex) {
       removeClass(cell, 'qg-timestamp')
     }
+    if (cell.cellIndex === columnCount - 1) {
+      removeClass(cell, 'qg-last-col')
+    }
+
     cell.cellIndex = columnIndex
     if (columnIndex === timestampIndex) {
       addClass(cell, 'qg-timestamp')
+    }
+    if (cell.cellIndex === columnCount - 1) {
+      addClass(cell, 'qg-last-col')
     }
   }
 
