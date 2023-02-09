@@ -104,6 +104,7 @@ const VerticalWrapper = styled.div`
   flex-shrink: 0;
 `
 
+const ghostSize = 10
 const ghostStyles = css`
   position: absolute;
   z-index: 20;
@@ -116,14 +117,14 @@ const ghostStyles = css`
 
 const HorizontalGhost = styled.div`
   ${ghostStyles};
-  width: 1rem;
+  width: ${ghostSize}px;
   top: 0;
   bottom: 0;
 `
 
 const VerticalGhost = styled.div`
   ${ghostStyles};
-  height: 1rem;
+  height: ${ghostSize}px;
   left: 0;
   right: 0;
 `
@@ -132,8 +133,8 @@ export const Splitter = ({
   children: rawChildren,
   fallback,
   direction,
-  max,
-  min,
+  max: maxRaw,
+  min: minRaw,
   onChange,
 }: Props) => {
   const [offset, setOffset] = useState(0)
@@ -149,33 +150,33 @@ export const Splitter = ({
   const handleMouseMove = useCallback(
     (event: TouchEvent | MouseEvent) => {
       event.stopPropagation()
-      const clientPosition = direction === "horizontal" ? "clientX" : "clientY"
-      const side = direction === "horizontal" ? "outerWidth" : "outerHeight"
-      let position = 0
 
-      if (window.TouchEvent && event instanceof TouchEvent) {
-        position = event.touches[0][clientPosition]
-      }
+      if (splitter.current?.parentElement) {
+        const min = Math.max(minRaw ?? 0, ghostSize)
 
-      if (event instanceof MouseEvent) {
-        position = event[clientPosition]
-      }
+        const max =
+          maxRaw ??
+          splitter.current.parentElement[
+            direction === "horizontal" ? "clientWidth" : "clientHeight"
+          ] - ghostSize
 
-      if (
-        (min != null &&
-          max != null &&
-          position > min &&
-          position < window[side] - max) ||
-        (min == null && max != null && position < window[side] - max) ||
-        (max == null && min != null && position > min) ||
-        (min == null && max == null)
-      ) {
-        setGhostPosition(position)
-      } else if (min != null && position <= min && firstChild.current) {
-        setGhostPosition(firstChild.current.getBoundingClientRect().left)
+        const xOrY = direction === "horizontal" ? "clientX" : "clientY"
+        let pointerPosition = 0
+
+        if (window.TouchEvent && event instanceof TouchEvent) {
+          pointerPosition = event.touches[0][xOrY]
+        }
+
+        if (event instanceof MouseEvent) {
+          pointerPosition = event[xOrY]
+        }
+
+        if (pointerPosition > min && pointerPosition < max) {
+          setGhostPosition(Math.min(pointerPosition, max))
+        }
       }
     },
-    [direction, max, min],
+    [direction, maxRaw, minRaw],
   )
 
   const handleMouseUp = useCallback(() => {
