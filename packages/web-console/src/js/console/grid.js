@@ -461,7 +461,6 @@ export function grid(root, msgBus) {
     for (let i = 0; i < columnCount; i++) {
       const c = columns[i]
       const h = document.createElement('div')
-      // h.className = 'qg-header ' + getColumnWidthSelector(i)
       h.className = 'qg-header'
       h.style.minWidth = getColumnWidth(i) + 'px'
       h.setAttribute('data-column-name', c.name)
@@ -892,7 +891,6 @@ export function grid(root, msgBus) {
 
       // re-index exiting cells
       for (let j = 0; j < visColumnCount; j++) {
-        // row.childNodes[j].className = 'qg-c ' + getColumnWidthSelector((visColumnLo + j) % visColumnCount)
         configureCell(row.childNodes[j], visColumnLo + j)
       }
 
