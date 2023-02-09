@@ -92,16 +92,14 @@ const Layout = () => {
               <Splitter
                 direction="vertical"
                 fallback={editorSplitterBasis}
-                max={300}
-                min={200}
+                min={100}
                 onChange={handleEditorSplitterChange}
               >
                 <Top>
                   <Splitter
                     direction="horizontal"
                     fallback={resultsSplitterBasis}
-                    max={300}
-                    min={200}
+                    max={500}
                     onChange={handleResultsSplitterChange}
                   >
                     {!sm && <Schema />}
