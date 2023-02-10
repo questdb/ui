@@ -50,7 +50,7 @@ export enum ModalId {
 export enum TelemetryTable {
   MAIN = "telemetry",
   CONFIG = "telemetry_config",
-  WAL="sys.telemetry_wal"
+  WAL = "sys.telemetry_wal"
 }
 
 const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
