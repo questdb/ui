@@ -8,14 +8,14 @@ export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
       "",
     ),
     provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position)
+
       const textUntilPosition = model.getValueInRange({
         startLineNumber: 1,
         startColumn: 1,
         endLineNumber: position.lineNumber,
-        endColumn: position.column,
+        endColumn: word.endColumn,
       })
-
-      const word = model.getWordUntilPosition(position)
 
       const range = {
         startLineNumber: position.lineNumber,
@@ -24,20 +24,29 @@ export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
         endColumn: word.endColumn,
       }
 
+      const nextChar = model.getValueInRange({
+        startLineNumber: position.lineNumber,
+        startColumn: word.endColumn,
+        endLineNumber: position.lineNumber,
+        endColumn: word.endColumn + 1,
+      })
+
       if (
         word.word ||
         /(FROM|INTO|TABLE) $/gim.test(textUntilPosition) ||
         (/'$/gim.test(textUntilPosition) && !textUntilPosition.endsWith("= '"))
       ) {
+        const openQuote = textUntilPosition.substr(-1 - word.word.length, 1) === "\"";
+        const nextCharQuote = nextChar == "\"";
         return {
           suggestions: questDBTables.map((item) => {
             return {
               label: item.name,
               kind: CompletionItemKind.Class,
               insertText:
-                textUntilPosition.substr(-1) === "'"
-                  ? item.name
-                  : `'${item.name}'`,
+              openQuote
+                  ? item.name + (nextCharQuote ? "" : "\"")
+                  :  /^[a-z0-9_]+$/i.test(item.name) ? item.name : `"${item.name}"`,
               range,
             }
           }),
