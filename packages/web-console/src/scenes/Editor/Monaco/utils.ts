@@ -216,8 +216,8 @@ export const getErrorRange = (
     let wordAtPosition
     if (selection && selectedText) {
       wordAtPosition = model.getWordAtPosition({
-        column: selection.startColumn + errorPosition,
-        lineNumber: selection.startLineNumber,
+        column: selection.startColumn + position.column,
+        lineNumber: position.lineNumber,
       })
     } else {
       wordAtPosition = model.getWordAtPosition(position)

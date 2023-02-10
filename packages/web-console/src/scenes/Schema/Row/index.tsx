@@ -191,7 +191,7 @@ const Row = ({
   const handlePlusButtonClick = useCallback(
     (event: MouseEvent) => {
       event.stopPropagation()
-      insertTextAtCursor(kind === "table" ? `'${name}'` : name)
+      insertTextAtCursor(kind === "table" && !/^[a-z0-9_]+$/i.test(name) ? `"${name}"` : name)
     },
     [name, kind],
   )
