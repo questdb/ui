@@ -4,7 +4,7 @@ import { CompletionItemKind } from "./types"
 
 export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
-    triggerCharacters: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz '".split(
+    triggerCharacters: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz \"".split(
       "",
     ),
     provideCompletionItems(model, position) {
@@ -14,7 +14,7 @@ export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
         startLineNumber: 1,
         startColumn: 1,
         endLineNumber: position.lineNumber,
-        endColumn: word.endColumn,
+        endColumn: word.startColumn,
       })
 
       const range = {
@@ -36,7 +36,7 @@ export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
         /(FROM|INTO|TABLE) $/gim.test(textUntilPosition) ||
         (/'$/gim.test(textUntilPosition) && !textUntilPosition.endsWith("= '"))
       ) {
-        const openQuote = textUntilPosition.substr(-1 - word.word.length, 1) === "\"";
+        const openQuote = textUntilPosition.substr(-1) === "\"";
         const nextCharQuote = nextChar == "\"";
         return {
           suggestions: questDBTables.map((item) => {
