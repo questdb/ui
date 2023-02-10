@@ -132,13 +132,43 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
       if (remoteConfig?.lastUpdated) {
         return from(
           quest.queryRaw(
-            `SELECT cast(created as long), event, origin
-                FROM ${TelemetryTable.MAIN}
-                WHERE created > '${new Date(
-                  remoteConfig.lastUpdated,
-                ).toISOString()}'
-                LIMIT -10000
-            `,
+            `with tel as (
+             SELECT cast(created as long), event, origin
+             FROM ${TelemetryTable.MAIN}
+             WHERE created > '${new Date(
+              remoteConfig.lastUpdated,
+             ).toISOString()}'
+             LIMIT -10000 
+            )            
+            SELECT cast(created as long), cast(1000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
+              SELECT created, cast(ceil(sum(rowCount) / 1000.0) as short) sm
+              FROM ${TelemetryTable.WAL}
+              WHERE created > '${new Date(
+                remoteConfig.lastUpdated,
+              ).toISOString()}' and rowCount > 0
+              SAMPLE BY 1h align to calendar
+            )
+            UNION ALL 
+            SELECT cast(created as long), cast(2000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
+              SELECT created, cast(ceil(sum(rowCount) / 1000.0) as short) sm
+              FROM ${TelemetryTable.WAL}
+              WHERE created > '${new Date(
+                remoteConfig.lastUpdated,
+              ).toISOString()}' and rowCount > 0
+              SAMPLE BY 1h align to calendar
+            )
+            UNION ALL 
+            SELECT cast(created as long), cast(3000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
+              SELECT created, cast(max(latency) / 1000.0 as short) sm
+              FROM ${TelemetryTable.WAL}
+              WHERE created > '${new Date(
+                remoteConfig.lastUpdated,
+              ).toISOString()}' and rowCount > 0
+              SAMPLE BY 1h align to calendar
+             )
+             UNION ALL
+             SELECT * FROM tel
+             `,
           ),
         )
       }
