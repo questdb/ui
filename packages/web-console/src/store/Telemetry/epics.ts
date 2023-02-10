@@ -150,7 +150,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
             )
             UNION ALL 
             SELECT cast(created as long), cast(2000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
-              SELECT created, cast(ceil(sum(rowCount) / 1000.0) as short) sm
+              SELECT created, cast(count() as short) sm
               FROM ${TelemetryTable.WAL}
               WHERE created > '${new Date(
                 remoteConfig.lastUpdated,
