@@ -49,6 +49,9 @@ module.exports = {
     },
     "should mark 'telemetry' as error": {
       "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:110px;width:93px;height:21px;\"></div>"
+    },
+    "should mark date position as error": {
+      "1": "<div class=\"cdr squiggly-error\"\n  style=\"left:506px;width:42px;height:21px;\"></div>"
     }
   },
   "questdb grid": {
