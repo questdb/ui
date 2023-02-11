@@ -39,7 +39,11 @@ It does feel a bit strange to have dependencies committed, but it's a well worth
 
 ### 2. Bootstrap dependencies
 
-Make sure you have `node` and `yarn` and that their versions are compatible with this project:
+
+#### `node` and `yarn`
+
+First make sure you have `node` and `yarn` and that their versions are compatible with this project.
+This is a common source of issues, best not to skip this step:
 
 * `node -v` should return `16.13.1`\
   If it doesn't, you can use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to manage node versions on your machine.\
@@ -49,7 +53,11 @@ Make sure you have `node` and `yarn` and that their versions are compatible with
   If it returns `command not found`, enable `yarn` by running `corepack enable`.\
   Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have trouble.
   
-* run `yarn` to bootstrap dependencies. This should be a quick process (less than a minute).
+#### Bootstrap
+
+Simply run `yarn` to bootstrap.
+
+All dependencies are already available, so this should be a quick process.
 
 ### 3. Run command of a package
 
