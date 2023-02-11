@@ -2,7 +2,7 @@
 
 const baseUrl = "http://localhost:9999";
 
-describe.only("appendQuery", () => {
+describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
       { name: "query 1", value: "first query" },
@@ -134,7 +134,8 @@ describe("&query URL param", () => {
     cy.runQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
-    cy.getGridRow(0).should("contain", "2").snapshot();
+    cy.getGridRow(0).should("contain", "2");
+    cy.getSelectedLines().snapshot();
   });
 
   it("should append and select multiline query", () => {
@@ -146,7 +147,8 @@ describe("&query URL param", () => {
     );
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
-    cy.getGridRow(0).should("contain", "2").snapshot();
+    cy.getGridRow(0).should("contain", "2");
+    cy.getSelectedLines().snapshot();
   });
 
   it("should not append query if it already exists in editor", () => {
@@ -170,7 +172,7 @@ describe("autocomplete", () => {
 
   it("should work when tables list is empty", () => {
     cy.visit(baseUrl);
-    cy.typeQuery("select * from tel");
+    cy.typeQuery("select * from teletubies");
     cy.getAutocomplete().should("not.be.visible");
     cy.clearEditor();
     cy.runQuery('create table "my_secrets" ("secret" string)');
