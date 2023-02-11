@@ -43,3 +43,5 @@ Cypress.Commands.add("F9", () =>
     keyCode: 120,
   })
 );
+
+Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
