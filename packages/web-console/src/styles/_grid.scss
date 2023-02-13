@@ -132,8 +132,9 @@ $drag-handle-margin: 5px;
   // place drag handle so that visible "line" is in the middle of it
   // to add hysteresis for the drag cursor
   margin-left: -$visible-drag-handle-margin - $drag-handle-margin;
-  width: $visible-drag-handle-margin * 2 ;
-  height: $row-height;
+  width: $visible-drag-handle-margin * 2;
+  height: 100%;
+  top: 0;
   z-index: 1;
   position: absolute;
 }
