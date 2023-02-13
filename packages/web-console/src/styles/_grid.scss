@@ -44,6 +44,14 @@ $row-height: 55px;
   }
 }
 
+.qg-timestamp {
+  color: #50fa7b;
+}
+
+.qg-null {
+  color: #939393;
+}
+
 .qg-header-row,
 .qg-r {
   white-space: nowrap;
@@ -57,25 +65,35 @@ $row-height: 55px;
   right: 0;
 }
 
+$active-row-background: #323342;
+
 .qg-hover .qg-r:hover {
-  background-color: #44475a;
+  background-color: $active-row-background;
 }
 
 .qg-r:focus {
   outline: none;
 }
 
+.qg-last-col {
+  border-right: thin dotted #44475a;
+}
+
 .qg-hover .qg-r-active:hover {
-  background-color: #6272a4;
+  background-color: $active-row-background;
   color: #f8f8f2;
 }
 
 .qg-r-active {
-  background-color: #6272a4;
+  background-color: $active-row-background;
 }
 
 .qg-stub {
   height: 100% !important;
+}
+
+.qg-stub-transparent {
+  background: transparent !important;
 }
 
 .qg-header {
@@ -92,16 +110,16 @@ $row-height: 55px;
 }
 
 $visible-drag-handle-margin: 10px;
+$drag-handle-margin: 5px;
 
 .qg-header-border {
   position: absolute;
   margin-top: 10px;
   height: 25px;
-  border-right: thin dashed #cac30f;
-}
-
-.qg-header-l .qg-header-border {
-  margin-left: 0 !important;
+  border-left: thin dashed #cac30f;
+  // border span is squashed against the left side of the parent div, we need to bring
+  // it out left a little to make it look like it is a left border of the previous cell
+  margin-left: -$drag-handle-margin;
 }
 
 .qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
@@ -113,10 +131,12 @@ $visible-drag-handle-margin: 10px;
 .qg-drag-handle {
   // place drag handle so that visible "line" is in the middle of it
   // to add hysteresis for the drag cursor
-  margin-left: -$visible-drag-handle-margin / 2;
-  width: $visible-drag-handle-margin * 2 !important;
-  height: $row-height;
+  margin-left: -$visible-drag-handle-margin - $drag-handle-margin;
+  width: $visible-drag-handle-margin * 2;
+  height: 100%;
+  top: 0;
   z-index: 1;
+  position: absolute;
 }
 
 .qg-drag-handle:hover {
@@ -125,7 +145,7 @@ $visible-drag-handle-margin: 10px;
 
 .qg-col-resize-ghost {
   position: absolute;
-  width: 4px;
+  width: $drag-handle-margin;
   box-shadow: inset 0 0 0 2px #f1fa8c;
   height: 0;
   background: #f1fa8c;
@@ -177,13 +197,15 @@ $visible-drag-handle-margin: 10px;
 }
 
 .qg-c {
+  position: absolute;
   padding: 4px 5px 4px 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
+  border-left: thin dotted #44475a;
 }
 
-.qg-hover .qg-c:hover, .qg-r-active .qg-c:hover, .qg-c-active {
+.qg-c-active {
   box-shadow: inset 0 0 0 2px #f1fa8c;
   border-radius: 6px;
 }
