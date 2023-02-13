@@ -63,7 +63,29 @@ yarn workspace @questdb/web-console run build
 
 ## Run tests
 
-This monorepo contains [`browser-tests`](../browser-tests/) package which is used to test
+### Unit tests
+
+This package uses [Jest](https://jestjs.io/) for unit tests.
+
+To run them locally while developing, run:
+
+```
+yarn workspace @questdb/web-console run test
+```
+
+This will start jest in watch mode and will rerun tests on file changes.
+
+If you want to run tests once, use:
+
+```
+yarn workspace @questdb/web-console run test:prod
+```
+
+This command is also used in CI.
+
+### Browser tests
+
+This monorepo contains `browser-tests` package which is used to test
 `web-console` package. `browser-tests` does not yet run as part of
 `web-console` build on CI, but they can be used to test changes locally.
 
