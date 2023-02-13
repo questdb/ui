@@ -21,6 +21,12 @@ jobs:
       - name: build
         run: yarn workspace @questdb/web-console run build
 
+      - name: start QuestDB docker
+        run: docker run -p 9000:9000 questdb/questdb:nightly
+
+      - name: start node and run cypress tests
+        run: yarn workspace @questdb/web-console start &  yarn workspace browser-tests test            
+
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
         uses: JS-DevTools/npm-publish@v1
