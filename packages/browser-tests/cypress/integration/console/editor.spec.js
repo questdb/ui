@@ -28,22 +28,25 @@ describe("appendQuery", () => {
     cy.visit(baseUrl);
   });
 
-  it("should append and select query", () => {
+  it("should append and select first query", () => {
     cy.selectQuery(0);
     const expected = `${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
-  it("should append and select query", () => {
+  it("should append and select second query", () => {
     cy.selectQuery(1);
     const expected = `${queries[1]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should append and select multiline query", () => {
     cy.selectQuery(2);
     const expected = `${queries[2]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and select query after multiple inserts", () => {
@@ -52,7 +55,8 @@ describe("appendQuery", () => {
     cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
     cy.selectQuery(1);
     const expected = `${queries[1]}\n\n${queries[1]}\n\n${queries[2]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and select query when position is first line which is empty", () => {
@@ -60,42 +64,48 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     cy.selectQuery(1);
     const expected = `${queries[0]}\n\n${queries[1]}\n\n--b`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and select query when position is first line which is not empty", () => {
     cy.typeQuery(`--a`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and add surrounding new lines when position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}--b`);
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 
   it("should correctly append and add surrounding new lines when position is middle of non empty line and next line is empty", () => {
@@ -103,7 +113,8 @@ describe("appendQuery", () => {
     cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`); // go to line 2
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
-    cy.getEditor().should("have.value", expected).snapshot();
+    cy.getEditor().should("have.value", expected);
+    cy.getSelectedLines().snapshot();
   });
 });
 
@@ -123,7 +134,8 @@ describe("&query URL param", () => {
     cy.runQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
-    cy.getGridRow(0).should("contain", "2").snapshot();
+    cy.getGridRow(0).should("contain", "2");
+    cy.getSelectedLines().snapshot();
   });
 
   it("should append and select multiline query", () => {
@@ -135,7 +147,8 @@ describe("&query URL param", () => {
     );
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
-    cy.getGridRow(0).should("contain", "2").snapshot();
+    cy.getGridRow(0).should("contain", "2");
+    cy.getSelectedLines().snapshot();
   });
 
   it("should not append query if it already exists in editor", () => {
@@ -159,7 +172,7 @@ describe("autocomplete", () => {
 
   it("should work when tables list is empty", () => {
     cy.visit(baseUrl);
-    cy.typeQuery("select * from tel");
+    cy.typeQuery("select * from teletubies");
     cy.getAutocomplete().should("not.be.visible");
     cy.clearEditor();
     cy.runQuery('create table "my_secrets" ("secret" string)');
@@ -203,6 +216,13 @@ describe("errors", () => {
     const query = `CREATE TABLE 'telemetry' (id LONG256)`;
     cy.runQuery(query);
     cy.getErrorMarker().snapshot();
+  });
+
+  it("should mark date position as error", () => {
+    const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
+    cy.runQuery(query);
+    cy.getErrorMarker().snapshot();
+    cy.getNotifications().should("contain", "Invalid date");
   });
 });
 

@@ -7,6 +7,6 @@
   },
   "devDependencies": {
     "@cypress/snapshot": "^2.1.7",
-    "cypress": "^9.5.1"
+    "cypress": "^10.11.0"
   }
 }
