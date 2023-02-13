@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.11 - 2023-02-13
+
+### Fixed
+- tidy-up grid visuals
+- fix grid column resize glitches
+- improve grid render performance by over 80%
+- fix horizontal splitter resize issue
+
+### Added
+- grid semantic highlighting for designated timestamp values
+- grid semantic highlighting for null values
+
 ## 0.0.11 - 2023-02-07
 
 - made column type a subtext in column header
