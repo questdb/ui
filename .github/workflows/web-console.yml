@@ -6,14 +6,21 @@ on:
 jobs:
   build:
     name: Build packages/web-console
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
           node-version: '16.13.1'
-          cache: 'yarn'
+          cache: $(Build.SourcesDirectory)/.yarn
+
+      - task: Cache@2
+        inputs:
+          key: '"questdb_ui" | "$(Agent.OS)" | "yarn"'
+          restoreKeys: |
+            "questdb_ui" | "$(Agent.OS)" | "yarn"
+          path: $(.yarn)
 
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
