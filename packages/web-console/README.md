@@ -9,14 +9,14 @@ Yarn@3 and Webpack.
 
 In order to run this package locally, you need to do the following steps:
 
-1. Clone and bootstrap repository (by following instructions on [`local-development-setup.md`](../docs/local-development-setup.md)) 
+1. Clone and bootstrap repository (by following instructions on [`local-development-setup.md`](../../docs/local-development-setup.md)) 
 2. Start development server
 3. Run QuestDB in the background
 4. Hack!
 
 ### 1. Clone and bootstrap repository
 
-Consult instructions on [`local-development-setup.md`](../docs/local-development-setup.md) document.
+Consult instructions on [`local-development-setup.md`](../../docs/local-development-setup.md) document.
 
 ### 2. Start development server
 
