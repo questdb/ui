@@ -125,6 +125,8 @@ export function grid(root, msgBus) {
   let colResizeColOrigOffset
   let colResizeColOrigWidth
   let colResizeOrigMargin
+  let colResizeTargetWidth = 0
+  let colResizeTimer
 
   let hoverEnabled = true
   let recomputeColumnWidthOnResize = false
@@ -200,6 +202,11 @@ export function grid(root, msgBus) {
 
   function empty(x) {
     return data[x] === null || data[x] === undefined || data[x].length === 0
+  }
+
+  function setHeaderCellWidth(cell, width) {
+    cell.style.minWidth = width + 'px'
+    cell.style.maxWidth = width + 'px'
   }
 
   function loadPages(p1, p2) {
@@ -375,6 +382,10 @@ export function grid(root, msgBus) {
     }
   }
 
+  function getColResizeGhostLeft(delta) {
+    return (colResizeDragHandleStartX + delta - viewport.scrollLeft) + 'px';
+  }
+
   function columnResizeStart(e) {
     e.preventDefault()
 
@@ -393,7 +404,7 @@ export function grid(root, msgBus) {
     document.onmouseup = columnResizeEnd
 
     columnResizeGhost.style.top = target.getBoundingClientRect().top + 'px'
-    columnResizeGhost.style.left = colResizeDragHandleStartX + 'px'
+    columnResizeGhost.style.left = getColResizeGhostLeft(0)
     columnResizeGhost.style.height = (grid.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0)) + 'px'
     columnResizeGhost.style.visibility = 'visible';
 
@@ -412,19 +423,15 @@ export function grid(root, msgBus) {
     totalWidth = columnOffsets[columnCount]
   }
 
-  let colResizeTargetWidth = 0
-
   function columnResizeDrag(e) {
     e.preventDefault()
     const delta = e.clientX - colResizeMouseDownX
     const width = colResizeColOrigWidth + delta
     if (width > defaults.minColumnWidth) {
-      columnResizeGhost.style.left = (colResizeDragHandleStartX + delta - viewport.scrollLeft) + 'px'
+      columnResizeGhost.style.left = getColResizeGhostLeft(delta)
       colResizeTargetWidth = width
     }
   }
-
-  let colResizeTimer
 
   function columnResizeEnd(e) {
     e.preventDefault()
@@ -434,7 +441,7 @@ export function grid(root, msgBus) {
     updateColumnWidth(colResizeColIndex, colResizeTargetWidth)
 
     // update header width
-    header.childNodes[colResizeColIndex].style.minWidth = colResizeTargetWidth + 'px'
+    setHeaderCellWidth(header.childNodes[colResizeColIndex], colResizeTargetWidth)
     renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
     ensureCellsFillVisibleWindow()
 
@@ -459,7 +466,7 @@ export function grid(root, msgBus) {
       const c = columns[i]
       const h = document.createElement('div')
       h.className = 'qg-header'
-      h.style.minWidth = getColumnWidth(i) + 'px'
+      setHeaderCellWidth(h, getColumnWidth(i))
       h.setAttribute('data-column-name', c.name)
       if (isLeftAligned(i)) {
         h.className += ' qg-header-l'
@@ -569,12 +576,12 @@ export function grid(root, msgBus) {
   }
 
   function removeClass(e, className) {
-    e.className = e.className.replace(className, '').trim()
+    e.classList.remove(className)
   }
 
   function addClass(e, className) {
-    if (e && !e.className.includes(className)) {
-      e.className += ' ' + className
+    if (e) {
+      e.classList.add(className)
     }
   }
 
@@ -587,7 +594,13 @@ export function grid(root, msgBus) {
   }
 
   function setCellData(cell, cellData) {
-    cell.innerHTML = cellData !== null ? cellData.toString() : 'null'
+    if (cellData !== null) {
+      cell.innerHTML = cellData.toString()
+      cell.classList.remove('qg-null')
+    } else {
+      cell.innerHTML = 'null'
+      cell.classList.add('qg-null')
+    }
   }
 
   function setCellDataAndAttributes(row, rowData, cellIndex) {
@@ -930,7 +943,7 @@ export function grid(root, msgBus) {
       computeColumnWidths()
       // set header widths
       for (let i = 0; i < columnCount; i++) {
-        header.childNodes[i].style.minWidth = getColumnWidth(i) + 'px'
+        setHeaderCellWidth(header.childNodes[i], getColumnWidth(i))
       }
     }
 
