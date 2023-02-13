@@ -433,12 +433,9 @@ export function grid(root, msgBus) {
 
     updateColumnWidth(colResizeColIndex, colResizeTargetWidth)
 
-    const colLo = colResizeColIndex
-    const j = colLo % visColumnCount
-    const colHi = Math.min(colLo + (visColumnCount - j), columnCount)
     // update header width
-    header.childNodes[colLo].style.minWidth = colResizeTargetWidth + 'px'
-    renderCells(colLo, colHi, visColumnLo)
+    header.childNodes[colResizeColIndex].style.minWidth = colResizeTargetWidth + 'px'
+    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
     ensureCellsFillVisibleWindow()
 
     columnResizeGhost.style.visibility = 'hidden';
@@ -818,7 +815,6 @@ export function grid(root, msgBus) {
       }
       renderRows(y - oldY)
     }
-
     setFocus(focusedCell)
     logDebug()
   }
@@ -1084,7 +1080,7 @@ export function grid(root, msgBus) {
     cell.style.left = left + 'px'
     cell.style.width = (columnOffsets[columnIndex + 1] - left) + 'px'
     cell.style.height = defaults.rowHeight + 'px'
-    cell.style.textAlign = isLeftAligned(columnIndex) ? 'left' : undefined
+    cell.style.textAlign = isLeftAligned(columnIndex) ? 'left' : 'right'
     cell.onclick = rowClick
     if (cell.cellIndex === timestampIndex) {
       removeClass(cell, 'qg-timestamp')
