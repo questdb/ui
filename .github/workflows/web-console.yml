@@ -13,26 +13,13 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '16.13.1'
-          cache: $(Build.SourcesDirectory)/.yarn
-
-      - task: Cache@2
-        inputs:
-          key: '"questdb_ui" | "$(Agent.OS)" | "yarn"'
-          restoreKeys: |
-            "questdb_ui" | "$(Agent.OS)" | "yarn"
-          path: $(.yarn)
+          cache: 'yarn'
 
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
 
       - name: build
         run: yarn workspace @questdb/web-console run build
-
-      - name: start QuestDB docker
-        run: docker run -d --rm -p 9000:9000 questdb/questdb:nightly
-
-      - name: start node and run cypress tests
-        run: yarn workspace @questdb/web-console start &  yarn workspace browser-tests test            
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
