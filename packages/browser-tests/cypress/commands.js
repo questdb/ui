@@ -1,5 +1,7 @@
 require("@cypress/snapshot").register();
 
+const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
+
 Cypress.Commands.add("getGrid", () =>
   cy.get(".qg-canvas").should("be.visible")
 );
@@ -9,15 +11,23 @@ Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 Cypress.Commands.add("getGridRow", (n) => cy.get(".qg-r").eq(n));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.get(".monaco-editor").first().click().focused().type("{ctrl}a").type(query)
+  cy
+    .get(".monaco-editor")
+    .first()
+    .click()
+    .focused()
+    .type(`${ctrlOrCmd}a`)
+    .type(query)
 );
 
 Cypress.Commands.add("runQuery", (query) => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(query).type("{ctrl}{enter}").wait("@exec");
+  return cy.typeQuery(query).type(`${ctrlOrCmd}{enter}`).wait("@exec");
 });
 
-Cypress.Commands.add("clearEditor", () => cy.typeQuery("{ctrl}a{backspace}"));
+Cypress.Commands.add("clearEditor", () =>
+  cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
+);
 
 Cypress.Commands.add("selectQuery", (n) =>
   cy
@@ -43,3 +53,7 @@ Cypress.Commands.add("F9", () =>
     keyCode: 120,
   })
 );
+
+Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
+
+Cypress.Commands.add("getNotifications", () => cy.get(".notifications"));
