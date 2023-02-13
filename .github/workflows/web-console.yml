@@ -21,6 +21,9 @@ jobs:
       - name: build
         run: yarn workspace @questdb/web-console run build
 
+      - name: test
+        run: yarn workspace @questdb/web-console run test:prod
+
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
         uses: JS-DevTools/npm-publish@v1
