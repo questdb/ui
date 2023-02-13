@@ -7,49 +7,18 @@ Yarn@3 and Webpack.
 
 ## Local development setup
 
-You need to do the following steps:
+In order to run this package locally, you need to do the following steps:
 
-1. Clone the repository
-2. Bootstrap dependencies
-3. Start development server
-4. Run QuestDB in the background
-5. Hack!
+1. Clone and bootstrap repository (by following instructions on [`local-development-setup.md`](../docs/local-development-setup.md)) 
+2. Start development server
+3. Run QuestDB in the background
+4. Hack!
 
-The setup is fairly quick!
+### 1. Clone and bootstrap repository
 
-### 1. Clone the repository
+Consult instructions on [`local-development-setup.md`](../docs/local-development-setup.md) document.
 
-The repository is about 250MB in size. This is expected, because we use [Yarn@3 with PnP](https://next.yarnpkg.com/features/pnp).\
-Download is what takes the most amount of time (~1 minute on a decent connection).
-
-* clone using SSH:
-  ```
-  git clone git@github.com:questdb/ui.git
-  ```
-
-* or using HTTPS:
-  ```
-  git clone https://github.com/questdb/ui.git
-  ```
-
-* or using [Github CLI](https://cli.github.com/):
-  ```
-  gh repo clone questdb/ui
-  ```
-
-### 2. Bootstrap dependencies
-
-* `node -v` should return `16.13.1`\
-  If it doesn't, you can use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to manage node versions on your machine.\
-  Then run `fnm use` or `nvm use` to set correct version.
-
-* `yarn -v` should return v3 (like `3.2.1`).\
-  If it returns `command not found`, enable `yarn` by running `corepack enable`.\
-  Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have trouble.
-  
-* run `yarn` to bootstrap dependencies. This should be a quick process (less than a minute).
-
-### 3. Start development server
+### 2. Start development server
 
 ```
 yarn workspace @questdb/web-console start
@@ -57,10 +26,10 @@ yarn workspace @questdb/web-console start
 
 [localhost:9999](http://localhost:9999) should show web console
 
-### 4. Run QuestDB in the background
+### 3. Run QuestDB in the background
 
-This package is a only GUI for QuestDB, it does not include QuestDB itself.\
-GUI will work without it, but since it's a tool to interact with QuestDB, you will need QuestDB as well.
+This package (`web-console`) is a only GUI for QuestDB, it does not include QuestDB itself.\
+GUI will work without it, but because it's a tool to interact with QuestDB, you will need QuestDB as well.
 
 Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.
 
@@ -70,13 +39,13 @@ If you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 ```
 
-### 5. Hack!
+### 4. Hack!
 
 Do your code changes and browser will automatically refresh [localhost:9999](http://localhost:9999).
 
 Happy hacking!
 
-## Run build 
+## Build production version
 
 1. Make sure dependencies are set up:
 
@@ -94,7 +63,7 @@ yarn workspace @questdb/web-console run build
 
 ## Run tests
 
-This monorepo contains `browser-tests` package which is used to test
+This monorepo contains [`browser-tests`](../browser-tests/) package which is used to test
 `web-console` package. `browser-tests` does not yet run as part of
 `web-console` build on CI, but they can be used to test changes locally.
 
