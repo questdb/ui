@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - tidy-up grid visuals
 - fix grid column resize glitches
 - improve grid render performance by over 80%
+- fix horizontal splitter resize issue
 
 ### Added
 - grid semantic highlighting for designated timestamp values
