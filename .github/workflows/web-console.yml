@@ -15,13 +15,6 @@ jobs:
           node-version: '16.13.1'
           cache: '$(Build.SourcesDirectory)/.yarn'
 
-      - task: Cache@2
-        inputs:
-          key: '"questdb_ui" | "$(Agent.OS)" | "yarn"'
-          restoreKeys: |
-            "questdb_ui" | "$(Agent.OS)" | "yarn"
-          path: $(.yarn)
-
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
 
