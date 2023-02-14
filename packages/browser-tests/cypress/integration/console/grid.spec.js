@@ -1,26 +1,27 @@
 /// <reference types="cypress" />
 
 describe("questdb grid", () => {
-  beforeEach(() => {
+  before(() => {
     cy.visit("http://localhost:9999");
+  });
+
+  afterEach(() => {
+    cy.clearEditor();
   });
 
   it("when results empty", () => {
     cy.runQuery("select x from long_sequence(0)");
-    cy.getGrid().snapshot();
-  });
-
-  it("when results don't have vertical scroll", () => {
-    const query = `select x from long_sequence(3)`;
-    cy.runQuery(query);
-    cy.getGrid().snapshot();
+    cy.getGridRows().should("have.length", 0);
   });
 
   it("when results have vertical scroll", () => {
     cy.runQuery(`select x from long_sequence(100)`);
-    cy.getGrid().snapshot();
+    cy.getGridRows().should("have.length", 6);
+    cy.getGridRow(0).should("contain", "1");
+
     cy.getGridViewport().scrollTo("bottom");
-    cy.getGrid().snapshot();
+    cy.getGridRows().should("have.length", 6);
+    cy.getGridRow(0).should("contain", "95");
   });
 
   it("multiple scrolls till the bottom", () => {

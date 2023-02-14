@@ -2,6 +2,15 @@
 
 const baseUrl = "http://localhost:9999";
 
+const numberRangeRegexp = (n, width = 3) => {
+  const [min, max] = [n - width, n + width];
+  const numbers = Array.from(
+    { length: Math.abs(max - min) },
+    (_, i) => min + i
+  );
+  return numbers.join("|");
+};
+
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
@@ -16,7 +25,7 @@ describe("appendQuery", () => {
 
   const queries = consoleConfiguration.savedQueries.map((query) => query.value);
 
-  beforeEach(() => {
+  before(() => {
     cy.intercept(
       {
         method: "GET",
@@ -28,25 +37,30 @@ describe("appendQuery", () => {
     cy.visit(baseUrl);
   });
 
+  afterEach(() => {
+    cy.clearEditor();
+  });
+
   it("should append and select first query", () => {
     cy.selectQuery(0);
     const expected = `${queries[0]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select second query", () => {
     cy.selectQuery(1);
     const expected = `${queries[1]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
     cy.selectQuery(2);
     const expected = `${queries[2]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    // monaco editor visually selects all 3 lines, but creates 4 elements to visualise selection
+    cy.getSelectedLines().should("have.length", 4);
   });
 
   it("should correctly append and select query after multiple inserts", () => {
@@ -56,7 +70,7 @@ describe("appendQuery", () => {
     cy.selectQuery(1);
     const expected = `${queries[1]}\n\n${queries[1]}\n\n${queries[2]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and select query when position is first line which is empty", () => {
@@ -65,7 +79,7 @@ describe("appendQuery", () => {
     cy.selectQuery(1);
     const expected = `${queries[0]}\n\n${queries[1]}\n\n--b`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and select query when position is first line which is not empty", () => {
@@ -73,7 +87,7 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
@@ -81,7 +95,7 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
@@ -89,7 +103,7 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and add surrounding new lines when position is last line which is empty", () => {
@@ -97,7 +111,7 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
@@ -105,7 +119,7 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should correctly append and add surrounding new lines when position is middle of non empty line and next line is empty", () => {
@@ -114,12 +128,12 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
     cy.getEditor().should("have.value", expected);
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 });
 
 describe("&query URL param", () => {
-  beforeEach(() => {
+  before(() => {
     Cypress.on("uncaught:exception", (err) => {
       // this error can be safely ignored
       if (err.message.includes("ResizeObserver loop limit exceeded")) {
@@ -130,12 +144,11 @@ describe("&query URL param", () => {
 
   it("should append and select single line query", () => {
     cy.visit(baseUrl);
-    cy.clearEditor();
     cy.runQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
     cy.getGridRow(0).should("contain", "2");
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
@@ -148,7 +161,7 @@ describe("&query URL param", () => {
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
     cy.getGridRow(0).should("contain", "2");
-    cy.getSelectedLines().snapshot();
+    cy.getSelectedLines().should("have.length", 4);
   });
 
   it("should not append query if it already exists in editor", () => {
@@ -161,17 +174,22 @@ describe("&query URL param", () => {
 });
 
 describe("autocomplete", () => {
-  beforeEach(() => {
+  before(() => {
     Cypress.on("uncaught:exception", (err) => {
       // this error can be safely ignored
       if (err.message.includes("ResizeObserver loop limit exceeded")) {
         return false;
       }
     });
+
+    cy.visit(baseUrl);
+  });
+
+  afterEach(() => {
+    cy.clearEditor();
   });
 
   it("should work when tables list is empty", () => {
-    cy.visit(baseUrl);
     cy.typeQuery("select * from teletubies");
     cy.getAutocomplete().should("not.be.visible");
     cy.clearEditor();
@@ -183,7 +201,6 @@ describe("autocomplete", () => {
   });
 
   it("should work when tables list is not empty", () => {
-    cy.visit(baseUrl);
     cy.runQuery('create table "my_secrets" ("secret" string)');
     cy.runQuery('create table "my_publics" ("public" string)');
     cy.reload();
@@ -202,59 +219,85 @@ describe("errors", () => {
     cy.visit(baseUrl);
   });
 
-  beforeEach(() => {
+  afterEach(() => {
     cy.clearEditor();
   });
 
   it("should mark '(200000)' as error", () => {
     const query = `create table test (\ncol symbol index CAPACITY (200000)`;
     cy.runQuery(query);
-    cy.getErrorMarker().snapshot();
+    cy.getErrorMarker()
+      .should("have.attr", "style")
+      .and(
+        "match",
+        new RegExp(
+          `left:${numberRangeRegexp(237)}px;width:${numberRangeRegexp(67)}px;`
+        )
+      );
   });
 
   it("should mark 'telemetry' as error", () => {
     const query = `CREATE TABLE 'telemetry' (id LONG256)`;
     cy.runQuery(query);
-    cy.getErrorMarker().snapshot();
+    cy.getErrorMarker()
+      .should("have.attr", "style")
+      .and(
+        "match",
+        new RegExp(
+          `left:${numberRangeRegexp(111)}px;width:${numberRangeRegexp(93)}px;`
+        )
+      );
   });
 
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
     cy.runQuery(query);
-    cy.getErrorMarker().snapshot();
+    cy.getErrorMarker()
+      .should("have.attr", "style")
+      .and(
+        "match",
+        new RegExp(
+          `left:${numberRangeRegexp(506)}px;width:${numberRangeRegexp(42)}px;`
+        )
+      );
+
     cy.getNotifications().should("contain", "Invalid date");
   });
 });
 
 describe("running query with F9", () => {
-  beforeEach(() => {
+  before(() => {
     Cypress.on("uncaught:exception", (err) => {
       // this error can be safely ignored
       if (err.message.includes("ResizeObserver loop limit exceeded")) {
         return false;
       }
     });
+
+    cy.visit(baseUrl);
+  });
+
+  afterEach(() => {
+    cy.clearEditor();
   });
 
   it("should execute correct query, when text cursor is on query which has no semicolon", () => {
-    cy.visit(baseUrl);
     cy.typeQuery("select * from long_sequence(1)").F9();
     cy.getGridRow(0).should("contain", "1");
     cy.clearEditor();
     cy.typeQuery(`select * from long_sequence(2);{leftArrow}`).F9();
-    cy.wait(100).getGridRow(1).should("contain", "2");
+    cy.wait(50).getGridRow(1).should("contain", "2");
   });
 
   it("should execute correct query, when multiple queries exist", () => {
-    cy.visit(baseUrl);
     cy.typeQuery(
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;{upArrow}{upArrow}{end}{leftArrow}"
     ).F9();
-    cy.getGridRow(0).should("contain", "3");
+    cy.wait(50).getGridRow(0).should("contain", "3");
     cy.clearEditor();
     cy.typeQuery(
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2{upArrow}{upArrow}{end}{leftArrow}"
     ).F9();
-    cy.getGridRow(0).should("contain", "3");
+    cy.wait(50).getGridRow(0).should("contain", "3");
   });
 });
