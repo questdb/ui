@@ -91,7 +91,7 @@ yarn workspace @questdb/web-console start
 
 The setup is done! All packages are ready to be worked on.
 
-They all have a `readme.md` with more details, for instance, here's a link to [`@questdb/web-console/readme.md`](../packages/web-console/readme.md).
+They all have a `readme.md` with more details, for instance, here's a link to [`@questdb/web-console/readme.md`](../packages/web-console/README.md).
 
 Vim and VSCode should work out of the box. If they don't or you use some
 other IDE, you might need to setup and SDK as explained in [Yarn
