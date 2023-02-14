@@ -29,13 +29,11 @@ jobs:
       - name: Run unit tests
         run: yarn workspace @questdb/web-console run test:prod
 
-      - name: run cypress tests
-        run: yarn workspace browser-tests test       
-
       - name: Cypress run
         uses: cypress-io/github-action@v5
         with:
           start: python -m http.server --directory dist 9999
+          command: yarn workspace browser-tests test       
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
