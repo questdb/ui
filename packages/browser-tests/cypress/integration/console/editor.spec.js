@@ -229,8 +229,7 @@ describe("errors", () => {
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
     cy.runQuery(query);
-    cy.matchErrorMarkerPosition({ left: 506, width: 185 });
-
+    cy.matchErrorMarkerPosition({ left: 506, width: 42 });
     cy.getNotifications().should("contain", "Invalid date");
   });
 });
