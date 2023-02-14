@@ -47,6 +47,7 @@ export function grid(root, msgBus) {
   const NAV_EVENT_END = 4
 
   const bus = msgBus
+  const gridID = 'qdb-grid'
   const grid = root[0]
   let viewport
   let canvas
@@ -55,6 +56,7 @@ export function grid(root, msgBus) {
   let columnOffsets
   let columns = []
   let columnCount = 0
+  let rowCount
   let timestampIndex = -1
   let data = []
   let totalWidth = -1
@@ -130,7 +132,13 @@ export function grid(root, msgBus) {
   let hoverEnabled = true
   let recomputeColumnWidthOnResize = false
 
-  function setRowCount(rowCount) {
+  const layoutStoreCache = {}
+  let layoutStoreTextEncoder = new TextEncoder()
+  let layoutStoreColumnSetKey = undefined
+  let layoutStoreColumnSetSha256 = undefined
+  let layoutStoreTimer
+
+  function computeCanvasHeight() {
     r += rowCount
     yMax = r * rh
     if (yMax < defaults.yMaxThreshold) {
@@ -432,6 +440,54 @@ export function grid(root, msgBus) {
     }
   }
 
+  function layoutStoreGetColumnSetSha2560(callback) {
+    const data = layoutStoreTextEncoder.encode(layoutStoreColumnSetKey);
+    const promise = crypto.subtle.digest('SHA-256', data);
+    promise.then((buf) => {
+      layoutStoreColumnSetSha256 = btoa(
+        new Uint8Array(buf)
+          .reduce((data, byte) => data + String.fromCharCode(byte), '')
+      )
+      callback()
+    })
+  }
+
+  function layoutStoreComputeKeyAndHash(callback) {
+    // SHA-256 is that of the "key" and "key" is
+    // stringified JSON. This JSON is a list of column name + type pairs. The idea
+    // is to remember column layout for column set but not row set.
+    const columnSet = []
+    for (let i = 0; i < columnCount; i++) {
+      columnSet.push({name: columns[i].name, type: columns[i].type})
+    }
+    layoutStoreColumnSetKey = JSON.stringify(columnSet)
+    layoutStoreGetColumnSetSha2560(callback)
+  }
+
+  function layoutStoreSaveAll0() {
+    window.localStorage.setItem(gridID + '.columnLayout', JSON.stringify(layoutStoreCache))
+  }
+
+  function layoutStoreSaveAll() {
+    if (layoutStoreTimer) {
+      clearTimeout(layoutStoreTimer)
+    }
+    layoutStoreTimer = setTimeout(layoutStoreSaveAll0, 5000)
+  }
+
+  function layoutStoreSaveColumnChange(columnName, width) {
+    let entry = layoutStoreCache[layoutStoreColumnSetSha256]
+    if (entry === undefined) {
+      const deviants = {}
+      deviants[columnName] = width
+      entry = {key: layoutStoreColumnSetKey, deviants: deviants}
+      layoutStoreCache[layoutStoreColumnSetSha256] = entry
+    } else {
+      entry.deviants[columnName] = width
+    }
+    layoutStoreSaveAll()
+  }
+
   function columnResizeEnd(e) {
     e.preventDefault()
     document.onmousemove = null
@@ -454,6 +510,7 @@ export function grid(root, msgBus) {
       },
       500
     )
+    layoutStoreSaveColumnChange(columns[colResizeColIndex].name, colResizeTargetWidth)
   }
 
   function getCellWidth(valueLen) {
@@ -538,6 +595,8 @@ export function grid(root, msgBus) {
     loPage = 0
     hiPage = 0
     downKey = []
+    columnCount = 0
+    rowCount = 0
     activeRowContainer = null
     focusedCell = null
     activeRow = 0
@@ -551,6 +610,8 @@ export function grid(root, msgBus) {
     // this is to prevent overlapping events actioning anything accidentally
     colResizeColIndex = -1
     colResizeClearTimer()
+    layoutStoreColumnSetKey = undefined
+    layoutStoreColumnSetSha256 = undefined
     enableHover()
   }
 
@@ -1145,18 +1206,30 @@ export function grid(root, msgBus) {
     recomputeColumnWidthOnResize = maxWidth < 0.1
 
     if (!recomputeColumnWidthOnResize && data && data.length > 0) {
+      //
+      const storedLayout = layoutStoreCache[layoutStoreColumnSetSha256]
+      const deviants = storedLayout !== undefined ? storedLayout.deviants : undefined
+      console.log(deviants)
       const dataBatch = data[0]
       const dataBatchLen = dataBatch.length
       // a little inefficient, but lets traverse
       let offset = 0
       for (let i = 0; i < columnCount; i++) {
         // this assumes that initial width has been set to the width of the header
-        let w = getColumnWidth(i)
-        for (let j = 0; j < dataBatchLen; j++) {
-          columnOffsets[i] = offset
-          const value = dataBatch[j][i]
-          const str = value !== null ? value.toString() : "null"
-          w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+        let w;
+
+        if (deviants) {
+          w = deviants[columns[i].name]
+        }
+
+        if (w === undefined) {
+          w = getColumnWidth(i)
+          for (let j = 0; j < dataBatchLen; j++) {
+            columnOffsets[i] = offset
+            const value = dataBatch[j][i]
+            const str = value !== null ? value.toString() : "null"
+            w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+          }
         }
         offset += w
       }
@@ -1173,30 +1246,39 @@ export function grid(root, msgBus) {
     activeRowContainer.focus()
   }
 
-  function update(x, m) {
-    $('.js-query-refresh .fa').removeClass('fa-spin')
+  function updatePart1(m) {
+    clear()
+    query = m.query
+    data.push(m.dataset)
+    columns = m.columns
+    columnCount = columns.length
+    timestampIndex = m.timestamp
+    rowCount = m.count
+    computeHeaderWidths()
+    computeVisibleColumnWindow()
+    // visible position depends on correctness of visColumnCount value
+    computeVisibleColumnsPosition()
+  }
 
-    setTimeout(() => {
-        clear()
-        query = m.query
-        data.push(m.dataset)
-        columns = m.columns
-        columnCount = columns.length
-        timestampIndex = m.timestamp
-        computeHeaderWidths()
-        computeVisibleColumnWindow()
-        // visible position depends on correctness of visColumnCount value
-        computeVisibleColumnsPosition()
-        computeColumnWidths()
-        createHeaderElements()
-        createRowElements()
-        setRowCount(m.count)
-        viewport.scrollTop = 0
-        resize()
-        // Resize uses scroll and causes grid viewport to render.
+  function updatePart2() {
+    computeColumnWidths()
+    createHeaderElements()
+    createRowElements()
+    computeCanvasHeight()
+    viewport.scrollTop = 0
+    resize()
+    // Resize uses scroll and causes grid viewport to render.
         // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
         // we can assume that viewport already rendered top left corner of the data set
         focustFirstCell()
+  }
+
+  function update(x, m) {
+    setTimeout(() => {
+        updatePart1(m);
+        // This part of the update sequence requires layoutStore access.
+        // For that we need to calculate layout key and hash, which is async
+        layoutStoreComputeKeyAndHash(updatePart2)
       },
       0
     )
@@ -1211,8 +1293,6 @@ export function grid(root, msgBus) {
   function refreshQuery() {
     if (query) {
       bus.trigger(qdb.MSG_QUERY_EXEC, {q: query})
-    } else {
-      $('.js-query-refresh .fa').removeClass('fa-spin')
     }
   }
 
@@ -1227,7 +1307,7 @@ export function grid(root, msgBus) {
 
     grid.append(header, viewport)
     // when grid is navigated via keyboard, mouse hover is disabled
-    // to not to confuse user. Hover is then re-enabled on mouse move
+    // to not confuse user. Hover is then re-enabled on mouse move
     grid.onmousemove = enableHover
 
     canvas = $('<div>')
