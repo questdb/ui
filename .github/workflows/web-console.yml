@@ -29,9 +29,10 @@ jobs:
       - name: Run unit tests
         run: yarn workspace @questdb/web-console run test:prod
 
-      - name: Cypress run
+      - name: Run Cypress
         uses: cypress-io/github-action@v5
         with:
+          install: false
           start: python -m http.server --directory dist 9999
           command: yarn workspace browser-tests test       
 
