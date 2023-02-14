@@ -1,5 +1,3 @@
-require("@cypress/snapshot").register();
-
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
 Cypress.Commands.add("getGrid", () =>
@@ -8,7 +6,11 @@ Cypress.Commands.add("getGrid", () =>
 
 Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 
-Cypress.Commands.add("getGridRow", (n) => cy.get(".qg-r").eq(n));
+Cypress.Commands.add("getGridRow", (n) =>
+  cy.get(".qg-r").filter(":visible").eq(n)
+);
+
+Cypress.Commands.add("getGridRows", (n) => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
   cy
@@ -16,17 +18,20 @@ Cypress.Commands.add("typeQuery", (query) =>
     .first()
     .click()
     .focused()
-    .type(`${ctrlOrCmd}a`)
-    .type(query)
+    .type(`${ctrlOrCmd}a`, { delay: 10 })
+    .type(query, { delay: 10 })
 );
 
 Cypress.Commands.add("runQuery", (query) => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(query).type(`${ctrlOrCmd}{enter}`).wait("@exec");
+  return cy
+    .typeQuery(query)
+    .type(`${ctrlOrCmd}{enter}`, { delay: 10 })
+    .wait("@exec");
 });
 
 Cypress.Commands.add("clearEditor", () =>
-  cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
+  cy.typeQuery(`${ctrlOrCmd}a{backspace}`, { delay: 5 })
 );
 
 Cypress.Commands.add("selectQuery", (n) =>
@@ -36,7 +41,6 @@ Cypress.Commands.add("selectQuery", (n) =>
     .click()
     .get('[class^="QueryPicker__Wrapper"] [class^="Row__Wrapper"]')
     .eq(n)
-    .wait(50)
     .click()
 );
 
