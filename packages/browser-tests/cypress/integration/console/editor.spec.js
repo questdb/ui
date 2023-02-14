@@ -243,6 +243,9 @@ describe("errors", () => {
     cy.clearEditor();
     cy.runQuery(`select * from 'table-that-doesnt-exist'`);
     cy.matchErrorMarkerPosition({ left: 118, width: 211 });
+
+    cy.runQuery(`select * from "double-quotes"`);
+    cy.matchErrorMarkerPosition({ left: 118, width: 126 });
   });
 });
 
