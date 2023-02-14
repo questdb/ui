@@ -6,7 +6,8 @@ export const conf: monaco.languages.LanguageConfiguration = {
    * This way we can highlight table names escaped with quotes and the ones created from CSV files.
    * An additional example is a "bad integer" error, i.e. (20000) - needs brackets to be allowed as well.
    */
-  wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\@\#\$\%\^\&\*\-\=\+\[\{\]\}\\\|\;\:\"\,\<\>\/\?\s]+)/g,
+  wordPattern:
+    /(-?\d*\.\d\w*)|('[\w\d-:]*')|([^\`\~\!\@\#\$\%\^\&\*\-\=\+\[\{\]\}\\\|\;\:\"\,\<\>\/\?\s]+)/g,
   comments: {
     lineComment: "--",
     blockComment: ["/*", "*/"],
