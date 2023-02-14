@@ -7,7 +7,7 @@ export const conf: monaco.languages.LanguageConfiguration = {
    * An additional example is a "bad integer" error, i.e. (20000) - needs brackets to be allowed as well.
    */
   wordPattern:
-    /(-?\d*\.\d\w*)|('[\w\d-:]*')|([^\`\~\!\@\#\$\%\^\&\*\-\=\+\[\{\]\}\\\|\;\:\"\,\<\>\/\?\s]+)/g,
+    /(-?\d*\.\d\w*)|(['"][\w\d-:]*['"])|([^\`\~\!\@\#\$\%\^\&\*\-\=\+\[\{\]\}\\\|\;\:\"\,\<\>\/\?\s]+)/g,
   comments: {
     lineComment: "--",
     blockComment: ["/*", "*/"],
