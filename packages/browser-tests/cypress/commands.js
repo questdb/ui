@@ -1,5 +1,3 @@
-require("@cypress/snapshot").register();
-
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
 Cypress.Commands.add("getGrid", () =>
