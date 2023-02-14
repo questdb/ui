@@ -28,9 +28,10 @@ import * as qdb from "./globals"
 
 export function grid(root, msgBus) {
   const defaults = {
+    gridID: 'qdb-grid',
     minColumnWidth: 60,
     rowHeight: 28,
-    divCacheSize: 128,
+    divCacheSize: 64,
     viewportHeight: 400,
     yMaxThreshold: 10000000,
     maxRowsToAnalyze: 100,
@@ -38,6 +39,8 @@ export function grid(root, msgBus) {
     minDivHeight: 160,
     scrollerGirth: 10,
     dragHandleWidth: 20,
+    dataPageSize: 1000,
+    layoutStoreTimeout: 1000
   }
   const ACTIVE_CELL_CLASS = 'qg-c-active'
   const NAV_EVENT_ANY_VERTICAL = 0
@@ -47,7 +50,8 @@ export function grid(root, msgBus) {
   const NAV_EVENT_END = 4
 
   const bus = msgBus
-  const gridID = 'qdb-grid'
+  const gridID = defaults.gridID
+  const layoutStoreID = gridID + '.columnLayout'
   const grid = root[0]
   let viewport
   let canvas
@@ -63,7 +67,7 @@ export function grid(root, msgBus) {
   // number of divs in "rows" cache, has to be power of two
   const dc = defaults.divCacheSize
   const dcn = dc - 1
-  const pageSize = 1000
+  const pageSize = defaults.dataPageSize
   const oneThirdPage = Math.floor(pageSize / 3)
   const twoThirdsPage = oneThirdPage * 2
   let loPage
@@ -132,11 +136,13 @@ export function grid(root, msgBus) {
   let hoverEnabled = true
   let recomputeColumnWidthOnResize = false
 
-  const layoutStoreCache = {}
+  let layoutStoreCache = {}
   let layoutStoreTextEncoder = new TextEncoder()
   let layoutStoreColumnSetKey = undefined
   let layoutStoreColumnSetSha256 = undefined
   let layoutStoreTimer
+
+  let activeCellPulseClearTimer
 
   function computeCanvasHeight() {
     r += rowCount
@@ -441,8 +447,8 @@ export function grid(root, msgBus) {
   }
 
   function layoutStoreGetColumnSetSha2560(callback) {
-    const data = layoutStoreTextEncoder.encode(layoutStoreColumnSetKey);
-    const promise = crypto.subtle.digest('SHA-256', data);
+    const data = layoutStoreTextEncoder.encode(layoutStoreColumnSetKey)
+    const promise = crypto.subtle.digest('SHA-256', data)
     promise.then((buf) => {
       layoutStoreColumnSetSha256 = btoa(
         new Uint8Array(buf)
@@ -465,14 +471,14 @@ export function grid(root, msgBus) {
   }
 
   function layoutStoreSaveAll0() {
-    window.localStorage.setItem(gridID + '.columnLayout', JSON.stringify(layoutStoreCache))
+    window.localStorage.setItem(layoutStoreID, JSON.stringify(layoutStoreCache))
   }
 
   function layoutStoreSaveAll() {
     if (layoutStoreTimer) {
       clearTimeout(layoutStoreTimer)
     }
-    layoutStoreTimer = setTimeout(layoutStoreSaveAll0, 5000)
+    layoutStoreTimer = setTimeout(layoutStoreSaveAll0, defaults.layoutStoreTimeout)
   }
 
   function layoutStoreSaveColumnChange(columnName, width) {
@@ -488,17 +494,19 @@ export function grid(root, msgBus) {
     layoutStoreSaveAll()
   }
 
+  function setColumnWidth(columnIndex, width) {
+    updateColumnWidth(columnIndex, width)
+    // update header width
+    setHeaderCellWidth(header.childNodes[columnIndex], width)
+    ensureCellsFillViewport()
+    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+  }
+
   function columnResizeEnd(e) {
     e.preventDefault()
     document.onmousemove = null
     document.onmouseup = null
-
-    updateColumnWidth(colResizeColIndex, colResizeTargetWidth)
-
-    // update header width
-    setHeaderCellWidth(header.childNodes[colResizeColIndex], colResizeTargetWidth)
-    ensureCellsFillViewport()
-    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    setColumnWidth(colResizeColIndex, colResizeTargetWidth)
 
     columnResizeGhost.style.visibility = 'hidden'
     columnResizeGhost.style.left = 0
@@ -979,6 +987,14 @@ export function grid(root, msgBus) {
     }
   }
 
+  function computeColumnWidthAndConfigureHeader() {
+    computeColumnWidths()
+    // set header widths
+    for (let i = 0; i < columnCount; i++) {
+      setHeaderCellWidth(header.childNodes[i], getColumnWidth(i))
+    }
+  }
+
   function resize() {
     // If viewport is invisible when grid is updated it is not possible
     // to calculate column width correctly. When grid becomes visible again, resize()
@@ -986,11 +1002,7 @@ export function grid(root, msgBus) {
     // called under many other circumstances, so width calculation is conditional
     if (recomputeColumnWidthOnResize) {
       recomputeColumnWidthOnResize = false
-      computeColumnWidths()
-      // set header widths
-      for (let i = 0; i < columnCount; i++) {
-        setHeaderCellWidth(header.childNodes[i], getColumnWidth(i))
-      }
+      computeColumnWidthAndConfigureHeader();
     }
 
     if (grid.style.display !== 'none') {
@@ -1060,8 +1072,30 @@ export function grid(root, msgBus) {
 
   function copyActiveCellToClipboard() {
     if (focusedCell) {
+      if (activeCellPulseClearTimer) {
+        clearTimeout(activeCellPulseClearTimer)
+      }
+      addClass(focusedCell, 'qg-c-active-pulse')
       navigator.clipboard.writeText(focusedCell.innerHTML)
+
+      activeCellPulseClearTimer = setTimeout(
+        () => {
+          removeClass(focusedCell, 'qg-c-active-pulse')
+        }, 1000
+      )
     }
+  }
+
+  function restoreColumnWidths() {
+    // remove stored layout
+    layoutStoreCache[layoutStoreColumnSetSha256] = undefined
+    layoutStoreSaveAll()
+
+    // compute column width from scratch
+    computeHeaderWidths()
+    computeColumnWidthAndConfigureHeader();
+    ensureCellsFillViewport()
+    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
   }
 
   function onKeyDown(e) {
@@ -1114,9 +1148,17 @@ export function grid(root, msgBus) {
         break
       case 67: // Ctrl+C (copy)
       case 45: // Ctrl+Insert (copy)
-        copyActiveCellToClipboard()
+        if (downKey[17]) {
+          copyActiveCellToClipboard()
+        }
+        break
+      case 66:
+        if (downKey[17]) {
+          restoreColumnWidths()
+        }
         break
       default:
+        console.log('key: ' + keyCode)
         downKey[keyCode] = true
         preventDefault = false
         break
@@ -1206,7 +1248,6 @@ export function grid(root, msgBus) {
     recomputeColumnWidthOnResize = maxWidth < 0.1
 
     if (!recomputeColumnWidthOnResize && data && data.length > 0) {
-      //
       const storedLayout = layoutStoreCache[layoutStoreColumnSetSha256]
       const deviants = storedLayout !== undefined ? storedLayout.deviants : undefined
       console.log(deviants)
@@ -1216,7 +1257,7 @@ export function grid(root, msgBus) {
       let offset = 0
       for (let i = 0; i < columnCount; i++) {
         // this assumes that initial width has been set to the width of the header
-        let w;
+        let w
 
         if (deviants) {
           w = deviants[columns[i].name]
@@ -1230,6 +1271,8 @@ export function grid(root, msgBus) {
             const str = value !== null ? value.toString() : "null"
             w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
           }
+        } else {
+          columnOffsets[i] = offset
         }
         offset += w
       }
@@ -1268,14 +1311,14 @@ export function grid(root, msgBus) {
     viewport.scrollTop = 0
     resize()
     // Resize uses scroll and causes grid viewport to render.
-        // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
-        // we can assume that viewport already rendered top left corner of the data set
-        focustFirstCell()
+    // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
+    // we can assume that viewport already rendered top left corner of the data set
+    focustFirstCell()
   }
 
   function update(x, m) {
     setTimeout(() => {
-        updatePart1(m);
+        updatePart1(m)
         // This part of the update sequence requires layoutStore access.
         // For that we need to calculate layout key and hash, which is async
         layoutStoreComputeKeyAndHash(updatePart2)
@@ -1328,6 +1371,12 @@ export function grid(root, msgBus) {
     bus.on('grid.refresh', refreshQuery)
     bus.on('grid.publish.query', publishQuery)
     bus.on(qdb.MSG_ACTIVE_PANEL, resize)
+
+    // load layoutStoreCache from local storage
+    const json = window.localStorage.getItem(layoutStoreID)
+    if (json !== undefined) {
+      layoutStoreCache = JSON.parse(json)
+    }
   }
 
   bind()

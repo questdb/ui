@@ -210,6 +210,19 @@ $drag-handle-margin: 5px;
   border-radius: 6px;
 }
 
+.qg-c-active-pulse {
+  animation: pulse 1000ms 0.1s;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: #f1fa8c 0 0 0 2px;
+  }
+  75% {
+    box-shadow: #f1fa8c00 0 0 0 16px;
+  }
+}
+
 .qg-r-active:hover .qg-c-active,
 .qg-r-active:hover .qg-c-active:hover {
   box-shadow: inset 0 0 0 2px #f1fa8c;
