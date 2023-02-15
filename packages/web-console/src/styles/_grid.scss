@@ -27,18 +27,29 @@
   width: 100%;
   flex-direction: column;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  "Courier New", monospace;
   overflow: hidden;
 }
+
+$row-height: 55px;
 
 .qg-header-row {
   display: flex;
   overflow: hidden;
-  height: 33px;
+  height: $row-height;
+  position: relative;
 
-  .qg-header:last-child {
-    margin-right: 10px;
+  .qg-header:nth-last-child(2) {
+    border-right: none !important;
   }
+}
+
+.qg-timestamp {
+  color: #50fa7b;
+}
+
+.qg-null {
+  color: #939393;
 }
 
 .qg-header-row,
@@ -54,33 +65,40 @@
   right: 0;
 }
 
-.qg-r:hover {
-  background-color: #44475a;
+$active-row-background: #323342;
+
+.qg-hover .qg-r:hover {
+  background-color: $active-row-background;
 }
 
 .qg-r:focus {
   outline: none;
 }
 
-.qg-r-active:hover {
-  background-color: #6272a4;
+.qg-last-col {
+  border-right: thin dotted #44475a;
+}
+
+.qg-hover .qg-r-active:hover {
+  background-color: $active-row-background;
   color: #f8f8f2;
 }
 
 .qg-r-active {
-  background-color: #6272a4;
+  background-color: $active-row-background;
+}
+
+.qg-stub {
+  height: 100% !important;
+}
+
+.qg-stub-transparent {
+  background: transparent !important;
 }
 
 .qg-header {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: flex-end;
-  flex-direction: row;
-  padding: 5px 3px 7px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 10px 5px 10px 5px;
   cursor: pointer;
-  border-bottom: 1px solid #191a21;
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-user-select: none; /* Safari */
   -moz-user-select: none; /* Old versions of Firefox */
@@ -91,23 +109,81 @@
   background: #21222c;
 }
 
+$visible-drag-handle-margin: 10px;
+$drag-handle-margin: 5px;
+
+.qg-header-border {
+  position: absolute;
+  margin-top: 10px;
+  height: 25px;
+  border-left: thin dashed #cac30f;
+  // border span is squashed against the left side of the parent div, we need to bring
+  // it out left a little to make it look like it is a left border of the previous cell
+  margin-left: -$drag-handle-margin;
+}
+
+.qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
+  text-align: left;
+}
+
+
+// drag handle is not inside header element, it is next to it (sibling)
+.qg-drag-handle {
+  // place drag handle so that visible "line" is in the middle of it
+  // to add hysteresis for the drag cursor
+  margin-left: -$visible-drag-handle-margin - $drag-handle-margin;
+  width: $visible-drag-handle-margin * 2;
+  height: 100%;
+  top: 0;
+  z-index: 1;
+  position: absolute;
+}
+
+.qg-drag-handle:hover {
+  cursor: col-resize;
+}
+
+.qg-col-resize-ghost {
+  position: absolute;
+  width: $drag-handle-margin;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
+  height: 0;
+  background: #f1fa8c;
+  top: 0;
+  left: 0;
+  cursor: col-resize;
+}
+
+.qg-header-name, .qg-header-type {
+  display: block;
+  margin-left: $visible-drag-handle-margin + 3;
+  padding: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .qg-header-name {
   font-weight: 700;
   color: #f1fa8c !important;
+  font-size: medium;
 }
 
 .qg-header-type {
-  font-weight: 700;
+  color: #ff79c6;
+  font-size: x-small;
   font-style: italic;
-  margin: 0 7px;
-  color: #6272a4;
-  white-space: nowrap;
 }
 
 .qg-header-l {
   text-align: left;
   flex-direction: row-reverse;
   white-space: nowrap;
+  text-overflow: ellipsis;
+
+  .qg-header-type {
+    text-align: left;
+  }
 }
 
 .qg-viewport {
@@ -121,29 +197,35 @@
 }
 
 .qg-c {
-  padding: 4px 3px;
+  position: absolute;
+  padding: 4px 5px 4px 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-}
-
-.qg-c:hover {
-  box-shadow: inset 0 0 0 2px #8d95a5;
-  border-bottom: 1px solid transparent;
-}
-
-.qg-r-active .qg-c:hover {
-  box-shadow: inset 0 0 0 2px #f8f8f2;
+  border-left: thin dotted #44475a;
 }
 
 .qg-c-active {
-  box-shadow: inset 0 0 0 2px #f8f8f2;
-  border-bottom: 1px solid transparent;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
+  border-radius: 6px;
+}
+
+.qg-c-active-pulse {
+  animation: pulse 1000ms 0.1s;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: #f1fa8c 0 0 0 2px;
+  }
+  75% {
+    box-shadow: #f1fa8c00 0 0 0 16px;
+  }
 }
 
 .qg-r-active:hover .qg-c-active,
 .qg-r-active:hover .qg-c-active:hover {
-  box-shadow: inset 0 0 0 2px #ffb86c;
+  box-shadow: inset 0 0 0 2px #f1fa8c;
 }
 
 #debug {

@@ -1,4 +1,4 @@
-require("@cypress/snapshot").register();
+const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
 Cypress.Commands.add("getGrid", () =>
   cy.get(".qg-canvas").should("be.visible")
@@ -6,25 +6,32 @@ Cypress.Commands.add("getGrid", () =>
 
 Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
 
-Cypress.Commands.add("getGridRow", (n) => cy.get(".qg-r").eq(n));
+Cypress.Commands.add("getGridRow", (n) =>
+  cy.get(".qg-r").filter(":visible").eq(n)
+);
+
+Cypress.Commands.add("getGridRows", (n) => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
   cy
     .get(".monaco-editor[role='code']")
     .click()
     .focused()
-    .type("{ctrl}a")
-    .type(query)
+    .type(`${ctrlOrCmd}a`, { delay: 10 })
+    .type(query, { delay: 10 })
 );
 
 Cypress.Commands.add("runQuery", (query) => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(query).type("{ctrl}{enter}").wait("@exec");
+  return cy
+    .typeQuery(query)
+    .type(`${ctrlOrCmd}{enter}`, { delay: 10 })
+    .wait("@exec");
 });
 
-Cypress.Commands.add("clearEditor", () => {
-  cy.typeQuery("{ctrl}a{backspace}");
-});
+Cypress.Commands.add("clearEditor", () =>
+  cy.typeQuery(`${ctrlOrCmd}a{backspace}`, { delay: 5 })
+);
 
 Cypress.Commands.add("selectQuery", (n) =>
   cy
@@ -33,7 +40,6 @@ Cypress.Commands.add("selectQuery", (n) =>
     .click()
     .get('[class^="QueryPicker__Wrapper"] [class^="Row__Wrapper"]')
     .eq(n)
-    .wait(50)
     .click()
 );
 
@@ -63,3 +69,7 @@ Cypress.Commands.add("getTab", (nth = 0) => cy.get(`[data-hook^=tab-${nth}]`));
 Cypress.Commands.add("getCloseTabButton", (nth = 0) =>
   cy.get(`[data-hook^=close-tab-button-${nth}]`)
 );
+
+Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
+
+Cypress.Commands.add("getNotifications", () => cy.get(".notifications"));

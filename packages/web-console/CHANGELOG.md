@@ -14,6 +14,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.0.11 - 2023-02-13
+
+### Fixed
+- tidy-up grid visuals
+- fix grid column resize glitches
+- improve grid render performance by over 80%
+- fix horizontal splitter resize issue
+
+### Added
+- grid semantic highlighting for designated timestamp values
+- grid semantic highlighting for null values
+
+## 0.0.11 - 2023-02-07
+
+- made column type a subtext in column header
+- column header is a little taller
+- new header look and feel
+- new "drag handles"
+- designated timestamp columns is highlighted in green
+- column resize fixed as in when columns get narrower and by that do not fill entire viewport - the virtual cells are re-rendered and subsequent glitches fixed
+- column width is rendered based on first 1000 rows of data
+- column name is using ellipsis when it does not fit in column
+- column resize uses ghost bar to improve resize performance on complicated grids
+
+## 0.0.10 - 2023-02-03
+
+- grid is virtualized horizontally, fixed bunch of glitches, added column resize, added cell copy to clipboard shortcuts, updated visuals
+
+## 0.0.9 - 2023-02-02
+
+### Added
+
+- add icon next to WAL enabled tables [#73](https://github.com/questdb/ui/pull/73)
+- highlight `EXPLAIN` keyword in web console [#74](https://github.com/questdb/ui/pull/73)
+
 ## 0.0.8 - 2022-10-19
 
 ### Fixed
