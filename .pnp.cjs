@@ -6404,6 +6404,8 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["cross-env", "npm:7.0.2"],\
             ["css-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.3"],\
             ["date-fns", "npm:2.14.0"],\
+            ["dexie", "npm:3.2.2"],\
+            ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.1"],\
             ["docsearch.js", "npm:2.6.3"],\
             ["dotenv", "npm:10.0.0"],\
             ["echarts", "npm:5.3.2"],\
@@ -6459,6 +6461,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["svg-react-loader", "npm:0.4.6"],\
             ["throttle-debounce", "npm:2.2.1"],\
             ["typescript", "patch:typescript@npm%3A4.4.4#~builtin<compat/typescript>::version=4.4.4&hash=7ad353"],\
+            ["usehooks-ts", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.1"],\
             ["webpack", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.72.1"],\
             ["webpack-cli", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.9.2"],\
             ["webpack-dev-server", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.9.2"]\
@@ -15175,6 +15178,41 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/devtools-protocol-npm-0.0.981744-4636a91b0c-609901bff5.zip/node_modules/devtools-protocol/",\
           "packageDependencies": [\
             ["devtools-protocol", "npm:0.0.981744"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["dexie", [\
+        ["npm:3.2.2", {\
+          "packageLocation": "./.yarn/cache/dexie-npm-3.2.2-1acd619fbb-7a21079f7a.zip/node_modules/dexie/",\
+          "packageDependencies": [\
+            ["dexie", "npm:3.2.2"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["dexie-react-hooks", [\
+        ["npm:1.1.1", {\
+          "packageLocation": "./.yarn/cache/dexie-react-hooks-npm-1.1.1-c1b1d9bb04-09e1b1d4eb.zip/node_modules/dexie-react-hooks/",\
+          "packageDependencies": [\
+            ["dexie-react-hooks", "npm:1.1.1"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.1", {\
+          "packageLocation": "./.yarn/__virtual__/dexie-react-hooks-virtual-e1e73de3f2/0/cache/dexie-react-hooks-npm-1.1.1-c1b1d9bb04-09e1b1d4eb.zip/node_modules/dexie-react-hooks/",\
+          "packageDependencies": [\
+            ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.1"],\
+            ["@types/dexie", null],\
+            ["@types/react", "npm:17.0.2"],\
+            ["dexie", "npm:3.2.2"],\
+            ["react", "npm:17.0.2"]\
+          ],\
+          "packagePeers": [\
+            "@types/dexie",\
+            "@types/react",\
+            "dexie",\
+            "react"\
           ],\
           "linkType": "HARD"\
         }]\
@@ -27809,6 +27847,32 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "packagePeers": [\
             "@types/react",\
+            "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["usehooks-ts", [\
+        ["npm:2.7.1", {\
+          "packageLocation": "./.yarn/cache/usehooks-ts-npm-2.7.1-2dd640b74e-316e96c141.zip/node_modules/usehooks-ts/",\
+          "packageDependencies": [\
+            ["usehooks-ts", "npm:2.7.1"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.1", {\
+          "packageLocation": "./.yarn/__virtual__/usehooks-ts-virtual-8682827274/0/cache/usehooks-ts-npm-2.7.1-2dd640b74e-316e96c141.zip/node_modules/usehooks-ts/",\
+          "packageDependencies": [\
+            ["usehooks-ts", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.1"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/react-dom", "npm:16.9.8"],\
+            ["react", "npm:17.0.2"],\
+            ["react-dom", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:17.0.2"]\
+          ],\
+          "packagePeers": [\
+            "@types/react-dom",\
+            "@types/react",\
+            "react-dom",\
             "react"\
           ],\
           "linkType": "HARD"\

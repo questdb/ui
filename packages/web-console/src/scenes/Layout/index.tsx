@@ -108,8 +108,8 @@ const Layout = () => {
                 </Top>
                 <Result />
               </Splitter>
-              <Notifications />
             </EditorProvider>
+            <Notifications />
           </Console>,
           consoleNode,
         )}

@@ -3832,6 +3832,8 @@ __metadata:
     cross-env: 7.0.2
     css-loader: 3.5.3
     date-fns: 2.14.0
+    dexie: ^3.2.2
+    dexie-react-hooks: ^1.1.1
     docsearch.js: 2.6.3
     dotenv: ^10.0.0
     echarts: ^5.2.2
@@ -3887,6 +3889,7 @@ __metadata:
     svg-react-loader: 0.4.6
     throttle-debounce: 2.2.1
     typescript: ^4.6.2
+    usehooks-ts: ^2.7.1
     webpack: ^5.72.1
     webpack-cli: ^4.9.2
     webpack-dev-server: ^4.6.0
@@ -9746,6 +9749,24 @@ __metadata:
   version: 0.0.981744
   resolution: "devtools-protocol@npm:0.0.981744"
   checksum: 609901bff551f5fbe98e272bdda7269de527e28fab138de371ffd7e9a06fa68ca2eec2e961bd1cd6fd98223ccee562c55b7ce3235d4e37cc8d85d6681bc45593
+  languageName: node
+  linkType: hard
+
+"dexie-react-hooks@npm:^1.1.1":
+  version: 1.1.1
+  resolution: "dexie-react-hooks@npm:1.1.1"
+  peerDependencies:
+    "@types/react": ">=16"
+    dexie: ">=3.1.0-alpha.1 <5.0.0"
+    react: ">=16"
+  checksum: 09e1b1d4ebc248d103eb13c8f77733f4c140478350d2b8f3989af2fedb45e0d4ae7a07df9281ade162a3264ff621db35899b47d6edf5bf532ba22d571f6f1496
+  languageName: node
+  linkType: hard
+
+"dexie@npm:^3.2.2":
+  version: 3.2.2
+  resolution: "dexie@npm:3.2.2"
+  checksum: 7a21079f7ab139ebd724a009917f9293f2b01c341e2a3cd51d2455dda4d4e78b9ca7de0373e963108395cf1921ce7f6556cac967c1e957005a3c7c11794ceccf
   languageName: node
   linkType: hard
 
@@ -20153,6 +20174,16 @@ __metadata:
   version: 3.1.1
   resolution: "use@npm:3.1.1"
   checksum: 08a130289f5238fcbf8f59a18951286a6e660d17acccc9d58d9b69dfa0ee19aa038e8f95721b00b432c36d1629a9e32a464bf2e7e0ae6a244c42ddb30bdd8b33
+  languageName: node
+  linkType: hard
+
+"usehooks-ts@npm:^2.7.1":
+  version: 2.7.1
+  resolution: "usehooks-ts@npm:2.7.1"
+  peerDependencies:
+    react: ^16.8.0  || ^17.0.0 || ^18.0.0
+    react-dom: ^16.8.0  || ^17.0.0 || ^18.0.0
+  checksum: 316e96c141c129e5b592a4cfd9e803f62b56d6b22ed76534cc9e95a8d9277d157c4915d0460ae6ca634462ad7c5ef4c41cd439e061ed3932a0563a968a07e221
   languageName: node
   linkType: hard
 

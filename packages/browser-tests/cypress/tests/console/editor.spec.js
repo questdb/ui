@@ -34,7 +34,9 @@ describe("appendQuery", () => {
       consoleConfiguration
     ).as("getConsoleConfiguration");
 
+    indexedDB.deleteDatabase("web-console");
     cy.visit(baseUrl);
+    cy.getEditor().should("be.visible");
   });
 
   afterEach(() => {
@@ -63,7 +65,8 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 4);
   });
 
-  it("should correctly append and select query after multiple inserts", () => {
+  it("should open new tab for each new query", () => {
+    cy.selectQuery(0);
     cy.selectQuery(1);
     cy.selectQuery(2);
     cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
@@ -73,7 +76,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and select query when position is first line which is empty", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and select query when position is first line which is empty", () => {
     cy.typeQuery(`{enter}--b{upArrow}`);
     cy.selectQuery(0);
     cy.selectQuery(1);
@@ -82,7 +88,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and select query when position is first line which is not empty", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and select query when position is first line which is not empty", () => {
     cy.typeQuery(`--a`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
@@ -90,7 +99,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
@@ -98,7 +110,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
@@ -106,7 +121,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and add surrounding new lines when position is last line which is empty", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and add surrounding new lines when position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}--b`);
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n`;
@@ -114,7 +132,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
@@ -122,7 +143,10 @@ describe("appendQuery", () => {
     cy.getSelectedLines().should("have.length", 1);
   });
 
-  it("should correctly append and add surrounding new lines when position is middle of non empty line and next line is empty", () => {
+  // this test is trying to assert `appendQuery` through `QueryPicker`.
+  // `QueryPicker` adds new tab for each query
+  // @TODO: move `appendQuery` test to `@questdb/web-console` unit tests
+  it.skip("should correctly append and add surrounding new lines when position is middle of non empty line and next line is empty", () => {
     cy.typeQuery(`--a{enter}--b{enter}{enter}--c`);
     cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`); // go to line 2
     cy.selectQuery(0);
@@ -174,6 +198,11 @@ describe("&query URL param", () => {
 });
 
 describe("autocomplete", () => {
+  beforeEach(() => {
+    indexedDB.deleteDatabase("web-console");
+    cy.getEditor().should("be.visible");
+  });
+
   before(() => {
     Cypress.on("uncaught:exception", (err) => {
       // this error can be safely ignored
@@ -183,6 +212,10 @@ describe("autocomplete", () => {
     });
 
     cy.visit(baseUrl);
+  });
+
+  it("should work when tables list is empty", () => {
+    cy.typeQuery("select * from teleme");
   });
 
   afterEach(() => {

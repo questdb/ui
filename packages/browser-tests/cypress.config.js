@@ -5,7 +5,7 @@ module.exports = defineConfig({
     baseUrl: "http://localhost:9999",
     viewportWidth: 1280,
     viewportHeight: 720,
-    specPattern: "cypress/integration/**/*.spec.js",
+    specPattern: "**/*.spec.js",
     supportFile: "cypress/commands.js",
     setupNodeEvents(on) {
       on("before:browser:launch", (browser = {}, launchOptions) => {

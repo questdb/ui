@@ -22,32 +22,46 @@
  *
  ******************************************************************************/
 
-import React, { CSSProperties, forwardRef, Ref } from "react"
-import styled from "styled-components"
-import { PaneWrapper } from "../../components"
-import Menu from "./Menu"
-import Monaco from "./Monaco"
+import { useEffect, useRef } from "react"
+import type { RefObject } from "react"
 
-type Props = Readonly<{
-  style?: CSSProperties
-}>
+export const useHorizontalScroll = (
+  inViewRef: RefObject<HTMLButtonElement>,
+) => {
+  const ref = useRef<HTMLDivElement>(null)
 
-const EditorPaneWrapper = styled(PaneWrapper)`
-  overflow: hidden;
-`
+  useEffect(() => {
+    const element = ref.current
 
-const Editor = ({
-  innerRef,
-  ...rest
-}: Props & { innerRef: Ref<HTMLDivElement> }) => (
-  <EditorPaneWrapper ref={innerRef} {...rest}>
-    <Menu />
-    <Monaco />
-  </EditorPaneWrapper>
-)
+    if (inViewRef.current !== null && element) {
+      inViewRef.current.scrollIntoView({ behavior: "auto" })
+    }
+  }, [inViewRef.current])
 
-const EditorWithRef = (props: Props, ref: Ref<HTMLDivElement>) => (
-  <Editor {...props} innerRef={ref} />
-)
+  useEffect(() => {
+    const element = ref.current
 
-export default forwardRef(EditorWithRef)
+    if (element) {
+      const onWheel = (event: WheelEvent) => {
+        // skip if the user is scrolling vertically
+        if (event.deltaY === 0) {
+          return
+        }
+
+        event.preventDefault()
+        element.scrollTo({
+          left: element.scrollLeft + event.deltaY,
+          behavior: "auto",
+        })
+      }
+
+      element.addEventListener("wheel", onWheel)
+
+      return () => {
+        element.removeEventListener("wheel", onWheel)
+      }
+    }
+  }, [])
+
+  return ref
+}

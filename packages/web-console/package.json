@@ -32,6 +32,8 @@
     "compare-versions": "^5.0.1",
     "core-js": "^3.22.8",
     "date-fns": "2.14.0",
+    "dexie": "^3.2.2",
+    "dexie-react-hooks": "^1.1.1",
     "docsearch.js": "2.6.3",
     "dotenv": "^10.0.0",
     "echarts": "^5.2.2",
@@ -55,7 +57,8 @@
     "sql-formatter": "^4.0.2",
     "styled-components": "5.1.1",
     "styled-icons": "10.2.1",
-    "throttle-debounce": "2.2.1"
+    "throttle-debounce": "2.2.1",
+    "usehooks-ts": "^2.7.1"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",

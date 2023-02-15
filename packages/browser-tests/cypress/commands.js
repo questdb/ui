@@ -14,8 +14,7 @@ Cypress.Commands.add("getGridRows", (n) => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
   cy
-    .get(".monaco-editor")
-    .first()
+    .get(".monaco-editor[role='code']")
     .click()
     .focused()
     .type(`${ctrlOrCmd}a`, { delay: 10 })
@@ -55,7 +54,20 @@ Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
 Cypress.Commands.add("F9", () =>
   cy.getEditor().trigger("keydown", {
     keyCode: 120,
+    force: true,
   })
+);
+
+Cypress.Commands.add("getTabs", () => cy.get("[data-hook^=tab-]"));
+
+Cypress.Commands.add("getAddTabButton", () =>
+  cy.get("[data-hook=add-tab-button]")
+);
+
+Cypress.Commands.add("getTab", (nth = 0) => cy.get(`[data-hook^=tab-${nth}]`));
+
+Cypress.Commands.add("getCloseTabButton", (nth = 0) =>
+  cy.get(`[data-hook^=close-tab-button-${nth}]`)
 );
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));

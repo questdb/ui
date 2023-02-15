@@ -71,6 +71,14 @@ const altOption = platform.isMacintosh || platform.isIOS ? "⌥" : "Alt"
 
 const editorList: ShortcutsList = [
   {
+    keys: [[altOption, "t"]],
+    title: "Add new tab",
+  },
+  {
+    keys: [[altOption, "w"]],
+    title: "Close current tab",
+  },
+  {
     keys: [[altOption, ctrlCmd, "↑"]],
     title: "Add cursor above",
   },
