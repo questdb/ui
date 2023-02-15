@@ -136,13 +136,27 @@ export function grid(root, msgBus) {
   let hoverEnabled = true
   let recomputeColumnWidthOnResize = false
 
+  // Persisted state of column layout. By that I mean remembering columns that have been manually resized
+  // and storing their widths. The width are keyed against "column set", which is SHA-256 of JSON list of {name, type} pairs.
+  // Technically it is possible (though improbable) that two column sets will have the same SHA-256. In which case
+  // width of columns by the same name will be reused.
   let layoutStoreCache = {}
   let layoutStoreTextEncoder = new TextEncoder()
   let layoutStoreColumnSetKey = undefined
   let layoutStoreColumnSetSha256 = undefined
   let layoutStoreTimer
 
+  // Timer that restores style of pulsed cell.
+  // Cell will pulse when its content is copied to clipboard
   let activeCellPulseClearTimer
+
+  // Freezing left columns. We should be able to freeze 0..N columns on the left. What this means that frozen
+  // columns will be pinned at their positions in the viewport (always visible). The rest of the columns should
+  // scroll normally without obscuring pinned columns. To get there we do the following:
+
+  // 1. limit left position of where columns can be rendered, e.g. offset render of all columns by given number of pixels.
+  // 2. reduce virtual viewport size by the left offset value
+  // 3. render pinned columns separately with 0 left offset
 
   function computeCanvasHeight() {
     r += rowCount
@@ -1158,7 +1172,6 @@ export function grid(root, msgBus) {
         }
         break
       default:
-        console.log('key: ' + keyCode)
         downKey[keyCode] = true
         preventDefault = false
         break
@@ -1250,7 +1263,6 @@ export function grid(root, msgBus) {
     if (!recomputeColumnWidthOnResize && data && data.length > 0) {
       const storedLayout = layoutStoreCache[layoutStoreColumnSetSha256]
       const deviants = storedLayout !== undefined ? storedLayout.deviants : undefined
-      console.log(deviants)
       const dataBatch = data[0]
       const dataBatchLen = dataBatch.length
       // a little inefficient, but lets traverse
@@ -1281,7 +1293,7 @@ export function grid(root, msgBus) {
     }
   }
 
-  function focustFirstCell() {
+  function focusFirstCell() {
     activeRow = 0
     activeRowContainer = rows[activeRow]
     focusedCellIndex = 0
@@ -1313,7 +1325,7 @@ export function grid(root, msgBus) {
     // Resize uses scroll and causes grid viewport to render.
     // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
     // we can assume that viewport already rendered top left corner of the data set
-    focustFirstCell()
+    focusFirstCell()
   }
 
   function update(x, m) {
@@ -1374,7 +1386,7 @@ export function grid(root, msgBus) {
 
     // load layoutStoreCache from local storage
     const json = window.localStorage.getItem(layoutStoreID)
-    if (json !== undefined) {
+    if (json) {
       layoutStoreCache = JSON.parse(json)
     }
   }
