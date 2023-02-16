@@ -56,6 +56,13 @@ export function grid(root, msgBus) {
   let viewport
   let canvas
   let header
+  let panelLeft
+  let panelLeftWidth
+  let viewportLeft
+  let canvasLeft
+  let headerLeft
+  let freezeLeft = 0
+  let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
   let columns = []
@@ -153,10 +160,24 @@ export function grid(root, msgBus) {
       h = defaults.yMaxThreshold
     }
     M = yMax / h
-    canvas[0].style.height = (h === 0 ? 1 : h) + 'px'
+    const canvasHeight = (h === 0 ? 1 : h) + 'px'
+    canvas[0].style.height = canvasHeight
+    canvasLeft.style.height = canvasHeight
   }
 
-  function renderRow(row, rowIndex) {
+  function toggleActiveRow(row, rowIndex, colHi) {
+    if (row === activeRowContainer) {
+      if (rowIndex === activeRow) {
+        row.className = 'qg-r qg-r-active'
+        setFocusedCell(row.childNodes[focusedCellIndex % colHi])
+      } else {
+        row.className = 'qg-r'
+        removeFocus(row.childNodes[focusedCellIndex % colHi])
+      }
+    }
+  }
+
+  function renderRow(row, rowIndex, colLo, colHi) {
     if (row.questIndex !== rowIndex) {
       const rowData = data[Math.floor(rowIndex / pageSize)]
       let k
@@ -164,8 +185,8 @@ export function grid(root, msgBus) {
         const d = rowData[rowIndex % pageSize]
         if (d) {
           row.style.display = 'flex'
-          for (k = 0; k < visColumnCount; k++) {
-            setCellData(row.childNodes[(k + visColumnLo) % visColumnCount], d[k + visColumnLo])
+          for (k = 0; k < colHi; k++) {
+            setCellData(row.childNodes[(k + colLo) % colHi], d[k + colLo])
           }
         } else {
           row.style.display = 'none'
@@ -173,31 +194,28 @@ export function grid(root, msgBus) {
         row.questIndex = rowIndex
       } else {
         // clear grid if there is no row data
-        for (k = 0; k < visColumnCount; k++) {
-          row.childNodes[(k + visColumnLo) % visColumnCount].innerHTML = ''
+        for (k = 0; k < colHi; k++) {
+          row.childNodes[(k + colLo) % colHi].innerHTML = ''
         }
         row.questIndex = -1
       }
       row.style.top = rowIndex * rh - o + 'px'
-      if (row === activeRowContainer) {
-        if (rowIndex === activeRow) {
-          row.className = 'qg-r qg-r-active'
-          setFocusedCell(row.childNodes[focusedCellIndex % visColumnCount])
-        } else {
-          row.className = 'qg-r'
-          removeFocus(row.childNodes[focusedCellIndex % visColumnCount])
-        }
-      }
     }
+  }
+
+  function setViewportScrollTop(scrollTop) {
+    viewport.scrollTop = scrollTop
+    viewportLeft.scrollTop = scrollTop
   }
 
   function renderViewportNoCompute() {
     // calculate the viewport + buffer
-    const t = Math.max(0, Math.floor((y - viewportHeight) / rh))
-    const b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh))
+    const bounds = computeRowBounds()
+    const t = bounds.t
+    const b = bounds.b
 
     for (let i = t; i < b; i++) {
-      renderRow(rows[i & dcn], i)
+      renderRow(rows[i & dcn], i, visColumnLo, visColumnCount)
     }
 
     if (pendingRender.render) {
@@ -341,10 +359,17 @@ export function grid(root, msgBus) {
     }
   }
 
+  function computeRowBounds() {
+    let t = Math.max(0, Math.floor((y) / rh))
+    let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight) / rh))
+    return {t: t, b: b}
+  }
+
   function renderRows(direction) {
     // calculate the viewport + buffer
-    let t = Math.max(0, Math.floor((y - viewportHeight) / rh))
-    let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh))
+    const bounds = computeRowBounds()
+    let t = bounds.t
+    let b = bounds.b
 
     if (direction !== 0) {
       computeDataPages(direction, t, b)
@@ -359,13 +384,21 @@ export function grid(root, msgBus) {
     for (let i = t; i < b; i++) {
       const row = rows[i & dcn]
       if (row) {
-        renderRow(row, i)
+        renderRow(row, i, visColumnLo, visColumnCount)
+        toggleActiveRow(row, i, visColumnCount);
+        if (freezeLeft > 0) {
+          renderRow(rowsLeft[i & dcn], i, 0, freezeLeft)
+        }
       }
     }
   }
 
-  function getColumnWidth(i) {
-    return columnOffsets[i + 1] - columnOffsets[i]
+  function getColumnOffset(columnIndex) {
+    return columnOffsets[columnIndex]
+  }
+
+  function getColumnWidth(columnIndex) {
+    return columnOffsets[columnIndex + 1] - columnOffsets[columnIndex]
   }
 
   function isLeftAligned(columnIndex) {
@@ -407,7 +440,7 @@ export function grid(root, msgBus) {
     const target = e.target
     // column index is derived from stylesheet selector name
     colResizeColIndex = target.columnIndex - 1
-    colResizeColOrigOffset = columnOffsets[colResizeColIndex]
+    colResizeColOrigOffset = getColumnOffset(colResizeColIndex)
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
     colResizeOrigMargin = target.style.marginLeft
     colResizeDragHandleStartX = target.offsetLeft + defaults.dragHandleWidth / 2 - 5
@@ -416,7 +449,7 @@ export function grid(root, msgBus) {
     document.onmousemove = columnResizeDrag
     document.onmouseup = columnResizeEnd
 
-    columnResizeGhost.style.top = target.getBoundingClientRect().top + 'px'
+    columnResizeGhost.style.top = 0
     columnResizeGhost.style.left = getColResizeGhostLeft(0)
     columnResizeGhost.style.height = (grid.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0)) + 'px'
     columnResizeGhost.style.visibility = 'visible'
@@ -525,35 +558,35 @@ export function grid(root, msgBus) {
     return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 1.2))
   }
 
-  function createHeaderElements() {
+  function createHeaderElements(header, columnCount) {
     for (let i = 0; i < columnCount; i++) {
       const c = columns[i]
       const h = document.createElement('div')
-      h.className = 'qg-header'
+      addClass(h, 'qg-header')
       setHeaderCellWidth(h, getColumnWidth(i))
       h.setAttribute('data-column-name', c.name)
       if (isLeftAligned(i)) {
-        h.className += ' qg-header-l'
+        addClass(h, 'qg-header-l')
       }
 
       const hType = document.createElement('span')
-      hType.className = 'qg-header-type'
+      addClass(hType, 'qg-header-type')
       hType.innerHTML = c.type.toLowerCase()
 
       const hName = document.createElement('span')
-      hName.className = 'qg-header-name'
+      addClass(hName, 'qg-header-name')
       hName.innerHTML = c.name
 
       if (i > 0) {
         // drag handle for this column is located on left side of i+1 column (visually). So column
         // 0 does not have drag handle
         const handle = document.createElement('div')
-        handle.className = 'qg-drag-handle'
+        addClass(handle, 'qg-drag-handle')
         handle.columnIndex = i
         handle.onmousedown = columnResizeStart
 
         const hBorderSpan = document.createElement('span')
-        hBorderSpan.className = 'qg-header-border'
+        addClass(hBorderSpan, 'qg-header-border')
         h.append(handle, hBorderSpan)
       }
 
@@ -562,9 +595,9 @@ export function grid(root, msgBus) {
       header.append(h)
     }
 
-    headerStub = document.createElement('div')
-    headerStub.className = 'qg-header qg-stub'
-    headerStub.style.width = scrollerGirth + 'px'
+    const stub = document.createElement('div')
+    stub.className = 'qg-header qg-stub'
+    stub.style.width = scrollerGirth + 'px'
 
     const lastDragHandle = document.createElement('div')
     lastDragHandle.className = 'qg-drag-handle'
@@ -573,8 +606,9 @@ export function grid(root, msgBus) {
 
     const hBorderSpan = document.createElement('span')
     hBorderSpan.className = 'qg-header-border'
-    headerStub.append(lastDragHandle, hBorderSpan)
-    header.append(headerStub)
+    stub.append(lastDragHandle, hBorderSpan)
+    header.append(stub)
+    return stub
   }
 
   function computeHeaderWidths() {
@@ -598,6 +632,7 @@ export function grid(root, msgBus) {
     header.innerHTML = ''
     canvas[0].innerHTML = ''
     rows = []
+    rowsLeft = []
     data = []
     query = null
     loPage = 0
@@ -613,6 +648,7 @@ export function grid(root, msgBus) {
     visColumnCount = 10
     lastKnownViewportWidth = 0
     timestampIndex = -1
+    activeRow = -1
     recomputeColumnWidthOnResize = false
     // -1 means column is not being resized, anything else means user drags resize handle
     // this is to prevent overlapping events actioning anything accidentally
@@ -620,6 +656,7 @@ export function grid(root, msgBus) {
     colResizeClearTimer()
     layoutStoreColumnSetKey = undefined
     layoutStoreColumnSetSha256 = undefined
+    setPanelLeftWidth(panelLeftWidth)
     enableHover()
   }
 
@@ -676,8 +713,9 @@ export function grid(root, msgBus) {
       pendingRender.nextVisColumnLo = nextVisColumnLo
       pendingRender.render = false
 
-      let t = Math.max(0, Math.floor((y - viewportHeight) / rh))
-      let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight + viewportHeight) / rh))
+      const bounds = computeRowBounds()
+      let t = bounds.t
+      let b = bounds.b
       // adjust t,b to back-fill the entire "rows" contents
       // t,b lands us somewhere in the middle of rows array when adjusted to `dcn`
       // we want to cover all the rows
@@ -695,7 +733,7 @@ export function grid(root, msgBus) {
           // We need to put cells in the same order, which one would
           // get scrolling towards the end of row using right arrow, e.g. one cell at a time
           // This is to make sure scrolling one column left at a time works correctly
-          for (let j = colLo; j < colHi; j++) {
+          for (let j = Math.max(freezeLeft, colLo); j < colHi; j++) {
             setCellDataAndAttributes(row, d2, j)
           }
         } else {
@@ -731,11 +769,11 @@ export function grid(root, msgBus) {
       renderCells(columnCount - visColumnCount, columnCount, columnCount - visColumnCount)
     }
 
-    const columnOffset = columnOffsets[focusedCellIndex]
-    const columnWidth = columnOffsets[focusedCellIndex + 1] - columnOffset
+    const columnOffset = getColumnOffset(focusedCellIndex)
+    const columnWidth = getColumnWidth(focusedCellIndex)
 
     if (navEvent !== NAV_EVENT_ANY_VERTICAL) {
-      const w = Math.max(0, columnOffset)
+      const w = Math.max(0, columnOffset - panelLeftWidth)
       if (w < viewport.scrollLeft) {
         setScrollLeft(w)
       } else if (w > viewport.scrollLeft) {
@@ -758,7 +796,7 @@ export function grid(root, msgBus) {
       updateCellViewport(NAV_EVENT_ANY_VERTICAL)
       const scrollTop = activeRow * rh - o - 5 // top margin
       if (scrollTop < viewport.scrollTop) {
-        viewport.scrollTop = Math.max(0, scrollTop)
+        setViewportScrollTop(Math.max(0, scrollTop))
       }
     }
   }
@@ -778,7 +816,7 @@ export function grid(root, msgBus) {
       const scrollTop = activeRow * rh - viewportHeight + rh - o
       const sh = isHorizontalScroller() ? scrollerGirth : 0
       if (scrollTop > viewport.scrollTop) {
-        viewport.scrollTop = scrollTop + sh
+        setViewportScrollTop(scrollTop + sh)
       }
     }
   }
@@ -987,6 +1025,19 @@ export function grid(root, msgBus) {
     }
   }
 
+  function setPanelLeftWidth(width) {
+    panelLeftWidth = width
+    panelLeft.style.width = width + 'px'
+  }
+
+  function computePanelLeftWidth() {
+    let w = 0
+    for (let i = 0; i < freezeLeft; i++) {
+      w += getColumnWidth(i)
+    }
+    setPanelLeftWidth(w)
+  }
+
   function computeColumnWidthAndConfigureHeader() {
     computeColumnWidths()
     // set header widths
@@ -1170,9 +1221,9 @@ export function grid(root, msgBus) {
   }
 
   function configureCell(cell, columnIndex) {
-    const left = columnOffsets[columnIndex]
+    const left = getColumnOffset(columnIndex)
     cell.style.left = left + 'px'
-    cell.style.width = (columnOffsets[columnIndex + 1] - left) + 'px'
+    cell.style.width = (getColumnOffset(columnIndex + 1) - left) + 'px'
     cell.style.height = defaults.rowHeight + 'px'
     cell.style.textAlign = isLeftAligned(columnIndex) ? 'left' : 'right'
     cell.onclick = rowClick
@@ -1192,16 +1243,12 @@ export function grid(root, msgBus) {
     }
   }
 
-  function createRowElements() {
+  function createRowElements(canvas, rows, columnCount, rowWidth) {
     for (let i = 0; i < dc; i++) {
       const rowDiv = document.createElement('div')
       rowDiv.className = 'qg-r'
       rowDiv.tabIndex = i + i
-
-      if (i === 0) {
-        activeRowContainer = rowDiv
-      }
-      for (let k = 0; k < visColumnCount; k++) {
+      for (let k = 0; k < columnCount; k++) {
         const cell = document.createElement('div')
         cell.className = 'qg-c'
         configureCell(cell, k)
@@ -1212,9 +1259,9 @@ export function grid(root, msgBus) {
       }
       rowDiv.style.top = '-100'
       rowDiv.style.height = rh.toString() + 'px'
-      rowDiv.style.width = totalWidth + 'px'
+      rowDiv.style.width = rowWidth + 'px'
       rows.push(rowDiv)
-      canvas[0].append(rowDiv)
+      canvas.append(rowDiv)
     }
   }
 
@@ -1305,10 +1352,16 @@ export function grid(root, msgBus) {
 
   function updatePart2() {
     computeColumnWidths()
-    createHeaderElements()
-    createRowElements()
+    computePanelLeftWidth()
+    headerStub = createHeaderElements(header, columnCount)
+    if (freezeLeft > 0) {
+      createHeaderElements(headerLeft, freezeLeft)
+    }
+    createRowElements(canvas[0], rows, visColumnCount, totalWidth)
+    createRowElements(canvasLeft, rowsLeft, freezeLeft, panelLeftWidth)
+
     computeCanvasHeight()
-    viewport.scrollTop = 0
+    setViewportScrollTop(0)
     resize()
     // Resize uses scroll and causes grid viewport to render.
     // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
@@ -1347,12 +1400,6 @@ export function grid(root, msgBus) {
     viewport.onscroll = scroll
     addClass(viewport, 'qg-viewport')
 
-
-    grid.append(header, viewport)
-    // when grid is navigated via keyboard, mouse hover is disabled
-    // to not confuse user. Hover is then re-enabled on mouse move
-    grid.onmousemove = enableHover
-
     canvas = $('<div>')
     canvas[0].className = 'qg-canvas'
     // we're using jQuery here to handle key bindings
@@ -1361,10 +1408,22 @@ export function grid(root, msgBus) {
 
     columnResizeGhost = document.createElement('div')
     columnResizeGhost.className = 'qg-col-resize-ghost'
-
     viewport.append(canvas[0], columnResizeGhost)
 
-    window.onresize = resize
+    panelLeft = document.createElement('div')
+    addClass(panelLeft, 'qg-panel-left')
+
+    headerLeft = document.createElement('div')
+    addClass(headerLeft, 'qg-header-left-row')
+
+    viewportLeft = document.createElement('div')
+    addClass(viewportLeft, 'qg-viewport-left')
+
+    canvasLeft = document.createElement('div')
+    canvasLeft.className = 'qg-canvas'
+    viewportLeft.append(canvasLeft)
+
+    panelLeft.append(headerLeft, viewportLeft)
 
     bus.on(qdb.MSG_QUERY_DATASET, update)
     bus.on('grid.focus', focusCell)
@@ -1372,11 +1431,20 @@ export function grid(root, msgBus) {
     bus.on('grid.publish.query', publishQuery)
     bus.on(qdb.MSG_ACTIVE_PANEL, resize)
 
+    grid.append(header, viewport, panelLeft)
+    // when grid is navigated via keyboard, mouse hover is disabled
+    // to not confuse user. Hover is then re-enabled on mouse move
+    grid.onmousemove = enableHover
+    // ensure grid position is relative, we're using absolute positioning inside the grid and
+    // taking no chances
+    grid.style.position = 'relative'
+
     // load layoutStoreCache from local storage
     const json = window.localStorage.getItem(layoutStoreID)
     if (json !== undefined) {
       layoutStoreCache = JSON.parse(json)
     }
+    window.onresize = resize
   }
 
   bind()
