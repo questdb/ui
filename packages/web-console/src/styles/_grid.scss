@@ -235,8 +235,11 @@ $drag-handle-margin: 5px;
   overflow: hidden;
   top: 0;
   left: 0;
-  //border: 1px solid yellow;
   background: #282a36;
+}
+
+.qg-panel-left-scroller-visible {
+  height: calc(100% - 10px);
 }
 
 .qg-viewport-left {
