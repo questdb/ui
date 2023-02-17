@@ -73,11 +73,16 @@ Cypress.Commands.add("matchErrorMarkerPosition", ({ left, width }) =>
     )
 );
 
-Cypress.Commands.add("F9", () =>
-  cy.getEditor().trigger("keydown", {
-    keyCode: 120,
-  })
-);
+Cypress.Commands.add("F9", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy
+    .getEditor()
+    .trigger("keydown", {
+      keyCode: 120,
+    })
+    .wait("@exec")
+    .wait(501);
+});
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
