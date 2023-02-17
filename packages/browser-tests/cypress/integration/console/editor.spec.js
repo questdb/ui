@@ -258,6 +258,8 @@ describe("running query with F9", () => {
       }
     });
 
+    cy.intercept("https://alurin.questdb.io/add", "success");
+
     cy.visit(baseUrl);
   });
 
