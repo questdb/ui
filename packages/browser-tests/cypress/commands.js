@@ -1,5 +1,29 @@
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
+before(() => {
+  cy.intercept(
+    {
+      method: "POST",
+      url: "/*",
+      hostname: "alurin.questdb.io",
+    },
+    (req) => {
+      req.reply("success");
+    }
+  );
+
+  cy.intercept(
+    {
+      method: "GET",
+      url: "/**",
+      hostname: "api.github.com",
+    },
+    (req) => {
+      req.reply("success");
+    }
+  );
+});
+
 Cypress.Commands.add("getGrid", () =>
   cy.get(".qg-canvas").should("be.visible")
 );
@@ -18,20 +42,17 @@ Cypress.Commands.add("typeQuery", (query) =>
     .first()
     .click()
     .focused()
-    .type(`${ctrlOrCmd}a`, { delay: 10 })
-    .type(query, { delay: 10 })
+    .type(`${ctrlOrCmd}a`)
+    .type(query)
 );
 
 Cypress.Commands.add("runQuery", (query) => {
   cy.intercept("/exec*").as("exec");
-  return cy
-    .typeQuery(query)
-    .type(`${ctrlOrCmd}{enter}`, { delay: 10 })
-    .wait("@exec");
+  return cy.typeQuery(query).type(`${ctrlOrCmd}{enter}`).wait("@exec");
 });
 
 Cypress.Commands.add("clearEditor", () =>
-  cy.typeQuery(`${ctrlOrCmd}a{backspace}`, { delay: 5 })
+  cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
 );
 
 Cypress.Commands.add("selectQuery", (n) =>
