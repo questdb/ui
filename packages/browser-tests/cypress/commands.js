@@ -52,6 +52,27 @@ Cypress.Commands.add("getAutocomplete", () =>
 
 Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
 
+const numberRangeRegexp = (n, width = 3) => {
+  const [min, max] = [n - width, n + width];
+  const numbers = Array.from(
+    { length: Math.abs(max - min) },
+    (_, i) => min + i
+  );
+  return `(${numbers.join("|")})`;
+};
+
+Cypress.Commands.add("matchErrorMarkerPosition", ({ left, width }) =>
+  cy
+    .getErrorMarker()
+    .should("have.attr", "style")
+    .and(
+      "match",
+      new RegExp(
+        `left:${numberRangeRegexp(left)}px;width:${numberRangeRegexp(width)}px;`
+      )
+    )
+);
+
 Cypress.Commands.add("F9", () =>
   cy.getEditor().trigger("keydown", {
     keyCode: 120,
