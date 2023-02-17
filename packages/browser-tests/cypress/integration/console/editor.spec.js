@@ -194,7 +194,7 @@ describe("autocomplete", () => {
   it("should work when tables list is not empty", () => {
     cy.runQuery('create table "my_secrets" ("secret" string)');
     cy.runQuery('create table "my_publics" ("public" string)');
-    cy.reload();
+    cy.visit(baseUrl);
     cy.typeQuery("select * from ");
     cy.getAutocomplete().should("not.contain", "telemetry");
     cy.getAutocomplete().should("contain", "my_secrets");

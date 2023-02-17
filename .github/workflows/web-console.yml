@@ -4,9 +4,14 @@ on:
   push:
 
 jobs:
-  build:
+  CI:
     name: Build packages/web-console
     runs-on: ubuntu-latest
+    services:
+      questdb:
+        image: questdb/questdb:nightly
+        ports:
+          - 9000:9000
 
     steps:
       - uses: actions/checkout@v3
@@ -18,11 +23,14 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
 
-      - name: build
+      - name: Build
         run: yarn workspace @questdb/web-console run build
 
-      - name: test
+      - name: Run unit tests
         run: yarn workspace @questdb/web-console run test:prod
+
+      - name: Run Cypress
+        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
