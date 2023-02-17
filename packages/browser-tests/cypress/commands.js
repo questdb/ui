@@ -1,6 +1,6 @@
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
-before(() => {
+beforeEach(() => {
   cy.intercept(
     {
       method: "POST",
