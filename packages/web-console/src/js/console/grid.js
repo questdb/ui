@@ -62,7 +62,7 @@ export function grid(root, msgBus) {
   let canvasLeft
   let headerLeft
   let activeRowContainerLeft
-  let freezeLeft = 0
+  let freezeLeft = 4
   let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
@@ -194,8 +194,10 @@ export function grid(root, msgBus) {
   }
 
   function setViewportScrollTop(scrollTop) {
+    console.log('scrolltop: ' + scrollTop)
     viewport.scrollTop = scrollTop
     viewportLeft.scrollTop = scrollTop
+    console.log('scrolltop: ' + scrollTop + ', vlp: ' + viewportLeft.scrollTop + ', vplH: ' + viewportLeft.getBoundingClientRect().height + ', vpH: ' + viewport.getBoundingClientRect().height)
   }
 
   function renderViewportNoCompute() {
@@ -212,7 +214,7 @@ export function grid(root, msgBus) {
     }
 
     if (pendingRender.render) {
-      renderCells(pendingRender.colLo, pendingRender.colHi, pendingRender.nextVisColumnLo)
+      renderCells(rows, pendingRender.colLo, pendingRender.colHi, pendingRender.nextVisColumnLo)
     }
   }
 
@@ -522,9 +524,16 @@ export function grid(root, msgBus) {
   function setColumnWidth(columnIndex, width) {
     updateColumnWidth(columnIndex, width)
     // update header width
-    setHeaderCellWidth(header.childNodes[columnIndex], width)
+    if (columnIndex < freezeLeft) {
+      setHeaderCellWidth(headerLeft.childNodes[columnIndex], width)
+      renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
+      computePanelLeftWidth()
+      applyPanelLeftWidth()
+    } else {
+      setHeaderCellWidth(header.childNodes[columnIndex - freezeLeft], width)
+    }
     ensureCellsFillViewport()
-    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
   }
 
   function columnResizeEnd(e) {
@@ -550,13 +559,19 @@ export function grid(root, msgBus) {
     return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 1.2))
   }
 
-  function createHeaderElements(header, columnCount) {
-    for (let i = 0; i < columnCount; i++) {
+  function createHeaderElements(header, columnCount, freezeLeft) {
+    for (let i = freezeLeft; i < columnCount; i++) {
       const c = columns[i]
       const h = document.createElement('div')
       addClass(h, 'qg-header')
       setHeaderCellWidth(h, getColumnWidth(i))
       h.setAttribute('data-column-name', c.name)
+
+      if (i === freezeLeft) {
+        h.style.marginLeft = (freezeLeft > 0 ? panelLeftWidth : 0) + 'px'
+        console.log("set 1")
+      }
+
       if (isLeftAligned(i)) {
         addClass(h, 'qg-header-l')
       }
@@ -651,7 +666,7 @@ export function grid(root, msgBus) {
     colResizeClearTimer()
     layoutStoreColumnSetKey = undefined
     layoutStoreColumnSetSha256 = undefined
-    setPanelLeftWidth(panelLeftWidth)
+    panelLeftWidth = 0
     enableHover()
   }
 
@@ -700,7 +715,11 @@ export function grid(root, msgBus) {
     setCellData(cell, rowData[cellIndex])
   }
 
-  function renderCells(colLo, colHi, nextVisColumnLo) {
+  function getNonFrozenColLo(colLo) {
+    return Math.max(freezeLeft, colLo)
+  }
+
+  function renderCells(rows, colLo, colHi, nextVisColumnLo) {
     if (rows.length > 0 && columnCount > 0) {
 
       pendingRender.colLo = colLo
@@ -728,7 +747,7 @@ export function grid(root, msgBus) {
           // We need to put cells in the same order, which one would
           // get scrolling towards the end of row using right arrow, e.g. one cell at a time
           // This is to make sure scrolling one column left at a time works correctly
-          for (let j = Math.max(freezeLeft, colLo); j < colHi; j++) {
+          for (let j = colLo; j < colHi; j++) {
             setCellDataAndAttributes(row, d2, j)
           }
         } else {
@@ -759,9 +778,9 @@ export function grid(root, msgBus) {
 
   function updateCellViewport(navEvent) {
     if (navEvent === NAV_EVENT_HOME && visColumnLo > 0 && columnCount > visColumnCount) {
-      renderCells(0, visColumnCount, 0)
+      renderCells(rows, freezeLeft, visColumnCount, 0)
     } else if (navEvent === NAV_EVENT_END && visColumnLo + visColumnCount < columnCount) {
-      renderCells(columnCount - visColumnCount, columnCount, columnCount - visColumnCount)
+      renderCells(rows, getNonFrozenColLo(columnCount - visColumnCount), columnCount, columnCount - visColumnCount)
     }
 
     const columnOffset = getColumnOffset(focusedCellIndex)
@@ -858,7 +877,7 @@ export function grid(root, msgBus) {
         if (k > visColumnLo) {
           // Scroll right, incrementally to improve rendering performance. The data cells are partially visible. We are moving
           // invisible cells to the "right" (visually) and have them render new data
-          renderCells(visColumnCount + visColumnLo, Math.min(visColumnCount + k, columnCount), k)
+          renderCells(rows, getNonFrozenColLo(visColumnCount + visColumnLo), Math.min(visColumnCount + k, columnCount), k)
         } else if (k === -1) {
           // the data cells disappeared from the view entirely. Render cells in the new view.
           // calculate columns we need to render. We know the width of data cells up to the right edge of what we have
@@ -868,7 +887,7 @@ export function grid(root, msgBus) {
           while (w < vpl) {
             w += getColumnWidth(++k)
           }
-          renderCells(k, Math.min(visColumnCount + k, columnCount), k)
+          renderCells(rows, getNonFrozenColLo(k), Math.min(visColumnCount + k, columnCount), k)
         }
       } else if (colLeftEdge > vpl) {
         // left edge of the data cells is in the "middle" of the viewport
@@ -881,7 +900,7 @@ export function grid(root, msgBus) {
         }
 
         const z = Math.min(visColumnCount, visColumnLo - k)
-        renderCells(k, Math.min(z + k, columnCount), k)
+        renderCells(rows, getNonFrozenColLo(k), Math.min(z + k, columnCount), k)
       }
     }
   }
@@ -990,7 +1009,7 @@ export function grid(root, msgBus) {
         row.childNodes[visColumnCount].remove()
       }
     }
-    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
   }
 
   function addCellElements(colCount) {
@@ -1009,7 +1028,7 @@ export function grid(root, msgBus) {
       }
 
     }
-    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
   }
 
   function isVerticalScroller() {
@@ -1038,29 +1057,28 @@ export function grid(root, msgBus) {
     }
   }
 
-  function setPanelLeftWidth(width) {
-    panelLeftWidth = width
-    panelLeft.style.width = width + 'px'
-  }
-
   function computePanelLeftWidth() {
     let w = 0
     for (let i = 0; i < freezeLeft; i++) {
       w += getColumnWidth(i)
     }
-    setPanelLeftWidth(w)
+    panelLeftWidth = w
   }
 
   function computeColumnWidthAndConfigureHeader() {
     computeColumnWidths()
-    // set header widths
-    for (let i = 0; i < columnCount; i++) {
-      setHeaderCellWidth(header.childNodes[i], getColumnWidth(i))
+    // set frozen header widths
+    for (let i = 0; i < freezeLeft; i++) {
+      setHeaderCellWidth(headerLeft.childNodes[i], getColumnWidth(i))
+    }
+    // main set header widths
+    for (let i = 0, n = columnCount - freezeLeft; i < n; i++) {
+      setHeaderCellWidth(header.childNodes[i], getColumnWidth(i + freezeLeft))
     }
   }
 
   function syncViewportLeftScroll() {
-    viewportLeft.style.height = viewport.getBoundingClientRect().height + 'px'
+    viewportLeft.style.height = (viewport.getBoundingClientRect().height - (isHorizontalScroller() ? 10 : 0)) + 'px'
     viewportLeft.scrollTop = viewport.scrollTop
   }
 
@@ -1189,7 +1207,8 @@ export function grid(root, msgBus) {
     computeHeaderWidths()
     computeColumnWidthAndConfigureHeader();
     ensureCellsFillViewport()
-    renderCells(visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
+    renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
   }
 
   function onKeyDown(e) {
@@ -1394,13 +1413,19 @@ export function grid(root, msgBus) {
     computeVisibleColumnsPosition()
   }
 
+  function applyPanelLeftWidth() {
+    panelLeft.style.width = panelLeftWidth + 'px'
+    header.childNodes[0].style.marginLeft = panelLeftWidth + 'px'
+  }
+
   function updatePart2() {
     computeColumnWidths()
     computePanelLeftWidth()
-    headerStub = createHeaderElements(header, columnCount)
+    headerStub = createHeaderElements(header, columnCount, freezeLeft)
     if (freezeLeft > 0) {
-      createHeaderElements(headerLeft, freezeLeft)
+      createHeaderElements(headerLeft, freezeLeft, 0)
     }
+    applyPanelLeftWidth()
     createRowElements(canvas[0], rows, visColumnCount, totalWidth)
     createRowElements(canvasLeft, rowsLeft, freezeLeft, panelLeftWidth)
 

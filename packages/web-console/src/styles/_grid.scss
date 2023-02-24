@@ -153,6 +153,7 @@ $drag-handle-margin: 5px;
   top: 0;
   left: 0;
   cursor: col-resize;
+  z-index: 3;
 }
 
 .qg-header-name, .qg-header-type {
