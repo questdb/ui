@@ -62,7 +62,7 @@ export function grid(root, msgBus) {
   let canvasLeft
   let headerLeft
   let activeRowContainerLeft
-  let freezeLeft = 2
+  let freezeLeft = 3
   let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
@@ -137,7 +137,7 @@ export function grid(root, msgBus) {
   let colResizeColIndex
   let colResizeColOrigOffset
   let colResizeColOrigWidth
-  let colResizeOrigMargin
+  // let colResizeOrigMargin
   let colResizeTargetWidth = 0
   let colResizeTimer
 
@@ -382,7 +382,7 @@ export function grid(root, msgBus) {
       const row = rows[i & dcn]
       if (row) {
         renderRow(row, i, Math.max(visColumnLo, freezeLeft), visColumnCount)
-        renderRow(rowsLeft[i & dcn], i, 0, freezeLeft)
+        renderRow(rowsLeft[i & dcn], i, 0, Math.min(freezeLeft, columnCount))
       }
     }
   }
@@ -433,13 +433,12 @@ export function grid(root, msgBus) {
 
     const target = e.target
     // column index is derived from stylesheet selector name
-    colResizeColIndex = target.columnIndex - 1
+    colResizeColIndex = target.columnIndex
     colResizeColOrigOffset = getColumnOffset(colResizeColIndex)
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
-    colResizeOrigMargin = target.style.marginLeft
-    const offset = target.parentElement.offsetLeft
-    console.log('offset: '+offset)
-    colResizeDragHandleStartX = offset
+    const parent = target.parentElement
+    // we place ghost on the right side of the column that is being resized
+    colResizeDragHandleStartX = parent.offsetLeft + parent.getBoundingClientRect().width
     colResizeMouseDownX = e.clientX
 
     document.onmousemove = columnResizeDrag
@@ -586,19 +585,14 @@ export function grid(root, msgBus) {
       addClass(hName, 'qg-header-name')
       hName.innerHTML = c.name
 
-      if (i > 0) {
-        // drag handle for this column is located on left side of i+1 column (visually). So column
-        // 0 does not have drag handle
-        const handle = document.createElement('div')
-        addClass(handle, 'qg-drag-handle')
-        handle.columnIndex = i
-        handle.onmousedown = columnResizeStart
+      const handle = document.createElement('div')
+      addClass(handle, 'qg-drag-handle')
+      handle.columnIndex = i
+      handle.onmousedown = columnResizeStart
 
-        const hBorderSpan = document.createElement('span')
-        addClass(hBorderSpan, 'qg-header-border')
-        h.append(handle, hBorderSpan)
-      }
-
+      const hBorderSpan = document.createElement('span')
+      addClass(hBorderSpan, 'qg-header-border')
+      h.append(handle, hBorderSpan)
       h.append(hName, hType)
       h.onclick = broadcastColumnName
       header.append(h)
@@ -607,15 +601,6 @@ export function grid(root, msgBus) {
     const stub = document.createElement('div')
     stub.className = 'qg-header qg-stub'
     stub.style.width = scrollerGirth + 'px'
-
-    const lastDragHandle = document.createElement('div')
-    lastDragHandle.className = 'qg-drag-handle'
-    lastDragHandle.onmousedown = columnResizeStart
-    lastDragHandle.columnIndex = columnCount
-
-    const hBorderSpan = document.createElement('span')
-    hBorderSpan.className = 'qg-header-border'
-    stub.append(lastDragHandle, hBorderSpan)
     header.append(stub)
     return stub
   }
@@ -1429,7 +1414,7 @@ export function grid(root, msgBus) {
     computePanelLeftWidth()
     headerStub = createHeaderElements(header, columnCount, freezeLeft)
     if (freezeLeft > 0) {
-      createHeaderElements(headerLeft, freezeLeft, 0)
+      createHeaderElements(headerLeft, Math.min(freezeLeft, columnCount), 0)
     }
     applyPanelLeftWidth()
     createRowElements(canvas[0], rows, visColumnCount, totalWidth)

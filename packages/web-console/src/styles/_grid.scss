@@ -108,8 +108,6 @@ $active-row-background: #323342;
   -moz-user-select: none; /* Old versions of Firefox */
   -ms-user-select: none; /* Internet Explorer/Edge */
   user-select: none;
-  /* Non-prefixed version, currently
-                                   supported by Chrome, Opera and Firefox */
   background: #21222c;
   position: relative;
 }
@@ -125,6 +123,7 @@ $drag-handle-margin: 5px;
   // border span is squashed against the left side of the parent div, we need to bring
   // it out left a little to make it look like it is a left border of the previous cell
   margin-left: -$drag-handle-margin;
+  right: 0;
 }
 
 .qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
@@ -135,13 +134,15 @@ $drag-handle-margin: 5px;
 .qg-drag-handle {
   // place drag handle so that visible "line" is in the middle of it
   // to add hysteresis for the drag cursor
-  margin-left: -$visible-drag-handle-margin - $drag-handle-margin;
   width: $visible-drag-handle-margin * 2;
   height: 100%;
   top: 0;
   z-index: $drag-handle-z-index;
   position: absolute;
   border: 1px dotted red;
+  // drag handle is to the right of the header
+  right: 0;
+  margin-right: -$visible-drag-handle-margin;
 }
 
 .qg-drag-handle:hover {
