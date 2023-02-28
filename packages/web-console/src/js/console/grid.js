@@ -63,6 +63,12 @@ export function grid(root, msgBus) {
   let headerLeft
   let activeRowContainerLeft
   let freezeLeft = 3
+  let panelLeftHysteresis
+  let panelLeftGhost
+  let panelLeftGhostHandle
+  let panelLeftGhostHandleY
+  let panelLeftGhostHandleX
+  let panelLeftGhostHandleTop
   let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
@@ -473,6 +479,7 @@ export function grid(root, msgBus) {
   }
 
   function columnResizeDrag(e) {
+    console.log('drag')
     e.preventDefault()
     const delta = e.clientX - colResizeMouseDownX
     const width = colResizeColOrigWidth + delta
@@ -566,6 +573,53 @@ export function grid(root, msgBus) {
 
   function getCellWidth(valueLen) {
     return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 1.2))
+  }
+
+  function colFreezeMouseEnter(e) {
+    if (!panelLeftGhostHandleY) {
+      e.preventDefault()
+      panelLeftGhost.style.left = panelLeftWidth + 'px'
+      panelLeftGhost.style.display = 'block'
+      panelLeftGhostHandleTop = (e.offsetY - panelLeftGhostHandle.getBoundingClientRect().height / 2)
+      panelLeftGhostHandleY = e.pageY
+      panelLeftGhostHandle.style.top = panelLeftGhostHandleTop + 'px'
+    }
+  }
+
+  function colFreezeMouseLeave(e) {
+    const target = e.relatedTarget
+    if (target !== panelLeftGhostHandle && target !== panelLeftGhost && target !== panelLeftHysteresis && !panelLeftGhostHandleX) {
+      e.preventDefault()
+      panelLeftGhost.style.display = 'none'
+      panelLeftGhostHandleY = undefined
+    }
+  }
+  function colFreezeDrag(e) {
+    const d = e.pageX - panelLeftGhostHandleX
+    panelLeftGhost.style.left = (panelLeftWidth + d) + 'px'
+  }
+
+  function colFreezeMouseUp() {
+    document.onmousemove = undefined
+    document.onmouseup = undefined
+    panelLeftGhost.style.display = 'none'
+    panelLeftGhostHandleY = undefined
+    panelLeftGhostHandleX = undefined
+  }
+
+  function colFreezeMouseDown(e) {
+    e.preventDefault()
+    panelLeftGhostHandleX = e.pageX
+    document.onmousemove = colFreezeDrag
+    document.onmouseup = colFreezeMouseUp
+  }
+
+  function colFreezeMouseMove(e) {
+    if (panelLeftGhostHandleY) {
+      e.preventDefault()
+      const d = e.pageY - panelLeftGhostHandleY
+      panelLeftGhostHandle.style.top = (panelLeftGhostHandleTop + d) + 'px'
+    }
   }
 
   function createHeaderElements(header, columnCount, freezeLeft) {
@@ -1442,6 +1496,9 @@ export function grid(root, msgBus) {
     headerStub = createHeaderElements(header, columnCount, freezeLeft)
     if (freezeLeft > 0) {
       createHeaderElements(headerLeft, Math.min(freezeLeft, columnCount), 0)
+      panelLeft.style.display = 'block'
+    } else {
+      panelLeft.style.display = 'none'
     }
     applyPanelLeftWidth()
     createRowElements(canvas[0], rows, visColumnCount, totalWidth)
@@ -1520,7 +1577,25 @@ export function grid(root, msgBus) {
 
     viewportLeft.append(canvasLeft)
 
-    panelLeft.append(headerLeft, viewportLeft)
+    panelLeftHysteresis = document.createElement('div')
+    addClass(panelLeftHysteresis, 'qg-panel-left-hysteresis')
+
+    panelLeftGhost = document.createElement('div')
+    addClass(panelLeftGhost, 'qg-panel-left-ghost')
+
+    panelLeftGhostHandle = document.createElement('div')
+    addClass(panelLeftGhostHandle, 'qg-panel-left-ghost-handle')
+    panelLeftGhost.append(panelLeftGhostHandle)
+    panelLeft.append(headerLeft, viewportLeft, panelLeftHysteresis)
+
+    panelLeftHysteresis.onmouseenter = colFreezeMouseEnter
+    panelLeftHysteresis.onmouseleave = colFreezeMouseLeave
+    panelLeftHysteresis.onmousemove = colFreezeMouseMove
+    panelLeftHysteresis.onmousedown = colFreezeMouseDown
+    panelLeftGhost.onmousemove = colFreezeMouseMove
+    panelLeftGhost.onmouseleave = colFreezeMouseLeave
+    panelLeftGhostHandle.onmouseleave = colFreezeMouseLeave
+    panelLeftGhostHandle.onmousedown = colFreezeMouseDown
 
     bus.on(qdb.MSG_QUERY_DATASET, update)
     bus.on('grid.focus', focusCell)
@@ -1528,7 +1603,7 @@ export function grid(root, msgBus) {
     bus.on('grid.publish.query', publishQuery)
     bus.on(qdb.MSG_ACTIVE_PANEL, resize)
 
-    grid.append(header, viewport, panelLeft)
+    grid.append(header, viewport, panelLeft, panelLeftGhost)
     // when grid is navigated via keyboard, mouse hover is disabled
     // to not confuse user. Hover is then re-enabled on mouse move
     grid.onmousemove = enableHover

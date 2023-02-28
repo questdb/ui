@@ -232,9 +232,9 @@ $drag-handle-margin: 5px;
 }
 
 .qg-panel-left {
+  display: none;
   height: 100%;
   position: absolute;
-  overflow: hidden;
   top: 0;
   left: 0;
   background: #282a36;
@@ -277,4 +277,37 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   -webkit-box-shadow: $top-shadow;
   -moz-box-shadow: $top-shadow;
   box-shadow: $top-shadow;
+}
+
+.qg-panel-left-ghost, .qg-panel-left-hysteresis {
+  position: absolute;
+  top: 0;
+  margin-top: 54px;
+  height: calc(100% - 54px);
+  z-index: 5;
+}
+
+.qg-panel-left-ghost {
+  background-color: #98999f;
+  width: 2px;
+  display: none;
+}
+
+.qg-panel-left-hysteresis {
+  right: 0;
+  margin-right: -10px;
+  width: 20px;
+  cursor: grab;
+}
+
+.qg-panel-left-ghost-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 30px;
+  background-color: yellow;
+  border-radius: 3px;
+  margin-left: -2px;
+  cursor: grab;
 }
