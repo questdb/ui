@@ -32,6 +32,9 @@
 }
 
 $row-height: 55px;
+$drag-handle-z-index: 1;
+$panel-left-z-index: ($drag-handle-z-index + 1);
+$col-resize-ghost-z-index: ($panel-left-z-index + 1);
 
 .qg-header-row, .qg-header-left-row {
   display: flex;
@@ -108,6 +111,7 @@ $active-row-background: #323342;
   /* Non-prefixed version, currently
                                    supported by Chrome, Opera and Firefox */
   background: #21222c;
+  position: relative;
 }
 
 $visible-drag-handle-margin: 10px;
@@ -127,7 +131,6 @@ $drag-handle-margin: 5px;
   text-align: left;
 }
 
-
 // drag handle is not inside header element, it is next to it (sibling)
 .qg-drag-handle {
   // place drag handle so that visible "line" is in the middle of it
@@ -136,8 +139,9 @@ $drag-handle-margin: 5px;
   width: $visible-drag-handle-margin * 2;
   height: 100%;
   top: 0;
-  z-index: 1;
+  z-index: $drag-handle-z-index;
   position: absolute;
+  border: 1px dotted red;
 }
 
 .qg-drag-handle:hover {
@@ -153,7 +157,7 @@ $drag-handle-margin: 5px;
   top: 0;
   left: 0;
   cursor: col-resize;
-  z-index: 3;
+  z-index: $col-resize-ghost-z-index;
 }
 
 .qg-header-name, .qg-header-type {
@@ -237,6 +241,8 @@ $drag-handle-margin: 5px;
   top: 0;
   left: 0;
   background: #282a36;
+  // z-index of the panel must be greater than z-index of the drag handle
+  z-index: $panel-left-z-index;
 }
 
 .qg-panel-left-scroller-visible {
@@ -248,5 +254,11 @@ $drag-handle-margin: 5px;
   height: 100%;
   position: relative;
   border-right: thin solid #98999f;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+// chrome & safari
+.qg-viewport-left::-webkit-scrollbar {
+  display: none;
 }

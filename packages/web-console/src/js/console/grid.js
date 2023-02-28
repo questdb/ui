@@ -62,7 +62,7 @@ export function grid(root, msgBus) {
   let canvasLeft
   let headerLeft
   let activeRowContainerLeft
-  let freezeLeft = 4
+  let freezeLeft = 2
   let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
@@ -422,8 +422,8 @@ export function grid(root, msgBus) {
     }
   }
 
-  function getColResizeGhostLeft(delta) {
-    return (colResizeDragHandleStartX + delta - viewport.scrollLeft) + 'px'
+  function getColResizeGhostLeft(delta, colResizeColIndex) {
+    return (colResizeDragHandleStartX + delta - (colResizeColIndex < freezeLeft ? 0 : viewport.scrollLeft)) + 'px'
   }
 
   function columnResizeStart(e) {
@@ -437,14 +437,16 @@ export function grid(root, msgBus) {
     colResizeColOrigOffset = getColumnOffset(colResizeColIndex)
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
     colResizeOrigMargin = target.style.marginLeft
-    colResizeDragHandleStartX = target.offsetLeft + defaults.dragHandleWidth / 2 - 5 // todo? is this scroller girth ?
+    const offset = target.parentElement.offsetLeft
+    console.log('offset: '+offset)
+    colResizeDragHandleStartX = offset
     colResizeMouseDownX = e.clientX
 
     document.onmousemove = columnResizeDrag
     document.onmouseup = columnResizeEnd
 
     columnResizeGhost.style.top = 0
-    columnResizeGhost.style.left = getColResizeGhostLeft(0)
+    columnResizeGhost.style.left = getColResizeGhostLeft(0, colResizeColIndex)
     columnResizeGhost.style.height = (grid.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0)) + 'px'
     columnResizeGhost.style.visibility = 'visible'
 
@@ -468,7 +470,7 @@ export function grid(root, msgBus) {
     const delta = e.clientX - colResizeMouseDownX
     const width = colResizeColOrigWidth + delta
     if (width > defaults.minColumnWidth) {
-      columnResizeGhost.style.left = getColResizeGhostLeft(delta)
+      columnResizeGhost.style.left = getColResizeGhostLeft(delta, colResizeColIndex)
       colResizeTargetWidth = width
     }
   }
@@ -1082,6 +1084,10 @@ export function grid(root, msgBus) {
     viewportLeft.scrollTop = viewport.scrollTop
   }
 
+  function syncViewportScroll() {
+    viewport.scrollTop = viewportLeft.scrollTop
+  }
+
   function resize() {
     // If viewport is invisible when grid is updated it is not possible
     // to calculate column width correctly. When grid becomes visible again, resize()
@@ -1461,30 +1467,6 @@ export function grid(root, msgBus) {
     }
   }
 
-  let viewportLeftScrollTimer
-  let viewportLeftScrollOpts = {
-    top: 0,
-    left: 0,
-    behavior: 'smooth'
-  }
-
-  function viewportLeftScroll() {
-    viewportLeft.scroll(viewportLeftScrollOpts)
-    viewport.scroll(viewportLeftScrollOpts)
-    viewportLeftScrollTimer = undefined
-  }
-
-  function viewportLeftWheel(e) {
-    if (viewportLeftScrollTimer) {
-      clearTimeout(viewportLeftScrollTimer)
-      viewportLeftScrollOpts.top -= e.wheelDelta
-    } else {
-      viewportLeftScrollOpts.top = viewport.scrollTop - e.wheelDelta * 5.0
-    }
-    viewportLeftScrollOpts.left = viewport.scrollLeft
-    viewportLeftScrollTimer = setTimeout(viewportLeftScroll, 40)
-  }
-
   function bind() {
     header = document.createElement('div')
     addClass(header, 'qg-header-row')
@@ -1510,10 +1492,11 @@ export function grid(root, msgBus) {
     addClass(headerLeft, 'qg-header-left-row')
 
     viewportLeft = document.createElement('div')
+    viewportLeft.onscroll = syncViewportScroll
     // viewport left does not have scrollbar to make "stitch" cleaner
     // however, mouse wheel should still function as if scrollbar was
     // present.
-    viewportLeft.onwheel = viewportLeftWheel
+    // viewportLeft.onwheel = viewportLeftWheel
     addClass(viewportLeft, 'qg-viewport-left')
 
     const cl = $('<div>')
