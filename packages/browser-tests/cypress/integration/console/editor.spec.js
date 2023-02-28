@@ -2,15 +2,6 @@
 
 const baseUrl = "http://localhost:9999";
 
-const numberRangeRegexp = (n, width = 3) => {
-  const [min, max] = [n - width, n + width];
-  const numbers = Array.from(
-    { length: Math.abs(max - min) },
-    (_, i) => min + i
-  );
-  return numbers.join("|");
-};
-
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
@@ -203,7 +194,7 @@ describe("autocomplete", () => {
   it("should work when tables list is not empty", () => {
     cy.runQuery('create table "my_secrets" ("secret" string)');
     cy.runQuery('create table "my_publics" ("public" string)');
-    cy.reload();
+    cy.visit(baseUrl);
     cy.typeQuery("select * from ");
     cy.getAutocomplete().should("not.contain", "telemetry");
     cy.getAutocomplete().should("contain", "my_secrets");
@@ -226,41 +217,19 @@ describe("errors", () => {
   it("should mark '(200000)' as error", () => {
     const query = `create table test (\ncol symbol index CAPACITY (200000)`;
     cy.runQuery(query);
-    cy.getErrorMarker()
-      .should("have.attr", "style")
-      .and(
-        "match",
-        new RegExp(
-          `left:${numberRangeRegexp(237)}px;width:${numberRangeRegexp(67)}px;`
-        )
-      );
+    cy.matchErrorMarkerPosition({ left: 237, width: 67 });
   });
 
   it("should mark 'telemetry' as error", () => {
     const query = `CREATE TABLE 'telemetry' (id LONG256)`;
     cy.runQuery(query);
-    cy.getErrorMarker()
-      .should("have.attr", "style")
-      .and(
-        "match",
-        new RegExp(
-          `left:${numberRangeRegexp(111)}px;width:${numberRangeRegexp(93)}px;`
-        )
-      );
+    cy.matchErrorMarkerPosition({ left: 111, width: 93 });
   });
 
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
     cy.runQuery(query);
-    cy.getErrorMarker()
-      .should("have.attr", "style")
-      .and(
-        "match",
-        new RegExp(
-          `left:${numberRangeRegexp(506)}px;width:${numberRangeRegexp(42)}px;`
-        )
-      );
-
+    cy.matchErrorMarkerPosition({ left: 506, width: 42 });
     cy.getNotifications().should("contain", "Invalid date");
   });
 });
