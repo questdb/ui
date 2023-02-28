@@ -1121,7 +1121,7 @@ export function grid(root, msgBus) {
 
   function rowEnter(e) {
     e.preventDefault()
-    const target = e.toElement
+    const target = e.srcElement
     if (target) {
       const row = target.parentElement.questIndex & dcn
       addClass(rows[row], 'qg-r-hover')
@@ -1131,7 +1131,7 @@ export function grid(root, msgBus) {
 
   function rowLeave(e) {
     e.preventDefault()
-    const target = e.fromElement
+    const target = e.target
     if (target) {
       const row = target.parentElement.questIndex & dcn
       removeClass(rows[row], 'qg-r-hover')
@@ -1187,7 +1187,7 @@ export function grid(root, msgBus) {
         clearTimeout(activeCellPulseClearTimer)
       }
       addClass(focusedCell, 'qg-c-active-pulse')
-      navigator.clipboard.writeText(focusedCell.innerHTML)
+      navigator.clipboard.writeText(focusedCell.innerHTML).then(undefined)
 
       activeCellPulseClearTimer = setTimeout(
         () => {

@@ -136,7 +136,6 @@ $drag-handle-margin: 5px;
   top: 0;
   z-index: $drag-handle-z-index;
   position: absolute;
-  border: 1px dotted red;
   // drag handle is to the right of the header
   right: 0;
   margin-right: -$visible-drag-handle-margin;
@@ -254,6 +253,9 @@ $drag-handle-margin: 5px;
   border-right: thin solid #98999f;
   overflow-x: hidden;
   overflow-y: auto;
+  // hide scrollbar for IE, Edge and Firefox
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
 
 // chrome & safari
