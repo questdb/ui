@@ -6,7 +6,7 @@
  *    \__\_\\__,_|\___||___/\__|____/|____/
  *
  *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
+ *  Copyright (c) 2019-2023 QuestDB
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -915,13 +915,32 @@ export function grid(root, msgBus) {
 
   function scroll(event) {
 
-    if (header.scrollLeft !== viewport.scrollLeft) {
-      header.scrollLeft = viewport.scrollLeft
+    const scrollLeft = viewport.scrollLeft
+    const scrollTop = viewport.scrollTop
+
+    if (header.scrollLeft !== scrollLeft) {
+      header.scrollLeft = scrollLeft
+    }
+
+    // give visual cue panels overlapping
+    if (freezeLeft > 0) {
+      if (scrollLeft > 0) {
+        addClass(panelLeft, 'qg-panel-scrolled-left')
+      } else {
+        removeClass(panelLeft, 'qg-panel-scrolled-left')
+      }
+    }
+
+    if (scrollTop > 0) {
+      addClass(header, 'qg-panel-scrolled-top')
+      addClass(headerLeft, 'qg-panel-scrolled-top')
+    } else {
+      removeClass(header, 'qg-panel-scrolled-top')
+      removeClass(headerLeft, 'qg-panel-scrolled-top')
     }
 
     renderColumns()
 
-    const scrollTop = viewport.scrollTop
     if (scrollTop !== top || !event) {
       const oldY = y
       // if grid content fits in viewport we don't need to adjust activeRow

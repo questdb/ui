@@ -6,7 +6,7 @@
  *    \__\_\\__,_|\___||___/\__|____/|____/
  *
  *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
+ *  Copyright (c) 2019-2023 QuestDB
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -255,10 +255,26 @@ $drag-handle-margin: 5px;
   overflow-y: auto;
   // hide scrollbar for IE, Edge and Firefox
   -ms-overflow-style: none;  /* IE and Edge */
+  //noinspection CssUnknownProperty
   scrollbar-width: none;  /* Firefox */
 }
 
 // chrome & safari
 .qg-viewport-left::-webkit-scrollbar {
   display: none;
+}
+
+$left-shadow: 10px 0 30px -4px rgba(0,0,0,0.75);
+$top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
+
+.qg-panel-scrolled-left {
+  -webkit-box-shadow: $left-shadow;
+  -moz-box-shadow: $left-shadow;
+  box-shadow: $left-shadow;
+}
+
+.qg-panel-scrolled-top {
+  -webkit-box-shadow: $top-shadow;
+  -moz-box-shadow: $top-shadow;
+  box-shadow: $top-shadow;
 }
