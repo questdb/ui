@@ -194,10 +194,8 @@ export function grid(root, msgBus) {
   }
 
   function setViewportScrollTop(scrollTop) {
-    console.log('scrolltop: ' + scrollTop)
     viewport.scrollTop = scrollTop
     viewportLeft.scrollTop = scrollTop
-    console.log('scrolltop: ' + scrollTop + ', vlp: ' + viewportLeft.scrollTop + ', vplH: ' + viewportLeft.getBoundingClientRect().height + ', vpH: ' + viewport.getBoundingClientRect().height)
   }
 
   function renderViewportNoCompute() {
@@ -205,8 +203,6 @@ export function grid(root, msgBus) {
     const bounds = computeRowBounds()
     const t = bounds.t
     const b = bounds.b
-
-    console.log("no compute t: " + t + ", b: " + b + ", y: " + y + ", o: " + o + ", top: " + top)
 
     for (let i = t; i < b; i++) {
       renderRow(rows[i & dcn], i, Math.max(visColumnLo, freezeLeft), visColumnCount)
@@ -376,12 +372,10 @@ export function grid(root, msgBus) {
       t = Math.max(0, b - dc)
     }
 
-    console.log("rr t: " + t + ", b: " + b + ", y: " + y + ", o: " + o + ", top: " + top)
-
     for (let i = t; i < b; i++) {
       const row = rows[i & dcn]
       if (row) {
-        renderRow(row, i, Math.max(visColumnLo, freezeLeft), visColumnCount)
+        renderRow(row, i, Math.min(columnCount, Math.max(visColumnLo, freezeLeft)), visColumnCount)
         renderRow(rowsLeft[i & dcn], i, 0, Math.min(freezeLeft, columnCount))
       }
     }
@@ -527,14 +521,14 @@ export function grid(root, msgBus) {
     // update header width
     if (columnIndex < freezeLeft) {
       setHeaderCellWidth(headerLeft.childNodes[columnIndex], width)
-      renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
+      renderCells(rowsLeft, 0, Math.min(freezeLeft, columnCount), visColumnLo)
       computePanelLeftWidth()
       applyPanelLeftWidth()
     } else {
       setHeaderCellWidth(header.childNodes[columnIndex - freezeLeft], width)
     }
     ensureCellsFillViewport()
-    renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
+    renderCells(rows, visColumnLo, visColumnLo + visColumnCount, visColumnLo)
   }
 
   function columnResizeEnd(e) {
@@ -570,7 +564,6 @@ export function grid(root, msgBus) {
 
       if (i === freezeLeft) {
         h.style.marginLeft = (freezeLeft > 0 ? panelLeftWidth : 0) + 'px'
-        console.log("set 1")
       }
 
       if (isLeftAligned(i)) {
@@ -1046,7 +1039,8 @@ export function grid(root, msgBus) {
 
   function computePanelLeftWidth() {
     let w = 0
-    for (let i = 0; i < freezeLeft; i++) {
+    const n = Math.min(freezeLeft, columnCount)
+    for (let i = 0; i < n; i++) {
       w += getColumnWidth(i)
     }
     panelLeftWidth = w
@@ -1418,7 +1412,7 @@ export function grid(root, msgBus) {
     }
     applyPanelLeftWidth()
     createRowElements(canvas[0], rows, visColumnCount, totalWidth)
-    createRowElements(canvasLeft, rowsLeft, freezeLeft, panelLeftWidth)
+    createRowElements(canvasLeft, rowsLeft, Math.min(freezeLeft, columnCount), panelLeftWidth)
 
     computeCanvasHeight()
     setViewportScrollTop(0)

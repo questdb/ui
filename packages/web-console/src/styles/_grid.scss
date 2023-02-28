@@ -120,9 +120,6 @@ $drag-handle-margin: 5px;
   margin-top: 10px;
   height: 25px;
   border-left: thin dashed #cac30f;
-  // border span is squashed against the left side of the parent div, we need to bring
-  // it out left a little to make it look like it is a left border of the previous cell
-  margin-left: -$drag-handle-margin;
   right: 0;
 }
 
