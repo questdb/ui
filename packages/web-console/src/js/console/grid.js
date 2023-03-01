@@ -62,7 +62,8 @@ export function grid(root, msgBus) {
   let canvasLeft
   let headerLeft
   let activeRowContainerLeft
-  let freezeLeft = 3
+  let freezeLeft = 0
+  let nextFreezeLeft
   let panelLeftHysteresis
   let panelLeftGhost
   let panelLeftSnapGhost
@@ -70,6 +71,7 @@ export function grid(root, msgBus) {
   let panelLeftGhostHandleY
   let panelLeftGhostHandleX
   let panelLeftGhostHandleTop
+  let panelLeftInitialHysteresis
   let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
@@ -144,7 +146,6 @@ export function grid(root, msgBus) {
   let colResizeColIndex
   let colResizeColOrigOffset
   let colResizeColOrigWidth
-  // let colResizeOrigMargin
   let colResizeTargetWidth = 0
   let colResizeTimer
 
@@ -425,7 +426,7 @@ export function grid(root, msgBus) {
 
   function broadcastColumnName(e) {
     // avoid broadcasting fat finger clicks
-    if (colResizeColIndex === -1) {
+    if (!colResizeColIndex) {
       bus.trigger('editor.insert.column', e.currentTarget.getAttribute('data-column-name'))
     }
   }
@@ -441,12 +442,34 @@ export function grid(root, msgBus) {
     return (colResizeDragHandleStartX + delta - (colResizeColIndex < freezeLeft ? 0 : viewport.scrollLeft)) + 'px'
   }
 
-  function columnResizeStart(e) {
+  function columnResizeMouseEnter(e) {
+    if (e.target.childNodes.length === 0) {
+      e.preventDefault()
+      const div = document.createElement('div')
+      div.baguette = true
+      addClass(div, 'qg-col-resize-hysteresis-enter')
+      e.target.append(div)
+    }
+  }
+
+  function columnResizeMouseLeave(e) {
+    e.preventDefault()
+    if (e.target.childNodes.length > 0) {
+      e.target.childNodes[0].remove()
+    }
+  }
+
+  function columnResizeMouseDown(e) {
     e.preventDefault()
 
     colResizeClearTimer()
 
-    const target = e.target
+    // Mouse down could have occurred on either the hysteresis element or
+    // the drag handle.
+    const target = e.target.baguette ? e.target.parentElement : e.target
+    if (e.target.childNodes.length > 0) {
+      e.target.childNodes[0].remove()
+    }
     // column index is derived from stylesheet selector name
     colResizeColIndex = target.columnIndex
     colResizeColOrigOffset = getColumnOffset(colResizeColIndex)
@@ -480,7 +503,6 @@ export function grid(root, msgBus) {
   }
 
   function columnResizeDrag(e) {
-    console.log('drag')
     e.preventDefault()
     const delta = e.clientX - colResizeMouseDownX
     const width = colResizeColOrigWidth + delta
@@ -546,9 +568,8 @@ export function grid(root, msgBus) {
       renderCells(rowsLeft, 0, Math.min(freezeLeft, columnCount), visColumnLo)
       computePanelLeftWidth()
       applyPanelLeftWidth()
-    } else {
-      setHeaderCellWidth(header.childNodes[columnIndex - freezeLeft], width)
     }
+    setHeaderCellWidth(header.childNodes[columnIndex], width)
     ensureCellsFillViewport()
     renderCells(rows, visColumnLo, visColumnLo + visColumnCount, visColumnLo)
   }
@@ -565,7 +586,7 @@ export function grid(root, msgBus) {
     colResizeTimer = setTimeout(
       () => {
         // delay clearing drag end to prevent overlapping header click
-        colResizeColIndex = -1
+        colResizeColIndex = undefined
       },
       500
     )
@@ -601,10 +622,30 @@ export function grid(root, msgBus) {
 
   function colFreezeDrag(e) {
     const d = e.pageX - panelLeftGhostHandleX
-    panelLeftGhost.style.left = (panelLeftWidth + d) + 'px'
+    const t = panelLeftWidth + d
+    panelLeftGhost.style.left = t + 'px'
     // make "snap" ghost visible to illustrate which columns are
     // going to be frozen
-    panelLeftSnapGhost.style.left = panelLeftWidth + 'px'
+
+    // find column index to snap the next frozen column to
+    nextFreezeLeft = freezeLeft
+    let target = t
+    for (let i = 0; i < columnCount; i++) {
+      const w = getColumnWidth(i)
+      target -= w
+      if (target < 0) {
+        const r = -target / w
+        nextFreezeLeft = r < 0.5 ? i + 1 : i
+        break
+      }
+    }
+
+    // viewport must not be scrolled to update next freezeLeft up,
+    // but we can reduce freezeLeft regardless of scroll
+    if (nextFreezeLeft > freezeLeft && viewport.scrollLeft > 0) {
+      nextFreezeLeft = freezeLeft
+    }
+    panelLeftSnapGhost.style.left = getColumnOffset(nextFreezeLeft) + 'px'
     panelLeftSnapGhost.style.display = 'block'
 
     colFreezeMouseMoveGhostHandle(e)
@@ -618,6 +659,9 @@ export function grid(root, msgBus) {
     panelLeftGhostHandleY = undefined
     panelLeftGhostHandleX = undefined
     grid.style.cursor = null
+    panelLeftGhostHandle.style.cursor = null
+    panelLeftInitialHysteresis.style.cursor = null
+    setFreezeLeft(nextFreezeLeft)
   }
 
   function colFreezeMouseDown(e) {
@@ -625,28 +669,33 @@ export function grid(root, msgBus) {
     panelLeftGhostHandleX = e.pageX
     document.onmousemove = colFreezeDrag
     document.onmouseup = colFreezeMouseUp
-    grid.style.cursor = 'grab'
+    grid.style.cursor = 'grabbing'
+    panelLeftGhostHandle.style.cursor = 'grabbing'
+    panelLeftInitialHysteresis.style.cursor = 'grabbing'
   }
 
   function colFreezeMouseMoveGhostHandle(e) {
     if (panelLeftGhostHandleY) {
       e.preventDefault()
       const d = e.pageY - panelLeftGhostHandleY
-      panelLeftGhostHandle.style.top = Math.max(0, panelLeftGhostHandleTop + d) + 'px'
+      // limit handle position to within the viewport from both top and bottom
+      panelLeftGhostHandle.style.top = Math.min(
+        viewportHeight - panelLeftGhostHandle.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0),
+        Math.max(
+          0,
+          panelLeftGhostHandleTop + d
+        )
+      ) + 'px'
     }
   }
 
-  function createHeaderElements(header, columnCount, freezeLeft) {
-    for (let i = freezeLeft; i < columnCount; i++) {
+  function createHeaderElements(header, fromColumn, columnCount, createStub) {
+    for (let i = fromColumn, n = fromColumn + columnCount; i < n; i++) {
       const c = columns[i]
       const h = document.createElement('div')
       addClass(h, 'qg-header')
       setHeaderCellWidth(h, getColumnWidth(i))
       h.setAttribute('data-column-name', c.name)
-
-      if (i === freezeLeft) {
-        h.style.marginLeft = (freezeLeft > 0 ? panelLeftWidth : 0) + 'px'
-      }
 
       if (isLeftAligned(i)) {
         addClass(h, 'qg-header-l')
@@ -660,24 +709,29 @@ export function grid(root, msgBus) {
       addClass(hName, 'qg-header-name')
       hName.innerHTML = c.name
 
-      const handle = document.createElement('div')
-      addClass(handle, 'qg-drag-handle')
-      handle.columnIndex = i
-      handle.onmousedown = columnResizeStart
+      const hysteresis = document.createElement('div')
+      addClass(hysteresis, 'qg-col-resize-hysteresis')
+      hysteresis.columnIndex = i
+      hysteresis.onmousedown = columnResizeMouseDown
+      hysteresis.onmouseenter = columnResizeMouseEnter
+      hysteresis.onmouseleave = columnResizeMouseLeave
 
       const hBorderSpan = document.createElement('span')
       addClass(hBorderSpan, 'qg-header-border')
-      h.append(handle, hBorderSpan)
+      h.append(hysteresis, hBorderSpan)
       h.append(hName, hType)
       h.onclick = broadcastColumnName
       header.append(h)
     }
 
-    const stub = document.createElement('div')
-    stub.className = 'qg-header qg-stub'
-    stub.style.width = scrollerGirth + 'px'
-    header.append(stub)
-    return stub
+    if (createStub) {
+      const stub = document.createElement('div')
+      stub.className = 'qg-header qg-stub'
+      stub.style.width = scrollerGirth + 'px'
+      header.append(stub)
+      return stub
+    }
+    return null
   }
 
   function computeHeaderWidths() {
@@ -724,11 +778,12 @@ export function grid(root, msgBus) {
     recomputeColumnWidthOnResize = false
     // -1 means column is not being resized, anything else means user drags resize handle
     // this is to prevent overlapping events actioning anything accidentally
-    colResizeColIndex = -1
+    colResizeColIndex = undefined
     colResizeClearTimer()
     layoutStoreColumnSetKey = undefined
     layoutStoreColumnSetSha256 = undefined
     panelLeftWidth = 0
+    freezeLeft = 0
     enableHover()
   }
 
@@ -848,7 +903,7 @@ export function grid(root, msgBus) {
     const columnOffset = getColumnOffset(focusedCellIndex)
     const columnWidth = getColumnWidth(focusedCellIndex)
 
-    if (navEvent !== NAV_EVENT_ANY_VERTICAL && focusedCellIndex >= freezeLeft) {
+    if (navEvent !== NAV_EVENT_ANY_VERTICAL && (focusedCellIndex >= freezeLeft || navEvent === NAV_EVENT_HOME)) {
       const w = Math.max(0, columnOffset - panelLeftWidth)
       if (w < viewport.scrollLeft) {
         setScrollLeft(w)
@@ -1245,7 +1300,7 @@ export function grid(root, msgBus) {
   }
 
   function activeCellHome() {
-    if (focusedCellIndex > 0) {
+    if (focusedCellIndex > 0 || viewport.scrollLeft > 0) {
       disableHover()
       focusedCellIndex = 0
       updateCellViewport(NAV_EVENT_HOME)
@@ -1503,18 +1558,17 @@ export function grid(root, msgBus) {
 
   function applyPanelLeftWidth() {
     panelLeft.style.width = panelLeftWidth + 'px'
-    header.childNodes[0].style.marginLeft = panelLeftWidth + 'px'
   }
 
   function updatePart2() {
     computeColumnWidths()
     computePanelLeftWidth()
-    headerStub = createHeaderElements(header, columnCount, freezeLeft)
+    headerStub = createHeaderElements(header, 0, columnCount, true)
     if (freezeLeft > 0) {
-      createHeaderElements(headerLeft, Math.min(freezeLeft, columnCount), 0)
-      panelLeft.style.display = 'block'
+      createHeaderElements(headerLeft, 0, Math.min(freezeLeft, columnCount), false)
+      showPanelLeft()
     } else {
-      panelLeft.style.display = 'none'
+      hidePanelLeft()
     }
     applyPanelLeftWidth()
     createRowElements(canvas[0], rows, visColumnCount, totalWidth)
@@ -1527,6 +1581,61 @@ export function grid(root, msgBus) {
     // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
     // we can assume that viewport already rendered top left corner of the data set
     focusFirstCell()
+  }
+
+  function showPanelLeft() {
+    panelLeft.style.display = 'block'
+    panelLeftInitialHysteresis.style.display = 'none'
+  }
+
+  function hidePanelLeft() {
+    panelLeft.style.display = 'none'
+    panelLeftInitialHysteresis.style.display = 'block'
+  }
+
+  function setFreezeLeft(nextFreezeLeft) {
+    if (nextFreezeLeft !== freezeLeft) {
+      if (nextFreezeLeft < freezeLeft) {
+        // remove columns from all the rows
+        for (let i = 0, n = rowsLeft.length; i < n; i++) {
+          const row = rowsLeft[i]
+          for (let j = nextFreezeLeft; j < freezeLeft; j++) {
+            // as we remove, the children shift left
+            row.childNodes[nextFreezeLeft].remove()
+          }
+        }
+        // remove headers
+        for (let j = nextFreezeLeft; j < freezeLeft; j++) {
+          // as we remove, the children shift left
+          headerLeft.childNodes[nextFreezeLeft].remove()
+        }
+
+        if (nextFreezeLeft === 0) {
+          hidePanelLeft();
+        }
+
+      } else {
+        // add columns to all the rows
+        for (let i = 0, n = rowsLeft.length; i < n; i++) {
+          const row = rowsLeft[i]
+          for (let j = freezeLeft; j < nextFreezeLeft; j++) {
+            const cell = document.createElement('div')
+            cell.className = 'qg-c'
+            configureCell(cell, j)
+            row.append(cell)
+          }
+        }
+        // add header
+        createHeaderElements(headerLeft, freezeLeft, nextFreezeLeft - freezeLeft, false)
+        showPanelLeft();
+      }
+
+      freezeLeft = nextFreezeLeft
+      renderCells(rowsLeft, 0, Math.min(freezeLeft, columnCount), visColumnLo)
+      computePanelLeftWidth()
+      applyPanelLeftWidth()
+      renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
+    }
   }
 
   function update(x, m) {
@@ -1616,13 +1725,20 @@ export function grid(root, msgBus) {
     panelLeftSnapGhost = document.createElement('div')
     addClass(panelLeftSnapGhost, 'qg-panel-left-snap-ghost')
 
+    panelLeftInitialHysteresis = document.createElement('div')
+    addClass(panelLeftInitialHysteresis, 'qg-panel-left-initial-hysteresis')
+    panelLeftInitialHysteresis.onmouseenter = colFreezeMouseEnter
+    panelLeftInitialHysteresis.onmouseleave = colFreezeMouseLeave
+    panelLeftInitialHysteresis.onmousemove = colFreezeMouseMoveGhostHandle
+    panelLeftInitialHysteresis.onmousedown = colFreezeMouseDown
+
     bus.on(qdb.MSG_QUERY_DATASET, update)
     bus.on('grid.focus', focusCell)
     bus.on('grid.refresh', refreshQuery)
     bus.on('grid.publish.query', publishQuery)
     bus.on(qdb.MSG_ACTIVE_PANEL, resize)
 
-    grid.append(header, viewport, panelLeft, panelLeftGhost, panelLeftSnapGhost)
+    grid.append(header, viewport, panelLeft, panelLeftGhost, panelLeftSnapGhost, panelLeftInitialHysteresis)
     // when grid is navigated via keyboard, mouse hover is disabled
     // to not confuse user. Hover is then re-enabled on mouse move
     grid.onmousemove = enableHover

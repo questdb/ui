@@ -113,7 +113,7 @@ $active-row-background: #323342;
 }
 
 $visible-drag-handle-margin: 10px;
-$drag-handle-margin: 5px;
+$drag-handle-margin: 2px;
 
 .qg-header-border {
   position: absolute;
@@ -128,7 +128,7 @@ $drag-handle-margin: 5px;
 }
 
 // drag handle is not inside header element, it is next to it (sibling)
-.qg-drag-handle {
+.qg-col-resize-hysteresis {
   // place drag handle so that visible "line" is in the middle of it
   // to add hysteresis for the drag cursor
   width: $visible-drag-handle-margin * 2;
@@ -141,16 +141,24 @@ $drag-handle-margin: 5px;
   margin-right: -$visible-drag-handle-margin;
 }
 
-.qg-drag-handle:hover {
-  cursor: col-resize;
+.qg-col-resize-hysteresis:hover {
+  cursor: grab;
+}
+
+.qg-col-resize-hysteresis-enter {
+  background-color: yellow;
+  width: 5px;
+  margin-top: 10px;
+  margin-left: 8px;
+  height: 35px;
+  border-radius: 3px;
 }
 
 .qg-col-resize-ghost {
   position: absolute;
   width: $drag-handle-margin;
-  box-shadow: inset 0 0 0 2px #f1fa8c;
+  background-color: yellow;
   height: 0;
-  background: #f1fa8c;
   top: 0;
   left: 0;
   cursor: col-resize;
@@ -240,6 +248,8 @@ $drag-handle-margin: 5px;
   background: #282a36;
   // z-index of the panel must be greater than z-index of the drag handle
   z-index: $panel-left-z-index;
+  // this is to make last column hysteresis fully visible (it is transparent)
+  overflow: visible;
 }
 
 .qg-panel-left-scroller-visible {
@@ -279,7 +289,7 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   box-shadow: $top-shadow;
 }
 
-.qg-panel-left-ghost, .qg-panel-left-hysteresis, .qg-panel-left-snap-ghost {
+.qg-panel-left-ghost, .qg-panel-left-hysteresis, .qg-panel-left-snap-ghost, .qg-panel-left-initial-hysteresis {
   position: absolute;
   top: 0;
   margin-top: 54px;
@@ -306,6 +316,13 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   cursor: grab;
 }
 
+.qg-panel-left-initial-hysteresis {
+  width: 10px;
+  left: 0;
+  display: none;
+  cursor: grab;
+}
+
 .qg-panel-left-ghost-handle {
   position: absolute;
   top: 0;
@@ -317,3 +334,4 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   margin-left: -2px;
   cursor: grab;
 }
+
