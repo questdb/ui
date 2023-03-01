@@ -1350,6 +1350,8 @@ export function grid(root, msgBus) {
     computeHeaderWidths()
     computeColumnWidthAndConfigureHeader();
     ensureCellsFillViewport()
+    computePanelLeftWidth()
+    applyPanelLeftWidth()
     renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
     renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
   }
@@ -1404,12 +1406,13 @@ export function grid(root, msgBus) {
         break
       case 67: // Ctrl+C (copy)
       case 45: // Ctrl+Insert (copy)
-        if (downKey[17]) {
+        if (downKey[17] || downKey[91]) {
           copyActiveCellToClipboard()
         }
         break
       case 66:
-        if (downKey[17]) {
+        // 17 = Ctrl, 91 = Cmd (mac)
+        if (downKey[17] || downKey[91]) {
           restoreColumnWidths()
         }
         break
@@ -1586,6 +1589,7 @@ export function grid(root, msgBus) {
   function showPanelLeft() {
     panelLeft.style.display = 'block'
     panelLeftInitialHysteresis.style.display = 'none'
+    viewportLeft.scrollTop = viewport.scrollTop
   }
 
   function hidePanelLeft() {
