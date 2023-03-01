@@ -65,6 +65,7 @@ export function grid(root, msgBus) {
   let freezeLeft = 3
   let panelLeftHysteresis
   let panelLeftGhost
+  let panelLeftSnapGhost
   let panelLeftGhostHandle
   let panelLeftGhostHandleY
   let panelLeftGhostHandleX
@@ -580,9 +581,12 @@ export function grid(root, msgBus) {
       e.preventDefault()
       panelLeftGhost.style.left = panelLeftWidth + 'px'
       panelLeftGhost.style.display = 'block'
+      panelLeftGhost.style.height = (viewportHeight - (isHorizontalScroller() ? scrollerGirth : 0)) + 'px'
+      panelLeftSnapGhost.style.height = panelLeftGhost.style.height
       panelLeftGhostHandleTop = (e.offsetY - panelLeftGhostHandle.getBoundingClientRect().height / 2)
       panelLeftGhostHandleY = e.pageY
       panelLeftGhostHandle.style.top = panelLeftGhostHandleTop + 'px'
+
     }
   }
 
@@ -594,17 +598,26 @@ export function grid(root, msgBus) {
       panelLeftGhostHandleY = undefined
     }
   }
+
   function colFreezeDrag(e) {
     const d = e.pageX - panelLeftGhostHandleX
     panelLeftGhost.style.left = (panelLeftWidth + d) + 'px'
+    // make "snap" ghost visible to illustrate which columns are
+    // going to be frozen
+    panelLeftSnapGhost.style.left = panelLeftWidth + 'px'
+    panelLeftSnapGhost.style.display = 'block'
+
+    colFreezeMouseMoveGhostHandle(e)
   }
 
   function colFreezeMouseUp() {
     document.onmousemove = undefined
     document.onmouseup = undefined
     panelLeftGhost.style.display = 'none'
+    panelLeftSnapGhost.style.display = 'none'
     panelLeftGhostHandleY = undefined
     panelLeftGhostHandleX = undefined
+    grid.style.cursor = null
   }
 
   function colFreezeMouseDown(e) {
@@ -612,13 +625,14 @@ export function grid(root, msgBus) {
     panelLeftGhostHandleX = e.pageX
     document.onmousemove = colFreezeDrag
     document.onmouseup = colFreezeMouseUp
+    grid.style.cursor = 'grab'
   }
 
-  function colFreezeMouseMove(e) {
+  function colFreezeMouseMoveGhostHandle(e) {
     if (panelLeftGhostHandleY) {
       e.preventDefault()
       const d = e.pageY - panelLeftGhostHandleY
-      panelLeftGhostHandle.style.top = (panelLeftGhostHandleTop + d) + 'px'
+      panelLeftGhostHandle.style.top = Math.max(0, panelLeftGhostHandleTop + d) + 'px'
     }
   }
 
@@ -834,7 +848,7 @@ export function grid(root, msgBus) {
     const columnOffset = getColumnOffset(focusedCellIndex)
     const columnWidth = getColumnWidth(focusedCellIndex)
 
-    if (navEvent !== NAV_EVENT_ANY_VERTICAL) {
+    if (navEvent !== NAV_EVENT_ANY_VERTICAL && focusedCellIndex >= freezeLeft) {
       const w = Math.max(0, columnOffset - panelLeftWidth)
       if (w < viewport.scrollLeft) {
         setScrollLeft(w)
@@ -1194,8 +1208,9 @@ export function grid(root, msgBus) {
 
   function rowEnter(e) {
     e.preventDefault()
-    const target = e.srcElement
-    if (target) {
+    const target = e.target
+    // do not show "hover" visuals when left panel is interacted with
+    if (target && !panelLeftGhostHandleX) {
       const row = target.parentElement.questIndex & dcn
       addClass(rows[row], 'qg-r-hover')
       addClass(rowsLeft[row], 'qg-r-hover')
@@ -1205,7 +1220,8 @@ export function grid(root, msgBus) {
   function rowLeave(e) {
     e.preventDefault()
     const target = e.target
-    if (target) {
+    // do not show "hover" visuals when left panel is interacted with
+    if (target && !panelLeftGhostHandleX) {
       const row = target.parentElement.questIndex & dcn
       removeClass(rows[row], 'qg-r-hover')
       removeClass(rowsLeft[row], 'qg-r-hover')
@@ -1579,23 +1595,26 @@ export function grid(root, msgBus) {
 
     panelLeftHysteresis = document.createElement('div')
     addClass(panelLeftHysteresis, 'qg-panel-left-hysteresis')
+    panelLeftHysteresis.onmouseenter = colFreezeMouseEnter
+    panelLeftHysteresis.onmouseleave = colFreezeMouseLeave
+    panelLeftHysteresis.onmousemove = colFreezeMouseMoveGhostHandle
+    panelLeftHysteresis.onmousedown = colFreezeMouseDown
 
     panelLeftGhost = document.createElement('div')
     addClass(panelLeftGhost, 'qg-panel-left-ghost')
+    panelLeftGhost.onmousemove = colFreezeMouseMoveGhostHandle
+    panelLeftGhost.onmouseleave = colFreezeMouseLeave
 
     panelLeftGhostHandle = document.createElement('div')
     addClass(panelLeftGhostHandle, 'qg-panel-left-ghost-handle')
+    panelLeftGhostHandle.onmouseleave = colFreezeMouseLeave
+    panelLeftGhostHandle.onmousedown = colFreezeMouseDown
+
     panelLeftGhost.append(panelLeftGhostHandle)
     panelLeft.append(headerLeft, viewportLeft, panelLeftHysteresis)
 
-    panelLeftHysteresis.onmouseenter = colFreezeMouseEnter
-    panelLeftHysteresis.onmouseleave = colFreezeMouseLeave
-    panelLeftHysteresis.onmousemove = colFreezeMouseMove
-    panelLeftHysteresis.onmousedown = colFreezeMouseDown
-    panelLeftGhost.onmousemove = colFreezeMouseMove
-    panelLeftGhost.onmouseleave = colFreezeMouseLeave
-    panelLeftGhostHandle.onmouseleave = colFreezeMouseLeave
-    panelLeftGhostHandle.onmousedown = colFreezeMouseDown
+    panelLeftSnapGhost = document.createElement('div')
+    addClass(panelLeftSnapGhost, 'qg-panel-left-snap-ghost')
 
     bus.on(qdb.MSG_QUERY_DATASET, update)
     bus.on('grid.focus', focusCell)
@@ -1603,7 +1622,7 @@ export function grid(root, msgBus) {
     bus.on('grid.publish.query', publishQuery)
     bus.on(qdb.MSG_ACTIVE_PANEL, resize)
 
-    grid.append(header, viewport, panelLeft, panelLeftGhost)
+    grid.append(header, viewport, panelLeft, panelLeftGhost, panelLeftSnapGhost)
     // when grid is navigated via keyboard, mouse hover is disabled
     // to not confuse user. Hover is then re-enabled on mouse move
     grid.onmousemove = enableHover

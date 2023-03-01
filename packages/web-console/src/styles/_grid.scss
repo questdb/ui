@@ -279,7 +279,7 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   box-shadow: $top-shadow;
 }
 
-.qg-panel-left-ghost, .qg-panel-left-hysteresis {
+.qg-panel-left-ghost, .qg-panel-left-hysteresis, .qg-panel-left-snap-ghost {
   position: absolute;
   top: 0;
   margin-top: 54px;
@@ -289,6 +289,12 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 
 .qg-panel-left-ghost {
   background-color: #98999f;
+  width: 2px;
+  display: none;
+}
+
+.qg-panel-left-snap-ghost {
+  background-color: yellow;
   width: 2px;
   display: none;
 }
