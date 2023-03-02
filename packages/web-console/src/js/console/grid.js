@@ -975,7 +975,7 @@ export function grid(root, msgBus) {
       activeRow = Math.min(r - 1, activeRow + n)
       setBothRowsInactive()
       disableHover()
-      setBothRowsActive();
+      setBothRowsActive()
       updateCellViewport(NAV_EVENT_ANY_VERTICAL)
       const scrollTop = activeRow * rh - viewportHeight + rh - o
       const sh = isHorizontalScroller() ? scrollerGirth : 0
@@ -1247,7 +1247,7 @@ export function grid(root, msgBus) {
     // called under many other circumstances, so width calculation is conditional
     if (recomputeColumnWidthOnResize) {
       recomputeColumnWidthOnResize = false
-      computeColumnWidthAndConfigureHeader();
+      computeColumnWidthAndConfigureHeader()
     }
 
     syncViewportLeftScroll();
@@ -1364,7 +1364,7 @@ export function grid(root, msgBus) {
 
     // compute column width from scratch
     computeHeaderWidths()
-    computeColumnWidthAndConfigureHeader();
+    computeColumnWidthAndConfigureHeader()
     ensureCellsFillViewport()
     computePanelLeftWidth()
     applyPanelLeftWidth()
@@ -1636,7 +1636,7 @@ export function grid(root, msgBus) {
         }
 
         if (nextFreezeLeft === 0) {
-          hidePanelLeft();
+          hidePanelLeft()
         }
 
       } else {
@@ -1652,7 +1652,7 @@ export function grid(root, msgBus) {
         }
         // add header
         createHeaderElements(headerLeft, freezeLeft, nextFreezeLeft - freezeLeft, false)
-        showPanelLeft();
+        showPanelLeft()
       }
 
       freezeLeft = nextFreezeLeft
