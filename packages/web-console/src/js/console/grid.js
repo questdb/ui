@@ -584,6 +584,8 @@ export function grid(root, msgBus) {
     setHeaderCellWidth(header.childNodes[columnIndex], width)
     ensureCellsFillViewport()
     renderCells(rows, visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    // we have to call scroll to ensure empty space created by contracting column
+    // will be filled in with new data
     scroll()
   }
 
