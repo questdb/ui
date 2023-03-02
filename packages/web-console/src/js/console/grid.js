@@ -480,7 +480,7 @@ export function grid(root, msgBus) {
     colResizeMouseDownX = e.clientX
 
     document.onmousemove = columnResizeDrag
-    document.onmouseup = columnResizeEnd
+    document.onmouseup = columnResizeMouseUp
 
     columnResizeGhost.style.top = 0
     columnResizeGhost.style.left = getColResizeGhostLeft(0, colResizeColIndex)
@@ -584,9 +584,10 @@ export function grid(root, msgBus) {
     setHeaderCellWidth(header.childNodes[columnIndex], width)
     ensureCellsFillViewport()
     renderCells(rows, visColumnLo, visColumnLo + visColumnCount, visColumnLo)
+    scroll()
   }
 
-  function columnResizeEnd(e) {
+  function columnResizeMouseUp(e) {
     e.preventDefault()
     document.onmousemove = null
     document.onmouseup = null
