@@ -547,12 +547,24 @@ export function grid(root, msgBus) {
     layoutStoreTimer = setTimeout(layoutStoreSaveAll0, defaults.layoutStoreTimeout)
   }
 
+  function layoutStoreSaveFreezeLeft() {
+    let entry = layoutStoreCache[layoutStoreColumnSetSha256]
+    if (entry === undefined) {
+      const deviants = {}
+      entry = {key: layoutStoreColumnSetKey, deviants: deviants, freezeLeft: freezeLeft}
+      layoutStoreCache[layoutStoreColumnSetSha256] = entry
+    } else {
+      entry.freezeLeft = freezeLeft
+    }
+    layoutStoreSaveAll()
+  }
+
   function layoutStoreSaveColumnChange(columnName, width) {
     let entry = layoutStoreCache[layoutStoreColumnSetSha256]
     if (entry === undefined) {
       const deviants = {}
       deviants[columnName] = width
-      entry = {key: layoutStoreColumnSetKey, deviants: deviants}
+      entry = {key: layoutStoreColumnSetKey, deviants: deviants, freezeLeft: freezeLeft}
       layoutStoreCache[layoutStoreColumnSetSha256] = entry
     } else {
       entry.deviants[columnName] = width
@@ -1215,7 +1227,9 @@ export function grid(root, msgBus) {
   }
 
   function syncViewportLeftScroll() {
-    viewportLeft.style.height = (viewport.getBoundingClientRect().height - (isHorizontalScroller() ? 10 : 0)) + 'px'
+    const h = viewport.clientHeight + header.clientHeight
+    panelLeft.style.height = h + 'px'
+    viewportLeft.style.height = viewport.clientHeight + 'px'
     viewportLeft.scrollTop = viewport.scrollTop
   }
 
@@ -1242,12 +1256,6 @@ export function grid(root, msgBus) {
       if (lastKnownViewportWidth !== viewportWidth) {
         lastKnownViewportWidth = viewportWidth
         ensureCellsFillViewport()
-      }
-      // reduce panelLeft height to make horizontal scroller visible
-      if (isHorizontalScroller()) {
-        addClass(panelLeft, 'qg-panel-left-scroller-visible')
-      } else {
-        removeClass(panelLeft, 'qg-panel-left-scroller-visible')
       }
       scroll()
     }
@@ -1346,6 +1354,11 @@ export function grid(root, msgBus) {
     layoutStoreCache[layoutStoreColumnSetSha256] = undefined
     layoutStoreSaveAll()
 
+    // remove panelLeft
+    freezeLeft = 0
+    headerLeft.innerHTML = ''
+    hidePanelLeft()
+
     // compute column width from scratch
     computeHeaderWidths()
     computeColumnWidthAndConfigureHeader();
@@ -1436,7 +1449,7 @@ export function grid(root, msgBus) {
     cell.onclick = rowClick
     cell.onmouseenter = rowEnter
     cell.onmouseleave = rowLeave
-    if (cell.cellIndex === timestampIndex) {
+    if (cell.classList.contains('qg-timestamp')) {
       removeClass(cell, 'qg-timestamp')
     }
     if (cell.cellIndex === columnCount - 1) {
@@ -1508,8 +1521,13 @@ export function grid(root, msgBus) {
       const deviants = storedLayout !== undefined ? storedLayout.deviants : undefined
       const dataBatch = data[0]
       const dataBatchLen = dataBatch.length
-      // a little inefficient, but lets traverse
+      freezeLeft = storedLayout !== undefined ? storedLayout.freezeLeft : 0
+      if (freezeLeft === undefined) {
+        freezeLeft = 0
+      }
+
       let offset = 0
+      // a little inefficient, but lets traverse
       for (let i = 0; i < columnCount; i++) {
         // this assumes that initial width has been set to the width of the header
         let w
@@ -1635,6 +1653,8 @@ export function grid(root, msgBus) {
       }
 
       freezeLeft = nextFreezeLeft
+      layoutStoreSaveFreezeLeft()
+
       renderCells(rowsLeft, 0, Math.min(freezeLeft, columnCount), visColumnLo)
       computePanelLeftWidth()
       applyPanelLeftWidth()

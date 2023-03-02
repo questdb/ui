@@ -241,7 +241,6 @@ $drag-handle-margin: 2px;
 
 .qg-panel-left {
   display: none;
-  height: 100%;
   position: absolute;
   top: 0;
   left: 0;
@@ -250,10 +249,6 @@ $drag-handle-margin: 2px;
   z-index: $panel-left-z-index;
   // this is to make last column hysteresis fully visible (it is transparent)
   overflow: visible;
-}
-
-.qg-panel-left-scroller-visible {
-  height: calc(100% - 9px);
 }
 
 .qg-viewport-left {
