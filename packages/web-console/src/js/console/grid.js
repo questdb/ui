@@ -76,6 +76,7 @@ export function grid(root, msgBus) {
   let columnResizeGhost
   let columnOffsets
   let columns = []
+  let columnPositions = []
   let columnCount = 0
   let rowCount
   let timestampIndex = -1
@@ -173,6 +174,42 @@ export function grid(root, msgBus) {
   // 1. limit left position of where columns can be rendered, e.g. offset render of all columns by given number of pixels.
   // 2. reduce virtual viewport size by the left offset value
   // 3. render pinned columns separately with 0 left offset
+
+  function getColumn(index) {
+    return columns[columnPositions[index]]
+  }
+
+  function moveColumnToFront(columnIndex) {
+    const w = getColumnWidth(columnIndex)
+    // adjust columns offsets that go after the moved column
+    for (let i = columnIndex + 1; i < columnCount; i++) {
+      columnOffsets[i] -= w
+    }
+    // move offsets of columns that go before
+    for (let i = 0; i < columnIndex; i++) {
+      columnOffsets[i + 1] = columnOffsets[i] + w
+    }
+    // columnOffsets[0] is always zero
+    columnOffsets[0] = 0
+
+    // shift column positions
+    const p = columnPositions[columnIndex]
+    for (let i = 0; i < columnIndex; i++) {
+      columnPositions[i + 1] = columnPositions[i]
+    }
+    columnPositions[0] = p
+
+    visColumnX = 0
+    renderCells(rows, 0, visColumnCount, 0)
+    if (viewport.scrollLeft > 0) {
+      viewport.scrollLeft = 0
+    } else {
+      scroll()
+    }
+
+    console.log(columnPositions)
+    console.log(columnOffsets)
+  }
 
   function computeCanvasHeight() {
     r = rowCount
@@ -412,7 +449,7 @@ export function grid(root, msgBus) {
   }
 
   function isLeftAligned(columnIndex) {
-    const col = columns[columnIndex]
+    const col = getColumn(columnIndex)
     if (col) {
       switch (col.type) {
         case 'STRING':
@@ -530,7 +567,8 @@ export function grid(root, msgBus) {
     // is to remember column layout for column set but not row set.
     const columnSet = []
     for (let i = 0; i < columnCount; i++) {
-      columnSet.push({name: columns[i].name, type: columns[i].type})
+      const col = getColumn(i)
+      columnSet.push({name: col.name, type: col.type})
     }
     layoutStoreColumnSetKey = JSON.stringify(columnSet)
     layoutStoreGetColumnSetSha2560(callback)
@@ -605,7 +643,7 @@ export function grid(root, msgBus) {
       },
       500
     )
-    layoutStoreSaveColumnChange(columns[colResizeColIndex].name, colResizeTargetWidth)
+    layoutStoreSaveColumnChange(getColumn(colResizeColIndex).name, colResizeTargetWidth)
   }
 
   function getCellWidth(valueLen) {
@@ -706,7 +744,7 @@ export function grid(root, msgBus) {
 
   function createHeaderElements(header, fromColumn, columnCount, createStub) {
     for (let i = fromColumn, n = fromColumn + columnCount; i < n; i++) {
-      const c = columns[i]
+      const c = getColumn(i)
       const h = document.createElement('div')
       addClass(h, 'qg-header')
       setHeaderCellWidth(h, getColumnWidth(i))
@@ -753,7 +791,7 @@ export function grid(root, msgBus) {
     columnOffsets = []
     totalWidth = 0
     for (let i = 0; i < columnCount; i++) {
-      const c = columns[i]
+      const c = getColumn(i)
       const w = getCellWidth(c.name.length + c.type.length)
       columnOffsets.push(totalWidth)
       totalWidth += w
@@ -1372,9 +1410,14 @@ export function grid(root, msgBus) {
     renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
   }
 
+  function isCtrlOrCmd() {
+    return downKey[17] || downKey[91];
+  }
+
   function onKeyDown(e) {
     const keyCode = 'which' in e ? e.which : e.keyCode
     let preventDefault = true
+    console.log('keyCode: ' + keyCode)
     switch (keyCode) {
       case 33: // page up
         activeRowUp(rowsInView)
@@ -1422,15 +1465,18 @@ export function grid(root, msgBus) {
         break
       case 67: // Ctrl+C (copy)
       case 45: // Ctrl+Insert (copy)
-        if (downKey[17] || downKey[91]) {
+        if (isCtrlOrCmd()) {
           copyActiveCellToClipboard()
         }
         break
       case 66:
         // 17 = Ctrl, 91 = Cmd (mac)
-        if (downKey[17] || downKey[91]) {
+        if (isCtrlOrCmd()) {
           restoreColumnWidths()
         }
+        break
+      case 191:
+        moveColumnToFront(focusedCellIndex)
         break
       default:
         downKey[keyCode] = true
@@ -1536,7 +1582,7 @@ export function grid(root, msgBus) {
         let w
 
         if (deviants) {
-          w = deviants[columns[i].name]
+          w = deviants[getColumn(i).name]
         }
 
         if (w === undefined) {
@@ -1572,6 +1618,10 @@ export function grid(root, msgBus) {
     data.push(m.dataset)
     columns = m.columns
     columnCount = columns.length
+    columnPositions = []
+    for (let i = 0; i < columnCount; i++) {
+      columnPositions.push(i)
+    }
     timestampIndex = m.timestamp
     rowCount = m.count
     computeHeaderWidths()
