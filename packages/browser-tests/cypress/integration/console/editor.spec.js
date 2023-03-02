@@ -220,12 +220,6 @@ describe("errors", () => {
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
   });
 
-  it("should mark 'telemetry' as error", () => {
-    const query = `CREATE TABLE 'telemetry' (id LONG256)`;
-    cy.runQuery(query);
-    cy.matchErrorMarkerPosition({ left: 111, width: 93 });
-  });
-
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
     cy.runQuery(query);

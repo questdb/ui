@@ -12,6 +12,8 @@ jobs:
         image: questdb/questdb:nightly
         ports:
           - 9000:9000
+        env:
+          QDB_TELEMETRY_ENABLED: false
 
     steps:
       - uses: actions/checkout@v3
