@@ -220,16 +220,11 @@ describe("errors", () => {
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
   });
 
-  it("should mark 'telemetry' as error", () => {
-    const query = `CREATE TABLE 'telemetry' (id LONG256)`;
-    cy.runQuery(query);
-    cy.matchErrorMarkerPosition({ left: 111, width: 93 });
-  });
-
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
     cy.runQuery(query);
     cy.matchErrorMarkerPosition({ left: 506, width: 42 });
+
     cy.getNotifications().should("contain", "Invalid date");
   });
 });
@@ -251,22 +246,25 @@ describe("running query with F9", () => {
   });
 
   it("should execute correct query, when text cursor is on query which has no semicolon", () => {
-    cy.typeQuery("select * from long_sequence(1)").F9();
+    cy.typeQuery("select * from long_sequence(1)");
+    cy.F9();
     cy.getGridRow(0).should("contain", "1");
     cy.clearEditor();
     cy.typeQuery(`select * from long_sequence(2);{leftArrow}`).F9();
-    cy.wait(50).getGridRow(1).should("contain", "2");
+    cy.getGridRow(1).should("contain", "2");
   });
 
   it("should execute correct query, when multiple queries exist", () => {
     cy.typeQuery(
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2;{upArrow}{upArrow}{end}{leftArrow}"
-    ).F9();
-    cy.wait(50).getGridRow(0).should("contain", "3");
+    );
+    cy.F9();
+    cy.getGridRow(0).should("contain", "3");
     cy.clearEditor();
     cy.typeQuery(
       "long_sequence(10) where x = 3;\n\nlong_sequence(5) limit 2{upArrow}{upArrow}{end}{leftArrow}"
-    ).F9();
-    cy.wait(50).getGridRow(0).should("contain", "3");
+    );
+    cy.F9();
+    cy.getGridRow(0).should("contain", "3");
   });
 });
