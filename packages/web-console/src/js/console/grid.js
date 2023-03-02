@@ -1616,7 +1616,7 @@ export function grid(root, msgBus) {
   }
 
   function setFreezeLeft(nextFreezeLeft) {
-    if (nextFreezeLeft !== freezeLeft) {
+    if (nextFreezeLeft !== undefined && nextFreezeLeft !== freezeLeft) {
       if (nextFreezeLeft < freezeLeft) {
         // remove columns from all the rows
         for (let i = 0, n = rowsLeft.length; i < n; i++) {
