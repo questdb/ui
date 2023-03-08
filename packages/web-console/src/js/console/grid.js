@@ -212,7 +212,7 @@ export function grid(root, msgBus) {
     }
 
     // rotate timestamp
-    if (timestampIndex < leftColumnCount) {
+    if (timestampIndex !== -1 && timestampIndex < leftColumnCount) {
       timestampIndex = (timestampIndex + 1) % leftColumnCount
     }
     header.childNodes[0].before(header.childNodes[columnIndex])
@@ -245,7 +245,7 @@ export function grid(root, msgBus) {
     } else {
       scroll()
     }
-
+    setFocusedColumn(columnIndex)
   }
 
   function computeCanvasHeight() {
@@ -974,8 +974,9 @@ export function grid(root, msgBus) {
     }
   }
 
-  function setFocusedCellFromIndex() {
-    if (focusedColumnIndex !== -1) {
+  function setFocusedColumn(columnIndex) {
+    if (columnIndex !== -1) {
+      focusedColumnIndex = columnIndex
       const cell = focusedColumnIndex < freezeLeft ? focusedRowContainerLeft.childNodes[focusedColumnIndex] : focusedRowContainer.childNodes[focusedColumnIndex % visColumnCount]
       cell.columnIndex = focusedColumnIndex
       setFocusedCell(cell)
@@ -1003,7 +1004,7 @@ export function grid(root, msgBus) {
         }
       }
     }
-    setFocusedCellFromIndex()
+    setFocusedColumn(focusedColumnIndex)
   }
 
   function activeRowUp(n) {
@@ -1442,13 +1443,16 @@ export function grid(root, msgBus) {
     // compute column width from scratch
     header.innerHTML = ''
     computeHeaderWidths()
-    computePanelLeftWidth()
+    computeColumnWidths()
+    panelLeftWidth = 0
     headerStub = createHeaderElements(header, 0, columnCount, true)
     ensureCellsFillViewport()
     computePanelLeftWidth()
     applyPanelLeftWidth()
     renderCells(rows, getNonFrozenColLo(visColumnLo), visColumnLo + visColumnCount, visColumnLo)
     renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
+    viewport.scrollLeft = 0
+    focusFirstCell()
   }
 
   function isCtrlOrCmd() {
@@ -1644,12 +1648,15 @@ export function grid(root, msgBus) {
   }
 
   function focusFirstCell() {
+    setFocusedColumn(0)
+    focusedRowContainer.focus()
+  }
+
+  function focusTopLeftCell() {
     focusedRowIndex = 0
     focusedRowContainer = rows[focusedRowIndex]
     focusedRowContainerLeft = rowsLeft[focusedRowIndex]
-    focusedColumnIndex = 0
-    setFocusedCellFromIndex()
-    focusedRowContainer.focus()
+    focusFirstCell();
   }
 
   function resetColumnPositions() {
@@ -1699,7 +1706,7 @@ export function grid(root, msgBus) {
     // Resize uses scroll and causes grid viewport to render.
     // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
     // we can assume that viewport already rendered top left corner of the data set
-    focusFirstCell()
+    focusTopLeftCell()
   }
 
   function showPanelLeft() {
