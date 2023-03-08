@@ -181,34 +181,51 @@ export function grid(root, msgBus) {
 
   function moveColumnToFront(columnIndex) {
     const w = getColumnWidth(columnIndex)
-    // adjust columns offsets that go after the moved column
-    for (let i = columnIndex + 1; i < columnCount; i++) {
-      columnOffsets[i] -= w
-    }
-    // move offsets of columns that go before
-    for (let i = 0; i < columnIndex; i++) {
-      columnOffsets[i + 1] = columnOffsets[i] + w
+    // move offsets of columns that go before the column
+    for (let i = columnIndex; i > 0; i--) {
+      columnOffsets[i] = columnOffsets[i - 1] + w
     }
     // columnOffsets[0] is always zero
     columnOffsets[0] = 0
 
-    // shift column positions
     const p = columnPositions[columnIndex]
-    for (let i = 0; i < columnIndex; i++) {
-      columnPositions[i + 1] = columnPositions[i]
+    const h = header.childNodes[columnIndex]
+    h.columnIndex = 0
+
+    // re-number element.columnIndex
+    for (let i = columnIndex - 1; i >= 0; i--) {
+      const h =  header.childNodes[columnIndex]
+      const ci = h.columnIndex
+      h.columnIndex = ci + 1
+      const hh = h.querySelector('.qg-col-resize-hysteresis')
+      if (hh) {
+        hh.columnIndex = ci + 1
+      }
+    }
+
+    header.childNodes[0].before(h)
+
+    // shift column positions, the indirection system
+    for (let i = columnIndex; i > 0; i--) {
+      columnPositions[i] = columnPositions[i - 1]
     }
     columnPositions[0] = p
 
+    // move timestamp
+    if (p === timestampIndex) {
+      timestampIndex = 0
+    } else {
+      timestampIndex = (timestampIndex + 1) % columnCount
+    }
+
     visColumnX = 0
     renderCells(rows, 0, visColumnCount, 0)
+
     if (viewport.scrollLeft > 0) {
       viewport.scrollLeft = 0
     } else {
       scroll()
     }
-
-    console.log(columnPositions)
-    console.log(columnOffsets)
   }
 
   function computeCanvasHeight() {
@@ -227,14 +244,13 @@ export function grid(root, msgBus) {
 
   function renderRow(row, rowIndex, colLo, colHi) {
     if (row.questIndex !== rowIndex) {
-      const rowData = data[Math.floor(rowIndex / pageSize)]
-      let k
-      if (rowData) {
-        const d = rowData[rowIndex % pageSize]
-        if (d) {
+      const dataPage = data[Math.floor(rowIndex / pageSize)]
+      if (dataPage) {
+        const rowData = dataPage[rowIndex % pageSize]
+        if (rowData) {
           row.style.display = 'flex'
-          for (k = colLo; k < colHi; k++) {
-            setCellData(row.childNodes[k % colHi], d[k])
+          for (let i = colLo; i < colHi; i++) {
+            setCellData(row.childNodes[i % colHi], rowData[columnPositions[i]])
           }
           row.questIndex = rowIndex
         } else {
@@ -243,8 +259,8 @@ export function grid(root, msgBus) {
         }
       } else {
         // clear grid if there is no row data
-        for (k = colLo; k < colHi; k++) {
-          row.childNodes[k % colHi].innerHTML = ''
+        for (let i = colLo; i < colHi; i++) {
+          row.childNodes[i % colHi].innerHTML = ''
         }
         row.questIndex = -1
       }
@@ -508,6 +524,7 @@ export function grid(root, msgBus) {
       e.target.childNodes[0].remove()
     }
     // column index is derived from stylesheet selector name
+    console.log(target)
     colResizeColIndex = target.columnIndex
     colResizeColOrigOffset = getColumnOffset(colResizeColIndex)
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
@@ -882,7 +899,7 @@ export function grid(root, msgBus) {
   function setCellDataAndAttributes(row, rowData, cellIndex) {
     const cell = row.childNodes[cellIndex % visColumnCount]
     configureCell(cell, cellIndex)
-    setCellData(cell, rowData[cellIndex])
+    setCellData(cell, rowData[columnPositions[cellIndex]])
   }
 
   function getNonFrozenColLo(colLo) {
@@ -911,14 +928,14 @@ export function grid(root, msgBus) {
         row.style.width = totalWidth + 'px'
         const m = Math.floor(i / pageSize)
         const n = i % pageSize
-        let d1
-        let d2
-        if (m < data.length && (d1 = data[m]) && n < d1.length && (d2 = d1[n])) {
+        let dataPage
+        let rowData
+        if (m < data.length && (dataPage = data[m]) && n < dataPage.length && (rowData = dataPage[n])) {
           // We need to put cells in the same order, which one would
           // get scrolling towards the end of row using right arrow, e.g. one cell at a time
           // This is to make sure scrolling one column left at a time works correctly
           for (let j = colLo; j < colHi; j++) {
-            setCellDataAndAttributes(row, d2, j)
+            setCellDataAndAttributes(row, rowData, j)
           }
         } else {
           pendingRender.render = true
@@ -1417,7 +1434,6 @@ export function grid(root, msgBus) {
   function onKeyDown(e) {
     const keyCode = 'which' in e ? e.which : e.keyCode
     let preventDefault = true
-    console.log('keyCode: ' + keyCode)
     switch (keyCode) {
       case 33: // page up
         activeRowUp(rowsInView)
@@ -1568,8 +1584,8 @@ export function grid(root, msgBus) {
     if (!recomputeColumnWidthOnResize && data && data.length > 0) {
       const storedLayout = layoutStoreCache[layoutStoreColumnSetSha256]
       const deviants = storedLayout !== undefined ? storedLayout.deviants : undefined
-      const dataBatch = data[0]
-      const dataBatchLen = dataBatch.length
+      const dataPage = data[0]
+      const dataPageLen = dataPage.length
       freezeLeft = storedLayout !== undefined ? storedLayout.freezeLeft : 0
       if (freezeLeft === undefined) {
         freezeLeft = 0
@@ -1587,9 +1603,9 @@ export function grid(root, msgBus) {
 
         if (w === undefined) {
           w = getColumnWidth(i)
-          for (let j = 0; j < dataBatchLen; j++) {
+          for (let j = 0; j < dataPageLen; j++) {
             columnOffsets[i] = offset
-            const value = dataBatch[j][i]
+            const value = dataPage[j][i]
             const str = value !== null ? value.toString() : "null"
             w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
           }
