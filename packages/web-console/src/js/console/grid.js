@@ -181,6 +181,19 @@ export function grid(root, msgBus) {
   }
 
   function moveColumnToFront(columnIndex) {
+    let freezeLeftBefore = 0
+
+    // handle frozen columns by resetting the panel
+    if (freezeLeft > 0) {
+      freezeLeftBefore = freezeLeft
+      if (freezeLeft <= columnIndex) {
+        // we will be increasing
+        freezeLeft = 0
+        headerLeft.innerHTML = ''
+        hidePanelLeft()
+      }
+    }
+
     const w = getColumnWidth(columnIndex)
     // move offsets of columns that go before the column
     for (let i = columnIndex; i > 0; i--) {
@@ -211,6 +224,19 @@ export function grid(root, msgBus) {
     }
     columnPositions[0] = p
 
+    if (freezeLeftBefore > 0) {
+      if (freezeLeftBefore <= columnIndex) {
+        // we have added a new column to panelLeft
+        // this is BAU for the setFreezeLeft function
+        setFreezeLeft(freezeLeftBefore + 1)
+      } else {
+        // when we here, we moved column that was already on the panelLeft
+        // we also need to move its header and re-render the cells for the moved data
+        headerLeft.childNodes[0].before(headerLeft.childNodes[columnIndex])
+        renderCells(rowsLeft, 0, Math.min(freezeLeft, columnCount), visColumnLo)
+      }
+    }
+
     visColumnX = 0
     renderCells(rows, 0, visColumnCount, 0)
 
@@ -219,6 +245,7 @@ export function grid(root, msgBus) {
     } else {
       scroll()
     }
+
   }
 
   function computeCanvasHeight() {
@@ -1399,7 +1426,7 @@ export function grid(root, msgBus) {
     }
   }
 
-  function restoreColumnWidths() {
+  function clearCustomLayout() {
     // remove stored layout
     layoutStoreCache[layoutStoreColumnSetSha256] = undefined
     layoutStoreSaveAll()
@@ -1485,7 +1512,7 @@ export function grid(root, msgBus) {
       case 66:
         // 17 = Ctrl, 91 = Cmd (mac)
         if (isCtrlOrCmd()) {
-          restoreColumnWidths()
+          clearCustomLayout()
         }
         break
       case 191:
