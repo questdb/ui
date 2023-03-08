@@ -188,35 +188,27 @@ export function grid(root, msgBus) {
     // columnOffsets[0] is always zero
     columnOffsets[0] = 0
 
-    const p = columnPositions[columnIndex]
-    const h = header.childNodes[columnIndex]
-    h.columnIndex = 0
-
-    // re-number element.columnIndex
-    for (let i = columnIndex - 1; i >= 0; i--) {
-      const h =  header.childNodes[columnIndex]
-      const ci = h.columnIndex
-      h.columnIndex = ci + 1
-      const hh = h.querySelector('.qg-col-resize-hysteresis')
-      if (hh) {
-        hh.columnIndex = ci + 1
+    // rotate column header indexes
+    const leftColumnCount = columnIndex + 1;
+    for (let i = columnIndex; i >= 0; i--) {
+      const hysteresis = header.childNodes[i].querySelector('.qg-col-resize-hysteresis')
+      if (hysteresis) {
+        hysteresis.columnIndex = (hysteresis.columnIndex + 1) % leftColumnCount
       }
     }
 
-    header.childNodes[0].before(h)
+    // rotate timestamp
+    if (timestampIndex < leftColumnCount) {
+      timestampIndex = (timestampIndex + 1) % leftColumnCount
+    }
+    header.childNodes[0].before(header.childNodes[columnIndex])
 
     // shift column positions, the indirection system
+    const p = columnPositions[columnIndex]
     for (let i = columnIndex; i > 0; i--) {
       columnPositions[i] = columnPositions[i - 1]
     }
     columnPositions[0] = p
-
-    // move timestamp
-    if (p === timestampIndex) {
-      timestampIndex = 0
-    } else {
-      timestampIndex = (timestampIndex + 1) % columnCount
-    }
 
     visColumnX = 0
     renderCells(rows, 0, visColumnCount, 0)
@@ -524,7 +516,6 @@ export function grid(root, msgBus) {
       e.target.childNodes[0].remove()
     }
     // column index is derived from stylesheet selector name
-    console.log(target)
     colResizeColIndex = target.columnIndex
     colResizeColOrigOffset = getColumnOffset(colResizeColIndex)
     colResizeColOrigWidth = getColumnWidth(colResizeColIndex)
