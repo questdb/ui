@@ -80,6 +80,7 @@ export function grid(root, msgBus) {
   let columnCount = 0
   let rowCount
   let timestampIndex = -1
+  let ogTimestampIndex = -1
   let data = []
   let totalWidth = -1
   // number of divs in "rows" cache, has to be power of two
@@ -834,6 +835,7 @@ export function grid(root, msgBus) {
     visColumnCount = 10
     lastKnownViewportWidth = 0
     timestampIndex = -1
+    ogTimestampIndex = -1
     focusedRowIndex = -1
     recomputeColumnWidthOnResize = false
     // -1 means column is not being resized, anything else means user drags resize handle
@@ -1406,10 +1408,15 @@ export function grid(root, msgBus) {
     freezeLeft = 0
     headerLeft.innerHTML = ''
     hidePanelLeft()
+    // reset column positions
+    resetColumnPositions();
+    timestampIndex = ogTimestampIndex
 
     // compute column width from scratch
+    header.innerHTML = ''
     computeHeaderWidths()
-    computeColumnWidthAndConfigureHeader()
+    computePanelLeftWidth()
+    headerStub = createHeaderElements(header, 0, columnCount, true)
     ensureCellsFillViewport()
     computePanelLeftWidth()
     applyPanelLeftWidth()
@@ -1618,17 +1625,22 @@ export function grid(root, msgBus) {
     focusedRowContainer.focus()
   }
 
+  function resetColumnPositions() {
+    columnPositions = []
+    for (let i = 0; i < columnCount; i++) {
+      columnPositions.push(i)
+    }
+  }
+
   function updatePart1(m) {
     clear()
     query = m.query
     data.push(m.dataset)
     columns = m.columns
     columnCount = columns.length
-    columnPositions = []
-    for (let i = 0; i < columnCount; i++) {
-      columnPositions.push(i)
-    }
-    timestampIndex = m.timestamp
+    resetColumnPositions();
+    ogTimestampIndex = m.timestamp
+    timestampIndex = ogTimestampIndex
     rowCount = m.count
     computeHeaderWidths()
     computeVisibleColumnWindow()
