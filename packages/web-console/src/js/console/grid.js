@@ -180,7 +180,7 @@ export function grid(root, msgBus) {
     return columns[columnPositions[index]]
   }
 
-  function moveColumnToFront(columnIndex) {
+  function shuffleToFront(columnIndex) {
     let freezeLeftBefore = 0
 
     // handle frozen columns by resetting the panel
@@ -246,6 +246,7 @@ export function grid(root, msgBus) {
       scroll()
     }
     setFocusedColumn(columnIndex)
+    layoutStoreSaveShuffledColumns(leftColumnCount)
   }
 
   function computeCanvasHeight() {
@@ -621,27 +622,34 @@ export function grid(root, msgBus) {
     layoutStoreTimer = setTimeout(layoutStoreSaveAll0, defaults.layoutStoreTimeout)
   }
 
-  function layoutStoreSaveFreezeLeft() {
+  function getLayoutEntry() {
     let entry = layoutStoreCache[layoutStoreColumnSetSha256]
     if (entry === undefined) {
       const deviants = {}
-      entry = {key: layoutStoreColumnSetKey, deviants: deviants, freezeLeft: freezeLeft}
+      entry = {key: layoutStoreColumnSetKey, deviants: deviants}
       layoutStoreCache[layoutStoreColumnSetSha256] = entry
-    } else {
-      entry.freezeLeft = freezeLeft
     }
+    return entry
+  }
+
+  function layoutStoreSaveFreezeLeft() {
+    getLayoutEntry().freezeLeft = freezeLeft
     layoutStoreSaveAll()
   }
 
   function layoutStoreSaveColumnChange(columnName, width) {
-    let entry = layoutStoreCache[layoutStoreColumnSetSha256]
-    if (entry === undefined) {
-      const deviants = {}
-      deviants[columnName] = width
-      entry = {key: layoutStoreColumnSetKey, deviants: deviants, freezeLeft: freezeLeft}
-      layoutStoreCache[layoutStoreColumnSetSha256] = entry
-    } else {
-      entry.deviants[columnName] = width
+    getLayoutEntry().deviants[columnName] = width
+    layoutStoreSaveAll()
+  }
+
+  function layoutStoreSaveShuffledColumns(leftColumnCount) {
+    const entry = getLayoutEntry()
+    entry.columnPositions = columnPositions
+    // timestamp could change
+    entry.timestampIndex = timestampIndex
+    // store column widths that changed
+    for (let i = 0; i < leftColumnCount; i++) {
+      entry.deviants[getColumn(i).name] = getColumnWidth(i)
     }
     layoutStoreSaveAll()
   }
@@ -1520,7 +1528,7 @@ export function grid(root, msgBus) {
         }
         break
       case 191:
-        moveColumnToFront(focusedColumnIndex)
+        shuffleToFront(focusedColumnIndex)
         break
       default:
         downKey[keyCode] = true
@@ -1687,6 +1695,11 @@ export function grid(root, msgBus) {
   }
 
   function updatePart2() {
+    const storedLayout = layoutStoreCache[layoutStoreColumnSetSha256]
+    if (storedLayout && storedLayout.columnPositions) {
+      columnPositions = storedLayout.columnPositions
+      timestampIndex = storedLayout.timestampIndex
+    }
     computeColumnWidths()
     computePanelLeftWidth()
     headerStub = createHeaderElements(header, 0, columnCount, true)
