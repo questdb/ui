@@ -23,18 +23,21 @@
  ******************************************************************************/
 
 import $ from "jquery"
-import React, { useCallback, useEffect, useState } from "react"
-import { useSelector } from "react-redux"
+import React, {useCallback, useEffect, useRef, useState} from "react"
+import {useSelector} from "react-redux"
 import styled from "styled-components"
-import { Download2, Grid, PieChart, Refresh } from "styled-icons/remix-line"
+import {Download2, Grid, PieChart, Refresh} from "styled-icons/remix-line"
+import {Reset} from "styled-icons/boxicons-regular"
+import {HandPointLeft} from "styled-icons/fa-regular"
+import {TableFreezeColumn} from "styled-icons/fluentui-system-filled"
 
-import { grid } from "../../js/console/grid"
-import { quickVis } from "../../js/console/quick-vis"
+import {grid} from "../../js/console/grid"
+import {quickVis} from "../../js/console/quick-vis"
 
 import {
   PaneContent,
-  PaneWrapper,
   PaneMenu,
+  PaneWrapper,
   PopperHover,
   PrimaryToggleButton,
   SecondaryButton,
@@ -42,10 +45,10 @@ import {
   Tooltip,
   useScreenSize,
 } from "../../components"
-import { BusEvent } from "../../consts"
-import { selectors } from "../../store"
-import { color } from "../../utils"
+import {selectors} from "../../store"
+import {color} from "../../utils"
 import * as QuestDB from "../../utils/questdb"
+import {BusEvent} from "../../consts";
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;
@@ -77,6 +80,23 @@ const RefreshButton = styled(SecondaryButton)`
   margin-right: 1rem;
 `
 
+const ResetGridLayoutButton = styled(SecondaryButton)`
+  margin-right: 1rem;
+`
+
+const ShuffleGridColumnToFrontButton = styled(SecondaryButton)`
+  margin-right: 1rem;
+`
+
+const ToggleGridColumnFreezeButton = styled(PrimaryToggleButton)`
+  height: 4rem;
+  width: 4.5rem;
+  margin-right: 1rem;
+`
+
+const TableFreezeColumnIcon = styled(TableFreezeColumn)`
+  transform: scaleX(-1);
+`
 const ToggleButton = styled(PrimaryToggleButton)`
   height: 4rem;
   width: 8.5rem;
@@ -87,22 +107,64 @@ const Result = () => {
   const [count, setCount] = useState<number | undefined>()
   const { sm } = useScreenSize()
   const result = useSelector(selectors.query.getResult)
+  const gridRef = useRef<any | undefined>()
+  const gridID = 'qdb_grid'
   useEffect(() => {
-    grid($("#grid"), window.bus as unknown as ReturnType<typeof $>)
+    gridRef.current = grid(document.getElementById('grid'), window.bus as unknown as ReturnType<typeof $>, gridID)
     quickVis($("#quick-vis"), window.bus as unknown as ReturnType<typeof $>)
+
+    bus.on(BusEvent.GRID_FOCUS, function () {
+      gridRef.current.focus()
+    })
+
+    bus.on(BusEvent.MSG_QUERY_DATASET, function (x, data) {
+      gridRef.current.setData(data)
+    })
+
+    bus.on(BusEvent.MSG_ACTIVE_PANEL, function () {
+      gridRef.current.render()
+    })
+
+    // gridRef.current.addEventListener('header.click', function (el, event) {
+    //   console.log(event)
+    //   bus.trigger('editor.insert.column', event)
+    // })
+
   }, [])
 
   const handleChartClick = useCallback(() => {
     setSelected("chart")
   }, [])
+
   const handleGridClick = useCallback(() => {
     setSelected("grid")
   }, [])
+
   const handleExportClick = useCallback(() => {
-    window.bus.trigger("grid.publish.query")
+    const query = gridRef.current.getQuery()
+    if (query) {
+      bus.trigger(BusEvent.MSG_QUERY_EXPORT, {q: query})
+    }
   }, [])
+
   const handleRefreshClick = useCallback(() => {
-    window.bus.trigger("grid.refresh")
+    const query = gridRef.current.getQuery()
+    if (query) {
+      bus.trigger(BusEvent.MSG_QUERY_EXEC, {q: query})
+    }
+  }, [])
+
+  const handleGridLayoutResetClick = useCallback(() => {
+    gridRef.current.clearCustomLayout()
+  }, [])
+
+  const handleShuffleGridColumnToFrontClick = useCallback(() => {
+    gridRef.current.shuffleFocusedColumnToFront()
+  }, [])
+
+  const handleGridColumnFreezeGridColumnToggle = useCallback(() => {
+    gridRef.current.toggleFreezeLeft()
+    gridRef.current.focus()
   }, [])
 
   useEffect(() => {
@@ -120,11 +182,10 @@ const Result = () => {
     }
 
     if (selected === "grid") {
-      grid.style.display = "flex"
       chart.style.display = "none"
-      window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
+      gridRef.current.show()
     } else {
-      grid.style.display = "none"
+      gridRef.current.hide()
       chart.style.display = "flex"
     }
   }, [selected])
@@ -155,6 +216,48 @@ const Result = () => {
             <RowCount color="draculaForeground">
               {`${count.toLocaleString()} row${count > 1 ? "s" : ""}`}
             </RowCount>
+          )}
+
+          {!sm && (
+              <PopperHover
+                  delay={350}
+                  placement="bottom"
+                  trigger={
+                    <ToggleGridColumnFreezeButton onClick={handleGridColumnFreezeGridColumnToggle} selected={gridRef.current && gridRef.current.getFreezeLeft() > 0}>
+                      <TableFreezeColumnIcon size="18px" />
+                    </ToggleGridColumnFreezeButton>
+                  }
+              >
+                <Tooltip>Freeze left column</Tooltip>
+              </PopperHover>
+          )}
+
+          {!sm && (
+              <PopperHover
+                  delay={350}
+                  placement="bottom"
+                  trigger={
+                    <ShuffleGridColumnToFrontButton onClick={handleShuffleGridColumnToFrontClick}>
+                      <HandPointLeft size="18px" />
+                    </ShuffleGridColumnToFrontButton>
+                  }
+              >
+                <Tooltip>Move selected column to the front</Tooltip>
+              </PopperHover>
+          )}
+
+          {!sm && (
+              <PopperHover
+                  delay={350}
+                  placement="bottom"
+                  trigger={
+                    <ResetGridLayoutButton onClick={handleGridLayoutResetClick}>
+                      <Reset size="18px" />
+                    </ResetGridLayoutButton>
+                  }
+              >
+                <Tooltip>Reset grid layout</Tooltip>
+              </PopperHover>
           )}
 
           {!sm && (

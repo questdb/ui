@@ -22,11 +22,9 @@
  *
  ******************************************************************************/
 
-import $ from "jquery"
-
 import * as qdb from "./globals"
 
-export function grid(root, msgBus) {
+export function grid(root, msgBus, _gridID) {
   const defaults = {
     gridID: 'qdb-grid',
     minColumnWidth: 60,
@@ -50,9 +48,9 @@ export function grid(root, msgBus) {
   const NAV_EVENT_END = 4
 
   const bus = msgBus
-  const gridID = defaults.gridID
+  const gridID = _gridID ? _gridID : defaults.gridID
   const layoutStoreID = gridID + '.columnLayout'
-  const grid = root[0]
+  const grid = root
   let viewport
   let canvas
   let header
@@ -168,19 +166,12 @@ export function grid(root, msgBus) {
   // Cell will pulse when its content is copied to clipboard
   let activeCellPulseClearTimer
 
-  // Freezing left columns. We should be able to freeze 0..N columns on the left. What this means that frozen
-  // columns will be pinned at their positions in the viewport (always visible). The rest of the columns should
-  // scroll normally without obscuring pinned columns. To get there we do the following:
-
-  // 1. limit left position of where columns can be rendered, e.g. offset render of all columns by given number of pixels.
-  // 2. reduce virtual viewport size by the left offset value
-  // 3. render pinned columns separately with 0 left offset
-
   function getColumn(index) {
     return columns[columnPositions[index]]
   }
 
-  function shuffleToFront(columnIndex) {
+  function shuffleToFront() {
+    const columnIndex = focusedColumnIndex
     let freezeLeftBefore = 0
 
     // handle frozen columns by resetting the panel
@@ -259,7 +250,7 @@ export function grid(root, msgBus) {
     }
     M = yMax / h
     const canvasHeight = (h === 0 ? 1 : h) + 'px'
-    canvas[0].style.height = canvasHeight
+    canvas.style.height = canvasHeight
     canvasLeft.style.height = canvasHeight
   }
 
@@ -360,7 +351,13 @@ export function grid(root, msgBus) {
       renderViewportNoCompute()
       return
     }
-    $.get('/exec', {query, limit: lo + 1 + ',' + hi, nm: true}).done(renderFunc)
+    fetch('/exec?' + new URLSearchParams({
+      query: query,
+      limit: lo + 1 + ',' + hi,
+      nm: true
+    }))
+      .then((response) => response.json())
+      .then(renderFunc)
   }
 
   function loadPagesDelayed(p1, p2) {
@@ -498,10 +495,11 @@ export function grid(root, msgBus) {
     }
   }
 
-  function broadcastColumnName(e) {
+  function triggerHeaderClick(e) {
     // avoid broadcasting fat finger clicks
     if (!colResizeColIndex) {
       bus.trigger('editor.insert.column', e.currentTarget.getAttribute('data-column-name'))
+      triggerEvent('header.click', e.currentTarget.getAttribute('data-column-name'))
     }
   }
 
@@ -717,6 +715,15 @@ export function grid(root, msgBus) {
     }
   }
 
+  function colFreezeToggle() {
+    if (freezeLeft > 0) {
+      setFreezeLeft(0)
+    } else {
+      setFreezeLeft(1)
+    }
+    setFocusedColumn(focusedColumnIndex)
+  }
+
   function colFreezeDrag(e) {
     const d = e.pageX - panelLeftGhostHandleX
     const t = panelLeftWidth + d
@@ -817,7 +824,7 @@ export function grid(root, msgBus) {
       addClass(hBorderSpan, 'qg-header-border')
       h.append(hysteresis, hBorderSpan)
       h.append(hName, hType)
-      h.onclick = broadcastColumnName
+      h.onclick = triggerHeaderClick
       header.append(h)
     }
 
@@ -851,7 +858,7 @@ export function grid(root, msgBus) {
 
     header.innerHTML = ''
     headerLeft.innerHTML = ''
-    canvas[0].innerHTML = ''
+    canvas.innerHTML = ''
     canvasLeft.innerHTML = ''
     rows = []
     rowsLeft = []
@@ -903,7 +910,7 @@ export function grid(root, msgBus) {
   }
 
   function setFocusedCell(cell) {
-    if (cell && focusedCell !== cell) {
+    if (cell && (focusedCell !== cell || !cell.classList.contains(ACTIVE_CELL_CLASS))) {
       if (focusedCell) {
         removeFocus(focusedCell)
       }
@@ -1323,7 +1330,7 @@ export function grid(root, msgBus) {
     viewport.scrollTop = viewportLeft.scrollTop
   }
 
-  function resize() {
+  function render() {
     // If viewport is invisible when grid is updated it is not possible
     // to calculate column width correctly. When grid becomes visible again, resize()
     // is called where we continue calculating column widths. resize() can also be
@@ -1528,7 +1535,7 @@ export function grid(root, msgBus) {
         }
         break
       case 191:
-        shuffleToFront(focusedColumnIndex)
+        shuffleToFront()
         break
       default:
         downKey[keyCode] = true
@@ -1606,9 +1613,9 @@ export function grid(root, msgBus) {
     visColumnWidth = width
   }
 
-  function focusCell() {
+  function focus() {
     if (focusedCell && focusedRowContainer) {
-      focusedCell.click()
+      setFocusedCell(focusedCell)
       focusedRowContainer.focus()
     }
   }
@@ -1674,16 +1681,16 @@ export function grid(root, msgBus) {
     }
   }
 
-  function updatePart1(m) {
+  function updatePart1(_data) {
     clear()
-    query = m.query
-    data.push(m.dataset)
-    columns = m.columns
+    query = _data.query
+    data.push(_data.dataset)
+    columns = _data.columns
     columnCount = columns.length
     resetColumnPositions();
-    ogTimestampIndex = m.timestamp
+    ogTimestampIndex = _data.timestamp
     timestampIndex = ogTimestampIndex
-    rowCount = m.count
+    rowCount = _data.count
     computeHeaderWidths()
     computeVisibleColumnWindow()
     // visible position depends on correctness of visColumnCount value
@@ -1710,12 +1717,12 @@ export function grid(root, msgBus) {
       hidePanelLeft()
     }
     applyPanelLeftWidth()
-    createRowElements(canvas[0], rows, visColumnCount, totalWidth)
+    createRowElements(canvas, rows, visColumnCount, totalWidth)
     createRowElements(canvasLeft, rowsLeft, Math.min(freezeLeft, columnCount), panelLeftWidth)
 
     computeCanvasHeight()
     setViewportScrollTop(0)
-    resize()
+    render()
     // Resize uses scroll and causes grid viewport to render.
     // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
     // we can assume that viewport already rendered top left corner of the data set
@@ -1780,9 +1787,9 @@ export function grid(root, msgBus) {
     }
   }
 
-  function update(x, m) {
+  function setData(_data) {
     setTimeout(() => {
-        updatePart1(m)
+        updatePart1(_data)
         // This part of the update sequence requires layoutStore access.
         // For that we need to calculate layout key and hash, which is async
         layoutStoreComputeKeyAndHash(updatePart2)
@@ -1791,16 +1798,33 @@ export function grid(root, msgBus) {
     )
   }
 
-  function publishQuery() {
-    if (query) {
-      bus.trigger(qdb.MSG_QUERY_EXPORT, {q: query})
+  function addEventListener(eventName, eventHandler, selector) {
+    if (selector) {
+      const wrappedHandler = (e) => {
+        if (!e.target) return;
+        const el = e.target.closest(selector);
+        if (el) {
+          const newEvent = Object.create(e, {
+            target: {
+              value: el
+            }
+          });
+          eventHandler.call(el, newEvent);
+        }
+      };
+      grid.addEventListener(eventName, wrappedHandler);
+      return wrappedHandler;
+    } else {
+      const wrappedHandler = (e) => {
+        eventHandler.call(grid, e);
+      };
+      grid.addEventListener(eventName, wrappedHandler);
+      return wrappedHandler;
     }
   }
 
-  function refreshQuery() {
-    if (query) {
-      bus.trigger(qdb.MSG_QUERY_EXEC, {q: query})
-    }
+  function triggerEvent(eventName, data) {
+    grid.dispatchEvent(new CustomEvent(eventName, data));
   }
 
   function bind() {
@@ -1811,15 +1835,15 @@ export function grid(root, msgBus) {
     viewport.onscroll = scroll
     addClass(viewport, 'qg-viewport')
 
-    canvas = $('<div>')
-    canvas[0].className = 'qg-canvas'
+    canvas = document.createElement('div')
+    canvas.className = 'qg-canvas'
     // we're using jQuery here to handle key bindings
-    canvas.bind('keydown', onKeyDown)
-    canvas.bind('keyup', onKeyUp)
+    canvas.onkeydown = onKeyDown
+    canvas.onkeyup = onKeyUp
 
     columnResizeGhost = document.createElement('div')
     columnResizeGhost.className = 'qg-col-resize-ghost'
-    viewport.append(canvas[0], columnResizeGhost)
+    viewport.append(canvas, columnResizeGhost)
 
     panelLeft = document.createElement('div')
     addClass(panelLeft, 'qg-panel-left')
@@ -1835,13 +1859,10 @@ export function grid(root, msgBus) {
     // viewportLeft.onwheel = viewportLeftWheel
     addClass(viewportLeft, 'qg-viewport-left')
 
-    const cl = $('<div>')
-    canvasLeft = cl[0]
+    canvasLeft = document.createElement('div')
     canvasLeft.className = 'qg-canvas'
-
-    cl.bind('keydown', onKeyDown)
-    cl.bind('keyup', onKeyUp)
-
+    canvasLeft.onkeydown = onKeyDown
+    canvasLeft.onkeyup = onKeyUp
     viewportLeft.append(canvasLeft)
 
     panelLeftHysteresis = document.createElement('div')
@@ -1874,12 +1895,6 @@ export function grid(root, msgBus) {
     panelLeftInitialHysteresis.onmousemove = colFreezeMouseMoveGhostHandle
     panelLeftInitialHysteresis.onmousedown = colFreezeMouseDown
 
-    bus.on(qdb.MSG_QUERY_DATASET, update)
-    bus.on('grid.focus', focusCell)
-    bus.on('grid.refresh', refreshQuery)
-    bus.on('grid.publish.query', publishQuery)
-    bus.on(qdb.MSG_ACTIVE_PANEL, resize)
-
     grid.append(header, viewport, panelLeft, panelLeftGhost, panelLeftSnapGhost, panelLeftInitialHysteresis)
     // when grid is navigated via keyboard, mouse hover is disabled
     // to not confuse user. Hover is then re-enabled on mouse move
@@ -1893,9 +1908,56 @@ export function grid(root, msgBus) {
     if (json) {
       layoutStoreCache = JSON.parse(json)
     }
-    window.onresize = resize
+    window.onresize = render
   }
 
   bind()
-  resize()
+  render()
+
+  return {
+    getFreezeLeft: function () {
+      return freezeLeft
+    },
+
+    clearCustomLayout: function () {
+      clearCustomLayout()
+    },
+
+    shuffleFocusedColumnToFront: function () {
+      shuffleToFront()
+    },
+
+    toggleFreezeLeft: function () {
+      colFreezeToggle()
+    },
+
+    show: function () {
+      grid.style.display = 'flex'
+      render()
+    },
+
+    hide: function () {
+      grid.style.display = 'none'
+    },
+
+    focus: function () {
+      focus()
+    },
+
+    setData: function (_data) {
+      setData(_data)
+    },
+
+    getQuery: function () {
+      return query
+    },
+
+    render: function () {
+      render()
+    },
+
+    addEventListener: function (eventName, eventHandler) {
+      addEventListener(eventName, eventHandler)
+    }
+  }
 }
