@@ -7,7 +7,7 @@ export interface IQuestDBGrid {
 
     render(): void
 
-    addEventListener(eventName: string, fn: (event: CustomEvent) => void);
+    addEventListener(eventName: string, fn: (event: CustomEvent) => void)
 
     setData(data: any): void
 
@@ -20,6 +20,6 @@ export interface IQuestDBGrid {
 
 export function grid(
     root: HTMLElement | null
-    , paginationFn: ((sql: string, lo: number, hi: number, rendererFn: (data: any) => void) => void) | undefined = undefined
-    , _id: string | undefined = undefined
+    , paginationFn?: (sql: string, lo: number, hi: number, rendererFn: (data: any) => void) => void
+    , id?: string
 ): IQuestDBGrid

@@ -22,11 +22,11 @@
  *
  ******************************************************************************/
 
-export function grid(rootElement, _paginationFn, _id) {
+export function grid(rootElement, _paginationFn, id) {
   const defaults = {
     gridID: 'qdb-grid',
     minColumnWidth: 60,
-    rowHeight: 28,
+    rowHeight: 30,
     divCacheSize: 64,
     viewportHeight: 400,
     yMaxThreshold: 10000000,
@@ -45,7 +45,7 @@ export function grid(rootElement, _paginationFn, _id) {
   const NAV_EVENT_HOME = 3
   const NAV_EVENT_END = 4
 
-  const gridID = _id ? _id : defaults.gridID
+  const gridID = id ? id : defaults.gridID
   const layoutStoreID = gridID + '.columnLayout'
   const grid = rootElement
   const paginationFn = _paginationFn
@@ -1066,7 +1066,7 @@ export function grid(rootElement, _paginationFn, _id) {
       disableHover()
       setBothRowsActive()
       updateCellViewport(NAV_EVENT_ANY_VERTICAL)
-      const scrollTop = focusedRowIndex * rh - viewportHeight + rh - o
+      const scrollTop = Math.min(focusedRowIndex * rh + rh - o, viewport.scrollHeight) - viewportHeight
       const sh = isHorizontalScroller() ? scrollerGirth : 0
       if (scrollTop > viewport.scrollTop) {
         setViewportScrollTop(scrollTop + sh)
