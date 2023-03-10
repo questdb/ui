@@ -22,9 +22,7 @@
  *
  ******************************************************************************/
 
-import * as qdb from "./globals"
-
-export function grid(root, msgBus, _gridID) {
+export function grid(rootElement, _paginationFn, _id) {
   const defaults = {
     gridID: 'qdb-grid',
     minColumnWidth: 60,
@@ -47,10 +45,10 @@ export function grid(root, msgBus, _gridID) {
   const NAV_EVENT_HOME = 3
   const NAV_EVENT_END = 4
 
-  const bus = msgBus
-  const gridID = _gridID ? _gridID : defaults.gridID
+  const gridID = _id ? _id : defaults.gridID
   const layoutStoreID = gridID + '.columnLayout'
-  const grid = root
+  const grid = rootElement
+  const paginationFn = _paginationFn
   let viewport
   let canvas
   let header
@@ -89,7 +87,7 @@ export function grid(root, msgBus, _gridID) {
   const twoThirdsPage = oneThirdPage * 2
   let loPage
   let hiPage
-  let query
+  let sql
   let queryTimer
   let downKey = []
   // index of the leftmost visible column in the grid
@@ -178,7 +176,7 @@ export function grid(root, msgBus, _gridID) {
     if (freezeLeft > 0) {
       freezeLeftBefore = freezeLeft
       if (freezeLeft <= columnIndex) {
-        // we will be increasing
+        // we will be increasing freeze left
         freezeLeft = 0
         headerLeft.innerHTML = ''
         hidePanelLeft()
@@ -194,7 +192,7 @@ export function grid(root, msgBus, _gridID) {
     columnOffsets[0] = 0
 
     // rotate column header indexes
-    const leftColumnCount = columnIndex + 1;
+    const leftColumnCount = columnIndex + 1
     for (let i = columnIndex; i >= 0; i--) {
       const hysteresis = header.childNodes[i].querySelector('.qg-col-resize-hysteresis')
       if (hysteresis) {
@@ -351,13 +349,10 @@ export function grid(root, msgBus, _gridID) {
       renderViewportNoCompute()
       return
     }
-    fetch('/exec?' + new URLSearchParams({
-      query: query,
-      limit: lo + 1 + ',' + hi,
-      nm: true
-    }))
-      .then((response) => response.json())
-      .then(renderFunc)
+
+    if (paginationFn) {
+      paginationFn(sql, lo + 1, hi, renderFunc)
+    }
   }
 
   function loadPagesDelayed(p1, p2) {
@@ -498,8 +493,12 @@ export function grid(root, msgBus, _gridID) {
   function triggerHeaderClick(e) {
     // avoid broadcasting fat finger clicks
     if (!colResizeColIndex) {
-      bus.trigger('editor.insert.column', e.currentTarget.getAttribute('data-column-name'))
-      triggerEvent('header.click', e.currentTarget.getAttribute('data-column-name'))
+      triggerEvent(
+        'header.click',
+        {
+          columnName: e.currentTarget.getAttribute('data-column-name')
+        }
+      )
     }
   }
 
@@ -863,7 +862,7 @@ export function grid(root, msgBus, _gridID) {
     rows = []
     rowsLeft = []
     data = []
-    query = null
+    sql = null
     loPage = 0
     hiPage = 0
     downKey = []
@@ -887,7 +886,7 @@ export function grid(root, msgBus, _gridID) {
     layoutStoreColumnSetKey = undefined
     layoutStoreColumnSetSha256 = undefined
     panelLeftWidth = 0
-    freezeLeft = 0
+    setFreezeLeft0(0)
     enableHover()
   }
 
@@ -1340,7 +1339,7 @@ export function grid(root, msgBus, _gridID) {
       computeColumnWidthAndConfigureHeader()
     }
 
-    syncViewportLeftScroll();
+    syncViewportLeftScroll()
 
     if (grid.style.display !== 'none') {
       viewportHeight = Math.max(viewport.getBoundingClientRect().height, defaults.minVpHeight)
@@ -1448,11 +1447,11 @@ export function grid(root, msgBus, _gridID) {
     layoutStoreSaveAll()
 
     // remove panelLeft
-    freezeLeft = 0
+    setFreezeLeft0(0)
     headerLeft.innerHTML = ''
     hidePanelLeft()
     // reset column positions
-    resetColumnPositions();
+    resetColumnPositions()
     timestampIndex = ogTimestampIndex
 
     // compute column width from scratch
@@ -1471,7 +1470,7 @@ export function grid(root, msgBus, _gridID) {
   }
 
   function isCtrlOrCmd() {
-    return downKey[17] || downKey[91];
+    return downKey[17] || downKey[91]
   }
 
   function onKeyDown(e) {
@@ -1520,7 +1519,7 @@ export function grid(root, msgBus, _gridID) {
         break
       case 113:
         unfocusCell()
-        bus.trigger(qdb.MSG_EDITOR_FOCUS)
+        triggerEvent('yield.focus')
         break
       case 67: // Ctrl+C (copy)
       case 45: // Ctrl+Insert (copy)
@@ -1629,10 +1628,7 @@ export function grid(root, msgBus, _gridID) {
       const deviants = storedLayout !== undefined ? storedLayout.deviants : undefined
       const dataPage = data[0]
       const dataPageLen = dataPage.length
-      freezeLeft = storedLayout !== undefined ? storedLayout.freezeLeft : 0
-      if (freezeLeft === undefined) {
-        freezeLeft = 0
-      }
+      setFreezeLeft0(storedLayout !== undefined ? storedLayout.freezeLeft : 0)
 
       let offset = 0
       // a little inefficient, but lets traverse
@@ -1671,7 +1667,7 @@ export function grid(root, msgBus, _gridID) {
     focusedRowIndex = 0
     focusedRowContainer = rows[focusedRowIndex]
     focusedRowContainerLeft = rowsLeft[focusedRowIndex]
-    focusFirstCell();
+    focusFirstCell()
   }
 
   function resetColumnPositions() {
@@ -1683,11 +1679,11 @@ export function grid(root, msgBus, _gridID) {
 
   function updatePart1(_data) {
     clear()
-    query = _data.query
+    sql = _data.query
     data.push(_data.dataset)
     columns = _data.columns
     columnCount = columns.length
-    resetColumnPositions();
+    resetColumnPositions()
     ogTimestampIndex = _data.timestamp
     timestampIndex = ogTimestampIndex
     rowCount = _data.count
@@ -1740,6 +1736,11 @@ export function grid(root, msgBus, _gridID) {
     panelLeftInitialHysteresis.style.display = 'block'
   }
 
+  function setFreezeLeft0(_freezeLeft) {
+    freezeLeft = _freezeLeft !== undefined ? _freezeLeft : 0
+    triggerEvent('freeze.state', {freezeLeft: freezeLeft})
+  }
+
   function setFreezeLeft(nextFreezeLeft) {
     if (nextFreezeLeft !== undefined && nextFreezeLeft !== freezeLeft) {
       if (nextFreezeLeft < freezeLeft) {
@@ -1777,7 +1778,7 @@ export function grid(root, msgBus, _gridID) {
         showPanelLeft()
       }
 
-      freezeLeft = nextFreezeLeft
+      setFreezeLeft0(nextFreezeLeft)
       layoutStoreSaveFreezeLeft()
 
       renderCells(rowsLeft, 0, Math.min(freezeLeft, columnCount), visColumnLo)
@@ -1801,30 +1802,30 @@ export function grid(root, msgBus, _gridID) {
   function addEventListener(eventName, eventHandler, selector) {
     if (selector) {
       const wrappedHandler = (e) => {
-        if (!e.target) return;
-        const el = e.target.closest(selector);
+        if (!e.target) return
+        const el = e.target.closest(selector)
         if (el) {
           const newEvent = Object.create(e, {
             target: {
               value: el
             }
-          });
-          eventHandler.call(el, newEvent);
+          })
+          eventHandler.call(el, newEvent)
         }
-      };
-      grid.addEventListener(eventName, wrappedHandler);
-      return wrappedHandler;
+      }
+      grid.addEventListener(eventName, wrappedHandler)
+      return wrappedHandler
     } else {
       const wrappedHandler = (e) => {
-        eventHandler.call(grid, e);
-      };
-      grid.addEventListener(eventName, wrappedHandler);
-      return wrappedHandler;
+        eventHandler.call(grid, e)
+      }
+      grid.addEventListener(eventName, wrappedHandler)
+      return wrappedHandler
     }
   }
 
   function triggerEvent(eventName, data) {
-    grid.dispatchEvent(new CustomEvent(eventName, data));
+    grid.dispatchEvent(new CustomEvent(eventName, {detail: data}))
   }
 
   function bind() {
@@ -1915,9 +1916,6 @@ export function grid(root, msgBus, _gridID) {
   render()
 
   return {
-    getFreezeLeft: function () {
-      return freezeLeft
-    },
 
     clearCustomLayout: function () {
       clearCustomLayout()
@@ -1948,8 +1946,8 @@ export function grid(root, msgBus, _gridID) {
       setData(_data)
     },
 
-    getQuery: function () {
-      return query
+    getSQL: function () {
+      return sql
     },
 
     render: function () {
