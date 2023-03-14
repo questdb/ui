@@ -6,7 +6,7 @@
  *    \__\_\\__,_|\___||___/\__|____/|____/
  *
  *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
+ *  Copyright (c) 2019-2023 QuestDB
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -32,11 +32,15 @@
 }
 
 $row-height: 55px;
+$drag-handle-z-index: 1;
+$panel-left-z-index: ($drag-handle-z-index + 1);
+$col-resize-ghost-z-index: ($panel-left-z-index + 1);
 
-.qg-header-row {
+.qg-header-row, .qg-header-left-row {
   display: flex;
   overflow: hidden;
-  height: $row-height;
+  min-height: $row-height;
+  max-height: $row-height;
   position: relative;
 
   .qg-header:nth-last-child(2) {
@@ -67,7 +71,7 @@ $row-height: 55px;
 
 $active-row-background: #323342;
 
-.qg-hover .qg-r:hover {
+.qg-r-hover {
   background-color: $active-row-background;
 }
 
@@ -104,54 +108,61 @@ $active-row-background: #323342;
   -moz-user-select: none; /* Old versions of Firefox */
   -ms-user-select: none; /* Internet Explorer/Edge */
   user-select: none;
-  /* Non-prefixed version, currently
-                                   supported by Chrome, Opera and Firefox */
   background: #21222c;
+  position: relative;
 }
 
 $visible-drag-handle-margin: 10px;
-$drag-handle-margin: 5px;
+$drag-handle-margin: 2px;
 
 .qg-header-border {
   position: absolute;
   margin-top: 10px;
   height: 25px;
   border-left: thin dashed #cac30f;
-  // border span is squashed against the left side of the parent div, we need to bring
-  // it out left a little to make it look like it is a left border of the previous cell
-  margin-left: -$drag-handle-margin;
+  right: 0;
 }
 
 .qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
   text-align: left;
 }
 
-
 // drag handle is not inside header element, it is next to it (sibling)
-.qg-drag-handle {
+.qg-col-resize-hysteresis {
   // place drag handle so that visible "line" is in the middle of it
   // to add hysteresis for the drag cursor
-  margin-left: -$visible-drag-handle-margin - $drag-handle-margin;
   width: $visible-drag-handle-margin * 2;
   height: 100%;
   top: 0;
-  z-index: 1;
+  z-index: $drag-handle-z-index;
   position: absolute;
+  // drag handle is to the right of the header
+  right: 0;
+  margin-right: -$visible-drag-handle-margin;
 }
 
-.qg-drag-handle:hover {
-  cursor: col-resize;
+.qg-col-resize-hysteresis:hover {
+  cursor: grab;
+}
+
+.qg-col-resize-hysteresis-enter {
+  background-color: yellow;
+  width: 5px;
+  margin-top: 10px;
+  margin-left: 8px;
+  height: 35px;
+  border-radius: 3px;
 }
 
 .qg-col-resize-ghost {
   position: absolute;
   width: $drag-handle-margin;
-  box-shadow: inset 0 0 0 2px #f1fa8c;
+  background-color: yellow;
   height: 0;
-  background: #f1fa8c;
   top: 0;
   left: 0;
   cursor: col-resize;
+  z-index: $col-resize-ghost-z-index;
 }
 
 .qg-header-name, .qg-header-type {
@@ -188,7 +199,7 @@ $drag-handle-margin: 5px;
 
 .qg-viewport {
   overflow: auto;
-  height: calc(100% - 35px);
+  height: 100%;
 }
 
 .qg-canvas {
@@ -228,10 +239,94 @@ $drag-handle-margin: 5px;
   box-shadow: inset 0 0 0 2px #f1fa8c;
 }
 
-#debug {
-  float: right;
-  width: 300px;
-  height: 300px;
-  background: white;
-  border: 1px solid red;
+.qg-panel-left {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: #282a36;
+  // z-index of the panel must be greater than z-index of the drag handle
+  z-index: $panel-left-z-index;
+  // this is to make last column hysteresis fully visible (it is transparent)
+  overflow: visible;
 }
+
+.qg-viewport-left {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-right: thin solid #98999f;
+  overflow-x: hidden;
+  overflow-y: auto;
+  // hide scrollbar for IE, Edge and Firefox
+  -ms-overflow-style: none;  /* IE and Edge */
+  //noinspection CssUnknownProperty
+  scrollbar-width: none;  /* Firefox */
+}
+
+// chrome & safari
+.qg-viewport-left::-webkit-scrollbar {
+  display: none;
+}
+
+$left-shadow: 10px 0 30px -4px rgba(0,0,0,0.75);
+$top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
+
+.qg-panel-scrolled-left {
+  -webkit-box-shadow: $left-shadow;
+  -moz-box-shadow: $left-shadow;
+  box-shadow: $left-shadow;
+}
+
+.qg-panel-scrolled-top {
+  -webkit-box-shadow: $top-shadow;
+  -moz-box-shadow: $top-shadow;
+  box-shadow: $top-shadow;
+}
+
+.qg-panel-left-ghost, .qg-panel-left-hysteresis, .qg-panel-left-snap-ghost, .qg-panel-left-initial-hysteresis {
+  position: absolute;
+  top: 0;
+  margin-top: 54px;
+  height: calc(100% - 54px);
+  z-index: 5;
+}
+
+.qg-panel-left-ghost {
+  background-color: #98999f;
+  width: 2px;
+  display: none;
+}
+
+.qg-panel-left-snap-ghost {
+  background-color: yellow;
+  width: 2px;
+  display: none;
+}
+
+.qg-panel-left-hysteresis {
+  right: 0;
+  margin-right: -10px;
+  width: 20px;
+  cursor: grab;
+}
+
+.qg-panel-left-initial-hysteresis {
+  width: 10px;
+  left: 0;
+  display: none;
+  cursor: grab;
+}
+
+.qg-panel-left-ghost-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 30px;
+  background-color: yellow;
+  border-radius: 3px;
+  margin-left: -2px;
+  cursor: grab;
+}
+
