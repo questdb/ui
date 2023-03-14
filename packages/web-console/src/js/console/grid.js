@@ -1734,6 +1734,10 @@ export function grid(rootElement, _paginationFn, id) {
   function hidePanelLeft() {
     panelLeft.style.display = 'none'
     panelLeftInitialHysteresis.style.display = 'block'
+    // clear panel left columns
+    for (let i = 0, n = rowsLeft.length; i < n; i++) {
+      rowsLeft[i].innerHTML = ''
+    }
   }
 
   function setFreezeLeft0(_freezeLeft) {
