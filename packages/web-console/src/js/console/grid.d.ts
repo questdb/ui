@@ -1,5 +1,25 @@
-import jQuery from "jquery"
+export interface IQuestDBGrid {
+    focus(): void
+
+    show(): void
+
+    hide(): void
+
+    render(): void
+
+    addEventListener(eventName: string, fn: (event: CustomEvent) => void)
+
+    setData(data: any): void
+
+    getSQL(): string
+
+    clearCustomLayout(): void
+
+    toggleFreezeLeft(): void
+}
+
 export function grid(
-  root: ReturnType<typeof jQuery>,
-  msgBus: ReturnType<typeof jQuery>,
-): void
+    root: HTMLElement | null
+    , paginationFn?: (sql: string, lo: number, hi: number, rendererFn: (data: any) => void) => void
+    , id?: string
+): IQuestDBGrid

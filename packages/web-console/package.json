@@ -54,7 +54,7 @@
     "slim-select": "1.26.0",
     "sql-formatter": "^4.0.2",
     "styled-components": "5.1.1",
-    "styled-icons": "10.2.1",
+    "styled-icons": "10.47.0",
     "throttle-debounce": "2.2.1"
   },
   "devDependencies": {
