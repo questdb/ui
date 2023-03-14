@@ -14,25 +14,30 @@ describe("questdb grid", () => {
     cy.getGridRows().should("have.length", 0);
   });
 
-///  it("when results have vertical scroll", () => {
-///    cy.runQuery(`select x from long_sequence(100)`);
-///    cy.getGridRows().should("have.length", 6);
-///    cy.getGridRow(0).should("contain", "1");
+  it("when results have vertical scroll", () => {
+    cy.runQuery(`select x from long_sequence(100)`);
+    cy.getGridRows().should("have.length", 5);
+    cy.getGridRow(0).should("contain", "1");
 
-///    cy.getGridViewport().scrollTo("bottom");
-///    cy.getGridRows().should("have.length", 6);
-///    cy.getGridRow(0).should("contain", "95");
-///  });
+    cy.getGridViewport().scrollTo("bottom");
+    cy.getGridRows().should("have.length", 5);
+    cy.getGridRow(0).should("contain", "96");
+  });
 
-///  it("multiple scrolls till the bottom", () => {
-///    cy.intercept("/exec*").as("exec");
-///    cy.runQuery(`select x from long_sequence(1000)`);
+  it("multiple scrolls till the bottom", () => {
+    const rows = 1000;
+    const rowsPerPage = 128;
+    const rowHeight = 30;
+    cy.runQuery(`select x from long_sequence(${rows})`);
 
-///    for (let i = 1; i < 1000; i += 128) {
-///      cy.getGridViewport().scrollTo(0, (i - 1) * 28);
-///      cy.getGrid().contains(i).click();
-///    }
+    for (let i = 0; i < rows; i += rowsPerPage) {
+      cy.getGridViewport().scrollTo(0, i * rowHeight);
+      cy.wait(100);
+      cy.getGrid()
+        .contains(i + 1)
+        .click();
+    }
 
-///    cy.getGridViewport().scrollTo("bottom");
-///  });
+    cy.getGridViewport().scrollTo("bottom");
+  });
 });
