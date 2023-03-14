@@ -37,12 +37,17 @@ Cypress.Commands.add("getGridRow", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.get(".monaco-editor").first().click().type(`${ctrlOrCmd}a`).type(query)
+  cy.get(".monaco-editor").first().click().type(query)
 );
 
-Cypress.Commands.add("runQuery", (query) => {
+Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(query).type(`${ctrlOrCmd}{enter}`).wait("@exec");
+  return cy.typeQuery(`${ctrlOrCmd}{enter}`).wait("@exec");
+});
+
+Cypress.Commands.add("clickRun", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.get("button").contains("Run").click().wait("@exec");
 });
 
 Cypress.Commands.add("clearEditor", () =>

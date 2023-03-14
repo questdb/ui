@@ -10,14 +10,19 @@ describe("questdb grid", () => {
   });
 
   it("when results empty", () => {
-    cy.runQuery("select x from long_sequence(0)");
-    cy.getGridRows().should("have.length", 0);
+    cy.typeQuery("select x from long_sequence(0)")
+      .runLine()
+      .getGridRows()
+      .should("have.length", 0);
   });
 
   it("when results have vertical scroll", () => {
-    cy.runQuery(`select x from long_sequence(100)`);
-    cy.getGridRows().should("have.length", 5);
-    cy.getGridRow(0).should("contain", "1");
+    cy.typeQuery(`select x from long_sequence(100)`)
+      .runLine()
+      .getGridRows()
+      .should("have.length", 5)
+      .getGridRow(0)
+      .should("contain", "1");
 
     cy.getGridViewport().scrollTo("bottom");
     cy.getGridRows().should("have.length", 5);
@@ -28,7 +33,7 @@ describe("questdb grid", () => {
     const rows = 1000;
     const rowsPerPage = 128;
     const rowHeight = 30;
-    cy.runQuery(`select x from long_sequence(${rows})`);
+    cy.typeQuery(`select x from long_sequence(${rows})`).runLine();
 
     for (let i = 0; i < rows; i += rowsPerPage) {
       cy.getGridViewport().scrollTo(0, i * rowHeight);
