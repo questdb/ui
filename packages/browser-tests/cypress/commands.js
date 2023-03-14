@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 Cypress.Commands.add("getGrid", () =>
-  cy.get(".qg-canvas").should("be.visible")
+  cy.get(".qg-viewport .qg-canvas").should("be.visible")
 );
 
 Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"));
@@ -34,21 +34,20 @@ Cypress.Commands.add("getGridRow", (n) =>
   cy.get(".qg-r").filter(":visible").eq(n)
 );
 
-Cypress.Commands.add("getGridRows", (n) => cy.get(".qg-r").filter(":visible"));
+Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy
-    .get(".monaco-editor")
-    .first()
-    .click()
-    .focused()
-    .type(`${ctrlOrCmd}a`)
-    .type(query)
+  cy.get(".monaco-editor textarea").first().click().type(query)
 );
 
-Cypress.Commands.add("runQuery", (query) => {
+Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(query).type(`${ctrlOrCmd}{enter}`).wait("@exec");
+  return cy.typeQuery(`${ctrlOrCmd}{enter}`).wait("@exec");
+});
+
+Cypress.Commands.add("clickRun", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.get("button").contains("Run").click().wait("@exec");
 });
 
 Cypress.Commands.add("clearEditor", () =>

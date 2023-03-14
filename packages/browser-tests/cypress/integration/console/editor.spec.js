@@ -135,7 +135,7 @@ describe("&query URL param", () => {
 
   it("should append and select single line query", () => {
     cy.visit(baseUrl);
-    cy.runQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
+    cy.typeQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
     cy.getGridRow(0).should("contain", "2");
@@ -144,7 +144,7 @@ describe("&query URL param", () => {
 
   it("should append and select multiline query", () => {
     cy.visit(baseUrl);
-    cy.runQuery(
+    cy.typeQuery(
       `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
         5
       )}`
@@ -158,7 +158,7 @@ describe("&query URL param", () => {
   it("should not append query if it already exists in editor", () => {
     cy.visit(baseUrl);
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
-    cy.runQuery(query);
+    cy.typeQuery(query).clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditor().should("have.value", query);
   });
@@ -176,32 +176,46 @@ describe("autocomplete", () => {
     cy.visit(baseUrl);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
     cy.clearEditor();
   });
 
   it("should work when tables list is empty", () => {
-    cy.typeQuery("select * from teletubies");
-    cy.getAutocomplete().should("not.be.visible");
-    cy.clearEditor();
-    cy.runQuery('create table "my_secrets" ("secret" string)');
-    cy.typeQuery("select * from my_");
-    cy.getAutocomplete().should("contain", "my_secrets");
-    cy.clearEditor();
-    cy.runQuery('drop table "my_secrets"');
+    cy.typeQuery("select * from teletubies")
+      .getAutocomplete()
+      .should("not.be.visible")
+      .clearEditor();
+
+    cy.typeQuery('create table "my_secrets" ("secret" string)')
+      .runLine()
+      .clearEditor();
+
+    cy.typeQuery("select * from my_")
+      .getAutocomplete()
+      .should("contain", "my_secrets");
+
+    cy.clearEditor().typeQuery('drop table "my_secrets"').runLine();
   });
 
   it("should work when tables list is not empty", () => {
-    cy.runQuery('create table "my_secrets" ("secret" string)');
-    cy.runQuery('create table "my_publics" ("public" string)');
+    cy.typeQuery('create table "my_secrets" ("secret" string);')
+      .clickRun()
+      .clearEditor();
+
+    cy.typeQuery('create table "my_publics" ("public" string);')
+      .clickRun()
+      .clearEditor();
+
     cy.visit(baseUrl);
-    cy.typeQuery("select * from ");
-    cy.getAutocomplete().should("not.contain", "telemetry");
-    cy.getAutocomplete().should("contain", "my_secrets");
-    cy.getAutocomplete().should("contain", "my_publics");
-    cy.clearEditor();
-    cy.runQuery('drop table "my_secrets"');
-    cy.runQuery('drop table "my_publics"');
+    cy.typeQuery("\nselect * from ");
+    cy.getAutocomplete()
+      .should("not.contain", "telemetry")
+      .should("contain", "my_secrets")
+      .should("contain", "my_publics")
+      .clearEditor();
+
+    cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
+    cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
   });
 });
 
@@ -216,13 +230,13 @@ describe("errors", () => {
 
   it("should mark '(200000)' as error", () => {
     const query = `create table test (\ncol symbol index CAPACITY (200000)`;
-    cy.runQuery(query);
+    cy.typeQuery(query).runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
   });
 
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
-    cy.runQuery(query);
+    cy.typeQuery(query).runLine();
     cy.matchErrorMarkerPosition({ left: 506, width: 42 });
 
     cy.getNotifications().should("contain", "Invalid date");
