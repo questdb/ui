@@ -37,7 +37,7 @@ Cypress.Commands.add("getGridRow", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.get(".monaco-editor").first().click().type(query)
+  cy.get(".monaco-editor textarea").first().click().type(query)
 );
 
 Cypress.Commands.add("runLine", () => {

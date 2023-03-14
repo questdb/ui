@@ -5,7 +5,7 @@ describe("questdb grid", () => {
     cy.visit("http://localhost:9999");
   });
 
-  afterEach(() => {
+  beforeEach(() => {
     cy.clearEditor();
   });
 
@@ -17,9 +17,10 @@ describe("questdb grid", () => {
   });
 
   it("when results have vertical scroll", () => {
-    cy.typeQuery(`select x from long_sequence(100)`)
-      .runLine()
-      .getGridRows()
+    cy.typeQuery(`select x from long_sequence(100)`).runLine();
+    cy.wait(100);
+
+    cy.getGridRows()
       .should("have.length", 5)
       .getGridRow(0)
       .should("contain", "1");
