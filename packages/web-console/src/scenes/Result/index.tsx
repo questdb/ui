@@ -114,7 +114,7 @@ const Result = () => {
         const _grid = grid(
             document.getElementById('grid'),
             function (sql, lo, hi, rendererFn: (data: any) => void) {
-                fetch('/exec?query=' + sql + '&limit=' + lo + ',' + hi + '&nm=true').then((response) => response.json()).then(rendererFn)
+                fetch('/exec?query=' + encodeURIComponent(sql) + '&limit=' + lo + ',' + hi + '&nm=true').then((response) => response.json()).then(rendererFn)
             }
         )
         gridRef.current = _grid
