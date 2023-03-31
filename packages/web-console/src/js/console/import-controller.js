@@ -55,7 +55,6 @@ export function setupImportController(bus) {
   $("#dragTarget").dropbox(bus)
   $("#import-file-list").importManager(bus)
   $("#import-detail").importEditor(bus)
-  $("#import-splitter").splitter(bus, "import", 420, 250)
 
   bus.on("splitter.import.resize", splitterResize)
 }

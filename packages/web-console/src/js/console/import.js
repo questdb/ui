@@ -25,7 +25,6 @@
 import $ from "jquery"
 
 import * as qdb from "./globals"
-import { BusEvent } from "../../consts"
 
 function s4() {
   return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1)
@@ -290,7 +289,7 @@ $.fn.importManager = function (editorBus) {
 
   function render(e) {
     const html = $(`
-                        <div id="${e.id}" class="ud-row" style="top: ${top}px;">
+                        <div id="${e.id}" class="ud-row">
                             <div class="ud-cell ud-c0">
                                 <i class="fa fa-square-o ud-checkbox js-row-toggle"></i>
                                 <span class="label js-row-append" title="Append">A</span>
@@ -367,7 +366,8 @@ $.fn.importManager = function (editorBus) {
           "s</span>",
         true,
       )
-      window.bus.trigger(BusEvent.MSQ_QUERY_SCHEMA)
+      window.bus.trigger(qdb.MSG_QUERY_SCHEMA)
+      window.bus.trigger("splitter.import.resize")
     } else {
       current.importState = 4
       current.response = data.status
@@ -566,13 +566,6 @@ $.fn.importManager = function (editorBus) {
       }
     }
 
-    // rejig remaining rows
-    top = 0
-    const rows = canvas.find(".ud-row")
-    for (let i = 0; i < rows.length; i++) {
-      $(rows[i]).css("top", top)
-      top += rowHeight
-    }
     updateButtons()
   }
 
@@ -623,7 +616,7 @@ $.fn.importManager = function (editorBus) {
 // this class will manage drag&drop into dropbox element and
 // broadcast file readiness to document via custom event 'dropbox.files'
 $.fn.dropbox = function (bus) {
-  let collection = $()
+  let collection = []
   const target = this
 
   function startDrag() {
@@ -637,7 +630,7 @@ $.fn.dropbox = function (bus) {
   function handleDrop(evt) {
     nopropagation(evt)
     endDrag()
-    collection = $()
+    collection = []
     $(document).trigger("dropbox.files", evt.originalEvent.dataTransfer)
   }
 
@@ -657,10 +650,10 @@ $.fn.dropbox = function (bus) {
 
   function handleDragEnter(event) {
     nopropagation(event)
-    if (collection.size() === 0) {
+    if (collection.length === 0) {
       startDrag()
     }
-    collection = collection.add(event.target)
+    collection.push(event.timeStamp)
   }
 
   function handleDragLeave(event) {
@@ -669,8 +662,8 @@ $.fn.dropbox = function (bus) {
      * before firing dragenter on the next one so we introduce a delay
      */
     setTimeout(function () {
-      collection = collection.not(event.target)
-      if (collection.size() === 0) {
+      collection = collection.filter(item => item !== event.timeStamp)
+      if (collection.length === 0) {
         endDrag()
       }
     }, 1)

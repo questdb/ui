@@ -50,7 +50,6 @@ $drag-drop-border: #c6c6c6;
 }
 
 .ud-canvas {
-  position: relative;
   overflow: auto;
   flex: 1;
 }
@@ -67,7 +66,7 @@ $drag-drop-border: #c6c6c6;
 }
 
 .ud-row {
-  position: absolute;
+  position: relative;
   width: 100%;
   line-height: 31px;
   height: 35px;

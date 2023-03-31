@@ -170,13 +170,10 @@ $.fn.importEditor = function (ebus) {
 
       // records
       if (e.response.columns) {
-        let top = 0
         for (let k = 0; k < e.response.columns.length; k++) {
           const col = e.response.columns[k]
           divCanvas.append(
-            '<div class="ud-row" style="top: ' +
-              top +
-              'px">' +
+            '<div class="ud-row">' +
               '<div class="ud-cell gc-1 g-other js-g-row">' +
               (k + 1) +
               "</div>" +
@@ -200,8 +197,6 @@ $.fn.importEditor = function (ebus) {
               "</div>" +
               "</div>",
           )
-
-          top += lineHeight
         }
       }
 

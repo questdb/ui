@@ -138,7 +138,7 @@ const Sidebar = () => {
                 settingsPanel.style.display = "none"
             }
         }
-        window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
+        window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL, selected)
     }, [selected])
 
     return (
