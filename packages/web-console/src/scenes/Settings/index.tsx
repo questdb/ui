@@ -25,15 +25,18 @@
 import React, { useCallback, useState } from "react"
 import styled from "styled-components"
 import Notifications from "./Notifications"
-import {
-  PaneContent,
-  PaneMenu,
-  Text,
-  PrimaryToggleButton,
-} from "../../components"
+import { PaneContent, Text, PrimaryToggleButton, Page } from "../../components"
 import { Settings2 } from "styled-icons/evaicons-solid"
 import { Popup } from "styled-icons/entypo"
 import { color } from "../../utils"
+
+const Root = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 2rem;
+`
 
 const PaneWrapper = styled.div`
   display: flex;
@@ -41,29 +44,10 @@ const PaneWrapper = styled.div`
   flex: 0;
 `
 
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: flex-start;
+const PageInfo = styled(Text)`
+  margin-bottom: 2rem;
 `
 
-const HeaderWrapper = styled(PaneWrapper)`
-  width: 100%;
-`
-const HeaderMenu = styled(PaneMenu)`
-  & > :not(:first-child) {
-    margin-left: 1rem;
-  }
-`
-const Info = styled.div`
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-start;
-  align-items: center;
-  width: 100%;
-  padding: 2rem;
-`
 const Icon = styled(Settings2)`
   color: ${color("draculaForeground")};
 `
@@ -71,6 +55,7 @@ const SettingsMenu = styled(PaneWrapper)`
   width: 100%;
   padding: 0 10px;
 `
+
 const ToggleButton = styled(PrimaryToggleButton)`
   height: 4rem;
   padding: 0 1rem;
@@ -91,31 +76,25 @@ const Settings = () => {
   }, [])
 
   return (
-    <Wrapper>
-      <HeaderWrapper>
-        <HeaderMenu>
-          <Icon size="20px" />
-          <Text color="draculaForeground">Settings</Text>
-        </HeaderMenu>
-      </HeaderWrapper>
-      <Info>
-        <Text color="draculaForeground">
+    <Page title="Settings" icon={<Icon size="20px" />}>
+      <Root>
+        <PageInfo color="draculaForeground">
           On this page, you can customize your Quest DB console
-        </Text>
-      </Info>
-      <PaneWrapper>
-        <SettingsMenu>
-          <ToggleButton
-            onClick={handleNotificationClick}
-            selected={selected === "notification"}
-          >
-            <Popup size="18px" />
-            <span>Notification Log</span>
-          </ToggleButton>
-        </SettingsMenu>
-      </PaneWrapper>
-      <Content>{selected === "notification" && <Notifications />}</Content>
-    </Wrapper>
+        </PageInfo>
+        <PaneWrapper>
+          <SettingsMenu>
+            <ToggleButton
+              onClick={handleNotificationClick}
+              selected={selected === "notification"}
+            >
+              <Popup size="18px" />
+              <span>Notification Log</span>
+            </ToggleButton>
+          </SettingsMenu>
+        </PaneWrapper>
+        <Content>{selected === "notification" && <Notifications />}</Content>
+      </Root>
+    </Page>
   )
 }
 

@@ -22,17 +22,17 @@
  *
  ******************************************************************************/
 
-import React, {useCallback, useEffect, useState} from "react"
-import {useSelector} from "react-redux"
+import React, { useCallback, useEffect, useState } from "react"
+import { useSelector } from "react-redux"
 import styled from "styled-components"
-import {CodeSSlash} from "styled-icons/remix-line"
-import {Upload2} from "styled-icons/remix-line"
-import {Settings2} from "styled-icons/evaicons-solid"
+import { CodeSSlash } from "styled-icons/remix-line"
+import { Upload2 } from "styled-icons/remix-line"
+import { Settings2 } from "styled-icons/evaicons-solid"
 
-import {PopperHover, PrimaryToggleButton, Tooltip} from "../../components"
-import {selectors} from "../../store"
-import {color} from "../../utils"
-import {BusEvent} from "../../consts";
+import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
+import { selectors } from "../../store"
+import { color } from "../../utils"
+import { BusEvent } from "../../consts"
 
 const Wrapper = styled.div`
   display: flex;
@@ -59,7 +59,7 @@ const Logo = styled.div`
 `
 
 type NavigationProps = Readonly<{
-    selected: boolean
+  selected: boolean
 }>
 
 const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
@@ -95,157 +95,156 @@ const DisabledNavigation = styled.div`
 type Tab = "console" | "import" | "settings"
 
 const Sidebar = () => {
-    const [selected, setSelected] = useState<Tab>("console")
-    const handleConsoleClick = useCallback(() => {
-        setSelected("console")
-    }, [])
-    const handleImportClick = useCallback(() => {
-        setSelected("import")
-    }, [])
-    const handleSettingsClick = useCallback(() => {
-        setSelected("settings")
-    }, [])
-    const {readOnly} = useSelector(selectors.console.getConfig)
+  const [selected, setSelected] = useState<Tab>("console")
+  const handleConsoleClick = useCallback(() => {
+    setSelected("console")
+  }, [])
+  const handleImportClick = useCallback(() => {
+    setSelected("import")
+  }, [])
+  const handleSettingsClick = useCallback(() => {
+    setSelected("settings")
+  }, [])
+  const { readOnly } = useSelector(selectors.console.getConfig)
 
-    useEffect(() => {
-        const consolePanel = document.querySelector<HTMLElement>(".js-sql-panel")
-        const importPanel = document.querySelector<HTMLElement>(".js-import-panel")
-        const settingsPanel =
-            document.querySelector<HTMLElement>(".js-settings-panel")
+  useEffect(() => {
+    const consolePanel = document.querySelector<HTMLElement>("#console")
+    const importPanel = document.querySelector<HTMLElement>("#import")
+    const settingsPanel = document.querySelector<HTMLElement>("#settings")
 
-        if (!consolePanel || !importPanel || !settingsPanel) {
-            return
+    if (!consolePanel || !importPanel || !settingsPanel) {
+      return
+    }
+
+    switch (selected) {
+      case "import": {
+        consolePanel.style.display = "none"
+        importPanel.style.display = "flex"
+        settingsPanel.style.display = "none"
+        break
+      }
+      case "settings": {
+        consolePanel.style.display = "none"
+        importPanel.style.display = "none"
+        settingsPanel.style.display = "flex"
+        break
+      }
+
+      case "console":
+      default: {
+        consolePanel.style.display = "flex"
+        importPanel.style.display = "none"
+        settingsPanel.style.display = "none"
+      }
+    }
+    window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
+  }, [selected])
+
+  return (
+    <Wrapper>
+      <Logo>
+        <a href="https://questdb.io" rel="noreferrer" target="_blank">
+          <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
+        </a>
+      </Logo>
+
+      <PopperHover
+        delay={350}
+        placement="right"
+        trigger={
+          <Navigation
+            direction="left"
+            onClick={handleConsoleClick}
+            selected={selected === "console"}
+          >
+            <CodeSSlash size="18px" />
+          </Navigation>
         }
+      >
+        <Tooltip>Console</Tooltip>
+      </PopperHover>
 
-        switch (selected) {
-            case "import": {
-                consolePanel.style.display = "none"
-                importPanel.style.display = "flex"
-                settingsPanel.style.display = "none"
-                break
-            }
-            case "settings": {
-                consolePanel.style.display = "none"
-                importPanel.style.display = "none"
-                settingsPanel.style.display = "flex"
-                break
-            }
-
-            case "console":
-            default: {
-                consolePanel.style.display = "flex"
-                importPanel.style.display = "none"
-                settingsPanel.style.display = "none"
-            }
+      <PopperHover
+        delay={readOnly ? 0 : 350}
+        placement="right"
+        trigger={
+          readOnly ? (
+            <DisabledNavigation>
+              <Navigation
+                direction="left"
+                disabled
+                onClick={handleImportClick}
+                selected={selected === "import"}
+              >
+                <Upload2 size="18px" />
+              </Navigation>
+            </DisabledNavigation>
+          ) : (
+            <Navigation
+              direction="left"
+              onClick={handleImportClick}
+              selected={selected === "import"}
+            >
+              <Upload2 size="18px" />
+            </Navigation>
+          )
         }
-        window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
-    }, [selected])
+      >
+        <Tooltip>
+          {readOnly ? (
+            <>
+              <b>Import</b> is currently disabled.
+              <br />
+              To use this feature, turn <b>read-only</b> mode to <i>false</i> in
+              the configuration file
+            </>
+          ) : (
+            <>Import</>
+          )}
+        </Tooltip>
+      </PopperHover>
 
-    return (
-        <Wrapper>
-            <Logo>
-                <a href="https://questdb.io" rel="noreferrer" target="_blank">
-                    <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg"/>
-                </a>
-            </Logo>
-
-            <PopperHover
-                delay={350}
-                placement="right"
-                trigger={
-                    <Navigation
-                        direction="left"
-                        onClick={handleConsoleClick}
-                        selected={selected === "console"}
-                    >
-                        <CodeSSlash size="18px"/>
-                    </Navigation>
-                }
+      <PopperHover
+        delay={readOnly ? 0 : 350}
+        placement="right"
+        trigger={
+          readOnly ? (
+            <DisabledNavigation>
+              <Navigation
+                direction="left"
+                disabled
+                onClick={handleSettingsClick}
+                selected={selected === "settings"}
+              >
+                <Settings2 size="18px" />
+              </Navigation>
+            </DisabledNavigation>
+          ) : (
+            <Navigation
+              direction="left"
+              onClick={handleSettingsClick}
+              selected={selected === "settings"}
             >
-                <Tooltip>Console</Tooltip>
-            </PopperHover>
-
-            <PopperHover
-                delay={readOnly ? 0 : 350}
-                placement="right"
-                trigger={
-                    readOnly ? (
-                        <DisabledNavigation>
-                            <Navigation
-                                direction="left"
-                                disabled
-                                onClick={handleImportClick}
-                                selected={selected === "import"}
-                            >
-                                <Upload2 size="18px"/>
-                            </Navigation>
-                        </DisabledNavigation>
-                    ) : (
-                        <Navigation
-                            direction="left"
-                            onClick={handleImportClick}
-                            selected={selected === "import"}
-                        >
-                            <Upload2 size="18px"/>
-                        </Navigation>
-                    )
-                }
-            >
-                <Tooltip>
-                    {readOnly ? (
-                        <>
-                            <b>Import</b> is currently disabled.
-                            <br/>
-                            To use this feature, turn <b>read-only</b> mode to <i>false</i> in
-                            the configuration file
-                        </>
-                    ) : (
-                        <>Import</>
-                    )}
-                </Tooltip>
-            </PopperHover>
-
-            <PopperHover
-                delay={readOnly ? 0 : 350}
-                placement="right"
-                trigger={
-                    readOnly ? (
-                        <DisabledNavigation>
-                            <Navigation
-                                direction="left"
-                                disabled
-                                onClick={handleSettingsClick}
-                                selected={selected === "settings"}
-                            >
-                                <Settings2 size="18px"/>
-                            </Navigation>
-                        </DisabledNavigation>
-                    ) : (
-                        <Navigation
-                            direction="left"
-                            onClick={handleSettingsClick}
-                            selected={selected === "settings"}
-                        >
-                            <Settings2 size="18px"/>
-                        </Navigation>
-                    )
-                }
-            >
-                <Tooltip>
-                    {readOnly ? (
-                        <>
-                            <b>Settings</b> is currently disabled.
-                            <br/>
-                            To use this feature, turn <b>read-only</b> mode to <i>false</i> in
-                            the configuration file
-                        </>
-                    ) : (
-                        <>Settings</>
-                    )}
-                </Tooltip>
-            </PopperHover>
-        </Wrapper>
-    )
+              <Settings2 size="18px" />
+            </Navigation>
+          )
+        }
+      >
+        <Tooltip>
+          {readOnly ? (
+            <>
+              <b>Settings</b> is currently disabled.
+              <br />
+              To use this feature, turn <b>read-only</b> mode to <i>false</i> in
+              the configuration file
+            </>
+          ) : (
+            <>Settings</>
+          )}
+        </Tooltip>
+      </PopperHover>
+    </Wrapper>
+  )
 }
 
 export default Sidebar
