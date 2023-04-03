@@ -140,13 +140,13 @@ $.fn.importManager = function (editorBus) {
     if (e.selected) {
       element
         .find(".js-row-toggle")
-        .removeClass("fa-square-o")
-        .addClass("fa-check-square-o")
+        .removeClass("fa-square")
+        .addClass("fa-check-square")
     } else {
       element
         .find(".js-row-toggle")
-        .removeClass("fa-check-square-o")
-        .addClass("fa-square-o")
+        .removeClass("fa-check-square")
+        .addClass("fa-square")
     }
 
     if (e.forceHeader) {
@@ -303,7 +303,7 @@ $.fn.importManager = function (editorBus) {
     const html = $(`
                         <div id="${e.id}" class="ud-row">
                             <div class="ud-cell ud-c0">
-                                <i class="fa fa-square-o ud-checkbox js-row-toggle"></i>
+                                <i class="fa fa-square ud-checkbox js-row-toggle"></i>
                                 <span class="label label-info js-row-append" title="Append">A</span>
                                 <span class="label label-info js-row-overwrite" title="Overwrite">O</span>
                                 <span class="label label-info js-row-lev" title="Skip lines with extra values">LEV</span>
