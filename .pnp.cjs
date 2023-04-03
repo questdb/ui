@@ -5539,10 +5539,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@fortawesome/fontawesome-free", [\
-        ["npm:5.13.0", {\
-          "packageLocation": "./.yarn/cache/@fortawesome-fontawesome-free-npm-5.13.0-f20fc0388d-873193fbd9.zip/node_modules/@fortawesome/fontawesome-free/",\
+        ["npm:6.4.0", {\
+          "packageLocation": "./.yarn/unplugged/@fortawesome-fontawesome-free-npm-6.4.0-68881a27c1/node_modules/@fortawesome/fontawesome-free/",\
           "packageDependencies": [\
-            ["@fortawesome/fontawesome-free", "npm:5.13.0"]\
+            ["@fortawesome/fontawesome-free", "npm:6.4.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -6384,7 +6384,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@babel/preset-env", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.20.2"],\
             ["@babel/preset-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.17.12"],\
             ["@babel/preset-typescript", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.18.6"],\
-            ["@fortawesome/fontawesome-free", "npm:5.13.0"],\
+            ["@fortawesome/fontawesome-free", "npm:6.4.0"],\
             ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.5"],\
             ["@popperjs/core", "npm:2.4.2"],\
             ["@questdb/sql-grammar", "npm:1.0.9"],\

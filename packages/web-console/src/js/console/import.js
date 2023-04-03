@@ -150,15 +150,27 @@ $.fn.importManager = function (editorBus) {
     }
 
     if (e.forceHeader) {
-      element.find(".js-row-toggle-header").addClass("label-success")
+      element
+        .find(".js-row-toggle-header")
+        .removeClass("label-info")
+        .addClass("label-success")
     } else {
-      element.find(".js-row-toggle-header").removeClass("label-success")
+      element
+        .find(".js-row-toggle-header")
+        .removeClass("label-success")
+        .addClass("label-info")
     }
 
     if (e.skipLev) {
-      element.find(".js-row-lev").addClass("label-success")
+      element
+        .find(".js-row-lev")
+        .removeClass("label-info")
+        .addClass("label-success")
     } else {
-      element.find(".js-row-lev").removeClass("label-success")
+      element
+        .find(".js-row-lev")
+        .removeClass("label-success")
+        .addClass("label-info")
     }
 
     updateButtons()
@@ -292,10 +304,10 @@ $.fn.importManager = function (editorBus) {
                         <div id="${e.id}" class="ud-row">
                             <div class="ud-cell ud-c0">
                                 <i class="fa fa-square-o ud-checkbox js-row-toggle"></i>
-                                <span class="label js-row-append" title="Append">A</span>
-                                <span class="label js-row-overwrite" title="Overwrite">O</span>
-                                <span class="label js-row-lev" title="Skip lines with extra values">LEV</span>
-                                <span class="label js-row-toggle-header" title="Header">H</span>
+                                <span class="label label-info js-row-append" title="Append">A</span>
+                                <span class="label label-info js-row-overwrite" title="Overwrite">O</span>
+                                <span class="label label-info js-row-lev" title="Skip lines with extra values">LEV</span>
+                                <span class="label label-info js-row-toggle-header" title="Header">H</span>
                                 <i class="fa fa-upload js-row-upload"></i>
                             </div>
                             <div class="ud-cell ud-c1">${e.name}</div>
@@ -305,7 +317,7 @@ $.fn.importManager = function (editorBus) {
                             <div class="ud-cell ud-c5 js-row-rejected">?</div>
                             <div class="ud-cell ud-c6 js-row-header">?</div>
                             <div class="ud-cell ud-c7 ud-status">
-                                <span class="label">pending</span>
+                                <span class="label label-info">pending</span>
                             </div>
                         </div>
             `)

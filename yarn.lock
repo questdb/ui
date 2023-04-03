@@ -3097,10 +3097,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fortawesome/fontawesome-free@npm:5.13.0":
-  version: 5.13.0
-  resolution: "@fortawesome/fontawesome-free@npm:5.13.0"
-  checksum: 873193fbd9e25657e9fec10e321ea6946ec469a1ae5edb5e853991f01ab613fb00d06b48d11f35299cdfa949cfab57ec693ff79926e182544da09a002e85582c
+"@fortawesome/fontawesome-free@npm:6.4.0":
+  version: 6.4.0
+  resolution: "@fortawesome/fontawesome-free@npm:6.4.0"
+  checksum: 0197cd7df96de375862fea561d69427deebb918cadc26074cc8d490180d536e7e58853d138ca74d081b46b2cbdec2783d01cdaccb8bd723d6ef6b4cc8455b84b
   languageName: node
   linkType: hard
 
@@ -3813,7 +3813,7 @@ __metadata:
     "@babel/preset-env": ^7.20.2
     "@babel/preset-react": ^7.17.12
     "@babel/preset-typescript": ^7.18.6
-    "@fortawesome/fontawesome-free": 5.13.0
+    "@fortawesome/fontawesome-free": 6.4.0
     "@monaco-editor/react": ^4.3.1
     "@popperjs/core": 2.4.2
     "@questdb/sql-grammar": 1.0.9

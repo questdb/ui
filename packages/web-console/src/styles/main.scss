@@ -31,7 +31,7 @@ $fa-font-path: "~@fortawesome/fontawesome-free/webfonts";
   font-style: normal;
   font-weight: 900;
   font-display: $fa-font-display;
-  src: url("#{$fa-font-path}/fa-solid-900.woff") format("woff");
+  src: url("#{$fa-font-path}/fa-solid-900.woff2") format("woff2");
 }
 
 .fa,
@@ -45,7 +45,10 @@ $fa-font-path: "~@fortawesome/fontawesome-free/webfonts";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_normalize";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_scaffolding";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_type";
+@import "~bootstrap-sass/assets/stylesheets/bootstrap/_grid";
 @import "~bootstrap-sass/assets/stylesheets/bootstrap/_buttons";
+@import "~bootstrap-sass/assets/stylesheets/bootstrap/_labels";
+@import "~bootstrap-sass/assets/stylesheets/bootstrap/_panels";
 
 @import "~animate.css/source/_base.css";
 
