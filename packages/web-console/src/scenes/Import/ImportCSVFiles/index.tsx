@@ -16,10 +16,12 @@ type Props = {
 }
 
 export const ImportCSVFiles = ({}: Props) => {
+  const [filesDropped, setFilesDropped] = React.useState<FileList | null>(null)
+
   return (
     <Root>
-      <DropBox />
-      <FilesToUpload />
+      <DropBox onFilesDropped={setFilesDropped} />
+      <FilesToUpload files={filesDropped} />
       <ProcessedFiles />
     </Root>
   )

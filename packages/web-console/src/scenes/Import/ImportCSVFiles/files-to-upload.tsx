@@ -7,8 +7,11 @@ const Root = styled.div`
   justify-content: center;
 `
 
-type Props = {}
+type Props = {
+  files: FileList | null
+}
 
-export const FilesToUpload = ({}: Props) => {
+export const FilesToUpload = ({ files }: Props) => {
+  console.log(files)
   return <Root>Files to upload</Root>
 }

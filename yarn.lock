@@ -19960,6 +19960,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "ui@workspace:."
   dependencies:
+    "@questdb/react-components": "workspace:^"
     "@types/node": ^17.0.41
     eslint: ^8.17.0
     eslint-config-prettier: ^8.5.0
