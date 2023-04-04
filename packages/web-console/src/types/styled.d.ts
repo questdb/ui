@@ -67,5 +67,6 @@ declare module "styled-components" {
     fontEmoji: string
     fontMonospace: string
     fontSize: FontSizeShape
+    borderRadius: string
   }
 }

@@ -60,14 +60,14 @@ const fontSize: FontSizeShape = {
 export const theme: DefaultThemeShape = {
   baseFontSize: "10px",
   color,
-  font:
-    '"Open Sans", -apple-system, BlinkMacSystemFont, Helvetica, Roboto, sans-serif',
+  font: '"Open Sans", -apple-system, BlinkMacSystemFont, Helvetica, Roboto, sans-serif',
 
   fontEmoji:
     '"apple color emoji", "segoe ui emoji", "android emoji", "emojisymbols", "emojione mozilla", "twemoji mozilla", "segoe ui symbol", "noto color emoji"',
   fontMonospace:
     'SFMono-Regular, Menlo, Monaco, Consolas,"Liberation Mono", "Courier New", monospace',
   fontSize,
+  borderRadius: "0.8rem",
 }
 
 export type ThemeShape = typeof theme

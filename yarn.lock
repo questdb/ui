@@ -3762,7 +3762,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@questdb/react-components@workspace:packages/react-components":
+"@questdb/react-components@workspace:^, @questdb/react-components@workspace:packages/react-components":
   version: 0.0.0-use.local
   resolution: "@questdb/react-components@workspace:packages/react-components"
   dependencies:
@@ -3816,6 +3816,7 @@ __metadata:
     "@fortawesome/fontawesome-free": 5.13.0
     "@monaco-editor/react": ^4.3.1
     "@popperjs/core": 2.4.2
+    "@questdb/react-components": "workspace:^"
     "@questdb/sql-grammar": 1.0.9
     "@types/jquery": 3.5.1
     "@types/node": ^17.0.41

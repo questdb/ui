@@ -2,6 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { Page } from "../../components"
 import { Upload2 } from "styled-icons/remix-line"
+import { ImportCSVFiles } from "./ImportCSVFiles"
 
 const Root = styled.div`
   display: flex;
@@ -12,7 +13,9 @@ const Root = styled.div`
 const Import = () => {
   return (
     <Page title="Import" icon={<Upload2 size="20px" />}>
-      <Root>import component</Root>
+      <Root>
+        <ImportCSVFiles onImported={() => {}} />
+      </Root>
     </Page>
   )
 }
