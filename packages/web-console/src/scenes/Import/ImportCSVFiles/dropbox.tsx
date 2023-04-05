@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react"
 import styled from "styled-components"
-import { Upload2 } from "styled-icons/remix-line"
+import { Search2 } from "styled-icons/remix-line"
 import { PrimaryButton, Text } from "../../../components"
 import { Box } from "../../../components/Box"
 import { Heading } from "@questdb/react-components"
@@ -85,7 +85,7 @@ export const DropBox = ({ onFilesDropped }: Props) => {
           uploadInputRef.current?.click()
         }}
       >
-        <Upload2 size="18px" />
+        <Search2 size="18px" />
         <span>Browse from disk</span>
       </PrimaryButton>
       <Caution>

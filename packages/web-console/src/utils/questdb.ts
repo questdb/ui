@@ -124,6 +124,15 @@ export type Release = {
   published_at: string
 }
 
+export enum FileStatus {
+  EXISTS = "Exists",
+  DOES_NOT_EXIST = "Does not exist",
+}
+
+export type FileCheckResponse = {
+  status: FileStatus
+}
+
 export class Client {
   private readonly _host: string
   private _controllers: AbortController[] = []
@@ -313,6 +322,20 @@ export class Client {
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
+  }
+
+  async checkCSVFile(name: string): Promise<FileCheckResponse> {
+    try {
+      const response: Response = await fetch(
+        `${this._host}/chk?${Client.encodeParams({
+          f: "json",
+          j: name,
+        })}`,
+      )
+      return await response.json()
+    } catch (error) {
+      throw error
+    }
   }
 
   async getLatestRelease() {
