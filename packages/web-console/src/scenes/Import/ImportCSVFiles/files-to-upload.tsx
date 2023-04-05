@@ -13,6 +13,7 @@ import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
 import { FileStatus } from "./file-status"
 import {
   Close,
+  Edit,
   Information,
   Table as TableIcon,
   Upload2,
@@ -105,13 +106,23 @@ export const FilesToUpload = ({ files }: Props) => {
           {
             header: "Status",
             align: "flex-end",
-            width: "250px",
+            width: "200px",
             render: ({ data }) => <FileStatus file={data} />,
+          },
+          {
+            header: "Table name",
+            align: "flex-end",
+            width: "200px",
+            render: ({ data }) => (
+              <Button skin="transparent" prefixIcon={<Edit size="14px" />}>
+                {data.name}
+              </Button>
+            ),
           },
           {
             header: "Table schema",
             align: "flex-end",
-            width: "250px",
+            width: "200px",
             render: ({ data }) => (
               <Button skin="secondary" prefixIcon={<TableIcon size="18px" />}>
                 Add table schema
@@ -135,7 +146,7 @@ export const FilesToUpload = ({ files }: Props) => {
               </PopperHover>
             ),
             align: "flex-end",
-            width: "200px",
+            width: "150px",
             render: ({ data }) => <Switch onChange={() => {}} />,
           },
           {
