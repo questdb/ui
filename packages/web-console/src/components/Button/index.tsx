@@ -105,7 +105,7 @@ const getTheme = (
     border-color: ${color(normal.border)};
 
     &:focus {
-      box-shadow: inset 0 0 0 1px ${color("draculaForeground")};
+      box-shadow: inset 0 0 0 1px ${color("foreground")};
     }
 
     &:hover:not([disabled]) {
@@ -131,17 +131,17 @@ const PrimaryButtonStyled = styled.button<ButtonProps>`
   ${baseStyles};
   ${getTheme(
     {
-      background: "draculaSelection",
-      border: "draculaSelection",
-      color: "draculaForeground",
+      background: "selection",
+      border: "selection",
+      color: "foreground",
     },
     {
-      background: "draculaComment",
-      border: "draculaSelection",
-      color: "draculaForeground",
+      background: "comment",
+      border: "selection",
+      color: "foreground",
     },
     {
-      background: "draculaSelection",
+      background: "selection",
       border: "gray1",
       color: "gray1",
     },
@@ -161,19 +161,19 @@ const SecondaryButtonStyled = styled.button<ButtonProps>`
   ${baseStyles};
   ${getTheme(
     {
-      background: "draculaBackground",
-      border: "draculaBackground",
-      color: "draculaForeground",
+      background: "background",
+      border: "background",
+      color: "foreground",
     },
     {
-      background: "draculaComment",
-      border: "draculaComment",
-      color: "draculaForeground",
+      background: "comment",
+      border: "comment",
+      color: "foreground",
     },
     {
       background: "gray1",
       border: "gray1",
-      color: "draculaBackground",
+      color: "background",
     },
   )};
 `
@@ -191,17 +191,17 @@ const SuccessButtonStyled = styled.button<ButtonProps>`
   ${baseStyles};
   ${getTheme(
     {
-      background: "draculaSelection",
-      border: "draculaSelection",
-      color: "draculaGreen",
+      background: "selection",
+      border: "selection",
+      color: "green",
     },
     {
-      background: "draculaComment",
-      border: "draculaSelection",
-      color: "draculaGreen",
+      background: "comment",
+      border: "selection",
+      color: "green",
     },
     {
-      background: "draculaSelection",
+      background: "selection",
       border: "gray1",
       color: "gray1",
     },
@@ -221,17 +221,17 @@ const ErrorButtonStyled = styled.button<ButtonProps>`
   ${baseStyles};
   ${getTheme(
     {
-      background: "draculaSelection",
-      border: "draculaSelection",
-      color: "draculaRed",
+      background: "selection",
+      border: "selection",
+      color: "red",
     },
     {
-      background: "draculaComment",
-      border: "draculaSelection",
-      color: "draculaRed",
+      background: "comment",
+      border: "selection",
+      color: "red",
     },
     {
-      background: "draculaSelection",
+      background: "selection",
       border: "gray1",
       color: "gray1",
     },
@@ -253,15 +253,15 @@ const TransparentButtonStyled = styled.button<ButtonProps>`
     {
       background: "transparent",
       border: "transparent",
-      color: "draculaForeground",
+      color: "foreground",
     },
     {
-      background: "draculaComment",
+      background: "comment",
       border: "transparent",
-      color: "draculaForeground",
+      color: "foreground",
     },
     {
-      background: "draculaSelection",
+      background: "selection",
       border: "gray1",
       color: "gray1",
     },

@@ -32,7 +32,7 @@ export const PaneMenu = styled.div`
   height: 4rem;
   padding: 0 1rem;
   align-items: center;
-  background: ${color("draculaBackgroundDarker")};
+  background: ${color("backgroundDarker")};
   box-shadow: 0 6px 6px -6px ${color("black")};
   border-bottom: 1px solid ${color("black")};
   border-top: 1px solid transparent;

@@ -48,13 +48,13 @@ const Wrapper = styled.div`
 
   svg {
     margin-right: 0.2rem;
-    color: ${color("draculaForeground")};
+    color: ${color("foreground")};
   }
 `
 
 const Details = styled.div`
   display: flex;
-  background: ${color("draculaBackground")};
+  background: ${color("background")};
 `
 
 const DetailsColumn = styled.div`
@@ -73,7 +73,7 @@ const addColor = (timing: string) => {
     return <Text color="gray2">0</Text>
   }
 
-  return <Text color="draculaOrange">{timing}</Text>
+  return <Text color="orange">{timing}</Text>
 }
 
 const formatTiming = (nanos: number) => {
@@ -108,14 +108,14 @@ const QueryResult = ({ compiler, count, execute, fetch, rowCount }: Props) => {
 
       <Details>
         <DetailsColumn>
-          <DetailsText color="draculaForeground">
+          <DetailsText color="foreground">
             Execute: {addColor(formatTiming(execute))}
           </DetailsText>
-          <DetailsText color="draculaForeground">
+          <DetailsText color="foreground">
             Network:&nbsp;
             {addColor(formatTiming(fetch - execute))}
           </DetailsText>
-          <DetailsText color="draculaForeground">
+          <DetailsText color="foreground">
             Total:&nbsp;
             {addColor(formatTiming(fetch))}
           </DetailsText>

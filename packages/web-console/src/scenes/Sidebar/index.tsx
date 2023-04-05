@@ -40,7 +40,7 @@ const Wrapper = styled.div`
   flex: 0 0 4.5rem;
   flex-direction: column;
 
-  background: ${color("draculaBackgroundDarker")};
+  background: ${color("backgroundDarker")};
 `
 
 const Logo = styled.div`

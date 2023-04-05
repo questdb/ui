@@ -50,7 +50,7 @@ const Backdrop = styled.div<{ active: boolean }>`
   justify-content: center;
   z-index: ${({ active }) => (active ? 50 : -1)};
   background: ${({ active, theme }) =>
-    active ? theme.color.blackAlpha40 : theme.color.transparent};
+    active ? theme.color.black40 : theme.color.transparent};
   transition: background ${TransitionDuration.REG}ms
     cubic-bezier(0, 0, 0.38, 0.9);
 `

@@ -44,7 +44,7 @@ const Wrapper = styled.div`
   max-width: 600px;
   padding: 6rem 7rem;
   background: ${color("black")};
-  box-shadow: 8px 6px 0 0 ${color("draculaBackground")};
+  box-shadow: 8px 6px 0 0 ${color("background")};
   border-radius: 4px;
 `
 
@@ -79,10 +79,10 @@ const CloseIcon = styled(Close)`
 `
 
 const Link = styled.a`
-  color: ${color("draculaCyan")};
+  color: ${color("cyan")};
 
   &:hover {
-    color: ${color("draculaCyan")};
+    color: ${color("cyan")};
     text-decoration: underline;
   }
 `
@@ -177,7 +177,7 @@ const PowerUser = ({ innerRef }: Props) => {
         <EmailInput dirty={dirty} onInit={handleInit} />
 
         {error !== "" && (
-          <Error color="draculaOrange" size="md">
+          <Error color="orange" size="md">
             {error}
           </Error>
         )}

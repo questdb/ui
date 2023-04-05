@@ -10,8 +10,8 @@ const Wrapper = styled.div`
   flex: 0;
   justify-content: flex-start;
   align-items: flex-start;
-  background: ${color("draculaBackgroundDarker")};
-  color: ${color("draculaForeground")};
+  background: ${color("backgroundDarker")};
+  color: ${color("foreground")};
   width: calc(100vw - 45px);
   height: 100vh;
 `
@@ -30,7 +30,7 @@ const HeaderMenu = styled(PaneMenu)`
 `
 
 const Icon = styled.span`
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
 `
 
 type Props = {
@@ -45,7 +45,7 @@ export const Page = ({ children, icon, title }: Props) => (
       <HeaderWrapper>
         <HeaderMenu>
           <Icon>{icon}</Icon>
-          <Text color="draculaForeground">{title}</Text>
+          <Text color="foreground">{title}</Text>
         </HeaderMenu>
       </HeaderWrapper>
     )}

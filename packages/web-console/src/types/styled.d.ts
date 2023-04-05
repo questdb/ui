@@ -26,23 +26,32 @@ import "styled-components"
 
 export type ColorShape = {
   black: string
-  blackAlpha40: string
+  black70: string
+  black40: string
+  black20: string
   gray1: string
   gray2: string
-  draculaBackgroundDarker: string
-  draculaBackground: string
-  draculaForeground: string
-  draculaSelection: string
-  draculaComment: string
-  draculaRed: string
-  draculaOrange: string
-  draculaYellow: string
-  draculaGreen: string
-  draculaPurple: string
-  draculaCyan: string
-  draculaPink: string
+  backgroundLighter: string
+  backgroundDarker: string
+  background: string
+  foreground: string
+  selection: string
+  selectionDarker: string
+  comment: string
+  red: string
+  orange: string
+  yellow: string
+  green: string
+  purple: string
+  cyan: string
+  pink: string
+  pink50: string
+  pinkDarker: string
   transparent: string
   white: string
+  inherit: string
+  tooltipBackground: string
+  graphLegend: string
 }
 
 export type FontSizeShape = {

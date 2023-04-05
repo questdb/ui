@@ -46,7 +46,7 @@ const Wrapper = styled.div`
   max-width: 100vw;
   padding: 0.6rem 0;
   flex-direction: column;
-  background: ${color("draculaBackgroundDarker")};
+  background: ${color("backgroundDarker")};
   box-shadow: ${color("black")} 0px 5px 8px;
   border: 1px solid ${color("black")};
   border-radius: 4px;
@@ -61,7 +61,7 @@ const Helper = styled(Text)`
 
 const Esc = styled(Text)`
   padding: 0 2px;
-  background: ${color("draculaForeground")};
+  background: ${color("foreground")};
   border-radius: 2px;
 `
 
@@ -103,15 +103,15 @@ const isQuery = ({ type }: QueryListItem) => type === "query"
 const Title = styled(Text)`
   padding: 0.6rem 1.2rem 0.4rem;
   margin-top: 0.6rem;
-  border-top: 1px solid ${({ theme }) => theme.color.draculaSelection};
-  background: ${({ theme }) => theme.color.blackAlpha40};
+  border-top: 1px solid ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.black40};
 `
 
 const Description = styled(Text)`
   padding: 0 1.2rem 1rem;
-  color: ${({ theme }) => theme.color.draculaForeground};
+  color: ${({ theme }) => theme.color.foreground};
   opacity: 0.7;
-  background: ${({ theme }) => theme.color.blackAlpha40};
+  background: ${({ theme }) => theme.color.black40};
 `
 
 const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
@@ -171,7 +171,7 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
 
   return (
     <Wrapper ref={ref}>
-      <Helper _style="italic" color="draculaForeground" size="xs">
+      <Helper _style="italic" color="foreground" size="xs">
         Navigate the list with <UpArrowSquare size="16px" />
         <DownArrowSquare size="16px" /> keys, exit with&nbsp;
         <Esc _style="normal" size="ms" weight={700}>
@@ -198,10 +198,10 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
         const { title, description } = entry.data
         return (
           <React.Fragment key={entry.id}>
-            <Title color="draculaForeground" size="md">
+            <Title color="foreground" size="md">
               {title}
             </Title>
-            <Description color="draculaForeground">{description}</Description>
+            <Description color="foreground">{description}</Description>
           </React.Fragment>
         )
       })}

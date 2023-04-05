@@ -49,7 +49,7 @@ const PageInfo = styled(Text)`
 `
 
 const Icon = styled(Settings2)`
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
 `
 const SettingsMenu = styled(PaneWrapper)`
   width: 100%;
@@ -61,11 +61,11 @@ const ToggleButton = styled(PrimaryToggleButton)`
   padding: 0 1rem;
 `
 const Content = styled(PaneContent)`
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
 
   *::selection {
-    background: ${color("draculaRed")};
-    color: ${color("draculaForeground")};
+    background: ${color("red")};
+    color: ${color("foreground")};
   }
 `
 
@@ -78,7 +78,7 @@ const Settings = () => {
   return (
     <Page title="Settings" icon={<Icon size="20px" />}>
       <Root>
-        <PageInfo color="draculaForeground">
+        <PageInfo color="foreground">
           On this page, you can customize your Quest DB console
         </PageInfo>
         <PaneWrapper>

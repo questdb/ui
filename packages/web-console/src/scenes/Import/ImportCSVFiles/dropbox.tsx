@@ -10,7 +10,7 @@ const Root = styled(Box).attrs({ flexDirection: "column" })<{
 }>`
   padding: 4rem 0 0;
   gap: 2rem;
-  background: ${({ theme }) => theme.color.draculaBackground};
+  background: ${({ theme }) => theme.color.backgroundLighter};
   border: 3px dashed ${({ isDragging }) => (isDragging ? "#5D6074" : "#333543")};
   box-shadow: inset 0 0 10px 0 #1b1c23;
   transition: all 0.15s ease-in-out;
@@ -20,7 +20,7 @@ const Caution = styled.div`
   margin-top: 2rem;
   padding: 2rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.draculaBackgroundDarker};
+  background: ${({ theme }) => theme.color.backgroundDarker};
   text-align: center;
 `
 
@@ -28,7 +28,7 @@ const CautionText = styled(Text)`
   color: #8b8fa7;
 
   a {
-    color: ${({ theme }) => theme.color.draculaForeground};
+    color: ${({ theme }) => theme.color.foreground};
   }
 `
 

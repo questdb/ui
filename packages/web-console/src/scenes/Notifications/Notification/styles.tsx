@@ -32,7 +32,7 @@ export const Wrapper = styled.div`
   border-right: none;
   width: 100%;
   height: 4rem;
-  border-bottom: 1px ${color("draculaBackgroundDarker")} solid;
+  border-bottom: 1px ${color("backgroundDarker")} solid;
   padding: 0 1rem;
 
   ${bezierTransition};

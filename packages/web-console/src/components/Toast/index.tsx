@@ -33,8 +33,8 @@ export const Toast = styled.div<{ borderColor: Color }>`
   width: 340px;
   padding: 1rem;
   flex-direction: column;
-  background: ${color("draculaBackgroundDarker")};
-  border: 2px solid ${color("draculaSelection")};
+  background: ${color("backgroundDarker")};
+  border: 2px solid ${color("selection")};
 
   &:before {
     position: absolute;

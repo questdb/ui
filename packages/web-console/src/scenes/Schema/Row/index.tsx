@@ -95,7 +95,7 @@ const Wrapper = styled.div<Pick<Props, "expanded">>`
 
   &:hover,
   &:active {
-    background: ${color("draculaSelection")};
+    background: ${color("selection")};
   }
 
   &:hover ${/* sc-selector */ Type} {
@@ -113,16 +113,16 @@ const Spacer = styled.span`
 `
 
 const InfoIcon = styled(Information)`
-  color: ${color("draculaPurple")};
+  color: ${color("purple")};
 `
 
 const RocketIcon = styled(Rocket)`
-  color: ${color("draculaOrange")};
+  color: ${color("orange")};
   margin-right: 1rem;
 `
 
 const SortDownIcon = styled(SortDown)`
-  color: ${color("draculaGreen")};
+  color: ${color("green")};
   margin-right: 0.8rem;
 `
 
@@ -145,7 +145,7 @@ const TitleIcon = styled(TableIcon)`
   min-height: 18px;
   min-width: 18px;
   margin-right: 1rem;
-  color: ${color("draculaCyan")};
+  color: ${color("cyan")};
 `
 
 const InfoIconWrapper = styled.div`
@@ -167,7 +167,7 @@ const PieChartIcon = styled(PieChart)`
 `
 
 const FileListIcon = styled(FileList)`
-  color: ${color("draculaYellow")};
+  color: ${color("yellow")};
   margin-right: 0.5rem;
 `
 
@@ -191,7 +191,9 @@ const Row = ({
   const handlePlusButtonClick = useCallback(
     (event: MouseEvent) => {
       event.stopPropagation()
-      insertTextAtCursor(kind === "table" && !/^[a-z0-9_]+$/i.test(name) ? `"${name}"` : name)
+      insertTextAtCursor(
+        kind === "table" && !/^[a-z0-9_]+$/i.test(name) ? `"${name}"` : name,
+      )
     },
     [name, kind],
   )
@@ -225,7 +227,7 @@ const Row = ({
           <DotIcon size="12px" />
         )}
 
-        <Title color="draculaForeground" ellipsis kind={kind}>
+        <Title color="foreground" ellipsis kind={kind}>
           {name}
         </Title>
         {suffix}
@@ -233,7 +235,7 @@ const Row = ({
         <Spacer />
 
         {type && (
-          <Type _style="italic" color="draculaPink" transform="lowercase">
+          <Type _style="italic" color="pink" transform="lowercase">
             {type}
           </Type>
         )}
@@ -248,7 +250,7 @@ const Row = ({
         {kind === "table" && walEnabled && (
           <PartitionByWrapper>
             <FileListIcon size="14px" />
-            <Text color="draculaYellow">WAL</Text>
+            <Text color="yellow">WAL</Text>
           </PartitionByWrapper>
         )}
 
@@ -276,7 +278,7 @@ const Row = ({
         )}
       </FlexRow>
 
-      {!tooltip && <Text color="draculaComment">{description}</Text>}
+      {!tooltip && <Text color="comment">{description}</Text>}
     </Wrapper>
   )
 }
