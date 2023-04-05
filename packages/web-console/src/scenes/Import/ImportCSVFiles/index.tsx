@@ -1,15 +1,7 @@
 import React from "react"
-import styled from "styled-components"
+import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
-import { ProcessedFiles } from "./processed-files"
-
-const Root = styled.div`
-  display: grid;
-  width: 100%;
-  grid-auto-flow: row;
-  gap: 2rem;
-`
 
 type Props = {
   onImported: () => void
@@ -19,10 +11,9 @@ export const ImportCSVFiles = ({}: Props) => {
   const [filesDropped, setFilesDropped] = React.useState<FileList | null>(null)
 
   return (
-    <Root>
+    <Box gap="4rem" flexDirection="column">
       <DropBox onFilesDropped={setFilesDropped} />
       <FilesToUpload files={filesDropped} />
-      <ProcessedFiles />
-    </Root>
+    </Box>
   )
 }

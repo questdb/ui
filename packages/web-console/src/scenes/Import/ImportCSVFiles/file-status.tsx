@@ -2,20 +2,35 @@ import React, { useEffect, useContext, useState } from "react"
 import type { File } from "./types"
 import { QuestContext } from "../../../providers"
 import { FileStatus as FileStatusType } from "../../../utils"
+import { Badge, BadgeType } from "@questdb/react-components"
 
-const mapStatusToLabel = (status: FileStatusType) => {
+const mapStatusToLabel = (
+  status: FileStatusType | undefined,
+): { label: string; type: BadgeType } | undefined => {
+  if (!status) {
+    return undefined
+  }
+
   switch (status) {
     case FileStatusType.EXISTS:
-      return "File exists"
+      return {
+        label: "File already uploaded",
+        type: BadgeType.ERROR,
+      }
       break
     case FileStatusType.DOES_NOT_EXIST:
-      return "Ready to upload"
+      return {
+        label: "Ready to upload",
+        type: BadgeType.WARNING,
+      }
   }
 }
 
 export const FileStatus = ({ file }: { file: File }) => {
   const { quest } = useContext(QuestContext)
   const [fileStatus, setFileStatus] = useState<FileStatusType>()
+
+  const status = mapStatusToLabel(fileStatus)
 
   useEffect(() => {
     if (file) {
@@ -27,5 +42,5 @@ export const FileStatus = ({ file }: { file: File }) => {
     }
   }, [file])
 
-  return <div>{fileStatus && mapStatusToLabel(fileStatus)}</div>
+  return status ? <Badge type={status.type}>{status.label}</Badge> : <></>
 }

@@ -1,13 +1,14 @@
 import React, { useRef, useState } from "react"
 import styled from "styled-components"
 import { Search2 } from "styled-icons/remix-line"
-import { PrimaryButton, Text } from "../../../components"
+import { Text } from "../../../components"
 import { Box } from "../../../components/Box"
-import { Heading } from "@questdb/react-components"
+import { Button, Heading } from "@questdb/react-components"
 
 const Root = styled(Box).attrs({ flexDirection: "column" })<{
   isDragging: boolean
 }>`
+  width: 100%;
   padding: 4rem 0 0;
   gap: 2rem;
   background: ${({ theme }) => theme.color.backgroundLighter};
@@ -80,14 +81,15 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         ref={uploadInputRef}
         style={{ display: "none" }}
       />
-      <PrimaryButton
+      <Button
         onClick={() => {
           uploadInputRef.current?.click()
         }}
+        prefixIcon={<Search2 size="18px" />}
+        skin="secondary"
       >
-        <Search2 size="18px" />
-        <span>Browse from disk</span>
-      </PrimaryButton>
+        Browse from disk
+      </Button>
       <Caution>
         <CautionText>
           Suitable for small batches of CSV file upload. For database
