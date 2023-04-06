@@ -124,13 +124,20 @@ export type Release = {
   published_at: string
 }
 
-export enum FileStatus {
+export enum FileCheckStatus {
   EXISTS = "Exists",
   DOES_NOT_EXIST = "Does not exist",
 }
 
 export type FileCheckResponse = {
-  status: FileStatus
+  status: FileCheckStatus
+}
+
+type UploadOptions = {
+  file: File
+  name: string
+  forceHeader: boolean
+  overwrite: boolean
 }
 
 export class Client {
@@ -331,6 +338,28 @@ export class Client {
           f: "json",
           j: name,
         })}`,
+      )
+      return await response.json()
+    } catch (error) {
+      throw error
+    }
+  }
+
+  async uploadCSVFile({
+    file,
+    name,
+    forceHeader,
+    overwrite,
+  }: UploadOptions): Promise<QueryResult<any>> {
+    const formData = new FormData()
+    formData.append("data", file)
+    try {
+      const response: Response = await fetch(
+        `${this._host}/imp?fmt=json&name=${name}&forceHeader=${forceHeader}&overwrite=${overwrite}`,
+        {
+          method: "POST",
+          body: formData,
+        },
       )
       return await response.json()
     } catch (error) {

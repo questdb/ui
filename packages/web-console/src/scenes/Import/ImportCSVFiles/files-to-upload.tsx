@@ -1,4 +1,4 @@
-import React, { useEffect } from "react"
+import React, { useContext } from "react"
 import styled from "styled-components"
 import {
   Button,
@@ -11,14 +11,11 @@ import { PopperHover, Text, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
 import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
 import { FileStatus } from "./file-status"
-import {
-  Close,
-  Edit,
-  Information,
-  Table as TableIcon,
-  Upload2,
-} from "styled-icons/remix-line"
+import { Edit, Information, Table as TableIcon } from "styled-icons/remix-line"
 import { FiletypeCsv } from "styled-icons/bootstrap"
+import { QuestContext } from "../../../providers"
+import { ProcessedFile, WriteMode } from "./types"
+import { UploadActions } from "./upload-actions"
 
 const StyledTable = styled(Table)`
   width: 100%;
@@ -64,30 +61,24 @@ const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
 `
 
 type Props = {
-  files: FileList | null
+  files: ProcessedFile[]
+  onFileRemove: (file: ProcessedFile) => void
+  onFileUpload: (file: ProcessedFile) => void
+  onFilePropertyChange: (filename: string, file: Partial<ProcessedFile>) => void
 }
 
-const filterCSVFiles = (files: FileList | null): File[] => {
-  return files
-    ? Array.from(files).filter((file) => file.type === "text/csv")
-    : []
-}
-
-export const FilesToUpload = ({ files }: Props) => {
-  const [csvFileList, setCsvFileList] = React.useState<File[]>(
-    filterCSVFiles(files),
-  )
-
-  useEffect(() => {
-    if (files) {
-      setCsvFileList([...csvFileList, ...filterCSVFiles(files)])
-    }
-  }, [files])
+export const FilesToUpload = ({
+  files,
+  onFileRemove,
+  onFilePropertyChange,
+  onFileUpload,
+}: Props) => {
+  const { quest } = useContext(QuestContext)
 
   return (
     <Box flexDirection="column" gap="2rem">
       <Heading level={3}>Upload queue</Heading>
-      <StyledTable<React.FunctionComponent<TableProps<File>>>
+      <StyledTable<React.FunctionComponent<TableProps<ProcessedFile>>>
         columns={[
           {
             header: "File",
@@ -97,8 +88,10 @@ export const FilesToUpload = ({ files }: Props) => {
               <File>
                 <FiletypeCsv size="32px" />
                 <FileDetails>
-                  <Text color="foreground">{data.name}</Text>
-                  <Text color="gray2">{bytesWithSuffix(data.size)}</Text>
+                  <Text color="foreground">{data.fileObject.name}</Text>
+                  <Text color="gray2">
+                    {bytesWithSuffix(data.fileObject.size)}
+                  </Text>
                 </FileDetails>
               </File>
             ),
@@ -107,7 +100,7 @@ export const FilesToUpload = ({ files }: Props) => {
             header: "Status",
             align: "flex-end",
             width: "200px",
-            render: ({ data }) => <FileStatus file={data} />,
+            render: ({ data }) => <FileStatus status={data.status} />,
           },
           {
             header: "Table name",
@@ -115,17 +108,17 @@ export const FilesToUpload = ({ files }: Props) => {
             width: "200px",
             render: ({ data }) => (
               <Button skin="transparent" prefixIcon={<Edit size="14px" />}>
-                {data.name}
+                {data.fileObject.name}
               </Button>
             ),
           },
           {
             header: "Table schema",
             align: "flex-end",
-            width: "200px",
+            width: "150px",
             render: ({ data }) => (
               <Button skin="secondary" prefixIcon={<TableIcon size="18px" />}>
-                Add table schema
+                Add
               </Button>
             ),
           },
@@ -147,41 +140,37 @@ export const FilesToUpload = ({ files }: Props) => {
             ),
             align: "flex-end",
             width: "150px",
-            render: ({ data }) => <Switch onChange={() => {}} />,
+            render: ({ data }) => (
+              <Switch
+                onChange={(value) => {
+                  onFilePropertyChange(data.fileObject.name, {
+                    forceHeader: value,
+                  })
+                }}
+              />
+            ),
           },
           {
             header: "Actions",
             align: "flex-end",
-            width: "200px",
+            width: "300px",
             render: ({ data }) => (
-              <Box gap="1rem" align="center">
-                <Button skin="primary" prefixIcon={<Upload2 size="18px" />}>
-                  Upload
-                </Button>
-                <PopperHover
-                  placement="bottom"
-                  trigger={
-                    <Button
-                      skin="secondary"
-                      onClick={() => {
-                        setCsvFileList(
-                          csvFileList.filter((file) => file.name !== data.name),
-                        )
-                      }}
-                    >
-                      <Close size="18px" />
-                    </Button>
-                  }
-                >
-                  <Tooltip>Remove file from queue</Tooltip>
-                </PopperHover>
-              </Box>
+              <UploadActions
+                file={data}
+                onUpload={onFileUpload}
+                onRemove={onFileRemove}
+                onModeChange={(mode: WriteMode) => {
+                  onFilePropertyChange(data.fileObject.name, {
+                    overwrite: mode === "overwrite",
+                  })
+                }}
+              />
             ),
           },
         ]}
-        rows={csvFileList}
+        rows={files}
       />
-      {csvFileList.length === 0 && (
+      {files.length === 0 && (
         <EmptyState>
           <Text color="gray2" align="center">
             No files in queue

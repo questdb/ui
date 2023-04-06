@@ -54,6 +54,7 @@ export const DropBox = ({ onFilesDropped }: Props) => {
     e.stopPropagation()
     setIsDragging(false)
     onFilesDropped(e.dataTransfer.files)
+    uploadInputRef.current?.setAttribute("value", "")
   }
 
   return (
