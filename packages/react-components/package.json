@@ -2,6 +2,11 @@
   "name": "@questdb/react-components",
   "version": "0.0.4",
   "packageManager": "yarn@3.2.0",
+  "scripts": {
+    "storybook": "start-storybook -p 6006",
+    "build-storybook": "build-storybook",
+    "build": "rimraf dist && tsc"
+  },
   "files": [
     "dist"
   ],
@@ -29,14 +34,10 @@
     "react": "17.0.2",
     "react-dom": "17.0.2",
     "react-is": "17.0.2",
+    "rimraf": "3.0.2",
     "styled-components": "^5.3.5",
     "typescript": "4.4.4",
     "webpack": "^5"
-  },
-  "scripts": {
-    "storybook": "start-storybook -p 6006",
-    "build-storybook": "build-storybook",
-    "build": "tsc"
   },
   "peerDependencies": {
     "react": "17.0.2",
