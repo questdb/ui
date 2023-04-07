@@ -6358,6 +6358,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["react", "npm:17.0.2"],\
             ["react-dom", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:17.0.2"],\
             ["react-is", "npm:17.0.2"],\
+            ["rimraf", "npm:3.0.2"],\
             ["styled-components", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:5.3.5"],\
             ["typescript", "patch:typescript@npm%3A4.4.4#~builtin<compat/typescript>::version=4.4.4&hash=7ad353"],\
             ["webpack", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:5.72.1"]\
