@@ -6351,8 +6351,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@questdb/react-components", [\
-<<<<<<< Updated upstream
-=======
         ["virtual:abd86f0db4e628a3d1844be9352358a814881ef2b82dee67188058dec9fd0f37a9154622d1055dbe04477d6e93c1d74ae4e55efba208fff05df26b9f136509a2#workspace:packages/react-components", {\
           "packageLocation": "./.yarn/__virtual__/@questdb-react-components-virtual-455cc13156/1/packages/react-components/",\
           "packageDependencies": [\
@@ -6433,24 +6431,11 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "linkType": "SOFT"\
         }],\
->>>>>>> Stashed changes
         ["workspace:packages/react-components", {\
           "packageLocation": "./packages/react-components/",\
           "packageDependencies": [\
             ["@questdb/react-components", "workspace:packages/react-components"],\
             ["@babel/core", "npm:7.17.12"],\
-<<<<<<< Updated upstream
-            ["@mdx-js/react", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:1.6.22"],\
-            ["@radix-ui/react-switch", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:0.1.5"],\
-            ["@storybook/addon-actions", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/addon-docs", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/addon-essentials", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/addon-interactions", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/addon-links", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/builder-webpack5", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/manager-webpack5", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-            ["@storybook/react", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:6.4.22"],\
-=======
             ["@mdx-js/react", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:1.6.22"],\
             ["@radix-ui/react-alert-dialog", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:1.0.3"],\
             ["@radix-ui/react-dialog", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:1.0.3"],\
@@ -6463,7 +6448,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@storybook/builder-webpack5", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:6.4.22"],\
             ["@storybook/manager-webpack5", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:6.4.22"],\
             ["@storybook/react", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:6.4.22"],\
->>>>>>> Stashed changes
             ["@storybook/testing-library", "npm:0.0.11"],\
             ["@styled-icons/remix-line", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:10.18.0"],\
             ["@types/node", "npm:17.0.33"],\
@@ -6475,12 +6459,8 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["generate-password", "npm:1.7.0"],\
             ["joi", "npm:17.9.1"],\
             ["react", "npm:17.0.2"],\
-<<<<<<< Updated upstream
-            ["react-dom", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:17.0.2"],\
-=======
             ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
             ["react-hook-form", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:7.43.9"],\
->>>>>>> Stashed changes
             ["react-is", "npm:17.0.2"],\
             ["styled-components", "virtual:993be8e95ad776f90a212770363851655eceeba97c59ab4a108569543fb76f9a9020361380f8adca7caa9a59b32fc26e7615a095a1e955104971d4da417e8b40#npm:5.3.5"],\
             ["typescript", "patch:typescript@npm%3A4.4.4#~builtin<compat/typescript>::version=4.4.4&hash=7ad353"],\
