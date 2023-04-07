@@ -1,4 +1,30 @@
-export const color = {
+export type Color = {
+  black: string;
+  black70: string;
+  black40: string;
+  gray1: string;
+  gray2: string;
+  backgroundDarker: string;
+  background: string;
+  foreground: string;
+  selection: string;
+  comment: string;
+  red: string;
+  orange: string;
+  yellow: string;
+  green: string;
+  purple: string;
+  cyan: string;
+  pink: string;
+  pink50: string;
+  pinkDarker: string;
+  transparent: string;
+  white: string;
+  inherit: string;
+  tooltipBackground: string;
+};
+
+export const color: Color = {
   black: "#191a21",
   black70: "rgba(25, 26, 33, 0.7)",
   black40: "rgba(25, 26, 33, 0.4)",

@@ -1,35 +1,32 @@
 import React, { ReactNode } from "react";
 import styled, { css } from "styled-components";
 
-import type { Color, ColorShape, FontSize } from "../../types";
+import type { Size } from "../../theme/font";
+import type { Color } from "../../theme/color";
 import { color } from "../../theme/color";
 
-type FontStyle = "normal" | "italic";
-type Transform = "capitalize" | "lowercase" | "uppercase";
-type Type = "span" | "label";
-
-export type TextProps = Readonly<{
-  _style?: FontStyle;
+export type Props = {
+  _style?: "normal" | "italic";
   align?: "left" | "right" | "center";
   className?: string;
   code?: boolean;
-  color?: Color;
+  color?: keyof Color;
   children?: ReactNode;
   ellipsis?: boolean;
   htmlFor?: string;
   onClick?: () => void;
-  size?: FontSize;
+  size?: Size;
   title?: string;
-  transform?: Transform;
-  type?: Type;
+  transform?: "capitalize" | "lowercase" | "uppercase";
+  type?: "span" | "label";
   weight?: number;
-  linkColor?: Color;
-}>;
+  linkColor?: keyof Color;
+};
 
-const defaultProps: Readonly<{
-  color: Color;
-  type: Type;
-}> = {
+const defaultProps: {
+  color: Props["color"];
+  type: Props["type"];
+} = {
   color: "inherit",
   type: "span",
 };
@@ -40,7 +37,7 @@ const ellipsisStyles = css`
   white-space: nowrap;
 `;
 
-export const textStyles = css<TextProps>`
+export const textStyles = css<Props>`
   color: ${(props) => (props.color ? color[props.color] : "inherit")};
   font-family: ${({ code, theme }) => code && theme.fontMonospace};
   font-size: ${({ size, theme }) => (size ? theme.fontSize[size] : "inherit")};
@@ -52,7 +49,7 @@ export const textStyles = css<TextProps>`
   line-height: 1.5;
 `;
 
-const TextStyled = styled.label<TextProps>`
+const TextStyled = styled.label<Props>`
   ${textStyles};
 
   a {
@@ -61,7 +58,7 @@ const TextStyled = styled.label<TextProps>`
   }
 `;
 
-export const Text = ({ type, ...rest }: TextProps) => {
+export const Text = ({ type, ...rest }: Props) => {
   return <TextStyled as={type} {...rest} type={type} />;
 };
 

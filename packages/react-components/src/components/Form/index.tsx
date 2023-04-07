@@ -5,7 +5,6 @@ import {
   SubmitHandler,
   UseFormProps,
   WatchObserver,
-  Path,
 } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
 import { Schema } from "joi";
@@ -30,7 +29,7 @@ type DirtyChangeObserver<T = Record<string, any>> = (
   dirtyFields: Partial<T> | Record<string, string>
 ) => void;
 
-export type FormProps<TFormValues> = {
+export type Props<TFormValues> = {
   name: string;
   method?: HTMLFormElement["method"];
   onSubmit: SubmitHandler<TFormValues>;
@@ -56,7 +55,7 @@ export const Form = <
   defaultValues,
   className,
   preventSubmitOnEnter,
-}: FormProps<TFormValues>) => {
+}: Props<TFormValues>) => {
   let props: UseFormProps<TFormValues> = {};
 
   if (defaultValues) {
