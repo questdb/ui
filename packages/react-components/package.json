@@ -43,6 +43,11 @@
     "styled-components": "^5.3.5"
   },
   "dependencies": {
-    "@radix-ui/react-switch": "^0.1.5"
+    "@radix-ui/react-alert-dialog": "^1.0.3",
+    "@radix-ui/react-dialog": "^1.0.3",
+    "@radix-ui/react-switch": "^0.1.5",
+    "generate-password": "^1.7.0",
+    "joi": "^17.9.1",
+    "react-hook-form": "^7.43.9"
   }
 }
