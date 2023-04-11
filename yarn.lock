@@ -3111,31 +3111,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hapi/hoek@npm:^9.0.0":
-  version: 9.3.0
-  resolution: "@hapi/hoek@npm:9.3.0"
-  checksum: 4771c7a776242c3c022b168046af4e324d116a9d2e1d60631ee64f474c6e38d1bb07092d898bf95c7bc5d334c5582798a1456321b2e53ca817d4e7c88bc25b43
-  languageName: node
-  linkType: hard
-
-"@hapi/topo@npm:^5.0.0":
-  version: 5.1.0
-  resolution: "@hapi/topo@npm:5.1.0"
-  dependencies:
-    "@hapi/hoek": ^9.0.0
-  checksum: 604dfd5dde76d5c334bd03f9001fce69c7ce529883acf92da96f4fe7e51221bf5e5110e964caca287a6a616ba027c071748ab636ff178ad750547fba611d6014
-  languageName: node
-  linkType: hard
-
-"@hookform/resolvers@npm:2.8.5":
-  version: 2.8.5
-  resolution: "@hookform/resolvers@npm:2.8.5"
-  peerDependencies:
-    react-hook-form: ^7.0.0
-  checksum: 0751f0561e00415040e45759d28378fa90b7b9482e7e112feae5fdcaf2c0e18384d2ee15b7ce444dbc2f716dcd3c5f696efaf66f5f5f37add4d9bf9c43a5fa42
-  languageName: node
-  linkType: hard
-
 "@humanwhocodes/config-array@npm:^0.9.2":
   version: 0.9.5
   resolution: "@humanwhocodes/config-array@npm:0.9.5"
@@ -3792,7 +3767,6 @@ __metadata:
   resolution: "@questdb/react-components@workspace:packages/react-components"
   dependencies:
     "@babel/core": ^7.17.12
-    "@hookform/resolvers": 2.8.5
     "@mdx-js/react": ^1.6.22
     "@radix-ui/react-alert-dialog": ^1.0.3
     "@radix-ui/react-dialog": ^1.0.3
@@ -3814,10 +3788,8 @@ __metadata:
     babel-loader: ^8.2.5
     core-js: ^3.22.5
     generate-password: ^1.7.0
-    joi: 17.5.0
     react: 17.0.2
     react-dom: 17.0.2
-    react-hook-form: 7.22.3
     react-is: 17.0.2
     rimraf: 3.0.2
     styled-components: ^5.3.5
@@ -4201,29 +4173,6 @@ __metadata:
   peerDependencies:
     react: ^16.8 || ^17.0 || ^18.0
   checksum: b319564668512bb5c8c64530e3c12810c4b7c75c19a00d5ef758c246e8d85cd5015df19688e174db1cc44b0584c8d7f22411eb00af5f8ac6c2e789aa5c8e34f5
-  languageName: node
-  linkType: hard
-
-"@sideway/address@npm:^4.1.3":
-  version: 4.1.4
-  resolution: "@sideway/address@npm:4.1.4"
-  dependencies:
-    "@hapi/hoek": ^9.0.0
-  checksum: b9fca2a93ac2c975ba12e0a6d97853832fb1f4fb02393015e012b47fa916a75ca95102d77214b2a29a2784740df2407951af8c5dde054824c65577fd293c4cdb
-  languageName: node
-  linkType: hard
-
-"@sideway/formula@npm:^3.0.0":
-  version: 3.0.1
-  resolution: "@sideway/formula@npm:3.0.1"
-  checksum: e4beeebc9dbe2ff4ef0def15cec0165e00d1612e3d7cea0bc9ce5175c3263fc2c818b679bd558957f49400ee7be9d4e5ac90487e1625b4932e15c4aa7919c57a
-  languageName: node
-  linkType: hard
-
-"@sideway/pinpoint@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "@sideway/pinpoint@npm:2.0.0"
-  checksum: 0f4491e5897fcf5bf02c46f5c359c56a314e90ba243f42f0c100437935daa2488f20482f0f77186bd6bf43345095a95d8143ecf8b1f4d876a7bc0806aba9c3d2
   languageName: node
   linkType: hard
 
@@ -14342,19 +14291,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"joi@npm:17.5.0":
-  version: 17.5.0
-  resolution: "joi@npm:17.5.0"
-  dependencies:
-    "@hapi/hoek": ^9.0.0
-    "@hapi/topo": ^5.0.0
-    "@sideway/address": ^4.1.3
-    "@sideway/formula": ^3.0.0
-    "@sideway/pinpoint": ^2.0.0
-  checksum: 6a20d009d2fa8a72dbfd9bc739d240f678b09d3a16c05b4bfb4e2d0503e60f7d7914250f0bfc52fb79a537490739ba36a1ace00a05b8ddecaaacfcedafc5c8b9
-  languageName: node
-  linkType: hard
-
 "jquery@npm:3.5.1":
   version: 3.5.1
   resolution: "jquery@npm:3.5.1"
@@ -17307,15 +17243,6 @@ __metadata:
     react: ^16.6.0 || ^17.0.0 || ^18.0.0
     react-dom: ^16.6.0 || ^17.0.0 || ^18.0.0
   checksum: 7ca7e47f8af14ea186688b512a87ab912bf6041312b297f92516341b140b3f0f8aedf5a44d226d99e69ed067b0cc106e38aeb9c9b738ffcc63d10721c844db90
-  languageName: node
-  linkType: hard
-
-"react-hook-form@npm:7.22.3":
-  version: 7.22.3
-  resolution: "react-hook-form@npm:7.22.3"
-  peerDependencies:
-    react: ^16.8.0 || ^17
-  checksum: ea95034df3f6cefe0d58cc328605898dbc2864618918e1182e07dbd497999afe3927093675ef06ac70f68827c793f99c176915eb41b7d8d578eba3fd88e10773
   languageName: node
   linkType: hard
 
