@@ -22,6 +22,16 @@
  *
  ******************************************************************************/
 
+const hashString = (str) => {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = (hash << 5) - hash + char
+    hash &= hash
+  }
+  return new Uint32Array([hash])[0].toString(36)
+}
+
 export function grid(rootElement, _paginationFn, id) {
   const defaults = {
     gridID: 'qdb-grid',
@@ -583,18 +593,6 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function layoutStoreGetColumnSetSha2560(callback) {
-    const data = layoutStoreTextEncoder.encode(layoutStoreColumnSetKey)
-    const promise = crypto.subtle.digest('SHA-256', data)
-    promise.then((buf) => {
-      layoutStoreColumnSetSha256 = btoa(
-        new Uint8Array(buf)
-          .reduce((data, byte) => data + String.fromCharCode(byte), '')
-      )
-      callback()
-    })
-  }
-
   function layoutStoreComputeKeyAndHash(callback) {
     // SHA-256 is that of the "key" and "key" is
     // stringified JSON. This JSON is a list of column name + type pairs. The idea
@@ -605,7 +603,8 @@ export function grid(rootElement, _paginationFn, id) {
       columnSet.push({name: col.name, type: col.type})
     }
     layoutStoreColumnSetKey = JSON.stringify(columnSet)
-    layoutStoreGetColumnSetSha2560(callback)
+    layoutStoreColumnSetSha256 = hashString(layoutStoreColumnSetKey)
+    callback()
   }
 
   function layoutStoreSaveAll0() {

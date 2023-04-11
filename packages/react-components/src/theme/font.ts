@@ -1,4 +1,6 @@
-export const size = {
+export type Size = "ms" | "xs" | "sm" | "md" | "lg" | "xl" | "hg";
+
+export const size: { [key in Size]: string } = {
   ms: "1rem",
   xs: "1.2rem",
   sm: "1.3rem",
