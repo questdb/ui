@@ -1,5 +1,4 @@
 {
-  "tsserver.tsdk": ".yarn/sdks/typescript/lib",
   "eslint.packageManager": "yarn",
   "eslint.nodePath": ".yarn/sdks",
   "prettier.semi": false,
@@ -12,5 +11,7 @@
     "typescript",
     "typescriptreact"
   ],
-  "eslint.format.enable": true
+  "eslint.format.enable": true,
+  "tsserver.useLocalTsdk": true,
+  "tsserver.tsdk": "${workspaceFolder}/.yarn/sdks/typescript/lib"
 }
