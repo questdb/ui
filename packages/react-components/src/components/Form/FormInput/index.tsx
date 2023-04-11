@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { Input as UnstyledInput } from "../../Input";
 import styled from "styled-components";
-import { Button } from "@questdb/react-components";
+import { Button } from "../../Button";
 import { Eye, EyeOff, Refresh } from "@styled-icons/remix-line";
 import generator from "generate-password";
 
-interface FormInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string;
   placeholder?: string;
-  type?: React.HTMLInputTypeAttribute;
+  type?: React.InputHTMLAttributes<HTMLInputElement>["type"];
   generatePassword?: boolean;
   generatePasswordRules?: {
     length: number;
@@ -17,7 +17,7 @@ interface FormInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   };
   showPassword?: boolean;
   autoFocus?: boolean;
-}
+};
 
 const Wrapper = styled.div`
   display: flex;

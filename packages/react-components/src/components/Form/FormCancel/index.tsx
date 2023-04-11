@@ -1,13 +1,12 @@
 import React from "react";
 import type { Props as ButtonProps } from "../../../components/Button";
 import { Button } from "../../../components/Button";
-import { FormCancelVariant } from "../../../types";
-import { useForm, useFormContext } from "react-hook-form";
+import { useFormContext } from "react-hook-form";
 
 type Props<TFormValues> = {
   children: React.ReactNode;
   disabled?: boolean;
-  variant?: FormCancelVariant;
+  variant?: "warning" | "secondary";
   prefixIcon?: ButtonProps["prefixIcon"];
   defaultValues?: TFormValues;
 };

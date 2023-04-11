@@ -1,10 +1,17 @@
 import Joi from "joi";
-import { FormSchema } from "../../../types";
 
-export const getValidationSchema = (formSchema: FormSchema) => {
+export type Schema = {
+  [key: string]: {
+    disabled?: boolean;
+    validation: Joi.AnySchema;
+    helperText?: string;
+  };
+};
+
+export const getValidationSchema = (schema: Schema) => {
   let out: Joi.Schema = Joi.object(
-    Object.keys(formSchema).reduce(
-      (o, key) => ({ ...o, [key]: formSchema[key].validation }),
+    Object.keys(schema).reduce(
+      (o, key) => ({ ...o, [key]: schema[key].validation }),
       {}
     )
   );

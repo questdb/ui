@@ -4,7 +4,7 @@ import { useFormContext } from "react-hook-form";
 import { Text } from "../../../components/Text";
 
 type Props = {
-  name?: string;
+  name: string;
   label?: React.ReactNode;
   afterLabel?: React.ReactNode;
   helperText?: React.ReactNode;
@@ -90,7 +90,7 @@ export const FormItem = ({
         ))}
 
       {name && errors && errors[name] && (
-        <Text color="red">{errors[name].message}</Text>
+        <Text color="red">{errors[name]?.message}</Text>
       )}
     </Root>
   );

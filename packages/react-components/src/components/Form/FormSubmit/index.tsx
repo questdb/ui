@@ -1,12 +1,11 @@
 import React from "react";
 import type { Props as ButtonProps } from "../../../components/Button";
 import { Button } from "../../../components/Button";
-import { FormSubmitVariant } from "../../../types";
 
 type Props = {
   children: React.ReactNode;
   disabled?: boolean;
-  variant?: FormSubmitVariant;
+  variant?: "error" | "success" | "warning" | "primary";
   prefixIcon?: ButtonProps["prefixIcon"];
 };
 
