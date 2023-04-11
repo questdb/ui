@@ -14,3 +14,11 @@ export type ProcessedFile = {
 }
 
 export type WriteMode = "append" | "overwrite"
+
+// TODO: Refactor @questdb/react-components/Badge to ditch enum as prop value
+export enum BadgeType {
+  SUCCESS = "success",
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
+}

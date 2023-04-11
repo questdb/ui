@@ -1,12 +1,7 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
-import {
-  Button,
-  Heading,
-  Switch,
-  Table,
-  Props as TableProps,
-} from "@questdb/react-components"
+import { Button, Heading, Switch, Table } from "@questdb/react-components"
+import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { PopperHover, Text, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
 import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
@@ -16,6 +11,7 @@ import { FiletypeCsv } from "styled-icons/bootstrap"
 import { QuestContext } from "../../../providers"
 import { ProcessedFile, WriteMode } from "./types"
 import { UploadActions } from "./upload-actions"
+import { RenameTableDialog } from "./rename-table-dialog"
 
 const StyledTable = styled(Table)`
   width: 100%;
@@ -74,6 +70,9 @@ export const FilesToUpload = ({
   onFileUpload,
 }: Props) => {
   const { quest } = useContext(QuestContext)
+  const [renameDialogOpen, setRenameDialogOpen] = React.useState<
+    string | null
+  >()
 
   return (
     <Box flexDirection="column" gap="2rem">
@@ -106,11 +105,16 @@ export const FilesToUpload = ({
             header: "Table name",
             align: "flex-end",
             width: "200px",
-            render: ({ data }) => (
-              <Button skin="transparent" prefixIcon={<Edit size="14px" />}>
-                {data.fileObject.name}
-              </Button>
-            ),
+            render: ({ data }) => {
+              const name = data.table_name ?? data.fileObject.name
+              return (
+                <RenameTableDialog
+                  open={renameDialogOpen === name}
+                  onOpenChange={setRenameDialogOpen}
+                  file={data}
+                />
+              )
+            },
           },
           {
             header: "Table schema",

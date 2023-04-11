@@ -1,6 +1,7 @@
 import React from "react"
 import { FileCheckStatus as FileStatusType } from "../../../utils"
-import { Badge, BadgeType } from "@questdb/react-components"
+import { Badge } from "@questdb/react-components"
+import { BadgeType } from "./types"
 
 const mapStatusToLabel = (
   status: FileStatusType | undefined,
