@@ -46,7 +46,6 @@
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.0.3",
     "@radix-ui/react-dialog": "^1.0.3",
-    "@radix-ui/react-switch": "^1.0.2",
-    "generate-password": "^1.7.0"
+    "@radix-ui/react-switch": "^1.0.2"
   }
 }

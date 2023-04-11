@@ -3787,7 +3787,6 @@ __metadata:
     "@types/styled-components": ^5.1.25
     babel-loader: ^8.2.5
     core-js: ^3.22.5
-    generate-password: ^1.7.0
     react: 17.0.2
     react-dom: 17.0.2
     react-is: 17.0.2
@@ -11914,13 +11913,6 @@ __metadata:
     strip-ansi: "npm:^6.0.1"
     wide-align: "npm:^1.1.5"
   checksum: 788b6bfe52f1dd8e263cda800c26ac0ca2ff6de0b6eee2fe0d9e3abf15e149b651bd27bf5226be10e6e3edb5c4e5d5985a5a1a98137e7a892f75eff76467ad2d
-  languageName: node
-  linkType: hard
-
-"generate-password@npm:^1.7.0":
-  version: 1.7.0
-  resolution: "generate-password@npm:1.7.0"
-  checksum: c0d13e9a9c72d84adc4365a0c0dbd28463f2da1975b4ec83f34a126b95122551274755db641418e5aa11c8d94c1d216c8da8314f38e56e05378e1a43792f4614
   languageName: node
   linkType: hard
 
