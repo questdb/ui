@@ -1,20 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { useFormContext } from "react-hook-form"
-import { Input as UnstyledInput } from "../../Input"
 import styled from "styled-components"
-import { Button } from "@questdb/react-components"
-import { Eye, EyeOff, Refresh } from "styled-icons/remix-line"
-import generator from "generate-password"
+import { Button, Input as UnstyledInput } from "@questdb/react-components"
+import { Eye, EyeOff } from "styled-icons/remix-line"
 
 export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string
   placeholder?: string
   type?: React.InputHTMLAttributes<HTMLInputElement>["type"]
-  generatePassword?: boolean
-  generatePasswordRules?: {
-    length: number
-    numbers?: boolean
-  }
   showPassword?: boolean
   autoFocus?: boolean
 }
@@ -25,13 +18,6 @@ const Wrapper = styled.div`
 `
 
 const Input = styled(UnstyledInput)<FormInputProps>`
-  ${(props) =>
-    (props.type === "password" || props.showPassword) &&
-    `
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  `};
-
   ${(props) => props.disabled && `opacity: 0.7;`}
 `
 
@@ -52,8 +38,6 @@ export const FormInput = ({
   placeholder,
   type = "text",
   disabled,
-  generatePassword,
-  generatePasswordRules,
   showPassword,
   autoFocus,
   autoComplete,
@@ -66,21 +50,6 @@ export const FormInput = ({
   const handleTogglePassword = useCallback(() => {
     setPasswordShown(!passwordShown)
   }, [passwordShown, setPasswordShown])
-
-  const regeneratePassword = useCallback(() => {
-    if (!generatePasswordRules) return
-    setValue(
-      name,
-      generator.generate({
-        length: generatePasswordRules.length,
-        numbers: generatePasswordRules.numbers ?? true,
-      }),
-      {
-        shouldDirty: true,
-      },
-    )
-    setPasswordShown(true)
-  }, [])
 
   useEffect(() => {
     if (autoFocus) {
@@ -101,16 +70,6 @@ export const FormInput = ({
         showPassword={showPassword}
         {...rest}
       />
-      {type === "password" && generatePassword && generatePasswordRules && (
-        <ToggleButton
-          skin="secondary"
-          onClick={regeneratePassword}
-          title="Regenerate the password"
-          type="button"
-        >
-          <Refresh size="18px" />
-        </ToggleButton>
-      )}
       {type === "password" && (
         <ToggleButton
           skin="secondary"

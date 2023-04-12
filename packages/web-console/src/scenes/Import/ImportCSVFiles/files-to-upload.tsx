@@ -111,6 +111,11 @@ export const FilesToUpload = ({
                 <RenameTableDialog
                   open={renameDialogOpen === name}
                   onOpenChange={setRenameDialogOpen}
+                  onNameChange={(name) => {
+                    onFilePropertyChange(data.fileObject.name, {
+                      table_name: name,
+                    })
+                  }}
                   file={data}
                 />
               )
