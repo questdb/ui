@@ -86,7 +86,7 @@ export const RenameTableDialog = ({
           validationSchema={schema}
         >
           <AlertDialog.Content>
-            <AlertDialog.Title>Rename table</AlertDialog.Title>
+            <AlertDialog.Title>Change table name</AlertDialog.Title>
 
             <StyledDescription>
               <Form.Item name="name" label="Table name">

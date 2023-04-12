@@ -63,14 +63,25 @@ export const ImportCSVFiles = ({}: Props) => {
             ),
           )
         }}
-        onFilePropertyChange={(filename, partialFile) => {
-          setFilesDropped(
-            filesDropped.map((file) =>
-              file.fileObject.name === filename
-                ? { ...file, ...partialFile }
-                : file,
-            ),
+        onFilePropertyChange={async (filename, partialFile) => {
+          const processedFiles = await Promise.all(
+            filesDropped.map(async (file) => {
+              if (file.fileObject.name === filename) {
+                // Only check for file existence if table name is changed
+                const result = partialFile.table_name
+                  ? await quest.checkCSVFile(partialFile.table_name)
+                  : await Promise.resolve({ status: file.status })
+                return {
+                  ...file,
+                  ...partialFile,
+                  status: result.status ?? undefined,
+                }
+              } else {
+                return file
+              }
+            }),
           )
+          setFilesDropped(processedFiles)
         }}
       />
     </Box>
