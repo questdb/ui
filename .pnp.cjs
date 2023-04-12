@@ -5557,6 +5557,47 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["@hapi/hoek", [\
+        ["npm:9.3.0", {\
+          "packageLocation": "./.yarn/cache/@hapi-hoek-npm-9.3.0-447eb8d274-4771c7a776.zip/node_modules/@hapi/hoek/",\
+          "packageDependencies": [\
+            ["@hapi/hoek", "npm:9.3.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@hapi/topo", [\
+        ["npm:5.1.0", {\
+          "packageLocation": "./.yarn/cache/@hapi-topo-npm-5.1.0-5e0b776809-604dfd5dde.zip/node_modules/@hapi/topo/",\
+          "packageDependencies": [\
+            ["@hapi/topo", "npm:5.1.0"],\
+            ["@hapi/hoek", "npm:9.3.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@hookform/resolvers", [\
+        ["npm:2.8.5", {\
+          "packageLocation": "./.yarn/cache/@hookform-resolvers-npm-2.8.5-211a9589f7-0751f0561e.zip/node_modules/@hookform/resolvers/",\
+          "packageDependencies": [\
+            ["@hookform/resolvers", "npm:2.8.5"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.8.5", {\
+          "packageLocation": "./.yarn/__virtual__/@hookform-resolvers-virtual-fd662e4db6/0/cache/@hookform-resolvers-npm-2.8.5-211a9589f7-0751f0561e.zip/node_modules/@hookform/resolvers/",\
+          "packageDependencies": [\
+            ["@hookform/resolvers", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.8.5"],\
+            ["@types/react-hook-form", null],\
+            ["react-hook-form", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.22.3"]\
+          ],\
+          "packagePeers": [\
+            "@types/react-hook-form",\
+            "react-hook-form"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["@humanwhocodes/config-array", [\
         ["npm:0.9.5", {\
           "packageLocation": "./.yarn/cache/@humanwhocodes-config-array-npm-0.9.5-030a025eae-8ba6281bc0.zip/node_modules/@humanwhocodes/config-array/",\
@@ -6465,6 +6506,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@babel/preset-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.17.12"],\
             ["@babel/preset-typescript", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.18.6"],\
             ["@fortawesome/fontawesome-free", "npm:5.13.0"],\
+            ["@hookform/resolvers", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.8.5"],\
             ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.5"],\
             ["@popperjs/core", "npm:2.4.2"],\
             ["@questdb/react-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#workspace:packages/react-components"],\
@@ -6509,10 +6551,12 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["eslint-plugin-standard", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.0.0"],\
             ["file-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:6.0.0"],\
             ["fork-ts-checker-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:6.1.0"],\
+            ["generate-password", "npm:1.7.0"],\
             ["handlebars", "npm:4.7.7"],\
             ["handlebars-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.7.1"],\
             ["html-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.5.0"],\
             ["jest", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:29.4.2"],\
+            ["joi", "npm:17.5.0"],\
             ["jquery", "npm:3.5.1"],\
             ["mini-css-extract-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.6.0"],\
             ["monaco-editor", "npm:0.30.1"],\
@@ -6522,6 +6566,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["react", "npm:17.0.2"],\
             ["react-contextmenu", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.14.0"],\
             ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
+            ["react-hook-form", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.22.3"],\
             ["react-is", "npm:18.1.0"],\
             ["react-popper", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.2.3"],\
             ["react-redux", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.2.0"],\
@@ -7074,6 +7119,34 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packagePeers": [\
             "@types/react",\
             "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@sideway/address", [\
+        ["npm:4.1.4", {\
+          "packageLocation": "./.yarn/cache/@sideway-address-npm-4.1.4-32f94bc9f5-b9fca2a93a.zip/node_modules/@sideway/address/",\
+          "packageDependencies": [\
+            ["@sideway/address", "npm:4.1.4"],\
+            ["@hapi/hoek", "npm:9.3.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@sideway/formula", [\
+        ["npm:3.0.1", {\
+          "packageLocation": "./.yarn/cache/@sideway-formula-npm-3.0.1-ee371b2ddf-e4beeebc9d.zip/node_modules/@sideway/formula/",\
+          "packageDependencies": [\
+            ["@sideway/formula", "npm:3.0.1"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@sideway/pinpoint", [\
+        ["npm:2.0.0", {\
+          "packageLocation": "./.yarn/cache/@sideway-pinpoint-npm-2.0.0-66d94e687e-0f4491e589.zip/node_modules/@sideway/pinpoint/",\
+          "packageDependencies": [\
+            ["@sideway/pinpoint", "npm:2.0.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -18284,6 +18357,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["generate-password", [\
+        ["npm:1.7.0", {\
+          "packageLocation": "./.yarn/cache/generate-password-npm-1.7.0-bd6ed15e37-c0d13e9a9c.zip/node_modules/generate-password/",\
+          "packageDependencies": [\
+            ["generate-password", "npm:1.7.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["gensync", [\
         ["npm:1.0.0-beta.2", {\
           "packageLocation": "./.yarn/cache/gensync-npm-1.0.0-beta.2-224666d72f-a7437e58c6.zip/node_modules/gensync/",\
@@ -20992,6 +21074,20 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["jest-util", "npm:29.4.2"],\
             ["merge-stream", "npm:2.0.0"],\
             ["supports-color", "npm:8.1.1"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["joi", [\
+        ["npm:17.5.0", {\
+          "packageLocation": "./.yarn/cache/joi-npm-17.5.0-02b9b7e605-6a20d009d2.zip/node_modules/joi/",\
+          "packageDependencies": [\
+            ["joi", "npm:17.5.0"],\
+            ["@hapi/hoek", "npm:9.3.0"],\
+            ["@hapi/topo", "npm:5.1.0"],\
+            ["@sideway/address", "npm:4.1.4"],\
+            ["@sideway/formula", "npm:3.0.1"],\
+            ["@sideway/pinpoint", "npm:2.0.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -24511,6 +24607,28 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             "@types/react-dom",\
             "@types/react",\
             "react-dom",\
+            "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["react-hook-form", [\
+        ["npm:7.22.3", {\
+          "packageLocation": "./.yarn/cache/react-hook-form-npm-7.22.3-68164760a3-ea95034df3.zip/node_modules/react-hook-form/",\
+          "packageDependencies": [\
+            ["react-hook-form", "npm:7.22.3"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.22.3", {\
+          "packageLocation": "./.yarn/__virtual__/react-hook-form-virtual-aa5a98b555/0/cache/react-hook-form-npm-7.22.3-68164760a3-ea95034df3.zip/node_modules/react-hook-form/",\
+          "packageDependencies": [\
+            ["react-hook-form", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.22.3"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["react", "npm:17.0.2"]\
+          ],\
+          "packagePeers": [\
+            "@types/react",\
             "react"\
           ],\
           "linkType": "HARD"\
