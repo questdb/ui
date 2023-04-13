@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { Page } from "../../components"
 import { Upload2 } from "styled-icons/remix-line"
 import { ImportCSVFiles } from "./ImportCSVFiles"
+import { BusEvent } from "../../consts"
 
 const Root = styled.div`
   display: flex;
@@ -14,7 +15,14 @@ const Import = () => {
   return (
     <Page title="Import" icon={<Upload2 size="20px" />}>
       <Root>
-        <ImportCSVFiles onImported={() => {}} />
+        <ImportCSVFiles
+          onImported={(result) => {
+            if (result.status === "OK") {
+              bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+              bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, result.location)
+            }
+          }}
+        />
       </Root>
     </Page>
   )

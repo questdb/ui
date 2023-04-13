@@ -7,7 +7,7 @@ export type SchemaColumn = {
 export type ProcessedFile = {
   fileObject: File
   status?: string
-  table_name?: string
+  table_name: string
   forceHeader: boolean
   overwrite: boolean
   schema?: SchemaColumn[]

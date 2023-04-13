@@ -140,6 +140,22 @@ type UploadOptions = {
   overwrite: boolean
 }
 
+export type UploadResultColumn = {
+  name: string
+  type: string
+  size: number
+  errors: number
+}
+
+export type UploadResult = {
+  columns: UploadResultColumn[]
+  header: boolean
+  location: string
+  rowsImported: number
+  rowsRejected: number
+  status: string
+}
+
 export class Client {
   private readonly _host: string
   private _controllers: AbortController[] = []
@@ -350,7 +366,7 @@ export class Client {
     name,
     forceHeader,
     overwrite,
-  }: UploadOptions): Promise<QueryResult<any>> {
+  }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
     formData.append("data", file)
     try {

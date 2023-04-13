@@ -5,9 +5,10 @@ import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile } from "./types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
+import { UploadResult } from "utils"
 
 type Props = {
-  onImported: () => void
+  onImported: (result: UploadResult) => void
 }
 
 const filterCSVFiles = (files: FileList) => {
@@ -16,7 +17,7 @@ const filterCSVFiles = (files: FileList) => {
     : []
 }
 
-export const ImportCSVFiles = ({}: Props) => {
+export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = React.useState<ProcessedFile[]>([])
 
@@ -28,7 +29,7 @@ export const ImportCSVFiles = ({}: Props) => {
         return {
           fileObject: file,
           table_name: file.name,
-          status: result.status ?? undefined,
+          status: result.status,
           schema: undefined,
           forceHeader: false,
           overwrite: false,
@@ -48,13 +49,13 @@ export const ImportCSVFiles = ({}: Props) => {
       <FilesToUpload
         files={filesDropped}
         onFileUpload={async (file) => {
-          await quest.uploadCSVFile({
+          const response = await quest.uploadCSVFile({
             file: file.fileObject,
-            name: file.table_name ?? file.fileObject.name,
+            name: file.table_name,
             forceHeader: file.forceHeader,
             overwrite: file.overwrite,
           })
-          // onImported upwards
+          onImported(response)
         }}
         onFileRemove={(removedFile) => {
           setFilesDropped(
@@ -74,7 +75,7 @@ export const ImportCSVFiles = ({}: Props) => {
                 return {
                   ...file,
                   ...partialFile,
-                  status: result.status ?? undefined,
+                  status: result.status,
                 }
               } else {
                 return file

@@ -12,7 +12,7 @@ const Root = styled(Box).attrs({ flexDirection: "column" })<{
   padding: 4rem 0 0;
   gap: 2rem;
   background: ${({ theme }) => theme.color.backgroundLighter};
-  border: 3px dashed ${({ isDragging }) => (isDragging ? "#5D6074" : "#333543")};
+  border: 3px dashed ${({ isDragging }) => (isDragging ? "#7f839b" : "#333543")};
   box-shadow: inset 0 0 10px 0 #1b1c23;
   transition: all 0.15s ease-in-out;
 `
