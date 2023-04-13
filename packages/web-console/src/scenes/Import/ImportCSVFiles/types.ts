@@ -15,6 +15,7 @@ export type ProcessedFile = {
   schema?: SchemaColumn[]
   uploaded: boolean
   uplloadResult?: UploadResult
+  error?: string
 }
 
 export type WriteMode = "append" | "overwrite"

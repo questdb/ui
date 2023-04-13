@@ -2,10 +2,12 @@ import React from "react"
 import { FileCheckStatus as FileStatusType } from "../../../utils"
 import { Badge } from "@questdb/react-components"
 import { BadgeType, ProcessedFile } from "./types"
+import { Box } from "../../../components/Box"
+import { Text } from "../../../components/Text"
 
 const mapStatusToLabel = (
   file: ProcessedFile,
-): { label: string; type: BadgeType } | undefined => {
+): { label: string; type: BadgeType; description?: string } | undefined => {
   if (file.uploaded) {
     return {
       label: "Uploaded",
@@ -13,8 +15,12 @@ const mapStatusToLabel = (
     }
   }
 
-  if (!file.status) {
-    return undefined
+  if (file.error) {
+    return {
+      label: "Upload error",
+      type: BadgeType.ERROR,
+      description: file.error,
+    }
   }
 
   switch (file.status) {
@@ -35,7 +41,14 @@ const mapStatusToLabel = (
 export const FileStatus = ({ file }: { file: ProcessedFile }) => {
   const mappedStatus = mapStatusToLabel(file)
   return mappedStatus ? (
-    <Badge type={mappedStatus.type}>{mappedStatus.label}</Badge>
+    <Box gap="1rem" align="flex-end" flexDirection="column">
+      <Badge type={mappedStatus.type}>{mappedStatus.label}</Badge>
+      {mappedStatus.description && (
+        <Text color="red" size="sm">
+          {mappedStatus.description}
+        </Text>
+      )}
+    </Box>
   ) : (
     <></>
   )

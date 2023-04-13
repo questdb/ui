@@ -57,19 +57,20 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             forceHeader: file.forceHeader,
             overwrite: file.overwrite,
           })
-          if (response.status === "OK") {
-            setFilesDropped(
-              filesDropped.map((f) => {
-                if (f.table_name === file.table_name) {
-                  return {
-                    ...f,
-                    uploaded: true,
-                    uploadResult: response,
-                  }
+          setFilesDropped(
+            filesDropped.map((f) => {
+              if (f.table_name === file.table_name) {
+                return {
+                  ...f,
+                  uploaded: response.status === "OK",
+                  uploadResult: response.status === "OK" ? response : undefined,
+                  error: response.status === "OK" ? undefined : response.status,
                 }
-                return f
-              }),
-            )
+              }
+              return f
+            }),
+          )
+          if (response.status === "OK") {
             onImported(response)
           }
         }}
@@ -92,6 +93,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                   ...file,
                   ...partialFile,
                   status: result.status,
+                  error: partialFile.table_name ? undefined : file.error, // reset prior error if table name is changed
                 }
               } else {
                 return file
