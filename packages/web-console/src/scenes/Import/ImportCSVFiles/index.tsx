@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -19,9 +19,9 @@ const filterCSVFiles = (files: FileList) => {
 
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
-  const [filesDropped, setFilesDropped] = React.useState<ProcessedFile[]>([])
+  const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
 
-  const getFileConfigs = async (files: FileList) => {
+  const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
     const csvFiles = filterCSVFiles(files)
     return await Promise.all(
       csvFiles.map(async (file) => {
@@ -33,6 +33,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           schema: undefined,
           forceHeader: false,
           overwrite: false,
+          uploaded: false,
+          uploadResult: undefined,
         }
       }),
     )
@@ -55,7 +57,21 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             forceHeader: file.forceHeader,
             overwrite: file.overwrite,
           })
-          onImported(response)
+          if (response.status === "OK") {
+            setFilesDropped(
+              filesDropped.map((f) => {
+                if (f.table_name === file.table_name) {
+                  return {
+                    ...f,
+                    uploaded: true,
+                    uploadResult: response,
+                  }
+                }
+                return f
+              }),
+            )
+            onImported(response)
+          }
         }}
         onFileRemove={(removedFile) => {
           setFilesDropped(

@@ -1,3 +1,5 @@
+import { UploadResult } from "utils"
+
 export type SchemaColumn = {
   name: string
   type: string
@@ -6,11 +8,13 @@ export type SchemaColumn = {
 
 export type ProcessedFile = {
   fileObject: File
-  status?: string
+  status: string
   table_name: string
   forceHeader: boolean
   overwrite: boolean
   schema?: SchemaColumn[]
+  uploaded: boolean
+  uplloadResult?: UploadResult
 }
 
 export type WriteMode = "append" | "overwrite"

@@ -3,8 +3,7 @@ import { ProcessedFile, WriteMode } from "./types"
 import { Button, Select } from "@questdb/react-components"
 import { PopperHover, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
-import { Close, MenuAdd, Upload2 } from "styled-icons/remix-line"
-import { PageDelete } from "styled-icons/foundation"
+import { Close, Upload2 } from "styled-icons/remix-line"
 import { FileCheckStatus } from "../../../utils"
 
 type Props = {

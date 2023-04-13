@@ -1,4 +1,4 @@
-import React, { useContext } from "react"
+import React from "react"
 import styled from "styled-components"
 import { Button, Heading, Switch, Table } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
@@ -6,9 +6,8 @@ import { PopperHover, Text, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
 import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
 import { FileStatus } from "./file-status"
-import { Edit, Information, Table as TableIcon } from "styled-icons/remix-line"
+import { Information, Table as TableIcon } from "styled-icons/remix-line"
 import { FiletypeCsv } from "styled-icons/bootstrap"
-import { QuestContext } from "../../../providers"
 import { ProcessedFile, WriteMode } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
@@ -69,7 +68,6 @@ export const FilesToUpload = ({
   onFilePropertyChange,
   onFileUpload,
 }: Props) => {
-  const { quest } = useContext(QuestContext)
   const [renameDialogOpen, setRenameDialogOpen] = React.useState<
     string | null
   >()
@@ -99,7 +97,7 @@ export const FilesToUpload = ({
             header: "Status",
             align: "flex-end",
             width: "200px",
-            render: ({ data }) => <FileStatus status={data.status} />,
+            render: ({ data }) => <FileStatus file={data} />,
           },
           {
             header: "Table name",

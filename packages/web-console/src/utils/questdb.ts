@@ -370,8 +370,14 @@ export class Client {
     const formData = new FormData()
     formData.append("data", file)
     try {
+      const params = {
+        fmt: "json",
+        name,
+        forceHeader: forceHeader ? "true" : "false",
+        overwrite: overwrite ? "true" : "false",
+      }
       const response: Response = await fetch(
-        `${this._host}/imp?fmt=json&name=${name}&forceHeader=${forceHeader}&overwrite=${overwrite}`,
+        `${this._host}/imp?${new URLSearchParams(params)}`,
         {
           method: "POST",
           body: formData,

@@ -1,16 +1,23 @@
 import React from "react"
 import { FileCheckStatus as FileStatusType } from "../../../utils"
 import { Badge } from "@questdb/react-components"
-import { BadgeType } from "./types"
+import { BadgeType, ProcessedFile } from "./types"
 
 const mapStatusToLabel = (
-  status: FileStatusType | undefined,
+  file: ProcessedFile,
 ): { label: string; type: BadgeType } | undefined => {
-  if (!status) {
+  if (file.uploaded) {
+    return {
+      label: "Uploaded",
+      type: BadgeType.SUCCESS,
+    }
+  }
+
+  if (!file.status) {
     return undefined
   }
 
-  switch (status) {
+  switch (file.status) {
     case FileStatusType.EXISTS:
       return {
         label: "Table already exists",
@@ -25,8 +32,8 @@ const mapStatusToLabel = (
   }
 }
 
-export const FileStatus = ({ status }: { status: string | undefined }) => {
-  const mappedStatus = mapStatusToLabel(status as FileStatusType)
+export const FileStatus = ({ file }: { file: ProcessedFile }) => {
+  const mappedStatus = mapStatusToLabel(file)
   return mappedStatus ? (
     <Badge type={mappedStatus.type}>{mappedStatus.label}</Badge>
   ) : (
