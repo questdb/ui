@@ -120,7 +120,23 @@ export const FilesToUpload = ({
             },
           },
           {
-            header: "Table schema",
+            header: (
+              <PopperHover
+                placement="bottom"
+                trigger={
+                  <Box align="center" gap="0.5rem">
+                    <Information size="16px" />
+                    Table schema
+                  </Box>
+                }
+              >
+                <Tooltip>
+                  Optional. By default, QuestDB will infer schema from the CSV
+                  file structure
+                </Tooltip>
+              </PopperHover>
+            ),
+
             align: "flex-end",
             width: "150px",
             render: ({ data }) => (
