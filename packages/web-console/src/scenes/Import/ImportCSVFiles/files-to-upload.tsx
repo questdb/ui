@@ -130,34 +130,6 @@ export const FilesToUpload = ({
             ),
           },
           {
-            header: (
-              <PopperHover
-                placement="bottom"
-                trigger={
-                  <Box align="center" gap="0.5rem">
-                    <Information size="14px" />
-                    Force header
-                  </Box>
-                }
-              >
-                <Tooltip>
-                  Enable in case of problems with automated header row detection
-                </Tooltip>
-              </PopperHover>
-            ),
-            align: "flex-end",
-            width: "150px",
-            render: ({ data }) => (
-              <Switch
-                onChange={(value) => {
-                  onFilePropertyChange(data.fileObject.name, {
-                    forceHeader: value,
-                  })
-                }}
-              />
-            ),
-          },
-          {
             header: "Actions",
             align: "flex-end",
             width: "300px",
@@ -166,9 +138,9 @@ export const FilesToUpload = ({
                 file={data}
                 onUpload={onFileUpload}
                 onRemove={onFileRemove}
-                onModeChange={(mode: WriteMode) => {
-                  onFilePropertyChange(data.fileObject.name, {
-                    overwrite: mode === "overwrite",
+                onSettingsChange={(settings) => {
+                  onFilePropertyChange(data.table_name, {
+                    settings,
                   })
                 }}
               />

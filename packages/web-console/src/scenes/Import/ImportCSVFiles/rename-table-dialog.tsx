@@ -10,6 +10,7 @@ import { Edit } from "styled-icons/remix-line"
 import { Undo } from "styled-icons/boxicons-regular"
 import { Text } from "../../../components/Text"
 import { Form } from "../../../components/Form"
+import { Box } from "../../../components/Box"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import styled from "styled-components"
@@ -86,7 +87,12 @@ export const RenameTableDialog = ({
           validationSchema={schema}
         >
           <AlertDialog.Content>
-            <AlertDialog.Title>Change table name</AlertDialog.Title>
+            <AlertDialog.Title>
+              <Box>
+                <Edit size={20} />
+                Change table name
+              </Box>
+            </AlertDialog.Title>
 
             <StyledDescription>
               <Form.Item name="name" label="Table name">

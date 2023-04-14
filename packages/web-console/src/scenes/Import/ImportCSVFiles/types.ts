@@ -1,4 +1,4 @@
-import { UploadResult } from "utils"
+import { UploadResult, UploadModeSettings } from "utils"
 
 export type SchemaColumn = {
   name: string
@@ -10,8 +10,7 @@ export type ProcessedFile = {
   fileObject: File
   status: string
   table_name: string
-  forceHeader: boolean
-  overwrite: boolean
+  settings: UploadModeSettings
   schema?: SchemaColumn[]
   uploaded: boolean
   uplloadResult?: UploadResult

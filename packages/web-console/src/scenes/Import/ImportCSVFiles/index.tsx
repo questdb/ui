@@ -31,8 +31,13 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           table_name: file.name,
           status: result.status,
           schema: undefined,
-          forceHeader: false,
-          overwrite: false,
+          settings: {
+            forceHeader: false,
+            overwrite: false,
+            skipLev: false,
+            delimiter: "",
+            atomicity: "skipCol",
+          },
           uploaded: false,
           uploadResult: undefined,
         }
@@ -54,8 +59,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           const response = await quest.uploadCSVFile({
             file: file.fileObject,
             name: file.table_name,
-            forceHeader: file.forceHeader,
-            overwrite: file.overwrite,
+            settings: file.settings,
           })
           setFilesDropped(
             filesDropped.map((f) => {

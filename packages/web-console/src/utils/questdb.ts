@@ -133,11 +133,18 @@ export type FileCheckResponse = {
   status: FileCheckStatus
 }
 
+export type UploadModeSettings = {
+  forceHeader: boolean
+  overwrite: boolean
+  skipLev: boolean
+  delimiter: string
+  atomicity: string
+}
+
 type UploadOptions = {
   file: File
   name: string
-  forceHeader: boolean
-  overwrite: boolean
+  settings: UploadModeSettings
 }
 
 export type UploadResultColumn = {
@@ -364,17 +371,22 @@ export class Client {
   async uploadCSVFile({
     file,
     name,
-    forceHeader,
-    overwrite,
+    settings,
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
     formData.append("data", file)
     try {
+      const serializedSettings = Object.keys(settings).reduce(
+        (acc, key) => ({
+          ...acc,
+          [key]: settings[key as keyof UploadModeSettings].toString(),
+        }),
+        {},
+      )
       const params = {
         fmt: "json",
         name,
-        forceHeader: forceHeader ? "true" : "false",
-        overwrite: overwrite ? "true" : "false",
+        ...serializedSettings,
       }
       const response: Response = await fetch(
         `${this._host}/imp?${new URLSearchParams(params)}`,
