@@ -28,6 +28,7 @@ const StyledTable = styled(Table)`
 
   tbody td {
     background: ${({ theme }) => theme.color.backgroundLighter};
+    vertical-align: top;
 
     &:first-child {
       border-top-left-radius: ${({ theme }) => theme.borderRadius};
@@ -108,9 +109,10 @@ export const FilesToUpload = ({
                 <FileStatus file={data} />
                 {data.uploadResult && (
                   <Text color="green" size="sm">
-                    Imported {data.uploadResult.rowsImported} row
+                    Imported {data.uploadResult.rowsImported.toLocaleString()}{" "}
+                    row
                     {data.uploadResult.rowsImported > 1 ? "s" : ""}, rejected{" "}
-                    {data.uploadResult.rowsRejected}
+                    {data.uploadResult.rowsRejected.toLocaleString()}
                   </Text>
                 )}
               </Box>
