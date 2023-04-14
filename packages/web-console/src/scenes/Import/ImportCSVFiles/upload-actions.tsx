@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { ProcessedFile, WriteMode } from "./types"
+import { ProcessedFile } from "./types"
 import { Button } from "@questdb/react-components"
 import { PopperHover, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"

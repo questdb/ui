@@ -40,7 +40,10 @@ const schema = Joi.object({
   name: Joi.string()
     .required()
     .custom((value, helpers) => {
-      if (!isValidTableName(value)) {
+      if (
+        !isValidTableName(value) ||
+        ["telemetry", "telemetry_config"].includes(value)
+      ) {
         return helpers.error("string.validTableName")
       }
       return value
@@ -107,6 +110,10 @@ export const RenameTableDialog = ({
                     <strong>{`? , ' " \\ / : ) ( + * & ~ \r \n`}</strong>
                   </li>
                   <li>No control characters and UTF-8 BOM (Byte Order Mark)</li>
+                  <li>
+                    Cannot be named <strong>telemetry</strong> or{" "}
+                    <strong>telemetry_config</strong>
+                  </li>
                 </List>
               </Text>
             </StyledDescription>
