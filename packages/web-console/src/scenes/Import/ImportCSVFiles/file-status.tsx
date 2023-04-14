@@ -4,14 +4,28 @@ import { Badge } from "@questdb/react-components"
 import { BadgeType, ProcessedFile } from "./types"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
+import styled from "styled-components"
+import { CheckboxCircle } from "styled-icons/remix-fill"
+
+const CheckboxCircleIcon = styled(CheckboxCircle)`
+  color: ${({ theme }) => theme.color.green};
+`
 
 const mapStatusToLabel = (
   file: ProcessedFile,
-): { label: string; type: BadgeType; description?: string } | undefined => {
+):
+  | {
+      label: string
+      type: BadgeType
+      description?: string
+      icon?: React.ReactNode
+    }
+  | undefined => {
   if (file.uploaded) {
     return {
       label: "Uploaded",
       type: BadgeType.SUCCESS,
+      icon: <CheckboxCircleIcon size="16px" />,
     }
   }
 
@@ -48,7 +62,11 @@ export const FileStatus = ({ file }: { file: ProcessedFile }) => {
   const mappedStatus = mapStatusToLabel(file)
   return mappedStatus ? (
     <Box gap="1rem" align="flex-end" flexDirection="column">
-      <Badge type={mappedStatus.type}>{mappedStatus.label}</Badge>
+      <Badge type={mappedStatus.type}>
+        <Box gap="0.5rem">
+          {mappedStatus.icon} {mappedStatus.label}
+        </Box>
+      </Badge>
       {mappedStatus.description && (
         <Text color="red" size="sm">
           {mappedStatus.description}
