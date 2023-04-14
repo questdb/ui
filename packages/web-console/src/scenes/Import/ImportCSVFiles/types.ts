@@ -13,7 +13,7 @@ export type ProcessedFile = {
   settings: UploadModeSettings
   schema?: SchemaColumn[]
   uploaded: boolean
-  uplloadResult?: UploadResult
+  uploadResult?: UploadResult
   error?: string
 }
 

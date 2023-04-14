@@ -18,20 +18,26 @@ const StyledTable = styled(Table)`
   border-collapse: separate;
   border-spacing: 0 2rem;
 
-  tr {
-    border-radius: ${({ theme }) => theme.borderRadius};
-  }
-
   th {
-    padding: 0 1rem;
+    padding: 0 2rem;
   }
 
   td {
-    padding: 1rem;
+    padding: 2rem;
   }
 
-  tbody tr {
+  tbody td {
     background: ${({ theme }) => theme.color.backgroundLighter};
+
+    &:first-child {
+      border-top-left-radius: ${({ theme }) => theme.borderRadius};
+      border-bottom-left-radius: ${({ theme }) => theme.borderRadius};
+    }
+
+    &:last-child {
+      border-top-right-radius: ${({ theme }) => theme.borderRadius};
+      border-bottom-right-radius: ${({ theme }) => theme.borderRadius};
+    }
   }
 `
 
@@ -80,10 +86,10 @@ export const FilesToUpload = ({
           {
             header: "File",
             align: "flex-start",
-            width: "40%",
+            width: "35%",
             render: ({ data }) => (
               <File>
-                <FiletypeCsv size="32px" />
+                <FiletypeCsv size="36px" />
                 <FileDetails>
                   <Text color="foreground">{data.fileObject.name}</Text>
                   <Text color="gray2">
@@ -96,8 +102,19 @@ export const FilesToUpload = ({
           {
             header: "Status",
             align: "flex-end",
-            width: "200px",
-            render: ({ data }) => <FileStatus file={data} />,
+            width: "250px",
+            render: ({ data }) => (
+              <Box flexDirection="column" align="flex-end" gap="1rem">
+                <FileStatus file={data} />
+                {data.uploadResult && (
+                  <Text color="green" size="sm">
+                    Imported {data.uploadResult.rowsImported} row
+                    {data.uploadResult.rowsImported > 1 ? "s" : ""}, rejected{" "}
+                    {data.uploadResult.rowsRejected}
+                  </Text>
+                )}
+              </Box>
+            ),
           },
           {
             header: "Table name",
@@ -141,7 +158,11 @@ export const FilesToUpload = ({
             width: "150px",
             render: ({ data }) => (
               <Button skin="secondary" prefixIcon={<TableIcon size="18px" />}>
-                Add
+                {data.uploadResult
+                  ? `${data.uploadResult.columns.length} column${
+                      data.uploadResult.columns.length > 1 ? "s" : ""
+                    }`
+                  : "Add"}
               </Button>
             ),
           },
