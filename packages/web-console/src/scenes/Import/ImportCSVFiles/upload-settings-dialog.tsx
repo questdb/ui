@@ -190,7 +190,7 @@ export const UploadSettingsDialog = ({
           <Overlay primitive={AlertDialog.Overlay} />
         </ForwardRef>
       </AlertDialog.Portal>
-      <AlertDialog.Content>
+      <AlertDialog.Content maxwidth="60rem">
         <AlertDialog.Title>
           <Box>
             <Settings4 size={20} />
