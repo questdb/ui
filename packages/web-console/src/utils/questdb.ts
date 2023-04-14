@@ -127,6 +127,7 @@ export type Release = {
 export enum FileCheckStatus {
   EXISTS = "Exists",
   DOES_NOT_EXIST = "Does not exist",
+  RESERVED_NAME = "Reserved name",
 }
 
 export type FileCheckResponse = {

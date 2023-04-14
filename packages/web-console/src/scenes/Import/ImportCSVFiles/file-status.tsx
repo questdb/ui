@@ -30,6 +30,12 @@ const mapStatusToLabel = (
         type: BadgeType.WARNING,
       }
       break
+    case FileStatusType.RESERVED_NAME:
+      return {
+        label: "Reserved table name",
+        type: BadgeType.ERROR,
+      }
+      break
     case FileStatusType.DOES_NOT_EXIST:
       return {
         label: "Ready to upload",
