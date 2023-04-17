@@ -140,6 +140,7 @@ export type UploadModeSettings = {
   skipLev: boolean
   delimiter: string
   atomicity: string
+  durable: boolean
 }
 
 export type SchemaColumn = {
