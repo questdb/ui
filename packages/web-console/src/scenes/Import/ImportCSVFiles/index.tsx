@@ -5,7 +5,7 @@ import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile } from "./types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
-import { UploadResult } from "utils"
+import { pick, SchemaColumn, UploadResult } from "../../../utils"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -30,7 +30,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           fileObject: file,
           table_name: file.name,
           status: result.status,
-          schema: undefined,
+          schema: [],
           settings: {
             forceHeader: false,
             overwrite: false,
@@ -60,6 +60,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             file: file.fileObject,
             name: file.table_name,
             settings: file.settings,
+            schema: file.schema,
           })
           setFilesDropped(
             filesDropped.map((f) => {
@@ -68,6 +69,12 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                   ...f,
                   uploaded: response.status === "OK",
                   uploadResult: response.status === "OK" ? response : undefined,
+                  schema:
+                    response.status === "OK"
+                      ? response.columns.map(
+                          (c) => pick(c, ["name", "type"]) as SchemaColumn,
+                        )
+                      : [],
                   error: response.status === "OK" ? undefined : response.status,
                 }
               }

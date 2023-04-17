@@ -11,7 +11,7 @@ export type ProcessedFile = {
   status: string
   table_name: string
   settings: UploadModeSettings
-  schema?: SchemaColumn[]
+  schema: SchemaColumn[]
   uploaded: boolean
   uploadResult?: UploadResult
   error?: string

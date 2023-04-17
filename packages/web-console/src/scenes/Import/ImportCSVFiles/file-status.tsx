@@ -21,9 +21,11 @@ const mapStatusToLabel = (
       icon?: React.ReactNode
     }
   | undefined => {
-  if (file.uploaded) {
+  if (file.uploaded && file.uploadResult) {
     return {
-      label: "Uploaded",
+      label: `Imported ${file.uploadResult.rowsImported} row${
+        file.uploadResult.rowsImported > 1 ? "s" : ""
+      }`,
       type: BadgeType.SUCCESS,
       icon: <CheckboxCircleIcon size="16px" />,
     }

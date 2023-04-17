@@ -142,10 +142,17 @@ export type UploadModeSettings = {
   atomicity: string
 }
 
+export type SchemaColumn = {
+  name: string
+  type: string
+  pattern?: string
+}
+
 type UploadOptions = {
   file: File
   name: string
   settings: UploadModeSettings
+  schema: SchemaColumn[]
 }
 
 export type UploadResultColumn = {
@@ -373,6 +380,7 @@ export class Client {
     file,
     name,
     settings,
+    schema,
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
     formData.append("data", file)
@@ -390,7 +398,9 @@ export class Client {
         ...serializedSettings,
       }
       const response: Response = await fetch(
-        `${this._host}/imp?${new URLSearchParams(params)}`,
+        `${this._host}/imp?${new URLSearchParams(
+          params,
+        )}&schema=${JSON.stringify(schema)}`,
         {
           method: "POST",
           body: formData,

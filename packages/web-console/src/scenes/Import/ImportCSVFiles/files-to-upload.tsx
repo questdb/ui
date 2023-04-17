@@ -11,6 +11,7 @@ import { FiletypeCsv } from "styled-icons/bootstrap"
 import { ProcessedFile, WriteMode } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
+import { TableSchemaDialog } from "./table-schema-dialog"
 
 const StyledTable = styled(Table)`
   width: 100%;
@@ -28,7 +29,6 @@ const StyledTable = styled(Table)`
 
   tbody td {
     background: ${({ theme }) => theme.color.backgroundLighter};
-    vertical-align: top;
 
     &:first-child {
       border-top-left-radius: ${({ theme }) => theme.borderRadius};
@@ -79,6 +79,10 @@ export const FilesToUpload = ({
     string | null
   >()
 
+  const [schemaDialogOpen, setSchemaDialogOpen] = React.useState<
+    string | null
+  >()
+
   return (
     <Box flexDirection="column" gap="2rem">
       <Heading level={3}>Upload queue</Heading>
@@ -107,12 +111,10 @@ export const FilesToUpload = ({
             render: ({ data }) => (
               <Box flexDirection="column" align="flex-end" gap="1rem">
                 <FileStatus file={data} />
-                {data.uploadResult && (
-                  <Text color="green" size="sm">
-                    Imported {data.uploadResult.rowsImported.toLocaleString()}{" "}
-                    row
-                    {data.uploadResult.rowsImported > 1 ? "s" : ""}, rejected{" "}
-                    {data.uploadResult.rowsRejected.toLocaleString()}
+                {data.uploadResult && data.uploadResult.rowsRejected > 0 && (
+                  <Text color="orange" size="sm">
+                    {data.uploadResult.rowsRejected.toLocaleString()} row
+                    {data.uploadResult.rowsRejected > 1 ? "s" : ""} rejected
                   </Text>
                 )}
               </Box>
@@ -159,13 +161,16 @@ export const FilesToUpload = ({
             align: "flex-end",
             width: "150px",
             render: ({ data }) => (
-              <Button skin="secondary" prefixIcon={<TableIcon size="18px" />}>
-                {data.uploadResult
-                  ? `${data.uploadResult.columns.length} column${
-                      data.uploadResult.columns.length > 1 ? "s" : ""
-                    }`
-                  : "Add"}
-              </Button>
+              <TableSchemaDialog
+                open={schemaDialogOpen === data.table_name}
+                onOpenChange={setSchemaDialogOpen}
+                onSchemaChange={(schema) => {
+                  onFilePropertyChange(data.table_name, {
+                    schema: schema.schemaColumns,
+                  })
+                }}
+                file={data}
+              />
             ),
           },
           {
