@@ -91,7 +91,10 @@ export const TableSchemaDialog = ({
             <Button
               prefixIcon={<Undo size={18} />}
               skin="secondary"
-              onClick={() => onOpenChange(undefined)}
+              onClick={() => {
+                onOpenChange(undefined)
+              }}
+              type="button"
             >
               Dismiss
             </Button>

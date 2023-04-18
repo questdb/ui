@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect } from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
 import { Button, Select, Switch, Input } from "@questdb/react-components"
@@ -69,14 +69,17 @@ export const UploadSettingsDialog = ({
   const { delimiter, overwrite, forceHeader, skipLev, atomicity, durable } =
     file.settings
 
-  const [settings, setSettings] = React.useState<UploadModeSettings>({
+  const initialState = {
     delimiter,
     overwrite,
     forceHeader,
     skipLev,
     atomicity,
     durable,
-  })
+  }
+
+  const [settings, setSettings] =
+    React.useState<UploadModeSettings>(initialState)
 
   const options: Option[] = [
     {
@@ -275,7 +278,11 @@ export const UploadSettingsDialog = ({
           <Button
             prefixIcon={<Undo size={18} />}
             skin="secondary"
-            onClick={() => onOpenChange(false)}
+            onClick={() => {
+              setSettings(initialState)
+              onOpenChange(false)
+            }}
+            type="button"
           >
             Dismiss
           </Button>
