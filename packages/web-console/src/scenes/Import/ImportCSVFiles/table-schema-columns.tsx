@@ -45,10 +45,8 @@ const Columns = styled(Box).attrs({ align: "flex-end", gap: "1rem" })`
 `
 
 export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
-  const { control, reset } = useForm()
-  const { setValue, watch } = useFormContext()
+  const { setValue, watch, reset } = useFormContext()
   const { fields, append, remove } = useFieldArray({
-    control,
     name: "schemaColumns",
   })
   const [columnNames, setColumnNames] = useState<string[]>([])
@@ -130,7 +128,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
           onClick={() => {
             append({
               name: "",
-              type: "AUTO",
+              type: "",
             })
             setColumnNames([...columnNames, ""])
           }}
