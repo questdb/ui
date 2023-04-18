@@ -49,6 +49,7 @@ const Wrapper = styled.div`
 const LeftContainer = styled.div`
   display: flex;
   padding-left: 1rem;
+  margin-top: 10px;
   align-items: center;
   flex: 1;
 `
