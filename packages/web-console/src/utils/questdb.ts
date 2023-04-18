@@ -402,7 +402,7 @@ export class Client {
         fmt: "json",
         name,
         partitionBy,
-        timestamp,
+        ...(timestamp ? { timestamp } : {}),
         ...serializedSettings,
       }
       const response: Response = await fetch(
