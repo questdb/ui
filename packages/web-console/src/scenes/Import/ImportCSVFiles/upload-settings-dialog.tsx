@@ -61,7 +61,7 @@ export const UploadSettingsDialog = ({
   onOpenChange,
   onSubmit,
 }: Props) => {
-  const { delimiter, overwrite, forceHeader, skipLev, atomicity } =
+  const { delimiter, overwrite, forceHeader, skipLev, atomicity, durable } =
     file.settings
 
   const [settings, setSettings] = React.useState<UploadModeSettings>({
@@ -70,6 +70,7 @@ export const UploadSettingsDialog = ({
     forceHeader,
     skipLev,
     atomicity,
+    durable,
   })
 
   const options: Option[] = [
@@ -168,6 +169,19 @@ export const UploadSettingsDialog = ({
         </>
       ),
       defaultValue: settings.skipLev,
+    },
+    {
+      type: "switch",
+      name: "durable",
+      label: "Durable",
+      description: (
+        <>
+          When set to <strong>true</strong>, import will be resilient against OS
+          errors or power losses by forcing the data to be fully persisted
+          before sending a response back to the user.
+        </>
+      ),
+      defaultValue: settings.durable,
     },
   ]
 

@@ -37,6 +37,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             skipLev: false,
             delimiter: "",
             atomicity: "skipCol",
+            durable: false,
           },
           uploaded: false,
           uploadResult: undefined,
