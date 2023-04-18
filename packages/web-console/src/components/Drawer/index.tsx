@@ -39,6 +39,7 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width: ${({ width }) => width ?? "50rem"};
   max-width: 100%;
   height: 100%;
+  overflow: auto;
   border-left: 1px ${({ theme }) => theme.color.selection} solid;
   z-index: 101;
 
