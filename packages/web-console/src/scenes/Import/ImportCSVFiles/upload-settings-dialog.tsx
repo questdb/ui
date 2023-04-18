@@ -1,20 +1,25 @@
-import React, { useEffect } from "react"
+import React from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
-import {
-  AlertDialog,
-  ForwardRef,
-  Button,
-  Overlay,
-  Select,
-  Switch,
-  Input,
-} from "@questdb/react-components"
+import { Button, Select, Switch, Input } from "@questdb/react-components"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 import { Settings4 } from "styled-icons/remix-line"
 import { Undo } from "styled-icons/boxicons-regular"
 import { UploadModeSettings } from "../../../utils"
+import { Drawer } from "../../../components/Drawer"
+
+const SettingsIcon = styled(Settings4)`
+  color: ${({ theme }) => theme.color.foreground};
+`
+
+const Content = styled(Box).attrs({ gap: "2rem", flexDirection: "column" })`
+  padding: 2rem;
+`
+
+const Actions = styled(Box).attrs({ gap: "1rem" })`
+  align-self: flex-end;
+`
 
 const Row = styled(Box).attrs({ justifyContent: "space-between", gap: "2rem" })`
   width: 100%;
@@ -186,122 +191,107 @@ export const UploadSettingsDialog = ({
   ]
 
   return (
-    <AlertDialog.Root open={open}>
-      <AlertDialog.Trigger asChild>
-        <ForwardRef>
-          <Button
-            skin="secondary"
-            prefixIcon={<Settings4 size="18px" />}
-            onClick={() => onOpenChange(true)}
-          >
-            Settings
-          </Button>
-        </ForwardRef>
-      </AlertDialog.Trigger>
-
-      <AlertDialog.Portal>
-        <ForwardRef>
-          <Overlay primitive={AlertDialog.Overlay} />
-        </ForwardRef>
-      </AlertDialog.Portal>
-      <AlertDialog.Content maxwidth="60rem">
-        <AlertDialog.Title>
-          <Box>
-            <Settings4 size={20} />
-            Upload settings
-          </Box>
-        </AlertDialog.Title>
-
-        <AlertDialog.Description>
-          <Box gap="2rem" flexDirection="column">
-            {options.map((option) => (
-              <Row key={option.name}>
-                <Box
-                  gap="1rem"
-                  flexDirection="column"
-                  align="flex-start"
-                  justifyContent="flex-start"
-                >
-                  <Text color="foreground" weight={600}>
-                    {option.label}
-                  </Text>
-                  {option.description && (
-                    <Text color="gray2" size="sm">
-                      {option.description}
-                    </Text>
-                  )}
-                </Box>
-                <InputWrapper>
-                  {option.type === "input" && (
-                    <Input
-                      name={option.name}
-                      defaultValue={option.defaultValue}
-                      placeholder={option.placeholder}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setSettings({
-                          ...settings,
-                          [option.name]: e.target.value,
-                        })
-                      }
-                    />
-                  )}
-                  {option.type === "select" && (
-                    <Select
-                      name={option.name}
-                      defaultValue={option.defaultValue as string}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                        setSettings({
-                          ...settings,
-                          [option.name]: e.target.value,
-                        })
-                      }
-                      options={option.options}
-                    />
-                  )}
-                  {option.type === "switch" && (
-                    <Switch
-                      checked={option.defaultValue}
-                      onChange={(value) =>
-                        setSettings({
-                          ...settings,
-                          [option.name]: value,
-                        })
-                      }
-                    />
-                  )}
-                </InputWrapper>
-              </Row>
-            ))}
-          </Box>
-        </AlertDialog.Description>
-
-        <AlertDialog.ActionButtons>
-          <AlertDialog.Cancel asChild>
-            <Button
-              prefixIcon={<Undo size={18} />}
-              skin="secondary"
-              onClick={() => onOpenChange(false)}
-            >
-              Dismiss
-            </Button>
-          </AlertDialog.Cancel>
-
-          <AlertDialog.Action asChild>
-            <ForwardRef>
-              <Button
-                prefixIcon={<Settings4 size={18} />}
-                skin="success"
-                onClick={() => {
-                  onSubmit(settings)
-                  onOpenChange(false)
-                }}
+    <Drawer
+      open={open}
+      title={
+        <Box>
+          <SettingsIcon size="20px" />
+          <Text color="foreground">Settings</Text>
+        </Box>
+      }
+      trigger={
+        <Button
+          skin="secondary"
+          prefixIcon={<Settings4 size="18px" />}
+          onClick={() => onOpenChange(true)}
+        >
+          Settings
+        </Button>
+      }
+    >
+      <Content>
+        <Box gap="2rem" flexDirection="column">
+          {options.map((option) => (
+            <Row key={option.name}>
+              <Box
+                gap="1rem"
+                flexDirection="column"
+                align="flex-start"
+                justifyContent="flex-start"
               >
-                Submit
-              </Button>
-            </ForwardRef>
-          </AlertDialog.Action>
-        </AlertDialog.ActionButtons>
-      </AlertDialog.Content>
-    </AlertDialog.Root>
+                <Text color="foreground" weight={600}>
+                  {option.label}
+                </Text>
+                {option.description && (
+                  <Text color="gray2" size="sm">
+                    {option.description}
+                  </Text>
+                )}
+              </Box>
+              <InputWrapper>
+                {option.type === "input" && (
+                  <Input
+                    name={option.name}
+                    defaultValue={option.defaultValue}
+                    placeholder={option.placeholder}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSettings({
+                        ...settings,
+                        [option.name]: e.target.value,
+                      })
+                    }
+                  />
+                )}
+                {option.type === "select" && (
+                  <Select
+                    name={option.name}
+                    defaultValue={option.defaultValue as string}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      setSettings({
+                        ...settings,
+                        [option.name]: e.target.value,
+                      })
+                    }
+                    options={option.options}
+                  />
+                )}
+                {option.type === "switch" && (
+                  <Switch
+                    checked={option.defaultValue}
+                    onChange={(value) =>
+                      setSettings({
+                        ...settings,
+                        [option.name]: value,
+                      })
+                    }
+                  />
+                )}
+              </InputWrapper>
+            </Row>
+          ))}
+        </Box>
+
+        <Actions>
+          <Button
+            prefixIcon={<Undo size={18} />}
+            skin="secondary"
+            onClick={() => onOpenChange(false)}
+          >
+            Dismiss
+          </Button>
+
+          <Button
+            prefixIcon={<Settings4 size={18} />}
+            skin="success"
+            onClick={() => {
+              onSubmit(settings)
+              onOpenChange(false)
+            }}
+          >
+            Submit
+          </Button>
+        </Actions>
+      </Content>
+    </Drawer>
   )
 }

@@ -11,6 +11,10 @@ import { SchemaColumn } from "utils"
 import { TableSchemaColumns } from "./table-schema-columns"
 import { Drawer } from "../../../components/Drawer"
 
+const StyledTableIcon = styled(TableIcon)`
+  color: ${({ theme }) => theme.color.foreground};
+`
+
 const Content = styled(Box).attrs({ gap: "2rem", flexDirection: "column" })`
   padding: 2rem;
 `
@@ -51,7 +55,12 @@ export const TableSchemaDialog = ({
 
   return (
     <Drawer
-      title={<Text color="foreground">Table schema</Text>}
+      title={
+        <Box gap="0.5rem">
+          <StyledTableIcon size="20px" />
+          <Text color="foreground">Table schema</Text>
+        </Box>
+      }
       open={open}
       trigger={
         <Button
