@@ -154,6 +154,8 @@ type UploadOptions = {
   name: string
   settings: UploadModeSettings
   schema: SchemaColumn[]
+  partitionBy: string
+  timestamp: string
 }
 
 export type UploadResultColumn = {
@@ -382,6 +384,8 @@ export class Client {
     name,
     settings,
     schema,
+    partitionBy,
+    timestamp,
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
     formData.append("data", file)
@@ -396,6 +400,8 @@ export class Client {
       const params = {
         fmt: "json",
         name,
+        partitionBy,
+        timestamp,
         ...serializedSettings,
       }
       const response: Response = await fetch(

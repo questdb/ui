@@ -22,6 +22,8 @@ const StyledDescription = styled(AlertDialog.Description)`
 
 type FormValues = {
   schemaColumns: SchemaColumn[]
+  partitionBy: string
+  timestamp: string
 }
 
 type Props = {

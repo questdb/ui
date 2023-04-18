@@ -147,7 +147,7 @@ export const FilesToUpload = ({
                 trigger={
                   <Box align="center" gap="0.5rem">
                     <Information size="16px" />
-                    Table schema
+                    Schema
                   </Box>
                 }
               >
@@ -167,6 +167,8 @@ export const FilesToUpload = ({
                 onSchemaChange={(schema) => {
                   onFilePropertyChange(data.table_name, {
                     schema: schema.schemaColumns,
+                    partitionBy: schema.partitionBy,
+                    timestamp: schema.timestamp,
                   })
                 }}
                 file={data}

@@ -31,6 +31,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           table_name: file.name,
           status: result.status,
           schema: [],
+          partitionBy: "NONE",
+          timestamp: "",
           settings: {
             forceHeader: false,
             overwrite: false,
@@ -57,11 +59,14 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
       <FilesToUpload
         files={filesDropped}
         onFileUpload={async (file) => {
+          console.log(file.timestamp)
           const response = await quest.uploadCSVFile({
             file: file.fileObject,
             name: file.table_name,
             settings: file.settings,
             schema: file.schema,
+            partitionBy: file.partitionBy,
+            timestamp: file.timestamp,
           })
           setFilesDropped(
             filesDropped.map((f) => {

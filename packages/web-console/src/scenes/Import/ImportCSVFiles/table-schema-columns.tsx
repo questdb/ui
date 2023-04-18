@@ -1,11 +1,13 @@
-import React, { useEffect } from "react"
+import React, { useEffect, useState } from "react"
 import styled from "styled-components"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, useFormContext } from "react-hook-form"
 import { SchemaColumn } from "utils"
 import { Box } from "../../../components/Box"
 import { Form } from "../../../components/Form"
+import { IconWithTooltip } from "../../../components"
 import { Button } from "@questdb/react-components"
-import { AddCircle, CloseCircle } from "styled-icons/remix-line"
+import { AddCircle, Close } from "styled-icons/remix-line"
+import { SortDown } from "styled-icons/boxicons-regular"
 
 const columnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -20,18 +22,29 @@ const columnTypes: { label: string; value: string }[] = [
   { label: "CHAR", value: "CHAR" },
   { label: "STRING", value: "STRING" },
   { label: "SYMBOL", value: "SYMBOL" },
+  { label: "TIMESTAMP", value: "TIMESTAMP" },
 ]
 
-const ColumnBox = styled(Box).attrs({ align: "flex-end", gap: "2rem" })`
+const partitionByOptions = ["NONE", "HOUR", "DAY", "MONTH", "YEAR"]
+
+const ColumnBox = styled(Box).attrs({ align: "flex-end", gap: "1rem" })`
   width: 100%;
+
+  > button {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 `
 
 export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   const { control, reset } = useForm()
+  const { setValue, watch } = useFormContext()
   const { fields, append, remove } = useFieldArray({
     control,
     name: "schemaColumns",
   })
+  const [columnNames, setColumnNames] = useState<string[]>([])
+  const watchTimestamp = watch("timestamp")
 
   useEffect(() => {
     reset({ schemaColumns: schema })
@@ -48,7 +61,14 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
         >
           <ColumnBox>
             <Form.Item name={`schemaColumns.${index}.name`} label="Column name">
-              <Form.Input name={`schemaColumns.${index}.name`} />
+              <Form.Input
+                name={`schemaColumns.${index}.name`}
+                onChange={(e) => {
+                  const cols = columnNames
+                  cols[index] = e.target.value
+                  setColumnNames(cols)
+                }}
+              />
             </Form.Item>
             <Form.Item name={`schemaColumns.${index}.type`} label="Column type">
               <Form.Select
@@ -57,12 +77,40 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
               />
             </Form.Item>
 
+            <IconWithTooltip
+              icon={
+                <Button
+                  skin={
+                    watchTimestamp !== "" &&
+                    columnNames[index] !== "" &&
+                    watchTimestamp === columnNames[index]
+                      ? "success"
+                      : "transparent"
+                  }
+                  onClick={() => {
+                    setValue("timestamp", columnNames[index])
+                  }}
+                  type="button"
+                >
+                  <SortDown size="18px" />
+                </Button>
+              }
+              tooltip="Set as designated timestamp"
+              placement="bottom"
+            />
+
             <Button
               skin="transparent"
-              onClick={() => remove(index)}
+              onClick={() => {
+                remove(index)
+                if (watchTimestamp === columnNames[index]) {
+                  setValue("timestamp", undefined)
+                }
+                setColumnNames(columnNames.filter((_, i) => i !== index))
+              }}
               type="button"
             >
-              <CloseCircle size="18px" />
+              <Close size="18px" />
             </Button>
           </ColumnBox>
         </Box>
@@ -71,17 +119,30 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
         <Button
           prefixIcon={<AddCircle size="18px" />}
           skin="transparent"
-          onClick={() =>
+          onClick={() => {
             append({
               name: "",
               type: "AUTO",
             })
-          }
+            setColumnNames([...columnNames, ""])
+          }}
           type="button"
         >
           Add
         </Button>
       </Box>
+      <ColumnBox>
+        <Form.Item name="partitionBy" label="Partition by">
+          <Form.Select
+            name="partitionBy"
+            options={partitionByOptions.map((item) => ({
+              label: item,
+              value: item,
+            }))}
+          />
+        </Form.Item>
+      </ColumnBox>
+      <Form.Input name="timestamp" hidden />
     </>
   )
 }

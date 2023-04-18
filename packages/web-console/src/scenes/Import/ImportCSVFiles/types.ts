@@ -12,6 +12,8 @@ export type ProcessedFile = {
   table_name: string
   settings: UploadModeSettings
   schema: SchemaColumn[]
+  partitionBy: string
+  timestamp: string
   uploaded: boolean
   uploadResult?: UploadResult
   error?: string

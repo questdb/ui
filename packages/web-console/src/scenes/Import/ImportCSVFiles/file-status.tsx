@@ -70,7 +70,7 @@ export const FileStatus = ({ file }: { file: ProcessedFile }) => {
         </Box>
       </Badge>
       {mappedStatus.description && (
-        <Text color="red" size="sm">
+        <Text color="red" size="sm" align="right">
           {mappedStatus.description}
         </Text>
       )}
