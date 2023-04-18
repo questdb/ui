@@ -78,11 +78,12 @@ const Header = styled.div`
 
 type DrawerProps = {
   children: React.ReactNode
-  title?: string
+  title?: React.ReactNode
   trigger: React.ReactNode
   width?: string
+  open: boolean
   onOpenChange?: (isOpen: boolean) => void
-  withCloseButton: boolean
+  withCloseButton?: boolean
 }
 
 export const Drawer = ({
@@ -90,10 +91,11 @@ export const Drawer = ({
   trigger,
   title,
   width,
+  open,
   onOpenChange,
   withCloseButton,
 }: DrawerProps) => (
-  <RadixDialog.Root onOpenChange={onOpenChange}>
+  <RadixDialog.Root onOpenChange={onOpenChange} open={open}>
     <RadixDialog.Trigger asChild>
       <ForwardRef>{trigger}</ForwardRef>
     </RadixDialog.Trigger>

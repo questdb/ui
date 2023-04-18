@@ -27,7 +27,15 @@ const columnTypes: { label: string; value: string }[] = [
 
 const partitionByOptions = ["NONE", "HOUR", "DAY", "MONTH", "YEAR"]
 
-const ColumnBox = styled(Box).attrs({ align: "flex-end", gap: "1rem" })`
+const Row = styled(Box).attrs({
+  flexDirection: "column",
+  align: "flex-start",
+  gap: "1rem",
+})`
+  width: 100%;
+`
+
+const Columns = styled(Box).attrs({ align: "flex-end", gap: "1rem" })`
   width: 100%;
 
   > button {
@@ -53,14 +61,14 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   return (
     <>
       {fields.map((field, index) => (
-        <Box
+        <Row
           gap="1rem"
           flexDirection="column"
           align="flex-start"
           key={field.id}
         >
-          <ColumnBox>
-            <Form.Item name={`schemaColumns.${index}.name`} label="Column name">
+          <Columns>
+            <Form.Item name={`schemaColumns.${index}.name`} label="Name">
               <Form.Input
                 name={`schemaColumns.${index}.name`}
                 onChange={(e) => {
@@ -70,7 +78,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                 }}
               />
             </Form.Item>
-            <Form.Item name={`schemaColumns.${index}.type`} label="Column type">
+            <Form.Item name={`schemaColumns.${index}.type`} label="Type">
               <Form.Select
                 name={`schemaColumns.${index}.type`}
                 options={columnTypes}
@@ -112,8 +120,8 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
             >
               <Close size="18px" />
             </Button>
-          </ColumnBox>
-        </Box>
+          </Columns>
+        </Row>
       ))}
       <Box align="center" justifyContent="center">
         <Button
@@ -128,10 +136,10 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
           }}
           type="button"
         >
-          Add
+          Add column
         </Button>
       </Box>
-      <ColumnBox>
+      <Columns>
         <Form.Item name="partitionBy" label="Partition by">
           <Form.Select
             name="partitionBy"
@@ -141,7 +149,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
             }))}
           />
         </Form.Item>
-      </ColumnBox>
+      </Columns>
       <Form.Input name="timestamp" hidden />
     </>
   )
