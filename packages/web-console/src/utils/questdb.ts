@@ -389,6 +389,7 @@ export class Client {
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
     formData.append("data", file)
+    formData.append("schema", JSON.stringify(schema))
     try {
       const serializedSettings = Object.keys(settings).reduce(
         (acc, key) => ({
@@ -405,9 +406,7 @@ export class Client {
         ...serializedSettings,
       }
       const response: Response = await fetch(
-        `${this._host}/imp?${new URLSearchParams(
-          params,
-        )}&schema=${JSON.stringify(schema)}`,
+        `${this._host}/imp?${new URLSearchParams(params)}`,
         {
           method: "POST",
           body: formData,
