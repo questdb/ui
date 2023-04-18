@@ -49,7 +49,9 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   const { fields, append, remove } = useFieldArray({
     name: "schemaColumns",
   })
-  const [columnNames, setColumnNames] = useState<string[]>([])
+  const [columnNames, setColumnNames] = useState<string[]>(
+    schema.map((c) => c.name),
+  )
   const watchTimestamp = watch("timestamp")
 
   useEffect(() => {
@@ -94,7 +96,12 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                       : "transparent"
                   }
                   onClick={() => {
-                    setValue("timestamp", columnNames[index])
+                    setValue(
+                      "timestamp",
+                      watchTimestamp === columnNames[index]
+                        ? undefined
+                        : columnNames[index],
+                    )
                   }}
                   type="button"
                 >
