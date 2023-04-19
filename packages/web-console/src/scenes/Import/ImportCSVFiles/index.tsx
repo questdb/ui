@@ -80,7 +80,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                       ? response.columns.map(
                           (c) => pick(c, ["name", "type"]) as SchemaColumn,
                         )
-                      : [],
+                      : file.schema,
                   error: response.status === "OK" ? undefined : response.status,
                 }
               }
