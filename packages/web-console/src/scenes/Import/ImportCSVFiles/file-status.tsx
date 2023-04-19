@@ -23,7 +23,7 @@ const mapStatusToLabel = (
   | undefined => {
   if (file.uploaded && file.uploadResult) {
     return {
-      label: `Imported ${file.uploadResult.rowsImported} row${
+      label: `Imported ${file.uploadResult.rowsImported.toLocaleString()} row${
         file.uploadResult.rowsImported > 1 ? "s" : ""
       }`,
       type: BadgeType.SUCCESS,

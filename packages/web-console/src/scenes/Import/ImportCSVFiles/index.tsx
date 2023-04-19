@@ -59,7 +59,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
       <FilesToUpload
         files={filesDropped}
         onFileUpload={async (file) => {
-          console.log(file.timestamp)
           const response = await quest.uploadCSVFile({
             file: file.fileObject,
             name: file.table_name,
