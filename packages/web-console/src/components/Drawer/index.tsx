@@ -3,8 +3,9 @@ import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
 import { ForwardRef, Heading, Overlay } from "@questdb/react-components"
 import { Close } from "styled-icons/remix-line"
-import { DrawerGroupHeader } from "./group-header"
-import { DrawerGroupItem } from "./group-item"
+import { GroupHeader } from "./group-header"
+import { GroupItem } from "./group-item"
+import { Actions } from "./actions"
 
 const animateShow = css`
   @keyframes animateShow {
@@ -121,5 +122,6 @@ export const Drawer = ({
   </RadixDialog.Root>
 )
 
-Drawer.GroupHeader = DrawerGroupHeader
-Drawer.GroupItem = DrawerGroupItem
+Drawer.GroupHeader = GroupHeader
+Drawer.GroupItem = GroupItem
+Drawer.Actions = Actions

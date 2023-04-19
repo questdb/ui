@@ -1,8 +1,8 @@
-import styled from "styled-components";
+import styled from "styled-components"
 
-export const DrawerGroupItem = styled.div<{
-  withLink?: boolean;
-  direction?: "row" | "column";
+export const GroupItem = styled.div<{
+  withLink?: boolean
+  direction?: "row" | "column"
 }>`
   display: flex;
   ${({ direction }) =>
@@ -11,6 +11,7 @@ export const DrawerGroupItem = styled.div<{
     flex-direction: column;
     align-items: flex-start;
     flex-wrap: wrap;
+    width: 100%;
   `
       : `
     justify-content: space-between;
@@ -35,4 +36,4 @@ export const DrawerGroupItem = styled.div<{
       background-color: ${theme.color.black};
     }
   `}
-`;
+`

@@ -15,13 +15,13 @@ const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const Content = styled(Box).attrs({ gap: "2rem", flexDirection: "column" })`
-  padding: 2rem;
+const Content = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
+  width: 100%;
+  height: calc(100vh - 12rem);
+  overflow: auto;
 `
 
-const Actions = styled(Box).attrs({ gap: "1rem" })`
-  align-self: flex-end;
-`
+const partitionByOptions = ["NONE", "HOUR", "DAY", "MONTH", "YEAR"]
 
 type FormValues = {
   schemaColumns: SchemaColumn[]
@@ -92,10 +92,32 @@ export const TableSchemaDialog = ({
           onOpenChange(undefined)
         }}
       >
-        <Content>
-          <TableSchemaColumns schema={defaults.schemaColumns} />
+        <Box gap="0" flexDirection="column">
+          <Content>
+            <Drawer.GroupHeader>
+              <Text color="foreground">Settings</Text>
+            </Drawer.GroupHeader>
 
-          <Actions>
+            <Drawer.GroupItem direction="column">
+              <Form.Item name="partitionBy" label="Partition by">
+                <Form.Select
+                  name="partitionBy"
+                  options={partitionByOptions.map((item) => ({
+                    label: item,
+                    value: item,
+                  }))}
+                />
+              </Form.Item>
+            </Drawer.GroupItem>
+
+            <Drawer.GroupHeader>
+              <Text color="foreground">Columns</Text>
+            </Drawer.GroupHeader>
+
+            <TableSchemaColumns schema={defaults.schemaColumns} />
+          </Content>
+
+          <Drawer.Actions>
             <Form.Cancel<FormValues>
               prefixIcon={<Undo size={18} />}
               variant="secondary"
@@ -109,8 +131,8 @@ export const TableSchemaDialog = ({
             <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
               Save
             </Form.Submit>
-          </Actions>
-        </Content>
+          </Drawer.Actions>
+        </Box>
       </Form>
     </Drawer>
   )
