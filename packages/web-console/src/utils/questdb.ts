@@ -388,8 +388,8 @@ export class Client {
     timestamp,
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
-    formData.append("data", file)
     formData.append("schema", JSON.stringify(schema))
+    formData.append("data", file)
     try {
       const serializedSettings = Object.keys(settings).reduce(
         (acc, key) => ({
