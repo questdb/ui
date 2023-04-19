@@ -1,15 +1,16 @@
-import React from "react";
-import type { Props as ButtonProps } from "@questdb/react-components/dist/components/Button";
-import { Button } from "@questdb/react-components";
-import { useFormContext } from "react-hook-form";
+import React from "react"
+import type { Props as ButtonProps } from "@questdb/react-components/dist/components/Button"
+import { Button } from "@questdb/react-components"
+import { useFormContext } from "react-hook-form"
 
 type Props<TFormValues> = {
-  children: React.ReactNode;
-  disabled?: boolean;
-  variant?: "warning" | "secondary";
-  prefixIcon?: ButtonProps["prefixIcon"];
-  defaultValues?: TFormValues;
-};
+  children: React.ReactNode
+  disabled?: boolean
+  variant?: "warning" | "secondary"
+  prefixIcon?: ButtonProps["prefixIcon"]
+  defaultValues?: TFormValues
+  onClick?: () => void
+}
 
 export const FormCancel = <TFormValues extends Record<string, any>>({
   children,
@@ -17,13 +18,19 @@ export const FormCancel = <TFormValues extends Record<string, any>>({
   variant,
   prefixIcon,
   defaultValues,
+  onClick,
 }: Props<TFormValues>) => {
-  const { reset } = useFormContext();
+  const { reset } = useFormContext()
 
   return (
     <Button
       type="button"
-      onClick={() => reset(defaultValues)}
+      onClick={() => {
+        reset(defaultValues)
+        if (onClick) {
+          onClick()
+        }
+      }}
       disabled={disabled}
       skin={variant ?? "secondary"}
       prefixIcon={prefixIcon}
@@ -31,5 +38,5 @@ export const FormCancel = <TFormValues extends Record<string, any>>({
     >
       {children}
     </Button>
-  );
-};
+  )
+}

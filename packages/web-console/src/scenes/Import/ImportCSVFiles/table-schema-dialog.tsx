@@ -43,15 +43,23 @@ export const TableSchemaDialog = ({
   onSchemaChange,
 }: Props) => {
   const name = file.table_name ?? file.fileObject.name
-  const [schema, setSchema] = useState<SchemaColumn[]>([])
+  const [defaults, setDefaults] = useState<FormValues>({
+    schemaColumns: [],
+    partitionBy: "NONE",
+    timestamp: "",
+  })
 
   useEffect(() => {
     if (file.schema) {
-      setSchema(file.schema)
+      setDefaults({
+        schemaColumns: file.schema,
+        partitionBy: file.partitionBy,
+        timestamp: file.timestamp,
+      })
     }
   }, [file])
 
-  const columnCount = schema.length
+  const columnCount = defaults.schemaColumns.length
 
   return (
     <Drawer
@@ -78,26 +86,25 @@ export const TableSchemaDialog = ({
     >
       <Form<FormValues>
         name="table-schema"
-        defaultValues={{ schemaColumns: schema }}
+        defaultValues={defaults}
         onSubmit={(values) => {
           onSchemaChange(values)
           onOpenChange(undefined)
         }}
       >
         <Content>
-          <TableSchemaColumns schema={schema} />
+          <TableSchemaColumns schema={defaults.schemaColumns} />
 
           <Actions>
-            <Button
+            <Form.Cancel<FormValues>
               prefixIcon={<Undo size={18} />}
-              skin="secondary"
+              variant="secondary"
               onClick={() => {
                 onOpenChange(undefined)
               }}
-              type="button"
             >
               Dismiss
-            </Button>
+            </Form.Cancel>
 
             <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
               Save
