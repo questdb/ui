@@ -12,6 +12,7 @@ type Props = {
   onUpload: (file: ProcessedFile) => void
   onRemove: (file: ProcessedFile) => void
   onSettingsChange: (settings: UploadModeSettings) => void
+  isUploading: boolean
 }
 
 export const UploadActions = ({
@@ -19,6 +20,7 @@ export const UploadActions = ({
   onUpload,
   onRemove,
   onSettingsChange,
+  isUploading,
 }: Props) => {
   const [settingsOpen, setSettingsOpen] = useState(false)
   return (
@@ -34,7 +36,7 @@ export const UploadActions = ({
         prefixIcon={<Upload2 size="18px" />}
         onClick={() => onUpload(file)}
       >
-        Upload
+        {isUploading ? "Uploading..." : "Upload"}
       </Button>
       <PopperHover
         placement="bottom"

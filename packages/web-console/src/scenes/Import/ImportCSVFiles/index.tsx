@@ -20,6 +20,7 @@ const filterCSVFiles = (files: FileList) => {
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
+  const [isUploading, setIsUploading] = useState(false)
 
   const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
     const csvFiles = filterCSVFiles(files)
@@ -59,6 +60,10 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
       <FilesToUpload
         files={filesDropped}
         onFileUpload={async (file) => {
+          if (isUploading) {
+            return
+          }
+          setIsUploading(true)
           const response = await quest.uploadCSVFile({
             file: file.fileObject,
             name: file.table_name,
@@ -89,6 +94,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           if (response.status === "OK") {
             onImported(response)
           }
+          setIsUploading(false)
         }}
         onFileRemove={(removedFile) => {
           setFilesDropped(
@@ -118,6 +124,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           )
           setFilesDropped(processedFiles)
         }}
+        isUploading={isUploading}
       />
     </Box>
   )
