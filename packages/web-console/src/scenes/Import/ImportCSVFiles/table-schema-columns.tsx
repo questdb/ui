@@ -69,7 +69,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   return (
     <>
       {fields.map((field, index) => (
-        <Drawer.GroupItem direction="column">
+        <Drawer.GroupItem direction="column" key={field.id}>
           <Row
             gap="2rem"
             flexDirection="column"

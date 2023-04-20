@@ -1,4 +1,4 @@
-import React, { useEffect } from "react"
+import React from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
 import { Button, Select, Switch, Input } from "@questdb/react-components"
@@ -11,14 +11,6 @@ import { Drawer } from "../../../components/Drawer"
 
 const SettingsIcon = styled(Settings4)`
   color: ${({ theme }) => theme.color.foreground};
-`
-
-const Content = styled(Box).attrs({ gap: "2rem", flexDirection: "column" })`
-  padding: 2rem;
-`
-
-const Actions = styled(Box).attrs({ gap: "1rem" })`
-  align-self: flex-end;
 `
 
 const Row = styled(Box).attrs({ justifyContent: "space-between", gap: "2rem" })`
@@ -215,7 +207,7 @@ export const UploadSettingsDialog = ({
       <Box gap="2rem" flexDirection="column">
         <Box gap="0" flexDirection="column" align="stretch">
           {options.map((option) => (
-            <Drawer.GroupItem>
+            <Drawer.GroupItem key={option.name}>
               <Row key={option.name}>
                 <Box
                   gap="1rem"
