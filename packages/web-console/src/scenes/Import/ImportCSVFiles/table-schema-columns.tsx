@@ -147,7 +147,8 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                 {columnTypes[index] === "TIMESTAMP" && (
                   <Form.Item
                     name={`schemaColumns.${index}.pattern`}
-                    label="Timestamp pattern"
+                    label="Timestamp pattern*"
+                    helperText="*Required when using the TIMESTAMP type"
                   >
                     <Form.Input
                       name={`schemaColumns.${index}.pattern`}

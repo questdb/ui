@@ -212,69 +212,71 @@ export const UploadSettingsDialog = ({
         </Button>
       }
     >
-      <Content>
-        <Box gap="2rem" flexDirection="column">
+      <Box gap="2rem" flexDirection="column">
+        <Box gap="0" flexDirection="column" align="stretch">
           {options.map((option) => (
-            <Row key={option.name}>
-              <Box
-                gap="1rem"
-                flexDirection="column"
-                align="flex-start"
-                justifyContent="flex-start"
-              >
-                <Text color="foreground" weight={600}>
-                  {option.label}
-                </Text>
-                {option.description && (
-                  <Text color="gray2" size="sm">
-                    {option.description}
+            <Drawer.GroupItem>
+              <Row key={option.name}>
+                <Box
+                  gap="1rem"
+                  flexDirection="column"
+                  align="flex-start"
+                  justifyContent="flex-start"
+                >
+                  <Text color="foreground" weight={600}>
+                    {option.label}
                   </Text>
-                )}
-              </Box>
-              <InputWrapper>
-                {option.type === "input" && (
-                  <Input
-                    name={option.name}
-                    defaultValue={option.defaultValue}
-                    placeholder={option.placeholder}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setSettings({
-                        ...settings,
-                        [option.name]: e.target.value,
-                      })
-                    }
-                  />
-                )}
-                {option.type === "select" && (
-                  <Select
-                    name={option.name}
-                    defaultValue={option.defaultValue as string}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                      setSettings({
-                        ...settings,
-                        [option.name]: e.target.value,
-                      })
-                    }
-                    options={option.options}
-                  />
-                )}
-                {option.type === "switch" && (
-                  <Switch
-                    checked={option.defaultValue}
-                    onChange={(value) =>
-                      setSettings({
-                        ...settings,
-                        [option.name]: value,
-                      })
-                    }
-                  />
-                )}
-              </InputWrapper>
-            </Row>
+                  {option.description && (
+                    <Text color="gray2" size="sm">
+                      {option.description}
+                    </Text>
+                  )}
+                </Box>
+                <InputWrapper>
+                  {option.type === "input" && (
+                    <Input
+                      name={option.name}
+                      defaultValue={option.defaultValue}
+                      placeholder={option.placeholder}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setSettings({
+                          ...settings,
+                          [option.name]: e.target.value,
+                        })
+                      }
+                    />
+                  )}
+                  {option.type === "select" && (
+                    <Select
+                      name={option.name}
+                      defaultValue={option.defaultValue as string}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setSettings({
+                          ...settings,
+                          [option.name]: e.target.value,
+                        })
+                      }
+                      options={option.options}
+                    />
+                  )}
+                  {option.type === "switch" && (
+                    <Switch
+                      checked={option.defaultValue}
+                      onChange={(value) =>
+                        setSettings({
+                          ...settings,
+                          [option.name]: value,
+                        })
+                      }
+                    />
+                  )}
+                </InputWrapper>
+              </Row>
+            </Drawer.GroupItem>
           ))}
         </Box>
 
-        <Actions>
+        <Drawer.Actions>
           <Button
             prefixIcon={<Undo size={18} />}
             skin="secondary"
@@ -297,8 +299,8 @@ export const UploadSettingsDialog = ({
           >
             Submit
           </Button>
-        </Actions>
-      </Content>
+        </Drawer.Actions>
+      </Box>
     </Drawer>
   )
 }

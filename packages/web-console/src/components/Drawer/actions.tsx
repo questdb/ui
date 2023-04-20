@@ -9,4 +9,5 @@ export const Actions = styled(Box).attrs({
   width: 100%;
   padding-left: 2rem;
   padding-right: 2rem;
+  height: 7rem;
 `

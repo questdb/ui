@@ -17,7 +17,6 @@ const StyledTableIcon = styled(TableIcon)`
 
 const Content = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
   width: 100%;
-  height: calc(100vh - 12rem);
   overflow: auto;
 `
 
