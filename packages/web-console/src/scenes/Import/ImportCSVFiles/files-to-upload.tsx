@@ -162,20 +162,23 @@ export const FilesToUpload = ({
 
             align: "flex-end",
             width: "150px",
-            render: ({ data }) => (
-              <TableSchemaDialog
-                open={schemaDialogOpen === data.table_name}
-                onOpenChange={setSchemaDialogOpen}
-                onSchemaChange={(schema) => {
-                  onFilePropertyChange(data.table_name, {
-                    schema: schema.schemaColumns,
-                    partitionBy: schema.partitionBy,
-                    timestamp: schema.timestamp,
-                  })
-                }}
-                file={data}
-              />
-            ),
+            render: ({ data }) => {
+              const name = data.table_name ?? data.fileObject.name
+              return (
+                <TableSchemaDialog
+                  open={schemaDialogOpen === name}
+                  onOpenChange={setSchemaDialogOpen}
+                  onSchemaChange={(schema) => {
+                    onFilePropertyChange(data.table_name, {
+                      schema: schema.schemaColumns,
+                      partitionBy: schema.partitionBy,
+                      timestamp: schema.timestamp,
+                    })
+                  }}
+                  file={data}
+                />
+              )
+            },
           },
           {
             header: "Actions",
