@@ -6,6 +6,11 @@ export const isValidTableName = (tableName: string): boolean => {
     return false
   }
 
+  // Telemetry tables are not allowed
+  if (["telemetry", "telemetry_config"].includes(tableName)) {
+    return false
+  }
+
   for (let i = 0; i < l; i++) {
     const c = tableName.charAt(i)
     switch (c) {

@@ -40,13 +40,9 @@ const schema = Joi.object({
   name: Joi.string()
     .required()
     .custom((value, helpers) => {
-      if (
-        !isValidTableName(value) ||
-        ["telemetry", "telemetry_config"].includes(value)
-      ) {
+      if (!isValidTableName(value)) {
         return helpers.error("string.validTableName")
       }
-      return value
     })
     .messages({
       "string.empty": "Please enter a name",
