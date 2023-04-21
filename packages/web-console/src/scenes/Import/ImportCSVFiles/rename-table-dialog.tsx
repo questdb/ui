@@ -43,6 +43,7 @@ const schema = Joi.object({
       if (!isValidTableName(value)) {
         return helpers.error("string.validTableName")
       }
+      return value
     })
     .messages({
       "string.empty": "Please enter a name",
