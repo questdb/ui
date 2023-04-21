@@ -12,6 +12,8 @@ import {
   FileCheckStatus,
 } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
+import { useSelector } from "react-redux"
+import { selectors } from "../../../store"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -27,35 +29,55 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const tables = useSelector(selectors.query.getTables)
 
   const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
     const csvFiles = filterCSVFiles(files)
     return await Promise.all(
       csvFiles.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
-        let initialSchema: SchemaColumn[] = []
-        let timestamp = ""
-        if (result.status === FileCheckStatus.EXISTS) {
-          const columnResponse = await quest.showColumns(file.name)
-          if (columnResponse && columnResponse.type === QuestDB.Type.DQL) {
-            // Find an initial schema
-            initialSchema = columnResponse.data.map((column) => ({
-              name: column.column,
-              type: column.type,
-            }))
-            // Find a designated timestamp, if exists
-            timestamp =
-              columnResponse.data.find((c) => c.designated)?.column ?? ""
-          }
-        }
+
+        const schema =
+          result.status === FileCheckStatus.EXISTS
+            ? await (async () => {
+                const columnResponse = await quest.showColumns(file.name)
+                if (
+                  columnResponse &&
+                  columnResponse.type === QuestDB.Type.DQL
+                ) {
+                  // Find a table schema
+                  return columnResponse.data.map((column) => ({
+                    name: column.column,
+                    type: column.type,
+                  }))
+                }
+                return []
+              })()
+            : []
+
+        const partitionBy =
+          result.status === FileCheckStatus.EXISTS && tables
+            ? await (async () => {
+                const table = tables.find((t) => t.name === file.name)
+                return table?.partitionBy ?? ""
+              })()
+            : ""
+
+        const timestamp =
+          result.status === FileCheckStatus.EXISTS && tables
+            ? await (async () => {
+                const table = tables.find((t) => t.name === file.name)
+                return table?.designatedTimestamp ?? ""
+              })()
+            : ""
 
         return {
           fileObject: file,
           table_name: file.name,
           status: result.status,
-          schema: initialSchema,
-          partitionBy: "NONE",
-          timestamp: timestamp,
+          schema,
+          partitionBy,
+          timestamp,
           settings: {
             forceHeader: false,
             overwrite: false,
