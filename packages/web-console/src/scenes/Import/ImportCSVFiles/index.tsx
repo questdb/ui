@@ -61,7 +61,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                 const table = tables.find((t) => t.name === file.name)
                 return table?.partitionBy ?? ""
               })()
-            : ""
+            : "NONE"
 
         const timestamp =
           result.status === FileCheckStatus.EXISTS && tables

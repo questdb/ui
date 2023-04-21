@@ -62,13 +62,6 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
 
   const watchTimestamp = watch("timestamp")
 
-  useEffect(() => {
-    reset({
-      ...getValues(),
-      schemaColumns: schema,
-    })
-  }, [schema])
-
   return (
     <>
       {fields.map((field, index) => (
