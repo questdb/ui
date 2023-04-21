@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import { SchemaColumn } from "utils"
@@ -61,6 +61,10 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   )
 
   const watchTimestamp = watch("timestamp")
+
+  useEffect(() => {
+    setValue("schemaColumns", schema)
+  }, [schema])
 
   return (
     <>
