@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import { SchemaColumn } from "utils"
@@ -49,7 +49,7 @@ const Columns = styled(Box).attrs({
 `
 
 export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
-  const { getValues, setValue, watch, reset } = useFormContext()
+  const { setValue, watch } = useFormContext()
   const { fields, append, remove } = useFieldArray({
     name: "schemaColumns",
   })
