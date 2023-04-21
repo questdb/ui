@@ -105,6 +105,10 @@ export type Table = {
 export type Column = {
   column: string
   indexed: boolean
+  designated: boolean
+  indexBlockCapacity: number
+  symbolCached: boolean
+  symbolCapacity: number
   type: string
 }
 

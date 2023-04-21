@@ -5,7 +5,13 @@ import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile } from "./types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
-import { pick, SchemaColumn, UploadResult } from "../../../utils"
+import {
+  pick,
+  SchemaColumn,
+  UploadResult,
+  FileCheckStatus,
+} from "../../../utils"
+import * as QuestDB from "../../../utils/questdb"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -27,13 +33,29 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     return await Promise.all(
       csvFiles.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
+        let initialSchema: SchemaColumn[] = []
+        let timestamp = ""
+        if (result.status === FileCheckStatus.EXISTS) {
+          const columnResponse = await quest.showColumns(file.name)
+          if (columnResponse && columnResponse.type === QuestDB.Type.DQL) {
+            // Find an initial schema
+            initialSchema = columnResponse.data.map((column) => ({
+              name: column.column,
+              type: column.type,
+            }))
+            // Find a designated timestamp, if exists
+            timestamp =
+              columnResponse.data.find((c) => c.designated)?.column ?? ""
+          }
+        }
+
         return {
           fileObject: file,
           table_name: file.name,
           status: result.status,
-          schema: [],
+          schema: initialSchema,
           partitionBy: "NONE",
-          timestamp: "",
+          timestamp: timestamp,
           settings: {
             forceHeader: false,
             overwrite: false,

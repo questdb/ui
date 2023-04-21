@@ -49,7 +49,7 @@ const Columns = styled(Box).attrs({
 `
 
 export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
-  const { setValue, watch, reset } = useFormContext()
+  const { getValues, setValue, watch, reset } = useFormContext()
   const { fields, append, remove } = useFieldArray({
     name: "schemaColumns",
   })
@@ -63,7 +63,10 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   const watchTimestamp = watch("timestamp")
 
   useEffect(() => {
-    reset({ schemaColumns: schema })
+    reset({
+      ...getValues(),
+      schemaColumns: schema,
+    })
   }, [schema])
 
   return (
