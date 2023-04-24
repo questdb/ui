@@ -77,6 +77,7 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         id="file"
         onChange={(e) => {
           onFilesDropped(e.target.files as FileList)
+          uploadInputRef.current?.setAttribute("value", "")
         }}
         multiple={true}
         ref={uploadInputRef}
