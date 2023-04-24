@@ -42,13 +42,6 @@ const StyledTable = styled(Table)`
   }
 `
 
-const File = styled(Box).attrs({
-  align: "center",
-  gap: "1rem",
-})`
-  padding: 0 1.1rem;
-`
-
 const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
   width: 100%;
   background: ${({ theme }) => theme.color.backgroundLighter};

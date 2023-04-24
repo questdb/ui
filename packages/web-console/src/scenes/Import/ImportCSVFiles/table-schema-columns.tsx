@@ -48,6 +48,13 @@ const Columns = styled(Box).attrs({
   }
 `
 
+const AddBox = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  margin: auto;
+`
+
 export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   const { setValue, watch } = useFormContext()
   const { fields, append, remove } = useFieldArray({
@@ -162,8 +169,8 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
         </Drawer.GroupItem>
       ))}
 
-      <Drawer.GroupItem>
-        <Box align="center" justifyContent="center">
+      <Drawer.GroupItem direction="column">
+        <AddBox>
           <Button
             prefixIcon={<AddCircle size="18px" />}
             skin="transparent"
@@ -178,7 +185,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
           >
             Add column
           </Button>
-        </Box>
+        </AddBox>
       </Drawer.GroupItem>
 
       <Form.Input name="timestamp" hidden />
