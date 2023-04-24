@@ -93,15 +93,11 @@ export const TableSchemaDialog = ({
       >
         <Box gap="0" flexDirection="column">
           <Content>
-            <Drawer.GroupHeader>
-              <Text color="foreground">Settings</Text>
-            </Drawer.GroupHeader>
-
             <Drawer.GroupItem direction="column">
               <Form.Item
                 name="partitionBy"
                 label="Partition by"
-                helperText="Important: If you're changing the partitioning strategy, you'll need to set `Write mode` to `Overwrite` in Settings."
+                helperText="If you're changing the partitioning strategy, you'll need to set `Write mode` to `Overwrite` in Settings."
               >
                 <Form.Select
                   name="partitionBy"
