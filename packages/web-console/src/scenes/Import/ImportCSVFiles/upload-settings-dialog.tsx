@@ -95,8 +95,10 @@ export const UploadSettingsDialog = ({
       label: "Write mode",
       description: (
         <>
-          When set to <strong>Overwrite</strong>, any existing data or structure
-          will be overwritten.
+          <strong>Append</strong>: data will be appended to the set.
+          <br />
+          <strong>Overwrite</strong>: any existing data or structure will be
+          overwritten. Required for partitioning and timestamp related changes.
         </>
       ),
       defaultValue: overwrite ? "true" : "false",
