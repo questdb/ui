@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { Heading, Table } from "@questdb/react-components"
+import { Heading, Table, Select } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { PopperHover, Text, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
@@ -20,11 +20,11 @@ const StyledTable = styled(Table)`
   border-spacing: 0 2rem;
 
   th {
-    padding: 0 2rem;
+    padding: 0 1.5rem;
   }
 
   td {
-    padding: 2rem;
+    padding: 1.5rem;
   }
 
   tbody td {
@@ -44,15 +44,9 @@ const StyledTable = styled(Table)`
 
 const File = styled(Box).attrs({
   align: "center",
+  gap: "1rem",
 })`
-  gap: 1rem;
-`
-
-const FileDetails = styled(Box).attrs({
-  align: "flex-start",
-  flexDirection: "column",
-})`
-  gap: 0.5rem;
+  padding: 0 1.1rem;
 `
 
 const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
@@ -93,32 +87,24 @@ export const FilesToUpload = ({
           {
             header: "File",
             align: "flex-start",
-            width: "35%",
             render: ({ data }) => (
-              <File>
-                <FiletypeCsv size="36px" />
-                <FileDetails>
-                  <Text color="foreground">{data.fileObject.name}</Text>
-                  <Text color="gray2">
-                    {bytesWithSuffix(data.fileObject.size)}
-                  </Text>
-                </FileDetails>
-              </File>
-            ),
-          },
-          {
-            header: "Status",
-            align: "flex-end",
-            width: "250px",
-            render: ({ data }) => (
-              <Box flexDirection="column" align="flex-end" gap="1rem">
-                <FileStatus file={data} />
-                {data.uploadResult && data.uploadResult.rowsRejected > 0 && (
-                  <Text color="orange" size="sm">
-                    {data.uploadResult.rowsRejected.toLocaleString()} row
-                    {data.uploadResult.rowsRejected > 1 ? "s" : ""} rejected
-                  </Text>
-                )}
+              <Box align="center" gap="1rem">
+                <FiletypeCsv size="46px" />
+                <Box gap="1rem" align="flex-4tart" flexDirection="column">
+                  <Box align="center" gap="1rem">
+                    <Text color="foreground">{data.fileObject.name}</Text>
+                    <Text color="gray2" size="sm">
+                      {bytesWithSuffix(data.fileObject.size)}
+                    </Text>
+                  </Box>
+                  <FileStatus file={data} />
+                  {data.uploadResult && data.uploadResult.rowsRejected > 0 && (
+                    <Text color="orange" size="sm">
+                      {data.uploadResult.rowsRejected.toLocaleString()} row
+                      {data.uploadResult.rowsRejected > 1 ? "s" : ""} rejected
+                    </Text>
+                  )}
+                </Box>
               </Box>
             ),
           },
@@ -161,7 +147,7 @@ export const FilesToUpload = ({
             ),
 
             align: "flex-end",
-            width: "150px",
+            width: "200px",
             render: ({ data }) => {
               const name = data.table_name ?? data.fileObject.name
               return (
@@ -179,6 +165,55 @@ export const FilesToUpload = ({
                 />
               )
             },
+          },
+          {
+            header: (
+              <PopperHover
+                placement="bottom"
+                trigger={
+                  <Box align="center" gap="0.5rem">
+                    <Information size="16px" />
+                    Write mode
+                  </Box>
+                }
+              >
+                <Tooltip>
+                  <>
+                    <strong>Append</strong>: data will be appended to the set.
+                    <br />
+                    <strong>Overwrite</strong>: any existing data or structure
+                    will be overwritten. Required for partitioning and timestamp
+                    related changes.
+                  </>
+                </Tooltip>
+              </PopperHover>
+            ),
+            align: "flex-end",
+            width: "150px",
+            render: ({ data }) => (
+              <Select
+                name="overwrite"
+                defaultValue={data.settings.overwrite ? "true" : "false"}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  onFilePropertyChange(data.table_name, {
+                    settings: {
+                      ...data.settings,
+                      overwrite: e.target.value === "true",
+                    },
+                  })
+                }
+                options={[
+                  {
+                    label: "Append",
+                    value: "false",
+                  },
+                  {
+                    label: "Overwrite",
+                    value: "true",
+                  },
+                ]}
+              />
+            ),
           },
           {
             header: "Actions",

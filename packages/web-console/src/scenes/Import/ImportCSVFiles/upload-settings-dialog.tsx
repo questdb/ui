@@ -91,30 +91,6 @@ export const UploadSettingsDialog = ({
     },
     {
       type: "select",
-      name: "overwrite",
-      label: "Write mode",
-      description: (
-        <>
-          <strong>Append</strong>: data will be appended to the set.
-          <br />
-          <strong>Overwrite</strong>: any existing data or structure will be
-          overwritten. Required for partitioning and timestamp related changes.
-        </>
-      ),
-      defaultValue: overwrite ? "true" : "false",
-      options: [
-        {
-          label: "Append",
-          value: "false",
-        },
-        {
-          label: "Overwrite",
-          value: "true",
-        },
-      ],
-    },
-    {
-      type: "select",
       name: "atomicity",
       label: "Atomicity",
       description: (
