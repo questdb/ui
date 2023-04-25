@@ -60,12 +60,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
   const { fields, append, remove } = useFieldArray({
     name: "schemaColumns",
   })
-  const [columnNames, setColumnNames] = useState<string[]>(
-    schema.map((c) => c.name),
-  )
-  const [columnTypes, setColumnTypes] = useState<string[]>(
-    schema.map((c) => c.type),
-  )
+  const [columns, setColumns] = useState<SchemaColumn[]>(schema)
 
   const watchTimestamp = watch("timestamp")
 
@@ -91,9 +86,9 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                     <Form.Input
                       name={`schemaColumns.${index}.name`}
                       onChange={(e) => {
-                        const cols = [...columnNames]
-                        cols[index] = e.target.value
-                        setColumnNames(cols)
+                        const cols = [...columns]
+                        cols[index].name = e.target.value
+                        setColumns(cols)
                       }}
                     />
                   </Form.Item>
@@ -102,9 +97,9 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                       name={`schemaColumns.${index}.type`}
                       options={supportedColumnTypes}
                       onChange={(e) => {
-                        const cols = [...columnTypes]
-                        cols[index] = e.target.value
-                        setColumnTypes(cols)
+                        const cols = [...columns]
+                        cols[index].type = e.target.value
+                        setColumns(cols)
                       }}
                     />
                   </Form.Item>
@@ -112,20 +107,23 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                   <IconWithTooltip
                     icon={
                       <Button
-                        disabled={columnTypes[index] !== "TIMESTAMP"}
+                        disabled={
+                          columns[index] && columns[index].type !== "TIMESTAMP"
+                        }
                         skin={
                           watchTimestamp !== "" &&
-                          columnNames[index] !== "" &&
-                          watchTimestamp === columnNames[index]
+                          columns[index] &&
+                          columns[index].name !== "" &&
+                          watchTimestamp === columns[index].name
                             ? "success"
                             : "transparent"
                         }
                         onClick={() => {
                           setValue(
                             "timestamp",
-                            watchTimestamp === columnNames[index]
+                            watchTimestamp === columns[index].name
                               ? undefined
-                              : columnNames[index],
+                              : columns[index].name,
                           )
                         }}
                         type="button"
@@ -141,17 +139,17 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                     skin="transparent"
                     onClick={() => {
                       remove(index)
-                      if (watchTimestamp === columnNames[index]) {
+                      if (watchTimestamp === columns[index].name) {
                         setValue("timestamp", undefined)
                       }
-                      setColumnNames(columnNames.filter((_, i) => i !== index))
+                      setColumns(columns.filter((_, i) => i !== index))
                     }}
                     type="button"
                   >
                     <Close size="18px" />
                   </Button>
                 </Box>
-                {columnTypes[index] === "TIMESTAMP" && (
+                {columns[index] && columns[index].type === "TIMESTAMP" && (
                   <Form.Item
                     name={`schemaColumns.${index}.pattern`}
                     label="Timestamp pattern"
@@ -160,6 +158,7 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                     <Form.Input
                       name={`schemaColumns.${index}.pattern`}
                       placeholder="yyy-MM-ddTHH:mm:ss.SSSUUUz"
+                      required
                     />
                   </Form.Item>
                 )}
@@ -175,11 +174,12 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
             prefixIcon={<AddCircle size="18px" />}
             skin="transparent"
             onClick={() => {
-              append({
+              const newColumn = {
                 name: "",
                 type: "",
-              })
-              setColumnNames([...columnNames, ""])
+              }
+              append(newColumn)
+              setColumns([...columns, newColumn])
             }}
             type="button"
           >
