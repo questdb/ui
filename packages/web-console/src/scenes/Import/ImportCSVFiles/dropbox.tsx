@@ -82,6 +82,7 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         multiple={true}
         ref={uploadInputRef}
         style={{ display: "none" }}
+        value=""
       />
       <Button
         onClick={() => {
