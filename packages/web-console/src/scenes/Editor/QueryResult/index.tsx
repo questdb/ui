@@ -54,7 +54,7 @@ const Wrapper = styled.div`
 
 const Details = styled.div`
   display: flex;
-  background: ${color("background")};
+  background: ${color("backgroundLighter")};
 `
 
 const DetailsColumn = styled.div`

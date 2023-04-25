@@ -161,8 +161,8 @@ const SecondaryButtonStyled = styled.button<ButtonProps>`
   ${baseStyles};
   ${getTheme(
     {
-      background: "background",
-      border: "background",
+      background: "backgroundLighter",
+      border: "backgroundLighter",
       color: "foreground",
     },
     {

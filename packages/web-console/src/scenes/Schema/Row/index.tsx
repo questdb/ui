@@ -235,7 +235,7 @@ const Row = ({
         <Spacer />
 
         {type && (
-          <Type _style="italic" color="pink" transform="lowercase">
+          <Type _style="italic" color="pinkLighter" transform="lowercase">
             {type}
           </Type>
         )}
