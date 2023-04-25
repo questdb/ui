@@ -14,6 +14,7 @@ export type ProcessedFile = {
   schema: SchemaColumn[]
   partitionBy: string
   timestamp: string
+  isUploading: boolean
   uploaded: boolean
   uploadResult?: UploadResult
   error?: string

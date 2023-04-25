@@ -58,7 +58,6 @@ type Props = {
   onFileRemove: (file: ProcessedFile) => void
   onFileUpload: (file: ProcessedFile) => void
   onFilePropertyChange: (filename: string, file: Partial<ProcessedFile>) => void
-  isUploading: boolean
 }
 
 export const FilesToUpload = ({
@@ -66,7 +65,6 @@ export const FilesToUpload = ({
   onFileRemove,
   onFilePropertyChange,
   onFileUpload,
-  isUploading,
 }: Props) => {
   const [renameDialogOpen, setRenameDialogOpen] = React.useState<
     string | null
@@ -241,7 +239,6 @@ export const FilesToUpload = ({
                     settings,
                   })
                 }}
-                isUploading={isUploading}
               />
             ),
           },

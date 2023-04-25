@@ -28,8 +28,21 @@ const filterCSVFiles = (files: FileList) => {
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
-  const [isUploading, setIsUploading] = useState(false)
   const tables = useSelector(selectors.query.getTables)
+
+  const setIsUploading = (file: ProcessedFile, isUploading: boolean) => {
+    setFilesDropped((files) =>
+      files.map((f) => {
+        if (f.table_name === file.table_name) {
+          return {
+            ...f,
+            isUploading,
+          }
+        }
+        return f
+      }),
+    )
+  }
 
   const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
     const csvFiles = filterCSVFiles(files)
@@ -86,6 +99,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             atomicity: "skipCol",
             durable: false,
           },
+          isUploading: false,
           uploaded: false,
           uploadResult: undefined,
         }
@@ -104,10 +118,10 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
       <FilesToUpload
         files={filesDropped}
         onFileUpload={async (file) => {
-          if (isUploading) {
+          if (file.isUploading) {
             return
           }
-          setIsUploading(true)
+          setIsUploading(file, true)
           const response = await quest.uploadCSVFile({
             file: file.fileObject,
             name: file.table_name,
@@ -138,7 +152,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           if (response.status === "OK") {
             onImported(response)
           }
-          setIsUploading(false)
+          setIsUploading(file, false)
         }}
         onFileRemove={(removedFile) => {
           setFilesDropped(
@@ -168,7 +182,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           )
           setFilesDropped(processedFiles)
         }}
-        isUploading={isUploading}
       />
     </Box>
   )
