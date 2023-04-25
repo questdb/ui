@@ -49,6 +49,10 @@ const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
   padding: 1rem;
 `
 
+const FileTextBox = styled(Box)`
+  padding: 0 1.1rem;
+`
+
 type Props = {
   files: ProcessedFile[]
   onFileRemove: (file: ProcessedFile) => void
@@ -84,19 +88,26 @@ export const FilesToUpload = ({
               <Box align="center" gap="1rem">
                 <FiletypeCsv size="46px" />
                 <Box gap="1rem" align="flex-4tart" flexDirection="column">
-                  <Box align="center" gap="1rem">
+                  <FileTextBox align="center" gap="1rem">
                     <Text color="foreground">{data.fileObject.name}</Text>
                     <Text color="gray2" size="sm">
                       {bytesWithSuffix(data.fileObject.size)}
                     </Text>
-                  </Box>
+                  </FileTextBox>
                   <FileStatus file={data} />
-                  {data.uploadResult && data.uploadResult.rowsRejected > 0 && (
-                    <Text color="orange" size="sm">
-                      {data.uploadResult.rowsRejected.toLocaleString()} row
-                      {data.uploadResult.rowsRejected > 1 ? "s" : ""} rejected
-                    </Text>
-                  )}
+                  <FileTextBox flexDirection="column" gap="1rem">
+                    {data.uploadResult && data.uploadResult.rowsRejected > 0 && (
+                      <Text color="orange" size="sm">
+                        {data.uploadResult.rowsRejected.toLocaleString()} row
+                        {data.uploadResult.rowsRejected > 1 ? "s" : ""} rejected
+                      </Text>
+                    )}
+                    {data.error && (
+                      <Text color="red" size="sm">
+                        {data.error}
+                      </Text>
+                    )}
+                  </FileTextBox>
                 </Box>
               </Box>
             ),

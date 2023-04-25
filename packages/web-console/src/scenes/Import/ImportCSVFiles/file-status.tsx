@@ -3,7 +3,6 @@ import { FileCheckStatus as FileStatusType } from "../../../utils"
 import { Badge } from "@questdb/react-components"
 import { BadgeType, ProcessedFile } from "./types"
 import { Box } from "../../../components/Box"
-import { Text } from "../../../components/Text"
 import styled from "styled-components"
 import { CheckboxCircle } from "styled-icons/remix-fill"
 
@@ -17,7 +16,6 @@ const mapStatusToLabel = (
   | {
       label: string
       type: BadgeType
-      description?: string
       icon?: React.ReactNode
     }
   | undefined => {
@@ -35,7 +33,6 @@ const mapStatusToLabel = (
     return {
       label: "Upload error",
       type: BadgeType.ERROR,
-      description: file.error,
     }
   }
 
@@ -69,11 +66,6 @@ export const FileStatus = ({ file }: { file: ProcessedFile }) => {
           {mappedStatus.icon} {mappedStatus.label}
         </Box>
       </Badge>
-      {mappedStatus.description && (
-        <Text color="red" size="sm" align="right">
-          {mappedStatus.description}
-        </Text>
-      )}
     </Box>
   ) : (
     <></>
