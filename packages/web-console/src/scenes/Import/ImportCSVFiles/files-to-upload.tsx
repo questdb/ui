@@ -95,19 +95,27 @@ export const FilesToUpload = ({
                     </Text>
                   </FileTextBox>
                   <FileStatus file={data} />
-                  <FileTextBox flexDirection="column" gap="1rem">
-                    {data.uploadResult && data.uploadResult.rowsRejected > 0 && (
-                      <Text color="orange" size="sm">
-                        {data.uploadResult.rowsRejected.toLocaleString()} row
-                        {data.uploadResult.rowsRejected > 1 ? "s" : ""} rejected
-                      </Text>
-                    )}
-                    {data.error && (
-                      <Text color="red" size="sm">
-                        {data.error}
-                      </Text>
-                    )}
-                  </FileTextBox>
+                  {(data.uploadResult && data.uploadResult.rowsRejected > 0) ||
+                    (data.error && (
+                      <FileTextBox flexDirection="column" gap="1rem">
+                        {data.uploadResult &&
+                          data.uploadResult.rowsRejected > 0 && (
+                            <Text color="orange" size="sm">
+                              {data.uploadResult.rowsRejected.toLocaleString()}{" "}
+                              row
+                              {data.uploadResult.rowsRejected > 1
+                                ? "s"
+                                : ""}{" "}
+                              rejected
+                            </Text>
+                          )}
+                        {data.error && (
+                          <Text color="red" size="sm">
+                            {data.error}
+                          </Text>
+                        )}
+                      </FileTextBox>
+                    ))}
                 </Box>
               </Box>
             ),
