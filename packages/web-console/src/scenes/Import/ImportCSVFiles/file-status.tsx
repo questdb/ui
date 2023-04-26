@@ -36,6 +36,13 @@ const mapStatusToLabel = (
     }
   }
 
+  if (file.isUploading) {
+    return {
+      label: "Uploading...",
+      type: BadgeType.WARNING,
+    }
+  }
+
   switch (file.status) {
     case FileStatusType.EXISTS:
       return {
