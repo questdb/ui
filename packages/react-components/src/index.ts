@@ -2,6 +2,7 @@ export { AlertDialog } from "./components/AlertDialog";
 export { Badge } from "./components/Badge";
 export { Button } from "./components/Button";
 export { Checkbox } from "./components/Checkbox";
+export { Dialog } from "./components/Dialog";
 export { ForwardRef } from "./components/ForwardRef";
 export { Heading } from "./components/Heading";
 export { Input } from "./components/Input";
