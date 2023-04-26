@@ -73,18 +73,18 @@ export const RenameTableDialog = ({
           <Overlay primitive={Dialog.Overlay} />
         </ForwardRef>
 
-        <Form<{ name: string }>
-          name="rename-table"
-          defaultValues={{ name }}
-          onSubmit={(values) => {
-            onNameChange(values.name)
-            onOpenChange(undefined)
-          }}
-          validationSchema={schema}
+        <Dialog.Content
+          onEscapeKeyDown={() => onOpenChange(undefined)}
+          onInteractOutside={() => onOpenChange(undefined)}
         >
-          <Dialog.Content
-            onEscapeKeyDown={() => onOpenChange(undefined)}
-            onInteractOutside={() => onOpenChange(undefined)}
+          <Form<{ name: string }>
+            name="rename-table"
+            defaultValues={{ name }}
+            onSubmit={(values) => {
+              onNameChange(values.name)
+              onOpenChange(undefined)
+            }}
+            validationSchema={schema}
           >
             <Dialog.Title>
               <Box>
@@ -136,8 +136,8 @@ export const RenameTableDialog = ({
                 </ForwardRef>
               </Dialog.Close>
             </Dialog.ActionButtons>
-          </Dialog.Content>
-        </Form>
+          </Form>
+        </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   )
