@@ -71,7 +71,7 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         height="80"
         src="/assets/upload.svg"
       />
-      <Heading level={3}>Drag CSV files to upload</Heading>
+      <Heading level={3}>Drag CSV files here or paste from clipboard</Heading>
       <input
         type="file"
         id="file"
