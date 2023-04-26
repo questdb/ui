@@ -112,8 +112,15 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     setFilesDropped([...filesDropped, ...fileConfigs] as ProcessedFile[])
   }
 
+  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const files = event.clipboardData?.files
+    if (files) {
+      handleDrop(files)
+    }
+  }
+
   return (
-    <Box gap="4rem" flexDirection="column">
+    <Box gap="4rem" flexDirection="column" onPaste={handlePaste}>
       <DropBox onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
