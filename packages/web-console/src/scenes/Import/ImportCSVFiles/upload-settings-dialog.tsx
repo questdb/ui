@@ -169,7 +169,7 @@ export const UploadSettingsDialog = ({
       title={
         <Box>
           <SettingsIcon size="20px" />
-          <Text color="foreground">Settings</Text>
+          <Text color="foreground">Settings for {file.fileObject.name}</Text>
         </Box>
       }
       trigger={
