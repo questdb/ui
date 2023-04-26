@@ -1,11 +1,6 @@
 import React from "react"
 import { ProcessedFile } from "./types"
-import {
-  AlertDialog,
-  ForwardRef,
-  Button,
-  Overlay,
-} from "@questdb/react-components"
+import { Dialog, ForwardRef, Button, Overlay } from "@questdb/react-components"
 import { Edit } from "styled-icons/remix-line"
 import { Undo } from "styled-icons/boxicons-regular"
 import { Text } from "../../../components/Text"
@@ -25,7 +20,7 @@ const List = styled.ul`
   }
 `
 
-const StyledDescription = styled(AlertDialog.Description)`
+const StyledDescription = styled(Dialog.Description)`
   display: grid;
   gap: 2rem;
 `
@@ -60,8 +55,8 @@ export const RenameTableDialog = ({
 }: Props) => {
   const name = file.table_name ?? file.fileObject.name
   return (
-    <AlertDialog.Root open={open}>
-      <AlertDialog.Trigger asChild>
+    <Dialog.Root open={open}>
+      <Dialog.Trigger asChild>
         <ForwardRef>
           <Button
             skin="transparent"
@@ -71,11 +66,11 @@ export const RenameTableDialog = ({
             {shortenText(name, 20)}
           </Button>
         </ForwardRef>
-      </AlertDialog.Trigger>
+      </Dialog.Trigger>
 
-      <AlertDialog.Portal>
+      <Dialog.Portal>
         <ForwardRef>
-          <Overlay primitive={AlertDialog.Overlay} />
+          <Overlay primitive={Dialog.Overlay} />
         </ForwardRef>
 
         <Form<{ name: string }>
@@ -87,13 +82,16 @@ export const RenameTableDialog = ({
           }}
           validationSchema={schema}
         >
-          <AlertDialog.Content>
-            <AlertDialog.Title>
+          <Dialog.Content
+            onEscapeKeyDown={() => onOpenChange(undefined)}
+            onInteractOutside={() => onOpenChange(undefined)}
+          >
+            <Dialog.Title>
               <Box>
                 <Edit size={20} />
-                Change table name
+                Change table name erwer
               </Box>
-            </AlertDialog.Title>
+            </Dialog.Title>
 
             <StyledDescription>
               <Form.Item name="name" label="Table name">
@@ -116,8 +114,8 @@ export const RenameTableDialog = ({
               </Text>
             </StyledDescription>
 
-            <AlertDialog.ActionButtons>
-              <AlertDialog.Cancel asChild>
+            <Dialog.ActionButtons>
+              <Dialog.Close asChild>
                 <Button
                   prefixIcon={<Undo size={18} />}
                   skin="secondary"
@@ -125,9 +123,9 @@ export const RenameTableDialog = ({
                 >
                   Dismiss
                 </Button>
-              </AlertDialog.Cancel>
+              </Dialog.Close>
 
-              <AlertDialog.Action asChild>
+              <Dialog.Close asChild>
                 <ForwardRef>
                   <Form.Submit
                     prefixIcon={<Edit size={18} />}
@@ -136,11 +134,11 @@ export const RenameTableDialog = ({
                     Change
                   </Form.Submit>
                 </ForwardRef>
-              </AlertDialog.Action>
-            </AlertDialog.ActionButtons>
-          </AlertDialog.Content>
+              </Dialog.Close>
+            </Dialog.ActionButtons>
+          </Dialog.Content>
         </Form>
-      </AlertDialog.Portal>
-    </AlertDialog.Root>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

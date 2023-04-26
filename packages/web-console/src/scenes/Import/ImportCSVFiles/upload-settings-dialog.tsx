@@ -181,6 +181,10 @@ export const UploadSettingsDialog = ({
           Settings
         </Button>
       }
+      onClickOutsideOrEscape={() => {
+        setSettings(initialState)
+        onOpenChange(false)
+      }}
     >
       <Box gap="2rem" flexDirection="column">
         <Box gap="0" flexDirection="column" align="stretch">

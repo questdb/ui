@@ -48,13 +48,17 @@ export const TableSchemaDialog = ({
     timestamp: "",
   })
 
+  const resetToDefaults = () => {
+    setDefaults({
+      schemaColumns: file.schema,
+      partitionBy: file.partitionBy,
+      timestamp: file.timestamp,
+    })
+  }
+
   useEffect(() => {
     if (file.schema) {
-      setDefaults({
-        schemaColumns: file.schema,
-        partitionBy: file.partitionBy,
-        timestamp: file.timestamp,
-      })
+      resetToDefaults()
     }
   }, [file])
 
@@ -82,6 +86,10 @@ export const TableSchemaDialog = ({
             : "Add"}
         </Button>
       }
+      onClickOutsideOrEscape={() => {
+        resetToDefaults()
+        onOpenChange(undefined)
+      }}
     >
       <Form<FormValues>
         name="table-schema"
@@ -121,6 +129,7 @@ export const TableSchemaDialog = ({
               prefixIcon={<Undo size={18} />}
               variant="secondary"
               onClick={() => {
+                resetToDefaults()
                 onOpenChange(undefined)
               }}
             >
