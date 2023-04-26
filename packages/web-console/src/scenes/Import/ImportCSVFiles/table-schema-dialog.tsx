@@ -69,7 +69,7 @@ export const TableSchemaDialog = ({
       title={
         <Box gap="0.5rem">
           <StyledTableIcon size="20px" />
-          <Text color="foreground">Table schema</Text>
+          <Text color="foreground">Table schema for {name}</Text>
         </Box>
       }
       open={open}
