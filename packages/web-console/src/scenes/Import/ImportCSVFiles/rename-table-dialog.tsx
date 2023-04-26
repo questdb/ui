@@ -89,7 +89,7 @@ export const RenameTableDialog = ({
             <Dialog.Title>
               <Box>
                 <Edit size={20} />
-                Change table name erwer
+                Change table name
               </Box>
             </Dialog.Title>
 
