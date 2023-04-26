@@ -14,6 +14,7 @@ import { Box } from "../../../components/Box"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import styled from "styled-components"
+import { shortenText } from "../../../utils"
 
 const List = styled.ul`
   list-style-position: inside;
@@ -67,7 +68,7 @@ export const RenameTableDialog = ({
             prefixIcon={<Edit size="14px" />}
             onClick={() => onOpenChange(name)}
           >
-            {name}
+            {shortenText(name, 20)}
           </Button>
         </ForwardRef>
       </AlertDialog.Trigger>
