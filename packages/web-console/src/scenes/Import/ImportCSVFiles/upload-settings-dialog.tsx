@@ -82,9 +82,8 @@ export const UploadSettingsDialog = ({
       description: (
         <>
           Delimiter character. When not set, import will try to detect the
-          delimiter automatically. Since automatic delimiter detection requires
-          at least two lines (rows) to be present in the file, this parameter
-          may be used to allow single line file import.
+          delimiter automatically. You can define the parameter here to disable
+          auto-detection and allow single-line file import.
         </>
       ),
       defaultValue: settings.delimiter,
@@ -95,7 +94,7 @@ export const UploadSettingsDialog = ({
       label: "Atomicity",
       description: (
         <>
-          Behaviour when an error is detected in the data.
+          Behavior when an error is detected in the data.
           <br />
           <strong>Abort</strong>: the entire file will be skipped.
           <br />
@@ -126,8 +125,8 @@ export const UploadSettingsDialog = ({
       label: "Force header",
       description: (
         <>
-          When <strong>false</strong>, QuestDB will try to infer if the first
-          line of the file is the header line.
+          When set to <strong>false</strong>, QuestDB will try to infer if the
+          first line of the file is the header line.
           <br />
           When set to <strong>true</strong>, QuestDB will expect that line to be
           the header line.
@@ -141,9 +140,10 @@ export const UploadSettingsDialog = ({
       label: "Skip line extra values",
       description: (
         <>
-          When set to <strong>true</strong>, the parser will ignore those extra
-          values rather than ignoring entire line. An extra value is something
-          in addition to what is defined by the header.
+          When set to <strong>true</strong>, the parser will ignore extra
+          values. When set to <strong>false</strong>, the parser will ignore the
+          entire line. An extra value is something in addition to what is
+          defined by the header.
         </>
       ),
       defaultValue: settings.skipLev,
