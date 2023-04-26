@@ -18,7 +18,12 @@ In order to run this package locally, you need to do the following steps:
 
 Consult instructions on [`local-development-setup.md`](../../docs/local-development-setup.md) document.
 
-### 2. Start development server
+### 2. Build the production version of `@questdb/react-components`, which this repository uses:
+```
+yarn workspace @questdb/react-components build
+```
+
+### 3. Start development server
 
 ```
 yarn workspace @questdb/web-console start
@@ -26,7 +31,7 @@ yarn workspace @questdb/web-console start
 
 [localhost:9999](http://localhost:9999) should show web console
 
-### 3. Run QuestDB in the background
+### 4. Run QuestDB in the background
 
 This package (`web-console`) is a only GUI for QuestDB, it does not include QuestDB itself.\
 GUI will work without it, but because it's a tool to interact with QuestDB, you will need QuestDB as well.
@@ -39,7 +44,7 @@ If you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 ```
 
-### 4. Hack!
+### 5. Hack!
 
 Do your code changes and browser will automatically refresh [localhost:9999](http://localhost:9999).
 
