@@ -85,7 +85,7 @@ type DrawerProps = {
   width?: string
   open: boolean
   onOpenChange?: (isOpen: boolean) => void
-  onClickOutsideOrEscape?: () => void
+  onDismiss?: () => void
   withCloseButton?: boolean
 }
 
@@ -96,7 +96,7 @@ export const Drawer = ({
   width,
   open,
   onOpenChange,
-  onClickOutsideOrEscape,
+  onDismiss,
   withCloseButton,
 }: DrawerProps) => (
   <RadixDialog.Root onOpenChange={onOpenChange} open={open}>
@@ -109,16 +109,16 @@ export const Drawer = ({
       </ForwardRef>
       <DrawerContent
         width={width}
-        {...(onClickOutsideOrEscape && {
-          onEscapeKeyDown: onClickOutsideOrEscape,
-          onInteractOutside: onClickOutsideOrEscape,
+        {...(onDismiss && {
+          onEscapeKeyDown: onDismiss,
+          onInteractOutside: onDismiss,
         })}
       >
         {(title || withCloseButton) && (
           <Header>
             {title && <Heading level={5}>{title}</Heading>}
-            {withCloseButton && (
-              <StyledClose>
+            {withCloseButton && onDismiss && (
+              <StyledClose onClick={onDismiss}>
                 <Close size="18px" />
               </StyledClose>
             )}

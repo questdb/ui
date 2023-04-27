@@ -181,10 +181,11 @@ export const UploadSettingsDialog = ({
           Settings
         </Button>
       }
-      onClickOutsideOrEscape={() => {
+      onDismiss={() => {
         setSettings(initialState)
         onOpenChange(false)
       }}
+      withCloseButton
     >
       <Box gap="2rem" flexDirection="column">
         <Box gap="0" flexDirection="column" align="stretch">

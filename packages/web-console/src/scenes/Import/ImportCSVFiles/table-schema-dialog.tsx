@@ -86,10 +86,11 @@ export const TableSchemaDialog = ({
             : "Add"}
         </Button>
       }
-      onClickOutsideOrEscape={() => {
+      onDismiss={() => {
         resetToDefaults()
         onOpenChange(undefined)
       }}
+      withCloseButton
     >
       <Form<FormValues>
         name="table-schema"
