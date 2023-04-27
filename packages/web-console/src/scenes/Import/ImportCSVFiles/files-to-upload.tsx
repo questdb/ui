@@ -12,6 +12,7 @@ import { ProcessedFile } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
 import { TableSchemaDialog } from "./table-schema-dialog"
+import { UploadResultDialog } from "./upload-result-dialog"
 
 const StyledTable = styled(Table)`
   width: 100%;
@@ -92,7 +93,12 @@ export const FilesToUpload = ({
                       {bytesWithSuffix(data.fileObject.size)}
                     </Text>
                   </FileTextBox>
-                  <FileStatus file={data} />
+                  <Box gap="1rem" align="center">
+                    <FileStatus file={data} />
+                    {!data.isUploading && data.uploadResult && (
+                      <UploadResultDialog file={data} />
+                    )}
+                  </Box>
                   {(data.uploadResult && data.uploadResult.rowsRejected > 0) ||
                     (data.error && (
                       <FileTextBox flexDirection="column" gap="1rem">

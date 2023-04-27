@@ -84,7 +84,7 @@ type DrawerProps = {
   title?: React.ReactNode
   trigger: React.ReactNode
   width?: string
-  open: boolean
+  open?: boolean
   onOpenChange?: (isOpen: boolean) => void
   onDismiss?: () => void
   withCloseButton?: boolean
@@ -118,8 +118,8 @@ export const Drawer = ({
         {(title || withCloseButton) && (
           <Header>
             {title && <Heading level={5}>{title}</Heading>}
-            {withCloseButton && onDismiss && (
-              <StyledClose onClick={onDismiss}>
+            {withCloseButton && (
+              <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
                 <Close size="18px" />
               </StyledClose>
             )}
