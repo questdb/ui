@@ -62,6 +62,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                   return columnResponse.data.map((column) => ({
                     name: column.column,
                     type: column.type,
+                    pattern: "",
                   }))
                 }
                 return []
