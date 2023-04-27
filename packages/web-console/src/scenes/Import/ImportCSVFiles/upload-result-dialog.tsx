@@ -63,7 +63,7 @@ export const UploadResultDialog = ({ file }: Props) => {
 
   const stats = [
     {
-      label: "Force header",
+      label: "Header forced",
       value: file.uploadResult?.header.toString(),
     },
     {
