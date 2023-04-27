@@ -89,7 +89,7 @@ export const UploadResultDialog = ({ file }: Props) => {
         </Box>
       }
       trigger={
-        <Button skin="secondary" prefixIcon={<Search size="14px" />}>
+        <Button skin="success" prefixIcon={<Search size="14px" />}>
           Details
         </Button>
       }
