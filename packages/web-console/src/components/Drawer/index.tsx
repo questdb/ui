@@ -67,6 +67,7 @@ const StyledClose = styled(RadixDialog.Close).attrs({
   appearance: initial;
   margin-left: auto;
   cursor: pointer;
+  color: ${({ theme }) => theme.color.foreground};
 `
 
 const Header = styled.div`
