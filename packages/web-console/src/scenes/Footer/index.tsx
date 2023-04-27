@@ -62,6 +62,11 @@ const RightContainer = styled.div`
     margin-right: 1rem;
   }
 `
+const FooterText = styled(Text)`
+  @media (max-width: 400px) {
+    margin-top: 12px;
+  }
+`;
 
 const GithubBannerTransition = createGlobalStyle`
   .github-banner-enter {
@@ -109,9 +114,9 @@ const Footer = () => {
   return (
     <Wrapper id="footer">
       <LeftContainer>
-        <Text color="draculaForeground">
+        <FooterText color="draculaForeground">
           Copyright &copy; {new Date().getFullYear()} QuestDB
-        </Text>
+        </FooterText>
       </LeftContainer>
       <RightContainer>
         <ConnectionStatus />
