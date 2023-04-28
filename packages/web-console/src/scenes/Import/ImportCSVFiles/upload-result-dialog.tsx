@@ -13,8 +13,11 @@ import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 import { Drawer } from "../../../components"
 import styled from "styled-components"
-import { Undo } from "styled-icons/boxicons-regular"
 import { UploadResultColumn } from "../../../utils"
+
+const SearchIcon = styled(Search)`
+  color: ${({ theme }) => theme.color.foreground};
+`
 
 const StyledTable = styled(Table)`
   width: 100%;
@@ -84,7 +87,7 @@ export const UploadResultDialog = ({ file }: Props) => {
     <Drawer
       title={
         <Box>
-          <Search size={20} />
+          <SearchIcon size={20} />
           <Text color="foreground">Import details for {name}</Text>
         </Box>
       }
