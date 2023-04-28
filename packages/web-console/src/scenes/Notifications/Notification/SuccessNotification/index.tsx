@@ -22,15 +22,21 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { useCallback, useMemo } from "react"
 import styled from "styled-components"
+import { format } from "date-fns/fp"
 import { Wrapper, SideContent, Content } from "../styles"
 import { NotificationShape } from "../../../../types"
 import { CheckmarkOutline } from "styled-icons/evaicons-outline"
 import { Zap } from "styled-icons/boxicons-solid"
-import { color } from "../../../../utils"
+import { Copy } from "styled-icons/evaicons-solid/"
+import { color, copyToClipboard, formatTiming, renderTable } from "../../../../utils"
 import { Timestamp } from "../Timestamp"
-import { IconWithTooltip } from "../../../../components"
+import {
+  IconWithTooltip,
+  PopperHover,
+  Tooltip
+} from "../../../../components"
 
 const CheckmarkOutlineIcon = styled(CheckmarkOutline)`
   color: ${color("draculaGreen")};
@@ -41,20 +47,55 @@ const ZapIcon = styled(Zap)`
   color: ${color("draculaYellow")};
 `
 
+const CopyIcon = styled(Copy)`
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+`
+
 export const SuccessNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent, jitCompiled } = props
+  const { createdAt, content, sideContent, jitCompiled, request, result } = props
+  const handleCopyToClipboard = useCallback(() => {
+    let clipboardText = `[${format("HH:mm:ss", createdAt)}] ${request?.query}\n`
+    if (result?.timings) {
+      try {
+        const { count, compiler, fetch, execute } = result.timings;
+        clipboardText += `✔ Success: ${result.count?.toLocaleString()} rows in ${formatTiming(fetch)}\n`;
+        clipboardText += renderTable([
+          ['Execute', 'Network', 'Total', 'Count', 'Compile'],
+          [
+            formatTiming(execute),
+            formatTiming(fetch - execute),
+            formatTiming(fetch),
+            formatTiming(count),
+            formatTiming(compiler),
+          ],
+        ])
+      } catch (error) {
+        console.error('Error building table to copy:', error)
+      }
+    }
+    copyToClipboard(clipboardText.trim())
+  }, [createdAt, request, result])
+
+  const icon = useMemo(() => {
+    return jitCompiled ? (
+      <IconWithTooltip
+        icon={<ZapIcon size="16px" />}
+        placement="top"
+        tooltip="JIT Compiled"
+      />
+    ) : (
+      <CheckmarkOutlineIcon size="18px" />
+    )
+  }, [jitCompiled])
+
   return (
-    <Wrapper>
+    <Wrapper onClick={handleCopyToClipboard}>
+      <PopperHover delay={350} placement="right" trigger={<CopyIcon size="20px" />}>
+        <Tooltip>{"Click to copy"}</Tooltip>
+      </PopperHover>
       <Timestamp createdAt={createdAt} />
-      {jitCompiled ? (
-        <IconWithTooltip
-          icon={<ZapIcon size="16px" />}
-          placement="top"
-          tooltip="JIT Compiled"
-        />
-      ) : (
-        <CheckmarkOutlineIcon size="18px" />
-      )}
+      {icon}
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>
     </Wrapper>

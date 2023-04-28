@@ -23,7 +23,7 @@
  ******************************************************************************/
 import { BusEvent } from "../consts"
 
-type ColumnDefinition = Readonly<{ name: string; type: string }>
+export type ColumnDefinition = Readonly<{ name: string; type: string }>
 
 type Value = string | number | boolean
 type RawData = Record<string, Value>
@@ -43,9 +43,9 @@ export type Timings = {
 
 export type Explain = { jitCompiled: boolean }
 
-type DatasetType = Array<boolean | string | number>
+export type DatasetType = Array<boolean | string | number>
 
-type RawDqlResult = {
+export type RawDqlResult = {
   columns: ColumnDefinition[]
   count: number
   dataset: DatasetType[]
@@ -60,7 +60,7 @@ type RawDdlResult = {
   ddl: "OK"
 }
 
-type RawErrorResult = {
+export type RawErrorResult = {
   ddl: undefined
   error: "<error message>"
   position: number
@@ -72,7 +72,7 @@ type DdlResult = {
   type: Type.DDL
 }
 
-type RawResult = RawDqlResult | RawDdlResult | RawErrorResult
+export type RawResult = RawDqlResult | RawDdlResult | RawErrorResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR

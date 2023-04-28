@@ -22,23 +22,40 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { useCallback } from "react"
 import styled from "styled-components"
+import { format } from "date-fns/fp"
 import { Wrapper, Content, SideContent } from "../styles"
 import { Timestamp } from "../Timestamp"
 import { NotificationShape } from "../../../../types"
 import { CloseOutline } from "styled-icons/evaicons-outline"
-import { color } from "../../../../utils"
+import { Copy } from "styled-icons/evaicons-solid/"
+import { color, copyToClipboard } from "../../../../utils"
+import { PopperHover, Tooltip } from "../../../../components"
 
 const CloseOutlineIcon = styled(CloseOutline)`
   color: ${color("draculaRed")};
   flex-shrink: 0;
 `
 
+const CopyIcon = styled(Copy)`
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+`
+
 export const ErrorNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent } = props
+  const { createdAt, content, sideContent, request, result } = props
+  const handleCopyToClipboard = useCallback(() => {
+    let clipboardText = `[${format("HH:mm:ss", createdAt)}] ${request?.query}\n`
+    clipboardText += `✖ Error: ${result?.error || 'Unknown Error'}`;
+    copyToClipboard(clipboardText.trim())
+  }, [createdAt, request, result])
+
   return (
-    <Wrapper>
+    <Wrapper onClick={handleCopyToClipboard}>
+      <PopperHover delay={350} placement="right" trigger={<CopyIcon size="20px" />}>
+        <Tooltip>{"Click to copy"}</Tooltip>
+      </PopperHover>
       <Timestamp createdAt={createdAt} />
       <CloseOutlineIcon size="18px" />
       <Content>{content}</Content>

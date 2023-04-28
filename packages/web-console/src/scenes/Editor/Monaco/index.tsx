@@ -23,7 +23,7 @@ import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
 import { BusEvent } from "../../../consts"
-import type { ErrorResult } from "../../../utils/questdb"
+import type { QueryRawResult, ErrorResult } from "../../../utils/questdb"
 import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
@@ -359,7 +359,7 @@ const MonacoEditor = () => {
       if (request?.query) {
         void quest
           .queryRaw(request.query, { limit: "0,1000", explain: true })
-          .then((result) => {
+          .then((result: QueryRawResult) => {
             setRequest(undefined)
             errorRef.current = undefined
             errorRangeRef.current = undefined
@@ -404,6 +404,8 @@ const MonacoEditor = () => {
                       {result.query}
                     </Text>
                   ),
+                  request,
+                  result,
                 }),
               )
               bus.trigger(BusEvent.MSG_QUERY_DATASET, result)
@@ -426,6 +428,8 @@ const MonacoEditor = () => {
                   </Text>
                 ),
                 type: NotificationType.ERROR,
+                request,
+                result: error,
               }),
             )
 

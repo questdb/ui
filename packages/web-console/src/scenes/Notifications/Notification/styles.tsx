@@ -34,6 +34,7 @@ export const Wrapper = styled.div`
   height: 4rem;
   border-bottom: 1px ${color("draculaBackgroundDarker")} solid;
   padding: 0 1rem;
+  cursor: pointer;
 
   ${bezierTransition};
 `
