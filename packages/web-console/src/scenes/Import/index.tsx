@@ -19,7 +19,10 @@ const Import = () => {
           onImported={(result) => {
             if (result.status === "OK") {
               bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
-              bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, result.location)
+              bus.trigger(
+                BusEvent.MSG_QUERY_FIND_N_EXEC,
+                `"${result.location}"`,
+              )
             }
           }}
         />

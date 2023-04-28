@@ -157,7 +157,8 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                   >
                     <Form.Input
                       name={`schemaColumns.${index}.pattern`}
-                      placeholder="yyy-MM-ddTHH:mm:ss.SSSUUUz"
+                      placeholder="yyyy-MM-ddTHH:mm:ss.SSSUUUz"
+                      defaultValue="yyyy-MM-ddTHH:mm:ss.SSSUUUz"
                       required
                     />
                   </Form.Item>
