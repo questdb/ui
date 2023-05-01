@@ -236,8 +236,11 @@ const MonacoEditor = () => {
   ) => {
     errorRangeRef.current = undefined
     errorRef.current = undefined
+    const model = editor.getModel()
 
-    monaco.editor.setModelMarkers(editor.getModel()!, QuestDBLanguageName, []);
+    if (model) {
+      monaco.editor.setModelMarkers(model, QuestDBLanguageName, []);
+    }
     dispatch(actions.query.cleanupNotifications())
   }
 
