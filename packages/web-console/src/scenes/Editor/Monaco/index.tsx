@@ -309,6 +309,44 @@ const MonacoEditor = () => {
         },
       })
 
+      const countChar = (s: string, char: string) => {
+        return s.split(char).length - 1
+      }
+
+      // Recursively remove trailing char until none are found
+      const removeTrailingChar = (str: string, char: string): string => {
+        let removeIndex = str.length - 1
+
+        // Move back one char if the current char is a newline
+        if (str[removeIndex] === `\n`) {
+          removeIndex = removeIndex - 1
+        }
+
+        if (str[removeIndex] === char) {
+          str = str.slice(0, -1)
+          return removeTrailingChar(str, char)
+        }
+
+        return str
+      }
+
+      editor.onDidChangeModelContent((e) => {
+        const model = editor.getModel()
+        const updatedContent = model?.getValue()
+        const currentLineHasError = errorRangeRef.current?.startLineNumber === editor.getPosition()?.lineNumber
+        const trimmedQuery = removeTrailingChar(updatedContent || '', ';')
+        const updatedValueIsSingleQuery = countChar(trimmedQuery, ';') === 0
+
+        // Optimistically remove error markers when the user updates the query causing the error
+        if (errorRangeRef.current && model && (currentLineHasError || updatedValueIsSingleQuery)) {
+          errorRangeRef.current = undefined
+          errorRef.current = undefined
+
+          monaco.editor.setModelMarkers(model, QuestDBLanguageName, []);
+          dispatch(actions.query.cleanupNotifications())
+        }
+      })
+
       editor.onDidChangeCursorPosition(() => {
         renderLineMarkings(monaco, editor)
       })
