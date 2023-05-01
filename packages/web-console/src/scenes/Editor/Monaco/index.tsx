@@ -350,7 +350,6 @@ const MonacoEditor = () => {
       })
 
       editor.onDidChangeCursorPosition(() => {
-        console.log('hey')
         const queryAtCursor = getQueryFromCursor(editor)
 
         renderLineMarkings(monaco, editor)
