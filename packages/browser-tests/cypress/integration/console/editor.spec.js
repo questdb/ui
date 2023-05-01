@@ -241,6 +241,15 @@ describe("errors", () => {
 
     cy.getNotifications().should("contain", "Invalid date");
   });
+
+  it("should mark an invalid query as error, then remove the error when updated", () => {
+    const query = `fdz as ssss;`;
+    cy.typeQuery(query).runLine();
+    cy.getErrorMarker().should("exist");
+    cy.matchErrorMarkerPosition({ left: 0, width: 25 });
+    cy.typeQuery(`ff`);
+    cy.getErrorMarker().should("not.exist");
+  });
 });
 
 describe("running query with F9", () => {
