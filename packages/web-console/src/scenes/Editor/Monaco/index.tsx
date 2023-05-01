@@ -110,6 +110,7 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<string[]>([])
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+  const errorQueryHasFocusRef = useRef<boolean>(false)
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -229,6 +230,17 @@ const MonacoEditor = () => {
     }
   }
 
+  const removeErrors = (
+    editor: IStandaloneCodeEditor,
+    monaco: Monaco,
+  ) => {
+    errorRangeRef.current = undefined
+    errorRef.current = undefined
+
+    monaco.editor.setModelMarkers(editor.getModel()!, QuestDBLanguageName, []);
+    dispatch(actions.query.cleanupNotifications())
+  }
+
   const handleEditorDidMount = (
     editor: IStandaloneCodeEditor,
     monaco: Monaco,
@@ -331,24 +343,31 @@ const MonacoEditor = () => {
       }
 
       editor.onDidChangeModelContent((e) => {
-        const model = editor.getModel()
-        const updatedContent = model?.getValue()
-        const currentLineHasError = errorRangeRef.current?.startLineNumber === editor.getPosition()?.lineNumber
-        const trimmedQuery = removeTrailingChar(updatedContent || '', ';')
-        const updatedValueIsSingleQuery = countChar(trimmedQuery, ';') === 0
-
-        // Optimistically remove error markers when the user updates the query causing the error
-        if (errorRangeRef.current && model && (currentLineHasError || updatedValueIsSingleQuery)) {
-          errorRangeRef.current = undefined
-          errorRef.current = undefined
-
-          monaco.editor.setModelMarkers(model, QuestDBLanguageName, []);
-          dispatch(actions.query.cleanupNotifications())
+        // Remove errors when the user updates the query causing the error
+        if (errorQueryHasFocusRef.current) {
+          removeErrors(editor, monaco)
         }
       })
 
       editor.onDidChangeCursorPosition(() => {
+        console.log('hey')
+        const queryAtCursor = getQueryFromCursor(editor)
+
         renderLineMarkings(monaco, editor)
+
+        if (queryAtCursor && errorRef.current) {
+          const queriesHaveBeenMerged = queryAtCursor.query !== errorRef.current.query && queryAtCursor.query.includes(errorRef.current.query)
+
+          // Remove errors when the query causing the error is merged with another query
+          if (queriesHaveBeenMerged) {
+            removeErrors(editor, monaco)
+          }
+
+          // Does the query at the cursor match the query that caused the error? 
+          // Set here for use on content change, as checking then is too late
+          errorQueryHasFocusRef.current = queryAtCursor.query === errorRef.current.query
+        }
+
       })
     }
 
