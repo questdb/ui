@@ -325,7 +325,7 @@ const MonacoEditor = () => {
       })
 
       editor.onDidChangeModelContent((e) => {
-        // Remove errors when the user updates the query causing the error
+        // Remove errors when the invald query is updated
         if (errorQueryHasFocusRef.current) {
           removeErrors(editor, monaco)
         }
@@ -339,7 +339,7 @@ const MonacoEditor = () => {
         if (queryAtCursor && errorRef.current) {
           const queriesHaveBeenMerged = queryAtCursor.query !== errorRef.current.query && queryAtCursor.query.includes(errorRef.current.query)
 
-          // Remove errors when the query causing the error is merged with another query
+          // Remove errors when the invalid query is merged with another query
           if (queriesHaveBeenMerged) {
             removeErrors(editor, monaco)
           }
