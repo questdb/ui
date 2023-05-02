@@ -344,9 +344,9 @@ const MonacoEditor = () => {
             removeErrors(editor, monaco)
           }
 
-          // Does the query at the cursor match the query that caused the error? 
+          // Does the query at the cursor match the invalid query? 
           // Set here for use on content change, as checking then is too late
-          errorQueryHasFocusRef.current = queryAtCursor.query === errorRef.current.query
+          errorQueryHasFocusRef.current = queryAtCursor.query === errorRef.current?.query
         }
 
       })
