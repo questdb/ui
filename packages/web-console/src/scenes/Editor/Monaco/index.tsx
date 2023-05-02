@@ -234,13 +234,13 @@ const MonacoEditor = () => {
     editor: IStandaloneCodeEditor,
     monaco: Monaco,
   ) => {
-    errorRangeRef.current = undefined
-    errorRef.current = undefined
     const model = editor.getModel()
-
     if (model) {
       monaco.editor.setModelMarkers(model, QuestDBLanguageName, []);
     }
+
+    errorRangeRef.current = undefined
+    errorRef.current = undefined
     dispatch(actions.query.cleanupNotifications())
   }
 
@@ -332,10 +332,9 @@ const MonacoEditor = () => {
       })
 
       editor.onDidChangeCursorPosition(() => {
-        const queryAtCursor = getQueryFromCursor(editor)
-
         renderLineMarkings(monaco, editor)
-
+        
+        const queryAtCursor = getQueryFromCursor(editor)
         if (queryAtCursor && errorRef.current) {
           const queriesHaveBeenMerged = queryAtCursor.query !== errorRef.current.query && queryAtCursor.query.includes(errorRef.current.query)
 
@@ -348,7 +347,6 @@ const MonacoEditor = () => {
           // Set here for use on content change, as checking then is too late
           errorQueryHasFocusRef.current = queryAtCursor.query === errorRef.current?.query
         }
-
       })
     }
 
