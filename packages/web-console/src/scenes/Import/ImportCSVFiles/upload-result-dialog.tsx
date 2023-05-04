@@ -57,6 +57,20 @@ const Stat = styled(Box).attrs({
   width: 100%;
 `
 
+const DetailsButton = styled(Button)`
+  position: relative;
+`
+
+const NotificationCircle = styled.span`
+  position: absolute;
+  right: -0.4rem;
+  top: -0.4rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background-color: ${({ theme }) => theme.color.red};
+`
+
 type Props = {
   file: ProcessedFile
 }
@@ -83,6 +97,12 @@ export const UploadResultDialog = ({ file }: Props) => {
     },
   ]
 
+  const partialErrorsCount =
+    file.uploadResult?.columns.reduce(
+      (acc, column) => acc + column.errors,
+      0,
+    ) ?? 0
+
   return (
     <Drawer
       title={
@@ -92,9 +112,10 @@ export const UploadResultDialog = ({ file }: Props) => {
         </Box>
       }
       trigger={
-        <Button skin="success" prefixIcon={<Search size="14px" />}>
+        <DetailsButton skin="success" prefixIcon={<Search size="14px" />}>
+          {partialErrorsCount > 0 && <NotificationCircle />}
           Details
-        </Button>
+        </DetailsButton>
       }
       withCloseButton
     >
