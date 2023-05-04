@@ -163,7 +163,7 @@ export const FilesToUpload = ({
             ),
 
             align: "flex-end",
-            width: "200px",
+            width: "150px",
             render: ({ data }) => {
               const name = data.table_name ?? data.fileObject.name
               return (
