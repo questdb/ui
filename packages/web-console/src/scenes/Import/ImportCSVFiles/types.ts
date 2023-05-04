@@ -17,6 +17,7 @@ export type ProcessedFile = {
   isUploading: boolean
   uploaded: boolean
   uploadResult?: UploadResult
+  uploadProgress: number
   error?: string
 }
 

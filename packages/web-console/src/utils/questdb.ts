@@ -160,6 +160,7 @@ type UploadOptions = {
   schema: SchemaColumn[]
   partitionBy: string
   timestamp: string
+  onProgress: (progress: number) => void
 }
 
 export type UploadResultColumn = {
@@ -390,36 +391,51 @@ export class Client {
     schema,
     partitionBy,
     timestamp,
+    onProgress,
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
     formData.append("schema", JSON.stringify(schema))
     formData.append("data", file)
-    try {
-      const serializedSettings = Object.keys(settings).reduce(
-        (acc, key) => ({
-          ...acc,
-          [key]: settings[key as keyof UploadModeSettings].toString(),
-        }),
-        {},
-      )
-      const params = {
-        fmt: "json",
-        name,
-        partitionBy,
-        ...(timestamp ? { timestamp } : {}),
-        ...serializedSettings,
-      }
-      const response: Response = await fetch(
-        `${this._host}/imp?${new URLSearchParams(params)}`,
-        {
-          method: "POST",
-          body: formData,
-        },
-      )
-      return await response.json()
-    } catch (error) {
-      throw error
+    const serializedSettings = Object.keys(settings).reduce(
+      (acc, key) => ({
+        ...acc,
+        [key]: settings[key as keyof UploadModeSettings].toString(),
+      }),
+      {},
+    )
+    const params = {
+      fmt: "json",
+      name,
+      partitionBy,
+      ...(timestamp ? { timestamp } : {}),
+      ...serializedSettings,
     }
+
+    return new Promise((resolve, reject) => {
+      let request = new XMLHttpRequest()
+      request.open("POST", `${this._host}/imp?${new URLSearchParams(params)}`)
+      request.upload.addEventListener("progress", (e) => {
+        let percent_completed = (e.loaded / e.total) * 100
+        onProgress(percent_completed)
+      })
+      request.onload = (_e) => {
+        if (request.status === 200) {
+          resolve(JSON.parse(request.response))
+        } else {
+          reject({
+            status: request.status,
+            statusText: request.statusText,
+          })
+        }
+      }
+      request.onerror = () => {
+        reject({
+          status: request.status,
+          statusText: request.statusText,
+        })
+      }
+      request.send(formData)
+    })
   }
 
   async getLatestRelease() {

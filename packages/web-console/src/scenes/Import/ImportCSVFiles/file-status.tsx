@@ -19,7 +19,7 @@ const mapStatusToLabel = (
       icon?: React.ReactNode
     }
   | undefined => {
-  if (file.uploaded && file.uploadResult) {
+  if (!file.isUploading && file.uploaded && file.uploadResult) {
     return {
       label: `Imported ${file.uploadResult.rowsImported.toLocaleString()} row${
         file.uploadResult.rowsImported > 1 ? "s" : ""
@@ -38,7 +38,7 @@ const mapStatusToLabel = (
 
   if (file.isUploading) {
     return {
-      label: "Uploading...",
+      label: `Uploading: ${file.uploadProgress.toFixed(2)}%`,
       type: BadgeType.WARNING,
     }
   }

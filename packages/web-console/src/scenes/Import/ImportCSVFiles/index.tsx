@@ -30,18 +30,25 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
   const tables = useSelector(selectors.query.getTables)
 
-  const setIsUploading = (file: ProcessedFile, isUploading: boolean) => {
+  const setFileProperties = (
+    filename: string,
+    file: Partial<ProcessedFile>,
+  ) => {
     setFilesDropped((files) =>
       files.map((f) => {
-        if (f.table_name === file.table_name) {
+        if (f.table_name === filename) {
           return {
             ...f,
-            isUploading,
+            ...file,
           }
         }
         return f
       }),
     )
+  }
+
+  const setIsUploading = (file: ProcessedFile, isUploading: boolean) => {
+    setFileProperties(file.table_name, { isUploading })
   }
 
   const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
@@ -103,6 +110,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           isUploading: false,
           uploaded: false,
           uploadResult: undefined,
+          uploadProgress: 0,
         }
       }),
     )
@@ -130,37 +138,44 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             return
           }
           setIsUploading(file, true)
-          const response = await quest.uploadCSVFile({
-            file: file.fileObject,
-            name: file.table_name,
-            settings: file.settings,
-            schema: file.schema,
-            partitionBy: file.partitionBy,
-            timestamp: file.timestamp,
-          })
-          setFilesDropped(
-            filesDropped.map((f) => {
-              if (f.table_name === file.table_name) {
-                return {
-                  ...f,
-                  uploaded: response.status === "OK",
-                  uploadResult: response.status === "OK" ? response : undefined,
-                  schema:
-                    response.status === "OK"
-                      ? response.columns.map(
-                          (c) => pick(c, ["name", "type"]) as SchemaColumn,
-                        )
-                      : file.schema,
-                  error: response.status === "OK" ? undefined : response.status,
-                }
-              }
-              return f
-            }),
-          )
-          if (response.status === "OK") {
-            onImported(response)
+          try {
+            const response = await quest.uploadCSVFile({
+              file: file.fileObject,
+              name: file.table_name,
+              settings: file.settings,
+              schema: file.schema,
+              partitionBy: file.partitionBy,
+              timestamp: file.timestamp,
+              onProgress: (progress) => {
+                setFileProperties(file.table_name, {
+                  uploadProgress: progress,
+                })
+              },
+            })
+            setFileProperties(file.table_name, {
+              uploaded: response.status === "OK",
+              uploadResult: response.status === "OK" ? response : undefined,
+              schema:
+                response.status === "OK"
+                  ? response.columns.map(
+                      (c) => pick(c, ["name", "type"]) as SchemaColumn,
+                    )
+                  : file.schema,
+              error: response.status === "OK" ? undefined : response.status,
+            })
+            if (response.status === "OK") {
+              onImported(response)
+            }
+            setIsUploading(file, false)
+          } catch (err) {
+            setIsUploading(file, false)
+            setFileProperties(file.table_name, {
+              uploaded: false,
+              uploadResult: undefined,
+              uploadProgress: 0,
+              error: "Upload error",
+            })
           }
-          setIsUploading(file, false)
         }}
         onFileRemove={(removedFile) => {
           setFilesDropped(
