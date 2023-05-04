@@ -9,6 +9,8 @@ const Root = styled.div`
   display: flex;
   width: 100%;
   padding: 2rem;
+  margin-bottom: 4rem;
+  overflow: auto;
 `
 
 const Import = () => {
