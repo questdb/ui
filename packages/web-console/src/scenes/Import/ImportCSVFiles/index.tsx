@@ -14,6 +14,7 @@ import {
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
+import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -157,9 +158,20 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
               uploadResult: response.status === "OK" ? response : undefined,
               schema:
                 response.status === "OK"
-                  ? response.columns.map(
-                      (c) => pick(c, ["name", "type"]) as SchemaColumn,
-                    )
+                  ? response.columns.map((c) => {
+                      // Schema response only contains name and type,
+                      // so we look for the pattern provided before upload and augment the schema
+                      const match = file.schema.find((s) => s.name === c.name)
+                      return {
+                        ...pick(c, ["name", "type"]),
+                        ...({
+                          pattern:
+                            c.type === "TIMESTAMP"
+                              ? match?.pattern ?? DEFAULT_TIMESTAMP_FORMAT
+                              : "",
+                        } as SchemaColumn),
+                      }
+                    })
                   : file.schema,
               error: response.status === "OK" ? undefined : response.status,
             })

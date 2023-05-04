@@ -10,6 +10,7 @@ import { AddCircle, Close } from "styled-icons/remix-line"
 import { SortDown } from "styled-icons/boxicons-regular"
 import { Text } from "../../../components/Text"
 import { Drawer } from "../../../components/Drawer"
+import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -157,8 +158,8 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                   >
                     <Form.Input
                       name={`schemaColumns.${index}.pattern`}
-                      placeholder="yyyy-MM-ddTHH:mm:ss.SSSUUUz"
-                      defaultValue="yyyy-MM-ddTHH:mm:ss.SSSUUUz"
+                      placeholder={DEFAULT_TIMESTAMP_FORMAT}
+                      defaultValue={DEFAULT_TIMESTAMP_FORMAT}
                       required
                     />
                   </Form.Item>
