@@ -30,6 +30,7 @@ export const UploadActions = ({
         file={file}
       />
       <Button
+        disabled={file.isUploading}
         skin="primary"
         prefixIcon={<Upload2 size="18px" />}
         onClick={() => onUpload(file)}
@@ -40,6 +41,7 @@ export const UploadActions = ({
         placement="bottom"
         trigger={
           <Button
+            disabled={file.isUploading}
             skin="secondary"
             onClick={() => {
               onRemove(file)
