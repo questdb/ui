@@ -82,7 +82,7 @@ export const TableSchemaDialog = ({
           onClick={() => onOpenChange(name)}
         >
           {columnCount > 0
-            ? `${columnCount} column${columnCount > 1 ? "s" : ""}`
+            ? `${columnCount} col${columnCount > 1 ? "s" : ""}`
             : "Add"}
         </Button>
       }
