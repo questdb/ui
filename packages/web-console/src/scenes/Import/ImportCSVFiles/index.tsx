@@ -164,13 +164,15 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                       const match = file.schema.find((s) => s.name === c.name)
                       return {
                         ...pick(c, ["name", "type"]),
-                        ...({
+                        ...{
                           pattern:
                             c.type === "TIMESTAMP"
-                              ? match?.pattern ?? DEFAULT_TIMESTAMP_FORMAT
+                              ? match?.pattern
+                                ? match?.pattern
+                                : DEFAULT_TIMESTAMP_FORMAT
                               : "",
-                        } as SchemaColumn),
-                      }
+                        },
+                      } as SchemaColumn
                     })
                   : file.schema,
               error: response.status === "OK" ? undefined : response.status,
