@@ -3,7 +3,8 @@ import { UploadResult, UploadModeSettings } from "utils"
 export type SchemaColumn = {
   name: string
   type: string
-  pattern?: string
+  pattern: string | undefined
+  precision: string | undefined
 }
 
 export type ProcessedFile = {

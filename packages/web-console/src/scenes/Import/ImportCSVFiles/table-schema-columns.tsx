@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
-import { SchemaColumn } from "utils"
 import { Box } from "../../../components/Box"
 import { Form } from "../../../components/Form"
 import { IconWithTooltip } from "../../../components"
@@ -11,6 +10,7 @@ import { SortDown } from "styled-icons/boxicons-regular"
 import { Text } from "../../../components/Text"
 import { Drawer } from "../../../components/Drawer"
 import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
+import { SchemaColumn } from "./types"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -19,6 +19,7 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "DOUBLE", value: "DOUBLE" },
   { label: "DATE", value: "DATE" },
   { label: "FLOAT", value: "FLOAT" },
+  { label: "GEOHASH", value: "GEOHASH" },
   { label: "INT", value: "INT" },
   { label: "LONG", value: "LONG" },
   { label: "SHORT", value: "SHORT" },
@@ -164,6 +165,26 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                     />
                   </Form.Item>
                 )}
+                {columns[index] && columns[index].type === "GEOHASH" && (
+                  <Form.Item
+                    name={`schemaColumns.${index}.precision`}
+                    label="Precision"
+                    helperText={
+                      <a
+                        href="https://questdb.io/docs/concept/geohashes/#questdb-geohash-type"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Docs on QuestDB geohash type
+                      </a>
+                    }
+                  >
+                    <Form.Input
+                      name={`schemaColumns.${index}.precision`}
+                      required
+                    />
+                  </Form.Item>
+                )}
               </Box>
             </Columns>
           </Row>
@@ -179,6 +200,8 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
               const newColumn = {
                 name: "",
                 type: "",
+                pattern: "",
+                precision: "",
               }
               append(newColumn)
               setColumns([...columns, newColumn])

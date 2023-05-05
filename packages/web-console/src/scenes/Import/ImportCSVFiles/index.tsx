@@ -2,15 +2,10 @@ import React, { useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
-import { ProcessedFile } from "./types"
+import { ProcessedFile, SchemaColumn } from "./types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
-import {
-  pick,
-  SchemaColumn,
-  UploadResult,
-  FileCheckStatus,
-} from "../../../utils"
+import { pick, UploadResult, FileCheckStatus } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
@@ -24,6 +19,33 @@ const filterCSVFiles = (files: FileList) => {
   return files
     ? Array.from(files).filter((file) => file.type === "text/csv")
     : []
+}
+
+const isGeoHash = (type: string) => type.startsWith("GEOHASH")
+
+function extractPrecionFromGeohash(geohash: string) {
+  const regex = /\(([^)]+)\)/g
+  const matches = regex.exec(geohash)
+  if (matches && matches.length > 1) {
+    return matches[1]
+  }
+  return ""
+}
+
+const mapColumnTypeToUI = (type: string) => {
+  if (isGeoHash(type)) {
+    return "GEOHASH"
+  } else return type.toUpperCase()
+}
+
+const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
+  if (column.type === "GEOHASH") {
+    return {
+      ...column,
+      type: `GEOHASH(${column.precision})`,
+    }
+  }
+  return column
 }
 
 export const ImportCSVFiles = ({ onImported }: Props) => {
@@ -69,8 +91,11 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                   // Find a table schema
                   return columnResponse.data.map((column) => ({
                     name: column.column,
-                    type: column.type,
+                    type: mapColumnTypeToUI(column.type),
                     pattern: DEFAULT_TIMESTAMP_FORMAT,
+                    precision: isGeoHash(column.type)
+                      ? extractPrecionFromGeohash(column.type)
+                      : "",
                   }))
                 }
                 return []
@@ -144,7 +169,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
               file: file.fileObject,
               name: file.table_name,
               settings: file.settings,
-              schema: file.schema,
+              schema: file.schema.map(mapColumnTypeToQuestDB),
               partitionBy: file.partitionBy,
               timestamp: file.timestamp,
               onProgress: (progress) => {
@@ -163,14 +188,18 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                       // so we look for the pattern provided before upload and augment the schema
                       const match = file.schema.find((s) => s.name === c.name)
                       return {
-                        ...pick(c, ["name", "type"]),
+                        ...pick(c, ["name"]),
                         ...{
+                          type: mapColumnTypeToUI(c.type),
                           pattern:
                             c.type === "TIMESTAMP"
                               ? match?.pattern
                                 ? match?.pattern
                                 : DEFAULT_TIMESTAMP_FORMAT
                               : "",
+                          precision: isGeoHash(c.type)
+                            ? extractPrecionFromGeohash(c.type)
+                            : undefined,
                         },
                       } as SchemaColumn
                     })

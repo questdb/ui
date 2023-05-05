@@ -7,9 +7,9 @@ import styled from "styled-components"
 import { Table as TableIcon, Edit } from "styled-icons/remix-line"
 import { Undo } from "styled-icons/boxicons-regular"
 import { Form } from "../../../components/Form"
-import { SchemaColumn } from "utils"
 import { TableSchemaColumns } from "./table-schema-columns"
 import { Drawer } from "../../../components/Drawer"
+import { SchemaColumn } from "./types"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
