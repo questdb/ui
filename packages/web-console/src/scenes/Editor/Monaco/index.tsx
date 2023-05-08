@@ -241,7 +241,6 @@ const MonacoEditor = () => {
 
     errorRangeRef.current = undefined
     errorRef.current = undefined
-    dispatch(actions.query.cleanupNotifications())
   }
 
   const handleEditorDidMount = (
@@ -333,7 +332,7 @@ const MonacoEditor = () => {
 
       editor.onDidChangeCursorPosition(() => {
         renderLineMarkings(monaco, editor)
-        
+
         const queryAtCursor = getQueryFromCursor(editor)
         if (queryAtCursor && errorRef.current) {
           const queriesHaveBeenMerged = queryAtCursor.query !== errorRef.current.query && queryAtCursor.query.includes(errorRef.current.query)
