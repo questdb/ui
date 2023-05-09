@@ -171,11 +171,11 @@ export const TableSchemaColumns = ({ schema }: { schema: SchemaColumn[] }) => {
                     label="Precision"
                     helperText={
                       <a
-                        href="https://questdb.io/docs/concept/geohashes/#questdb-geohash-type"
+                        href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        Docs on QuestDB geohash type
+                        Docs on QuestDB geohash precision
                       </a>
                     }
                   >
