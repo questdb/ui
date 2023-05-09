@@ -17,7 +17,9 @@ type Props = {
 
 const filterCSVFiles = (files: FileList) => {
   return files
-    ? Array.from(files).filter((file) => file.type === "text/csv")
+    ? Array.from(files).filter(
+        (file) => file.name.endsWith(".csv") || file.type === "text/csv",
+      )
     : []
 }
 
