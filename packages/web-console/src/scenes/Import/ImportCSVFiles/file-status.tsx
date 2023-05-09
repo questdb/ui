@@ -22,7 +22,10 @@ const mapStatusToLabel = (
   if (!file.isUploading && file.uploaded && file.uploadResult) {
     return {
       label: `Imported ${file.uploadResult.rowsImported.toLocaleString()} row${
-        file.uploadResult.rowsImported > 1 ? "s" : ""
+        file.uploadResult.rowsImported > 1 ||
+        file.uploadResult.rowsImported === 0
+          ? "s"
+          : ""
       }`,
       type: BadgeType.SUCCESS,
       icon: <CheckboxCircleIcon size="16px" />,
