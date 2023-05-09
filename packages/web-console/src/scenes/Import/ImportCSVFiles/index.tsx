@@ -75,10 +75,14 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }
 
   const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
-    const csvFiles = filterCSVFiles(files)
+    // const csvFiles = filterCSVFiles(files)
+    // TEMP - debugging
+    const csvFiles = Array.from(files)
     return await Promise.all(
       csvFiles.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
+
+        console.info("/chk", result)
 
         const schema =
           result.status === FileCheckStatus.EXISTS
@@ -102,6 +106,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
               })()
             : []
 
+        console.info("schema", schema)
+
         const partitionBy =
           result.status === FileCheckStatus.EXISTS && tables
             ? await (async () => {
@@ -110,6 +116,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
               })()
             : "NONE"
 
+        console.info("partitionBy", partitionBy)
+
         const timestamp =
           result.status === FileCheckStatus.EXISTS && tables
             ? await (async () => {
@@ -117,6 +125,30 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                 return table?.designatedTimestamp ?? ""
               })()
             : ""
+
+        console.info("timestamp", timestamp)
+
+        // TEMP - debugging
+        console.info("out", {
+          fileObject: file,
+          table_name: file.name,
+          status: result.status,
+          schema,
+          partitionBy,
+          timestamp,
+          settings: {
+            forceHeader: false,
+            overwrite: false,
+            skipLev: false,
+            delimiter: "",
+            atomicity: "skipCol",
+            durable: false,
+          },
+          isUploading: false,
+          uploaded: false,
+          uploadResult: undefined,
+          uploadProgress: 0,
+        })
 
         return {
           fileObject: file,
