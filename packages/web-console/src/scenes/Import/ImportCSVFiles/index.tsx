@@ -15,14 +15,6 @@ type Props = {
   onImported: (result: UploadResult) => void
 }
 
-const filterCSVFiles = (files: FileList) => {
-  return files
-    ? Array.from(files).filter(
-        (file) => file.name.endsWith(".csv") || file.type === "text/csv",
-      )
-    : []
-}
-
 const isGeoHash = (type: string) => type.startsWith("GEOHASH")
 
 function extractPrecionFromGeohash(geohash: string) {
@@ -77,9 +69,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }
 
   const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
-    const csvFiles = filterCSVFiles(files)
     return await Promise.all(
-      csvFiles.map(async (file) => {
+      Array.from(files).map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
 
         const schema =
