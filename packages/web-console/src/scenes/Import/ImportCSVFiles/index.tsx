@@ -10,14 +10,17 @@ import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
-import { isSupportedFile } from "./utils"
 
 type Props = {
   onImported: (result: UploadResult) => void
 }
 
 const filterCSVFiles = (files: FileList) => {
-  return files ? Array.from(files).filter((file) => isSupportedFile(file)) : []
+  return files
+    ? Array.from(files).filter(
+        (file) => file.name.endsWith(".csv") || file.type === "text/csv",
+      )
+    : []
 }
 
 const isGeoHash = (type: string) => type.startsWith("GEOHASH")

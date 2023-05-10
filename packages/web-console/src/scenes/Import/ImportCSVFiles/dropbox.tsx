@@ -4,7 +4,6 @@ import { Search2 } from "styled-icons/remix-line"
 import { Text } from "../../../components"
 import { Box } from "../../../components/Box"
 import { Button, Heading } from "@questdb/react-components"
-import { isSupportedFile } from "./utils"
 
 const Root = styled(Box).attrs({ flexDirection: "column" })<{
   isDragging: boolean
@@ -40,7 +39,6 @@ type Props = {
 
 export const DropBox = ({ onFilesDropped }: Props) => {
   const [isDragging, setIsDragging] = useState(false)
-  const [unsupportedFiles, setUnsupportedFiles] = useState<File[]>([])
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
@@ -55,9 +53,6 @@ export const DropBox = ({ onFilesDropped }: Props) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
-    setUnsupportedFiles(
-      Array.from(e.dataTransfer.files).filter((file) => !isSupportedFile(file)),
-    )
     onFilesDropped(e.dataTransfer.files)
     uploadInputRef.current?.setAttribute("value", "")
   }
@@ -81,11 +76,6 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         type="file"
         id="file"
         onChange={(e) => {
-          setUnsupportedFiles(
-            Array.from(e.target.files ?? []).filter(
-              (file) => !isSupportedFile(file),
-            ),
-          )
           onFilesDropped(e.target.files as FileList)
           uploadInputRef.current?.setAttribute("value", "")
         }}
@@ -103,12 +93,6 @@ export const DropBox = ({ onFilesDropped }: Props) => {
       >
         Browse from disk
       </Button>
-      {unsupportedFiles.length > 0 && (
-        <Text color="red">
-          Unsupported file{unsupportedFiles.length > 1 ? "s" : ""}:{" "}
-          {unsupportedFiles.map((f) => f.name).join(", ")}
-        </Text>
-      )}
       <Caution>
         <CautionText>
           Suitable for small batches of CSV file upload. For database
