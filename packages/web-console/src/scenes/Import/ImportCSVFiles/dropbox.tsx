@@ -104,7 +104,7 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         Browse from disk
       </Button>
       {unsupportedFiles.length > 0 && (
-        <Text color="orange">
+        <Text color="red">
           Unsupported file{unsupportedFiles.length > 1 ? "s" : ""}:{" "}
           {unsupportedFiles.map((f) => f.name).join(", ")}
         </Text>
