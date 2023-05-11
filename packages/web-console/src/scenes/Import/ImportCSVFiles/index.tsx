@@ -9,7 +9,7 @@ import { pick, UploadResult, FileCheckStatus } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
+import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -125,6 +125,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             delimiter: "",
             atomicity: "skipCol",
             durable: false,
+            maxUncommitedRows: MAX_UNCOMMITTED_ROWS,
           },
           isUploading: false,
           uploaded: false,

@@ -8,6 +8,7 @@ import { Settings4 } from "styled-icons/remix-line"
 import { Undo } from "styled-icons/boxicons-regular"
 import { UploadModeSettings } from "../../../utils"
 import { Drawer } from "../../../components/Drawer"
+import { MAX_UNCOMMITTED_ROWS } from "./const"
 
 const SettingsIcon = styled(Settings4)`
   color: ${({ theme }) => theme.color.foreground};
@@ -36,14 +37,14 @@ type BooleanOption = {
 
 type InputOption = {
   type: "input"
-  defaultValue: string
+  defaultValue: string | number
   placeholder?: string
 }
 
 type SelectOption = {
   type: "select"
   defaultValue: string
-  options: { label: string; value: string }[]
+  options: { label: string; value: string | number }[]
 }
 
 type Option = {
@@ -58,8 +59,15 @@ export const UploadSettingsDialog = ({
   onOpenChange,
   onSubmit,
 }: Props) => {
-  const { delimiter, overwrite, forceHeader, skipLev, atomicity, durable } =
-    file.settings
+  const {
+    delimiter,
+    overwrite,
+    forceHeader,
+    skipLev,
+    atomicity,
+    durable,
+    maxUncommitedRows,
+  } = file.settings
 
   const initialState = {
     delimiter,
@@ -68,12 +76,27 @@ export const UploadSettingsDialog = ({
     skipLev,
     atomicity,
     durable,
+    maxUncommitedRows,
   }
 
   const [settings, setSettings] =
     React.useState<UploadModeSettings>(initialState)
 
   const options: Option[] = [
+    {
+      type: "input",
+      name: "maxUncommitedRows",
+      label: "Maximum number of uncommited rows",
+      placeholder: MAX_UNCOMMITTED_ROWS.toString(),
+      description: (
+        <>
+          Set this parameter to determine the size of the commit batch based on
+          the RAM size of the machine to avoid running out of memory during an
+          import.
+        </>
+      ),
+      defaultValue: settings.maxUncommitedRows,
+    },
     {
       type: "input",
       name: "delimiter",

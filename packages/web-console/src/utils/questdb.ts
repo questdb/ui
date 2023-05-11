@@ -145,6 +145,7 @@ export type UploadModeSettings = {
   delimiter: string
   atomicity: string
   durable: boolean
+  maxUncommitedRows: number
 }
 
 export type SchemaColumn = {
