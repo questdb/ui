@@ -11,7 +11,7 @@ import { FiletypeCsv } from "styled-icons/bootstrap"
 import { ProcessedFile } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
-import { TableSchemaDialog } from "./table-schema-dialog"
+import { Dialog as TableSchemaDialog } from "./table-schema/dialog"
 import { UploadResultDialog } from "./upload-result-dialog"
 
 const StyledTable = styled(Table)`
@@ -101,7 +101,11 @@ export const FilesToUpload = ({
                   </Box>
                   {(data.uploadResult && data.uploadResult.rowsRejected > 0) ||
                     (data.error && (
-                      <FileTextBox flexDirection="column" gap="1rem">
+                      <FileTextBox
+                        flexDirection="column"
+                        gap="1rem"
+                        align="flex-start"
+                      >
                         {data.uploadResult &&
                           data.uploadResult.rowsRejected > 0 && (
                             <Text color="orange" size="sm">

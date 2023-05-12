@@ -10,6 +10,7 @@ export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   type?: React.InputHTMLAttributes<HTMLInputElement>["type"]
   showPassword?: boolean
   autoFocus?: boolean
+  autoComplete?: string
 }
 
 const Wrapper = styled.div`
@@ -43,7 +44,7 @@ export const FormInput = ({
   autoComplete,
   ...rest
 }: FormInputProps) => {
-  const { register, setFocus, setValue } = useFormContext()
+  const { register, setFocus } = useFormContext()
 
   const [passwordShown, setPasswordShown] = useState(showPassword)
 
@@ -68,6 +69,7 @@ export const FormInput = ({
         type={passwordShown ? "text" : type}
         disabled={disabled}
         showPassword={showPassword}
+        autoComplete={autoComplete}
         {...rest}
       />
       {type === "password" && (

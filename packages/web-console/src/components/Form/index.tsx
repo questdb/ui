@@ -13,16 +13,9 @@ import { FormInput } from "./FormInput"
 import { FormCheckbox } from "./FormCheckbox"
 import { FormSelect } from "./FormSelect"
 import { FormGroup } from "./FormGroup"
-import styled from "styled-components"
 import { FormSubmit } from "./FormSubmit"
 import { FormCancel } from "./FormCancel"
 import { FormTextArea } from "./FormTextArea"
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-`
 
 type DirtyChangeObserver<T = Record<string, any>> = (
   isDirty: boolean,
@@ -38,7 +31,6 @@ export type Props<TFormValues> = {
   children: React.ReactNode
   validationSchema?: Schema
   defaultValues?: UseFormProps<TFormValues>["defaultValues"]
-  className?: string
   preventSubmitOnEnter?: boolean
 }
 
@@ -53,7 +45,6 @@ export const Form = <
   children,
   validationSchema,
   defaultValues,
-  className,
   preventSubmitOnEnter,
 }: Props<TFormValues>) => {
   let props: UseFormProps<TFormValues> = {}
@@ -96,18 +87,16 @@ export const Form = <
   }
 
   return (
-    <Wrapper className={className}>
-      <FormProvider {...methods}>
-        <form
-          name={name}
-          onSubmit={handleSubmit}
-          method={method}
-          onKeyDown={handleKeyDown}
-        >
-          {children}
-        </form>
-      </FormProvider>
-    </Wrapper>
+    <FormProvider {...methods}>
+      <form
+        name={name}
+        onSubmit={handleSubmit}
+        method={method}
+        onKeyDown={handleKeyDown}
+      >
+        {children}
+      </form>
+    </FormProvider>
   )
 }
 
