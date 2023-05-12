@@ -20,6 +20,7 @@ export type ProcessedFile = {
   uploadResult?: UploadResult
   uploadProgress: number
   error?: string
+  exists: boolean
 }
 
 export type WriteMode = "append" | "overwrite"

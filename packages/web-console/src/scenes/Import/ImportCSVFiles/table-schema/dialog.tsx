@@ -51,6 +51,7 @@ type Props = {
 
 export const Dialog = ({ file, open, onOpenChange, onSchemaChange }: Props) => {
   const name = file.table_name ?? file.fileObject.name
+
   const [defaults, setDefaults] = useState<FormValues>({
     schemaColumns: [],
     partitionBy: "NONE",
@@ -132,7 +133,7 @@ export const Dialog = ({ file, open, onOpenChange, onSchemaChange }: Props) => {
                 <Text color="foreground">Columns</Text>
               </Drawer.GroupHeader>
 
-              <Columns schema={defaults.schemaColumns} />
+              <Columns file={file} schema={defaults.schemaColumns} />
             </Inputs>
 
             <Drawer.Actions>

@@ -6,10 +6,10 @@ import { IconWithTooltip } from "../../../../components"
 import { Button } from "@questdb/react-components"
 import { Close } from "styled-icons/remix-line"
 import { SortDown } from "styled-icons/boxicons-regular"
-import { Text } from "../../../../components/Text"
 import { Drawer } from "../../../../components/Drawer"
 import { DEFAULT_TIMESTAMP_FORMAT } from "../const"
 import { SchemaColumn } from "../types"
+import { ProcessedFile } from "../types"
 import styled from "styled-components"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
@@ -39,8 +39,8 @@ const Row = styled(Box).attrs({
 
 const Columns = styled(Box).attrs({
   align: "flex-start",
-  justifyContent: "space-around",
-  gap: "1rem",
+  justifyContent: "space-between",
+  gap: 0,
 })`
   width: 100%;
 
@@ -50,7 +50,22 @@ const Columns = styled(Box).attrs({
   }
 `
 
+const Item = styled(Box).attrs({
+  gap: "1rem",
+  flexDirection: "column",
+})`
+  width: 100%;
+`
+
+const Inputs = styled(Box).attrs({
+  align: "flex-end",
+  gap: "1rem",
+})`
+  width: 100%;
+`
+
 export const Column = ({
+  file,
   index,
   column,
   onNameChange,
@@ -59,6 +74,7 @@ export const Column = ({
   onSetTimestamp,
   timestamp,
 }: {
+  file: ProcessedFile
   index: number
   column: SchemaColumn
   onNameChange: (name: string) => void
@@ -74,15 +90,17 @@ export const Column = ({
     onTypeChange(e.target.value)
   }
 
+  const isEditLocked = file.exists && file.table_name === file.fileObject.name
+
   return (
     <Drawer.GroupItem direction="column" key={column.name}>
-      <Row gap="2rem" flexDirection="column" align="flex-start">
+      <Row>
         <Columns>
-          <Text color="foreground">{index + 1}</Text>
-          <Box gap="1rem" flexDirection="column">
-            <Box gap="1rem" align="flex-end">
+          <Item>
+            <Inputs>
               <Form.Item name={`schemaColumns.${index}.name`} label="Name">
                 <Form.Input
+                  disabled={isEditLocked}
                   defaultValue={column.name}
                   name={`schemaColumns.${index}.name`}
                   onChange={(e) => {
@@ -93,6 +111,7 @@ export const Column = ({
               </Form.Item>
               <Form.Item name={`schemaColumns.${index}.type`} label="Type">
                 <Form.Select
+                  disabled={isEditLocked}
                   defaultValue={column.type}
                   name={`schemaColumns.${index}.type`}
                   options={supportedColumnTypes}
@@ -123,16 +142,18 @@ export const Column = ({
                 placement="bottom"
               />
 
-              <Button
-                skin="transparent"
-                onClick={() => {
-                  onRemove(index)
-                }}
-                type="button"
-              >
-                <Close size="18px" />
-              </Button>
-            </Box>
+              {!isEditLocked && (
+                <Button
+                  skin="transparent"
+                  onClick={() => {
+                    onRemove(index)
+                  }}
+                  type="button"
+                >
+                  <Close size="18px" />
+                </Button>
+              )}
+            </Inputs>
             {type === "TIMESTAMP" && (
               <Form.Item
                 name={`schemaColumns.${index}.pattern`}
@@ -140,6 +161,7 @@ export const Column = ({
                 helperText="Required when using the TIMESTAMP type"
               >
                 <Form.Input
+                  disabled={isEditLocked}
                   name={`schemaColumns.${index}.pattern`}
                   placeholder={DEFAULT_TIMESTAMP_FORMAT}
                   defaultValue={
@@ -166,12 +188,13 @@ export const Column = ({
                 }
               >
                 <Form.Input
+                  disabled={isEditLocked}
                   name={`schemaColumns.${index}.precision`}
                   required
                 />
               </Form.Item>
             )}
-          </Box>
+          </Item>
         </Columns>
       </Row>
     </Drawer.GroupItem>

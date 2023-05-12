@@ -115,6 +115,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           fileObject: file,
           table_name: file.name,
           status: result.status,
+          exists: result.status === FileCheckStatus.EXISTS,
           schema,
           partitionBy,
           timestamp,

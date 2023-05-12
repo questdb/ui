@@ -3,12 +3,23 @@ import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import { Box } from "../../../../components/Box"
 import { Form } from "../../../../components/Form"
-import { Button } from "@questdb/react-components"
-import { AddCircle } from "styled-icons/remix-line"
+import { Text } from "../../../../components"
 import { Drawer } from "../../../../components/Drawer"
-import { SchemaColumn } from "../types"
 import { VirtualList } from "../../../../components/VirtualList"
+import { Button } from "@questdb/react-components"
+import { AddCircle, Alert, Information } from "styled-icons/remix-line"
+import { SchemaColumn } from "../types"
 import { Column } from "./column"
+import { ProcessedFile } from "../types"
+
+const Disclaimer = styled(Box).attrs({ align: "center", gap: "1.5rem" })<{
+  isEditLocked: boolean
+}>`
+  width: 100%;
+  padding: 2rem;
+  color: ${({ theme, isEditLocked }) =>
+    theme.color[isEditLocked ? "orange" : "foreground"]};
+`
 
 const SchemaRoot = styled.div`
   width: 100%;
@@ -37,7 +48,13 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   </Drawer.GroupItem>
 )
 
-export const Columns = ({ schema }: { schema: SchemaColumn[] }) => {
+export const Columns = ({
+  file,
+  schema,
+}: {
+  file: ProcessedFile
+  schema: SchemaColumn[]
+}) => {
   const { setValue, watch } = useFormContext()
   const { append, remove } = useFieldArray({
     name: "schemaColumns",
@@ -45,6 +62,8 @@ export const Columns = ({ schema }: { schema: SchemaColumn[] }) => {
   const [columns, setColumns] = useState<SchemaColumn[]>(schema)
 
   const watchTimestamp = watch("timestamp")
+
+  const isEditLocked = file.exists && file.table_name === file.fileObject.name
 
   const addColumn = () => {
     const newColumn = {
@@ -66,6 +85,7 @@ export const Columns = ({ schema }: { schema: SchemaColumn[] }) => {
       return (
         <>
           <Column
+            file={file}
             index={index}
             column={column}
             onNameChange={(name) => {
@@ -90,7 +110,9 @@ export const Columns = ({ schema }: { schema: SchemaColumn[] }) => {
             timestamp={watchTimestamp}
           />
 
-          {index === columns.length - 1 && <AddColumn onAdd={addColumn} />}
+          {index === columns.length - 1 && !isEditLocked && (
+            <AddColumn onAdd={addColumn} />
+          )}
         </>
       )
     },
@@ -103,6 +125,26 @@ export const Columns = ({ schema }: { schema: SchemaColumn[] }) => {
 
   return (
     <>
+      {isEditLocked && (
+        <Disclaimer isEditLocked={true}>
+          <Alert size="20px" />
+          <Text color="orange">
+            Schema is read-only when importing to an existing table.
+            <br />
+            To edit, change the target table name and try again.
+          </Text>
+        </Disclaimer>
+      )}
+      {!isEditLocked && (
+        <Disclaimer isEditLocked={false}>
+          <Information size="20px" />
+          <Text color="foreground">
+            Column names have to match the CSV header.
+            <br />
+            Order is not important.
+          </Text>
+        </Disclaimer>
+      )}
       <SchemaRoot>
         {columns.length > 0 ? (
           <VirtualList
@@ -110,7 +152,7 @@ export const Columns = ({ schema }: { schema: SchemaColumn[] }) => {
             totalCount={columns.length}
           />
         ) : (
-          <AddColumn onAdd={addColumn} />
+          !isEditLocked && <AddColumn onAdd={addColumn} />
         )}
       </SchemaRoot>
 
