@@ -11,6 +11,7 @@ import { DEFAULT_TIMESTAMP_FORMAT } from "../const"
 import { SchemaColumn } from "../types"
 import { ProcessedFile } from "../types"
 import styled from "styled-components"
+import { useFormContext } from "react-hook-form"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -67,30 +68,24 @@ const Inputs = styled(Box).attrs({
 export const Column = ({
   file,
   index,
-  column,
-  onNameChange,
-  onTypeChange,
   onRemove,
   onSetTimestamp,
   timestamp,
 }: {
   file: ProcessedFile
   index: number
-  column: SchemaColumn
-  onNameChange: (name: string) => void
-  onTypeChange: (type: string) => void
   onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
   timestamp: string
 }) => {
-  const [type, setType] = useState(column.type)
-
-  const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setType(e.target.value)
-    onTypeChange(e.target.value)
-  }
+  const { getValues } = useFormContext()
+  const column = getValues()["schemaColumns"][index]
 
   const isEditLocked = file.exists && file.table_name === file.fileObject.name
+
+  if (!column) {
+    return null
+  }
 
   return (
     <Drawer.GroupItem direction="column" key={column.name}>
@@ -103,10 +98,10 @@ export const Column = ({
                   disabled={isEditLocked}
                   defaultValue={column.name}
                   name={`schemaColumns.${index}.name`}
-                  onChange={(e) => {
-                    onNameChange(e.target.value)
-                  }}
                   autoComplete="off"
+                  onChange={(e) => {
+                    e.preventDefault()
+                  }}
                 />
               </Form.Item>
               <Form.Item name={`schemaColumns.${index}.type`} label="Type">
@@ -115,14 +110,13 @@ export const Column = ({
                   defaultValue={column.type}
                   name={`schemaColumns.${index}.type`}
                   options={supportedColumnTypes}
-                  onChange={handleTypeChange}
                 />
               </Form.Item>
 
               <IconWithTooltip
                 icon={
                   <Button
-                    disabled={type !== "TIMESTAMP" || isEditLocked}
+                    disabled={column.type !== "TIMESTAMP" || isEditLocked}
                     skin={
                       timestamp !== "" &&
                       column.name !== "" &&
@@ -154,7 +148,7 @@ export const Column = ({
                 </Button>
               )}
             </Inputs>
-            {type === "TIMESTAMP" && (
+            {column.type === "TIMESTAMP" && (
               <Form.Item
                 name={`schemaColumns.${index}.pattern`}
                 label="Timestamp pattern"
@@ -173,7 +167,7 @@ export const Column = ({
                 />
               </Form.Item>
             )}
-            {type === "GEOHASH" && (
+            {column.type === "GEOHASH" && (
               <Form.Item
                 name={`schemaColumns.${index}.precision`}
                 label="Precision"

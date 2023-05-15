@@ -55,56 +55,38 @@ export const Columns = ({
   file: ProcessedFile
   schema: SchemaColumn[]
 }) => {
-  const { setValue, watch } = useFormContext()
+  const { getValues, setValue, watch } = useFormContext()
   const { append, remove } = useFieldArray({
     name: "schemaColumns",
   })
-  const [columns, setColumns] = useState<SchemaColumn[]>(schema)
-  const [lastTypeChanged, setLastTypeChanged] = useState("")
 
   const watchTimestamp = watch("timestamp")
+  const watchSchemaColumns = getValues()["schemaColumns"]
 
   const isEditLocked = file.exists && file.table_name === file.fileObject.name
 
   const addColumn = () => {
-    const newColumn = {
+    append({
       name: "",
       type: "",
       pattern: "",
       precision: "",
-    }
-    append(newColumn)
-    setColumns([...columns, newColumn])
+    })
   }
 
   const listItemContent = useCallback(
     (index: number) => {
-      const column = columns[index]
-
-      if (!column) return null
+      if (!watchSchemaColumns[index]) {
+        return null
+      }
 
       return (
         <>
           <Column
             file={file}
             index={index}
-            column={column}
-            onNameChange={(name) => {
-              const cols = [...columns]
-              cols[index].name = name
-              setColumns(cols)
-            }}
-            onTypeChange={(type) => {
-              const cols = [...columns]
-              cols[index].type = type
-              setColumns(cols)
-              setLastTypeChanged(type)
-            }}
             onRemove={(index) => {
               remove(index)
-              const cols = [...columns]
-              cols.splice(index, 1)
-              setColumns(cols)
             }}
             onSetTimestamp={(name) => {
               setValue("timestamp", watchTimestamp === name ? "" : name)
@@ -112,13 +94,13 @@ export const Columns = ({
             timestamp={watchTimestamp}
           />
 
-          {index === columns.length - 1 && !isEditLocked && (
+          {index === watchSchemaColumns.length - 1 && !isEditLocked && (
             <AddColumn onAdd={addColumn} />
           )}
         </>
       )
     },
-    [columns.length, watchTimestamp, lastTypeChanged],
+    [watchTimestamp, watchSchemaColumns.length],
   )
 
   useEffect(() => {
@@ -148,10 +130,10 @@ export const Columns = ({
         </Disclaimer>
       )}
       <SchemaRoot>
-        {columns.length > 0 ? (
+        {watchSchemaColumns.length > 0 ? (
           <VirtualList
             itemContent={listItemContent}
-            totalCount={columns.length}
+            totalCount={watchSchemaColumns.length}
           />
         ) : (
           !isEditLocked && <AddColumn onAdd={addColumn} />
