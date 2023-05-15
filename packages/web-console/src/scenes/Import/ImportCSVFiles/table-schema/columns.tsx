@@ -80,9 +80,12 @@ export const Columns = ({
         return null
       }
 
+      const column = watch(`schemaColumns.${index}`)
+
       return (
         <>
           <Column
+            column={column}
             file={file}
             index={index}
             onRemove={(index) => {

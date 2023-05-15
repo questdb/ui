@@ -9,7 +9,7 @@ import { Drawer } from "../../../../components/Drawer"
 import { DEFAULT_TIMESTAMP_FORMAT } from "../const"
 import { ProcessedFile } from "../types"
 import styled from "styled-components"
-import { useFormContext } from "react-hook-form"
+import { SchemaColumn } from "utils"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -65,20 +65,19 @@ const Inputs = styled(Box).attrs({
 
 export const Column = ({
   file,
+  column,
   index,
   onRemove,
   onSetTimestamp,
   timestamp,
 }: {
   file: ProcessedFile
+  column: SchemaColumn
   index: number
   onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
   timestamp: string
 }) => {
-  const { getValues } = useFormContext()
-  const column = getValues()["schemaColumns"][index]
-
   const isEditLocked = file.exists && file.table_name === file.fileObject.name
 
   if (!column) {
@@ -97,9 +96,6 @@ export const Column = ({
                   defaultValue={column.name}
                   name={`schemaColumns.${index}.name`}
                   autoComplete="off"
-                  onChange={(e) => {
-                    e.preventDefault()
-                  }}
                 />
               </Form.Item>
               <Form.Item name={`schemaColumns.${index}.type`} label="Type">
