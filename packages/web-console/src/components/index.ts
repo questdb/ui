@@ -24,11 +24,13 @@
 
 export * from "./Animation"
 export * from "./Button"
+export * from "./Drawer"
 export * from "./Emoji"
 export * from "./Hooks"
 export * from "./IconWithTooltip"
 export * from "./Input"
 export * from "./Link"
+export * from "./Page"
 export * from "./PaneContent"
 export * from "./PaneMenu"
 export * from "./PaneWrapper"

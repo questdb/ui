@@ -31,7 +31,7 @@ export const usePopperStyles = (
   useEffect(() => {
     const css = Object.entries(styles).reduce(
       (acc, [prop, value]) => `${acc} ${prop}: ${value as string};`,
-      "z-index: 100;",
+      "z-index: 1000;",
     )
     element.setAttribute("style", css)
   }, [element, styles])

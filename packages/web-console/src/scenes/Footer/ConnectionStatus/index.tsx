@@ -17,7 +17,7 @@ const StatusIcon = styled.div<{ isConnected: boolean }>`
   height: 0.6rem;
   border-radius: 50%;
   background-color: ${(props) =>
-    props.isConnected ? color("draculaGreen") : color("draculaRed")};
+    props.isConnected ? color("green") : color("red")};
   margin-right: 0.6rem;
 `
 

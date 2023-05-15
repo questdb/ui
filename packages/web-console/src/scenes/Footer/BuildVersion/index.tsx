@@ -51,11 +51,11 @@ const QuestDBVersion = styled.span`
 `
 
 const UpgradeIcon = styled(ArrowUpCircle)`
-  color: ${({ theme }) => theme.color.draculaGreen};
+  color: ${({ theme }) => theme.color.green};
 `
 
 const NewestRelease = styled.span`
-  color: ${({ theme }) => theme.color.draculaGreen};
+  color: ${({ theme }) => theme.color.green};
   font-size: ${({ theme }) => theme.fontSize.xs};
 `
 

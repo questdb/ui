@@ -109,7 +109,7 @@ const Footer = () => {
   return (
     <Wrapper id="footer">
       <LeftContainer>
-        <Text color="draculaForeground">
+        <Text color="foreground">
           Copyright &copy; {new Date().getFullYear()} QuestDB
         </Text>
       </LeftContainer>
@@ -117,8 +117,8 @@ const Footer = () => {
         <ConnectionStatus />
         {showBuildVersion && <BuildVersion />}
         <Link
-          color="draculaForeground"
-          hoverColor="draculaCyan"
+          color="foreground"
+          hoverColor="cyan"
           href="https://github.com/questdb/questdb"
           rel="noreferrer"
           target="_blank"

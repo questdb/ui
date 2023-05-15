@@ -75,12 +75,12 @@ const wrapperStyles = css`
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  background: ${color("draculaBackgroundDarker")};
+  background: ${color("backgroundDarker")};
   color: ${color("gray1")};
 
   &:hover {
-    background: ${color("draculaSelection")};
-    color: ${color("draculaForeground")};
+    background: ${color("selection")};
+    color: ${color("foreground")};
   }
 `
 
@@ -108,10 +108,10 @@ const ghostSize = 10
 const ghostStyles = css`
   position: absolute;
   z-index: 20;
-  background: ${color("draculaPurple")};
+  background: ${color("purple")};
 
   &:hover {
-    background: ${color("draculaPurple")};
+    background: ${color("purple")};
   }
 `
 

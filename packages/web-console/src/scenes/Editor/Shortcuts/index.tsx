@@ -12,7 +12,7 @@ const Wrapper = styled.div`
   width: 300px;
   max-width: 100vw;
   flex-direction: column;
-  background: ${color("draculaBackgroundDarker")};
+  background: ${color("backgroundDarker")};
   box-shadow: ${color("black")} 0px 5px 8px;
   border: 1px solid ${color("black")};
   border-radius: 4px;
@@ -27,8 +27,8 @@ const List = styled.div`
 const ListTitle = styled(Text)`
   padding: 0.6rem 1.2rem;
   margin-top: 0.6rem;
-  border-top: 1px solid ${({ theme }) => theme.color.draculaSelection};
-  background: ${({ theme }) => theme.color.blackAlpha40};
+  border-top: 1px solid ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.black40};
   width: 100%;
 `
 
@@ -38,7 +38,7 @@ const Item = styled.div`
   padding: 0.6rem 1.2rem;
 
   &:not(:last-child) {
-    border-bottom: 1px solid ${color("draculaBackground")};
+    border-bottom: 1px solid ${color("background")};
   }
 `
 

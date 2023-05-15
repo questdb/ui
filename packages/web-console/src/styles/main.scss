@@ -77,13 +77,23 @@ $spacing-s: 4px !default;
 @import "media";
 
 @import "editor";
-@import "import";
-@import "import-detail";
-@import "settings";
 @import "grid";
 @import "splitter";
 @import "visualisation";
 @import "quick-vis";
+
+.js-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  font-size: 1.4rem;
+  background: #21222c;
+
+  ::selection {
+    background: #44475a;
+  }
+}
 
 .btn:disabled {
   cursor: default;

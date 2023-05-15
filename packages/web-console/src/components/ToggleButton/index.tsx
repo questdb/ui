@@ -92,11 +92,11 @@ const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
     ${({ direction, selected, theme }) =>
       selected &&
       `border-${direction || defaultProps.direction}-color: ${
-        theme.color.draculaPink
+        theme.color.pink
       };`};
 
     &:focus {
-      box-shadow: inset 0 0 0 1px ${color("draculaForeground")};
+      box-shadow: inset 0 0 0 1px ${color("foreground")};
     }
 
     &:hover:not([disabled]) {
@@ -115,12 +115,12 @@ const PrimaryToggleButtonStyled = styled.button<Props>`
   ${baseStyles};
   ${getTheme(
     {
-      background: "draculaBackgroundDarker",
-      color: "draculaForeground",
+      background: "backgroundDarker",
+      color: "foreground",
     },
     {
-      background: "draculaComment",
-      color: "draculaForeground",
+      background: "comment",
+      color: "foreground",
     },
   )};
 `

@@ -42,7 +42,7 @@ type Props = Readonly<{
 }>
 
 const activeStyles = css`
-  background: ${color("draculaSelection")};
+  background: ${color("selection")};
 `
 
 const Wrapper = styled.div<{ active: boolean }>`
@@ -74,7 +74,7 @@ const FileIcon = styled(FileCode)`
   height: 2.2rem;
   flex: 0 0 12px;
   margin: 0 0.6rem;
-  color: ${color("draculaOrange")};
+  color: ${color("orange")};
 `
 
 const Name = styled(Text)`
@@ -91,12 +91,12 @@ const Row = ({ active, onMouseEnter, onMouseLeave, onClick, query }: Props) => (
     <FileIcon size="12px" />
 
     {query.name && (
-      <Name color="draculaForeground" size="sm">
+      <Name color="foreground" size="sm">
         {query.name}
       </Name>
     )}
 
-    <Value color="draculaForeground" size="sm">
+    <Value color="foreground" size="sm">
       {query.value}
     </Value>
   </Wrapper>

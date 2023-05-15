@@ -107,7 +107,7 @@ const HideSchemaButton = styled(SecondaryButton)`
 const Loader = styled(Loader3)`
   margin-left: 1rem;
   align-self: center;
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
   ${spinAnimation};
 `
 
@@ -221,7 +221,7 @@ const Schema = ({
   return (
     <Wrapper ref={innerRef} {...rest}>
       <Menu>
-        <Header color="draculaForeground">
+        <Header color="foreground">
           <DatabaseIcon size="18px" />
           Tables
         </Header>
