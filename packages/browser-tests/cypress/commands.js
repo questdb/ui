@@ -107,3 +107,10 @@ Cypress.Commands.add("F9", () => {
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
 Cypress.Commands.add("getNotifications", () => cy.get(".notifications"));
+
+Cypress.Commands.add("clickNotification", (n) =>
+  cy.get(".notifications")
+    .get('[class^="styles__Wrapper-"]')
+    .eq(n)
+    .click()
+);

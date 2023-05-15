@@ -24,13 +24,28 @@
 
 import type { ReactNode } from "react"
 
-import type { QueryRawResult, Table } from "utils/questdb"
+import type { ColumnDefinition, DatasetType, Explain, Timings, QueryRawResult, Table, Type } from "utils/questdb"
+
+import type { Request } from "../../scenes/Editor/Monaco/utils"
 
 export enum NotificationType {
   ERROR = "error",
   INFO = "info",
   SUCCESS = "success",
 }
+
+export type NotificationResult = Readonly<{
+  columns?: ColumnDefinition[]
+  count?: number
+  dataset?: DatasetType[]
+  error?: string
+  explain?: Explain
+  position?: number
+  query: string
+  timestamp?: number
+  timings?: Timings
+  type: Type
+}>
 
 export type NotificationShape = Readonly<{
   createdAt: Date
@@ -39,6 +54,8 @@ export type NotificationShape = Readonly<{
   line2?: ReactNode
   type: NotificationType
   jitCompiled?: boolean
+  request?: Request
+  result?: NotificationResult
 }>
 
 export type RunningShape = Readonly<{
