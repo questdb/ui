@@ -6369,10 +6369,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@questdb/sql-grammar", [\
-        ["npm:1.0.9", {\
-          "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.9-d8c95916b4-2b1a6caa53.zip/node_modules/@questdb/sql-grammar/",\
+        ["npm:1.0.11", {\
+          "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.11-510e52055b-4cc1ed9fa4.zip/node_modules/@questdb/sql-grammar/",\
           "packageDependencies": [\
-            ["@questdb/sql-grammar", "npm:1.0.9"]\
+            ["@questdb/sql-grammar", "npm:1.0.11"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -6390,7 +6390,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@fortawesome/fontawesome-free", "npm:5.13.0"],\
             ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.5"],\
             ["@popperjs/core", "npm:2.4.2"],\
-            ["@questdb/sql-grammar", "npm:1.0.9"],\
+            ["@questdb/sql-grammar", "npm:1.0.11"],\
             ["@types/jquery", "npm:3.5.1"],\
             ["@types/node", "npm:17.0.41"],\
             ["@types/ramda", "npm:0.27.40"],\
