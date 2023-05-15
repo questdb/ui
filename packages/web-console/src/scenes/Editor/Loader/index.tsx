@@ -52,9 +52,9 @@ const Wrapper = styled.div`
   z-index: 15;
   background: linear-gradient(
       to left,
-      ${color("draculaSelection")} 30%,
-      ${color("draculaForeground")} 80%,
-      ${color("draculaSelection")} 100%
+      ${color("selection")} 30%,
+      ${color("foreground")} 80%,
+      ${color("selection")} 100%
     )
     repeat;
   background-size: 50% 100%;

@@ -24,16 +24,8 @@
 
 import $ from "jquery"
 
-import { setupImportController } from "./import-controller"
-
 import "../../styles/main.scss"
-import "./import"
-import "./import-detail"
 import "./splitter"
 
 let messageBus = $({})
 window.bus = messageBus
-
-messageBus.on("react.ready", () => {
-  setupImportController(bus)
-})

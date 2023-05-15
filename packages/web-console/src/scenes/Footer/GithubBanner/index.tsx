@@ -41,7 +41,7 @@ const Wrapper = styled.div`
   height: 100%;
   align-items: center;
   justify-content: center;
-  background: ${color("draculaPink")};
+  background: ${color("pink")};
   overflow: hidden;
 `
 
@@ -60,7 +60,7 @@ const CloseIcon = styled(Close)`
 `
 
 const StarIcon = styled(Star)`
-  color: ${color("draculaYellow")};
+  color: ${color("yellow")};
 `
 
 const GithubBanner = ({ onClick }: Props) => (

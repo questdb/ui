@@ -105,6 +105,10 @@ export type Table = {
 export type Column = {
   column: string
   indexed: boolean
+  designated: boolean
+  indexBlockCapacity: number
+  symbolCached: boolean
+  symbolCapacity: number
   type: string
 }
 
@@ -122,6 +126,58 @@ export type Release = {
   html_url: string
   name: string
   published_at: string
+}
+
+export enum FileCheckStatus {
+  EXISTS = "Exists",
+  DOES_NOT_EXIST = "Does not exist",
+  RESERVED_NAME = "Reserved name",
+}
+
+export type FileCheckResponse = {
+  status: FileCheckStatus
+}
+
+export type UploadModeSettings = {
+  forceHeader: boolean
+  overwrite: boolean
+  skipLev: boolean
+  delimiter: string
+  atomicity: string
+  durable: boolean
+  maxUncommitedRows: number
+}
+
+export type SchemaColumn = {
+  name: string
+  type: string
+  pattern?: string
+}
+
+type UploadOptions = {
+  file: File
+  name: string
+  settings: UploadModeSettings
+  schema: SchemaColumn[]
+  partitionBy: string
+  timestamp: string
+  onProgress: (progress: number) => void
+}
+
+export type UploadResultColumn = {
+  name: string
+  type: string
+  size: number
+  errors: number
+}
+
+export type UploadResult = {
+  columns: UploadResultColumn[]
+  header: boolean
+  location: string
+  rowsImported: number
+  rowsRejected: number
+  status: string
 }
 
 export class Client {
@@ -313,6 +369,74 @@ export class Client {
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
+  }
+
+  async checkCSVFile(name: string): Promise<FileCheckResponse> {
+    try {
+      const response: Response = await fetch(
+        `${this._host}/chk?${Client.encodeParams({
+          f: "json",
+          j: name,
+        })}`,
+      )
+      return await response.json()
+    } catch (error) {
+      throw error
+    }
+  }
+
+  async uploadCSVFile({
+    file,
+    name,
+    settings,
+    schema,
+    partitionBy,
+    timestamp,
+    onProgress,
+  }: UploadOptions): Promise<UploadResult> {
+    const formData = new FormData()
+    formData.append("schema", JSON.stringify(schema))
+    formData.append("data", file)
+    const serializedSettings = Object.keys(settings).reduce(
+      (acc, key) => ({
+        ...acc,
+        [key]: settings[key as keyof UploadModeSettings].toString(),
+      }),
+      {},
+    )
+    const params = {
+      fmt: "json",
+      name,
+      partitionBy,
+      ...(timestamp ? { timestamp } : {}),
+      ...serializedSettings,
+    }
+
+    return new Promise((resolve, reject) => {
+      let request = new XMLHttpRequest()
+      request.open("POST", `${this._host}/imp?${new URLSearchParams(params)}`)
+      request.upload.addEventListener("progress", (e) => {
+        let percent_completed = (e.loaded / e.total) * 100
+        onProgress(percent_completed)
+      })
+      request.onload = (_e) => {
+        if (request.status === 200) {
+          resolve(JSON.parse(request.response))
+        } else {
+          reject({
+            status: request.status,
+            statusText: request.statusText,
+          })
+        }
+      }
+      request.onerror = () => {
+        reject({
+          status: request.status,
+          statusText: request.statusText,
+        })
+      }
+      request.send(formData)
+    })
   }
 
   async getLatestRelease() {

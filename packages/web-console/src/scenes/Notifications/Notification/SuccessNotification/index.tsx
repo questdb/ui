@@ -33,12 +33,12 @@ import { Timestamp } from "../Timestamp"
 import { IconWithTooltip } from "../../../../components"
 
 const CheckmarkOutlineIcon = styled(CheckmarkOutline)`
-  color: ${color("draculaGreen")};
+  color: ${color("green")};
   flex-shrink: 0;
 `
 
 const ZapIcon = styled(Zap)`
-  color: ${color("draculaYellow")};
+  color: ${color("yellow")};
 `
 
 export const SuccessNotification = (props: NotificationShape) => {

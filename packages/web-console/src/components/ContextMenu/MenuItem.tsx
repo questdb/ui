@@ -28,17 +28,17 @@ import { MenuItem as ReactMenuItem, MenuItemProps } from "react-contextmenu"
 import { color } from "../../utils"
 
 const StyledMenuItem = styled(ReactMenuItem)`
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
   cursor: pointer;
   padding: 0.5rem 1rem;
 
   &:hover {
-    background: ${color("draculaSelection")};
+    background: ${color("selection")};
   }
 `
 
 const StyledDivider = styled(ReactMenuItem)`
-  background: ${color("draculaForeground")};
+  background: ${color("foreground")};
   height: 1px;
   width: 100%;
   margin: 0.5rem 0;

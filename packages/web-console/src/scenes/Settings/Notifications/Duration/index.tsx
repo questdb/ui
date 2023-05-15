@@ -55,7 +55,7 @@ const Duration = () => {
         type="number"
         value={notificationDelay}
       />
-      <Text color="draculaForeground">seconds</Text>
+      <Text color="foreground">seconds</Text>
     </Wrapper>
   )
 }

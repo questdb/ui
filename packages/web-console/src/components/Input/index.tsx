@@ -49,12 +49,12 @@ const InputStyled = styled.input<Props>`
   padding: 0 1rem;
   line-height: 1.5;
   outline: none;
-  background: ${color("draculaSelection")};
+  background: ${color("selection")};
   border-radius: 4px;
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
 
   &:focus {
-    box-shadow: inset 0 0 0 1px ${color("draculaForeground")};
+    box-shadow: inset 0 0 0 1px ${color("foreground")};
   }
 
   &::placeholder {
