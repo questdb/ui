@@ -122,7 +122,7 @@ export const Column = ({
               <IconWithTooltip
                 icon={
                   <Button
-                    disabled={type !== "TIMESTAMP"}
+                    disabled={type !== "TIMESTAMP" || isEditLocked}
                     skin={
                       timestamp !== "" &&
                       column.name !== "" &&
