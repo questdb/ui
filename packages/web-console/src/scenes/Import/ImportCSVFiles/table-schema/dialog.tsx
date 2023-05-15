@@ -10,6 +10,7 @@ import { Form } from "../../../../components/Form"
 import { Columns } from "./columns"
 import { Drawer } from "../../../../components/Drawer"
 import { SchemaColumn } from "../types"
+import Joi from "joi"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
@@ -52,11 +53,14 @@ type Props = {
 export const Dialog = ({ file, open, onOpenChange, onSchemaChange }: Props) => {
   const name = file.table_name ?? file.fileObject.name
 
-  const [defaults, setDefaults] = useState<FormValues>({
+  const formDefaults = {
     schemaColumns: [],
     partitionBy: "NONE",
     timestamp: "",
-  })
+  }
+
+  const [defaults, setDefaults] = useState<FormValues>(formDefaults)
+  const [currentValues, setCurrentValues] = useState<FormValues>(formDefaults)
 
   const resetToDefaults = () => {
     setDefaults({
@@ -65,6 +69,23 @@ export const Dialog = ({ file, open, onOpenChange, onSchemaChange }: Props) => {
       timestamp: file.timestamp,
     })
   }
+
+  const schema = Joi.object({
+    partitionBy: Joi.string()
+      .required()
+      .custom((value, helpers) => {
+        if (value !== "NONE" && currentValues.timestamp === "") {
+          return helpers.error("string.timestampRequired")
+        }
+        return value
+      })
+      .messages({
+        "string.timestampRequired":
+          "Designated timestamp is required when partitioning is set to anything other than NONE",
+      }),
+    timestamp: Joi.string().allow(""),
+    schemaColumns: Joi.array(),
+  })
 
   useEffect(() => {
     if (file.schema) {
@@ -110,6 +131,8 @@ export const Dialog = ({ file, open, onOpenChange, onSchemaChange }: Props) => {
             onSchemaChange(values)
             onOpenChange(undefined)
           }}
+          onChange={(values) => setCurrentValues(values as FormValues)}
+          validationSchema={schema}
         >
           <Items>
             <Inputs>

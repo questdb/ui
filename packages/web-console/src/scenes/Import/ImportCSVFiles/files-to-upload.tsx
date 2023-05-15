@@ -175,7 +175,7 @@ export const FilesToUpload = ({
                   open={schemaDialogOpen === name}
                   onOpenChange={setSchemaDialogOpen}
                   onSchemaChange={(schema) => {
-                    onFilePropertyChange(data.table_name, {
+                    onFilePropertyChange(data.fileObject.name, {
                       schema: schema.schemaColumns,
                       partitionBy: schema.partitionBy,
                       timestamp: schema.timestamp,
@@ -215,7 +215,7 @@ export const FilesToUpload = ({
                 name="overwrite"
                 defaultValue={data.settings.overwrite ? "true" : "false"}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  onFilePropertyChange(data.table_name, {
+                  onFilePropertyChange(data.fileObject.name, {
                     settings: {
                       ...data.settings,
                       overwrite: e.target.value === "true",
@@ -245,7 +245,7 @@ export const FilesToUpload = ({
                 onUpload={onFileUpload}
                 onRemove={onFileRemove}
                 onSettingsChange={(settings) => {
-                  onFilePropertyChange(data.table_name, {
+                  onFilePropertyChange(data.fileObject.name, {
                     settings,
                   })
                 }}
