@@ -60,6 +60,7 @@ export const Columns = ({
     name: "schemaColumns",
   })
   const [columns, setColumns] = useState<SchemaColumn[]>(schema)
+  const [lastTypeChanged, setLastTypeChanged] = useState("")
 
   const watchTimestamp = watch("timestamp")
 
@@ -97,6 +98,7 @@ export const Columns = ({
               const cols = [...columns]
               cols[index].type = type
               setColumns(cols)
+              setLastTypeChanged(type)
             }}
             onRemove={(index) => {
               remove(index)
@@ -116,7 +118,7 @@ export const Columns = ({
         </>
       )
     },
-    [columns.length, watchTimestamp],
+    [columns.length, watchTimestamp, lastTypeChanged],
   )
 
   useEffect(() => {
