@@ -56,8 +56,8 @@ const FileTextBox = styled(Box)`
 
 type Props = {
   files: ProcessedFile[]
-  onFileRemove: (file: ProcessedFile) => void
-  onFileUpload: (file: ProcessedFile) => void
+  onFileRemove: (filename: string) => void
+  onFileUpload: (filename: string) => void
   onFilePropertyChange: (filename: string, file: Partial<ProcessedFile>) => void
 }
 

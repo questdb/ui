@@ -154,7 +154,11 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
       <DropBox onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
-        onFileUpload={async (file) => {
+        onFileUpload={async (filename) => {
+          const file = filesDropped.find(
+            (f) => f.table_name === filename,
+          ) as ProcessedFile
+
           if (file.isUploading) {
             return
           }
@@ -215,10 +219,13 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             })
           }
         }}
-        onFileRemove={(removedFile) => {
+        onFileRemove={(filename) => {
+          const file = filesDropped.find(
+            (f) => f.table_name === filename,
+          ) as ProcessedFile
           setFilesDropped(
             filesDropped.filter(
-              (f) => f.fileObject.name !== removedFile.fileObject.name,
+              (f) => f.fileObject.name !== file.fileObject.name,
             ),
           )
         }}

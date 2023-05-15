@@ -105,7 +105,7 @@ export const Columns = ({
               setColumns(cols)
             }}
             onSetTimestamp={(name) => {
-              setValue("timestamp", name)
+              setValue("timestamp", watchTimestamp === name ? "" : name)
             }}
             timestamp={watchTimestamp}
           />

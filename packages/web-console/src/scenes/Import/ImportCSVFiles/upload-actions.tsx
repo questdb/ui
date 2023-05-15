@@ -9,8 +9,8 @@ import { UploadModeSettings } from "../../../utils"
 
 type Props = {
   file: ProcessedFile
-  onUpload: (file: ProcessedFile) => void
-  onRemove: (file: ProcessedFile) => void
+  onUpload: (filename: string) => void
+  onRemove: (filename: string) => void
   onSettingsChange: (settings: UploadModeSettings) => void
 }
 
@@ -33,7 +33,7 @@ export const UploadActions = ({
         disabled={file.isUploading}
         skin="primary"
         prefixIcon={<Upload2 size="18px" />}
-        onClick={() => onUpload(file)}
+        onClick={() => onUpload(file.table_name)}
       >
         {file.isUploading ? "Uploading..." : "Upload"}
       </Button>
@@ -44,7 +44,7 @@ export const UploadActions = ({
             disabled={file.isUploading}
             skin="secondary"
             onClick={() => {
-              onRemove(file)
+              onRemove(file.table_name)
             }}
           >
             <Close size="18px" />
