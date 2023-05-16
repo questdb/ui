@@ -103,7 +103,11 @@ export const Columns = ({
         </>
       )
     },
-    [watchTimestamp, watchSchemaColumns.length],
+    [
+      watchTimestamp,
+      watchSchemaColumns.length,
+      watchSchemaColumns.map((c: SchemaColumn) => c.type).join(","),
+    ],
   )
 
   useEffect(() => {
