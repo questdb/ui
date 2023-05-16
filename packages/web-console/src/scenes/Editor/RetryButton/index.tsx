@@ -21,57 +21,41 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
+import React, { ReactNode, MouseEvent } from "react"
+import styled from "styled-components"
 import {
-  ConsoleConfigShape,
-  ConsoleAction,
-  ConsoleAT,
-  ConsoleStateShape,
-} from "../../types"
+    SecondaryButton,
+} from "../../../components"
 
-export const initialState: ConsoleStateShape = {
-  sideMenuOpened: false,
+import { useSelector } from "react-redux"
+import { selectors } from "../../../store"
+
+type Props = Readonly<{
+  onClick?: (event: MouseEvent) => void,
+  children: ReactNode
+}>
+
+const Button = styled(SecondaryButton)`
+  margin-left: 1rem;
+  width: 7rem !important;
+  height: 2rem !important;
+  color: white;
+`
+
+export const RetryButton = ({
+  children,
+  onClick
+}: Props) => {
+  const running = useSelector(selectors.query.getRunning)
+
+  return (
+    <Button
+      type="button"
+      onClick={onClick}
+      disabled={running.value}
+      fontSize="ms"
+    >
+        {children}
+    </Button>
+  )
 }
-
-export const defaultConfig: ConsoleConfigShape = {
-  githubBanner: false,
-  readOnly: false,
-  savedQueries: [],
-  statementTimeout: 6000
-}
-
-const _console = (
-  state = initialState,
-  action: ConsoleAction,
-): ConsoleStateShape => {
-  switch (action.type) {
-    case ConsoleAT.SET_CONFIG: {
-      return {
-        ...state,
-        config: {
-          ...defaultConfig,
-          ...action.payload,
-        },
-      }
-    }
-
-    case ConsoleAT.SET_MODAL_ID: {
-      return {
-        ...state,
-        modalId: action.payload,
-      }
-    }
-
-    case ConsoleAT.TOGGLE_SIDE_MENU: {
-      return {
-        ...state,
-        sideMenuOpened: !state.sideMenuOpened,
-      }
-    }
-
-    default:
-      return state
-  }
-}
-
-export default _console

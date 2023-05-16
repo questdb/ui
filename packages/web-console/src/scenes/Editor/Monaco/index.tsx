@@ -28,7 +28,9 @@ import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
 import Loader from "../Loader"
+import { RetryButton } from "../RetryButton"
 import styled from "styled-components"
+import { Refresh } from "styled-icons/remix-line"
 import {
   conf as QuestDBLanguageConf,
   language as QuestDBLanguage,
@@ -88,7 +90,16 @@ const Content = styled(PaneContent)`
     background: ${color("red")};
   }
 `
+const TimeoutNotificationSideContent = styled.div`
+  display: flex;
+  flex-wrap: nowrap;
+`
 
+const ButtonContent = styled.span`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+`
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
@@ -102,17 +113,19 @@ const MonacoEditor = () => {
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
+  const [errorQuery, setErrorQuery] = useState("")
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
+  const { statementTimeout } = useSelector(selectors.console.getConfig)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<string[]>([])
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
 
-  const toggleRunning = (isRefresh: boolean = false) => {
-    dispatch(actions.query.toggleRunning(isRefresh))
+  const toggleRunning = (isRefresh: boolean = false, isFromError: boolean = false) => {
+    dispatch(actions.query.toggleRunning(isRefresh, isFromError))
   }
 
   const handleEditorBeforeMount = (monaco: Monaco) => {
@@ -353,12 +366,15 @@ const MonacoEditor = () => {
       }
 
       const request = running.isRefresh
-        ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
+        ? getQueryRequestFromLastExecutedQuery(running.isFromError ? errorQuery : lastExecutedQuery)
         : getQueryRequestFromEditor(editorRef.current)
 
       if (request?.query) {
+        const headers = new Headers()
+        const timeout = running.isFromError ? statementTimeout*2 : statementTimeout
+        headers.set("Statement-Timeout", timeout.toString())
         void quest
-          .queryRaw(request.query, { limit: "0,1000", explain: true })
+          .queryRaw(request.query, { limit: "0,1000", explain: true }, headers )
           .then((result) => {
             setRequest(undefined)
             errorRef.current = undefined
@@ -405,13 +421,34 @@ const MonacoEditor = () => {
             errorRef.current = error
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
+
+            const refreshButton = /^timeout/.test(error.error) && 
+              (
+                <RetryButton
+                  onClick={
+                    () => {
+                     setErrorQuery(request.query)
+                     toggleRunning(false, true)
+                    }
+                  }
+                >
+                  <ButtonContent>
+                    <Refresh size={16} />
+                    120s
+                  </ButtonContent>
+                </RetryButton>
+              );
+
             dispatch(
               actions.query.addNotification({
                 content: <Text color="red">{error.error}</Text>,
                 sideContent: (
-                  <Text color="foreground" ellipsis title={request.query}>
-                    {request.query}
-                  </Text>
+                  <TimeoutNotificationSideContent>
+                    <Text color="foreground" ellipsis title={request.query}>
+                      {request.query}
+                    </Text>
+                    {refreshButton}
+                  </TimeoutNotificationSideContent>
                 ),
                 type: NotificationType.ERROR,
               }),
