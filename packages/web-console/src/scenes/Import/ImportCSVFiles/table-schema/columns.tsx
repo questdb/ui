@@ -48,13 +48,7 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   </Drawer.GroupItem>
 )
 
-export const Columns = ({
-  file,
-  schema,
-}: {
-  file: ProcessedFile
-  schema: SchemaColumn[]
-}) => {
+export const Columns = ({ file }: { file: ProcessedFile }) => {
   const { getValues, setValue, watch } = useFormContext()
   const { append, remove } = useFieldArray({
     name: "schemaColumns",
@@ -86,7 +80,7 @@ export const Columns = ({
         <>
           <Column
             column={column}
-            file={file}
+            disabled={isEditLocked}
             index={index}
             onRemove={(index) => {
               remove(index)
@@ -109,10 +103,6 @@ export const Columns = ({
       watchSchemaColumns.map((c: SchemaColumn) => c.type).join(","),
     ],
   )
-
-  useEffect(() => {
-    setValue("schemaColumns", schema)
-  }, [schema])
 
   return (
     <>

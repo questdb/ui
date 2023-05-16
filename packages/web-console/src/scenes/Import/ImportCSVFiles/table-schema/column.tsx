@@ -7,7 +7,6 @@ import { Close } from "styled-icons/remix-line"
 import { SortDown } from "styled-icons/boxicons-regular"
 import { Drawer } from "../../../../components/Drawer"
 import { DEFAULT_TIMESTAMP_FORMAT } from "../const"
-import { ProcessedFile } from "../types"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
 
@@ -64,22 +63,20 @@ const Inputs = styled(Box).attrs({
 `
 
 export const Column = ({
-  file,
+  disabled,
   column,
   index,
   onRemove,
   onSetTimestamp,
   timestamp,
 }: {
-  file: ProcessedFile
+  disabled: boolean
   column: SchemaColumn
   index: number
   onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
   timestamp: string
 }) => {
-  const isEditLocked = file.exists && file.table_name === file.fileObject.name
-
   if (!column) {
     return null
   }
@@ -92,7 +89,7 @@ export const Column = ({
             <Inputs>
               <Form.Item name={`schemaColumns.${index}.name`} label="Name">
                 <Form.Input
-                  disabled={isEditLocked}
+                  disabled={disabled}
                   defaultValue={column.name}
                   name={`schemaColumns.${index}.name`}
                   autoComplete="off"
@@ -100,37 +97,39 @@ export const Column = ({
               </Form.Item>
               <Form.Item name={`schemaColumns.${index}.type`} label="Type">
                 <Form.Select
-                  disabled={isEditLocked}
+                  disabled={disabled}
                   defaultValue={column.type}
                   name={`schemaColumns.${index}.type`}
                   options={supportedColumnTypes}
                 />
               </Form.Item>
 
-              <IconWithTooltip
-                icon={
-                  <Button
-                    disabled={column.type !== "TIMESTAMP" || isEditLocked}
-                    skin={
-                      timestamp !== "" &&
-                      column.name !== "" &&
-                      timestamp === column.name
-                        ? "success"
-                        : "transparent"
-                    }
-                    onClick={() => {
-                      onSetTimestamp(column.name)
-                    }}
-                    type="button"
-                  >
-                    <SortDown size="18px" />
-                  </Button>
-                }
-                tooltip="Set as designated timestamp"
-                placement="bottom"
-              />
+              {column.type === "TIMESTAMP" && (
+                <IconWithTooltip
+                  icon={
+                    <Button
+                      disabled={disabled}
+                      skin={
+                        timestamp !== "" &&
+                        column.name !== "" &&
+                        timestamp === column.name
+                          ? "success"
+                          : "transparent"
+                      }
+                      onClick={() => {
+                        onSetTimestamp(column.name)
+                      }}
+                      type="button"
+                    >
+                      <SortDown size="18px" />
+                    </Button>
+                  }
+                  tooltip="Set as designated timestamp"
+                  placement="top"
+                />
+              )}
 
-              {!isEditLocked && (
+              {!disabled && (
                 <Button
                   skin="transparent"
                   onClick={() => {
@@ -149,7 +148,7 @@ export const Column = ({
                 helperText="Required when using the TIMESTAMP type"
               >
                 <Form.Input
-                  disabled={isEditLocked}
+                  disabled={disabled}
                   name={`schemaColumns.${index}.pattern`}
                   placeholder={DEFAULT_TIMESTAMP_FORMAT}
                   defaultValue={
@@ -176,7 +175,7 @@ export const Column = ({
                 }
               >
                 <Form.Input
-                  disabled={isEditLocked}
+                  disabled={disabled}
                   name={`schemaColumns.${index}.precision`}
                   required
                 />
