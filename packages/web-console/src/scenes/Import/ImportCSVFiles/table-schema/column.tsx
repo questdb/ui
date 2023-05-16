@@ -186,7 +186,6 @@ export const Column = ({
                 }
               >
                 <Form.Input
-                  disabled={isEditLocked}
                   name={`schemaColumns.${index}.precision`}
                   required
                 />
