@@ -97,7 +97,6 @@ export const Column = ({
               </Form.Item>
               <Form.Item name={`schemaColumns.${index}.type`} label="Type">
                 <Form.Select
-                  disabled={disabled}
                   defaultValue={column.type}
                   name={`schemaColumns.${index}.type`}
                   options={supportedColumnTypes}
@@ -108,13 +107,12 @@ export const Column = ({
                 <IconWithTooltip
                   icon={
                     <Button
-                      disabled={disabled}
                       skin={
                         timestamp !== "" &&
                         column.name !== "" &&
                         timestamp === column.name
                           ? "success"
-                          : "transparent"
+                          : "secondary"
                       }
                       onClick={() => {
                         onSetTimestamp(column.name)
@@ -148,7 +146,6 @@ export const Column = ({
                 helperText="Required when using the TIMESTAMP type"
               >
                 <Form.Input
-                  disabled={disabled}
                   name={`schemaColumns.${index}.pattern`}
                   placeholder={DEFAULT_TIMESTAMP_FORMAT}
                   defaultValue={
@@ -175,7 +172,6 @@ export const Column = ({
                 }
               >
                 <Form.Input
-                  disabled={disabled}
                   name={`schemaColumns.${index}.precision`}
                   required
                 />

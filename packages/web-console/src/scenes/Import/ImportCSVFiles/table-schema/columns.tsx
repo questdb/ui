@@ -106,16 +106,6 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
 
   return (
     <>
-      {isEditLocked && (
-        <Disclaimer isEditLocked={true}>
-          <Alert size="20px" />
-          <Text color="orange">
-            Schema is read-only when importing to an existing table.
-            <br />
-            To edit, change the target table name and try again.
-          </Text>
-        </Disclaimer>
-      )}
       {!isEditLocked && (
         <Disclaimer isEditLocked={false}>
           <Information size="20px" />
