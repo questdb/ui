@@ -95,7 +95,6 @@ export const Column = ({
 
         <Form.Item name={`schemaColumns.${index}.type`} label="Type">
           <Form.Select
-            disabled={isEditLocked}
             defaultValue={column.type}
             name={`schemaColumns.${index}.type`}
             options={supportedColumnTypes}
@@ -118,7 +117,6 @@ export const Column = ({
         <Timestamp>
           <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
             <Form.Input
-              disabled={isEditLocked}
               name={`schemaColumns.${index}.pattern`}
               placeholder={DEFAULT_TIMESTAMP_FORMAT}
               defaultValue={
@@ -133,7 +131,6 @@ export const Column = ({
           <IconWithTooltip
             icon={
               <Button
-                disabled={isEditLocked}
                 skin={
                   timestamp !== "" &&
                   column.name !== "" &&
@@ -177,11 +174,7 @@ export const Column = ({
             </a>
           }
         >
-          <Form.Input
-            disabled={isEditLocked}
-            name={`schemaColumns.${index}.precision`}
-            required
-          />
+          <Form.Input name={`schemaColumns.${index}.precision`} required />
         </Form.Item>
       )}
     </Root>
