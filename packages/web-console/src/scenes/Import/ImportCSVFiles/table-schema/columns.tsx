@@ -50,7 +50,7 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
 
 export const Columns = ({ file }: { file: ProcessedFile }) => {
   const { getValues, setValue, watch } = useFormContext()
-  const { append, remove } = useFieldArray({
+  const { append } = useFieldArray({
     name: "schemaColumns",
   })
 
@@ -70,10 +70,6 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
 
   const listItemContent = useCallback(
     (index: number) => {
-      if (!watchSchemaColumns[index]) {
-        return null
-      }
-
       const column = watch(`schemaColumns.${index}`)
 
       return (
@@ -83,7 +79,12 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
             disabled={isEditLocked}
             index={index}
             onRemove={(index) => {
-              remove(index)
+              setValue(
+                "schemaColumns",
+                watchSchemaColumns.filter(
+                  (_: SchemaColumn, i: number) => i !== index,
+                ),
+              )
             }}
             onSetTimestamp={(name) => {
               setValue("timestamp", watchTimestamp === name ? "" : name)
