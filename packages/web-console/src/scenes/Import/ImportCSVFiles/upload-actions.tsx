@@ -38,7 +38,7 @@ export const UploadActions = ({
         {file.isUploading ? "Uploading..." : "Upload"}
       </Button>
       <PopperHover
-        placement="bottom"
+        placement="top"
         trigger={
           <Button
             disabled={file.isUploading}
