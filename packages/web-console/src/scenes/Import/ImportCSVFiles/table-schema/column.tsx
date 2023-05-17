@@ -127,7 +127,7 @@ export const Column = ({
                       column.name !== "" &&
                       timestamp === column.name
                         ? "success"
-                        : "transparent"
+                        : "secondary"
                     }
                     onClick={() => {
                       onSetTimestamp(column.name)
