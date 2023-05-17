@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect } from "react"
 import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import { Box } from "../../../../components/Box"
@@ -48,63 +48,43 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   </Drawer.GroupItem>
 )
 
-export const Columns = ({
-  file,
-  schema,
-}: {
-  file: ProcessedFile
-  schema: SchemaColumn[]
-}) => {
-  const { setValue, watch } = useFormContext()
-  const { append, remove } = useFieldArray({
+export const Columns = ({ file }: { file: ProcessedFile }) => {
+  const { getValues, setValue, watch } = useFormContext()
+  const { append } = useFieldArray({
     name: "schemaColumns",
   })
-  const [columns, setColumns] = useState<SchemaColumn[]>(schema)
-  const [lastTypeChanged, setLastTypeChanged] = useState("")
 
   const watchTimestamp = watch("timestamp")
+  const watchSchemaColumns = getValues()["schemaColumns"]
 
   const isEditLocked = file.exists && file.table_name === file.fileObject.name
 
   const addColumn = () => {
-    const newColumn = {
+    append({
       name: "",
       type: "",
       pattern: "",
       precision: "",
-    }
-    append(newColumn)
-    setColumns([...columns, newColumn])
+    })
   }
 
   const listItemContent = useCallback(
     (index: number) => {
-      const column = columns[index]
-
-      if (!column) return null
+      const column = watch(`schemaColumns.${index}`)
 
       return (
         <>
           <Column
-            file={file}
-            index={index}
             column={column}
-            onNameChange={(name) => {
-              const cols = [...columns]
-              cols[index].name = name
-              setColumns(cols)
-            }}
-            onTypeChange={(type) => {
-              const cols = [...columns]
-              cols[index].type = type
-              setColumns(cols)
-              setLastTypeChanged(type)
-            }}
+            disabled={isEditLocked}
+            index={index}
             onRemove={(index) => {
-              remove(index)
-              const cols = [...columns]
-              cols.splice(index, 1)
-              setColumns(cols)
+              setValue(
+                "schemaColumns",
+                watchSchemaColumns.filter(
+                  (_: SchemaColumn, i: number) => i !== index,
+                ),
+              )
             }}
             onSetTimestamp={(name) => {
               setValue("timestamp", watchTimestamp === name ? "" : name)
@@ -112,31 +92,21 @@ export const Columns = ({
             timestamp={watchTimestamp}
           />
 
-          {index === columns.length - 1 && !isEditLocked && (
+          {index === watchSchemaColumns.length - 1 && !isEditLocked && (
             <AddColumn onAdd={addColumn} />
           )}
         </>
       )
     },
-    [columns.length, watchTimestamp, lastTypeChanged],
+    [
+      watchTimestamp,
+      watchSchemaColumns.length,
+      watchSchemaColumns.map((c: SchemaColumn) => c.type).join(","),
+    ],
   )
-
-  useEffect(() => {
-    setValue("schemaColumns", schema)
-  }, [schema])
 
   return (
     <>
-      {isEditLocked && (
-        <Disclaimer isEditLocked={true}>
-          <Alert size="20px" />
-          <Text color="orange">
-            Schema is read-only when importing to an existing table.
-            <br />
-            To edit, change the target table name and try again.
-          </Text>
-        </Disclaimer>
-      )}
       {!isEditLocked && (
         <Disclaimer isEditLocked={false}>
           <Information size="20px" />
@@ -148,10 +118,10 @@ export const Columns = ({
         </Disclaimer>
       )}
       <SchemaRoot>
-        {columns.length > 0 ? (
+        {watchSchemaColumns.length > 0 ? (
           <VirtualList
             itemContent={listItemContent}
-            totalCount={columns.length}
+            totalCount={watchSchemaColumns.length}
           />
         ) : (
           !isEditLocked && <AddColumn onAdd={addColumn} />
