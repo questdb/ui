@@ -151,9 +151,12 @@ export const Column = ({
             href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ height: "100%" }}
           >
-            <Button skin="transparent" prefixIcon={<Book size="14" />}>
+            <Button
+              skin="transparent"
+              prefixIcon={<Book size="14" />}
+              type="button"
+            >
               Docs
             </Button>
           </a>
