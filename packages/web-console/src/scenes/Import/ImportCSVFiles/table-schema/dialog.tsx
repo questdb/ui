@@ -156,15 +156,15 @@ export const Dialog = ({ file, open, onOpenChange, onSchemaChange }: Props) => {
                 <Text color="foreground">Columns</Text>
               </Drawer.GroupHeader>
 
-              <Columns file={file} schema={defaults.schemaColumns} />
+              <Columns file={file} />
             </Inputs>
 
             <Drawer.Actions>
               <Form.Cancel<FormValues>
                 prefixIcon={<Undo size={18} />}
                 variant="secondary"
+                defaultValues={defaults}
                 onClick={() => {
-                  resetToDefaults()
                   onOpenChange(undefined)
                 }}
               >

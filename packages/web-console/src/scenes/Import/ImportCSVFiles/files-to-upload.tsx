@@ -151,11 +151,11 @@ export const FilesToUpload = ({
           {
             header: (
               <PopperHover
-                placement="bottom"
+                placement="top"
                 trigger={
                   <Box align="center" gap="0.5rem">
-                    <Information size="16px" />
                     Schema
+                    <Information size="16px" />
                   </Box>
                 }
               >
@@ -166,7 +166,7 @@ export const FilesToUpload = ({
               </PopperHover>
             ),
 
-            align: "flex-end",
+            align: "center",
             width: "150px",
             render: ({ data }) => {
               const name = data.table_name ?? data.fileObject.name
@@ -189,26 +189,24 @@ export const FilesToUpload = ({
           {
             header: (
               <PopperHover
-                placement="bottom"
+                placement="top"
                 trigger={
                   <Box align="center" gap="0.5rem">
-                    <Information size="16px" />
                     Write mode
+                    <Information size="16px" />
                   </Box>
                 }
               >
                 <Tooltip>
-                  <>
-                    <strong>Append</strong>: data will be appended to the set.
-                    <br />
-                    <strong>Overwrite</strong>: any existing data or structure
-                    will be overwritten. Required for partitioning and timestamp
-                    related changes.
-                  </>
+                  <strong>Append</strong>: data will be appended to the set.
+                  <br />
+                  <strong>Overwrite</strong>: any existing data or structure
+                  will be overwritten. Required for partitioning and timestamp
+                  related changes.
                 </Tooltip>
               </PopperHover>
             ),
-            align: "flex-end",
+            align: "center",
             width: "150px",
             render: ({ data }) => (
               <Select
@@ -236,7 +234,6 @@ export const FilesToUpload = ({
             ),
           },
           {
-            header: "Actions",
             align: "flex-end",
             width: "300px",
             render: ({ data }) => (
