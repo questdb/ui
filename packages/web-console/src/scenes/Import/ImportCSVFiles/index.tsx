@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -151,15 +151,24 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     setFilesDropped([...filesDropped, ...fileConfigs] as ProcessedFile[])
   }
 
-  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
-    const files = event.clipboardData?.files
+  const handlePaste = (event: Event) => {
+    const clipboardEvent = event as ClipboardEvent
+    const files = clipboardEvent.clipboardData?.files
     if (files) {
       handleDrop(files)
     }
   }
 
+  useEffect(() => {
+    window.addEventListener("paste", handlePaste)
+
+    return () => {
+      window.removeEventListener("paste", handlePaste)
+    }
+  }, [])
+
   return (
-    <Root onPaste={handlePaste}>
+    <Root>
       <DropBox onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
