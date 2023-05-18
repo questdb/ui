@@ -80,103 +80,115 @@ export const Column = ({
 
   return (
     <Root key={column.name} odd={index % 2 !== 0}>
-      <MainControl>
-        <Form.Item name={`schemaColumns.${index}.name`} label="Name">
-          <Form.Input
-            disabled={isEditLocked}
-            defaultValue={column.name}
-            name={`schemaColumns.${index}.name`}
-            onChange={(e) => {
-              onNameChange(e.target.value)
-            }}
-            autoComplete="off"
-          />
-        </Form.Item>
+      <Row>
+        <Columns>
+          <Item>
+            <MainControl>
+              <Form.Item name={`schemaColumns.${index}.name`} label="Name">
+                <Form.Input
+                  disabled={isEditLocked}
+                  defaultValue={column.name}
+                  name={`schemaColumns.${index}.name`}
+                  onChange={(e) => {
+                    onNameChange(e.target.value)
+                  }}
+                  autoComplete="off"
+                />
+              </Form.Item>
 
-        <Form.Item name={`schemaColumns.${index}.type`} label="Type">
-          <Form.Select
-            defaultValue={column.type}
-            name={`schemaColumns.${index}.type`}
-            options={supportedColumnTypes}
-            onChange={handleTypeChange}
-          />
-        </Form.Item>
+              <Form.Item name={`schemaColumns.${index}.type`} label="Type">
+                <Form.Select
+                  defaultValue={column.type}
+                  name={`schemaColumns.${index}.type`}
+                  options={supportedColumnTypes}
+                  onChange={handleTypeChange}
+                />
+              </Form.Item>
 
-        {!isEditLocked && (
-          <Button
-            skin="transparent"
-            onClick={() => onRemove(index)}
-            type="button"
-          >
-            <Close size="18px" />
-          </Button>
-        )}
-      </MainControl>
+              {!isEditLocked && (
+                <Button
+                  skin="transparent"
+                  onClick={() => onRemove(index)}
+                  type="button"
+                >
+                  <Close size="18px" />
+                </Button>
+              )}
+            </MainControl>
 
-      {type === "TIMESTAMP" && (
-        <Timestamp>
-          <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
-            <Form.Input
-              name={`schemaColumns.${index}.pattern`}
-              placeholder={DEFAULT_TIMESTAMP_FORMAT}
-              defaultValue={
-                column.pattern !== ""
-                  ? column.pattern
-                  : DEFAULT_TIMESTAMP_FORMAT
-              }
-              required
-            />
-          </Form.Item>
-
-          <IconWithTooltip
-            icon={
-              <Button
-                skin={
-                  timestamp !== "" &&
-                  column.name !== "" &&
-                  timestamp === column.name
-                    ? "success"
-                    : "secondary"
-                }
-                onClick={() => onSetTimestamp(column.name)}
-                type="button"
-                prefixIcon={
-                  <input
-                    type="checkbox"
-                    checked={
-                      timestamp !== "" &&
-                      column.name !== "" &&
-                      timestamp === column.name
+            {type === "TIMESTAMP" && (
+              <Timestamp>
+                <Form.Item
+                  name={`schemaColumns.${index}.pattern`}
+                  label="Pattern"
+                >
+                  <Form.Input
+                    name={`schemaColumns.${index}.pattern`}
+                    placeholder={DEFAULT_TIMESTAMP_FORMAT}
+                    defaultValue={
+                      column.pattern !== ""
+                        ? column.pattern
+                        : DEFAULT_TIMESTAMP_FORMAT
                     }
+                    required
                   />
+                </Form.Item>
+
+                <IconWithTooltip
+                  icon={
+                    <Button
+                      skin={
+                        timestamp !== "" &&
+                        column.name !== "" &&
+                        timestamp === column.name
+                          ? "success"
+                          : "secondary"
+                      }
+                      onClick={() => onSetTimestamp(column.name)}
+                      type="button"
+                      prefixIcon={
+                        <input
+                          type="checkbox"
+                          checked={
+                            timestamp !== "" &&
+                            column.name !== "" &&
+                            timestamp === column.name
+                          }
+                        />
+                      }
+                    >
+                      Designated
+                    </Button>
+                  }
+                  tooltip="Mark this column as a designated timestamp"
+                  placement="top"
+                />
+              </Timestamp>
+            )}
+
+            {type === "GEOHASH" && (
+              <Form.Item
+                name={`schemaColumns.${index}.precision`}
+                label="Precision"
+                helperText={
+                  <a
+                    href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Docs on QuestDB geohash precision
+                  </a>
                 }
               >
-                Designated
-              </Button>
-            }
-            tooltip="Mark this column as a designated timestamp"
-            placement="top"
-          />
-        </Timestamp>
-      )}
-
-      {type === "GEOHASH" && (
-        <Form.Item
-          name={`schemaColumns.${index}.precision`}
-          label="Precision"
-          helperText={
-            <a
-              href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Docs on QuestDB geohash precision
-            </a>
-          }
-        >
-          <Form.Input name={`schemaColumns.${index}.precision`} required />
-        </Form.Item>
-      )}
+                <Form.Input
+                  name={`schemaColumns.${index}.precision`}
+                  required
+                />
+              </Form.Item>
+            )}
+          </Item>
+        </Columns>
+      </Row>
     </Root>
   )
 }
