@@ -10,6 +10,7 @@ import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
+import styled from "styled-components"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -41,6 +42,14 @@ const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
   }
   return column
 }
+
+const Root = styled(Box).attrs({
+  gap: "4rem",
+  alignItems: "flex-start",
+  flexDirection: "column",
+})`
+  width: 100%;
+`
 
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
@@ -150,7 +159,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }
 
   return (
-    <Box gap="4rem" flexDirection="column" onPaste={handlePaste}>
+    <Root onPaste={handlePaste}>
       <DropBox onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
@@ -251,6 +260,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           setFilesDropped(processedFiles)
         }}
       />
-    </Box>
+    </Root>
   )
 }

@@ -4,13 +4,13 @@ import { Page } from "../../components"
 import { Upload2 } from "styled-icons/remix-line"
 import { ImportCSVFiles } from "./ImportCSVFiles"
 import { BusEvent } from "../../consts"
+import { Box } from "../../components/Box"
 
-const Root = styled.div`
-  display: flex;
-  width: 100%;
+const Root = styled(Box).attrs({ gap: "0" })`
+  width: calc(100vw - 4rem);
   padding: 2rem;
   margin-bottom: 4rem;
-  overflow: auto;
+  overflow: hidden;
 `
 
 const Import = () => {
