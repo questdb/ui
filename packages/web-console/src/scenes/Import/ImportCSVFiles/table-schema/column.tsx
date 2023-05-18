@@ -3,6 +3,7 @@ import { Form } from "../../../../components/Form"
 import { IconWithTooltip } from "../../../../components"
 import { Button } from "@questdb/react-components"
 import { Close } from "styled-icons/remix-line"
+import { Book } from "styled-icons/boxicons-regular"
 import { DEFAULT_TIMESTAMP_FORMAT } from "../const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
@@ -32,20 +33,13 @@ const Root = styled.div<{ odd: boolean }>`
   ${({ odd }) => odd && "background-color: #272833;"};
 `
 
-const MainControl = styled.div`
+const Controls = styled.div`
   display: grid;
   grid-template-columns: var(--columns);
   gap: 1rem;
   width: 100%;
   align-items: flex-end;
-`
-
-const Timestamp = styled.div`
-  display: grid;
-  grid-template-columns: var(--columns);
-  gap: 1rem;
-  width: 100%;
-  align-items: flex-end;
+  justify-items: center;
 `
 
 export const Column = ({
@@ -69,7 +63,7 @@ export const Column = ({
 
   return (
     <Root key={column.name} odd={index % 2 !== 0}>
-      <MainControl>
+      <Controls>
         <Form.Item name={`schemaColumns.${index}.name`} label="Name">
           <Form.Input
             disabled={disabled}
@@ -96,10 +90,10 @@ export const Column = ({
             <Close size="18px" />
           </Button>
         )}
-      </MainControl>
+      </Controls>
 
       {column.type === "TIMESTAMP" && (
-        <Timestamp>
+        <Controls>
           <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
             <Form.Input
               name={`schemaColumns.${index}.pattern`}
@@ -142,41 +136,28 @@ export const Column = ({
             tooltip="Mark this column as a designated timestamp"
             placement="top"
           />
-        </Timestamp>
+        </Controls>
       )}
 
-      {column.type === "TIMESTAMP" && (
-        <Form.Item
-          name={`schemaColumns.${index}.pattern`}
-          label="Timestamp pattern"
-          helperText="Required when using the TIMESTAMP type"
-        >
-          <Form.Input
-            name={`schemaColumns.${index}.pattern`}
-            placeholder={DEFAULT_TIMESTAMP_FORMAT}
-            defaultValue={
-              column.pattern !== "" ? column.pattern : DEFAULT_TIMESTAMP_FORMAT
-            }
-            required
-          />
-        </Form.Item>
-      )}
       {column.type === "GEOHASH" && (
-        <Form.Item
-          name={`schemaColumns.${index}.precision`}
-          label="Precision"
-          helperText={
-            <a
-              href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Docs on QuestDB geohash precision
-            </a>
-          }
-        >
-          <Form.Input name={`schemaColumns.${index}.precision`} required />
-        </Form.Item>
+        <Controls>
+          <Form.Item
+            name={`schemaColumns.${index}.precision`}
+            label="Precision"
+          >
+            <Form.Input name={`schemaColumns.${index}.precision`} required />
+          </Form.Item>
+          <a
+            href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ height: "100%" }}
+          >
+            <Button skin="transparent" prefixIcon={<Book size="14" />}>
+              Docs
+            </Button>
+          </a>
+        </Controls>
       )}
     </Root>
   )
