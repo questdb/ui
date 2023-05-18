@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `Fixed` for any bug fixes.
 * `Security` in case of vulnerabilities.
 
+## 0.2.1 - 2023-05-18
+
+### Added
+
+- Allow editing schema on existing tables (column type, designated timestamp and its pattern, geohash precision) [#140](https://github.com/questdb/ui/pull/140)
+- Adjust pasting CSV files from clipboard to not require page wrapper focus [#147](https://github.com/questdb/ui/pull/147)
+
+### Changed
+
+- Simplify and refactor state management in schema editor [#139](https://github.com/questdb/ui/pull/139)
+
 ## 0.0.11 - 2023-02-13
 
 ### Fixed
