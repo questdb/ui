@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -10,6 +10,7 @@ import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
+import { useIsVisible } from "../../../components/Hooks"
 
 type Props = {
   onImported: (result: UploadResult) => void
@@ -46,6 +47,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
   const tables = useSelector(selectors.query.getTables)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const isVisible = useIsVisible(rootRef)
 
   const setFileProperties = (
     filename: string,
@@ -150,6 +153,25 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     }
   }
 
+  const handleVisible = async () => {
+    const fileStatusList = await Promise.all(
+      filesDropped.map(async (file) => {
+        const result = await quest.checkCSVFile(file.table_name)
+        return {
+          ...file,
+          status: result.status,
+        }
+      }),
+    )
+    setFilesDropped(fileStatusList)
+  }
+
+  useEffect(() => {
+    if (isVisible) {
+      handleVisible()
+    }
+  }, [isVisible])
+
   useEffect(() => {
     window.addEventListener("paste", handlePaste)
 
@@ -159,7 +181,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }, [])
 
   return (
-    <Box gap="4rem" flexDirection="column">
+    <Box gap="4rem" flexDirection="column" ref={rootRef}>
       <DropBox onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
