@@ -22,6 +22,7 @@
  *
  ******************************************************************************/
 
+export * from "./useIsVisible"
 export * from "./useKeyPress"
 export * from "./usePopperStyles"
 export * from "./useScreenSize"
