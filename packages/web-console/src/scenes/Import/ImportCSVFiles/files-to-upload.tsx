@@ -13,6 +13,7 @@ import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
 import { Dialog as TableSchemaDialog } from "./table-schema/dialog"
 import { UploadResultDialog } from "./upload-result-dialog"
+import { shortenText } from "../../../utils"
 
 const StyledTable = styled(Table)`
   width: 100%;
@@ -83,50 +84,65 @@ export const FilesToUpload = ({
           {
             header: "File",
             align: "flex-start",
-            render: ({ data }) => (
-              <Box align="center" gap="1rem">
-                <FiletypeCsv size="46px" />
-                <Box gap="1rem" align="flex-4tart" flexDirection="column">
-                  <FileTextBox align="center" gap="1rem">
-                    <Text color="foreground">{data.fileObject.name}</Text>
-                    <Text color="gray2" size="sm">
-                      {bytesWithSuffix(data.fileObject.size)}
-                    </Text>
-                  </FileTextBox>
-                  <Box gap="1rem" align="center">
-                    <FileStatus file={data} />
-                    {!data.isUploading && data.uploadResult && (
-                      <UploadResultDialog file={data} />
+            ...(files.length > 0 && { width: "350px" }),
+            render: ({ data }) => {
+              const file = (
+                <FileTextBox align="center" gap="1rem">
+                  <Text color="foreground">
+                    {shortenText(data.fileObject.name, 20)}
+                  </Text>
+
+                  <Text color="gray2" size="sm">
+                    {bytesWithSuffix(data.fileObject.size)}
+                  </Text>
+                </FileTextBox>
+              )
+              return (
+                <Box align="center" gap="1rem">
+                  <FiletypeCsv size="46px" />
+                  <Box gap="1rem" align="flex-4tart" flexDirection="column">
+                    {data.fileObject.name.length > 20 && (
+                      <PopperHover placement="top" trigger={file}>
+                        <Tooltip>{data.fileObject.name}</Tooltip>
+                      </PopperHover>
                     )}
-                  </Box>
-                  {(data.uploadResult && data.uploadResult.rowsRejected > 0) ||
-                    (data.error && (
-                      <FileTextBox
-                        flexDirection="column"
-                        gap="1rem"
-                        align="flex-start"
-                      >
-                        {data.uploadResult &&
-                          data.uploadResult.rowsRejected > 0 && (
-                            <Text color="orange" size="sm">
-                              {data.uploadResult.rowsRejected.toLocaleString()}{" "}
-                              row
-                              {data.uploadResult.rowsRejected > 1
-                                ? "s"
-                                : ""}{" "}
-                              rejected
+                    {data.fileObject.name.length <= 20 && file}
+                    <Box gap="1rem" align="center">
+                      <FileStatus file={data} />
+                      {!data.isUploading && data.uploadResult && (
+                        <UploadResultDialog file={data} />
+                      )}
+                    </Box>
+                    {(data.uploadResult &&
+                      data.uploadResult.rowsRejected > 0) ||
+                      (data.error && (
+                        <FileTextBox
+                          flexDirection="column"
+                          gap="1rem"
+                          align="flex-start"
+                        >
+                          {data.uploadResult &&
+                            data.uploadResult.rowsRejected > 0 && (
+                              <Text color="orange" size="sm">
+                                {data.uploadResult.rowsRejected.toLocaleString()}{" "}
+                                row
+                                {data.uploadResult.rowsRejected > 1
+                                  ? "s"
+                                  : ""}{" "}
+                                rejected
+                              </Text>
+                            )}
+                          {data.error && (
+                            <Text color="red" size="sm">
+                              {data.error}
                             </Text>
                           )}
-                        {data.error && (
-                          <Text color="red" size="sm">
-                            {data.error}
-                          </Text>
-                        )}
-                      </FileTextBox>
-                    ))}
+                        </FileTextBox>
+                      ))}
+                  </Box>
                 </Box>
-              </Box>
-            ),
+              )
+            },
           },
           {
             header: "Table name",
