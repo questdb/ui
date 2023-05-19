@@ -69,11 +69,10 @@ const stopRunning = (): QueryAction => ({
   type: QueryAT.STOP_RUNNING,
 })
 
-const toggleRunning = (isRefresh = false, isFromError = false): QueryAction => ({
+const toggleRunning = (isRefresh = false): QueryAction => ({
   type: QueryAT.TOGGLE_RUNNING,
   payload: {
     isRefresh,
-    isFromError,
   },
 })
 

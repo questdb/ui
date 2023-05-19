@@ -23,39 +23,52 @@
  ******************************************************************************/
 import React, { ReactNode, MouseEvent } from "react"
 import styled from "styled-components"
+import { Stop } from "styled-icons/remix-line"
 import {
-    SecondaryButton,
+    PrimaryButton,
 } from "../../../components"
+import { color } from "../../../utils"
 
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 
 type Props = Readonly<{
-  onClick?: (event: MouseEvent) => void,
+  onRetry: (event?: MouseEvent) => void,
+  onCancel: (event?: MouseEvent) => void,
   children: ReactNode
 }>
 
-const Button = styled(SecondaryButton)`
+type RetryButtonProps = Readonly<{
+  isRunning: boolean,
+  onClick: (event?: MouseEvent) => void,
+  children: ReactNode
+}>
+
+const RetryButtonStyled = styled(PrimaryButton)<RetryButtonProps>`
   margin-left: 1rem;
-  width: 7rem !important;
+  width: 18rem !important;
   height: 2rem !important;
-  color: white;
+  background: "selection";
+  border: "selection";
+  color: ${props => props.isRunning ? color("red") : color("green")};
 `
 
 export const RetryButton = ({
   children,
-  onClick
+  onRetry,
+  onCancel
 }: Props) => {
-  const running = useSelector(selectors.query.getRunning)
+  const {value: isRunning} = useSelector(selectors.query.getRunning)
+  const onClick = isRunning ? onCancel : onRetry
 
   return (
-    <Button
+    <RetryButtonStyled
       type="button"
       onClick={onClick}
-      disabled={running.value}
       fontSize="ms"
+      isRunning={isRunning}
     >
-        {children}
-    </Button>
+      { isRunning ? <Stop size={16}/> : children }
+    </RetryButtonStyled>
   )
 }

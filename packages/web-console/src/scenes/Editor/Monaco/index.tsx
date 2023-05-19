@@ -113,10 +113,11 @@ const MonacoEditor = () => {
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
-  const [errorQuery, setErrorQuery] = useState("")
+  const [retryQuery, setRetryQuery] = useState("")
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
+  const notifications = useSelector(selectors.query.getNotifications)
   const { statementTimeout } = useSelector(selectors.console.getConfig)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
@@ -124,8 +125,8 @@ const MonacoEditor = () => {
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
 
-  const toggleRunning = (isRefresh: boolean = false, isFromError: boolean = false) => {
-    dispatch(actions.query.toggleRunning(isRefresh, isFromError))
+  const toggleRunning = (isRefresh: boolean = false) => {
+    dispatch(actions.query.toggleRunning(isRefresh))
   }
 
   const handleEditorBeforeMount = (monaco: Monaco) => {
@@ -360,23 +361,33 @@ const MonacoEditor = () => {
   }, [request, quest, dispatch, running])
 
   useEffect(() => {
+    if (retryQuery) {
+      toggleRunning(false);
+    }
+
+  }, [retryQuery])
+
+  useEffect(() => {
     if (running.value && editorRef?.current) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
       }
 
       const request = running.isRefresh
-        ? getQueryRequestFromLastExecutedQuery(running.isFromError ? errorQuery : lastExecutedQuery)
+        ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
+        : retryQuery
+        ? getQueryRequestFromLastExecutedQuery(retryQuery)
         : getQueryRequestFromEditor(editorRef.current)
 
       if (request?.query) {
         const headers = new Headers()
-        const timeout = running.isFromError ? statementTimeout*2 : statementTimeout
+        const timeout = retryQuery ? statementTimeout*2 : statementTimeout
         headers.set("Statement-Timeout", timeout.toString())
         void quest
           .queryRaw(request.query, { limit: "0,1000", explain: true }, headers )
           .then((result) => {
             setRequest(undefined)
+            setRetryQuery('')
             errorRef.current = undefined
             errorRangeRef.current = undefined
             dispatch(actions.query.stopRunning())
@@ -420,24 +431,10 @@ const MonacoEditor = () => {
           .catch((error: ErrorResult) => {
             errorRef.current = error
             setRequest(undefined)
+            setRetryQuery('')
             dispatch(actions.query.stopRunning())
 
-            const refreshButton = /^timeout/.test(error.error) && 
-              (
-                <RetryButton
-                  onClick={
-                    () => {
-                     setErrorQuery(request.query)
-                     toggleRunning(false, true)
-                    }
-                  }
-                >
-                  <ButtonContent>
-                    <Refresh size={16} />
-                    120s
-                  </ButtonContent>
-                </RetryButton>
-              );
+            const isTimeout = /^timeout/.test(error.error)
 
             dispatch(
               actions.query.addNotification({
@@ -447,7 +444,24 @@ const MonacoEditor = () => {
                     <Text color="foreground" ellipsis title={request.query}>
                       {request.query}
                     </Text>
-                    {refreshButton}
+                    {
+                      isTimeout && 
+                      <RetryButton
+                        onRetry={
+                          () => {
+                          setRetryQuery(request.query)
+                          }
+                        }
+                        onCancel={
+                          () => {dispatch(actions.query.stopRunning())}
+                        }
+                      >
+                        <ButtonContent>
+                          <Refresh size={16} />
+                          120s
+                        </ButtonContent>
+                      </RetryButton>
+                    }
                   </TimeoutNotificationSideContent>
                 ),
                 type: NotificationType.ERROR,
