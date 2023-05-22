@@ -11,7 +11,7 @@ import { FiletypeCsv } from "styled-icons/bootstrap"
 import { ProcessedFile } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
-import { Dialog as TableSchemaDialog } from "./table-schema/dialog"
+import { Dialog as TableSchemaDialog } from "../../../components/TableSchemaDialog/dialog"
 import { UploadResultDialog } from "./upload-result-dialog"
 import { shortenText } from "../../../utils"
 
@@ -197,7 +197,13 @@ export const FilesToUpload = ({
                       timestamp: schema.timestamp,
                     })
                   }}
-                  file={data}
+                  name={name}
+                  schema={data.schema}
+                  partitionBy={data.partitionBy}
+                  timestamp={data.timestamp}
+                  isEditLocked={
+                    data.exists && data.table_name === data.fileObject.name
+                  }
                 />
               )
             },
