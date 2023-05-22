@@ -7,6 +7,8 @@ import { Book } from "styled-icons/boxicons-regular"
 import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
+import { Controls } from "./controls"
+import { Action } from "./types"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -26,23 +28,14 @@ const supportedColumnTypes: { label: string; value: string }[] = [
 ]
 
 const Root = styled.div<{ odd: boolean }>`
-  --columns: auto 120px 40px; /* magic numbers to fit input, type dropdown and remove button nicely */
   display: grid;
   gap: 1rem;
   padding: 2rem;
   ${({ odd }) => odd && "background-color: #272833;"};
 `
 
-const Controls = styled.div`
-  display: grid;
-  grid-template-columns: var(--columns);
-  gap: 1rem;
-  width: 100%;
-  align-items: flex-end;
-  justify-items: center;
-`
-
 export const Column = ({
+  action,
   disabled,
   column,
   index,
@@ -50,6 +43,7 @@ export const Column = ({
   onSetTimestamp,
   timestamp,
 }: {
+  action: Action
   disabled: boolean
   column: SchemaColumn
   index: number
@@ -103,7 +97,7 @@ export const Column = ({
                   ? column.pattern
                   : DEFAULT_TIMESTAMP_FORMAT
               }
-              required
+              {...(action === "import" && { required: true })}
             />
           </Form.Item>
 

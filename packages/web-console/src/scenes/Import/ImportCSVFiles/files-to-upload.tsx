@@ -188,6 +188,7 @@ export const FilesToUpload = ({
               const name = data.table_name ?? data.fileObject.name
               return (
                 <TableSchemaDialog
+                  action="import"
                   open={schemaDialogOpen === name}
                   onOpenChange={setSchemaDialogOpen}
                   onSchemaChange={(schema) => {
@@ -204,6 +205,7 @@ export const FilesToUpload = ({
                   isEditLocked={
                     data.exists && data.table_name === data.fileObject.name
                   }
+                  hasWalSetting={false}
                 />
               )
             },

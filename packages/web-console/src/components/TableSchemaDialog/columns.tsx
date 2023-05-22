@@ -8,7 +8,7 @@ import { Drawer } from "../Drawer"
 import { VirtualList } from "../VirtualList"
 import { Button } from "@questdb/react-components"
 import { AddCircle, Information } from "styled-icons/remix-line"
-import { SchemaColumn } from "./types"
+import { Action, SchemaColumn } from "./types"
 import { Column } from "./column"
 
 const Disclaimer = styled(Box).attrs({ align: "center", gap: "1.5rem" })<{
@@ -32,6 +32,10 @@ const AddBox = styled(Box).attrs({
   margin: auto;
 `
 
+const Error = styled(Drawer.GroupItem).attrs({ direction: "column" })`
+  align-items: center;
+`
+
 const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   <Drawer.GroupItem direction="column">
     <AddBox>
@@ -47,8 +51,14 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   </Drawer.GroupItem>
 )
 
-export const Columns = ({ isEditLocked }: { isEditLocked: boolean }) => {
-  const { getValues, setValue, watch } = useFormContext()
+export const Columns = ({
+  action,
+  isEditLocked,
+}: {
+  action: Action
+  isEditLocked: boolean
+}) => {
+  const { formState, getValues, setValue, watch } = useFormContext()
   const { append } = useFieldArray({
     name: "schemaColumns",
   })
@@ -72,6 +82,7 @@ export const Columns = ({ isEditLocked }: { isEditLocked: boolean }) => {
       return (
         <>
           <Column
+            action={action}
             column={column}
             disabled={isEditLocked}
             index={index}
@@ -104,7 +115,7 @@ export const Columns = ({ isEditLocked }: { isEditLocked: boolean }) => {
 
   return (
     <>
-      {!isEditLocked && (
+      {action === "import" && !isEditLocked && (
         <Disclaimer isEditLocked={false}>
           <Information size="20px" />
           <Text color="foreground">
@@ -113,6 +124,11 @@ export const Columns = ({ isEditLocked }: { isEditLocked: boolean }) => {
             Order is not important.
           </Text>
         </Disclaimer>
+      )}
+      {formState.errors && formState.errors["schemaColumns"] && (
+        <Error>
+          <Text color="red">{formState.errors["schemaColumns"]?.message}</Text>
+        </Error>
       )}
       <SchemaRoot>
         {watchSchemaColumns.length > 0 ? (
