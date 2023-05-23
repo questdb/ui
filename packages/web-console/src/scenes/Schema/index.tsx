@@ -65,6 +65,8 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { Box } from "../../components/Box"
 import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
+import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
+import { useEditor } from "../../providers"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -136,6 +138,7 @@ const Schema = ({
   const { readOnly } = useSelector(selectors.console.getConfig)
   const { updateSettings } = useLocalStorage()
   const dispatch = useDispatch()
+  const { appendQuery } = useEditor()
 
   const handleChange = useCallback((name: string) => {
     setOpened(name)
@@ -202,7 +205,19 @@ const Schema = ({
   }, [])
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
-    console.log(values)
+    const { name, partitionBy, timestamp, schemaColumns, walEnabled } = values
+    const tableSchemaQuery = formatTableSchemaQuery({
+      name,
+      partitionBy,
+      timestamp,
+      walEnabled: walEnabled === "true",
+      schemaColumns: schemaColumns.map((column) => ({
+        column: column.name,
+        type: column.type,
+      })),
+    })
+    appendQuery(tableSchemaQuery)
+    dispatch(actions.query.toggleRunning())
   }
 
   useEffect(() => {

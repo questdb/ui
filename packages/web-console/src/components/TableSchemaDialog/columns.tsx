@@ -69,7 +69,7 @@ export const Columns = ({
   const addColumn = () => {
     append({
       name: "",
-      type: "",
+      type: action === "import" ? "" : "STRING",
       pattern: "",
       precision: "",
     })

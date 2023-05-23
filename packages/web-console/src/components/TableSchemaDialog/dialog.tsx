@@ -81,9 +81,9 @@ export const Dialog = ({
 }: Props) => {
   const formDefaults = {
     name,
-    schemaColumns: [],
-    partitionBy: "NONE",
-    timestamp: "",
+    schemaColumns: schema,
+    partitionBy,
+    timestamp,
     walEnabled: hasWalSetting ? "false" : undefined,
   }
 

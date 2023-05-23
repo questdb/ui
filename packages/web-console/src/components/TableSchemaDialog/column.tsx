@@ -69,9 +69,11 @@ export const Column = ({
 
         <Form.Item name={`schemaColumns.${index}.type`} label="Type">
           <Form.Select
-            defaultValue={column.type}
+            defaultValue={action === "import" ? column.type : "STRING"}
             name={`schemaColumns.${index}.type`}
-            options={supportedColumnTypes}
+            options={supportedColumnTypes.filter((type) =>
+              type.value === "" && action === "add" ? false : true,
+            )}
           />
         </Form.Item>
 
@@ -88,18 +90,20 @@ export const Column = ({
 
       {column.type === "TIMESTAMP" && (
         <Controls>
-          <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
-            <Form.Input
-              name={`schemaColumns.${index}.pattern`}
-              placeholder={DEFAULT_TIMESTAMP_FORMAT}
-              defaultValue={
-                column.pattern !== ""
-                  ? column.pattern
-                  : DEFAULT_TIMESTAMP_FORMAT
-              }
-              {...(action === "import" && { required: true })}
-            />
-          </Form.Item>
+          {action === "import" && (
+            <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
+              <Form.Input
+                name={`schemaColumns.${index}.pattern`}
+                placeholder={DEFAULT_TIMESTAMP_FORMAT}
+                defaultValue={
+                  column.pattern !== ""
+                    ? column.pattern
+                    : DEFAULT_TIMESTAMP_FORMAT
+                }
+                {...(action === "import" && { required: true })}
+              />
+            </Form.Item>
+          )}
 
           <IconWithTooltip
             icon={
