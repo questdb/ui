@@ -62,6 +62,7 @@ type Props = {
   timestamp: string
   trigger?: React.ReactNode
   tables?: QuestDB.Table[]
+  ctaText: string
 }
 
 export const Dialog = ({
@@ -78,6 +79,7 @@ export const Dialog = ({
   onSchemaChange,
   trigger,
   tables,
+  ctaText,
 }: Props) => {
   const formDefaults = {
     name,
@@ -297,7 +299,7 @@ export const Dialog = ({
                 prefixIcon={<TableIcon size={18} />}
                 variant="success"
               >
-                Save
+                {ctaText}
               </Form.Submit>
             </Drawer.Actions>
           </Items>

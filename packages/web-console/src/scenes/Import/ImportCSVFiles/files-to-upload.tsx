@@ -206,6 +206,7 @@ export const FilesToUpload = ({
                     data.exists && data.table_name === data.fileObject.name
                   }
                   hasWalSetting={false}
+                  ctaText="Save"
                 />
               )
             },

@@ -273,6 +273,7 @@ const Schema = ({
                     <span>Add</span>
                   </SecondaryButton>
                 }
+                ctaText="Add table"
               />
               <PopperHover
                 delay={350}
