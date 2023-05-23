@@ -12,6 +12,7 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import { Controls } from "./controls"
+import * as QuestDB from "../../utils/questdb"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
@@ -60,6 +61,7 @@ type Props = {
   partitionBy: string
   timestamp: string
   trigger?: React.ReactNode
+  tables?: QuestDB.Table[]
 }
 
 export const Dialog = ({
@@ -75,6 +77,7 @@ export const Dialog = ({
   onOpenChange,
   onSchemaChange,
   trigger,
+  tables,
 }: Props) => {
   const formDefaults = {
     name,
@@ -108,11 +111,15 @@ export const Dialog = ({
         if (!isValidTableName(value)) {
           return helpers.error("string.validTableName")
         }
+        if (action === "add" && tables?.find((table) => table.name === value)) {
+          return helpers.error("string.uniqueTableName")
+        }
         return value
       })
       .messages({
         "string.empty": "Please enter a name",
         "string.validTableName": "Invalid table name",
+        "string.uniqueTableName": "Table name must be unique",
       }),
     partitionBy: Joi.string()
       .required()

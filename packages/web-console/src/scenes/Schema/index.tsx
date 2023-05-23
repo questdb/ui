@@ -237,7 +237,7 @@ const Schema = ({
         </Header>
 
         <div style={{ display: "flex" }}>
-          {readOnly === false && (
+          {readOnly === false && tables && (
             <Box align="center" gap="1rem">
               <TableSchemaDialog
                 action="add"
@@ -247,6 +247,7 @@ const Schema = ({
                 name=""
                 partitionBy="NONE"
                 schema={[]}
+                tables={tables}
                 timestamp=""
                 onOpenChange={(open) => setAddTableDialogOpen(open)}
                 open={addTableDialogOpen !== undefined}
