@@ -71,9 +71,7 @@ export const formatTableSchemaQuery = ({
     query += ` PARTITION BY ${partitionBy}`
   }
 
-  if (walEnabled) {
-    query += " WAL"
-  }
+  query += walEnabled ? " WAL" : " BYPASS WAL"
 
   return `${formatSql(query)};`
 }
