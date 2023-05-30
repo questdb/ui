@@ -139,7 +139,7 @@ export const Column = ({
               placement="top"
             />
           </Controls>
-          <Text color="comment">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
+          <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
         </Box>
       )}
 
