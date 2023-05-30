@@ -143,7 +143,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
 
   const handleDrop = async (files: FileList) => {
     const fileConfigs = await getFileConfigs(files)
-    setFilesDropped([...filesDropped, ...fileConfigs] as ProcessedFile[])
+    setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
   }
 
   const handlePaste = useCallback((event: Event) => {
