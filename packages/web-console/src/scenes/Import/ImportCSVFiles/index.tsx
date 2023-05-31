@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -46,6 +46,7 @@ const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
+  const [dialogOpen, setDialogOpen] = useState(false)
   const tables = useSelector(selectors.query.getTables)
   const rootRef = useRef<HTMLDivElement>(null)
   const isVisible = useIsVisible(rootRef)
@@ -142,16 +143,16 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
 
   const handleDrop = async (files: File[]) => {
     const fileConfigs = await getFileConfigs(files)
-    setFilesDropped([...filesDropped, ...fileConfigs] as ProcessedFile[])
+    setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
   }
 
-  const handlePaste = (event: Event) => {
+  const handlePaste = useCallback((event: Event) => {
     const clipboardEvent = event as ClipboardEvent
     const files = clipboardEvent.clipboardData?.files
     if (files) {
       handleDrop(Array.from(files))
     }
-  }
+  }, [])
 
   const handleVisible = async () => {
     const fileStatusList = await Promise.all(
@@ -173,18 +174,25 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }, [isVisible])
 
   useEffect(() => {
-    window.addEventListener("paste", handlePaste)
-
     return () => {
       window.removeEventListener("paste", handlePaste)
     }
   }, [])
+
+  useEffect(() => {
+    if (dialogOpen) {
+      window.removeEventListener("paste", handlePaste)
+    } else {
+      window.addEventListener("paste", handlePaste)
+    }
+  }, [dialogOpen])
 
   return (
     <Box gap="4rem" flexDirection="column" ref={rootRef}>
       <DropBox files={filesDropped} onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
+        onDialogToggle={setDialogOpen}
         onFileUpload={async (filename) => {
           const file = filesDropped.find(
             (f) => f.table_name === filename,
