@@ -1,9 +1,21 @@
 import React, { useRef, useState } from "react"
 import styled from "styled-components"
 import { Search2 } from "styled-icons/remix-line"
-import { Text } from "../../../components"
 import { Box } from "../../../components/Box"
+import { Text } from "@questdb/react-components"
 import { Button, Heading } from "@questdb/react-components"
+import { ProcessedFile } from "./types"
+
+const getFileDuplicates = (
+  inputFiles: FileList,
+  existingFiles: ProcessedFile[],
+) => {
+  const existingFileNames = existingFiles.map((f) => f.table_name)
+  const duplicates = Array.from(inputFiles).filter((f) =>
+    existingFileNames.includes(f.name),
+  )
+  return duplicates
+}
 
 const Root = styled(Box).attrs({ flexDirection: "column" })<{
   isDragging: boolean
@@ -34,11 +46,13 @@ const CautionText = styled(Text)`
 `
 
 type Props = {
-  onFilesDropped: (files: FileList) => void
+  files: ProcessedFile[]
+  onFilesDropped: (files: File[]) => void
 }
 
-export const DropBox = ({ onFilesDropped }: Props) => {
+export const DropBox = ({ files, onFilesDropped }: Props) => {
   const [isDragging, setIsDragging] = useState(false)
+  const [duplicates, setDuplicates] = useState<File[]>([])
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
@@ -53,7 +67,15 @@ export const DropBox = ({ onFilesDropped }: Props) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
-    onFilesDropped(e.dataTransfer.files)
+    addToQueue(e.dataTransfer.files)
+  }
+
+  const addToQueue = (inputFiles: FileList) => {
+    const duplicates = getFileDuplicates(inputFiles, files)
+    setDuplicates(duplicates)
+    onFilesDropped(
+      Array.from(inputFiles).filter((f) => !duplicates.includes(f)),
+    )
     uploadInputRef.current?.setAttribute("value", "")
   }
 
@@ -76,8 +98,8 @@ export const DropBox = ({ onFilesDropped }: Props) => {
         type="file"
         id="file"
         onChange={(e) => {
-          onFilesDropped(e.target.files as FileList)
-          uploadInputRef.current?.setAttribute("value", "")
+          if (e.target.files === null) return
+          addToQueue(e.target.files)
         }}
         multiple={true}
         ref={uploadInputRef}
@@ -93,6 +115,13 @@ export const DropBox = ({ onFilesDropped }: Props) => {
       >
         Browse from disk
       </Button>
+      {duplicates.length > 0 && (
+        <Text color="red">
+          File{duplicates.length > 1 ? "s" : ""} already added to queue:{" "}
+          {duplicates.map((f) => f.name).join(", ")}. Change target table name
+          and try again.
+        </Text>
+      )}
       <Caution>
         <CautionText>
           Suitable for small batches of CSV file upload. For database

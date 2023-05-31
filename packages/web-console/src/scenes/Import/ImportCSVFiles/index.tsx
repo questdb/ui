@@ -71,9 +71,9 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     setFileProperties(file.table_name, { isUploading })
   }
 
-  const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
+  const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
     return await Promise.all(
-      Array.from(files).map(async (file) => {
+      files.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
 
         const schema =
@@ -140,7 +140,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     )
   }
 
-  const handleDrop = async (files: FileList) => {
+  const handleDrop = async (files: File[]) => {
     const fileConfigs = await getFileConfigs(files)
     setFilesDropped([...filesDropped, ...fileConfigs] as ProcessedFile[])
   }
@@ -149,7 +149,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     const clipboardEvent = event as ClipboardEvent
     const files = clipboardEvent.clipboardData?.files
     if (files) {
-      handleDrop(files)
+      handleDrop(Array.from(files))
     }
   }
 
@@ -182,7 +182,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
 
   return (
     <Box gap="4rem" flexDirection="column" ref={rootRef}>
-      <DropBox onFilesDropped={handleDrop} />
+      <DropBox files={filesDropped} onFilesDropped={handleDrop} />
       <FilesToUpload
         files={filesDropped}
         onFileUpload={async (filename) => {
