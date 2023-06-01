@@ -18,6 +18,25 @@ const Row = styled(Box).attrs({ justifyContent: "space-between", gap: "2rem" })`
   width: 100%;
 `
 
+const FormWrapper = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
+  width: 100%;
+  height: calc(100vh - 6.1rem);
+
+  form {
+    height: 100%;
+  }
+`
+
+const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
+  height: 100%;
+`
+
+const Inputs = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+`
+
 const InputWrapper = styled.div`
   flex-shrink: 0;
   width: 30%;
@@ -210,95 +229,97 @@ export const UploadSettingsDialog = ({
       }}
       withCloseButton
     >
-      <Box gap="2rem" flexDirection="column">
-        <Box gap="0" flexDirection="column" align="stretch">
-          {options.map((option) => (
-            <Drawer.GroupItem key={option.name}>
-              <Row key={option.name}>
-                <Box
-                  gap="1rem"
-                  flexDirection="column"
-                  align="flex-start"
-                  justifyContent="flex-start"
-                >
-                  <Text color="foreground" weight={600}>
-                    {option.label}
-                  </Text>
-                  {option.description && (
-                    <Text color="gray2" size="sm">
-                      {option.description}
+      <FormWrapper>
+        <Items>
+          <Inputs>
+            {options.map((option) => (
+              <Drawer.GroupItem key={option.name}>
+                <Row key={option.name}>
+                  <Box
+                    gap="1rem"
+                    flexDirection="column"
+                    align="flex-start"
+                    justifyContent="flex-start"
+                  >
+                    <Text color="foreground" weight={600}>
+                      {option.label}
                     </Text>
-                  )}
-                </Box>
-                <InputWrapper>
-                  {option.type === "input" && (
-                    <Input
-                      name={option.name}
-                      defaultValue={option.defaultValue}
-                      placeholder={option.placeholder}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setSettings({
-                          ...settings,
-                          [option.name]: e.target.value,
-                        })
-                      }
-                    />
-                  )}
-                  {option.type === "select" && (
-                    <Select
-                      name={option.name}
-                      defaultValue={option.defaultValue as string}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                        setSettings({
-                          ...settings,
-                          [option.name]: e.target.value,
-                        })
-                      }
-                      options={option.options}
-                    />
-                  )}
-                  {option.type === "switch" && (
-                    <Switch
-                      checked={option.defaultValue}
-                      onChange={(value) =>
-                        setSettings({
-                          ...settings,
-                          [option.name]: value,
-                        })
-                      }
-                    />
-                  )}
-                </InputWrapper>
-              </Row>
-            </Drawer.GroupItem>
-          ))}
-        </Box>
+                    {option.description && (
+                      <Text color="gray2" size="sm">
+                        {option.description}
+                      </Text>
+                    )}
+                  </Box>
+                  <InputWrapper>
+                    {option.type === "input" && (
+                      <Input
+                        name={option.name}
+                        defaultValue={option.defaultValue}
+                        placeholder={option.placeholder}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setSettings({
+                            ...settings,
+                            [option.name]: e.target.value,
+                          })
+                        }
+                      />
+                    )}
+                    {option.type === "select" && (
+                      <Select
+                        name={option.name}
+                        defaultValue={option.defaultValue as string}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                          setSettings({
+                            ...settings,
+                            [option.name]: e.target.value,
+                          })
+                        }
+                        options={option.options}
+                      />
+                    )}
+                    {option.type === "switch" && (
+                      <Switch
+                        checked={option.defaultValue}
+                        onChange={(value) =>
+                          setSettings({
+                            ...settings,
+                            [option.name]: value,
+                          })
+                        }
+                      />
+                    )}
+                  </InputWrapper>
+                </Row>
+              </Drawer.GroupItem>
+            ))}
+          </Inputs>
 
-        <Drawer.Actions>
-          <Button
-            prefixIcon={<Undo size={18} />}
-            skin="secondary"
-            onClick={() => {
-              setSettings(initialState)
-              onOpenChange(false)
-            }}
-            type="button"
-          >
-            Dismiss
-          </Button>
+          <Drawer.Actions>
+            <Button
+              prefixIcon={<Undo size={18} />}
+              skin="secondary"
+              onClick={() => {
+                setSettings(initialState)
+                onOpenChange(false)
+              }}
+              type="button"
+            >
+              Dismiss
+            </Button>
 
-          <Button
-            prefixIcon={<Settings4 size={18} />}
-            skin="success"
-            onClick={() => {
-              onSubmit(settings)
-              onOpenChange(false)
-            }}
-          >
-            Submit
-          </Button>
-        </Drawer.Actions>
-      </Box>
+            <Button
+              prefixIcon={<Settings4 size={18} />}
+              skin="success"
+              onClick={() => {
+                onSubmit(settings)
+                onOpenChange(false)
+              }}
+            >
+              Submit
+            </Button>
+          </Drawer.Actions>
+        </Items>
+      </FormWrapper>
     </Drawer>
   )
 }
