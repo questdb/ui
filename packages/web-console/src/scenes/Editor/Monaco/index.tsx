@@ -17,6 +17,7 @@ import {
   clearModelMarkers,
   getQueryFromCursor,
   findMatches,
+  AppendQueryOptions,
 } from "./utils"
 import type { Request } from "./utils"
 import { PaneContent, Text } from "../../../components"
@@ -248,11 +249,14 @@ const MonacoEditor = () => {
         insertTextAtCursor(column)
       })
 
-      window.bus.on(BusEvent.MSG_QUERY_FIND_N_EXEC, (_event, query: string) => {
-        const text = `${query};`
-        appendQuery(editor, text)
-        toggleRunning()
-      })
+      window.bus.on(
+        BusEvent.MSG_QUERY_FIND_N_EXEC,
+        (_event, payload: { query: string; options?: AppendQueryOptions }) => {
+          const text = `${payload.query};`
+          appendQuery(editor, text, payload.options)
+          toggleRunning()
+        },
+      )
 
       window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
         // TODO: Display a query marker on correct line
