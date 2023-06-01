@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react"
+import React, { useRef, useState, useCallback, useEffect } from "react"
 import styled from "styled-components"
 import { Search2 } from "styled-icons/remix-line"
 import { Box } from "../../../components/Box"
@@ -8,9 +8,8 @@ import { ProcessedFile } from "./types"
 
 const getFileDuplicates = (
   inputFiles: FileList,
-  existingFiles: ProcessedFile[],
+  existingFileNames: string[],
 ) => {
-  const existingFileNames = existingFiles.map((f) => f.table_name)
   const duplicates = Array.from(inputFiles).filter((f) =>
     existingFileNames.includes(f.name),
   )
@@ -48,12 +47,14 @@ const CautionText = styled(Text)`
 type Props = {
   files: ProcessedFile[]
   onFilesDropped: (files: File[]) => void
+  dialogOpen: boolean
 }
 
-export const DropBox = ({ files, onFilesDropped }: Props) => {
+export const DropBox = ({ files, onFilesDropped, dialogOpen }: Props) => {
   const [isDragging, setIsDragging] = useState(false)
   const [duplicates, setDuplicates] = useState<File[]>([])
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const filenames = useRef<string[]>(files.map((f) => f.table_name))
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -71,13 +72,39 @@ export const DropBox = ({ files, onFilesDropped }: Props) => {
   }
 
   const addToQueue = (inputFiles: FileList) => {
-    const duplicates = getFileDuplicates(inputFiles, files)
+    const duplicates = getFileDuplicates(inputFiles, filenames.current)
     setDuplicates(duplicates)
     onFilesDropped(
       Array.from(inputFiles).filter((f) => !duplicates.includes(f)),
     )
     uploadInputRef.current?.setAttribute("value", "")
   }
+
+  const handlePaste = (event: Event) => {
+    const clipboardEvent = event as ClipboardEvent
+    const clipboardFiles = clipboardEvent.clipboardData?.files
+    if (clipboardFiles) {
+      addToQueue(clipboardFiles)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("paste", handlePaste)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (dialogOpen) {
+      window.removeEventListener("paste", handlePaste)
+    } else {
+      window.addEventListener("paste", handlePaste)
+    }
+  }, [dialogOpen])
+
+  useEffect(() => {
+    filenames.current = files.map((f) => f.table_name)
+  }, [files])
 
   return (
     <Root

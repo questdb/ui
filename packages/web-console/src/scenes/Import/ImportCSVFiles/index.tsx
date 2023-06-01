@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -146,14 +146,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
   }
 
-  const handlePaste = useCallback((event: Event) => {
-    const clipboardEvent = event as ClipboardEvent
-    const files = clipboardEvent.clipboardData?.files
-    if (files) {
-      handleDrop(Array.from(files))
-    }
-  }, [])
-
   const handleVisible = async () => {
     const fileStatusList = await Promise.all(
       filesDropped.map(async (file) => {
@@ -173,23 +165,13 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     }
   }, [isVisible])
 
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("paste", handlePaste)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (dialogOpen) {
-      window.removeEventListener("paste", handlePaste)
-    } else {
-      window.addEventListener("paste", handlePaste)
-    }
-  }, [dialogOpen])
-
   return (
     <Box gap="4rem" flexDirection="column" ref={rootRef}>
-      <DropBox files={filesDropped} onFilesDropped={handleDrop} />
+      <DropBox
+        files={filesDropped}
+        onFilesDropped={handleDrop}
+        dialogOpen={dialogOpen}
+      />
       <FilesToUpload
         files={filesDropped}
         onDialogToggle={setDialogOpen}
