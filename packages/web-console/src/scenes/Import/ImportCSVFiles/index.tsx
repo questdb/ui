@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -72,9 +72,9 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     setFileProperties(file.table_name, { isUploading })
   }
 
-  const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
+  const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
     return await Promise.all(
-      Array.from(files).map(async (file) => {
+      files.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
 
         const schema =
@@ -141,18 +141,10 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     )
   }
 
-  const handleDrop = async (files: FileList) => {
+  const handleDrop = async (files: File[]) => {
     const fileConfigs = await getFileConfigs(files)
     setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
   }
-
-  const handlePaste = useCallback((event: Event) => {
-    const clipboardEvent = event as ClipboardEvent
-    const files = clipboardEvent.clipboardData?.files
-    if (files) {
-      handleDrop(files)
-    }
-  }, [])
 
   const handleVisible = async () => {
     const fileStatusList = await Promise.all(
@@ -173,23 +165,13 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     }
   }, [isVisible])
 
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("paste", handlePaste)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (dialogOpen) {
-      window.removeEventListener("paste", handlePaste)
-    } else {
-      window.addEventListener("paste", handlePaste)
-    }
-  }, [dialogOpen])
-
   return (
     <Box gap="4rem" flexDirection="column" ref={rootRef}>
-      <DropBox onFilesDropped={handleDrop} />
+      <DropBox
+        files={filesDropped}
+        onFilesDropped={handleDrop}
+        dialogOpen={dialogOpen}
+      />
       <FilesToUpload
         files={filesDropped}
         onDialogToggle={setDialogOpen}
