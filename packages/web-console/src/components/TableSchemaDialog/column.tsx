@@ -65,6 +65,7 @@ export const Column = ({
             defaultValue={column.name}
             name={`schemaColumns.${index}.name`}
             autoComplete="off"
+            required
           />
         </Form.Item>
 
