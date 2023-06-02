@@ -1,11 +1,11 @@
-name: web-console
+name: CI
 
 on:
   push:
 
 jobs:
   CI:
-    name: Build packages/web-console
+    name: Monorepo CI flow
     runs-on: ubuntu-latest
     services:
       questdb:
@@ -31,10 +31,10 @@ jobs:
       - name: Build @questdb/web-console
         run: yarn workspace @questdb/web-console run build
 
-      - name: Run unit tests
+      - name: Run @questdb/web-console unit tests
         run: yarn workspace @questdb/web-console run test:prod
 
-      - name: Run Cypress
+      - name: Run browser-tests test
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
       - name: Publish @questdb/web-console to npm
