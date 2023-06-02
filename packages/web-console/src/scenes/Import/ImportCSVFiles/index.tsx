@@ -47,6 +47,7 @@ const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
+  const [dialogOpen, setDialogOpen] = useState(false)
   const tables = useSelector(selectors.query.getTables)
   const rootRef = useRef<HTMLDivElement>(null)
   const isVisible = useIsVisible(rootRef)
@@ -72,9 +73,9 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     setFileProperties(file.table_name, { isUploading })
   }
 
-  const getFileConfigs = async (files: FileList): Promise<ProcessedFile[]> => {
+  const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
     return await Promise.all(
-      Array.from(files).map(async (file) => {
+      files.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
 
         const schema =
@@ -141,17 +142,9 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     )
   }
 
-  const handleDrop = async (files: FileList) => {
+  const handleDrop = async (files: File[]) => {
     const fileConfigs = await getFileConfigs(files)
-    setFilesDropped([...filesDropped, ...fileConfigs] as ProcessedFile[])
-  }
-
-  const handlePaste = (event: Event) => {
-    const clipboardEvent = event as ClipboardEvent
-    const files = clipboardEvent.clipboardData?.files
-    if (files) {
-      handleDrop(files)
-    }
+    setFilesDropped((filesDropped) => [...filesDropped, ...fileConfigs])
   }
 
   const handleVisible = async () => {
@@ -173,19 +166,16 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
     }
   }, [isVisible])
 
-  useEffect(() => {
-    window.addEventListener("paste", handlePaste)
-
-    return () => {
-      window.removeEventListener("paste", handlePaste)
-    }
-  }, [])
-
   return (
     <Box gap="4rem" flexDirection="column" ref={rootRef}>
-      <DropBox onFilesDropped={handleDrop} />
+      <DropBox
+        files={filesDropped}
+        onFilesDropped={handleDrop}
+        dialogOpen={dialogOpen}
+      />
       <FilesToUpload
         files={filesDropped}
+        onDialogToggle={setDialogOpen}
         onFileUpload={async (filename) => {
           const file = filesDropped.find(
             (f) => f.table_name === filename,

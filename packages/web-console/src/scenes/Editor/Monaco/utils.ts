@@ -426,7 +426,7 @@ const getInsertPosition = ({
   }
 }
 
-type AppendQueryOptions = {
+export type AppendQueryOptions = {
   appendAt: "cursor" | "end"
 }
 
@@ -484,6 +484,10 @@ export const appendQuery = (
     }
 
     editor.focus()
+
+    if (options.appendAt === "end") {
+      editor.revealLine(model.getLineCount())
+    }
   }
 }
 

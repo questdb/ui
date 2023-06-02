@@ -162,6 +162,23 @@ describe("&query URL param", () => {
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditor().should("have.value", query);
   });
+
+  it("should append query and scroll to it", () => {
+    cy.visit(baseUrl);
+
+    cy.typeQuery("--\n".repeat(20)); // take space so that query is not visible later
+    const query = "select x from long_sequence(1);";
+    cy.typeQuery(query).clickRun(); // save by running
+
+    const appendedQuery = "-- hello world";
+    cy.visit(
+      `${baseUrl}?query=${encodeURIComponent(appendedQuery)}&executeQuery=true`
+    );
+    cy.getVisibleLines()
+      .invoke("text")
+      .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
+    cy.clearEditor();
+  });
 });
 
 describe("autocomplete", () => {

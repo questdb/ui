@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect } from "react"
 import styled from "styled-components"
 import { Heading, Table, Select } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
@@ -57,6 +57,7 @@ const FileTextBox = styled(Box)`
 
 type Props = {
   files: ProcessedFile[]
+  onDialogToggle: (open: boolean) => void
   onFileRemove: (filename: string) => void
   onFileUpload: (filename: string) => void
   onFilePropertyChange: (filename: string, file: Partial<ProcessedFile>) => void
@@ -64,6 +65,7 @@ type Props = {
 
 export const FilesToUpload = ({
   files,
+  onDialogToggle,
   onFileRemove,
   onFilePropertyChange,
   onFileUpload,
@@ -75,6 +77,12 @@ export const FilesToUpload = ({
   const [schemaDialogOpen, setSchemaDialogOpen] = React.useState<
     string | null
   >()
+
+  useEffect(() => {
+    onDialogToggle(
+      renameDialogOpen !== undefined || schemaDialogOpen !== undefined,
+    )
+  }, [renameDialogOpen, schemaDialogOpen])
 
   return (
     <Box flexDirection="column" gap="2rem">

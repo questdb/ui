@@ -1,6 +1,7 @@
 import React from "react"
-import { Form } from "../Form"
-import { IconWithTooltip } from ".."
+import { Form } from "../../components/Form"
+import { IconWithTooltip, Text } from "../../components"
+import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { Close } from "styled-icons/remix-line"
 import { Book } from "styled-icons/boxicons-regular"
@@ -89,8 +90,8 @@ export const Column = ({
       </Controls>
 
       {column.type === "TIMESTAMP" && (
-        <Controls>
-          {action === "import" && (
+        <Box flexDirection="column" align="flex-start" gap="1rem">
+          <Controls>
             <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
               <Form.Input
                 name={`schemaColumns.${index}.pattern`}
@@ -103,38 +104,39 @@ export const Column = ({
                 {...(action === "import" && { required: true })}
               />
             </Form.Item>
-          )}
 
-          <IconWithTooltip
-            icon={
-              <Button
-                skin={
-                  timestamp !== "" &&
-                  column.name !== "" &&
-                  timestamp === column.name
-                    ? "success"
-                    : "secondary"
-                }
-                onClick={() => onSetTimestamp(column.name)}
-                type="button"
-                prefixIcon={
-                  <input
-                    type="checkbox"
-                    checked={
-                      timestamp !== "" &&
-                      column.name !== "" &&
-                      timestamp === column.name
-                    }
-                  />
-                }
-              >
-                Designated
-              </Button>
-            }
-            tooltip="Mark this column as a designated timestamp"
-            placement="top"
-          />
-        </Controls>
+            <IconWithTooltip
+              icon={
+                <Button
+                  skin={
+                    timestamp !== "" &&
+                    column.name !== "" &&
+                    timestamp === column.name
+                      ? "success"
+                      : "secondary"
+                  }
+                  onClick={() => onSetTimestamp(column.name)}
+                  type="button"
+                  prefixIcon={
+                    <input
+                      type="checkbox"
+                      checked={
+                        timestamp !== "" &&
+                        column.name !== "" &&
+                        timestamp === column.name
+                      }
+                    />
+                  }
+                >
+                  Designated
+                </Button>
+              }
+              tooltip="Mark this column as a designated timestamp"
+              placement="top"
+            />
+          </Controls>
+          <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
+        </Box>
       )}
 
       {column.type === "GEOHASH" && (
