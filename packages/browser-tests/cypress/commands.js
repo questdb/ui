@@ -106,4 +106,6 @@ Cypress.Commands.add("F9", () => {
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
+Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"));
+
 Cypress.Commands.add("getNotifications", () => cy.get(".notifications"));
