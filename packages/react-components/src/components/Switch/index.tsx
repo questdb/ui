@@ -11,51 +11,53 @@ export type Props = {
 };
 
 const Root = styled(SwitchPrimitive.Root)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 3px;
   width: 38px;
   height: 21px;
-  border-radius: 11px;
-  border: 1px solid #9580ff;
+  border-radius: 10px;
+  border: 1px solid #c4c4c9;
   background: transparent;
   appearance: none;
   position: relative;
+  transition: 0.2s ease-out;
 
-  &:focus: {
-    box-shadow: 0 0 0 2px black;
+  &:focus {
+    border-color: #878eb6;
   }
 
-  &[data-disabled] {
-    border-color: #5f5c70;
+  &[data-state="checked"] {
+    background: #44475a;
   }
 
+  &[data-disabled],
   &[data-state="checked"][data-disabled] {
-    border-color: #928fa3;
+    filter: grayscale(0.8) contrast(0.4);
   }
 `;
 
 const StyledThumb = styled(SwitchPrimitive.Thumb)`
   display: block;
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 15px;
-  height: 15px;
-  background-color: #fff;
+  width: 14px;
+  height: 14px;
+  background-color: #d8d8d8;
   border-radius: 50%;
   transition: linear transform 100ms;
   transform: translateX(0);
   will-change: transform;
 
   &[data-state="checked"] {
-    transform: translateX(18px);
-    background-color: #9580ff;
+    transform: translateX(17px);
   }
 
   &[data-disabled] {
-    background-color: #5f5c70;
+    filter: brightness(0.5);
   }
 
   &[data-state="checked"][data-disabled] {
-    background-color: #928fa3;
+    filter: brightness(0.8);
   }
 `;
 
