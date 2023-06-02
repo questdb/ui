@@ -45,3 +45,12 @@ jobs:
           access: public
           check-version: true
           package: ./packages/web-console/package.json
+
+      - name: Publish @questdb/react-components to npm
+        if: github.ref == 'refs/heads/main'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          package: ./packages/react-components/package.json
