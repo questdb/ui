@@ -29,6 +29,7 @@ import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import {
   Add,
+  Chat3,
   Close as _CloseIcon,
   Command,
   Database2,
@@ -41,6 +42,7 @@ import { Slack } from "styled-icons/boxicons-logos"
 
 import {
   ErrorButton,
+  FeedbackDialog,
   Input,
   Link,
   PaneMenu,
@@ -277,6 +279,18 @@ const Menu = () => {
       )}
 
       <Separator />
+
+      <FeedbackDialog
+        title="Web Console feedback"
+        subtitle="Let us know your thoughts"
+        category="web-console"
+        trigger={({ setOpen }) => (
+          <MenuButton onClick={() => setOpen(true)}>
+            <Chat3 size="18px" />
+            <span>Feedback</span>
+          </MenuButton>
+        )}
+      />
 
       <MenuLink
         href="https://slack.questdb.io/"
