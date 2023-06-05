@@ -1,11 +1,13 @@
 export { AlertDialog } from "./components/AlertDialog";
 export { Badge } from "./components/Badge";
 export { Button } from "./components/Button";
+export { Card } from "./components/Card";
 export { Checkbox } from "./components/Checkbox";
 export { Dialog } from "./components/Dialog";
 export { ForwardRef } from "./components/ForwardRef";
 export { Heading } from "./components/Heading";
 export { Input } from "./components/Input";
+export { Loader } from "./components/Loader";
 export { Overlay } from "./components/Overlay";
 export { Select } from "./components/Select";
 export { Switch } from "./components/Switch";
