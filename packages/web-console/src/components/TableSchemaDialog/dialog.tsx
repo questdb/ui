@@ -165,7 +165,7 @@ export const Dialog = ({
         <Box gap="0.5rem">
           <StyledTableIcon size="20px" />
           <Text color="foreground">
-            {name !== "" ? `Table schema for ${name}` : "Add a new table"}
+            {name !== "" ? `Table schema for ${name}` : "Create table"}
           </Text>
         </Box>
       }

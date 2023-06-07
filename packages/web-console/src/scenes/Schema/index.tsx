@@ -270,10 +270,10 @@ const Schema = ({
                 trigger={
                   <SecondaryButton onClick={() => setAddTableDialogOpen("add")}>
                     <AddCircle size="18px" />
-                    <span>Add</span>
+                    <span>Create</span>
                   </SecondaryButton>
                 }
-                ctaText="Add table"
+                ctaText="Create"
               />
               <PopperHover
                 delay={350}
