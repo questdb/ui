@@ -216,7 +216,7 @@ const Schema = ({
         type: column.type,
       })),
     })
-    appendQuery(tableSchemaQuery)
+    appendQuery(tableSchemaQuery, { appendAt: "end" })
     dispatch(actions.query.toggleRunning())
   }
 
