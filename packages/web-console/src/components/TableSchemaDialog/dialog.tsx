@@ -207,7 +207,7 @@ export const Dialog = ({
               {action === "add" && (
                 <Drawer.GroupItem direction="column">
                   <Form.Item name="name" label="Table name">
-                    <Form.Input name="name" />
+                    <Form.Input name="name" autoComplete="off" />
                   </Form.Item>
                 </Drawer.GroupItem>
               )}
