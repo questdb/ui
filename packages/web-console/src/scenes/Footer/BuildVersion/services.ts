@@ -22,15 +22,40 @@
  *
  ******************************************************************************/
 
-const buildVersionRegex = /Build Information: (QuestDB [0-9A-Za-z.]*),/
+const buildVersionRegex =
+  /Build Information: QuestDB ([\w- ]+ )?([0-9A-Za-z.]*),/
 
-const commitHashRegex = /Commit Hash ([0-9A-Za-z]*)/
+export type Versions = {
+  kind:
+    | "dev"
+    | "open-source"
+    | "enterprise"
+    | "enterprise pro"
+    | "enterprise ultimate"
+  version: string
+}
 
-export const formatVersion = (value: string | number | boolean) => {
+export const formatVersion = (value: string): Versions => {
   const matches = buildVersionRegex.exec(value.toString())
 
-  return matches ? matches[1].replace("QuestDB ", "") : ""
+  if (matches) {
+    const kind = (
+      matches[1] ? matches[1].trim().toLowerCase() : "open-source"
+    ) as Versions["kind"]
+
+    return {
+      kind,
+      version: matches[2],
+    }
+  }
+
+  return {
+    kind: "dev",
+    version: "",
+  }
 }
+
+const commitHashRegex = /Commit Hash ([0-9A-Za-z]*)/
 
 export const formatCommitHash = (value: string | number | boolean) => {
   const matches = commitHashRegex.exec(value.toString())
