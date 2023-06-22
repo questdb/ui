@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 const buildVersionRegex =
-  /Build Information: QuestDB ([\w- ]+ )?([0-9A-Za-z.]*),/
+  /Build Information: QuestDB ([\w- ]+ )?([0-9A-Za-z.-]*),/
 
 export type Versions = {
   kind:
@@ -51,7 +51,7 @@ export const formatVersion = (value: string): Versions => {
 
   return {
     kind: "dev",
-    version: "",
+    version: "x.x.x",
   }
 }
 
