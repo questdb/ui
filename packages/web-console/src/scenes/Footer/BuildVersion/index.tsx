@@ -94,15 +94,12 @@ const BuildVersion = () => {
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
-    // void quest.queryRaw("select build", { limit: "0,1000" }).then((result) => {
-    void quest
-      .queryRaw("select * from test limit 4,5;", { limit: "0,1000" })
-      .then((result) => {
-        if (result.type === QuestDB.Type.DQL && result.count === 1) {
-          setBuildVersion(formatVersion(result.dataset[0][0] as string))
-          setCommitHash(formatCommitHash(result.dataset[0][0]))
-        }
-      })
+    void quest.queryRaw("select build", { limit: "0,1000" }).then((result) => {
+      if (result.type === QuestDB.Type.DQL && result.count === 1) {
+        setBuildVersion(formatVersion(result.dataset[0][0] as string))
+        setCommitHash(formatCommitHash(result.dataset[0][0]))
+      }
+    })
   }, [])
 
   useEffect(() => {
