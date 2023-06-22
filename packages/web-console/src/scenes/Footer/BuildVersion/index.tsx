@@ -33,7 +33,6 @@ import { Release } from "../../../utils/questdb"
 import { compare } from "compare-versions"
 import { Team } from "styled-icons/remix-line"
 import { BuildingMultiple } from "styled-icons/fluentui-system-filled"
-import { BuildingRetailShield } from "styled-icons/fluentui-system-filled"
 import { ShieldLockFill } from "styled-icons/bootstrap"
 
 const Wrapper = styled.div`
@@ -123,14 +122,13 @@ const BuildVersion = () => {
     newestRelease &&
     compare(buildVersion.version, newestRelease.name, "<")
 
-  const releaseUrl =
-    upgradeAvailable && newestRelease
-      ? newestRelease.html_url
-      : `https://github.com/questdb/questdb${
-          buildVersion
-            ? `/releases/tag/${buildVersion.version}`
-            : `/commit/${commitHash}`
-        }`
+  const releaseUrl = upgradeAvailable
+    ? newestRelease.html_url
+    : `https://github.com/questdb/questdb${
+        buildVersion
+          ? `/releases/tag/${buildVersion.version}`
+          : `/commit/${commitHash}`
+      }`
 
   const { label, icon } = versionButtons[buildVersion.kind]
 
@@ -153,8 +151,11 @@ const BuildVersion = () => {
           {`${label} ${buildVersion.version}`}
 
           {!enterpriseVersion && <ExternalLink size="16px" />}
-          {upgradeAvailable && newestRelease && (
-            <NewestRelease>{newestRelease.name}</NewestRelease>
+          {upgradeAvailable && (
+            <>
+              <UpgradeIcon size="18px" />
+              <NewestRelease>{newestRelease.name}</NewestRelease>
+            </>
           )}
         </ReleaseNotesButton>
       </a>
