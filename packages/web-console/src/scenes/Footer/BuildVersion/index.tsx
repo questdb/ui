@@ -130,7 +130,10 @@ const BuildVersion = () => {
           : `/commit/${commitHash}`
       }`
 
-  const { label, icon } = versionButtons[buildVersion.kind]
+  const { label, icon } =
+    versionButtons[buildVersion.kind] ??
+    /* fallback to `dev` if `.kind` is something unexpected */
+    versionButtons.dev
 
   return (
     <Wrapper>
