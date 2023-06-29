@@ -27,10 +27,14 @@ import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { SecondaryButton } from "../../../components"
-import { formatCommitHash, formatVersion, Versions } from "./services"
+import {
+  getCanUpgrade,
+  formatCommitHash,
+  formatVersion,
+  Versions,
+} from "./services"
 import { ExternalLink, ArrowUpCircle } from "styled-icons/remix-line"
 import { Release } from "../../../utils/questdb"
-import { compare } from "compare-versions"
 import { Team } from "styled-icons/remix-line"
 import { BuildingMultiple } from "styled-icons/fluentui-system-filled"
 import { ShieldLockFill } from "styled-icons/bootstrap"
@@ -116,14 +120,10 @@ const BuildVersion = () => {
   }
 
   const enterpriseVersion = buildVersion.kind.includes("enterprise")
-
-  const upgradeAvailable =
-    !enterpriseVersion &&
-    newestRelease &&
-    compare(buildVersion.version, newestRelease.name, "<")
+  const upgradeAvailable = getCanUpgrade(buildVersion, newestRelease?.name)
 
   const releaseUrl = upgradeAvailable
-    ? newestRelease.html_url
+    ? newestRelease?.html_url
     : `https://github.com/questdb/questdb${
         buildVersion
           ? `/releases/tag/${buildVersion.version}`
@@ -157,7 +157,7 @@ const BuildVersion = () => {
           {upgradeAvailable && (
             <>
               <UpgradeIcon size="18px" />
-              <NewestRelease>{newestRelease.name}</NewestRelease>
+              <NewestRelease>{newestRelease?.name}</NewestRelease>
             </>
           )}
         </ReleaseNotesButton>

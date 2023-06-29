@@ -22,6 +22,8 @@
  *
  ******************************************************************************/
 
+import { compare } from "compare-versions"
+
 const buildVersionRegex =
   /Build Information: QuestDB ([\w- ]+ )?([0-9A-Za-z.-]*),/
 
@@ -51,7 +53,7 @@ export const formatVersion = (value: string): Versions => {
 
   return {
     kind: "dev",
-    version: "x.x.x",
+    version: "0.0.0",
   }
 }
 
@@ -61,4 +63,22 @@ export const formatCommitHash = (value: string | number | boolean) => {
   const matches = commitHashRegex.exec(value.toString())
 
   return matches ? matches[1] : ""
+}
+
+export const getCanUpgrade = (
+  buildVersion: Versions,
+  newestReleaseTag?: string,
+): boolean => {
+  if (typeof newestReleaseTag === "undefined") {
+    return false
+  }
+
+  const enterpriseVersion = buildVersion.kind.includes("enterprise")
+
+  try {
+    const isOlder = compare(buildVersion.version, newestReleaseTag, "<")
+    return !enterpriseVersion && isOlder
+  } catch (e) {
+    return false
+  }
 }
