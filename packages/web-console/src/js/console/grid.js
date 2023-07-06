@@ -33,6 +33,7 @@ const hashString = (str) => {
 }
 
 export function grid(rootElement, _paginationFn, id) {
+  let deferCompute;
   const defaults = {
     gridID: 'qdb-grid',
     minColumnWidth: 60,
@@ -165,7 +166,6 @@ export function grid(rootElement, _paginationFn, id) {
   // Technically it is possible (though improbable) that two column sets will have the same SHA-256. In which case
   // width of columns by the same name will be reused.
   let layoutStoreCache = {}
-  let layoutStoreTextEncoder = new TextEncoder()
   let layoutStoreColumnSetKey = undefined
   let layoutStoreColumnSetSha256 = undefined
   let layoutStoreTimer
@@ -270,7 +270,7 @@ export function grid(rootElement, _paginationFn, id) {
         if (rowData) {
           row.style.display = 'flex'
           for (let i = colLo; i < colHi; i++) {
-            setCellData(row.childNodes[i % colHi], rowData[columnPositions[i]])
+            setCellData(row.childNodes[i % visColumnCount], rowData[columnPositions[i]])
           }
           row.rowIndex = rowIndex
         } else {
@@ -280,7 +280,7 @@ export function grid(rootElement, _paginationFn, id) {
       } else {
         // clear grid if there is no row data
         for (let i = colLo; i < colHi; i++) {
-          row.childNodes[i % colHi].innerHTML = ''
+          row.childNodes[i % visColumnCount].innerHTML = ''
         }
         row.rowIndex = -1
       }
@@ -294,19 +294,9 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function renderViewportNoCompute() {
-    // calculate the viewport + buffer
-    const bounds = computeRowBounds()
-    const t = bounds.t
-    const b = bounds.b
-
-    for (let i = t; i < b; i++) {
-      renderRow(rows[i & dcn], i, Math.max(visColumnLo, freezeLeft), visColumnCount)
-      renderRow(rowsLeft[i & dcn], i, 0, freezeLeft)
-    }
-
-    if (pendingRender.render) {
-      renderCells(rows, pendingRender.colLo, pendingRender.colHi, pendingRender.nextVisColumnLo)
-    }
+    const colLo = Math.max(visColumnLo, freezeLeft)
+    const colHi = Math.min(colLo + visColumnCount, columnCount)
+    renderCells(rows, colLo, colHi, visColumnLo)
   }
 
   function purgeOutlierPages() {
@@ -939,8 +929,7 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function renderCells(rows, colLo, colHi, nextVisColumnLo) {
-    if (rows.length > 0 && columnCount > 0) {
-
+    if (rows.length > 0 && columnCount > 0 && colLo < colHi) {
       pendingRender.colLo = colLo
       pendingRender.colHi = colHi
       pendingRender.nextVisColumnLo = nextVisColumnLo
@@ -1198,6 +1187,14 @@ export function grid(rootElement, _paginationFn, id) {
 
   function computeVisibleColumnWindow() {
     const viewportWidth = viewport.getBoundingClientRect().width
+    if (viewportWidth === 0) {
+      console.log('viewport size is bad')
+      deferCompute = true
+      return
+    }
+
+    console.log('viewport size is good')
+    deferCompute = false
     if (totalWidth < viewportWidth) {
       // viewport is wider than total column width
       visColumnCount = columnCount
@@ -1338,6 +1335,14 @@ export function grid(rootElement, _paginationFn, id) {
       computeColumnWidthAndConfigureHeader()
     }
 
+    if (deferCompute) {
+      console.log('compute vis window')
+      computeVisibleAreaAfterDataIsSet()
+      if (!deferCompute) {
+        updatePart2()
+      }
+    }
+    console.log('render')
     syncViewportLeftScroll()
 
     if (grid.style.display !== 'none') {
@@ -1687,9 +1692,17 @@ export function grid(rootElement, _paginationFn, id) {
     timestampIndex = ogTimestampIndex
     rowCount = _data.count
     computeHeaderWidths()
+    computeVisibleAreaAfterDataIsSet()
+  }
+
+  deferCompute = false;
+
+  function computeVisibleAreaAfterDataIsSet() {
     computeVisibleColumnWindow()
-    // visible position depends on correctness of visColumnCount value
-    computeVisibleColumnsPosition()
+    if (!deferCompute) {
+      // visible position depends on correctness of visColumnCount value
+      computeVisibleColumnsPosition()
+    }
   }
 
   function applyPanelLeftWidth() {
