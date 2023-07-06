@@ -33,7 +33,6 @@ const hashString = (str) => {
 }
 
 export function grid(rootElement, _paginationFn, id) {
-  let deferCompute;
   const defaults = {
     gridID: 'qdb-grid',
     minColumnWidth: 60,
@@ -90,6 +89,7 @@ export function grid(rootElement, _paginationFn, id) {
   let ogTimestampIndex = -1
   let data = []
   let totalWidth = -1
+  let deferVisualsCompute = false
   // number of divs in "rows" cache, has to be power of two
   const dc = defaults.divCacheSize
   const dcn = dc - 1
@@ -493,12 +493,9 @@ export function grid(rootElement, _paginationFn, id) {
   function triggerHeaderClick(e) {
     // avoid broadcasting fat finger clicks
     if (!colResizeColIndex) {
-      triggerEvent(
-        'header.click',
-        {
-          columnName: e.currentTarget.getAttribute('data-column-name')
-        }
-      )
+      triggerEvent('header.click', {
+        columnName: e.currentTarget.getAttribute('data-column-name')
+      })
     }
   }
 
@@ -666,13 +663,10 @@ export function grid(rootElement, _paginationFn, id) {
     columnResizeGhost.style.visibility = 'hidden'
     columnResizeGhost.style.left = 0
 
-    colResizeTimer = setTimeout(
-      () => {
-        // delay clearing drag end to prevent overlapping header click
-        colResizeColIndex = undefined
-      },
-      500
-    )
+    colResizeTimer = setTimeout(() => {
+      // delay clearing drag end to prevent overlapping header click
+      colResizeColIndex = undefined
+    }, 500)
     layoutStoreSaveColumnChange(getColumn(colResizeColIndex).name, colResizeTargetWidth)
   }
 
@@ -771,13 +765,7 @@ export function grid(rootElement, _paginationFn, id) {
       e.preventDefault()
       const d = e.pageY - panelLeftGhostHandleY
       // limit handle position to within the viewport from both top and bottom
-      panelLeftGhostHandle.style.top = Math.min(
-        viewportHeight - panelLeftGhostHandle.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0),
-        Math.max(
-          0,
-          panelLeftGhostHandleTop + d
-        )
-      ) + 'px'
+      panelLeftGhostHandle.style.top = Math.min(viewportHeight - panelLeftGhostHandle.getBoundingClientRect().height - (isHorizontalScroller() ? scrollerGirth : 0), Math.max(0, panelLeftGhostHandleTop + d)) + 'px'
     }
   }
 
@@ -875,6 +863,7 @@ export function grid(rootElement, _paginationFn, id) {
     layoutStoreColumnSetKey = undefined
     layoutStoreColumnSetSha256 = undefined
     panelLeftWidth = 0
+    deferVisualsCompute = false
     setFreezeLeft0(0)
     enableHover()
   }
@@ -1187,14 +1176,12 @@ export function grid(rootElement, _paginationFn, id) {
 
   function computeVisibleColumnWindow() {
     const viewportWidth = viewport.getBoundingClientRect().width
-    if (viewportWidth === 0) {
-      console.log('viewport size is bad')
-      deferCompute = true
+    deferVisualsCompute = viewportWidth === 0
+
+    if (deferVisualsCompute) {
       return
     }
 
-    console.log('viewport size is good')
-    deferCompute = false
     if (totalWidth < viewportWidth) {
       // viewport is wider than total column width
       visColumnCount = columnCount
@@ -1335,14 +1322,10 @@ export function grid(rootElement, _paginationFn, id) {
       computeColumnWidthAndConfigureHeader()
     }
 
-    if (deferCompute) {
-      console.log('compute vis window')
+    if (deferVisualsCompute) {
       computeVisibleAreaAfterDataIsSet()
-      if (!deferCompute) {
-        updatePart2()
-      }
+      setDataPart2()
     }
-    console.log('render')
     syncViewportLeftScroll()
 
     if (grid.style.display !== 'none') {
@@ -1437,11 +1420,9 @@ export function grid(rootElement, _paginationFn, id) {
       addClass(focusedCell, 'qg-c-active-pulse')
       navigator.clipboard.writeText(focusedCell.innerHTML).then(undefined)
 
-      activeCellPulseClearTimer = setTimeout(
-        () => {
-          removeClass(focusedCell, 'qg-c-active-pulse')
-        }, 1000
-      )
+      activeCellPulseClearTimer = setTimeout(() => {
+        removeClass(focusedCell, 'qg-c-active-pulse')
+      }, 1000)
     }
   }
 
@@ -1600,6 +1581,9 @@ export function grid(rootElement, _paginationFn, id) {
 
 
   function computeVisibleColumnsPosition() {
+    if (deferVisualsCompute) {
+      return
+    }
     // compute left offset
     let x = 0
     for (let i = 0; i < visColumnLo; i++) {
@@ -1681,7 +1665,7 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function updatePart1(_data) {
+  function setDataPart1(_data) {
     clear()
     sql = _data.query
     data.push(_data.dataset)
@@ -1695,21 +1679,20 @@ export function grid(rootElement, _paginationFn, id) {
     computeVisibleAreaAfterDataIsSet()
   }
 
-  deferCompute = false;
-
   function computeVisibleAreaAfterDataIsSet() {
     computeVisibleColumnWindow()
-    if (!deferCompute) {
-      // visible position depends on correctness of visColumnCount value
-      computeVisibleColumnsPosition()
-    }
+    // visible position depends on correctness of visColumnCount value
+    computeVisibleColumnsPosition()
   }
 
   function applyPanelLeftWidth() {
     panelLeft.style.width = panelLeftWidth + 'px'
   }
 
-  function updatePart2() {
+  function setDataPart2() {
+    if (deferVisualsCompute) {
+      return
+    }
     const storedLayout = layoutStoreCache[layoutStoreColumnSetSha256]
     if (storedLayout && storedLayout.columnPositions) {
       columnPositions = storedLayout.columnPositions
@@ -1806,13 +1789,11 @@ export function grid(rootElement, _paginationFn, id) {
 
   function setData(_data) {
     setTimeout(() => {
-        updatePart1(_data)
-        // This part of the update sequence requires layoutStore access.
-        // For that we need to calculate layout key and hash, which is async
-        layoutStoreComputeKeyAndHash(updatePart2)
-      },
-      0
-    )
+      setDataPart1(_data)
+      // This part of the update sequence requires layoutStore access.
+      // For that we need to calculate layout key and hash, which is async
+      layoutStoreComputeKeyAndHash(setDataPart2)
+    }, 0)
   }
 
   function addEventListener(eventName, eventHandler, selector) {
