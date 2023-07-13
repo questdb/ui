@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import { Form } from "../../components/Form"
 import { IconWithTooltip, Text } from "../../components"
 import { Box } from "../../components/Box"
@@ -31,8 +31,18 @@ const supportedColumnTypes: { label: string; value: string }[] = [
 const Root = styled.div<{ odd: boolean }>`
   display: grid;
   gap: 1rem;
+  grid-template-columns: 40px auto;
   padding: 2rem;
   ${({ odd }) => odd && "background-color: #272833;"};
+`
+
+const Index = styled(Box).attrs({
+  gap: "0",
+  align: "center",
+  justifyContent: "center",
+})`
+  width: 4rem;
+  height: 3rem;
 `
 
 export const Column = ({
@@ -52,34 +62,21 @@ export const Column = ({
   onSetTimestamp: (name: string) => void
   timestamp: string
 }) => {
+  const [hover, setHover] = useState(false)
+
   if (!column) {
     return null
   }
 
   return (
-    <Root key={column.name} odd={index % 2 !== 0}>
-      <Controls>
-        <Form.Item name={`schemaColumns.${index}.name`} label="Name">
-          <Form.Input
-            disabled={disabled}
-            defaultValue={column.name}
-            name={`schemaColumns.${index}.name`}
-            autoComplete="off"
-            required
-          />
-        </Form.Item>
-
-        <Form.Item name={`schemaColumns.${index}.type`} label="Type">
-          <Form.Select
-            defaultValue={action === "import" ? column.type : "STRING"}
-            name={`schemaColumns.${index}.type`}
-            options={supportedColumnTypes.filter((type) =>
-              type.value === "" && action === "add" ? false : true,
-            )}
-          />
-        </Form.Item>
-
-        {!disabled && (
+    <Root
+      key={column.name}
+      odd={index % 2 !== 0}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <Index>
+        {hover && !disabled ? (
           <Button
             skin="transparent"
             onClick={() => onRemove(index)}
@@ -87,82 +84,112 @@ export const Column = ({
           >
             <Close size="18px" />
           </Button>
+        ) : (
+          <Text color="foreground">{index + 1}</Text>
         )}
-      </Controls>
+      </Index>
 
-      {column.type === "TIMESTAMP" && (
-        <Box flexDirection="column" align="flex-start" gap="1rem">
-          <Controls>
-            <Form.Item name={`schemaColumns.${index}.pattern`} label="Pattern">
-              <Form.Input
-                name={`schemaColumns.${index}.pattern`}
-                placeholder={DEFAULT_TIMESTAMP_FORMAT}
-                defaultValue={
-                  column.pattern !== ""
-                    ? column.pattern
-                    : DEFAULT_TIMESTAMP_FORMAT
-                }
-                {...(action === "import" && { required: true })}
-              />
-            </Form.Item>
-
-            <IconWithTooltip
-              icon={
-                <Button
-                  skin={
-                    timestamp !== "" &&
-                    column.name !== "" &&
-                    timestamp === column.name
-                      ? "success"
-                      : "secondary"
-                  }
-                  onClick={() => onSetTimestamp(column.name)}
-                  type="button"
-                  prefixIcon={
-                    <input
-                      type="checkbox"
-                      checked={
-                        timestamp !== "" &&
-                        column.name !== "" &&
-                        timestamp === column.name
-                      }
-                    />
-                  }
-                >
-                  Designated
-                </Button>
-              }
-              tooltip="Mark this column as a designated timestamp"
-              placement="top"
-            />
-          </Controls>
-          <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
-        </Box>
-      )}
-
-      {column.type === "GEOHASH" && (
+      <Box flexDirection="column" gap="1rem" align="stretch">
         <Controls>
-          <Form.Item
-            name={`schemaColumns.${index}.precision`}
-            label="Precision"
-          >
-            <Form.Input name={`schemaColumns.${index}.precision`} required />
+          <Form.Item name={`schemaColumns.${index}.name`}>
+            <Form.Input
+              placeholder="Name"
+              disabled={disabled}
+              defaultValue={column.name}
+              name={`schemaColumns.${index}.name`}
+              autoComplete="off"
+              required
+            />
           </Form.Item>
-          <a
-            href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button
-              skin="transparent"
-              prefixIcon={<Book size="14" />}
-              type="button"
-            >
-              Docs
-            </Button>
-          </a>
+
+          <Form.Item name={`schemaColumns.${index}.type`}>
+            <Form.Select
+              defaultValue={action === "import" ? column.type : "STRING"}
+              name={`schemaColumns.${index}.type`}
+              options={supportedColumnTypes.filter((type) =>
+                type.value === "" && action === "add" ? false : true,
+              )}
+            />
+          </Form.Item>
         </Controls>
-      )}
+
+        {column.type === "TIMESTAMP" && (
+          <Box flexDirection="column" gap="1rem">
+            <Controls>
+              <Form.Item
+                name={`schemaColumns.${index}.pattern`}
+                label="Pattern"
+              >
+                <Form.Input
+                  name={`schemaColumns.${index}.pattern`}
+                  placeholder={DEFAULT_TIMESTAMP_FORMAT}
+                  defaultValue={
+                    column.pattern !== ""
+                      ? column.pattern
+                      : DEFAULT_TIMESTAMP_FORMAT
+                  }
+                  {...(action === "import" && { required: true })}
+                />
+              </Form.Item>
+
+              <IconWithTooltip
+                icon={
+                  <Button
+                    skin={
+                      timestamp !== "" &&
+                      column.name !== "" &&
+                      timestamp === column.name
+                        ? "success"
+                        : "secondary"
+                    }
+                    onClick={() => onSetTimestamp(column.name)}
+                    type="button"
+                    prefixIcon={
+                      <input
+                        type="checkbox"
+                        checked={
+                          timestamp !== "" &&
+                          column.name !== "" &&
+                          timestamp === column.name
+                        }
+                      />
+                    }
+                  >
+                    Designated
+                  </Button>
+                }
+                tooltip="Mark this column as a designated timestamp"
+                placement="top"
+              />
+            </Controls>
+            <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
+          </Box>
+        )}
+
+        {column.type === "GEOHASH" && (
+          <Controls>
+            <Form.Item
+              name={`schemaColumns.${index}.precision`}
+              label="Precision"
+            >
+              <Form.Input name={`schemaColumns.${index}.precision`} required />
+            </Form.Item>
+            <a
+              href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button
+                skin="transparent"
+                prefixIcon={<Book size="14" />}
+                type="button"
+              >
+                Docs
+              </Button>
+            </a>
+          </Controls>
+        )}
+      </Box>
     </Root>
   )
 }

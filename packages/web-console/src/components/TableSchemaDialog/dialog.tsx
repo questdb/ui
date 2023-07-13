@@ -20,7 +20,7 @@ const StyledTableIcon = styled(TableIcon)`
 `
 
 const FormWrapper = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
-  --columns: auto 120px 40px; /* magic numbers to fit input, type dropdown and remove button nicely */
+  --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
   width: 100%;
   height: calc(100vh - 6.1rem);
 
