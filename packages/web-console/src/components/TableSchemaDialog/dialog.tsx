@@ -11,8 +11,9 @@ import { Drawer } from "../Drawer"
 import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
-import { Controls } from "./controls"
 import * as QuestDB from "../../utils/questdb"
+import { PopperHover } from "../PopperHover"
+import { Tooltip } from "../Tooltip"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
@@ -39,14 +40,32 @@ const Inputs = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
   overflow: auto;
 `
 
-const PartitionByBox = styled(Box).attrs({
-  gap: "1rem",
-  flexDirection: "column",
-})`
+const Controls = styled.div<{ action: Action }>`
+  display: grid;
+  grid-template-columns: repeat(
+    ${({ action }) => (action === "add" ? 2 : 1)},
+    1fr
+  );
+  gap: 1rem;
   width: 100%;
 `
 
 const partitionByOptions = ["NONE", "HOUR", "DAY", "MONTH", "YEAR"]
+
+const DocsLink = ({ url }: { url: string }) => (
+  <PopperHover
+    placement="bottom"
+    trigger={
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        <Button skin="transparent" type="button">
+          <Book size="14" />
+        </Button>
+      </a>
+    }
+  >
+    <Tooltip>Documentation</Tooltip>
+  </PopperHover>
+)
 
 type Props = {
   action: Action
@@ -213,8 +232,8 @@ export const Dialog = ({
               )}
 
               <Drawer.GroupItem direction="column">
-                <PartitionByBox>
-                  <Controls>
+                <Controls action={action}>
+                  <Box align="flex-end">
                     <Form.Item name="partitionBy" label="Partition by">
                       <Form.Select
                         name="partitionBy"
@@ -224,57 +243,35 @@ export const Dialog = ({
                         }))}
                       />
                     </Form.Item>
-                    <a
-                      href="https://questdb.io/docs/concept/partitions/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button
-                        skin="transparent"
-                        prefixIcon={<Book size="14" />}
-                        type="button"
+                    <DocsLink url="https://questdb.io/docs/concept/partitions/" />
+                  </Box>
+
+                  {hasWalSetting && (
+                    <Box align="flex-end">
+                      <Form.Item
+                        name="walEnabled"
+                        label="Write-Ahead Log (WAL)"
                       >
-                        Docs
-                      </Button>
-                    </a>
-                  </Controls>
+                        <Form.Select
+                          name="walEnabled"
+                          options={[
+                            { label: "Enabled", value: "true" },
+                            { label: "Disabled", value: "false" },
+                          ]}
+                        />
+                      </Form.Item>
+                      <DocsLink url="https://questdb.io/docs/concept/write-ahead-log/" />
+                    </Box>
+                  )}
+
                   {action === "import" && (
                     <Text color="gray2">
                       If you're changing the partitioning strategy, you'll need
                       to set `Write mode` to `Overwrite` in Settings.
                     </Text>
                   )}
-                </PartitionByBox>
+                </Controls>
               </Drawer.GroupItem>
-
-              {hasWalSetting && (
-                <Drawer.GroupItem direction="column">
-                  <Controls>
-                    <Form.Item name="walEnabled" label="Write-Ahead Log (WAL)">
-                      <Form.Select
-                        name="walEnabled"
-                        options={[
-                          { label: "Enabled", value: "true" },
-                          { label: "Disabled", value: "false" },
-                        ]}
-                      />
-                    </Form.Item>
-                    <a
-                      href="https://questdb.io/docs/concept/write-ahead-log/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button
-                        skin="transparent"
-                        prefixIcon={<Book size="14" />}
-                        type="button"
-                      >
-                        Docs
-                      </Button>
-                    </a>
-                  </Controls>
-                </Drawer.GroupItem>
-              )}
 
               <Drawer.GroupHeader>
                 <Text color="foreground">Columns</Text>
