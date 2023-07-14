@@ -3,8 +3,7 @@ import { Form } from "../../components/Form"
 import { IconWithTooltip, Text } from "../../components"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
-import { Close } from "styled-icons/remix-line"
-import { Book } from "styled-icons/boxicons-regular"
+import { DeleteBin2 } from "styled-icons/remix-line"
 import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
@@ -99,12 +98,8 @@ export const Column = ({
     <Root key={column.name} odd={index % 2 !== 0} disabled={disabled}>
       <Index>
         {!disabled && (
-          <RemoveButton
-            skin="transparent"
-            onClick={() => onRemove(index)}
-            type="button"
-          >
-            <Close size="18px" />
+          <RemoveButton onClick={() => onRemove(index)} type="button">
+            <DeleteBin2 size="18px" />
           </RemoveButton>
         )}
         <IndexNumber color="foreground">{index + 1}</IndexNumber>
