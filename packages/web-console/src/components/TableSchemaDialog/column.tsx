@@ -10,6 +10,7 @@ import styled from "styled-components"
 import { SchemaColumn } from "utils"
 import { Controls } from "./controls"
 import { Action } from "./types"
+import { useFormContext } from "react-hook-form"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -28,12 +29,30 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "TIMESTAMP", value: "TIMESTAMP" },
 ]
 
+const IndexNumber = styled(Text).attrs({ color: "foreground" })``
+
+const RemoveButton = styled(Button).attrs({
+  skin: "transparent",
+  type: "button",
+})`
+  display: none;
+`
+
 const Root = styled.div<{ odd: boolean }>`
   display: grid;
   gap: 1rem;
   grid-template-columns: 40px auto;
   padding: 2rem;
   ${({ odd }) => odd && "background-color: #272833;"};
+
+  &:hover {
+    ${RemoveButton} {
+      display: block;
+    }
+    ${IndexNumber} {
+      display: none;
+    }
+  }
 `
 
 const Index = styled(Box).attrs({
@@ -43,6 +62,10 @@ const Index = styled(Box).attrs({
 })`
   width: 4rem;
   height: 3rem;
+`
+
+const TimestampControls = styled(Controls)`
+  justify-items: flex-start;
 `
 
 export const Column = ({
@@ -63,30 +86,25 @@ export const Column = ({
   timestamp: string
 }) => {
   const [hover, setHover] = useState(false)
+  const [name, setName] = useState(column.name)
 
   if (!column) {
     return null
   }
 
   return (
-    <Root
-      key={column.name}
-      odd={index % 2 !== 0}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
+    <Root key={column.name} odd={index % 2 !== 0}>
       <Index>
-        {hover && !disabled ? (
-          <Button
+        {!disabled && (
+          <RemoveButton
             skin="transparent"
             onClick={() => onRemove(index)}
             type="button"
           >
             <Close size="18px" />
-          </Button>
-        ) : (
-          <Text color="foreground">{index + 1}</Text>
+          </RemoveButton>
         )}
+        <IndexNumber color="foreground">{index + 1}</IndexNumber>
       </Index>
 
       <Box flexDirection="column" gap="1rem" align="stretch">
@@ -96,6 +114,7 @@ export const Column = ({
               placeholder="Name"
               disabled={disabled}
               defaultValue={column.name}
+              onChange={(e) => setName(e.target.value)}
               name={`schemaColumns.${index}.name`}
               autoComplete="off"
               required
@@ -115,26 +134,26 @@ export const Column = ({
 
         {column.type === "TIMESTAMP" && (
           <Box flexDirection="column" gap="1rem">
-            <Controls>
-              <Form.Item
-                name={`schemaColumns.${index}.pattern`}
-                label="Pattern"
-              >
-                <Form.Input
-                  name={`schemaColumns.${index}.pattern`}
-                  placeholder={DEFAULT_TIMESTAMP_FORMAT}
-                  defaultValue={
-                    column.pattern !== ""
-                      ? column.pattern
-                      : DEFAULT_TIMESTAMP_FORMAT
-                  }
-                  {...(action === "import" && { required: true })}
-                />
-              </Form.Item>
+            <TimestampControls>
+              {action === "import" && (
+                <Form.Item name={`schemaColumns.${index}.pattern`}>
+                  <Form.Input
+                    name={`schemaColumns.${index}.pattern`}
+                    placeholder="Pattern"
+                    defaultValue={
+                      column.pattern !== ""
+                        ? column.pattern
+                        : DEFAULT_TIMESTAMP_FORMAT
+                    }
+                    required
+                  />
+                </Form.Item>
+              )}
 
               <IconWithTooltip
                 icon={
                   <Button
+                    disabled={name === ""}
                     skin={
                       timestamp !== "" &&
                       column.name !== "" &&
@@ -161,30 +180,29 @@ export const Column = ({
                 tooltip="Mark this column as a designated timestamp"
                 placement="top"
               />
-            </Controls>
-            <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
+            </TimestampControls>
+            {action === "import" && (
+              <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
+            )}
           </Box>
         )}
 
         {column.type === "GEOHASH" && (
           <Controls>
-            <Form.Item
-              name={`schemaColumns.${index}.precision`}
-              label="Precision"
-            >
-              <Form.Input name={`schemaColumns.${index}.precision`} required />
+            <Form.Item name={`schemaColumns.${index}.precision`}>
+              <Form.Input
+                name={`schemaColumns.${index}.precision`}
+                placeholder="Precision"
+                required
+              />
             </Form.Item>
             <a
               href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button
-                skin="transparent"
-                prefixIcon={<Book size="14" />}
-                type="button"
-              >
-                Docs
+              <Button skin="transparent" type="button">
+                <Book size="14" />
               </Button>
             </a>
           </Controls>
