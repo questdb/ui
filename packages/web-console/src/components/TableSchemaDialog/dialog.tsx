@@ -14,6 +14,7 @@ import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
 import { PopperHover } from "../PopperHover"
 import { Tooltip } from "../Tooltip"
+import { DocsLink } from "./docs-link"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
@@ -51,21 +52,6 @@ const Controls = styled.div<{ action: Action }>`
 `
 
 const partitionByOptions = ["NONE", "HOUR", "DAY", "MONTH", "YEAR"]
-
-const DocsLink = ({ url }: { url: string }) => (
-  <PopperHover
-    placement="bottom"
-    trigger={
-      <a href={url} target="_blank" rel="noopener noreferrer">
-        <Button skin="transparent" type="button">
-          <Book size="14" />
-        </Button>
-      </a>
-    }
-  >
-    <Tooltip>Documentation</Tooltip>
-  </PopperHover>
-)
 
 type Props = {
   action: Action

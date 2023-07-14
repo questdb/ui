@@ -10,7 +10,7 @@ import styled from "styled-components"
 import { SchemaColumn } from "utils"
 import { Controls } from "./controls"
 import { Action } from "./types"
-import { useFormContext } from "react-hook-form"
+import { DocsLink } from "./docs-link"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -195,15 +195,7 @@ export const Column = ({
                 required
               />
             </Form.Item>
-            <a
-              href="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button skin="transparent" type="button">
-                <Book size="14" />
-              </Button>
-            </a>
+            <DocsLink url="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision" />
           </Controls>
         )}
       </Box>
