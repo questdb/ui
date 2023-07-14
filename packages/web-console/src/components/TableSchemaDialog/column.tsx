@@ -85,7 +85,6 @@ export const Column = ({
   onSetTimestamp: (name: string) => void
   timestamp: string
 }) => {
-  const [hover, setHover] = useState(false)
   const [name, setName] = useState(column.name)
 
   if (!column) {

@@ -209,6 +209,8 @@ export const Dialog = ({
         onOpenChange(undefined)
       }}
       withCloseButton
+      closeOnOverlayClick={false}
+      closeOnEscape={false}
     >
       <FormWrapper>
         <Form<SchemaFormValues>
