@@ -4,7 +4,7 @@ import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"
 import { Table as TableIcon, Edit } from "styled-icons/remix-line"
-import { Undo, Book } from "styled-icons/boxicons-regular"
+import { Undo } from "styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
@@ -12,8 +12,6 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-import { PopperHover } from "../PopperHover"
-import { Tooltip } from "../Tooltip"
 import { DocsLink } from "./docs-link"
 
 const StyledTableIcon = styled(TableIcon)`
@@ -43,10 +41,8 @@ const Inputs = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
 
 const Controls = styled.div<{ action: Action }>`
   display: grid;
-  grid-template-columns: repeat(
-    ${({ action }) => (action === "add" ? 2 : 1)},
-    1fr
-  );
+  grid-template-columns: ${({ action }) =>
+    action === "add" ? "auto 120px 120px" : "1fr"};
   gap: 1rem;
   width: 100%;
 `
@@ -211,16 +207,14 @@ export const Dialog = ({
         >
           <Items>
             <Inputs>
-              {action === "add" && (
-                <Drawer.GroupItem direction="column">
-                  <Form.Item name="name" label="Table name">
-                    <Form.Input name="name" autoComplete="off" />
-                  </Form.Item>
-                </Drawer.GroupItem>
-              )}
-
               <Drawer.GroupItem direction="column">
                 <Controls action={action}>
+                  {action === "add" && (
+                    <Form.Item name="name" label="Table name">
+                      <Form.Input name="name" autoComplete="off" />
+                    </Form.Item>
+                  )}
+
                   <Box align="flex-end">
                     <Form.Item name="partitionBy" label="Partition by">
                       <Form.Select
@@ -231,15 +225,12 @@ export const Dialog = ({
                         }))}
                       />
                     </Form.Item>
-                    <DocsLink url="https://questdb.io/docs/concept/partitions/" />
+                    {/* <DocsLink url="https://questdb.io/docs/concept/partitions/" /> */}
                   </Box>
 
                   {hasWalSetting && (
                     <Box align="flex-end">
-                      <Form.Item
-                        name="walEnabled"
-                        label="Write-Ahead Log (WAL)"
-                      >
+                      <Form.Item name="walEnabled" label="WAL">
                         <Form.Select
                           name="walEnabled"
                           options={[
@@ -248,7 +239,7 @@ export const Dialog = ({
                           ]}
                         />
                       </Form.Item>
-                      <DocsLink url="https://questdb.io/docs/concept/write-ahead-log/" />
+                      {/* <DocsLink url="https://questdb.io/docs/concept/write-ahead-log/" /> */}
                     </Box>
                   )}
 

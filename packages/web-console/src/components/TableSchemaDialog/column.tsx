@@ -38,21 +38,25 @@ const RemoveButton = styled(Button).attrs({
   display: none;
 `
 
-const Root = styled.div<{ odd: boolean }>`
+const Root = styled.div<{ odd: boolean; disabled: boolean }>`
   display: grid;
   gap: 1rem;
   grid-template-columns: 40px auto;
   padding: 2rem;
   ${({ odd }) => odd && "background-color: #272833;"};
 
-  &:hover {
-    ${RemoveButton} {
-      display: block;
+  ${({ disabled }) =>
+    !disabled &&
+    `
+    &:hover {
+      ${RemoveButton} {
+        display: block;
+      }
+      ${IndexNumber} {
+        display: none;
+      }
     }
-    ${IndexNumber} {
-      display: none;
-    }
-  }
+  `}
 `
 
 const Index = styled(Box).attrs({
@@ -92,7 +96,7 @@ export const Column = ({
   }
 
   return (
-    <Root key={column.name} odd={index % 2 !== 0}>
+    <Root key={column.name} odd={index % 2 !== 0} disabled={disabled}>
       <Index>
         {!disabled && (
           <RemoveButton
@@ -195,7 +199,11 @@ export const Column = ({
                 required
               />
             </Form.Item>
-            <DocsLink url="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision" />
+            <DocsLink
+              url="https://questdb.io/docs/concept/geohashes/#specifying-geohash-precision"
+              text="Docs"
+              tooltipText="GEOHASH type documentation"
+            />
           </Controls>
         )}
       </Box>
