@@ -3,16 +3,17 @@ import { Button } from "@questdb/react-components"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"
-import { Table as TableIcon, Edit } from "styled-icons/remix-line"
+import { Information, Table as TableIcon, Edit } from "styled-icons/remix-line"
 import { Undo } from "styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
+import { PopperHover } from "../PopperHover"
+import { Tooltip } from "../Tooltip"
 import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-import { DocsLink } from "./docs-link"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
@@ -216,7 +217,30 @@ export const Dialog = ({
                   )}
 
                   <Box align="flex-end">
-                    <Form.Item name="partitionBy" label="Partition by">
+                    <Form.Item
+                      name="partitionBy"
+                      label={
+                        <PopperHover
+                          trigger={
+                            <Box
+                              align="center"
+                              justifyContent="center"
+                              gap="0.5rem"
+                            >
+                              <Information size="14" />
+                              <span>Partition by</span>
+                            </Box>
+                          }
+                          placement="bottom"
+                        >
+                          <Tooltip>
+                            Splits data into smaller chunks by intervals of time
+                            in order to improve the performance and scalability
+                            of the database system.
+                          </Tooltip>
+                        </PopperHover>
+                      }
+                    >
                       <Form.Select
                         name="partitionBy"
                         options={partitionByOptions.map((item) => ({
@@ -225,12 +249,34 @@ export const Dialog = ({
                         }))}
                       />
                     </Form.Item>
-                    {/* <DocsLink url="https://questdb.io/docs/concept/partitions/" /> */}
                   </Box>
 
                   {hasWalSetting && (
                     <Box align="flex-end">
-                      <Form.Item name="walEnabled" label="WAL">
+                      <Form.Item
+                        name="walEnabled"
+                        label={
+                          <PopperHover
+                            trigger={
+                              <Box
+                                align="center"
+                                justifyContent="center"
+                                gap="0.5rem"
+                              >
+                                <Information size="14" />
+                                <span>WAL</span>
+                              </Box>
+                            }
+                            placement="bottom"
+                          >
+                            <Tooltip>
+                              WAL (Write-Ahead Log) allows concurrent data
+                              ingestion and modifications via multiple
+                              interfaces as well as table schema changes.
+                            </Tooltip>
+                          </PopperHover>
+                        }
+                      >
                         <Form.Select
                           name="walEnabled"
                           options={[
@@ -239,7 +285,6 @@ export const Dialog = ({
                           ]}
                         />
                       </Form.Item>
-                      {/* <DocsLink url="https://questdb.io/docs/concept/write-ahead-log/" /> */}
                     </Box>
                   )}
 
