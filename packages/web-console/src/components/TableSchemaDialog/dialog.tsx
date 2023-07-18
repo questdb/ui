@@ -45,6 +45,7 @@ const Controls = styled.div<{ action: Action }>`
   grid-template-columns: ${({ action }) =>
     action === "add" ? "auto 120px 120px" : "1fr"};
   gap: 1rem;
+  align-items: flex-start;
   width: 100%;
 `
 
@@ -148,8 +149,10 @@ export const Dialog = ({
         }
         return value
       })
+      .unique((a, b) => a.name === b.name)
       .messages({
         "array.required": "Please add at least one column",
+        "array.unique": "Column names must be unique",
       }),
   })
 

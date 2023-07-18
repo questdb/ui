@@ -113,6 +113,8 @@ export const Columns = ({
     ],
   )
 
+  const errors = formState.errors["schemaColumns"]
+
   return (
     <>
       {action === "import" && !isEditLocked && (
@@ -125,11 +127,12 @@ export const Columns = ({
           </Text>
         </Disclaimer>
       )}
-      {formState.errors && formState.errors["schemaColumns"] && (
-        <Error>
-          <Text color="red">{formState.errors["schemaColumns"]?.message}</Text>
-        </Error>
-      )}
+      {errors &&
+        (Array.isArray(errors) ? errors : [errors]).map((error: any, index) => (
+          <Error key={index}>
+            <Text color="red">{error.message}</Text>
+          </Error>
+        ))}
       <SchemaRoot>
         {watchSchemaColumns.length > 0 ? (
           <VirtualList
