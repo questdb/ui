@@ -276,9 +276,14 @@ export const Dialog = ({
                               WAL (Write-Ahead Log) allows concurrent data
                               ingestion and modifications via multiple
                               interfaces as well as table schema changes.
-                              <br />
-                              <br />
-                              For WAL to work, the table must be partitioned.
+                              {currentValues.partitionBy === "NONE" && (
+                                <>
+                                  <br />
+                                  <br />
+                                  To enable WAL, set `Partition by` to a value
+                                  other than NONE.
+                                </>
+                              )}
                             </Tooltip>
                           </PopperHover>
                         }
