@@ -164,7 +164,7 @@ export const Column = ({
                     prefixIcon={
                       <input
                         type="checkbox"
-                        checked={
+                        defaultChecked={
                           timestamp !== "" &&
                           column.name !== "" &&
                           timestamp === column.name
