@@ -138,6 +138,7 @@ export const Columns = ({
           <VirtualList
             itemContent={listItemContent}
             totalCount={watchSchemaColumns.length}
+            followOutput={true}
           />
         ) : (
           !isEditLocked && <AddColumn onAdd={addColumn} />
