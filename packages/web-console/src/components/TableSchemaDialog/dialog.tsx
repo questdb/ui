@@ -3,8 +3,8 @@ import { Button } from "@questdb/react-components"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"
-import { Information, Table as TableIcon, Edit } from "styled-icons/remix-line"
-import { Undo } from "styled-icons/boxicons-regular"
+import { Table as TableIcon, Edit } from "styled-icons/remix-line"
+import { InfoCircle, Undo } from "styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
@@ -230,7 +230,7 @@ export const Dialog = ({
                               justifyContent="center"
                               gap="0.5rem"
                             >
-                              <Information size="14" />
+                              <InfoCircle size="14" />
                               <span>Partition by</span>
                             </Box>
                           }
@@ -266,7 +266,7 @@ export const Dialog = ({
                                 justifyContent="center"
                                 gap="0.5rem"
                               >
-                                <Information size="14" />
+                                <InfoCircle size="14" />
                                 <span>WAL</span>
                               </Box>
                             }
