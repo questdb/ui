@@ -276,12 +276,16 @@ export const Dialog = ({
                               WAL (Write-Ahead Log) allows concurrent data
                               ingestion and modifications via multiple
                               interfaces as well as table schema changes.
+                              <br />
+                              <br />
+                              For WAL to work, the table must be partitioned.
                             </Tooltip>
                           </PopperHover>
                         }
                       >
                         <Form.Select
                           name="walEnabled"
+                          disabled={currentValues.partitionBy === "NONE"}
                           options={[
                             { label: "Enabled", value: "true" },
                             { label: "Disabled", value: "false" },
