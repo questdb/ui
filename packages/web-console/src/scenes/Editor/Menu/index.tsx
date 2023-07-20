@@ -21,9 +21,9 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
+import React from "react"
 import docsearch from "docsearch.js"
-import React, { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useContext } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
@@ -63,6 +63,7 @@ import QueryPicker from "../QueryPicker"
 import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
+import { QuestContext } from "../../../providers"
 
 const Wrapper = styled(PaneMenu)<{ _display: string }>`
   z-index: 15;
@@ -171,12 +172,14 @@ const MenuLink: React.FunctionComponent<{
 
 const Menu = () => {
   const dispatch = useDispatch()
+  const { quest } = useContext(QuestContext)
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
   const { resultsSplitterBasis, exampleQueriesVisited, updateSettings } =
     useLocalStorage()
@@ -283,13 +286,20 @@ const Menu = () => {
       <FeedbackDialog
         title="Web Console feedback"
         subtitle="Let us know your thoughts"
-        category="web-console"
         trigger={({ setOpen }) => (
           <MenuButton onClick={() => setOpen(true)}>
             <Chat3 size="18px" />
             <span>Feedback</span>
           </MenuButton>
         )}
+        onSubmit={async ({ message }) => {
+          try {
+            const response = await quest.sendFeedback({
+              message,
+              telemetryConfig,
+            })
+          } catch (err) {}
+        }}
       />
 
       <MenuLink

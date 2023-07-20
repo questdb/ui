@@ -14,11 +14,9 @@ import Joi from "joi"
 import { Email } from "styled-icons/material-outlined"
 import { Undo } from "styled-icons/boxicons-regular"
 import { Close } from "styled-icons/remix-line"
-import { CameraVideo } from "styled-icons/bootstrap"
 import { useFormContext } from "react-hook-form"
 import styled from "styled-components"
 import { Chat3 } from "styled-icons/remix-line"
-import { Category } from "./types"
 
 type Values = {
   message: string
@@ -84,18 +82,20 @@ type Props = {
   }: {
     setOpen: (open: boolean) => void
   }) => React.ReactNode
+  onSubmit: (values: Values) => void
   title?: string
   subtitle?: string
-  category: Category
   initialMessage?: string
+  afterMessage?: React.ReactNode
 }
 
 export const FeedbackDialog = ({
   trigger,
   title,
   subtitle,
-  category,
   initialMessage,
+  afterMessage,
+  onSubmit,
 }: Props) => {
   const [message, setMessage] = useState<string>(initialMessage ?? "")
   const [open, setOpen] = useState(false)
@@ -114,7 +114,7 @@ export const FeedbackDialog = ({
         <AlertDialog.Content>
           <Form<Values>
             name="feedback-dialog"
-            onSubmit={({ message }: Values) => console.log(message)}
+            onSubmit={onSubmit}
             onChange={({ message }) => {
               setMessage(message ?? "")
             }}
@@ -155,20 +155,7 @@ export const FeedbackDialog = ({
                   </Box>
                 </Form.Item>
 
-                <Box gap="1rem">
-                  <CameraVideo size={24} />
-
-                  <Text>
-                    Need more help?{" "}
-                    <a
-                      href="https://questdb.io/cloud/book-a-demo/"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      Book a demo
-                    </a>
-                  </Text>
-                </Box>
+                {afterMessage}
               </Card.Content>
 
               <Footer onConfirm={() => setOpen(false)} />
