@@ -242,7 +242,7 @@ export class Client {
     return result
   }
 
-  async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
+  async queryRaw(query: string, options?: Options, headers?: Headers): Promise<QueryRawResult> {
     const controller = new AbortController()
     const payload = {
       ...options,
@@ -259,7 +259,7 @@ export class Client {
     try {
       response = await fetch(
         `${this._host}/exec?${Client.encodeParams(payload)}`,
-        { signal: controller.signal },
+        { signal: controller.signal, headers },
       )
     } catch (error) {
       const err = {

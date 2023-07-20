@@ -37,6 +37,7 @@ export const defaultConfig: ConsoleConfigShape = {
   githubBanner: false,
   readOnly: false,
   savedQueries: [],
+  statementTimeout: 6000
 }
 
 const _console = (

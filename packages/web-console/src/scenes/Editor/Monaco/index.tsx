@@ -29,7 +29,9 @@ import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
 import Loader from "../Loader"
+import { RetryButton } from "../RetryButton"
 import styled from "styled-components"
+import { Refresh } from "styled-icons/remix-line"
 import {
   conf as QuestDBLanguageConf,
   language as QuestDBLanguage,
@@ -89,7 +91,16 @@ const Content = styled(PaneContent)`
     background: ${color("red")};
   }
 `
+const TimeoutNotificationSideContent = styled.div`
+  display: flex;
+  flex-wrap: nowrap;
+`
 
+const ButtonContent = styled.span`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+`
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
@@ -103,9 +114,12 @@ const MonacoEditor = () => {
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
+  const [retryQuery, setRetryQuery] = useState("")
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
+  const notifications = useSelector(selectors.query.getNotifications)
+  const { statementTimeout } = useSelector(selectors.console.getConfig)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<string[]>([])
@@ -351,6 +365,13 @@ const MonacoEditor = () => {
   }, [request, quest, dispatch, running])
 
   useEffect(() => {
+    if (retryQuery) {
+      toggleRunning(false);
+    }
+
+  }, [retryQuery])
+
+  useEffect(() => {
     if (running.value && editorRef?.current) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
@@ -358,13 +379,19 @@ const MonacoEditor = () => {
 
       const request = running.isRefresh
         ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
+        : retryQuery
+        ? getQueryRequestFromLastExecutedQuery(retryQuery)
         : getQueryRequestFromEditor(editorRef.current)
 
       if (request?.query) {
+        const headers = new Headers()
+        const timeout = retryQuery ? statementTimeout*2 : statementTimeout
+        headers.set("Statement-Timeout", timeout.toString())
         void quest
-          .queryRaw(request.query, { limit: "0,1000", explain: true })
+          .queryRaw(request.query, { limit: "0,1000", explain: true }, headers )
           .then((result) => {
             setRequest(undefined)
+            setRetryQuery('')
             errorRef.current = undefined
             errorRangeRef.current = undefined
             dispatch(actions.query.stopRunning())
@@ -408,14 +435,38 @@ const MonacoEditor = () => {
           .catch((error: ErrorResult) => {
             errorRef.current = error
             setRequest(undefined)
+            setRetryQuery('')
             dispatch(actions.query.stopRunning())
+
+            const isTimeout = /^timeout/.test(error.error)
+
             dispatch(
               actions.query.addNotification({
                 content: <Text color="red">{error.error}</Text>,
                 sideContent: (
-                  <Text color="foreground" ellipsis title={request.query}>
-                    {request.query}
-                  </Text>
+                  <TimeoutNotificationSideContent>
+                    <Text color="foreground" ellipsis title={request.query}>
+                      {request.query}
+                    </Text>
+                    {
+                      isTimeout && 
+                      <RetryButton
+                        onRetry={
+                          () => {
+                          setRetryQuery(request.query)
+                          }
+                        }
+                        onCancel={
+                          () => {dispatch(actions.query.stopRunning())}
+                        }
+                      >
+                        <ButtonContent>
+                          <Refresh size={16} />
+                          120s
+                        </ButtonContent>
+                      </RetryButton>
+                    }
+                  </TimeoutNotificationSideContent>
                 ),
                 type: NotificationType.ERROR,
               }),

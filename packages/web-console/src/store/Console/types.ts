@@ -39,6 +39,7 @@ export type ConsoleConfigShape = Readonly<{
   githubBanner: boolean
   readOnly?: boolean
   savedQueries: Array<Query | QueryGroup>
+  statementTimeout: number
 }>
 
 export type ConsoleStateShape = Readonly<{
