@@ -42,7 +42,6 @@ import { Slack } from "styled-icons/boxicons-logos"
 
 import {
   ErrorButton,
-  FeedbackDialog,
   Input,
   Link,
   PaneMenu,
@@ -56,6 +55,7 @@ import {
   useKeyPress,
   useScreenSize,
 } from "../../../components"
+import { FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 
@@ -175,6 +175,8 @@ const Menu = () => {
   const { quest } = useContext(QuestContext)
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] =
+    useState<boolean>(false)
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
@@ -284,21 +286,27 @@ const Menu = () => {
       <Separator />
 
       <FeedbackDialog
+        isSubmitting={isFeedbackSubmitting}
         title="Web Console feedback"
         subtitle="Let us know your thoughts"
-        trigger={({ setOpen }) => (
+        trigger={({ setOpen }: { setOpen: (isOpen: boolean) => void }) => (
           <MenuButton onClick={() => setOpen(true)}>
             <Chat3 size="18px" />
             <span>Feedback</span>
           </MenuButton>
         )}
-        onSubmit={async ({ message }) => {
+        onSubmit={async ({ message }: { message: string }) => {
+          setIsFeedbackSubmitting(true)
           try {
-            const response = await quest.sendFeedback({
+            await quest.sendFeedback({
               message,
               telemetryConfig,
             })
-          } catch (err) {}
+          } catch (err) {
+            throw err
+          } finally {
+            setIsFeedbackSubmitting(false)
+          }
         }}
       />
 
