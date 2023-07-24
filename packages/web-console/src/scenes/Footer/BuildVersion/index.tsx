@@ -106,7 +106,7 @@ const BuildVersion = () => {
   }, [])
 
   useEffect(() => {
-    if (buildVersion) {
+    if (buildVersion.version && buildVersion.kind.includes("open-source")) {
       void quest.getLatestRelease().then((release: Release) => {
         if (release.name) {
           setNewestRelease(release)
