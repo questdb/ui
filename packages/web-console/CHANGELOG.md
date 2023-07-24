@@ -16,6 +16,18 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.2.4 - 2023-06-29
+
+### Fixed
+
+- Prevent UI from when unexpected `select build` value is parsed for `BuildVersion` button [#168](https://github.com/questdb/ui/pull/165)
+
+## 0.2.3 - 2023-06-23
+
+### Changed
+
+- Display different button variation at the bottom right depending on the database version [#165](https://github.com/questdb/ui/pull/165)
+
 ## 0.2.2 - 2023-06-09
 
 ### Added
