@@ -293,7 +293,7 @@ const Menu = () => {
         trigger={({ setOpen }: { setOpen: (isOpen: boolean) => void }) => (
           <MenuButton onClick={() => setOpen(true)}>
             <Chat3 size="18px" />
-            <span>Feedback</span>
+            {!sm && <span>Feedback</span>}
           </MenuButton>
         )}
         onSubmit={async ({ message }: { message: string }) => {
@@ -333,7 +333,7 @@ const Menu = () => {
         trigger={
           <MenuButton>
             <Command size="18px" />
-            <span>Shortcuts</span>
+            {!sm && <span>Shortcuts</span>}
           </MenuButton>
         }
         placement="bottom"
