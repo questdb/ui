@@ -18,6 +18,8 @@ import {
 import { StyledIconProps } from "@styled-icons/styled-icon"
 import { theme } from "../../theme"
 
+import "react-toastify/dist/ReactToastify.css"
+
 export const toast = _toast
 
 export const useNotificationCenter = RTNotificationCenter

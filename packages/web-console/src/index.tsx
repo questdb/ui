@@ -37,6 +37,7 @@ import {
   createGlobalFadeTransition,
   ScreenSizeProvider,
   TransitionDuration,
+  ToastContainer,
 } from "./components"
 import { actions, rootEpic, rootReducer } from "./store"
 import { StoreAction, StoreShape } from "./types"
@@ -67,6 +68,7 @@ ReactDOM.render(
   <ScreenSizeProvider>
     <Provider store={store}>
       <ThemeProvider theme={theme}>
+        {ReactDOM.createPortal(<ToastContainer />, document.body)}
         <LocalStorageProvider>
           <FadeSlow />
           <FadeReg />

@@ -49,6 +49,7 @@ import {
   PopperToggle,
   SecondaryButton,
   SuccessButton,
+  toast,
   Tooltip,
   TransitionDuration,
   TransparentButton,
@@ -302,7 +303,11 @@ const Menu = () => {
               message,
               telemetryConfig,
             })
+            toast.success(
+              "Thank you for your feedback! Our team will review it shortly.",
+            )
           } catch (err) {
+            toast.error("Something went wrong. Please try again later.")
             throw err
           } finally {
             setIsFeedbackSubmitting(false)
