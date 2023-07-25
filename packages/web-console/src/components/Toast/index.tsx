@@ -1,49 +1,59 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
+import React from "react"
+import {
+  ToastContainer as RTToastContainer,
+  ToastContainerProps,
+  toast as _toast,
+  Slide,
+  ToastOptions as RTToastOptions,
+} from "react-toastify"
+import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
+import { NotificationCenterItem as RNotificationCenterItem } from "react-toastify/addons/use-notification-center/useNotificationCenter"
+import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
+import {
+  Check,
+  CloseCircle,
+  ErrorWarning,
+  Information,
+} from "styled-icons/remix-line"
+import { StyledIconProps } from "@styled-icons/styled-icon"
+import { theme } from "../../theme"
 
-import styled from "styled-components"
+export const toast = _toast
 
-import { Color } from "../../types"
-import { color } from "../../utils"
+export const useNotificationCenter = RTNotificationCenter
 
-export const Toast = styled.div<{ borderColor: Color }>`
-  position: relative;
-  display: flex;
-  width: 340px;
-  padding: 1rem;
-  flex-direction: column;
-  background: ${color("backgroundDarker")};
-  border: 2px solid ${color("selection")};
+export type NotificationCenterItem<Data> = RNotificationCenterItem<Data>
 
-  &:before {
-    position: absolute;
-    display: block;
-    content: " ";
-    width: 3px;
-    top: 0;
-    right: 0;
-    bottom: -1px;
-    background: ${({ borderColor }) => color(borderColor)};
+export type ToastOptions = RTToastOptions
+
+export const ToastIcon = ({
+  type,
+  ...props
+}: StyledIconProps & {
+  type: BadgeType
+}) => {
+  switch (type) {
+    case BadgeType.SUCCESS:
+      return <Check {...props} color={theme.color.green} />
+    case BadgeType.WARNING:
+      return <ErrorWarning {...props} color={theme.color.orange} />
+    case BadgeType.ERROR:
+      return <CloseCircle {...props} color={theme.color.red} />
+    case BadgeType.INFO:
+    default:
+      return <Information {...props} color={theme.color.cyan} />
   }
-`
+}
+
+export const ToastContainer = (props?: ToastContainerProps) => {
+  const mergedProps: ToastContainerProps = {
+    autoClose: 3000,
+    draggable: false,
+    position: "top-right",
+    theme: "dark",
+    transition: Slide,
+    ...props,
+  }
+
+  return <RTToastContainer {...mergedProps} />
+}
