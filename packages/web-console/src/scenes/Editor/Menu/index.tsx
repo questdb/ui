@@ -287,6 +287,7 @@ const Menu = () => {
       <Separator />
 
       <FeedbackDialog
+        withEmailInput
         isSubmitting={isFeedbackSubmitting}
         title="Web Console feedback"
         subtitle="Let us know your thoughts"
@@ -296,10 +297,17 @@ const Menu = () => {
             {!sm && <span>Feedback</span>}
           </MenuButton>
         )}
-        onSubmit={async ({ message }: { message: string }) => {
+        onSubmit={async ({
+          email,
+          message,
+        }: {
+          email: string
+          message: string
+        }) => {
           setIsFeedbackSubmitting(true)
           try {
             await quest.sendFeedback({
+              email,
               message,
               telemetryConfig,
             })

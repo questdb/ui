@@ -453,9 +453,11 @@ export class Client {
   }
 
   async sendFeedback({
+    email,
     message,
     telemetryConfig,
   }: {
+    email: string
     message: string
     telemetryConfig?: TelemetryConfigShape
   }) {
@@ -468,6 +470,7 @@ export class Client {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            email,
             message,
             telemetryConfig,
             category: "web-console",
