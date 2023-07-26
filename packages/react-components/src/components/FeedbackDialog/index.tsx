@@ -6,6 +6,7 @@ import { Card } from "../Card";
 import { ForwardRef } from "../ForwardRef";
 import { Loader } from "../Loader";
 import { Overlay } from "../Overlay";
+import { Input } from "../Input";
 import { TextArea } from "../TextArea";
 import { Text } from "../Text";
 import Joi from "joi";
@@ -14,12 +15,19 @@ import { Undo } from "../icons/undo";
 import styled from "styled-components";
 
 type Values = {
+  email: string;
   message: string;
 };
 
 const minLength = 20;
 const maxLength = 1000;
 const schema = Joi.object({
+  email: Joi.string()
+    .email({ tlds: { allow: false } })
+    .messages({
+      "string.base": "Please enter an email address, it is required",
+      "string.email": "Please enter a valid email address",
+    }),
   message: Joi.string()
     .min(minLength)
     .max(maxLength)
@@ -33,15 +41,26 @@ const schema = Joi.object({
     }),
 });
 
+const FormControl = styled.div`
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+`;
+
 const ChatIcon = styled(Chat)`
   color: ${({ theme }) => theme.color.foreground};
 `;
 
 const StyledDialogContent = styled(AlertDialog.Content)`
+  display: grid;
+  gap: 1rem;
   background: #282a36;
 `;
 
 const StyledCardContent = styled(Card.Content)<{ withAfterMessage: boolean }>`
+  display: grid;
+  gap: 1rem;
+  width: 100%;
   ${({ withAfterMessage }) => !withAfterMessage && `padding-bottom: 0`}
 `;
 
@@ -97,11 +116,13 @@ type Props = {
   initialMessage?: string;
   afterMessage?: React.ReactNode;
   isSubmitting: boolean;
+  withEmailInput?: boolean;
 };
 
 type ErrorList = Record<string, string>;
 
 export const FeedbackDialog = ({
+  withEmailInput,
   isSubmitting,
   trigger,
   title,
@@ -114,28 +135,35 @@ export const FeedbackDialog = ({
   const [message, setMessage] = useState<string>(initialMessage ?? "");
   const [open, setOpen] = useState(false);
 
-  const validateField = (
+  const validateFields = (
     schema: Joi.ObjectSchema,
     values: Record<string, string>,
-    fieldName: string
+    fieldNames: string[]
   ): ErrorList => {
-    const err: ErrorList = { ...errors };
-    const res = schema.validate(values);
-    let errorsList: ErrorList = {};
+    const newErrors: ErrorList = { ...errors };
+    const res = schema.validate(values, { abortEarly: false });
+    const errorsList: ErrorList = {};
+
     if (res.error) {
       res.error.details.forEach((error) => {
+        const fieldName = error.path[0];
         errorsList[fieldName] = error.message;
       });
-      const newErrors = {
-        ...errors,
-        ...errorsList,
-      };
+
+      fieldNames.forEach((fieldName) => {
+        const errorMessage = errorsList[fieldName] || "";
+        newErrors[fieldName] = errorMessage;
+      });
+
       setErrors(newErrors);
       return newErrors;
     } else {
-      delete err[fieldName];
-      setErrors(err);
-      return err;
+      fieldNames.forEach((fieldName) => {
+        delete newErrors[fieldName];
+      });
+
+      setErrors(newErrors);
+      return newErrors;
     }
   };
 
@@ -155,15 +183,17 @@ export const FeedbackDialog = ({
             name="feedback-dialog"
             onSubmit={(e: React.BaseSyntheticEvent) => {
               e.preventDefault();
-              const errors = validateField(
+              const errors = validateFields(
                 schema,
                 { message: e.target.message.value },
-                "message"
+                ["email", "message"]
               );
               if (Object.keys(errors).length === 0) {
                 onSubmit({
+                  email: withEmailInput ? e.target.email.value : undefined,
                   message: e.target.message.value,
                 });
+                setOpen(false);
               }
             }}
             onChange={(e: React.BaseSyntheticEvent) => {
@@ -194,10 +224,35 @@ export const FeedbackDialog = ({
               />
 
               <StyledCardContent withAfterMessage={afterMessage !== undefined}>
-                <TextArea name="message" rows={4} autoFocus />
-                {errors && errors["message"] && (
-                  <Text color="red">{errors.message}</Text>
-                )}
+                <FormControl>
+                  {withEmailInput && (
+                    <Input
+                      name="email"
+                      type="email"
+                      placeholder="Your e-mail"
+                      autoFocus
+                    />
+                  )}
+                  {withEmailInput && (
+                    <Text color="comment">
+                      Providing an e-email address is optional, but if you do
+                      so, we will be able to contact you back.
+                    </Text>
+                  )}
+                  {errors && errors["email"] && (
+                    <Text color="red">{errors.email}</Text>
+                  )}
+                </FormControl>
+                <FormControl>
+                  <TextArea
+                    name="message"
+                    rows={4}
+                    placeholder="Feedback message"
+                  />
+                  {errors && errors["message"] && (
+                    <Text color="red">{errors.message}</Text>
+                  )}
+                </FormControl>
                 <Box
                   justifyContent="flex-end"
                   style={{
