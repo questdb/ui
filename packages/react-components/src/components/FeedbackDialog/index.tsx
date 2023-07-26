@@ -235,8 +235,8 @@ export const FeedbackDialog = ({
                   )}
                   {withEmailInput && (
                     <Text color="comment">
-                      Providing an e-email address is optional, but if you do
-                      so, we will be able to contact you back.
+                      Providing an e-mail address is optional, but if you do so,
+                      we will be able to contact you back.
                     </Text>
                   )}
                   {errors && errors["email"] && (
