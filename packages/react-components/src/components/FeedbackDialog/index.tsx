@@ -45,6 +45,12 @@ const FormControl = styled.div`
   display: grid;
   gap: 1rem;
   width: 100%;
+
+  // Hide the LastPass+NordPass icons
+  [data-lastpass-icon-root],
+  span[data-np-uid] {
+    display: none !important;
+  }
 `;
 
 const ChatIcon = styled(Chat)`
@@ -110,7 +116,7 @@ type Props = {
   }: {
     setOpen: (open: boolean) => void;
   }) => React.ReactNode;
-  onSubmit: (values: Values) => void;
+  onSubmit: (values: Values) => Promise<void>;
   title?: string;
   subtitle?: string;
   initialMessage?: string;
@@ -181,7 +187,7 @@ export const FeedbackDialog = ({
         <StyledDialogContent>
           <form
             name="feedback-dialog"
-            onSubmit={(e: React.BaseSyntheticEvent) => {
+            onSubmit={async (e: React.BaseSyntheticEvent) => {
               e.preventDefault();
               const errors = validateFields(
                 schema,
@@ -189,11 +195,15 @@ export const FeedbackDialog = ({
                 ["email", "message"]
               );
               if (Object.keys(errors).length === 0) {
-                onSubmit({
-                  email: withEmailInput ? e.target.email.value : undefined,
-                  message: e.target.message.value,
-                });
-                setOpen(false);
+                try {
+                  await onSubmit({
+                    email: withEmailInput ? e.target.email.value : undefined,
+                    message: e.target.message.value,
+                  });
+                  setOpen(false);
+                } catch (error) {
+                  Promise.reject(error);
+                }
               }
             }}
             onChange={(e: React.BaseSyntheticEvent) => {
@@ -224,25 +234,23 @@ export const FeedbackDialog = ({
               />
 
               <StyledCardContent withAfterMessage={afterMessage !== undefined}>
-                <FormControl>
-                  {withEmailInput && (
+                {withEmailInput && (
+                  <FormControl>
                     <Input
                       name="email"
                       type="email"
                       placeholder="Your e-mail"
                       autoFocus
                     />
-                  )}
-                  {withEmailInput && (
                     <Text color="comment">
                       Providing an e-mail address is optional, but if you do so,
                       we will be able to contact you back.
                     </Text>
-                  )}
-                  {errors && errors["email"] && (
-                    <Text color="red">{errors.email}</Text>
-                  )}
-                </FormControl>
+                    {errors && errors["email"] && (
+                      <Text color="red">{errors.email}</Text>
+                    )}
+                  </FormControl>
+                )}
                 <FormControl>
                   <TextArea
                     name="message"
