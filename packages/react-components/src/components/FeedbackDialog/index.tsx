@@ -121,7 +121,6 @@ type Props = {
   subtitle?: string;
   initialMessage?: string;
   afterMessage?: React.ReactNode;
-  isSubmitting: boolean;
   withEmailInput?: boolean;
 };
 
@@ -129,7 +128,6 @@ type ErrorList = Record<string, string>;
 
 export const FeedbackDialog = ({
   withEmailInput,
-  isSubmitting,
   trigger,
   title,
   subtitle,
@@ -140,6 +138,7 @@ export const FeedbackDialog = ({
   const [errors, setErrors] = useState<ErrorList>({});
   const [message, setMessage] = useState<string>(initialMessage ?? "");
   const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateFields = (
     schema: Joi.ObjectSchema,
@@ -196,6 +195,7 @@ export const FeedbackDialog = ({
               );
               if (Object.keys(errors).length === 0) {
                 try {
+                  setIsSubmitting(true);
                   await onSubmit({
                     email: withEmailInput ? e.target.email.value : undefined,
                     message: e.target.message.value,
@@ -203,6 +203,8 @@ export const FeedbackDialog = ({
                   setOpen(false);
                 } catch (error) {
                   Promise.reject(error);
+                } finally {
+                  setIsSubmitting(false);
                 }
               }
             }}
