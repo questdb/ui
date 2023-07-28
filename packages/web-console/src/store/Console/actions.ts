@@ -21,8 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import { ModalId } from "../../consts"
 import { ConsoleConfigShape, ConsoleAction, ConsoleAT } from "../../types"
 
 const bootstrap = (): ConsoleAction => ({
@@ -39,11 +37,6 @@ const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
   type: ConsoleAT.SET_CONFIG,
 })
 
-const setModalId = (payload?: ModalId): ConsoleAction => ({
-  payload,
-  type: ConsoleAT.SET_MODAL_ID,
-})
-
 const toggleSideMenu = (): ConsoleAction => ({
   type: ConsoleAT.TOGGLE_SIDE_MENU,
 })
@@ -52,6 +45,5 @@ export default {
   bootstrap,
   refreshAuthToken,
   setConfig,
-  setModalId,
   toggleSideMenu,
 }
