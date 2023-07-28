@@ -288,10 +288,9 @@ const Menu = () => {
 
       <FeedbackDialog
         withEmailInput
-        isSubmitting={isFeedbackSubmitting}
         title="Web Console feedback"
         subtitle="Let us know your thoughts"
-        trigger={({ setOpen }: { setOpen: (isOpen: boolean) => void }) => (
+        trigger={({ setOpen }) => (
           <MenuButton onClick={() => setOpen(true)}>
             <Chat3 size="18px" />
             {!sm && <span>Feedback</span>}
