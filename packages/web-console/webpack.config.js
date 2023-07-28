@@ -47,7 +47,7 @@ if (!process.env.NODE_ENV) {
 const basePlugins = [
   new CleanWebpackPlugin(),
   new HtmlWebpackPlugin({
-    template: "src/index.hbs",
+    template: "src/index.html",
     minify: {
       minifyCSS: false,
       minifyJS: false,
@@ -130,10 +130,6 @@ module.exports = {
       {
         test: /\.(png|jpg|ttf|woff)$/,
         use: ["file-loader"],
-      },
-      {
-        test: /\.hbs$/,
-        loader: "handlebars-loader",
       },
       {
         test: /\.(ts|js)x?$/,
