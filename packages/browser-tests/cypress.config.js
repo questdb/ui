@@ -1,4 +1,7 @@
 const { defineConfig } = require("cypress");
+const {
+  addMatchImageSnapshotPlugin,
+} = require("@simonsmith/cypress-image-snapshot/plugin");
 
 module.exports = defineConfig({
   e2e: {
@@ -10,6 +13,8 @@ module.exports = defineConfig({
     specPattern: "cypress/integration/**/*.spec.js",
     supportFile: "cypress/commands.js",
     setupNodeEvents(on) {
+      addMatchImageSnapshotPlugin(on);
+
       on("before:browser:launch", (browser = {}, launchOptions) => {
         if (browser.family === "chromium" && browser.name !== "electron") {
           launchOptions.args.push(

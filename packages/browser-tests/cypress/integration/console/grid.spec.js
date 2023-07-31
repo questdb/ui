@@ -28,6 +28,7 @@ describe("questdb grid", () => {
     cy.getGridViewport().scrollTo("bottom");
     cy.getGridRows().should("have.length", 5);
     cy.getGridRow(0).should("contain", "96");
+    cy.matchImageSnapshot();
   });
 
   it("multiple scrolls till the bottom", () => {
