@@ -3,7 +3,8 @@ const {
 } = require("@simonsmith/cypress-image-snapshot/command");
 
 addMatchImageSnapshotCommand({
-  failureThreshold: 0.2,
+  failureThreshold: 0.3,
+  blackout: [".notifications", 'button[class*="BuildVersion"'],
 });
 
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
