@@ -40,13 +40,6 @@ $fa-font-path: "~@fortawesome/fontawesome-free/webfonts";
   font-weight: 900;
 }
 
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_variables";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_mixins";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_normalize";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_scaffolding";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_type";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_buttons";
-
 @import "~animate.css/source/_base.css";
 
 $height: 3rem !default;

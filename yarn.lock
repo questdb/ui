@@ -3865,7 +3865,6 @@ __metadata:
     babel-jest: ^29.4.2
     babel-loader: ^8.2.5
     babel-plugin-styled-components: ^2.0.7
-    bootstrap-sass: 3.4.1
     clean-webpack-plugin: 3.0.0
     clipboard: 2.0.6
     compare-versions: ^5.0.1
@@ -8475,13 +8474,6 @@ __metadata:
   version: 1.0.0
   resolution: "boolbase@npm:1.0.0"
   checksum: 3e25c80ef626c3a3487c73dbfc70ac322ec830666c9ad915d11b701142fab25ec1e63eff2c450c74347acfd2de854ccde865cd79ef4db1683f7c7b046ea43bb0
-  languageName: node
-  linkType: hard
-
-"bootstrap-sass@npm:3.4.1":
-  version: 3.4.1
-  resolution: "bootstrap-sass@npm:3.4.1"
-  checksum: e759a5e8e0201f969b0ce7d1ab1a94c0e61df8cfe98290b81adaee40e746e86ee0128a472db3715e3a6963dd7fff07efd1723dc6a64e0c4da0b5468f1e5f7750
   languageName: node
   linkType: hard
 

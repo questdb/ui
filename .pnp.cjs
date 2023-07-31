@@ -6533,7 +6533,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["babel-jest", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:29.4.2"],\
             ["babel-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:8.2.5"],\
             ["babel-plugin-styled-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.0.7"],\
-            ["bootstrap-sass", "npm:3.4.1"],\
             ["clean-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.0.0"],\
             ["clipboard", "npm:2.0.6"],\
             ["compare-versions", "npm:5.0.1"],\
@@ -14162,15 +14161,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/boolbase-npm-1.0.0-965fe9af6d-3e25c80ef6.zip/node_modules/boolbase/",\
           "packageDependencies": [\
             ["boolbase", "npm:1.0.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["bootstrap-sass", [\
-        ["npm:3.4.1", {\
-          "packageLocation": "./.yarn/cache/bootstrap-sass-npm-3.4.1-30da3a8661-e759a5e8e0.zip/node_modules/bootstrap-sass/",\
-          "packageDependencies": [\
-            ["bootstrap-sass", "npm:3.4.1"]\
           ],\
           "linkType": "HARD"\
         }]\

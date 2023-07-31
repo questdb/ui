@@ -45,6 +45,7 @@ type Props = Readonly<{
 
 const InputStyled = styled.input<Props>`
   height: ${getButtonSize};
+  box-sizing: border-box;
   border: none;
   padding: 0 1rem;
   line-height: 1.5;

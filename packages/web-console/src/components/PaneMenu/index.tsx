@@ -29,6 +29,7 @@ import { color } from "../../utils"
 export const PaneMenu = styled.div`
   position: relative;
   display: flex;
+  box-sizing: border-box;
   height: 4rem;
   padding: 0 1rem;
   align-items: center;

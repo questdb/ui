@@ -30,7 +30,6 @@
     "@questdb/sql-grammar": "1.0.11",
     "@radix-ui/react-dialog": "^1.0.3",
     "animate.css": "3.7.2",
-    "bootstrap-sass": "3.4.1",
     "clipboard": "2.0.6",
     "compare-versions": "^5.0.1",
     "core-js": "^3.22.8",
