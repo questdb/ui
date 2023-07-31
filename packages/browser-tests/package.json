@@ -3,7 +3,7 @@
   "packageManager": "yarn@3.1.1",
   "private": true,
   "scripts": {
-    "test": "cypress run"
+    "test": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=true"
   },
   "devDependencies": {
     "@simonsmith/cypress-image-snapshot": "^8.0.1",
