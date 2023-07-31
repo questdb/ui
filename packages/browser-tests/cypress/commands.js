@@ -1,3 +1,11 @@
+const {
+  addMatchImageSnapshotCommand,
+} = require("@simonsmith/cypress-image-snapshot/command");
+
+addMatchImageSnapshotCommand({
+  failureThreshold: 0.2,
+});
+
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
 beforeEach(() => {
