@@ -37,6 +37,7 @@ body {
   color: $text-color;
   overflow-x: hidden;
   margin: 0;
+  line-height: 1.428571429;
 }
 
 #root {
@@ -107,6 +108,15 @@ a {
 a:hover,
 a:focus {
   text-decoration: none;
+}
+
+input,
+button,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .border-bottom {
