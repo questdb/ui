@@ -16,17 +16,32 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.2.5 - 2023-08-01
+
+### Fixed
+
+- Incorrect rendering of the last few columns in the grid
+  [#170](https://github.com/questdb/ui/pull/170)
+
+### Changed
+
+- Only check for new QuestDB releses in Open Source version
+  [#171](https://github.com/questdb/ui/pull/171)
+- Remove Handlebars [#175](https://github.com/questdb/ui/pull/175)
+
 ## 0.2.4 - 2023-06-29
 
 ### Fixed
 
-- Prevent UI from when unexpected `select build` value is parsed for `BuildVersion` button [#168](https://github.com/questdb/ui/pull/165)
+- Prevent UI from when unexpected `select build` value is parsed for
+  `BuildVersion` button [#168](https://github.com/questdb/ui/pull/165)
 
 ## 0.2.3 - 2023-06-23
 
 ### Changed
 
-- Display different button variation at the bottom right depending on the database version [#165](https://github.com/questdb/ui/pull/165)
+- Display different button variation at the bottom right depending on the
+  database version [#165](https://github.com/questdb/ui/pull/165)
 
 ## 0.2.2 - 2023-06-09
 
