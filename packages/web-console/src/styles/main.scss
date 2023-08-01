@@ -22,24 +22,6 @@
  *
  ******************************************************************************/
 
-$fa-font-path: "~@fortawesome/fontawesome-free/webfonts";
-
-@import "@fortawesome/fontawesome-free/scss/fontawesome.scss";
-
-@font-face {
-  font-family: "Font Awesome 5 Free";
-  font-style: normal;
-  font-weight: 900;
-  font-display: $fa-font-display;
-  src: url("#{$fa-font-path}/fa-solid-900.woff") format("woff");
-}
-
-.fa,
-.fas {
-  font-family: "Font Awesome 5 Free";
-  font-weight: 900;
-}
-
 @import "~animate.css/source/_base.css";
 
 $height: 3rem !default;

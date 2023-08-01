@@ -912,3 +912,24 @@ body.mini-navbar.fixed-sidebar .nav-header {
 label {
   font-weight: 400;
 }
+
+.icon {
+  display: inline-block;
+  vertical-align: middle;
+  overflow: hidden;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.icon-play {
+  background-image: url("/assets/icon-play.svg");
+  width: 14px;
+  height: 14px;
+}
+
+.icon-stop {
+  background-image: url("/assets/icon-stop.svg");
+  width: 14px;
+  height: 14px;
+}
