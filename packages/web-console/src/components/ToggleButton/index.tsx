@@ -75,10 +75,11 @@ const baseStyles = css<Props>`
   font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize]};
   font-weight: 400;
   line-height: 1.15;
+  cursor: pointer;
   ${({ direction }) =>
     `border-${direction || defaultProps.direction}: 3px solid transparent;`};
   ${bezierTransition};
-  ${({ disabled }) => disabled && "pointer-events: none;"};
+  ${({ disabled }) => disabled && "cursor: default; pointer-events: none;"};
 
   svg + span {
     margin-left: 1rem;
