@@ -96,12 +96,12 @@ export function quickVis(root, msgBus) {
   }
 
   function setDrawBtnToCancel() {
-    btnDraw.html('<i class="fa fa-stop"></i><span>Cancel</span>')
+    btnDraw.html('<i class="icon icon-stop"></i><span>Cancel</span>')
     btnDraw.removeClass("js-chart-draw").addClass("js-chart-cancel")
   }
 
   function setDrawBtnToDraw() {
-    btnDraw.html('<i class="fa fa-play"></i><span>Draw</span>')
+    btnDraw.html('<i class="icon icon-play"></i><span>Draw</span>')
     btnDraw.removeClass("js-chart-cancel").addClass("js-chart-draw")
   }
 
