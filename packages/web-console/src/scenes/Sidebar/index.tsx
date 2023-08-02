@@ -68,6 +68,7 @@ const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
   flex: 0 0 5rem;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
 
   & > span {
     margin-left: 0 !important;
@@ -89,6 +90,7 @@ const DisabledNavigation = styled.div`
 
   &:disabled {
     pointer-events: none;
+    cursor: default;
   }
 `
 

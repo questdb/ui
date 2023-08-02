@@ -87,6 +87,7 @@ const baseStyles = css<ButtonProps>`
   font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize]};
   font-weight: 400;
   line-height: 1.15;
+  cursor: pointer;
   ${bezierTransition};
 
   svg + span {
