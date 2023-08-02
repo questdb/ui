@@ -158,6 +158,7 @@ const Sidebar = () => {
             direction="left"
             onClick={handleConsoleClick}
             selected={selected === "console"}
+            data-hook="navigation-console-button"
           >
             <CodeSSlash size="18px" />
           </Navigation>
@@ -186,6 +187,7 @@ const Sidebar = () => {
               direction="left"
               onClick={handleImportClick}
               selected={selected === "import"}
+              data-hook="navigation-import-button"
             >
               <Upload2 size="18px" />
             </Navigation>
@@ -226,6 +228,7 @@ const Sidebar = () => {
               direction="left"
               onClick={handleSettingsClick}
               selected={selected === "settings"}
+              data-hook="navigation-settings-button"
             >
               <Settings2 size="18px" />
             </Navigation>
