@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-describe("questdb grid", () => {
+describe("questdb import", () => {
   before(() => {
     cy.visit("http://localhost:9999");
   });
