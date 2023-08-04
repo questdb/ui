@@ -31,7 +31,6 @@ import { BusEvent } from "../../consts"
 
 import Editor from "../Editor"
 import Footer from "../Footer"
-import Modal from "../Modal"
 import Notifications from "../Notifications"
 import Result from "../Result"
 import Import from "../Import"
@@ -75,7 +74,6 @@ const Layout = () => {
   const importNode = document.getElementById("import")
   const settingsNode = document.getElementById("settings")
   const sideMenuNode = document.getElementById("sideMenu")
-  const modalNode = document.getElementById("modal")
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
@@ -132,7 +130,6 @@ const Layout = () => {
         )}
       <Page>
         {sideMenuNode && createPortal(<SideMenu />, sideMenuNode)}
-        {modalNode && createPortal(<Modal />, modalNode)}
         {importNode && createPortal(<Import />, importNode)}
         {settingsNode && createPortal(<Settings />, settingsNode)}
       </Page>

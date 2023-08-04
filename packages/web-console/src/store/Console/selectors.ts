@@ -21,8 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import { ModalId } from "consts"
 import { ConsoleConfigShape, StoreShape } from "types"
 
 import { defaultConfig } from "./reducers"
@@ -33,11 +31,7 @@ const getConfig: (store: StoreShape) => ConsoleConfigShape = (store) =>
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
   store.console.sideMenuOpened
 
-const getModalId: (store: StoreShape) => ModalId | undefined = (store) =>
-  store.console.modalId
-
 export default {
   getConfig,
-  getModalId,
   getSideMenuOpened,
 }

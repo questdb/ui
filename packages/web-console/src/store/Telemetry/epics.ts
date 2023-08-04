@@ -26,11 +26,10 @@ import { Epic, ofType } from "redux-observable"
 import { delay, filter, map, switchMap, withLatestFrom } from "rxjs/operators"
 import { from, NEVER, of } from "rxjs"
 
-import { API, ModalId, TelemetryTable } from "../../consts"
+import { API, TelemetryTable } from "../../consts"
 import { actions, selectors } from "../../store"
 import {
   BootstrapAction,
-  ConsoleAction,
   ConsoleAT,
   SetTelemetryConfigAction,
   SetTelemetryRemoteConfigAction,
@@ -97,26 +96,6 @@ export const getRemoteConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
     }),
   )
 
-export const powerUserCta: Epic<StoreAction, ConsoleAction, StoreShape> = (
-  action$,
-  state$,
-) =>
-  action$.pipe(
-    ofType<StoreAction, SetTelemetryRemoteConfigAction>(
-      TelemetryAT.SET_REMOTE_CONFIG,
-    ),
-    withLatestFrom(state$),
-    switchMap(([_, state]) => {
-      const config = selectors.telemetry.getRemoteConfig(state)
-
-      if (config?.cta) {
-        return of(actions.console.setModalId(ModalId.POWER_USER))
-      }
-
-      return NEVER
-    }),
-  )
-
 export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
   state$,
@@ -130,7 +109,7 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
       const remoteConfig = selectors.telemetry.getRemoteConfig(state)
 
       if (remoteConfig?.lastUpdated) {
-        const ts = new Date(remoteConfig.lastUpdated).toISOString();
+        const ts = new Date(remoteConfig.lastUpdated).toISOString()
         return from(
           quest.queryRaw(
             `with tel as (
@@ -161,7 +140,9 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
              )
              UNION ALL
              SELECT * FROM tel
-             `.replace(/\s+/g, ' ').trim(),
+             `
+              .replace(/\s+/g, " ")
+              .trim(),
           ),
         )
       }
@@ -212,4 +193,4 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
     }),
   )
 
-export default [getConfig, getRemoteConfig, powerUserCta, startTelemetry]
+export default [getConfig, getRemoteConfig, startTelemetry]

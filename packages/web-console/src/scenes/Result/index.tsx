@@ -343,7 +343,7 @@ const Result = () => {
                 className="button-primary js-chart-draw"
                 id="_qvis_frm_draw"
               >
-                <i className="fa fa-play" />
+                <i className="icon icon-play" />
                 <span>Draw</span>
               </button>
             </form>
