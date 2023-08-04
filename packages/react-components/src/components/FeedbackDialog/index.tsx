@@ -75,7 +75,8 @@ const StyledCardContent = styled(Card.Content)<{ withAfterMessage: boolean }>`
 `;
 
 const StyledTextArea = styled(TextArea)`
-  max-height: 200px;
+  min-height: 100px;
+  max-height: 250px;
 `;
 
 const Footer = ({
@@ -216,9 +217,6 @@ export const FeedbackDialog = ({
                 }
               }
             }}
-            onChange={(e: React.BaseSyntheticEvent) => {
-              setMessage(e.target.value);
-            }}
           >
             <Card>
               <Card.Header
@@ -252,6 +250,7 @@ export const FeedbackDialog = ({
                       type="email"
                       placeholder="email@address.com"
                       autoFocus
+                      autoComplete="off"
                     />
                     <Text color="gray2">
                       Optional, if you want us to get back to you
@@ -268,6 +267,10 @@ export const FeedbackDialog = ({
                     rows={4}
                     placeholder="It would be great if I could..."
                     resize="vertical"
+                    defaultValue={message}
+                    onChange={(e: React.BaseSyntheticEvent) => {
+                      setMessage(e.target.value);
+                    }}
                   />
                   {errors && errors["message"] && (
                     <Text color="red">{errors.message}</Text>
