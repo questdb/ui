@@ -3955,6 +3955,8 @@ __metadata:
     svg-react-loader: 0.4.6
     throttle-debounce: 2.2.1
     typescript: ^4.6.2
+    uplot: ^1.6.24
+    uplot-react: ^1.1.4
     webpack: ^5.72.1
     webpack-cli: ^4.9.2
     webpack-dev-server: ^4.6.0
@@ -20552,6 +20554,23 @@ __metadata:
   bin:
     browserslist-lint: cli.js
   checksum: 12db73b4f63029ac407b153732e7cd69a1ea8206c9100b482b7d12859cd3cd0bc59c602d7ae31e652706189f1acb90d42c53ab24a5ba563ed13aebdddc5561a0
+  languageName: node
+  linkType: hard
+
+"uplot-react@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "uplot-react@npm:1.1.4"
+  peerDependencies:
+    react: ">=16.8.6"
+    uplot: ^1.6.7
+  checksum: 9f7f157a226ad7c081618adcd7e1b9a13a8d4b9ba5905b7dc515d62d731d40dcf729c0c51cba78d24ab03e4b94ed96be60341d62b666bc76920265b0d138b1b9
+  languageName: node
+  linkType: hard
+
+"uplot@npm:^1.6.24":
+  version: 1.6.24
+  resolution: "uplot@npm:1.6.24"
+  checksum: 253e389dc6db40e1231d1c63913dea1e6987856cfde985da036e70786ef0077afc40f3ed6883c54d95a97ecedc3ea52a7fa815e88f3c3d381b61c15e745f8a40
   languageName: node
   linkType: hard
 

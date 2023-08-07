@@ -21,8 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import $ from "jquery"
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
@@ -32,7 +30,8 @@ import { HandPointLeft } from "styled-icons/fa-regular"
 import { TableFreezeColumn } from "styled-icons/fluentui-system-filled"
 
 import { grid } from "../../js/console/grid"
-import { quickVis } from "../../js/console/quick-vis"
+
+import { Chart } from "./Chart/chart"
 
 import {
   PaneContent,
@@ -128,7 +127,6 @@ const Result = () => {
       },
     )
     gridRef.current = _grid
-    quickVis($("#quick-vis"), window.bus as unknown as ReturnType<typeof $>)
 
     bus.on(BusEvent.GRID_FOCUS, function () {
       _grid.focus()
@@ -198,7 +196,7 @@ const Result = () => {
 
   useEffect(() => {
     const grid = document.getElementById("grid")
-    const chart = document.getElementById("quick-vis")
+    const chart = document.getElementById("chart")
 
     if (!grid || !chart) {
       return
@@ -320,35 +318,8 @@ const Result = () => {
       <Content>
         <div id="grid" />
 
-        <div id="quick-vis">
-          <div className="quick-vis-controls">
-            <form className="v-fit" role="form">
-              <div className="form-group">
-                <label>Chart type</label>
-                <select id="_qvis_frm_chart_type">
-                  <option>bar</option>
-                  <option>line</option>
-                  <option>area</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Labels</label>
-                <select id="_qvis_frm_axis_x" />
-              </div>
-              <div className="form-group">
-                <label>Series</label>
-                <select id="_qvis_frm_axis_y" multiple />
-              </div>
-              <button
-                className="button-primary js-chart-draw"
-                id="_qvis_frm_draw"
-              >
-                <i className="icon icon-play" />
-                <span>Draw</span>
-              </button>
-            </form>
-          </div>
-          <div className="quick-vis-canvas" />
+        <div id="chart">
+          <Chart />
         </div>
       </Content>
     </Wrapper>

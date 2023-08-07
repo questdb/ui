@@ -60,7 +60,9 @@
     "sql-formatter": "^4.0.2",
     "styled-components": "5.1.1",
     "styled-icons": "10.47.0",
-    "throttle-debounce": "2.2.1"
+    "throttle-debounce": "2.2.1",
+    "uplot": "^1.6.24",
+    "uplot-react": "^1.1.4"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",
