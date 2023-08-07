@@ -111,6 +111,7 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<string[]>([])
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+  const errorQueryHasFocusRef = useRef<boolean>(false)
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -230,6 +231,19 @@ const MonacoEditor = () => {
     }
   }
 
+  const removeErrors = (
+    editor: IStandaloneCodeEditor,
+    monaco: Monaco,
+  ) => {
+    const model = editor.getModel()
+    if (model) {
+      monaco.editor.setModelMarkers(model, QuestDBLanguageName, []);
+    }
+
+    errorRangeRef.current = undefined
+    errorRef.current = undefined
+  }
+
   const handleEditorDidMount = (
     editor: IStandaloneCodeEditor,
     monaco: Monaco,
@@ -313,8 +327,29 @@ const MonacoEditor = () => {
         },
       })
 
+      editor.onDidChangeModelContent((e) => {
+        // Remove errors when the invald query is updated
+        if (errorQueryHasFocusRef.current) {
+          removeErrors(editor, monaco)
+        }
+      })
+
       editor.onDidChangeCursorPosition(() => {
         renderLineMarkings(monaco, editor)
+
+        const queryAtCursor = getQueryFromCursor(editor)
+        if (queryAtCursor && errorRef.current) {
+          const queriesHaveBeenMerged = queryAtCursor.query !== errorRef.current.query && queryAtCursor.query.includes(errorRef.current.query)
+
+          // Remove errors when the invalid query is merged with another query
+          if (queriesHaveBeenMerged) {
+            removeErrors(editor, monaco)
+          }
+
+          // Does the query at the cursor match the invalid query? 
+          // Set here for use on content change, as checking then is too late
+          errorQueryHasFocusRef.current = queryAtCursor.query === errorRef.current?.query
+        }
       })
     }
 

@@ -262,6 +262,39 @@ describe("errors", () => {
 
     cy.getNotifications().should("contain", "Invalid date");
   });
+
+  it("should mark an invalid query as error, then remove the error when updated", () => {
+    const query = `fdz as ssss;`;
+    cy.typeQuery(query).runLine();
+    cy.matchErrorMarkerPosition({ left: 0, width: 25 });
+    cy.typeQuery(`ff`);
+    cy.getErrorMarker().should("not.exist");
+    cy.getNotifications().should("contain", "table does not exist");
+  });
+
+  it("should remove an error from multiline query when updated", () => {
+    const query = `select * reading\nas somethinng;`;
+    cy.typeQuery(query).runLine();
+    cy.matchErrorMarkerPosition({ left: 169, width: 84 });
+    cy.typeQuery(`{downArrow}{home}ff`);
+    cy.getErrorMarker().should("not.exist");
+  });
+
+  it("should not remove the error when another query is edited", () => {
+    const query = `fdz as ssss;\nfoo as bar;`;
+    cy.typeQuery(query).runLine();
+    cy.matchErrorMarkerPosition({ left: 0, width: 25 });
+    cy.typeQuery(`{upArrow}{home}ff`);
+    cy.matchErrorMarkerPosition({ left: 0, width: 25 });
+  });
+
+  it("should remove the error when two queries are merged", () => {
+    const query = `fdz as ssss;\nfoo as bar;`;
+    cy.typeQuery(query).runLine();
+    cy.matchErrorMarkerPosition({ left: 0, width: 25 });
+    cy.typeQuery(`{upArrow}{end}{backspace}`);
+    cy.getErrorMarker().should("not.exist");
+  });
 });
 
 describe("running query with F9", () => {
