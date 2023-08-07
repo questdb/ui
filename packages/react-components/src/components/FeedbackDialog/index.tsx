@@ -53,6 +53,10 @@ const FormControl = styled.div`
   }
 `;
 
+const Label = styled.label<{ htmlFor: string }>`
+  color: ${({ theme }) => theme.color.foreground};
+`;
+
 const ChatIcon = styled(Chat)`
   color: ${({ theme }) => theme.color.foreground};
 `;
@@ -65,9 +69,14 @@ const StyledDialogContent = styled(AlertDialog.Content)`
 
 const StyledCardContent = styled(Card.Content)<{ withAfterMessage: boolean }>`
   display: grid;
-  gap: 1rem;
+  gap: 2rem;
   width: 100%;
   ${({ withAfterMessage }) => !withAfterMessage && `padding-bottom: 0`}
+`;
+
+const StyledTextArea = styled(TextArea)`
+  min-height: 100px;
+  max-height: 250px;
 `;
 
 const Footer = ({
@@ -208,9 +217,6 @@ export const FeedbackDialog = ({
                 }
               }
             }}
-            onChange={(e: React.BaseSyntheticEvent) => {
-              setMessage(e.target.value);
-            }}
           >
             <Card>
               <Card.Header
@@ -238,15 +244,16 @@ export const FeedbackDialog = ({
               <StyledCardContent withAfterMessage={afterMessage !== undefined}>
                 {withEmailInput && (
                   <FormControl>
+                    <Label htmlFor="email">Email</Label>
                     <Input
                       name="email"
                       type="email"
-                      placeholder="Your e-mail"
+                      placeholder="email@address.com"
                       autoFocus
+                      autoComplete="off"
                     />
-                    <Text color="comment">
-                      Providing an e-mail address is optional, but if you do so,
-                      we will be able to contact you back.
+                    <Text color="gray2">
+                      Optional, if you want us to get back to you
                     </Text>
                     {errors && errors["email"] && (
                       <Text color="red">{errors.email}</Text>
@@ -254,10 +261,16 @@ export const FeedbackDialog = ({
                   </FormControl>
                 )}
                 <FormControl>
-                  <TextArea
+                  <Label htmlFor="message">Message</Label>
+                  <StyledTextArea
                     name="message"
                     rows={4}
-                    placeholder="Feedback message"
+                    placeholder="It would be great if I could..."
+                    resize="vertical"
+                    defaultValue={message}
+                    onChange={(e: React.BaseSyntheticEvent) => {
+                      setMessage(e.target.value);
+                    }}
                   />
                   {errors && errors["message"] && (
                     <Text color="red">{errors.message}</Text>

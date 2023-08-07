@@ -21,14 +21,15 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
+import React from "react"
 import docsearch from "docsearch.js"
-import React, { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useContext } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import {
   Add,
+  Chat3,
   Close as _CloseIcon,
   Command,
   Database2,
@@ -48,12 +49,14 @@ import {
   PopperToggle,
   SecondaryButton,
   SuccessButton,
+  toast,
   Tooltip,
   TransitionDuration,
   TransparentButton,
   useKeyPress,
   useScreenSize,
 } from "../../../components"
+import { FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 
@@ -61,6 +64,7 @@ import QueryPicker from "../QueryPicker"
 import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
+import { QuestContext } from "../../../providers"
 
 const Wrapper = styled(PaneMenu)<{ _display: string }>`
   z-index: 15;
@@ -169,12 +173,16 @@ const MenuLink: React.FunctionComponent<{
 
 const Menu = () => {
   const dispatch = useDispatch()
+  const { quest } = useContext(QuestContext)
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] =
+    useState<boolean>(false)
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
   const { resultsSplitterBasis, exampleQueriesVisited, updateSettings } =
     useLocalStorage()
@@ -278,6 +286,42 @@ const Menu = () => {
 
       <Separator />
 
+      <FeedbackDialog
+        withEmailInput
+        title="Web Console feedback"
+        subtitle="Let us know your thoughts"
+        trigger={({ setOpen }) => (
+          <MenuButton onClick={() => setOpen(true)}>
+            <Chat3 size="18px" />
+            {!sm && <span>Feedback</span>}
+          </MenuButton>
+        )}
+        onSubmit={async ({
+          email,
+          message,
+        }: {
+          email: string
+          message: string
+        }) => {
+          setIsFeedbackSubmitting(true)
+          try {
+            await quest.sendFeedback({
+              email,
+              message,
+              telemetryConfig,
+            })
+            toast.success(
+              "Thank you for your feedback! Our team will review it shortly.",
+            )
+          } catch (err) {
+            toast.error("Something went wrong. Please try again later.")
+            throw err
+          } finally {
+            setIsFeedbackSubmitting(false)
+          }
+        }}
+      />
+
       <MenuLink
         href="https://slack.questdb.io/"
         icon={<Slack size="18px" />}
@@ -296,7 +340,7 @@ const Menu = () => {
         trigger={
           <MenuButton>
             <Command size="18px" />
-            <span>Shortcuts</span>
+            {!sm && <span>Shortcuts</span>}
           </MenuButton>
         }
         placement="bottom"
