@@ -22,31 +22,6 @@
  *
  ******************************************************************************/
 
-$fa-font-path: "~@fortawesome/fontawesome-free/webfonts";
-
-@import "@fortawesome/fontawesome-free/scss/fontawesome.scss";
-
-@font-face {
-  font-family: "Font Awesome 5 Free";
-  font-style: normal;
-  font-weight: 900;
-  font-display: $fa-font-display;
-  src: url("#{$fa-font-path}/fa-solid-900.woff") format("woff");
-}
-
-.fa,
-.fas {
-  font-family: "Font Awesome 5 Free";
-  font-weight: 900;
-}
-
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_variables";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_mixins";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_normalize";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_scaffolding";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_type";
-@import "~bootstrap-sass/assets/stylesheets/bootstrap/_buttons";
-
 @import "~animate.css/source/_base.css";
 
 $height: 3rem !default;
@@ -72,18 +47,25 @@ $spacing-s: 4px !default;
 @import "variables";
 @import "typography";
 @import "navigation";
-@import "buttons";
 @import "base";
 @import "media";
-
 @import "editor";
-@import "import";
-@import "import-detail";
-@import "settings";
 @import "grid";
 @import "splitter";
-@import "visualisation";
 @import "quick-vis";
+
+.js-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  font-size: 1.4rem;
+  background: #21222c;
+
+  ::selection {
+    background: #44475a;
+  }
+}
 
 .btn:disabled {
   cursor: default;

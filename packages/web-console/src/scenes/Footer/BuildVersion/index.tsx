@@ -27,10 +27,17 @@ import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { SecondaryButton } from "../../../components"
-import { formatCommitHash, formatVersion } from "./services"
+import {
+  getCanUpgrade,
+  formatCommitHash,
+  formatVersion,
+  Versions,
+} from "./services"
 import { ExternalLink, ArrowUpCircle } from "styled-icons/remix-line"
 import { Release } from "../../../utils/questdb"
-import { compare } from "compare-versions"
+import { Team } from "styled-icons/remix-line"
+import { BuildingMultiple } from "styled-icons/fluentui-system-filled"
+import { ShieldLockFill } from "styled-icons/bootstrap"
 
 const Wrapper = styled.div`
   display: flex;
@@ -42,42 +49,68 @@ const Wrapper = styled.div`
     margin-right: 1rem;
   }
 `
-const ReleaseNotesButton = styled(SecondaryButton)`
+const ReleaseNotesButton = styled(SecondaryButton)<{ enterprise?: boolean }>`
   position: relative;
+  ${({ enterprise }) => (enterprise ? `background: #322733;` : ``)}
+  gap: 0.5rem;
 `
 
-const QuestDBVersion = styled.span`
-  margin-right: 0.5rem;
+const ReleaseLink = styled.a`
+  text-decoration: none;
 `
 
 const UpgradeIcon = styled(ArrowUpCircle)`
-  color: ${({ theme }) => theme.color.draculaGreen};
+  color: ${({ theme }) => theme.color.green};
 `
 
 const NewestRelease = styled.span`
-  color: ${({ theme }) => theme.color.draculaGreen};
+  color: ${({ theme }) => theme.color.green};
   font-size: ${({ theme }) => theme.fontSize.xs};
 `
 
+const versionButtons: {
+  [key in Versions["kind"]]: { label: string; icon?: React.ReactNode }
+} = {
+  dev: {
+    label: "QuestDB Dev",
+  },
+  "open-source": {
+    label: "QuestDB",
+  },
+  enterprise: {
+    icon: <Team size="18px" />,
+    label: "QuestDB Enterprise",
+  },
+  "enterprise pro": {
+    icon: <BuildingMultiple size="18px" />,
+    label: "QuestDB Enterprise Pro",
+  },
+  "enterprise ultimate": {
+    icon: <ShieldLockFill size="18px" />,
+    label: "QuestDB Enterprise Ultimate",
+  },
+}
+
 const BuildVersion = () => {
   const { quest } = useContext(QuestContext)
-  const [buildVersion, setBuildVersion] = useState("")
+  const [buildVersion, setBuildVersion] = useState<Versions>({
+    kind: "open-source",
+    version: "",
+  })
   const [commitHash, setCommitHash] = useState("")
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
     void quest.queryRaw("select build", { limit: "0,1000" }).then((result) => {
-      if (result.type === QuestDB.Type.DQL) {
-        if (result.count === 1) {
-          setBuildVersion(formatVersion(result.dataset[0][0]))
-          setCommitHash(formatCommitHash(result.dataset[0][0]))
-        }
+      if (result.type === QuestDB.Type.DQL && result.count === 1) {
+        setBuildVersion(formatVersion(result.dataset[0][0] as string))
+        setCommitHash(formatCommitHash(result.dataset[0][0]))
       }
     })
   }, [])
 
   useEffect(() => {
-    if (buildVersion) {
+    if (buildVersion.version && buildVersion.kind.includes("open-source")) {
       void quest.getLatestRelease().then((release: Release) => {
         if (release.name) {
           setNewestRelease(release)
@@ -86,37 +119,53 @@ const BuildVersion = () => {
     }
   }, [buildVersion])
 
-  if (!buildVersion.length && !commitHash.length) return null
+  if (buildVersion.version === "" && !commitHash.length) {
+    return null
+  }
 
-  const upgradeAvailable =
-    newestRelease && compare(buildVersion, newestRelease.name, "<")
+  const enterpriseVersion = buildVersion.kind.includes("enterprise")
+  const upgradeAvailable = getCanUpgrade(buildVersion, newestRelease?.name)
 
-  const releaseUrl =
-    upgradeAvailable && newestRelease
-      ? newestRelease.html_url
-      : `https://github.com/questdb/questdb${
-          buildVersion
-            ? `/releases/tag/${buildVersion}`
-            : `/commit/${commitHash}`
-        }`
+  const releaseUrl = upgradeAvailable
+    ? newestRelease?.html_url
+    : `https://github.com/questdb/questdb${
+        buildVersion
+          ? `/releases/tag/${buildVersion.version}`
+          : `/commit/${commitHash}`
+      }`
+
+  const { label, icon } =
+    versionButtons[buildVersion.kind] ??
+    /* fallback to `dev` if `.kind` is something unexpected */
+    versionButtons.dev
 
   return (
     <Wrapper>
-      <a href={releaseUrl} rel="noopener noreferrer" target="_blank">
+      <ReleaseLink
+        href={enterpriseVersion ? "https://questdb.io/enterprise" : releaseUrl}
+        rel="noopener noreferrer"
+        target="_blank"
+      >
         <ReleaseNotesButton
-          title={`Show ${buildVersion ? "release notes" : "commit details"}`}
+          enterprise={enterpriseVersion}
+          title={
+            ["dev", "open-source"].includes(buildVersion.kind)
+              ? `Show ${buildVersion ? "release notes" : "commit details"}`
+              : ""
+          }
         >
-          <QuestDBVersion>QuestDB {buildVersion || "Dev"}</QuestDBVersion>
-          {upgradeAvailable ? (
-            <UpgradeIcon size="18px" />
-          ) : (
-            <ExternalLink size="16px" />
-          )}
-          {upgradeAvailable && newestRelease && (
-            <NewestRelease>{newestRelease.name}</NewestRelease>
+          {icon}
+          {`${label} ${buildVersion.version}`}
+
+          {!enterpriseVersion && <ExternalLink size="16px" />}
+          {upgradeAvailable && (
+            <>
+              <UpgradeIcon size="18px" />
+              <NewestRelease>{newestRelease?.name}</NewestRelease>
+            </>
           )}
         </ReleaseNotesButton>
-      </a>
+      </ReleaseLink>
     </Wrapper>
   )
 }

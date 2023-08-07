@@ -51,7 +51,7 @@ export const TooltipArrow = styled.div`
     left: 0;
     content: "";
     transform: rotate(45deg);
-    background: ${color("draculaBackgroundDarker")};
+    background: ${color("backgroundDarker")};
     border: 1px solid ${color("gray1")};
     border-radius: 1px;
   }
@@ -61,7 +61,7 @@ export const Wrapper = styled.div`
   position: relative;
   max-width: 260px;
   padding: 1rem;
-  background: ${color("draculaBackgroundDarker")};
+  background: ${color("backgroundDarker")};
   border: 1px solid ${color("gray1")};
   border-radius: 1px;
 
@@ -104,7 +104,7 @@ export const Wrapper = styled.div`
 
 export const Tooltip = ({ arrow, children, ...rest }: Props) => (
   <Wrapper {...rest}>
-    <Text color="draculaForeground">{children}</Text>
+    <Text color="foreground">{children}</Text>
     {arrow && <TooltipArrow ref={arrow.setArrowElement} style={arrow.styles} />}
   </Wrapper>
 )

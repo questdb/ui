@@ -42,10 +42,10 @@ const SettingGroup = styled.div`
   align-items: center;
   width: 100%;
   padding: 2rem;
-  background: ${color("draculaBackground")};
+  background: ${color("background")};
 
   &:not(:last-child) {
-    border-bottom: 1px dotted ${color("draculaSelection")};
+    border-bottom: 1px dotted ${color("selection")};
   }
 `
 const SettingControl = styled.div`

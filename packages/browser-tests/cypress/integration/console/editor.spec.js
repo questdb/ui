@@ -37,6 +37,7 @@ describe("appendQuery", () => {
     const expected = `${queries[0]}\n`;
     cy.getEditor().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
+    cy.matchImageSnapshot(); // screenshot diff
   });
 
   it("should append and select second query", () => {
@@ -103,6 +104,7 @@ describe("appendQuery", () => {
     const expected = `--a\n--b\n\n${queries[0]}\n`;
     cy.getEditor().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
+    cy.matchImageSnapshot();
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
@@ -162,6 +164,23 @@ describe("&query URL param", () => {
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditor().should("have.value", query);
   });
+
+  it("should append query and scroll to it", () => {
+    cy.visit(baseUrl);
+
+    cy.typeQuery("--\n".repeat(20)); // take space so that query is not visible later
+    const query = "select x from long_sequence(1);";
+    cy.typeQuery(query).clickRun(); // save by running
+
+    const appendedQuery = "-- hello world";
+    cy.visit(
+      `${baseUrl}?query=${encodeURIComponent(appendedQuery)}&executeQuery=true`
+    );
+    cy.getVisibleLines()
+      .invoke("text")
+      .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
+    cy.clearEditor();
+  });
 });
 
 describe("autocomplete", () => {
@@ -194,6 +213,7 @@ describe("autocomplete", () => {
       .getAutocomplete()
       .should("contain", "my_secrets");
 
+    cy.matchImageSnapshot();
     cy.clearEditor().typeQuery('drop table "my_secrets"').runLine();
   });
 
@@ -232,6 +252,7 @@ describe("errors", () => {
     const query = `create table test (\ncol symbol index CAPACITY (200000)`;
     cy.typeQuery(query).runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
+    cy.matchImageSnapshot();
   });
 
   it("should mark date position as error", () => {

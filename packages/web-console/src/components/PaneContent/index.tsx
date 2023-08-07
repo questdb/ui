@@ -36,6 +36,6 @@ export const PaneContent = styled.div<Props>`
   display: flex;
   flex-direction: column;
   flex: 1;
-  background: ${color("draculaBackground")};
+  background: ${color("backgroundLighter")};
   overflow: auto;
 `

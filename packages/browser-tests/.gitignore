@@ -1,3 +1,7 @@
 node_modules
 cypress/videos
 cypress/screenshots
+
+# folder is used to store screenshots and diffs created by `cy.matchImageSnapshot()`
+# ignored now until the snapshots will be stored somewhere else
+cypress/snapshots

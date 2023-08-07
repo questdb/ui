@@ -1,3 +1,12 @@
+const {
+  addMatchImageSnapshotCommand,
+} = require("@simonsmith/cypress-image-snapshot/command");
+
+addMatchImageSnapshotCommand({
+  failureThreshold: 0.3,
+  blackout: [".notifications", 'button[class*="BuildVersion"'],
+});
+
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
 beforeEach(() => {
@@ -105,5 +114,7 @@ Cypress.Commands.add("F9", () => {
 });
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
+
+Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"));
 
 Cypress.Commands.add("getNotifications", () => cy.get(".notifications"));

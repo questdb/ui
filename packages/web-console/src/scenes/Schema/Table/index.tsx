@@ -87,7 +87,7 @@ const Columns = styled.div`
 
 const Loader = styled(Loader4)`
   margin-left: 1rem;
-  color: ${color("draculaOrange")};
+  color: ${color("orange")};
   ${spinAnimation};
 `
 

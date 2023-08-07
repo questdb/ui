@@ -54,13 +54,6 @@ const _console = (
       }
     }
 
-    case ConsoleAT.SET_MODAL_ID: {
-      return {
-        ...state,
-        modalId: action.payload,
-      }
-    }
-
     case ConsoleAT.TOGGLE_SIDE_MENU: {
       return {
         ...state,

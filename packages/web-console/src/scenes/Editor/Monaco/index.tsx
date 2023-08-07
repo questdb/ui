@@ -17,6 +17,7 @@ import {
   clearModelMarkers,
   getQueryFromCursor,
   findMatches,
+  AppendQueryOptions,
 } from "./utils"
 import type { Request } from "./utils"
 import { PaneContent, Text } from "../../../components"
@@ -52,16 +53,16 @@ const Content = styled(PaneContent)`
   overflow: hidden;
 
   .monaco-scrollable-element > .scrollbar > .slider {
-    background: ${color("draculaSelection")};
+    background: ${color("selection")};
   }
 
   .cursorQueryDecoration {
     width: 0.2rem !important;
-    background: ${color("draculaGreen")};
+    background: ${color("green")};
     margin-left: 1.2rem;
 
     &.hasError {
-      background: ${color("draculaRed")};
+      background: ${color("red")};
     }
   }
 
@@ -74,7 +75,7 @@ const Content = styled(PaneContent)`
       content: "◃";
       font-size: 2.5rem;
       transform: rotate(180deg) scaleX(0.8);
-      color: ${color("draculaGreen")};
+      color: ${color("green")};
     }
   }
 
@@ -85,7 +86,7 @@ const Content = styled(PaneContent)`
     width: 0.75rem !important;
     height: 0.75rem !important;
     border-radius: 50%;
-    background: ${color("draculaRed")};
+    background: ${color("red")};
   }
 `
 
@@ -262,11 +263,14 @@ const MonacoEditor = () => {
         insertTextAtCursor(column)
       })
 
-      window.bus.on(BusEvent.MSG_QUERY_FIND_N_EXEC, (_event, query: string) => {
-        const text = `${query};`
-        appendQuery(editor, text)
-        toggleRunning()
-      })
+      window.bus.on(
+        BusEvent.MSG_QUERY_FIND_N_EXEC,
+        (_event, payload: { query: string; options?: AppendQueryOptions }) => {
+          const text = `${payload.query};`
+          appendQuery(editor, text, payload.options)
+          toggleRunning()
+        },
+      )
 
       window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
         // TODO: Display a query marker on correct line
@@ -409,11 +413,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   content: (
-                    <Text
-                      color="draculaForeground"
-                      ellipsis
-                      title={result.query}
-                    >
+                    <Text color="foreground" ellipsis title={result.query}>
                       {result.query}
                     </Text>
                   ),
@@ -431,11 +431,7 @@ const MonacoEditor = () => {
                     <QueryResult {...result.timings} rowCount={result.count} />
                   ),
                   sideContent: (
-                    <Text
-                      color="draculaForeground"
-                      ellipsis
-                      title={result.query}
-                    >
+                    <Text color="foreground" ellipsis title={result.query}>
                       {result.query}
                     </Text>
                   ),
@@ -450,13 +446,9 @@ const MonacoEditor = () => {
             dispatch(actions.query.stopRunning())
             dispatch(
               actions.query.addNotification({
-                content: <Text color="draculaRed">{error.error}</Text>,
+                content: <Text color="red">{error.error}</Text>,
                 sideContent: (
-                  <Text
-                    color="draculaForeground"
-                    ellipsis
-                    title={request.query}
-                  >
+                  <Text color="foreground" ellipsis title={request.query}>
                     {request.query}
                   </Text>
                 ),

@@ -104,7 +104,7 @@ const QueryPickerButton = styled(SecondaryButton)<{
 `
 
 const MenuIcon = styled(_MenuIcon)`
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
 `
 
 const ShowSchemaButton = styled(SecondaryButton)`
@@ -112,7 +112,7 @@ const ShowSchemaButton = styled(SecondaryButton)`
 `
 
 const CloseIcon = styled(_CloseIcon)`
-  color: ${color("draculaForeground")};
+  color: ${color("foreground")};
 `
 
 const SideMenuMenuButton = styled(TransparentButton)`
@@ -149,8 +149,8 @@ const MenuLink: React.FunctionComponent<{
   const Trigger = (
     <MenuButton>
       <Link
-        color="draculaForeground"
-        hoverColor="draculaForeground"
+        color="foreground"
+        hoverColor="foreground"
         href={href}
         rel="noreferrer"
         target="_blank"

@@ -32,8 +32,8 @@ import { color } from "../../utils"
 
 const StyledContextMenu = styled(ReactContextMenu)`
   z-index: 100;
-  background: ${color("draculaBackgroundDarker")};
-  border: 1px solid ${color("draculaSelection")};
+  background: ${color("backgroundDarker")};
+  border: 1px solid ${color("selection")};
   border-radius: 4px;
 `
 

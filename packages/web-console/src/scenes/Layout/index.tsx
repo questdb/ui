@@ -31,9 +31,9 @@ import { BusEvent } from "../../consts"
 
 import Editor from "../Editor"
 import Footer from "../Footer"
-import Modal from "../Modal"
 import Notifications from "../Notifications"
 import Result from "../Result"
+import Import from "../Import"
 import Settings from "../Settings"
 import SideMenu from "../SideMenu"
 import Schema from "../Schema"
@@ -54,11 +54,26 @@ const Top = styled.div`
   overflow: hidden;
 `
 
+const Page = styled.div`
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  font-size: 1.4rem;
+  background: #21222c;
+
+  ::selection {
+    background: #44475a;
+  }
+`
+
 const Layout = () => {
   const consoleNode = document.getElementById("console")
+  const importNode = document.getElementById("import")
   const settingsNode = document.getElementById("settings")
   const sideMenuNode = document.getElementById("sideMenu")
-  const modalNode = document.getElementById("modal")
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
@@ -113,9 +128,11 @@ const Layout = () => {
           </Console>,
           consoleNode,
         )}
-      {sideMenuNode && createPortal(<SideMenu />, sideMenuNode)}
-      {modalNode && createPortal(<Modal />, modalNode)}
-      {settingsNode && createPortal(<Settings />, settingsNode)}
+      <Page>
+        {sideMenuNode && createPortal(<SideMenu />, sideMenuNode)}
+        {importNode && createPortal(<Import />, importNode)}
+        {settingsNode && createPortal(<Settings />, settingsNode)}
+      </Page>
     </QuestProvider>
   )
 }

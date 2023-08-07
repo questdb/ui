@@ -31,7 +31,7 @@ import { CloseOutline } from "styled-icons/evaicons-outline"
 import { color } from "../../../../utils"
 
 const CloseOutlineIcon = styled(CloseOutline)`
-  color: ${color("draculaRed")};
+  color: ${color("red")};
   flex-shrink: 0;
 `
 
