@@ -61,6 +61,7 @@
     "styled-components": "5.1.1",
     "styled-icons": "10.47.0",
     "throttle-debounce": "2.2.1",
+    "ts-pattern": "^5.0.5",
     "uplot": "^1.6.24",
     "uplot-react": "^1.1.4"
   },

@@ -24,7 +24,7 @@
 import { BusEvent } from "../consts"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
 
-type ColumnDefinition = Readonly<{ name: string; type: string }>
+export type ColumnDefinition = Readonly<{ name: string; type: string }>
 
 type Value = string | number | boolean
 type RawData = Record<string, Value>
@@ -44,9 +44,9 @@ export type Timings = {
 
 export type Explain = { jitCompiled: boolean }
 
-type DatasetType = Array<boolean | string | number>
+export type DatasetType = Array<boolean | string | number>
 
-type RawDqlResult = {
+export type RawDqlResult = {
   columns: ColumnDefinition[]
   count: number
   dataset: DatasetType[]

@@ -1,26 +1,74 @@
-import React from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { GraphSettings } from "./graph-settings"
 import { Graph } from "./graph"
+import { match, P } from "ts-pattern"
+import * as QuestDB from "../../../utils/questdb"
+import { Box, Button, Heading } from "@questdb/react-components"
+import { Book } from "styled-icons/remix-line"
+import type { ChartConfig } from "./types"
 
-const Root = styled.div`
-  display: flex;
+const Root = styled(Box).attrs({ justifyContent: "center" })`
   width: 100%;
   height: 100%;
   padding: 2rem;
 `
 
+const GraphWrapper = styled(Box).attrs({ gap: "2rem" })``
+
+const ZeroState = () => (
+  <Box gap="2rem" flexDirection="column" align="center">
+    <img
+      alt="Database icon"
+      width="60"
+      height="80"
+      src="/assets/database.svg"
+    />
+    <Heading level={3}>Query data with SELECT to use the chart</Heading>
+    <a
+      href="https://questdb.io/docs/reference/sql/select/"
+      target="_blank"
+      rel="noopener noreferre"
+    >
+      <Button skin="secondary" prefixIcon={<Book size="18" />}>
+        Explore docs
+      </Button>
+    </a>
+  </Box>
+)
+
 export const Chart = () => {
   const result = useSelector(selectors.query.getResult)
+  const [chartConfig, setChartConfig] = useState<ChartConfig>({
+    type: "line",
+    series: [],
+    label: "",
+  })
+  const queryType = result?.type as QuestDB.Type
 
   console.log(result)
 
   return (
     <Root>
-      <GraphSettings />
-      <Graph />
+      {match(queryType)
+        .with(QuestDB.Type.DQL, () => (
+          <GraphWrapper>
+            <GraphSettings
+              columns={result?.type === QuestDB.Type.DQL ? result.columns : []}
+              chartConfig={chartConfig}
+              onChartConfigChange={setChartConfig}
+            />
+            <Graph
+              chartConfig={chartConfig}
+              dataset={result?.type === QuestDB.Type.DQL ? result.dataset : []}
+            />
+          </GraphWrapper>
+        ))
+        .with(P.not([QuestDB.Type.DQL]), () => <ZeroState />)
+        .with(undefined, () => <ZeroState />)
+        .exhaustive()}
     </Root>
   )
 }

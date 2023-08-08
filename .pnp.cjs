@@ -6612,6 +6612,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["stylelint-processor-styled-components", "npm:1.10.0"],\
             ["svg-react-loader", "npm:0.4.6"],\
             ["throttle-debounce", "npm:2.2.1"],\
+            ["ts-pattern", "npm:5.0.5"],\
             ["typescript", "patch:typescript@npm%3A4.4.4#~builtin<compat/typescript>::version=4.4.4&hash=7ad353"],\
             ["uplot", "npm:1.6.24"],\
             ["uplot-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.4"],\
@@ -28173,6 +28174,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             "@types/swc__wasm",\
             "@types/typescript",\
             "typescript"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["ts-pattern", [\
+        ["npm:5.0.5", {\
+          "packageLocation": "./.yarn/cache/ts-pattern-npm-5.0.5-0b6de45345-9eef9fe24e.zip/node_modules/ts-pattern/",\
+          "packageDependencies": [\
+            ["ts-pattern", "npm:5.0.5"]\
           ],\
           "linkType": "HARD"\
         }]\

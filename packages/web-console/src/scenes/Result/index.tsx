@@ -28,7 +28,6 @@ import { Download2, Grid, PieChart, Refresh } from "styled-icons/remix-line"
 import { Reset } from "styled-icons/boxicons-regular"
 import { HandPointLeft } from "styled-icons/fa-regular"
 import { TableFreezeColumn } from "styled-icons/fluentui-system-filled"
-
 import { grid } from "../../js/console/grid"
 
 import { Chart } from "./Chart/chart"
@@ -48,6 +47,11 @@ import { selectors } from "../../store"
 import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { BusEvent } from "../../consts"
+
+const Tab = styled.div`
+  width: 100%;
+  height: 100%;
+`
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;
@@ -195,18 +199,18 @@ const Result = () => {
   }, [result])
 
   useEffect(() => {
-    const grid = document.getElementById("grid")
-    const chart = document.getElementById("chart")
+    const grid = document.getElementById("grid-tab")
+    const chart = document.getElementById("chart-tab")
 
     if (!grid || !chart) {
       return
     }
 
     if (selected === "grid") {
+      grid.style.display = "flex"
       chart.style.display = "none"
-      gridRef.current.show()
     } else {
-      gridRef.current.hide()
+      grid.style.display = "none"
       chart.style.display = "flex"
     }
   }, [selected])
@@ -316,11 +320,13 @@ const Result = () => {
       </Menu>
 
       <Content>
-        <div id="grid" />
+        <Tab id="grid-tab">
+          <div id="grid" />
+        </Tab>
 
-        <div id="chart">
+        <Tab id="chart-tab">
           <Chart />
-        </div>
+        </Tab>
       </Content>
     </Wrapper>
   )
