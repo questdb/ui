@@ -22,6 +22,7 @@
  *
  ******************************************************************************/
 import { BusEvent } from "../consts"
+import { TelemetryConfigShape } from "./../store/Telemetry/types"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -445,6 +446,38 @@ export class Client {
         `https://api.github.com/repos/questdb/questdb/releases/latest`,
       )
       return (await response.json()) as Release
+    } catch (error) {
+      // eslint-disable-next-line prefer-promise-reject-errors
+      throw error
+    }
+  }
+
+  async sendFeedback({
+    email,
+    message,
+    telemetryConfig,
+  }: {
+    email: string
+    message: string
+    telemetryConfig?: TelemetryConfigShape
+  }) {
+    try {
+      const response: Response = await fetch(
+        `https://cloud.questdb.com/api/feedback`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            message,
+            telemetryConfig,
+            category: "web-console",
+          }),
+        },
+      )
+      return (await response.json()) as { status: string }
     } catch (error) {
       // eslint-disable-next-line prefer-promise-reject-errors
       throw error

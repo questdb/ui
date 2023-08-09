@@ -55,6 +55,10 @@ const ReleaseNotesButton = styled(SecondaryButton)<{ enterprise?: boolean }>`
   gap: 0.5rem;
 `
 
+const ReleaseLink = styled.a`
+  text-decoration: none;
+`
+
 const UpgradeIcon = styled(ArrowUpCircle)`
   color: ${({ theme }) => theme.color.green};
 `
@@ -106,7 +110,7 @@ const BuildVersion = () => {
   }, [])
 
   useEffect(() => {
-    if (buildVersion) {
+    if (buildVersion.version && buildVersion.kind.includes("open-source")) {
       void quest.getLatestRelease().then((release: Release) => {
         if (release.name) {
           setNewestRelease(release)
@@ -137,7 +141,7 @@ const BuildVersion = () => {
 
   return (
     <Wrapper>
-      <a
+      <ReleaseLink
         href={enterpriseVersion ? "https://questdb.io/enterprise" : releaseUrl}
         rel="noopener noreferrer"
         target="_blank"
@@ -161,7 +165,7 @@ const BuildVersion = () => {
             </>
           )}
         </ReleaseNotesButton>
-      </a>
+      </ReleaseLink>
     </Wrapper>
   )
 }
