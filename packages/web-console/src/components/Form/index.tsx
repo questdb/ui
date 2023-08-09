@@ -16,6 +16,7 @@ import { FormGroup } from "./FormGroup"
 import { FormSubmit } from "./FormSubmit"
 import { FormCancel } from "./FormCancel"
 import { FormTextArea } from "./FormTextArea"
+import { FormMultiSelect } from "./FormMultiSelect"
 
 type DirtyChangeObserver<T = Record<string, any>> = (
   isDirty: boolean,
@@ -108,3 +109,4 @@ Form.Group = FormGroup
 Form.Submit = FormSubmit
 Form.Cancel = FormCancel
 Form.TextArea = FormTextArea
+Form.MultiSelect = FormMultiSelect
