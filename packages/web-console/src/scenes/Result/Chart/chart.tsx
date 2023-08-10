@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
@@ -48,7 +48,14 @@ export const Chart = () => {
   })
   const queryType = result?.type as QuestDB.Type
 
-  console.log(result)
+  useEffect(() => {
+    if (result?.type === QuestDB.Type.DQL) {
+      setChartConfig({
+        ...chartConfig,
+        label: result.columns[0].name,
+      })
+    }
+  }, [result])
 
   return (
     <Root>
@@ -61,6 +68,7 @@ export const Chart = () => {
               onChartConfigChange={setChartConfig}
             />
             <Graph
+              columns={result?.type === QuestDB.Type.DQL ? result.columns : []}
               chartConfig={chartConfig}
               dataset={result?.type === QuestDB.Type.DQL ? result.dataset : []}
             />
