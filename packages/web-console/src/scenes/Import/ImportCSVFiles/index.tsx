@@ -129,7 +129,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             skipLev: false,
             delimiter: "",
             atomicity: "skipCol",
-            durable: false,
             maxUncommitedRows: MAX_UNCOMMITTED_ROWS,
           },
           isUploading: false,
