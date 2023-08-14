@@ -46,7 +46,6 @@ export const Chart = () => {
     series: [],
     label: "",
   })
-  const queryType = result?.type as QuestDB.Type
 
   useEffect(() => {
     if (result?.type === QuestDB.Type.DQL) {
@@ -59,24 +58,22 @@ export const Chart = () => {
 
   return (
     <Root>
-      {match(queryType)
-        .with(QuestDB.Type.DQL, () => (
-          <GraphWrapper>
-            <GraphSettings
-              columns={result?.type === QuestDB.Type.DQL ? result.columns : []}
-              chartConfig={chartConfig}
-              onChartConfigChange={setChartConfig}
-            />
-            <Graph
-              columns={result?.type === QuestDB.Type.DQL ? result.columns : []}
-              chartConfig={chartConfig}
-              dataset={result?.type === QuestDB.Type.DQL ? result.dataset : []}
-            />
-          </GraphWrapper>
-        ))
-        .with(P.not([QuestDB.Type.DQL]), () => <ZeroState />)
-        .with(undefined, () => <ZeroState />)
-        .exhaustive()}
+      {result && result?.type === QuestDB.Type.DQL ? (
+        <GraphWrapper>
+          <GraphSettings
+            columns={result.columns}
+            chartConfig={chartConfig}
+            onChartConfigChange={setChartConfig}
+          />
+          <Graph
+            columns={result.columns}
+            chartConfig={chartConfig}
+            dataset={result.dataset}
+          />
+        </GraphWrapper>
+      ) : (
+        <ZeroState />
+      )}
     </Root>
   )
 }

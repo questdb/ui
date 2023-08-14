@@ -2,14 +2,18 @@ import { useContext } from "react"
 import { ThemeContext } from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { ChartConfig } from "./types"
-import { ColumnDefinition } from "utils"
+import { ColumnDefinition } from "../../../utils/questdb"
+import uPlot from "uplot"
 
 type Props = {
-  columns: ColumnDefinition[]
+  columns: QuestDB.ColumnDefinition[]
   chartConfig: ChartConfig
 }
 
-export const useGraphOptions = ({ columns, chartConfig }: Props) => {
+export const useGraphOptions = ({
+  columns,
+  chartConfig,
+}: Props): uPlot.Options => {
   const themeContext = useContext(ThemeContext)
 
   const axisConfig = {

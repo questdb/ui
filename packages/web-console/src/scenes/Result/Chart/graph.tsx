@@ -6,7 +6,7 @@ import * as QuestDB from "../../../utils/questdb"
 import "uplot/dist/uPlot.min.css"
 import type { ChartConfig } from "./types"
 import { useGraphOptions } from "./useGraphOptions"
-import { ColumnDefinition } from "utils"
+import { ColumnDefinition } from "../../../utils/questdb"
 
 const Root = styled.div`
   position: relative;

@@ -1,9 +1,9 @@
 import React from "react"
 import styled from "styled-components"
-import { ColumnDefinition } from "utils"
 import type { ChartConfig } from "./types"
 import { Form } from "../../../components/Form"
 import { BarChartBox } from "styled-icons/remix-line"
+import { ColumnDefinition } from "../../../utils/questdb"
 
 type Props = {
   columns: ColumnDefinition[]
