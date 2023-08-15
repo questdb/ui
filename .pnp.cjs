@@ -6508,10 +6508,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@questdb/sql-grammar", [\
-        ["npm:1.0.11", {\
-          "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.11-510e52055b-4cc1ed9fa4.zip/node_modules/@questdb/sql-grammar/",\
+        ["npm:1.0.13", {\
+          "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.13-14258a9390-7edd9a7ef1.zip/node_modules/@questdb/sql-grammar/",\
           "packageDependencies": [\
-            ["@questdb/sql-grammar", "npm:1.0.11"]\
+            ["@questdb/sql-grammar", "npm:1.0.13"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -6530,7 +6530,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.5"],\
             ["@popperjs/core", "npm:2.4.2"],\
             ["@questdb/react-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#workspace:packages/react-components"],\
-            ["@questdb/sql-grammar", "npm:1.0.11"],\
+            ["@questdb/sql-grammar", "npm:1.0.13"],\
             ["@radix-ui/react-dialog", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.0.3"],\
             ["@styled-icons/styled-icon", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.7.0"],\
             ["@types/jquery", "npm:3.5.1"],\
