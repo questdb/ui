@@ -3852,10 +3852,10 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@questdb/sql-grammar@npm:1.0.11":
-  version: 1.0.11
-  resolution: "@questdb/sql-grammar@npm:1.0.11"
-  checksum: 4cc1ed9fa4bfc09864c0d4372352f0e9ced5569d27fb0362da55cbaeda29dc7a4ae4a40fb169e664579133b703f886f8f694f732b964e02ec57acfa7da2d9f55
+"@questdb/sql-grammar@npm:1.0.13":
+  version: 1.0.13
+  resolution: "@questdb/sql-grammar@npm:1.0.13"
+  checksum: 7edd9a7ef16ca83a41ffc35ab684a67add9368cb2a43a7844f03ca787373867503f0f59be5cf906e9233e4907ea1e3d1945d3435a2e6484d177b29e8a7fec78d
   languageName: node
   linkType: hard
 
@@ -3872,7 +3872,7 @@ __metadata:
     "@monaco-editor/react": ^4.3.1
     "@popperjs/core": 2.4.2
     "@questdb/react-components": "workspace:^"
-    "@questdb/sql-grammar": 1.0.11
+    "@questdb/sql-grammar": 1.0.13
     "@radix-ui/react-dialog": ^1.0.3
     "@styled-icons/styled-icon": ^10.7.0
     "@types/jquery": 3.5.1
