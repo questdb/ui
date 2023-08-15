@@ -145,7 +145,6 @@ export type UploadModeSettings = {
   skipLev: boolean
   delimiter: string
   atomicity: string
-  durable: boolean
   maxUncommitedRows: number
 }
 

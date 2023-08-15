@@ -84,7 +84,6 @@ export const UploadSettingsDialog = ({
     forceHeader,
     skipLev,
     atomicity,
-    durable,
     maxUncommitedRows,
   } = file.settings
 
@@ -94,7 +93,6 @@ export const UploadSettingsDialog = ({
     forceHeader,
     skipLev,
     atomicity,
-    durable,
     maxUncommitedRows,
   }
 
@@ -189,19 +187,6 @@ export const UploadSettingsDialog = ({
         </>
       ),
       defaultValue: settings.skipLev,
-    },
-    {
-      type: "switch",
-      name: "durable",
-      label: "Durable",
-      description: (
-        <>
-          When set to <strong>true</strong>, import will be resilient against OS
-          errors or power losses by forcing the data to be fully persisted
-          before sending a response back to the user.
-        </>
-      ),
-      defaultValue: settings.durable,
     },
   ]
 
