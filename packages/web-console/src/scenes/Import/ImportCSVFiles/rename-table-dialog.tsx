@@ -7,7 +7,7 @@ import { Text } from "../../../components/Text"
 import { Form } from "../../../components/Form"
 import { Box } from "../../../components/Box"
 import Joi from "joi"
-import { isValidTableName } from "./isValidTableName"
+import { isValidTableName } from "../../../components/TableSchemaDialog/isValidTableName"
 import styled from "styled-components"
 import { shortenText } from "../../../utils"
 

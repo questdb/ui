@@ -1,3 +1,5 @@
+import { Column } from "./../../../../utils/questdb"
+import { formatTableSchemaQuery } from "./../../../../utils/formatTableSchemaQuery"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -23,8 +25,6 @@
  ******************************************************************************/
 
 import * as QuestDB from "../../../../utils/questdb"
-import { trim } from "ramda"
-import { formatSql } from "../../../../utils"
 
 export const formatTableSchemaQueryResult = (
   name: string,
@@ -33,62 +33,25 @@ export const formatTableSchemaQueryResult = (
   walEnabled: boolean,
 ): string => {
   if (result.type === QuestDB.Type.DQL) {
-    let designatedName = null
-    let query = `CREATE TABLE '${name}' (`
-
-    for (let i = 0; i < result.count; i++) {
-      const [
-        name,
-        typeDef,
-        indexed,
-        indexBlockCapacity,
-        symbolCached,
-        symbolCapacity,
-        designated,
-      ] = result.dataset[i]
-
-      query += `${name} ${typeDef} `
-
-      if (typeDef === "SYMBOL") {
-        query += symbolCapacity ? `capacity ${symbolCapacity} ` : ""
-        if (symbolCached) {
-          query += "CACHE "
-        }
-      }
-
-      if (indexed) {
-        query += "index "
-        if (indexBlockCapacity) {
-          query += `capacity ${indexBlockCapacity} `
-        }
-      }
-
-      if (designated) {
-        designatedName = name
-      }
-
-      query = trim(query)
-
-      if (i !== result.count - 1) {
-        query += ", "
-      }
-    }
-
-    query += ")"
-
-    if (designatedName) {
-      query += ` timestamp (${designatedName})`
-    }
-
-    if (partitionBy !== "NONE") {
-      query += ` PARTITION BY ${partitionBy}`
-    }
-
-    if (walEnabled) {
-      query += " WAL"
-    }
-
-    return `${formatSql(query)};`
+    const findTimestampRow = result.dataset.find((row) => row[6] === true)
+    return formatTableSchemaQuery({
+      name,
+      partitionBy,
+      timestamp: findTimestampRow ? (findTimestampRow[0] as string) : "",
+      walEnabled,
+      schemaColumns: result.dataset.map(
+        (row) =>
+          ({
+            column: row[0],
+            type: row[1],
+            indexed: row[2],
+            indexBlockCapacity: row[3],
+            symbolCached: row[4],
+            symbolCapacity: row[5],
+            designated: row[6],
+          } as Column),
+      ),
+    })
   } else {
     throw new Error("Could not format table schema")
   }

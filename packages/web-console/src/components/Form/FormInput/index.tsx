@@ -13,9 +13,18 @@ export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   autoComplete?: string
 }
 
-const Wrapper = styled.div`
+const Wrapper = styled.div<{ autoComplete: FormInputProps["autoComplete"] }>`
   display: flex;
   width: 100%;
+  ${(props) =>
+    props.autoComplete === "off" &&
+    `
+    // Hide the LastPass+NordPass icons
+    [data-lastpass-icon-root],
+    span[data-np-uid] {
+      display: none !important;
+    }
+  `}
 `
 
 const Input = styled(UnstyledInput)<FormInputProps>`
@@ -59,7 +68,7 @@ export const FormInput = ({
   }, [])
 
   return (
-    <Wrapper>
+    <Wrapper autoComplete={autoComplete}>
       <Input
         {...register(name, {
           valueAsNumber: type === "number",
