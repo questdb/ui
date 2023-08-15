@@ -1,16 +1,15 @@
-import React, { useCallback, useEffect } from "react"
+import React, { useCallback } from "react"
 import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
-import { Box } from "../../../../components/Box"
-import { Form } from "../../../../components/Form"
-import { Text } from "../../../../components"
-import { Drawer } from "../../../../components/Drawer"
-import { VirtualList } from "../../../../components/VirtualList"
+import { Box } from "../Box"
+import { Form } from "../Form"
+import { Text } from ".."
+import { Drawer } from "../Drawer"
+import { VirtualList } from "../VirtualList"
 import { Button } from "@questdb/react-components"
-import { AddCircle, Alert, Information } from "styled-icons/remix-line"
-import { SchemaColumn } from "../types"
+import { AddCircle, Information } from "styled-icons/remix-line"
+import { Action, SchemaColumn } from "./types"
 import { Column } from "./column"
-import { ProcessedFile } from "../types"
 
 const Disclaimer = styled(Box).attrs({ align: "center", gap: "1.5rem" })<{
   isEditLocked: boolean
@@ -33,6 +32,10 @@ const AddBox = styled(Box).attrs({
   margin: auto;
 `
 
+const Error = styled(Drawer.GroupItem).attrs({ direction: "column" })`
+  align-items: center;
+`
+
 const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   <Drawer.GroupItem direction="column">
     <AddBox>
@@ -48,8 +51,14 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
   </Drawer.GroupItem>
 )
 
-export const Columns = ({ file }: { file: ProcessedFile }) => {
-  const { getValues, setValue, watch } = useFormContext()
+export const Columns = ({
+  action,
+  isEditLocked,
+}: {
+  action: Action
+  isEditLocked: boolean
+}) => {
+  const { formState, getValues, setValue, watch } = useFormContext()
   const { append } = useFieldArray({
     name: "schemaColumns",
   })
@@ -57,12 +66,10 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
   const watchTimestamp = watch("timestamp")
   const watchSchemaColumns = getValues()["schemaColumns"]
 
-  const isEditLocked = file.exists && file.table_name === file.fileObject.name
-
   const addColumn = () => {
     append({
       name: "",
-      type: "",
+      type: action === "import" ? "" : "STRING",
       pattern: "",
       precision: "",
     })
@@ -75,6 +82,7 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
       return (
         <>
           <Column
+            action={action}
             column={column}
             disabled={isEditLocked}
             index={index}
@@ -105,9 +113,11 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
     ],
   )
 
+  const errors = formState.errors["schemaColumns"]
+
   return (
     <>
-      {!isEditLocked && (
+      {action === "import" && !isEditLocked && (
         <Disclaimer isEditLocked={false}>
           <Information size="20px" />
           <Text color="foreground">
@@ -117,11 +127,18 @@ export const Columns = ({ file }: { file: ProcessedFile }) => {
           </Text>
         </Disclaimer>
       )}
+      {errors &&
+        (Array.isArray(errors) ? errors : [errors]).map((error: any, index) => (
+          <Error key={index}>
+            <Text color="red">{error.message}</Text>
+          </Error>
+        ))}
       <SchemaRoot>
         {watchSchemaColumns.length > 0 ? (
           <VirtualList
             itemContent={listItemContent}
             totalCount={watchSchemaColumns.length}
+            followOutput={true}
           />
         ) : (
           !isEditLocked && <AddColumn onAdd={addColumn} />

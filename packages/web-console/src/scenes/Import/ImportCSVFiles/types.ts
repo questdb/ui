@@ -1,11 +1,5 @@
 import { UploadResult, UploadModeSettings } from "utils"
-
-export type SchemaColumn = {
-  name: string
-  type: string
-  pattern: string | undefined
-  precision: string | undefined
-}
+import { SchemaColumn } from "../../../components/TableSchemaDialog/types"
 
 export type ProcessedFile = {
   fileObject: File

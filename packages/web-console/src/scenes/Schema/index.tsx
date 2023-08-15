@@ -40,6 +40,7 @@ import {
   Loader3,
   Refresh,
   ArrowLeftCircle,
+  AddCircle,
 } from "styled-icons/remix-line"
 
 import {
@@ -56,12 +57,16 @@ import {
 import { actions, selectors } from "../../store"
 import { color, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { BusEvent } from "../../consts"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { Box } from "../../components/Box"
+import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
+import { SchemaFormValues } from "components/TableSchemaDialog/types"
+import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
+import { useEditor } from "../../providers"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -127,9 +132,13 @@ const Schema = ({
   const [opened, setOpened] = useState<string>()
   const [refresh, setRefresh] = useState(Date.now())
   const [isScrolling, setIsScrolling] = useState(false)
+  const [addTableDialogOpen, setAddTableDialogOpen] = useState<
+    string | undefined
+  >(undefined)
   const { readOnly } = useSelector(selectors.console.getConfig)
   const { updateSettings } = useLocalStorage()
   const dispatch = useDispatch()
+  const { appendQuery } = useEditor()
 
   const handleChange = useCallback((name: string) => {
     setOpened(name)
@@ -195,6 +204,22 @@ const Schema = ({
     updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, 0)
   }, [])
 
+  const handleAddTableSchema = (values: SchemaFormValues) => {
+    const { name, partitionBy, timestamp, schemaColumns, walEnabled } = values
+    const tableSchemaQuery = formatTableSchemaQuery({
+      name,
+      partitionBy,
+      timestamp,
+      walEnabled: walEnabled === "true",
+      schemaColumns: schemaColumns.map((column) => ({
+        column: column.name,
+        type: column.type,
+      })),
+    })
+    appendQuery(tableSchemaQuery, { appendAt: "end" })
+    dispatch(actions.query.toggleRunning())
+  }
+
   useEffect(() => {
     void fetchTables()
 
@@ -227,18 +252,41 @@ const Schema = ({
         </Header>
 
         <div style={{ display: "flex" }}>
-          {readOnly === false && (
-            <PopperHover
-              delay={350}
-              placement="bottom"
-              trigger={
-                <SecondaryButton onClick={fetchTables}>
-                  <Refresh size="18px" />
-                </SecondaryButton>
-              }
-            >
-              <Tooltip>Refresh</Tooltip>
-            </PopperHover>
+          {readOnly === false && tables && (
+            <Box align="center" gap="1rem">
+              <TableSchemaDialog
+                action="add"
+                isEditLocked={false}
+                hasWalSetting={true}
+                walEnabled={false}
+                name=""
+                partitionBy="NONE"
+                schema={[]}
+                tables={tables}
+                timestamp=""
+                onOpenChange={(open) => setAddTableDialogOpen(open)}
+                open={addTableDialogOpen !== undefined}
+                onSchemaChange={handleAddTableSchema}
+                trigger={
+                  <SecondaryButton onClick={() => setAddTableDialogOpen("add")}>
+                    <AddCircle size="18px" />
+                    <span>Create</span>
+                  </SecondaryButton>
+                }
+                ctaText="Create"
+              />
+              <PopperHover
+                delay={350}
+                placement="bottom"
+                trigger={
+                  <SecondaryButton onClick={fetchTables}>
+                    <Refresh size="18px" />
+                  </SecondaryButton>
+                }
+              >
+                <Tooltip>Refresh</Tooltip>
+              </PopperHover>
+            </Box>
           )}
           <PopperHover
             delay={350}
