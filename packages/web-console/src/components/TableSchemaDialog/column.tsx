@@ -20,12 +20,15 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "FLOAT", value: "FLOAT" },
   { label: "GEOHASH", value: "GEOHASH" },
   { label: "INT", value: "INT" },
+  { label: "IPV4", value: "IPV4" },
   { label: "LONG", value: "LONG" },
+  { label: "LONG256", value: "LONG256" },
   { label: "SHORT", value: "SHORT" },
   { label: "CHAR", value: "CHAR" },
   { label: "STRING", value: "STRING" },
   { label: "SYMBOL", value: "SYMBOL" },
   { label: "TIMESTAMP", value: "TIMESTAMP" },
+  { label: "UUID", value: "UUID" },
 ]
 
 const IndexNumber = styled(Text).attrs({ color: "foreground" })``
