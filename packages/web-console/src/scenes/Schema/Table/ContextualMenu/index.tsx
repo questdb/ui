@@ -33,24 +33,25 @@ type Props = {
   name: string
   partitionBy: string
   walEnabled: boolean
+  dedup: boolean
 }
 
-const ContextualMenu = ({ name, partitionBy, walEnabled }: Props) => {
+const ContextualMenu = ({ name, partitionBy, walEnabled, dedup }: Props) => {
   const { quest } = useContext(QuestContext)
   const [schema, setSchema] = React.useState<string | undefined>()
 
-  const handleShow = useCallback(() => {
-    void quest.queryRaw(`table_columns('${name}')`).then((result) => {
-      if (result.type === QuestDB.Type.DQL && result.count > 0) {
-        const formattedResult = formatTableSchemaQueryResult(
-          name,
-          partitionBy,
-          result,
-          walEnabled,
-        )
-        setSchema(formattedResult)
-      }
-    })
+  const handleShow = useCallback(async () => {
+    const response = await quest.showColumns(name)
+    if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
+      const formattedResult = formatTableSchemaQueryResult(
+        name,
+        partitionBy,
+        response.data,
+        walEnabled,
+        dedup,
+      )
+      setSchema(formattedResult)
+    }
   }, [quest, name, partitionBy])
 
   const handleCopySchemaToClipboard = useCallback(() => {

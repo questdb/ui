@@ -101,6 +101,7 @@ export type Table = {
   partitionBy: string
   designatedTimestamp: string
   walEnabled: boolean
+  dedup: boolean
 }
 
 export type Column = {
@@ -111,6 +112,7 @@ export type Column = {
   symbolCached: boolean
   symbolCapacity: number
   type: string
+  upsertKey: boolean
 }
 
 export type Options = {

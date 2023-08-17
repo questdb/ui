@@ -9,12 +9,14 @@ type Column = {
   symbolCached?: boolean
   symbolCapacity?: number
   type: string
+  upsertKey?: boolean
 }
 
 type Props = {
   name: string
   partitionBy: string
   timestamp: string
+  dedup: boolean
   walEnabled: boolean
   schemaColumns: Column[]
 }
@@ -24,6 +26,7 @@ export const formatTableSchemaQuery = ({
   partitionBy,
   timestamp,
   walEnabled,
+  dedup,
   schemaColumns,
 }: Props) => {
   let query = `CREATE TABLE '${name}' (`
@@ -69,6 +72,13 @@ export const formatTableSchemaQuery = ({
 
   if (partitionBy !== "NONE") {
     query += ` PARTITION BY ${partitionBy} ${walEnabled ? "WAL" : "BYPASS WAL"}`
+  }
+
+  if (dedup) {
+    query += ` DEDUP UPSERT KEYS(${schemaColumns
+      .filter((c) => c.upsertKey)
+      .map((c) => c.column)
+      .join(",")})`
   }
 
   return `${formatSql(query)};`

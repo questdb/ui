@@ -1,3 +1,4 @@
+import { pick } from "./../../../../utils/pick"
 import { Column } from "./../../../../utils/questdb"
 import { formatTableSchemaQuery } from "./../../../../utils/formatTableSchemaQuery"
 /*******************************************************************************
@@ -29,30 +30,28 @@ import * as QuestDB from "../../../../utils/questdb"
 export const formatTableSchemaQueryResult = (
   name: string,
   partitionBy: string,
-  result: QuestDB.QueryRawResult,
+  columns: QuestDB.Column[],
   walEnabled: boolean,
+  dedup: boolean,
 ): string => {
-  if (result.type === QuestDB.Type.DQL) {
-    const findTimestampRow = result.dataset.find((row) => row[6] === true)
-    return formatTableSchemaQuery({
-      name,
-      partitionBy,
-      timestamp: findTimestampRow ? (findTimestampRow[0] as string) : "",
-      walEnabled,
-      schemaColumns: result.dataset.map(
-        (row) =>
-          ({
-            column: row[0],
-            type: row[1],
-            indexed: row[2],
-            indexBlockCapacity: row[3],
-            symbolCached: row[4],
-            symbolCapacity: row[5],
-            designated: row[6],
-          } as Column),
-      ),
-    })
-  } else {
-    throw new Error("Could not format table schema")
-  }
+  const findTimestampColumn = columns.find((c) => c.designated)
+  return formatTableSchemaQuery({
+    name,
+    partitionBy,
+    timestamp: findTimestampColumn ? findTimestampColumn.column : "",
+    walEnabled,
+    dedup,
+    schemaColumns: columns.map((c) => {
+      return pick(c, [
+        "column",
+        "type",
+        "indexed",
+        "indexBlockCapacity",
+        "symbolCached",
+        "symbolCapacity",
+        "designated",
+        "upsertKey",
+      ]) as Column
+    }),
+  })
 }

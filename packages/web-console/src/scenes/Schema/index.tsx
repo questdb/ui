@@ -167,6 +167,7 @@ const Schema = ({
             partitionBy={table.partitionBy}
             refresh={refresh}
             walEnabled={table.walEnabled}
+            dedup={table.dedup}
           />
         )
       }
@@ -214,7 +215,9 @@ const Schema = ({
       schemaColumns: schemaColumns.map((column) => ({
         column: column.name,
         type: column.type,
+        upsertKey: column.upsertKey,
       })),
+      dedup: schemaColumns.find((c) => c.upsertKey) !== undefined,
     })
     appendQuery(tableSchemaQuery, { appendAt: "end" })
     dispatch(actions.query.toggleRunning())
