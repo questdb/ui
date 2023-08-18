@@ -154,6 +154,7 @@ export type SchemaColumn = {
   name: string
   type: string
   pattern?: string
+  upsertKey?: boolean
 }
 
 type UploadOptions = {

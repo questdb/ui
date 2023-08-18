@@ -54,9 +54,11 @@ const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
 export const Columns = ({
   action,
   isEditLocked,
+  walEnabled,
 }: {
   action: Action
   isEditLocked: boolean
+  walEnabled?: boolean
 }) => {
   const { formState, getValues, setValue, watch } = useFormContext()
   const { append } = useFieldArray({
@@ -72,6 +74,7 @@ export const Columns = ({
       type: action === "import" ? "" : "STRING",
       pattern: "",
       precision: "",
+      upsertKey: false,
     })
   }
 
@@ -98,6 +101,7 @@ export const Columns = ({
               setValue("timestamp", watchTimestamp === name ? "" : name)
             }}
             timestamp={watchTimestamp}
+            walEnabled={walEnabled}
           />
 
           {index === watchSchemaColumns.length - 1 && !isEditLocked && (

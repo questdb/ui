@@ -51,7 +51,7 @@ export const formatTableSchemaQueryResult = (
         "symbolCapacity",
         "designated",
         "upsertKey",
-      ]) as Column
+      ])
     }),
   })
 }

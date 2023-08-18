@@ -19,8 +19,13 @@ const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const FormWrapper = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
-  --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
+const FormWrapper = styled(Box).attrs({ gap: "0", flexDirection: "column" })<{
+  action: Action
+}>`
+  --columns: ${({ action }) =>
+    action === "add"
+      ? "auto 120px 40px"
+      : "auto 120px"}; /* magic numbers to fit input, type dropdown and remove button nicely */
   width: 100%;
   height: calc(100vh - 6.1rem);
 
@@ -198,7 +203,7 @@ export const Dialog = ({
       closeOnOverlayClick={false}
       closeOnEscape={false}
     >
-      <FormWrapper>
+      <FormWrapper action={action}>
         <Form<SchemaFormValues>
           name="table-schema"
           defaultValues={defaults}
@@ -313,7 +318,11 @@ export const Dialog = ({
                 <Text color="foreground">Columns</Text>
               </Drawer.GroupHeader>
 
-              <Columns action={action} isEditLocked={isEditLocked} />
+              <Columns
+                action={action}
+                isEditLocked={isEditLocked}
+                walEnabled={walEnabled}
+              />
             </Inputs>
 
             <Drawer.Actions>

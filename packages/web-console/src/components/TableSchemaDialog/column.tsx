@@ -10,9 +10,14 @@ import { SchemaColumn } from "utils"
 import { Controls } from "./controls"
 import { Action } from "./types"
 import { DocsLink } from "./docs-link"
+import { PopperHover } from "../PopperHover"
+import { Tooltip } from "../Tooltip"
+import { MergeIcon } from "../MergeIcon"
+import { useFormContext } from "react-hook-form"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
+  { label: "BINARY", value: "BINARY" },
   { label: "BOOLEAN", value: "BOOLEAN" },
   { label: "BYTE", value: "BYTE" },
   { label: "DOUBLE", value: "DOUBLE" },
@@ -27,6 +32,8 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "SYMBOL", value: "SYMBOL" },
   { label: "TIMESTAMP", value: "TIMESTAMP" },
 ]
+
+const dedupRestrictedColumnTypes = ["BINARY", "STRING"]
 
 const IndexNumber = styled(Text).attrs({ color: "foreground" })``
 
@@ -71,6 +78,16 @@ const TimestampControls = styled(Controls)`
   justify-items: flex-start;
 `
 
+const DedupButton = styled(Button)<{ dedupDisabled: boolean }>`
+  ${({ dedupDisabled }) =>
+    dedupDisabled &&
+    `
+    filter: grayscale(100%);
+    opacity: 0.5;
+    cursor: not-allowed;
+  `}
+`
+
 export const Column = ({
   action,
   disabled,
@@ -79,6 +96,7 @@ export const Column = ({
   onRemove,
   onSetTimestamp,
   timestamp,
+  walEnabled,
 }: {
   action: Action
   disabled: boolean
@@ -87,8 +105,17 @@ export const Column = ({
   onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
   timestamp: string
+  walEnabled?: boolean
 }) => {
+  const { setValue } = useFormContext()
   const [name, setName] = useState(column.name)
+
+  const handleDedupKeyToggle = (name: string) => {
+    setValue(name, !column.upsertKey)
+  }
+
+  const isDedupDisabled =
+    dedupRestrictedColumnTypes.includes(column.type) || !walEnabled
 
   if (!column) {
     return null
@@ -128,6 +155,33 @@ export const Column = ({
               )}
             />
           </Form.Item>
+
+          {action === "add" && (
+            <PopperHover
+              trigger={
+                <DedupButton
+                  type="button"
+                  skin={column.upsertKey ? "success" : "transparent"}
+                  onClick={() => {
+                    if (isDedupDisabled) return
+                    handleDedupKeyToggle(`schemaColumns.${index}.upsertKey`)
+                  }}
+                  dedupDisabled={isDedupDisabled}
+                >
+                  <MergeIcon size="16px" />
+                </DedupButton>
+              }
+              placement="bottom"
+            >
+              <Tooltip>
+                {isDedupDisabled || !walEnabled
+                  ? `Deduplication requires WAL to be enabled and is unavailable for the following types: ${dedupRestrictedColumnTypes.join(
+                      ", ",
+                    )}`
+                  : "Set this column as deduplication key"}
+              </Tooltip>
+            </PopperHover>
+          )}
         </Controls>
 
         {column.type === "TIMESTAMP" && (
