@@ -174,7 +174,7 @@ export const Column = ({
               placement="bottom"
             >
               <Tooltip>
-                {isDedupDisabled || !walEnabled
+                {isDedupDisabled
                   ? `Deduplication requires WAL to be enabled and is unavailable for the following types: ${dedupRestrictedColumnTypes.join(
                       ", ",
                     )}`
