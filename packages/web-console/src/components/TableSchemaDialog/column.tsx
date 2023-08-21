@@ -96,7 +96,6 @@ export const Column = ({
   onRemove,
   onSetTimestamp,
   timestamp,
-  walEnabled,
 }: {
   action: Action
   disabled: boolean
@@ -105,17 +104,18 @@ export const Column = ({
   onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
   timestamp: string
-  walEnabled?: boolean
 }) => {
-  const { setValue } = useFormContext()
+  const { getValues, setValue } = useFormContext()
   const [name, setName] = useState(column.name)
 
   const handleDedupKeyToggle = (name: string) => {
     setValue(name, !column.upsertKey)
   }
 
+  const watchWalEnabled = getValues()["walEnabled"]
+
   const isDedupDisabled =
-    dedupRestrictedColumnTypes.includes(column.type) || !walEnabled
+    dedupRestrictedColumnTypes.includes(column.type) || !watchWalEnabled
 
   if (!column) {
     return null

@@ -101,7 +101,6 @@ export const Columns = ({
               setValue("timestamp", watchTimestamp === name ? "" : name)
             }}
             timestamp={watchTimestamp}
-            walEnabled={walEnabled}
           />
 
           {index === watchSchemaColumns.length - 1 && !isEditLocked && (
