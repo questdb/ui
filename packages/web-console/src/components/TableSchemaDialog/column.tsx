@@ -14,6 +14,7 @@ import { DocsLink } from "./docs-link"
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
   { label: "BOOLEAN", value: "BOOLEAN" },
+  { label: "BINARY", value: "BINARY" },
   { label: "BYTE", value: "BYTE" },
   { label: "DOUBLE", value: "DOUBLE" },
   { label: "DATE", value: "DATE" },
