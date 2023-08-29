@@ -27,7 +27,7 @@ const StyledDescription = styled(Dialog.Description)`
 
 type Props = {
   open: boolean
-  onOpenChange: (openedFileName: string | undefined) => void
+  onOpenChange: (file?: ProcessedFile) => void
   onNameChange: (name: string) => void
   file: ProcessedFile
 }
@@ -61,7 +61,7 @@ export const RenameTableDialog = ({
           <Button
             skin="transparent"
             prefixIcon={<Edit size="14px" />}
-            onClick={() => onOpenChange(name)}
+            onClick={() => onOpenChange(file)}
           >
             {shortenText(name, 20)}
           </Button>

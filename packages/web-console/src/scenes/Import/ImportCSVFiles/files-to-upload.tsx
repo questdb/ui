@@ -58,9 +58,9 @@ const FileTextBox = styled(Box)`
 type Props = {
   files: ProcessedFile[]
   onDialogToggle: (open: boolean) => void
-  onFileRemove: (filename: string) => void
-  onFileUpload: (filename: string) => void
-  onFilePropertyChange: (filename: string, file: Partial<ProcessedFile>) => void
+  onFileRemove: (id: string) => void
+  onFileUpload: (id: string) => void
+  onFilePropertyChange: (id: string, file: Partial<ProcessedFile>) => void
 }
 
 export const FilesToUpload = ({
@@ -71,11 +71,11 @@ export const FilesToUpload = ({
   onFileUpload,
 }: Props) => {
   const [renameDialogOpen, setRenameDialogOpen] = React.useState<
-    string | null
+    string | undefined
   >()
 
   const [schemaDialogOpen, setSchemaDialogOpen] = React.useState<
-    string | null
+    string | undefined
   >()
 
   useEffect(() => {
@@ -157,13 +157,12 @@ export const FilesToUpload = ({
             align: "flex-end",
             width: "200px",
             render: ({ data }) => {
-              const name = data.table_name ?? data.fileObject.name
               return (
                 <RenameTableDialog
-                  open={renameDialogOpen === name}
-                  onOpenChange={setRenameDialogOpen}
+                  open={renameDialogOpen === data.id}
+                  onOpenChange={(f) => setRenameDialogOpen(f?.id)}
                   onNameChange={(name) => {
-                    onFilePropertyChange(data.fileObject.name, {
+                    onFilePropertyChange(data.id, {
                       table_name: name,
                     })
                   }}
@@ -197,10 +196,12 @@ export const FilesToUpload = ({
               return (
                 <TableSchemaDialog
                   action="import"
-                  open={schemaDialogOpen === name}
-                  onOpenChange={setSchemaDialogOpen}
+                  open={schemaDialogOpen === data.id}
+                  onOpenChange={(name?: string) =>
+                    setSchemaDialogOpen(name ? data.id : undefined)
+                  }
                   onSchemaChange={(schema) => {
-                    onFilePropertyChange(data.fileObject.name, {
+                    onFilePropertyChange(data.id, {
                       schema: schema.schemaColumns,
                       partitionBy: schema.partitionBy,
                       timestamp: schema.timestamp,
@@ -246,7 +247,7 @@ export const FilesToUpload = ({
                 name="overwrite"
                 defaultValue={data.settings.overwrite ? "true" : "false"}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  onFilePropertyChange(data.fileObject.name, {
+                  onFilePropertyChange(data.id, {
                     settings: {
                       ...data.settings,
                       overwrite: e.target.value === "true",
