@@ -112,7 +112,7 @@ export const Column = ({
     setValue(name, !column.upsertKey)
   }
 
-  const watchWalEnabled = getValues()["walEnabled"]
+  const watchWalEnabled = getValues()["walEnabled"] === "true"
 
   const isDedupDisabled =
     dedupRestrictedColumnTypes.includes(column.type) || !watchWalEnabled

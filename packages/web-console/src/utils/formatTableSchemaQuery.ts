@@ -74,7 +74,7 @@ export const formatTableSchemaQuery = ({
     query += ` PARTITION BY ${partitionBy} ${walEnabled ? "WAL" : "BYPASS WAL"}`
   }
 
-  if (dedup && schemaColumns.some((c) => c.upsertKey)) {
+  if (walEnabled && dedup && schemaColumns.some((c) => c.upsertKey)) {
     query += ` DEDUP UPSERT KEYS(${schemaColumns
       .filter((c) => c.upsertKey)
       .map((c) => c.column)
