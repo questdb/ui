@@ -74,11 +74,22 @@ export const formatTableSchemaQuery = ({
     query += ` PARTITION BY ${partitionBy} ${walEnabled ? "WAL" : "BYPASS WAL"}`
   }
 
-  if (walEnabled && dedup && schemaColumns.some((c) => c.upsertKey)) {
-    query += ` DEDUP UPSERT KEYS(${schemaColumns
-      .filter((c) => c.upsertKey)
-      .map((c) => c.column)
-      .join(",")})`
+  // For deduplication keys to work, WAL has to be enabled and a designated timestamp has to be set.
+  if (walEnabled && dedup && timestamp) {
+    const upsertColumns = schemaColumns.filter((c) => c.upsertKey)
+    if (upsertColumns.length > 0) {
+      // Designated timestamp has to be part of the deduplication keys. We add it if user forgot.
+      const hasTimestampInKeys = upsertColumns.find(
+        (c) => c.column === timestamp,
+      )
+      const keyColumns = hasTimestampInKeys
+        ? upsertColumns
+        : [...upsertColumns, { column: timestamp }]
+
+      query += ` DEDUP UPSERT KEYS(${keyColumns
+        .map((c) => c.column)
+        .join(",")})`
+    }
   }
 
   return `${formatSql(query)};`
