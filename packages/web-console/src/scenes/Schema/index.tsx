@@ -21,8 +21,8 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import React, {
+import React from "react"
+import {
   CSSProperties,
   forwardRef,
   Ref,
@@ -30,6 +30,7 @@ import React, {
   useCallback,
   useEffect,
   useState,
+  useContext,
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
@@ -66,7 +67,7 @@ import { Box } from "../../components/Box"
 import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
-import { useEditor } from "../../providers"
+import { useEditor, QuestContext } from "../../providers"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -124,7 +125,7 @@ const Schema = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
-  const [quest] = useState(new QuestDB.Client())
+  const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
@@ -219,8 +220,15 @@ const Schema = ({
       })),
       dedup: schemaColumns.find((c) => c.upsertKey) !== undefined,
     })
-    appendQuery(tableSchemaQuery, { appendAt: "end" })
-    dispatch(actions.query.toggleRunning())
+    quest.queryRaw(tableSchemaQuery).then((result) => {
+      if (result.type === QuestDB.Type.DDL) {
+        bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+        appendQuery(`-- Created table '${name}'\n SELECT * FROM '${name}'`, {
+          appendAt: "end",
+        })
+        dispatch(actions.query.toggleRunning())
+      }
+    })
   }
 
   useEffect(() => {
