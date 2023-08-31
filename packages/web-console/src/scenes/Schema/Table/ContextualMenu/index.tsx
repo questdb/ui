@@ -40,7 +40,7 @@ const ContextualMenu = ({ name, partitionBy, walEnabled, dedup }: Props) => {
   const { quest } = useContext(QuestContext)
   const [schema, setSchema] = React.useState<string | undefined>()
 
-  const handleShow = useCallback(async () => {
+  const handleShow = async () => {
     const response = await quest.showColumns(name)
     if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
       const formattedResult = formatTableSchemaQueryResult(
@@ -52,7 +52,7 @@ const ContextualMenu = ({ name, partitionBy, walEnabled, dedup }: Props) => {
       )
       setSchema(formattedResult)
     }
-  }, [quest, name, partitionBy])
+  }
 
   const handleCopySchemaToClipboard = useCallback(() => {
     if (schema) {
