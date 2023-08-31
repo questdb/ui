@@ -155,7 +155,8 @@ const BuildVersion = () => {
           }
         >
           {icon}
-          {`${label} ${buildVersion.version}`}
+          {label}
+          {buildVersion.version ? ` ${buildVersion.version}` : ""}
 
           {!enterpriseVersion && <ExternalLink size="16px" />}
           {upgradeAvailable && (
