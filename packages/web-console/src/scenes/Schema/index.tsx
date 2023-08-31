@@ -223,7 +223,7 @@ const Schema = ({
     quest.queryRaw(tableSchemaQuery).then((result) => {
       if (result.type === QuestDB.Type.DDL) {
         bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
-        appendQuery(`-- Created table '${name}'\n SELECT * FROM '${name}'`, {
+        appendQuery(`-- Created table '${name}'\n SELECT * FROM '${name}';`, {
           appendAt: "end",
         })
         dispatch(actions.query.toggleRunning())
