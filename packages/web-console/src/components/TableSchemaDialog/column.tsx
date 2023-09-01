@@ -13,11 +13,12 @@ import { DocsLink } from "./docs-link"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
-  { label: "BOOLEAN", value: "BOOLEAN" },
   { label: "BINARY", value: "BINARY" },
+  { label: "BOOLEAN", value: "BOOLEAN" },
   { label: "BYTE", value: "BYTE" },
-  { label: "DOUBLE", value: "DOUBLE" },
+  { label: "CHAR", value: "CHAR" },
   { label: "DATE", value: "DATE" },
+  { label: "DOUBLE", value: "DOUBLE" },
   { label: "FLOAT", value: "FLOAT" },
   { label: "GEOHASH", value: "GEOHASH" },
   { label: "INT", value: "INT" },
@@ -25,7 +26,6 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "LONG", value: "LONG" },
   { label: "LONG256", value: "LONG256" },
   { label: "SHORT", value: "SHORT" },
-  { label: "CHAR", value: "CHAR" },
   { label: "STRING", value: "STRING" },
   { label: "SYMBOL", value: "SYMBOL" },
   { label: "TIMESTAMP", value: "TIMESTAMP" },
