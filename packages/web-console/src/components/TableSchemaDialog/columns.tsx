@@ -1,4 +1,4 @@
-import React, { useCallback } from "react"
+import React, { useCallback, useEffect } from "react"
 import styled from "styled-components"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import { Box } from "../Box"
@@ -115,6 +115,20 @@ export const Columns = ({
       watchSchemaColumns.map((c: SchemaColumn) => c.type).join(","),
     ],
   )
+
+  // If designated timestamp is set, but the associated column type is no longer a TIMESTAMP,
+  // clear the timestamp value
+  useEffect(() => {
+    if (
+      watchTimestamp !== "" &&
+      !watchSchemaColumns.find(
+        (c: SchemaColumn) =>
+          c.name === watchTimestamp && c.type === "TIMESTAMP",
+      )
+    ) {
+      setValue("timestamp", "")
+    }
+  }, [watchTimestamp, watchSchemaColumns.map((c: SchemaColumn) => c.type)])
 
   const errors = formState.errors["schemaColumns"]
 
