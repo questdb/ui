@@ -68,6 +68,7 @@ import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
 import { useEditor, QuestContext } from "../../providers"
+import { NotificationType } from "../../types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -220,15 +221,38 @@ const Schema = ({
       })),
       dedup: schemaColumns.find((c) => c.upsertKey) !== undefined,
     })
-    quest.queryRaw(tableSchemaQuery).then((result) => {
-      if (result.type === QuestDB.Type.DDL) {
-        bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
-        appendQuery(`-- Created table '${name}'\n SELECT * FROM '${name}';`, {
-          appendAt: "end",
-        })
-        dispatch(actions.query.toggleRunning())
-      }
-    })
+    quest
+      .queryRaw(tableSchemaQuery)
+      .then((result) => {
+        if (result.type === QuestDB.Type.DDL) {
+          dispatch(
+            actions.query.addNotification({
+              content: (
+                <Text color="foreground" ellipsis title={result.query}>
+                  {result.query}
+                </Text>
+              ),
+            }),
+          )
+          bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+        }
+      })
+      .catch((error: ErrorResult) => {
+        dispatch(
+          actions.query.addNotification({
+            content: <Text color="red">{error.error}</Text>,
+            sideContent: (
+              <Text color="foreground" ellipsis title={tableSchemaQuery}>
+                {tableSchemaQuery}
+              </Text>
+            ),
+            type: NotificationType.ERROR,
+          }),
+        )
+      })
+      .finally(() => {
+        dispatch(actions.query.stopRunning())
+      })
   }
 
   useEffect(() => {
