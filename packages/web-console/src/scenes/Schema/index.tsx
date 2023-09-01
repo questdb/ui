@@ -21,8 +21,8 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import React, {
+import React from "react"
+import {
   CSSProperties,
   forwardRef,
   Ref,
@@ -30,6 +30,7 @@ import React, {
   useCallback,
   useEffect,
   useState,
+  useContext,
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
@@ -66,7 +67,8 @@ import { Box } from "../../components/Box"
 import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
-import { useEditor } from "../../providers"
+import { useEditor, QuestContext } from "../../providers"
+import { NotificationType } from "../../types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -124,7 +126,7 @@ const Schema = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
-  const [quest] = useState(new QuestDB.Client())
+  const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
@@ -167,6 +169,7 @@ const Schema = ({
             partitionBy={table.partitionBy}
             refresh={refresh}
             walEnabled={table.walEnabled}
+            dedup={table.dedup}
           />
         )
       }
@@ -214,10 +217,42 @@ const Schema = ({
       schemaColumns: schemaColumns.map((column) => ({
         column: column.name,
         type: column.type,
+        upsertKey: column.upsertKey,
       })),
+      dedup: schemaColumns.find((c) => c.upsertKey) !== undefined,
     })
-    appendQuery(tableSchemaQuery, { appendAt: "end" })
-    dispatch(actions.query.toggleRunning())
+    quest
+      .queryRaw(tableSchemaQuery)
+      .then((result) => {
+        if (result.type === QuestDB.Type.DDL) {
+          dispatch(
+            actions.query.addNotification({
+              content: (
+                <Text color="foreground" ellipsis title={result.query}>
+                  {result.query}
+                </Text>
+              ),
+            }),
+          )
+          bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+        }
+      })
+      .catch((error: ErrorResult) => {
+        dispatch(
+          actions.query.addNotification({
+            content: <Text color="red">{error.error}</Text>,
+            sideContent: (
+              <Text color="foreground" ellipsis title={tableSchemaQuery}>
+                {tableSchemaQuery}
+              </Text>
+            ),
+            type: NotificationType.ERROR,
+          }),
+        )
+      })
+      .finally(() => {
+        dispatch(actions.query.stopRunning())
+      })
   }
 
   useEffect(() => {

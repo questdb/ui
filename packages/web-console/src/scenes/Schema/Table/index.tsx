@@ -119,6 +119,7 @@ const Table = ({
   partitionBy,
   expanded = false,
   walEnabled,
+  dedup,
   onChange = () => {},
 }: Props) => {
   const currentName = useRef(name)
@@ -208,6 +209,7 @@ const Table = ({
           name={name}
           partitionBy={partitionBy}
           walEnabled={walEnabled}
+          dedup={dedup}
         />
       )}
 

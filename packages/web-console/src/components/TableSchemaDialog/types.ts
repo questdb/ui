@@ -3,6 +3,7 @@ export type Action = "add" | "import"
 export type SchemaColumn = {
   name: string
   type: string
+  upsertKey?: boolean
   pattern?: string
   precision?: string
 }
