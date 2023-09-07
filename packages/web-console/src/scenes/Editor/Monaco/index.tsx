@@ -6,7 +6,6 @@ import { editor } from "monaco-editor"
 import type { IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
-import { usePreferences } from "./usePreferences"
 import {
   appendQuery,
   getErrorRange,
@@ -97,8 +96,13 @@ enum Command {
 }
 
 const MonacoEditor = () => {
-  const { editorRef, monacoRef, insertTextAtCursor } = useEditor()
-  const { loadPreferences, savePreferences } = usePreferences()
+  const {
+    editorRef,
+    monacoRef,
+    insertTextAtCursor,
+    activeBuffer,
+    updateBuffer,
+  } = useEditor()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
@@ -235,6 +239,9 @@ const MonacoEditor = () => {
     monaco: Monaco,
   ) => {
     monaco.editor.setTheme("dracula")
+    editor.setModel(
+      monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
+    )
 
     if (monacoRef) {
       monacoRef.current = monaco
@@ -317,8 +324,6 @@ const MonacoEditor = () => {
         renderLineMarkings(monaco, editor)
       })
     }
-
-    loadPreferences(editor)
 
     // Insert query, if one is found in the URL
     const params = new URLSearchParams(window.location.search)
@@ -447,14 +452,6 @@ const MonacoEditor = () => {
   }, [quest, dispatch, running])
 
   useEffect(() => {
-    const editor = editorRef?.current
-
-    if (running.value && editor) {
-      savePreferences(editor)
-    }
-  }, [running, savePreferences])
-
-  useEffect(() => {
     if (editorReady && monacoRef?.current) {
       schemaCompletionHandle?.dispose()
       setSchemaCompletionHandle(
@@ -472,6 +469,10 @@ const MonacoEditor = () => {
         beforeMount={handleEditorBeforeMount}
         defaultLanguage={QuestDBLanguageName}
         onMount={handleEditorDidMount}
+        saveViewState={false}
+        onChange={(value) => {
+          updateBuffer(activeBuffer.id as number, { value })
+        }}
         options={{
           fixedOverflowWidgets: true,
           fontSize: 14,
