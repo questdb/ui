@@ -102,6 +102,7 @@ const MonacoEditor = () => {
     insertTextAtCursor,
     activeBuffer,
     updateBuffer,
+    editorReadyTrigger,
   } = useEditor()
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -246,6 +247,7 @@ const MonacoEditor = () => {
     if (monacoRef) {
       monacoRef.current = monaco
       setEditorReady(true)
+      editorReadyTrigger(editor)
     }
 
     if (editorRef) {
@@ -474,6 +476,8 @@ const MonacoEditor = () => {
           updateBuffer(activeBuffer.id as number, { value })
         }}
         options={{
+          // initially null, but will be set during onMount with editor.setModel
+          model: null,
           fixedOverflowWidgets: true,
           fontSize: 14,
           fontFamily: theme.fontMonospace,
