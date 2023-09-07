@@ -18,15 +18,6 @@ const Row = styled(Box).attrs({ justifyContent: "space-between", gap: "2rem" })`
   width: 100%;
 `
 
-const FormWrapper = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
-  width: 100%;
-  height: calc(100vh - 6.1rem);
-
-  form {
-    height: 100%;
-  }
-`
-
 const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
   height: 100%;
 `
@@ -35,6 +26,10 @@ const Inputs = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
   width: 100%;
   height: 100%;
   overflow: auto;
+`
+
+const Option = styled(Drawer.GroupItem)`
+  width: 100%;
 `
 
 const InputWrapper = styled.div`
@@ -214,11 +209,11 @@ export const UploadSettingsDialog = ({
       }}
       withCloseButton
     >
-      <FormWrapper>
+      <Drawer.ContentWrapper>
         <Items>
           <Inputs>
             {options.map((option) => (
-              <Drawer.GroupItem key={option.name}>
+              <Option key={option.name}>
                 <Row key={option.name}>
                   <Box
                     gap="1rem"
@@ -275,7 +270,7 @@ export const UploadSettingsDialog = ({
                     )}
                   </InputWrapper>
                 </Row>
-              </Drawer.GroupItem>
+              </Option>
             ))}
           </Inputs>
 
@@ -304,7 +299,7 @@ export const UploadSettingsDialog = ({
             </Button>
           </Drawer.Actions>
         </Items>
-      </FormWrapper>
+      </Drawer.ContentWrapper>
     </Drawer>
   )
 }
