@@ -30,7 +30,6 @@ export type LocalConfig = {
   editorLine: number
   notificationDelay: number
   isNotificationEnabled: boolean
-  queryText: string
   editorSplitterBasis: number
   resultsSplitterBasis: number
   exampleQueriesVisited: boolean

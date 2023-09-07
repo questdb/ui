@@ -42,7 +42,6 @@ const defaultConfig: LocalConfig = {
   editorLine: 10,
   isNotificationEnabled: true,
   notificationDelay: 5,
-  queryText: "",
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
@@ -54,7 +53,6 @@ type ContextProps = {
   editorLine: number
   notificationDelay: number
   isNotificationEnabled: boolean
-  queryText: string
   editorSplitterBasis: number
   resultsSplitterBasis: number
   updateSettings: (key: StoreKey, value: SettingsType) => void
@@ -67,7 +65,6 @@ const defaultValues: ContextProps = {
   editorLine: 1,
   isNotificationEnabled: true,
   notificationDelay: 5,
-  queryText: "",
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
   updateSettings: (key: StoreKey, value: SettingsType) => undefined,
@@ -99,9 +96,6 @@ export const LocalStorageProvider = ({
       getValue(StoreKey.NOTIFICATION_DELAY),
       defaultConfig.notificationDelay,
     ),
-  )
-  const [queryText, setQueryText] = useState<string>(
-    getValue(StoreKey.QUERY_TEXT),
   )
   const [editorSplitterBasis, seteditorSplitterBasis] = useState<number>(
     parseInteger(
@@ -150,9 +144,6 @@ export const LocalStorageProvider = ({
           parseInteger(value, defaultConfig.notificationDelay),
         )
         break
-      case StoreKey.QUERY_TEXT:
-        setQueryText(value)
-        break
       case StoreKey.EDITOR_SPLITTER_BASIS:
         seteditorSplitterBasis(
           parseInteger(value, defaultConfig.editorSplitterBasis),
@@ -174,7 +165,6 @@ export const LocalStorageProvider = ({
         editorLine,
         isNotificationEnabled,
         notificationDelay,
-        queryText,
         editorSplitterBasis,
         resultsSplitterBasis,
         updateSettings,
