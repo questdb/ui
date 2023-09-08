@@ -84,6 +84,7 @@ If you want to work on `@questdb/web-console` package, you can start its develop
 ```
 yarn workspace @questdb/web-console start
 ```
+_You might need to run_ `yarn workspace @questdb/react-components build` _first._
 
 [localhost:9999](http://localhost:9999) should show web console.
 
