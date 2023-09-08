@@ -34,7 +34,7 @@ export type Versions = {
     | "enterprise"
     | "enterprise pro"
     | "enterprise ultimate"
-  version: string
+  version?: string
 }
 
 export const formatVersion = (value: string): Versions => {
@@ -53,7 +53,6 @@ export const formatVersion = (value: string): Versions => {
 
   return {
     kind: "dev",
-    version: "0.0.0",
   }
 }
 
@@ -76,8 +75,11 @@ export const getCanUpgrade = (
   const enterpriseVersion = buildVersion.kind.includes("enterprise")
 
   try {
-    const isOlder = compare(buildVersion.version, newestReleaseTag, "<")
-    return !enterpriseVersion && isOlder
+    if (buildVersion.version) {
+      const isOlder = compare(buildVersion.version, newestReleaseTag, "<")
+      return !enterpriseVersion && isOlder
+    }
+    return false
   } catch (e) {
     return false
   }
