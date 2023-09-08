@@ -6,6 +6,7 @@ import { Close } from "styled-icons/remix-line"
 import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
+import { ContentWrapper } from "./content-wrapper"
 
 const animateShow = css`
   @keyframes animateShow {
@@ -138,3 +139,4 @@ export const Drawer = ({
 Drawer.GroupHeader = GroupHeader
 Drawer.GroupItem = GroupItem
 Drawer.Actions = Actions
+Drawer.ContentWrapper = ContentWrapper
