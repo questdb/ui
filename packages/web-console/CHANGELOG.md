@@ -16,6 +16,34 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.2.7 - 2023.09.08
+
+### Changed
+
+- Added the missing data types: ipv4, byte, binary, long256, uuid.
+  [#191](https://github.com/questdb/ui/pull/191)
+- Allow writing multiple files to the same target table
+  [#192](https://github.com/questdb/ui/pull/192)
+- Updated build instructions [#195](https://github.com/questdb/ui/pull/195)
+
+### Fixed
+
+- Incorrect timestamp check icon when selected
+  [#191](https://github.com/questdb/ui/pull/191)
+- Multiple designated timestamps could be selected
+  [#191](https://github.com/questdb/ui/pull/191)
+- An unnecessary second scrollbar appeared in the UI
+  [#191](https://github.com/questdb/ui/pull/191)
+
+## 0.2.6 - 2023.08.15
+
+### Changed
+
+- Updated language grammar in SQL Editor
+  [#187](https://github.com/questdb/ui/pull/187)
+- Deprecated `durable` upload setting
+  [#183](https://github.com/questdb/ui/pull/183)
+
 ## 0.2.5 - 2023-08-01
 
 ### Fixed
