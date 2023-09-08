@@ -33,7 +33,7 @@ export const UploadActions = ({
         disabled={file.isUploading}
         skin="primary"
         prefixIcon={<Upload2 size="18px" />}
-        onClick={() => onUpload(file.table_name)}
+        onClick={() => onUpload(file.id)}
       >
         {file.isUploading ? "Uploading..." : "Upload"}
       </Button>
@@ -44,7 +44,7 @@ export const UploadActions = ({
             disabled={file.isUploading}
             skin="secondary"
             onClick={() => {
-              onRemove(file.table_name)
+              onRemove(file.id)
             }}
           >
             <Close size="18px" />

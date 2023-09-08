@@ -12,36 +12,16 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
 import { useIsVisible } from "../../../components/Hooks"
+import {
+  extractPrecionFromGeohash,
+  isGeoHash,
+  mapColumnTypeToQuestDB,
+  mapColumnTypeToUI,
+  uuid,
+} from "./utils"
 
 type Props = {
   onImported: (result: UploadResult) => void
-}
-
-const isGeoHash = (type: string) => type.startsWith("GEOHASH")
-
-function extractPrecionFromGeohash(geohash: string) {
-  const regex = /\(([^)]+)\)/g
-  const matches = regex.exec(geohash)
-  if (matches && matches.length > 1) {
-    return matches[1]
-  }
-  return ""
-}
-
-const mapColumnTypeToUI = (type: string) => {
-  if (isGeoHash(type)) {
-    return "GEOHASH"
-  } else return type.toUpperCase()
-}
-
-const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
-  if (column.type === "GEOHASH") {
-    return {
-      ...column,
-      type: `GEOHASH(${column.precision})`,
-    }
-  }
-  return column
 }
 
 export const ImportCSVFiles = ({ onImported }: Props) => {
@@ -52,13 +32,10 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const isVisible = useIsVisible(rootRef)
 
-  const setFileProperties = (
-    filename: string,
-    file: Partial<ProcessedFile>,
-  ) => {
+  const setFileProperties = (id: string, file: Partial<ProcessedFile>) => {
     setFilesDropped((files) =>
       files.map((f) => {
-        if (f.table_name === filename) {
+        if (f.id === id) {
           return {
             ...f,
             ...file,
@@ -70,7 +47,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }
 
   const setIsUploading = (file: ProcessedFile, isUploading: boolean) => {
-    setFileProperties(file.table_name, { isUploading })
+    setFileProperties(file.id, { isUploading })
   }
 
   const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
@@ -117,6 +94,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             : ""
 
         return {
+          id: uuid(),
           fileObject: file,
           table_name: file.name,
           status: result.status,
@@ -175,10 +153,8 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
       <FilesToUpload
         files={filesDropped}
         onDialogToggle={setDialogOpen}
-        onFileUpload={async (filename) => {
-          const file = filesDropped.find(
-            (f) => f.table_name === filename,
-          ) as ProcessedFile
+        onFileUpload={async (id) => {
+          const file = filesDropped.find((f) => f.id === id) as ProcessedFile
 
           if (file.isUploading) {
             return
@@ -193,12 +169,12 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
               partitionBy: file.partitionBy,
               timestamp: file.timestamp,
               onProgress: (progress) => {
-                setFileProperties(file.table_name, {
+                setFileProperties(file.id, {
                   uploadProgress: progress,
                 })
               },
             })
-            setFileProperties(file.table_name, {
+            setFileProperties(file.id, {
               uploaded: response.status === "OK",
               uploadResult: response.status === "OK" ? response : undefined,
               schema:
@@ -232,7 +208,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             setIsUploading(file, false)
           } catch (err) {
             setIsUploading(file, false)
-            setFileProperties(file.table_name, {
+            setFileProperties(file.id, {
               uploaded: false,
               uploadResult: undefined,
               uploadProgress: 0,
@@ -240,20 +216,18 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
             })
           }
         }}
-        onFileRemove={(filename) => {
-          const file = filesDropped.find(
-            (f) => f.table_name === filename,
-          ) as ProcessedFile
+        onFileRemove={(id) => {
+          const file = filesDropped.find((f) => f.id === id) as ProcessedFile
           setFilesDropped(
             filesDropped.filter(
               (f) => f.fileObject.name !== file.fileObject.name,
             ),
           )
         }}
-        onFilePropertyChange={async (filename, partialFile) => {
+        onFilePropertyChange={async (id, partialFile) => {
           const processedFiles = await Promise.all(
             filesDropped.map(async (file) => {
-              if (file.fileObject.name === filename) {
+              if (file.id === id) {
                 // Only check for file existence if table name is changed
                 const result = partialFile.table_name
                   ? await quest.checkCSVFile(partialFile.table_name)
