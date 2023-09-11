@@ -6,7 +6,6 @@ import { editor } from "monaco-editor"
 import type { IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
-import { usePreferences } from "./usePreferences"
 import {
   appendQuery,
   getErrorRange,
@@ -17,9 +16,10 @@ import {
   clearModelMarkers,
   getQueryFromCursor,
   findMatches,
-  AppendQueryOptions,
 } from "./utils"
 import type { Request } from "./utils"
+import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
+import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
@@ -30,14 +30,7 @@ import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
 import Loader from "../Loader"
 import styled from "styled-components"
-import {
-  conf as QuestDBLanguageConf,
-  language as QuestDBLanguage,
-  createQuestDBCompletionProvider,
-  createSchemaCompletionProvider,
-  documentFormattingEditProvider,
-  documentRangeFormattingEditProvider,
-} from "./questdb-sql"
+import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 
 loader.config({
@@ -97,8 +90,16 @@ enum Command {
 }
 
 const MonacoEditor = () => {
-  const { editorRef, monacoRef, insertTextAtCursor } = useEditor()
-  const { loadPreferences, savePreferences } = usePreferences()
+  const editorContext = useEditor()
+  const {
+    editorRef,
+    monacoRef,
+    insertTextAtCursor,
+    activeBuffer,
+    updateBuffer,
+    editorReadyTrigger,
+    addBuffer,
+  } = editorContext
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
@@ -116,33 +117,8 @@ const MonacoEditor = () => {
     dispatch(actions.query.toggleRunning(isRefresh))
   }
 
-  const handleEditorBeforeMount = (monaco: Monaco) => {
-    monaco.languages.register({ id: QuestDBLanguageName })
-
-    monaco.languages.setMonarchTokensProvider(
-      QuestDBLanguageName,
-      QuestDBLanguage,
-    )
-
-    monaco.languages.setLanguageConfiguration(
-      QuestDBLanguageName,
-      QuestDBLanguageConf,
-    )
-
-    monaco.languages.registerCompletionItemProvider(
-      QuestDBLanguageName,
-      createQuestDBCompletionProvider(),
-    )
-
-    monaco.languages.registerDocumentFormattingEditProvider(
-      QuestDBLanguageName,
-      documentFormattingEditProvider,
-    )
-
-    monaco.languages.registerDocumentRangeFormattingEditProvider(
-      QuestDBLanguageName,
-      documentRangeFormattingEditProvider,
-    )
+  const beforeMount = (monaco: Monaco) => {
+    registerLanguageAddons(monaco)
 
     setSchemaCompletionHandle(
       monaco.languages.registerCompletionItemProvider(
@@ -230,95 +206,30 @@ const MonacoEditor = () => {
     }
   }
 
-  const handleEditorDidMount = (
-    editor: IStandaloneCodeEditor,
-    monaco: Monaco,
-  ) => {
+  const onMount = (editor: IStandaloneCodeEditor, monaco: Monaco) => {
+    monacoRef.current = monaco
+    editorRef.current = editor
     monaco.editor.setTheme("dracula")
+    editor.setModel(
+      monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
+    )
 
-    if (monacoRef) {
-      monacoRef.current = monaco
-      setEditorReady(true)
-    }
+    setEditorReady(true)
+    editorReadyTrigger(editor)
 
-    if (editorRef) {
-      editorRef.current = editor
+    // Support legacy bus events for non-react codebase
+    registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
+    registerEditorActions({
+      editor,
+      monaco,
+      toggleRunning,
+      dispatch,
+      editorContext,
+    })
 
-      // Support legacy bus events for non-react codebase
-      window.bus.on(BusEvent.MSG_EDITOR_INSERT_COLUMN, (_event, column) => {
-        insertTextAtCursor(column)
-      })
-
-      window.bus.on(
-        BusEvent.MSG_QUERY_FIND_N_EXEC,
-        (_event, payload: { query: string; options?: AppendQueryOptions }) => {
-          const text = `${payload.query};`
-          appendQuery(editor, text, payload.options)
-          toggleRunning()
-        },
-      )
-
-      window.bus.on(BusEvent.MSG_QUERY_EXEC, (_event, query: { q: string }) => {
-        // TODO: Display a query marker on correct line
-        toggleRunning(true)
-      })
-
-      window.bus.on(
-        BusEvent.MSG_QUERY_EXPORT,
-        (_event, request?: { q: string }) => {
-          if (request) {
-            window.location.href = `/exp?query=${encodeURIComponent(request.q)}`
-          }
-        },
-      )
-
-      window.bus.on(BusEvent.MSG_EDITOR_FOCUS, () => {
-        const position = editor.getPosition()
-        if (position) {
-          editor.setPosition({
-            lineNumber: position.lineNumber + 1,
-            column: position?.column,
-          })
-        }
-        editor.focus()
-      })
-
-      editor.addAction({
-        id: Command.FOCUS_GRID,
-        label: "Focus Grid",
-        keybindings: [monaco.KeyCode.F2],
-        run: () => {
-          window.bus.trigger(BusEvent.GRID_FOCUS)
-        },
-      })
-
-      editor.addAction({
-        id: Command.EXECUTE,
-        label: "Execute command",
-        keybindings: [
-          monaco.KeyCode.F9,
-          monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-        ],
-        run: () => {
-          toggleRunning()
-        },
-      })
-
-      editor.addAction({
-        id: Command.CLEANUP_NOTIFICATIONS,
-        label: "Clear all notifications",
-        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
-        run: () => {
-          dispatch(actions.query.cleanupNotifications())
-        },
-      })
-
-      editor.onDidChangeCursorPosition(() => {
-        renderLineMarkings(monaco, editor)
-      })
-    }
-
-    loadPreferences(editor)
+    editor.onDidChangeCursorPosition(() => {
+      renderLineMarkings(monaco, editor)
+    })
 
     // Insert query, if one is found in the URL
     const params = new URLSearchParams(window.location.search)
@@ -447,14 +358,6 @@ const MonacoEditor = () => {
   }, [quest, dispatch, running])
 
   useEffect(() => {
-    const editor = editorRef?.current
-
-    if (running.value && editor) {
-      savePreferences(editor)
-    }
-  }, [running, savePreferences])
-
-  useEffect(() => {
     if (editorReady && monacoRef?.current) {
       schemaCompletionHandle?.dispose()
       setSchemaCompletionHandle(
@@ -469,10 +372,16 @@ const MonacoEditor = () => {
   return (
     <Content onClick={handleEditorClick}>
       <Editor
-        beforeMount={handleEditorBeforeMount}
+        beforeMount={beforeMount}
         defaultLanguage={QuestDBLanguageName}
-        onMount={handleEditorDidMount}
+        onMount={onMount}
+        saveViewState={false}
+        onChange={(value) => {
+          updateBuffer(activeBuffer.id as number, { value })
+        }}
         options={{
+          // initially null, but will be set during onMount with editor.setModel
+          model: null,
           fixedOverflowWidgets: true,
           fontSize: 14,
           fontFamily: theme.fontMonospace,
