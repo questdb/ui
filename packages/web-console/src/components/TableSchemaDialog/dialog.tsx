@@ -50,7 +50,7 @@ type Props = {
   isEditLocked: boolean
   hasWalSetting: boolean
   walEnabled?: boolean
-  onOpenChange: (openedFileName: string | undefined) => void
+  onOpenChange: (openedFileName?: string) => void
   onSchemaChange: (values: SchemaFormValues) => void
   name: string
   schema: SchemaColumn[]
