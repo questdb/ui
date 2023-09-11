@@ -26,6 +26,7 @@ describe("appendQuery", () => {
     ).as("getConsoleConfiguration");
 
     cy.visit(baseUrl);
+    cy.getEditor().should("be.visible");
   });
 
   afterEach(() => {
@@ -35,7 +36,7 @@ describe("appendQuery", () => {
   it("should append and select first query", () => {
     cy.selectQuery(0);
     const expected = `${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
     cy.matchImageSnapshot(); // screenshot diff
   });
@@ -43,14 +44,14 @@ describe("appendQuery", () => {
   it("should append and select second query", () => {
     cy.selectQuery(1);
     const expected = `${queries[1]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
     cy.selectQuery(2);
     const expected = `${queries[2]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     // monaco editor visually selects all 3 lines, but creates 4 elements to visualise selection
     cy.getSelectedLines().should("have.length", 4);
   });
@@ -61,7 +62,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
     cy.selectQuery(1);
     const expected = `${queries[1]}\n\n${queries[1]}\n\n${queries[2]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
@@ -70,7 +71,7 @@ describe("appendQuery", () => {
     cy.selectQuery(0);
     cy.selectQuery(1);
     const expected = `${queries[0]}\n\n${queries[1]}\n\n--b`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
@@ -78,7 +79,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
@@ -86,7 +87,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
@@ -94,7 +95,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n\n--b`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
@@ -102,7 +103,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a{enter}--b`);
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
     cy.matchImageSnapshot();
   });
@@ -111,7 +112,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a{enter}`);
     cy.selectQuery(0);
     const expected = `--a\n\n${queries[0]}\n`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
@@ -120,19 +121,14 @@ describe("appendQuery", () => {
     cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`); // go to line 2
     cy.selectQuery(0);
     const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
-    cy.getEditor().should("have.value", expected);
+    cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 });
 
 describe("&query URL param", () => {
-  before(() => {
-    Cypress.on("uncaught:exception", (err) => {
-      // this error can be safely ignored
-      if (err.message.includes("ResizeObserver loop limit exceeded")) {
-        return false;
-      }
-    });
+  afterEach(() => {
+    cy.clearEditor();
   });
 
   it("should append and select single line query", () => {
@@ -162,7 +158,7 @@ describe("&query URL param", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query).clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
-    cy.getEditor().should("have.value", query);
+    cy.getEditorContent().should("have.value", query);
   });
 
   it("should append query and scroll to it", () => {
@@ -179,23 +175,16 @@ describe("&query URL param", () => {
     cy.getVisibleLines()
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
-    cy.clearEditor();
   });
 });
 
 describe("autocomplete", () => {
   before(() => {
-    Cypress.on("uncaught:exception", (err) => {
-      // this error can be safely ignored
-      if (err.message.includes("ResizeObserver loop limit exceeded")) {
-        return false;
-      }
-    });
-
     cy.visit(baseUrl);
   });
 
   beforeEach(() => {
+    cy.getEditor().should("be.visible");
     cy.clearEditor();
   });
 
@@ -266,13 +255,6 @@ describe("errors", () => {
 
 describe("running query with F9", () => {
   before(() => {
-    Cypress.on("uncaught:exception", (err) => {
-      // this error can be safely ignored
-      if (err.message.includes("ResizeObserver loop limit exceeded")) {
-        return false;
-      }
-    });
-
     cy.visit(baseUrl);
   });
 

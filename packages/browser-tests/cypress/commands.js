@@ -9,18 +9,18 @@ addMatchImageSnapshotCommand({
 
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
-beforeEach(() => {
-  cy.intercept(
-    {
-      method: "POST",
-      url: "/*",
-      hostname: "alurin.questdb.io",
-    },
-    (req) => {
-      req.reply("success");
+before(() => {
+  Cypress.on("uncaught:exception", (err) => {
+    // this error can be safely ignored
+    if (err.message.includes("ResizeObserver loop")) {
+      return false;
     }
-  );
+  });
 
+  indexedDB.deleteDatabase("web-console");
+});
+
+beforeEach(() => {
   cy.intercept(
     {
       method: "GET",
@@ -28,7 +28,7 @@ beforeEach(() => {
       hostname: "api.github.com",
     },
     (req) => {
-      req.reply("success");
+      req.reply("{}");
     }
   );
 });
@@ -46,7 +46,7 @@ Cypress.Commands.add("getGridRow", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.get(".monaco-editor textarea").first().click().type(query)
+  cy.getEditor().click({ force: true }).type(query)
 );
 
 Cypress.Commands.add("runLine", () => {
@@ -73,7 +73,11 @@ Cypress.Commands.add("selectQuery", (n) =>
     .click()
 );
 
-Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor textarea"));
+Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));
+
+Cypress.Commands.add("getEditorContent", () =>
+  cy.get(".monaco-editor textarea")
+);
 
 Cypress.Commands.add("getAutocomplete", () =>
   cy.get('[widgetid="editor.widget.suggestWidget"]')
