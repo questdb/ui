@@ -1313,6 +1313,9 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function render() {
+    if (data.length === 0) {
+      return;
+    }
     // If viewport is invisible when grid is updated it is not possible
     // to calculate column width correctly. When grid becomes visible again, resize()
     // is called where we continue calculating column widths. resize() can also be
