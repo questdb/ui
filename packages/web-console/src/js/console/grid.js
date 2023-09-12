@@ -1312,10 +1312,20 @@ export function grid(rootElement, _paginationFn, id) {
     viewport.scrollTop = viewportLeft.scrollTop
   }
 
-  function render() {
+  function noData() {
     if (data.length === 0) {
+      return true
+    }
+    return data[0].length === 0;
+  }
+
+  function render() {
+    if (noData()) {
+      renderColumns()
+      renderRows(0)
       return;
     }
+
     // If viewport is invisible when grid is updated it is not possible
     // to calculate column width correctly. When grid becomes visible again, resize()
     // is called where we continue calculating column widths. resize() can also be
