@@ -38,9 +38,12 @@ import Settings from "../Settings"
 import SideMenu from "../SideMenu"
 import Schema from "../Schema"
 import Sidebar from "../Sidebar"
+import { ZeroState } from "../Result/zero-state"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { EditorProvider, QuestProvider } from "../../providers"
 import { StoreKey } from "../../utils/localStorage/types"
+import { useSelector } from "react-redux"
+import { selectors } from "../../store"
 
 const Console = styled.div`
   display: flex;
@@ -77,6 +80,7 @@ const Layout = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
+  const result = useSelector(selectors.query.getResult)
 
   const handleEditorSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)
@@ -121,7 +125,7 @@ const Layout = () => {
                     <Editor />
                   </Splitter>
                 </Top>
-                <Result />
+                {result ? <Result /> : <ZeroState />}
               </Splitter>
               <Notifications />
             </EditorProvider>

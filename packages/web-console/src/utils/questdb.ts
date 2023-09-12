@@ -129,6 +129,32 @@ export type Release = {
   published_at: string
 }
 
+export type NewsThumbnail = {
+  id: string
+  width: number
+  height: number
+  url: string
+  filename: string
+  size: number
+  type: string
+  thumbnails: Record<
+    "small" | "large" | "full",
+    {
+      url: string
+      width: number
+      height: number
+    }
+  >
+}
+
+export type NewsItem = {
+  title: string
+  body: string
+  thumbnail?: NewsThumbnail[]
+  status: "published" | "draft"
+  date: string
+}
+
 export enum FileCheckStatus {
   EXISTS = "Exists",
   DOES_NOT_EXIST = "Does not exist",
@@ -477,6 +503,24 @@ export class Client {
         },
       )
       return (await response.json()) as { status: string }
+    } catch (error) {
+      // eslint-disable-next-line prefer-promise-reject-errors
+      throw error
+    }
+  }
+
+  async getNews({
+    category,
+    telemetryConfig,
+  }: {
+    category: string
+    telemetryConfig?: TelemetryConfigShape
+  }) {
+    try {
+      const response: Response = await fetch(
+        `https://cloud.app.questdb.net/api/news?category=${category}`,
+      )
+      return (await response.json()) as NewsItem[]
     } catch (error) {
       // eslint-disable-next-line prefer-promise-reject-errors
       throw error
