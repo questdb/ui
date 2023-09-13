@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 import React, { useEffect } from "react"
-import { createPortal } from "react-dom"
 import styled from "styled-components"
 import { BusEvent } from "../../consts"
 import Footer from "../Footer"
@@ -53,7 +52,6 @@ const Page = styled.div`
 `
 
 const Layout = () => {
-  const sideMenuNode = document.getElementById("sideMenu")
   const activePanel = useSelector(selectors.console.getActivePanel)
 
   useEffect(() => {
@@ -81,7 +79,7 @@ const Layout = () => {
         <News />
       </Page>
 
-      {sideMenuNode && createPortal(<SideMenu />, sideMenuNode)}
+      <SideMenu />
     </QuestProvider>
   )
 }
