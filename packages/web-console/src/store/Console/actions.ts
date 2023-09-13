@@ -21,7 +21,12 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { ConsoleConfigShape, ConsoleAction, ConsoleAT } from "../../types"
+import {
+  ConsoleConfigShape,
+  ConsoleAction,
+  ConsoleAT,
+  Panel,
+} from "../../types"
 
 const bootstrap = (): ConsoleAction => ({
   type: ConsoleAT.BOOTSTRAP,
@@ -37,6 +42,11 @@ const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
   type: ConsoleAT.SET_CONFIG,
 })
 
+const setActivePanel = (panel: Panel): ConsoleAction => ({
+  payload: panel,
+  type: ConsoleAT.SET_ACTIVE_PANEL,
+})
+
 const toggleSideMenu = (): ConsoleAction => ({
   type: ConsoleAT.TOGGLE_SIDE_MENU,
 })
@@ -46,4 +56,5 @@ export default {
   refreshAuthToken,
   setConfig,
   toggleSideMenu,
+  setActivePanel,
 }

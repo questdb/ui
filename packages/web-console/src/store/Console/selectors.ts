@@ -1,3 +1,4 @@
+import { Panel } from "./types"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -31,7 +32,11 @@ const getConfig: (store: StoreShape) => ConsoleConfigShape = (store) =>
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
   store.console.sideMenuOpened
 
+const getActivePanel: (store: StoreShape) => Panel = (store) =>
+  store.console.activePanel
+
 export default {
   getConfig,
   getSideMenuOpened,
+  getActivePanel,
 }

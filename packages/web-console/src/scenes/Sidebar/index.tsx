@@ -22,17 +22,16 @@
  *
  ******************************************************************************/
 
-import React, { useCallback, useEffect, useState } from "react"
-import { useSelector } from "react-redux"
+import React from "react"
+import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { CodeSSlash } from "styled-icons/remix-line"
 import { Upload2 } from "styled-icons/remix-line"
 import { Settings2 } from "styled-icons/evaicons-solid"
 
 import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
-import { selectors } from "../../store"
+import { actions, selectors } from "../../store"
 import { color } from "../../utils"
-import { BusEvent } from "../../consts"
 
 const Wrapper = styled.div`
   display: flex;
@@ -94,53 +93,10 @@ const DisabledNavigation = styled.div`
   }
 `
 
-type Tab = "console" | "import" | "settings"
-
 const Sidebar = () => {
-  const [selected, setSelected] = useState<Tab>("console")
-  const handleConsoleClick = useCallback(() => {
-    setSelected("console")
-  }, [])
-  const handleImportClick = useCallback(() => {
-    setSelected("import")
-  }, [])
-  const handleSettingsClick = useCallback(() => {
-    setSelected("settings")
-  }, [])
+  const dispatch = useDispatch()
   const { readOnly } = useSelector(selectors.console.getConfig)
-
-  useEffect(() => {
-    const consolePanel = document.querySelector<HTMLElement>("#console")
-    const importPanel = document.querySelector<HTMLElement>("#import")
-    const settingsPanel = document.querySelector<HTMLElement>("#settings")
-
-    if (!consolePanel || !importPanel || !settingsPanel) {
-      return
-    }
-
-    switch (selected) {
-      case "import": {
-        consolePanel.style.display = "none"
-        importPanel.style.display = "flex"
-        settingsPanel.style.display = "none"
-        break
-      }
-      case "settings": {
-        consolePanel.style.display = "none"
-        importPanel.style.display = "none"
-        settingsPanel.style.display = "flex"
-        break
-      }
-
-      case "console":
-      default: {
-        consolePanel.style.display = "flex"
-        importPanel.style.display = "none"
-        settingsPanel.style.display = "none"
-      }
-    }
-    window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
-  }, [selected])
+  const activePanel = useSelector(selectors.console.getActivePanel)
 
   return (
     <Wrapper>
@@ -156,8 +112,8 @@ const Sidebar = () => {
         trigger={
           <Navigation
             direction="left"
-            onClick={handleConsoleClick}
-            selected={selected === "console"}
+            onClick={() => dispatch(actions.console.setActivePanel("console"))}
+            selected={activePanel === "console"}
             data-hook="navigation-console-button"
           >
             <CodeSSlash size="18px" />
@@ -176,8 +132,10 @@ const Sidebar = () => {
               <Navigation
                 direction="left"
                 disabled
-                onClick={handleImportClick}
-                selected={selected === "import"}
+                onClick={() =>
+                  dispatch(actions.console.setActivePanel("import"))
+                }
+                selected={activePanel === "import"}
               >
                 <Upload2 size="18px" />
               </Navigation>
@@ -185,8 +143,8 @@ const Sidebar = () => {
           ) : (
             <Navigation
               direction="left"
-              onClick={handleImportClick}
-              selected={selected === "import"}
+              onClick={() => dispatch(actions.console.setActivePanel("import"))}
+              selected={activePanel === "import"}
               data-hook="navigation-import-button"
             >
               <Upload2 size="18px" />
@@ -217,8 +175,10 @@ const Sidebar = () => {
               <Navigation
                 direction="left"
                 disabled
-                onClick={handleSettingsClick}
-                selected={selected === "settings"}
+                onClick={() =>
+                  dispatch(actions.console.setActivePanel("settings"))
+                }
+                selected={activePanel === "settings"}
               >
                 <Settings2 size="18px" />
               </Navigation>
@@ -226,8 +186,10 @@ const Sidebar = () => {
           ) : (
             <Navigation
               direction="left"
-              onClick={handleSettingsClick}
-              selected={selected === "settings"}
+              onClick={() =>
+                dispatch(actions.console.setActivePanel("settings"))
+              }
+              selected={activePanel === "settings"}
               data-hook="navigation-settings-button"
             >
               <Settings2 size="18px" />
