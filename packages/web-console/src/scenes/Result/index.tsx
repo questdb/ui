@@ -107,6 +107,7 @@ const Result = () => {
   const [count, setCount] = useState<number | undefined>()
   const { sm } = useScreenSize()
   const result = useSelector(selectors.query.getResult)
+  const activePanel = useSelector(selectors.console.getActivePanel)
   const gridRef = useRef<any | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
 
@@ -136,10 +137,6 @@ const Result = () => {
 
     bus.on(BusEvent.MSG_QUERY_DATASET, function (x, data) {
       _grid.setData(data)
-    })
-
-    bus.on(BusEvent.MSG_ACTIVE_PANEL, function () {
-      _grid.render()
     })
 
     _grid.addEventListener("header.click", function (event: CustomEvent) {
@@ -212,6 +209,12 @@ const Result = () => {
       chart.style.display = "flex"
     }
   }, [selected])
+
+  useEffect(() => {
+    if (activePanel === "console") {
+      gridRef.current.render()
+    }
+  }, [activePanel])
 
   return (
     <Wrapper>
