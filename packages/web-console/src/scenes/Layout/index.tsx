@@ -39,7 +39,7 @@ import { selectors } from "../../store"
 const Page = styled.div`
   display: flex;
   width: 100%;
-  height: 100%;
+  height: calc(100% - 4rem);
   flex-direction: column;
   flex: 1;
   overflow: hidden;

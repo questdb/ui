@@ -16,7 +16,7 @@ const Items = styled.div`
   display: grid;
   grid-auto-rows: max-content;
   gap: 4rem;
-  padding: 4rem 2rem 8rem; /* bottom padding accounts for the footer as well */
+  padding: 4rem 2rem;
   width: 100%;
   height: 100%;
   justify-items: center;
