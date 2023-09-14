@@ -26,7 +26,7 @@ const Items = styled.div`
 const Item = styled.div`
   display: grid;
   gap: 1rem;
-  max-width: 75%;
+  width: 75%;
 `
 
 const Icon = styled(Settings2)`

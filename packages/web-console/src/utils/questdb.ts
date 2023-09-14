@@ -518,7 +518,7 @@ export class Client {
   }) {
     try {
       const response: Response = await fetch(
-        `https://cloud.app.questdb.net/api/news?category=${category}&telemetryUserId=${telemetryConfig?.id}`,
+        `https://cloud.questdb.com/api/news?category=${category}&telemetryUserId=${telemetryConfig?.id}`,
       )
       return (await response.json()) as NewsItem[]
     } catch (error) {
