@@ -25,7 +25,7 @@
 import React from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import { CodeSSlash } from "styled-icons/remix-line"
+import { CodeSSlash, Notification2 } from "styled-icons/remix-line"
 import { Upload2 } from "styled-icons/remix-line"
 import { Settings2 } from "styled-icons/evaicons-solid"
 
@@ -209,6 +209,23 @@ const Sidebar = () => {
             <>Settings</>
           )}
         </Tooltip>
+      </PopperHover>
+
+      <PopperHover
+        delay={350}
+        placement="right"
+        trigger={
+          <Navigation
+            direction="left"
+            onClick={() => dispatch(actions.console.setActivePanel("news"))}
+            selected={activePanel === "news"}
+            data-hook="navigation-news-button"
+          >
+            <Notification2 size="18px" />
+          </Navigation>
+        }
+      >
+        <Tooltip>News</Tooltip>
       </PopperHover>
     </Wrapper>
   )

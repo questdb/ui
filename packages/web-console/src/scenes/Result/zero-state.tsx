@@ -1,30 +1,22 @@
-import React, { useEffect, useState } from "react"
-import { useContext } from "react"
-import { QuestContext } from "../../providers"
-import { NewsItem } from "../../utils/questdb"
-
+import React from "react"
 import { PaneContent, PaneWrapper } from "../../components"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
+import { Button } from "@questdb/react-components"
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
 
 export const ZeroState = () => {
-  const { quest } = useContext(QuestContext)
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [enterpriseNews, setEnterpriseNews] = useState<NewsItem[]>([])
-
-  useEffect(() => {
-    void quest
-      .getNews({ category: "enterprise", telemetryConfig })
-      .then((news: NewsItem[]) => {
-        setEnterpriseNews(news)
-      })
-  }, [])
-
-  console.log(enterpriseNews)
+  const dispatch = useDispatch()
 
   return (
     <PaneWrapper>
-      <PaneContent>result zero state</PaneContent>
+      <PaneContent>
+        <Button
+          skin="secondary"
+          onClick={() => dispatch(actions.console.setActivePanel("news"))}
+        >
+          Enterprise news
+        </Button>
+      </PaneContent>
     </PaneWrapper>
   )
 }

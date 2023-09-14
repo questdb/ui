@@ -7,7 +7,6 @@ import { color } from "../../utils"
 const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
-  flex: 0;
   justify-content: flex-start;
   align-items: flex-start;
   background: ${color("backgroundDarker")};
