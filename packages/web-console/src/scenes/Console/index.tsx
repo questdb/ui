@@ -2,7 +2,6 @@ import React from "react"
 import styled from "styled-components"
 import { Splitter, useScreenSize } from "../../components"
 import Editor from "../Editor"
-import Notifications from "../Notifications"
 import Result from "../Result"
 import Schema from "../Schema"
 import { ZeroState } from "../Result/zero-state"
@@ -68,7 +67,6 @@ const Console = () => {
           </Top>
           {result ? <Result /> : <ZeroState />}
         </Splitter>
-        <Notifications />
       </EditorProvider>
     </Root>
   )

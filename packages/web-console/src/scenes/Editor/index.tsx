@@ -29,6 +29,7 @@ import { PaneWrapper } from "../../components"
 
 import Monaco from "./Monaco"
 import Menu from "./Menu"
+import Notifications from "../Notifications"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -45,6 +46,7 @@ const Editor = ({
   <EditorPaneWrapper ref={innerRef} {...rest}>
     <Menu />
     <Monaco />
+    <Notifications />
   </EditorPaneWrapper>
 )
 
