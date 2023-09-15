@@ -31,7 +31,6 @@ import Import from "../Import"
 import Settings from "../Settings"
 import News from "../News"
 import SideMenu from "../SideMenu"
-import Sidebar from "../Sidebar"
 import { QuestProvider } from "../../providers"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
@@ -60,9 +59,6 @@ const Layout = () => {
 
   return (
     <QuestProvider>
-      <Sidebar />
-      <Footer />
-
       <Page style={{ display: activePanel === "console" ? "flex" : "none" }}>
         <Console />
       </Page>
@@ -80,6 +76,8 @@ const Layout = () => {
       </Page>
 
       <SideMenu />
+
+      <Footer />
     </QuestProvider>
   )
 }

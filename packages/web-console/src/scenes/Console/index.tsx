@@ -10,8 +10,10 @@ import { useCallback } from "react"
 import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
+import { useSelector, useDispatch } from "react-redux"
+import { selectors, actions } from "../../store"
+import { Sidebar } from "../../components/Sidebar"
+import { color } from "../../utils"
 
 const Root = styled.div`
   display: flex;
@@ -25,11 +27,29 @@ const Top = styled.div`
   overflow: hidden;
 `
 
+const Bottom = styled.div`
+  display: flex;
+  flex: 1;
+`
+
+const Logo = styled.div`
+  position: relative;
+  display: flex;
+  width: 4rem;
+  height: 4rem;
+  background: ${color("black")};
+  z-index: 1;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+`
+
 const Console = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
+  const dispatch = useDispatch()
 
   const handleEditorSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)
@@ -55,6 +75,16 @@ const Console = () => {
           onChange={handleEditorSplitterChange}
         >
           <Top>
+            <Sidebar>
+              <Logo
+                onClick={() =>
+                  dispatch(actions.console.setActivePanel("console"))
+                }
+              >
+                <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
+              </Logo>
+              top
+            </Sidebar>
             <Splitter
               direction="horizontal"
               fallback={resultsSplitterBasis}
@@ -65,7 +95,10 @@ const Console = () => {
               <Editor />
             </Splitter>
           </Top>
-          {result ? <Result /> : <ZeroState />}
+          <Bottom>
+            <Sidebar>bottom</Sidebar>
+            {result ? <Result /> : <ZeroState />}
+          </Bottom>
         </Splitter>
       </EditorProvider>
     </Root>
