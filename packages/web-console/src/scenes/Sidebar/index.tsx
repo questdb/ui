@@ -48,13 +48,9 @@ const Logo = styled.div`
   flex: 0 0 4rem;
   background: ${color("black")};
   z-index: 1;
-
-  a {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-  }
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 `
 
 type NavigationProps = Readonly<{
@@ -100,10 +96,8 @@ const Sidebar = () => {
 
   return (
     <Wrapper>
-      <Logo>
-        <a href="https://questdb.io" rel="noreferrer" target="_blank">
-          <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
-        </a>
+      <Logo onClick={() => dispatch(actions.console.setActivePanel("console"))}>
+        <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
       </Logo>
 
       <PopperHover
