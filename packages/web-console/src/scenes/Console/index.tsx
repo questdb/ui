@@ -17,6 +17,8 @@ import { Sidebar } from "../../components/Sidebar"
 import { color } from "../../utils"
 import { Navigation } from "../../components/Sidebar/navigation"
 import { Grid, PieChart } from "styled-icons/remix-line"
+import { ChevronDoubleLeft } from "styled-icons/bootstrap"
+import { Button } from "@questdb/react-components"
 import { ViewMode } from "./types"
 
 const Root = styled.div`
@@ -46,6 +48,10 @@ const Logo = styled.div`
   align-items: center;
   justify-content: center;
   cursor: pointer;
+`
+
+const ToggleTablesIcon = styled(ChevronDoubleLeft)<{ collapsed: boolean }>`
+  transform: rotate(${({ collapsed }) => (collapsed ? "180deg" : "0deg")});
 `
 
 const viewModes: {
@@ -105,7 +111,30 @@ const Console = () => {
               >
                 <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
               </Logo>
-              top
+              <PopperHover
+                delay={350}
+                placement="bottom"
+                trigger={
+                  <Button
+                    skin="transparent"
+                    onClick={() =>
+                      updateSettings(
+                        StoreKey.RESULTS_SPLITTER_BASIS,
+                        resultsSplitterBasis === 0 ? 300 : 0,
+                      )
+                    }
+                  >
+                    <ToggleTablesIcon
+                      size="16px"
+                      collapsed={resultsSplitterBasis === 0}
+                    />
+                  </Button>
+                }
+              >
+                <Tooltip>
+                  {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
+                </Tooltip>
+              </PopperHover>
             </Sidebar>
             <Splitter
               direction="horizontal"

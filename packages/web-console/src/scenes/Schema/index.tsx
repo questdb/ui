@@ -39,8 +39,8 @@ import {
   Database2,
   Loader3,
   Refresh,
-  ArrowLeftCircle,
   AddCircle,
+  Upload2,
 } from "styled-icons/remix-line"
 
 import {
@@ -48,7 +48,6 @@ import {
   PaneWrapper,
   PopperHover,
   PaneMenu,
-  SecondaryButton,
   spinAnimation,
   Text,
   Tooltip,
@@ -67,6 +66,7 @@ import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
 import { useEditor } from "../../providers"
+import { Button } from "@questdb/react-components"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -101,12 +101,17 @@ const Content = styled(PaneContent)<{
   ${({ _loading }) => _loading && loadingStyles};
 `
 
-const DatabaseIcon = styled(Database2)`
-  margin-right: 1rem;
+const Actions = styled.div`
+  display: grid;
+  grid-auto-flow: column;
+  gap: 1rem;
+  height: 4rem;
+  align-items: flex-end;
+  justify-content: center;
 `
 
-const HideSchemaButton = styled(SecondaryButton)`
-  margin-left: 1rem;
+const DatabaseIcon = styled(Database2)`
+  margin-right: 1rem;
 `
 
 const Loader = styled(Loader3)`
@@ -200,10 +205,6 @@ const Schema = ({
     )
   }, [quest])
 
-  const handleHideSchemaClick = useCallback(() => {
-    updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, 0)
-  }, [])
-
   const handleAddTableSchema = (values: SchemaFormValues) => {
     const { name, partitionBy, timestamp, schemaColumns, walEnabled } = values
     const tableSchemaQuery = formatTableSchemaQuery({
@@ -254,54 +255,21 @@ const Schema = ({
         <div style={{ display: "flex" }}>
           {readOnly === false && tables && (
             <Box align="center" gap="1rem">
-              <TableSchemaDialog
-                action="add"
-                isEditLocked={false}
-                hasWalSetting={true}
-                walEnabled={false}
-                name=""
-                partitionBy="NONE"
-                schema={[]}
-                tables={tables}
-                timestamp=""
-                onOpenChange={(open) => setAddTableDialogOpen(open)}
-                open={addTableDialogOpen !== undefined}
-                onSchemaChange={handleAddTableSchema}
-                trigger={
-                  <SecondaryButton onClick={() => setAddTableDialogOpen("add")}>
-                    <AddCircle size="18px" />
-                    <span>Create</span>
-                  </SecondaryButton>
-                }
-                ctaText="Create"
-              />
               <PopperHover
                 delay={350}
                 placement="bottom"
                 trigger={
-                  <SecondaryButton onClick={fetchTables}>
+                  <Button onClick={fetchTables} skin="secondary">
                     <Refresh size="18px" />
-                  </SecondaryButton>
+                  </Button>
                 }
               >
                 <Tooltip>Refresh</Tooltip>
               </PopperHover>
             </Box>
           )}
-          <PopperHover
-            delay={350}
-            placement="bottom"
-            trigger={
-              <HideSchemaButton onClick={handleHideSchemaClick}>
-                <ArrowLeftCircle size="18px" />
-              </HideSchemaButton>
-            }
-          >
-            <Tooltip>Hide tables</Tooltip>
-          </PopperHover>
         </div>
       </Menu>
-
       <Content _loading={loading}>
         {loading ? (
           <Loader size="48px" />
@@ -316,6 +284,41 @@ const Schema = ({
         )}
         {!loading && <FlexSpacer />}
       </Content>
+
+      <Actions>
+        <TableSchemaDialog
+          action="add"
+          isEditLocked={false}
+          hasWalSetting={true}
+          walEnabled={false}
+          name=""
+          partitionBy="NONE"
+          schema={[]}
+          tables={tables}
+          timestamp=""
+          onOpenChange={(open) => setAddTableDialogOpen(open)}
+          open={addTableDialogOpen !== undefined}
+          onSchemaChange={handleAddTableSchema}
+          trigger={
+            <Button
+              skin="secondary"
+              onClick={() => setAddTableDialogOpen("add")}
+              prefixIcon={<AddCircle size="18px" />}
+            >
+              Create
+            </Button>
+          }
+          ctaText="Create"
+        />
+
+        <Button
+          skin="secondary"
+          onClick={() => dispatch(actions.console.setActivePanel("import"))}
+          prefixIcon={<Upload2 size="18px" />}
+        >
+          Import
+        </Button>
+      </Actions>
     </Wrapper>
   )
 }

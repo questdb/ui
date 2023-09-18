@@ -32,7 +32,6 @@ import {
   Chat3,
   Close as _CloseIcon,
   Command,
-  Database2,
   Play,
   Stop,
 } from "styled-icons/remix-line"
@@ -111,10 +110,6 @@ const MenuIcon = styled(_MenuIcon)`
   color: ${color("foreground")};
 `
 
-const ShowSchemaButton = styled(SecondaryButton)`
-  margin-right: 1rem;
-`
-
 const CloseIcon = styled(_CloseIcon)`
   color: ${color("foreground")};
 `
@@ -184,8 +179,7 @@ const Menu = () => {
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
-  const { resultsSplitterBasis, exampleQueriesVisited, updateSettings } =
-    useLocalStorage()
+  const { exampleQueriesVisited, updateSettings } = useLocalStorage()
 
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
@@ -205,9 +199,6 @@ const Menu = () => {
   const handleSideMenuButtonClick = useCallback(() => {
     dispatch(actions.console.toggleSideMenu())
   }, [dispatch])
-  const handleShowSchemaClick = useCallback(() => {
-    updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, 300)
-  }, [])
 
   useEffect(() => {
     setQueriesPopperActive(false)
@@ -239,20 +230,6 @@ const Menu = () => {
 
   return (
     <Wrapper _display={sm ? "none" : "inline"}>
-      {resultsSplitterBasis === 0 && (
-        <PopperHover
-          delay={350}
-          placement="bottom"
-          trigger={
-            <ShowSchemaButton onClick={handleShowSchemaClick}>
-              <Database2 size="18px" />
-            </ShowSchemaButton>
-          }
-        >
-          <Tooltip>Show tables</Tooltip>
-        </PopperHover>
-      )}
-
       {running.value && (
         <ErrorButton onClick={handleClick}>
           <Stop size="18px" />
