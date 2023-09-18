@@ -28,7 +28,6 @@ import { BusEvent } from "../../consts"
 import Footer from "../Footer"
 import Console from "../Console"
 import Import from "../Import"
-import Settings from "../Settings"
 import News from "../News"
 import SideMenu from "../SideMenu"
 import { QuestProvider } from "../../providers"
@@ -65,10 +64,6 @@ const Layout = () => {
 
       <Page style={{ display: activePanel === "import" ? "flex" : "none" }}>
         <Import />
-      </Page>
-
-      <Page style={{ display: activePanel === "settings" ? "flex" : "none" }}>
-        <Settings />
       </Page>
 
       <Page style={{ display: activePanel === "news" ? "flex" : "none" }}>

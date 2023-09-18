@@ -28,8 +28,6 @@ export type LocalConfig = {
   authPayload: string
   editorCol: number
   editorLine: number
-  notificationDelay: number
-  isNotificationEnabled: boolean
   editorSplitterBasis: number
   resultsSplitterBasis: number
   exampleQueriesVisited: boolean

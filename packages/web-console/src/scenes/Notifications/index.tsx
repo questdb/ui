@@ -24,7 +24,6 @@
 
 import React, {
   useCallback,
-  useContext,
   useState,
   useEffect,
   useRef,
@@ -42,7 +41,6 @@ import {
   useScreenSize,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { LocalStorageContext } from "../../providers/LocalStorageProvider"
 import { TerminalBox, Subtract, ArrowUpS } from "styled-icons/remix-line"
 
 import Notification from "./Notification"
@@ -86,7 +84,6 @@ const ClearAllNotificationsButton = styled(SecondaryButton)`
 
 const Notifications = () => {
   const notifications = useSelector(selectors.query.getNotifications)
-  const { isNotificationEnabled } = useContext(LocalStorageContext)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -121,10 +118,6 @@ const Notifications = () => {
       setIsMinimized(true)
     }
   }, [sm])
-
-  if (!isNotificationEnabled) {
-    return <></>
-  }
 
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">

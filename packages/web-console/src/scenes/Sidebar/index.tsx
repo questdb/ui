@@ -27,7 +27,6 @@ import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { CodeSSlash, Notification2 } from "styled-icons/remix-line"
 import { Upload2 } from "styled-icons/remix-line"
-import { Settings2 } from "styled-icons/evaicons-solid"
 
 import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
 import { actions, selectors } from "../../store"
@@ -156,51 +155,6 @@ const Sidebar = () => {
             </>
           ) : (
             <>Import</>
-          )}
-        </Tooltip>
-      </PopperHover>
-
-      <PopperHover
-        delay={readOnly ? 0 : 350}
-        placement="right"
-        trigger={
-          readOnly ? (
-            <DisabledNavigation>
-              <Navigation
-                direction="left"
-                disabled
-                onClick={() =>
-                  dispatch(actions.console.setActivePanel("settings"))
-                }
-                selected={activePanel === "settings"}
-              >
-                <Settings2 size="18px" />
-              </Navigation>
-            </DisabledNavigation>
-          ) : (
-            <Navigation
-              direction="left"
-              onClick={() =>
-                dispatch(actions.console.setActivePanel("settings"))
-              }
-              selected={activePanel === "settings"}
-              data-hook="navigation-settings-button"
-            >
-              <Settings2 size="18px" />
-            </Navigation>
-          )
-        }
-      >
-        <Tooltip>
-          {readOnly ? (
-            <>
-              <b>Settings</b> is currently disabled.
-              <br />
-              To use this feature, turn <b>read-only</b> mode to <i>false</i> in
-              the configuration file
-            </>
-          ) : (
-            <>Settings</>
           )}
         </Tooltip>
       </PopperHover>
