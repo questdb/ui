@@ -1,6 +1,6 @@
-import React from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
-import { Splitter, useScreenSize } from "../../components"
+import { Splitter, useScreenSize, PopperHover } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
@@ -12,8 +12,12 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../store"
+import { Tooltip } from "../../components/Tooltip"
 import { Sidebar } from "../../components/Sidebar"
 import { color } from "../../utils"
+import { Navigation } from "../../components/Sidebar/navigation"
+import { Grid, PieChart } from "styled-icons/remix-line"
+import { ViewMode } from "./types"
 
 const Root = styled.div`
   display: flex;
@@ -35,7 +39,7 @@ const Bottom = styled.div`
 const Logo = styled.div`
   position: relative;
   display: flex;
-  width: 4rem;
+  width: 4.5rem;
   height: 4rem;
   background: ${color("black")};
   z-index: 1;
@@ -44,12 +48,30 @@ const Logo = styled.div`
   cursor: pointer;
 `
 
+const viewModes: {
+  icon: React.ReactNode
+  mode: ViewMode
+  tooltipText: string
+}[] = [
+  {
+    icon: <Grid size="18px" />,
+    mode: "grid",
+    tooltipText: "Grid",
+  },
+  {
+    icon: <PieChart size="18px" />,
+    mode: "chart",
+    tooltipText: "Chart",
+  },
+]
+
 const Console = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
   const dispatch = useDispatch()
+  const [resultViewMode, setResultViewMode] = useState<ViewMode>("grid")
 
   const handleEditorSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)
@@ -96,8 +118,28 @@ const Console = () => {
             </Splitter>
           </Top>
           <Bottom>
-            <Sidebar>bottom</Sidebar>
-            {result ? <Result /> : <ZeroState />}
+            <Sidebar>
+              {result &&
+                viewModes.map(({ icon, mode, tooltipText }) => (
+                  <PopperHover
+                    key={mode}
+                    delay={350}
+                    placement="right"
+                    trigger={
+                      <Navigation
+                        direction="left"
+                        onClick={() => setResultViewMode(mode)}
+                        selected={resultViewMode === mode}
+                      >
+                        {icon}
+                      </Navigation>
+                    }
+                  >
+                    <Tooltip>{tooltipText}</Tooltip>
+                  </PopperHover>
+                ))}
+            </Sidebar>
+            {result ? <Result viewMode={resultViewMode} /> : <ZeroState />}
           </Bottom>
         </Splitter>
       </EditorProvider>
