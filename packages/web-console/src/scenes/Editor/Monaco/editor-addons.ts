@@ -43,7 +43,6 @@ import { bufferStore } from "../../../store/buffers"
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
-  CLEANUP_NOTIFICATIONS = "clean_notifications",
   ADD_NEW_TAB = "add_new_tab",
   CLOSE_ACTIVE_TAB = "close_active_tab",
 }
@@ -79,15 +78,6 @@ export const registerEditorActions = ({
     ],
     run: () => {
       toggleRunning()
-    },
-  })
-
-  editor.addAction({
-    id: Command.CLEANUP_NOTIFICATIONS,
-    label: "Clear all notifications",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
-    run: () => {
-      dispatch(actions.query.cleanupNotifications())
     },
   })
 
