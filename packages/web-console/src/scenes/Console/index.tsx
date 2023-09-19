@@ -20,6 +20,7 @@ import { Grid, PieChart } from "styled-icons/remix-line"
 import { ChevronDoubleLeft } from "styled-icons/bootstrap"
 import { Button } from "@questdb/react-components"
 import { ViewMode } from "./types"
+import { Logo } from "../../components/Logo"
 
 const Root = styled.div`
   display: flex;
@@ -36,18 +37,6 @@ const Top = styled.div`
 const Bottom = styled.div`
   display: flex;
   flex: 1;
-`
-
-const Logo = styled.div`
-  position: relative;
-  display: flex;
-  width: 4.5rem;
-  height: 4rem;
-  background: ${color("black")};
-  z-index: 1;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
 `
 
 const ToggleTablesIcon = styled(ChevronDoubleLeft)<{ collapsed: boolean }>`
@@ -104,13 +93,7 @@ const Console = () => {
         >
           <Top>
             <Sidebar>
-              <Logo
-                onClick={() =>
-                  dispatch(actions.console.setActivePanel("console"))
-                }
-              >
-                <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
-              </Logo>
+              <Logo />
               <PopperHover
                 delay={350}
                 placement="bottom"

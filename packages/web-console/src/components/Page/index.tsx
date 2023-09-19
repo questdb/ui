@@ -3,16 +3,27 @@ import styled from "styled-components"
 import { Text } from "../../components/Text"
 import { PaneMenu } from "../../components/PaneMenu"
 import { color } from "../../utils"
+import { Sidebar } from "../../components/Sidebar"
+import { Logo } from "../../components/Logo"
+import { XLg } from "styled-icons/bootstrap"
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
+import { Button } from "@questdb/react-components"
+
+const Root = styled.div`
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+`
 
 const Wrapper = styled.div`
   display: flex;
+  flex: 1;
   flex-direction: column;
   justify-content: flex-start;
   align-items: flex-start;
   background: ${color("backgroundDarker")};
   color: ${color("foreground")};
-  width: calc(100vw - 45px);
-  height: 100vh;
 `
 
 const HeaderWrapper = styled.div`
@@ -38,16 +49,32 @@ type Props = {
   title?: string
 }
 
-export const Page = ({ children, icon, title }: Props) => (
-  <Wrapper>
-    {title && (
-      <HeaderWrapper>
-        <HeaderMenu>
-          <Icon>{icon}</Icon>
-          <Text color="foreground">{title}</Text>
-        </HeaderMenu>
-      </HeaderWrapper>
-    )}
-    {children}
-  </Wrapper>
-)
+export const Page = ({ children, icon, title }: Props) => {
+  const dispatch = useDispatch()
+
+  return (
+    <Root>
+      <Sidebar>
+        <Logo />
+        <Button
+          skin="transparent"
+          type="button"
+          onClick={() => dispatch(actions.console.setActivePanel("console"))}
+        >
+          <XLg size="18px" />
+        </Button>
+      </Sidebar>
+      <Wrapper>
+        {title && (
+          <HeaderWrapper>
+            <HeaderMenu>
+              <Icon>{icon}</Icon>
+              <Text color="foreground">{title}</Text>
+            </HeaderMenu>
+          </HeaderWrapper>
+        )}
+        {children}
+      </Wrapper>
+    </Root>
+  )
+}
