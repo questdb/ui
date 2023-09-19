@@ -32,6 +32,7 @@ import {
   Chat3,
   Close as _CloseIcon,
   Command,
+  Notification2,
   Play,
   Stop,
 } from "styled-icons/remix-line"
@@ -41,6 +42,7 @@ import { Slack } from "styled-icons/boxicons-logos"
 
 import {
   ErrorButton,
+  IconWithTooltip,
   Input,
   Link,
   PaneMenu,
@@ -329,6 +331,18 @@ const Menu = () => {
         id="docsearch-input"
         placeholder="Search documentation"
         title="Search..."
+      />
+
+      <IconWithTooltip
+        icon={
+          <SecondaryButton
+            onClick={() => dispatch(actions.console.setActivePanel("news"))}
+          >
+            <Notification2 size="18px" />
+          </SecondaryButton>
+        }
+        placement="bottom"
+        tooltip="QuestDB News"
       />
 
       {sm && (
