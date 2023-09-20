@@ -23,15 +23,18 @@
  ******************************************************************************/
 
 import styled from "styled-components"
+import { NotificationShape } from "types"
 import { bezierTransition } from "../../../components"
 import { color } from "../../../utils"
 
-export const Wrapper = styled.div`
+export const Wrapper = styled.div<{
+  isMinimized: NotificationShape["isMinimized"]
+}>`
   display: flex;
   align-items: center;
   border-right: none;
   width: 100%;
-  height: 4rem;
+  height: ${({ isMinimized }) => (isMinimized ? "auto" : "4rem")};
   border-bottom: 1px ${color("backgroundDarker")} solid;
   padding: 0 1rem;
 

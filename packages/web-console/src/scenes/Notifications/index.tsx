@@ -67,6 +67,11 @@ const Header = styled(Text)`
   align-items: center;
 `
 
+const LatestNotification = styled.div`
+  margin-left: 1rem;
+  flex: 1;
+`
+
 const TerminalBoxIcon = styled(TerminalBox)`
   margin-right: 1rem;
 `
@@ -119,6 +124,8 @@ const Notifications = () => {
     }
   }, [sm])
 
+  const lastNotification = notifications[notifications.length - 1]
+
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
       <Menu>
@@ -126,32 +133,40 @@ const Notifications = () => {
           <TerminalBoxIcon size="18px" />
           Log
         </Header>
+        <LatestNotification>
+          {isMinimized && lastNotification && (
+            <Notification isMinimized={true} {...lastNotification} />
+          )}
+        </LatestNotification>
         <SecondaryButton onClick={toggleMinimized}>
           {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
         </SecondaryButton>
       </Menu>
-      <Content minimized={isMinimized} ref={contentRef}>
-        <TransitionGroup className="notifications">
-          {notifications.map((notification) => (
-            <Notification
-              key={
-                notification.createdAt ? notification.createdAt.getTime() : 0
-              }
-              {...notification}
-            />
-          ))}
-        </TransitionGroup>
-        {!isMinimized && (
-          <ClearAllNotifications>
-            <ClearAllNotificationsButton
-              disabled={notifications.length === 0}
-              onClick={cleanupNotifications}
-            >
-              Clear all
-            </ClearAllNotificationsButton>
-          </ClearAllNotifications>
-        )}
-      </Content>
+      {!isMinimized && (
+        <Content minimized={isMinimized} ref={contentRef}>
+          <TransitionGroup className="notifications">
+            {notifications.map((notification) => (
+              <Notification
+                isMinimized={false}
+                key={
+                  notification.createdAt ? notification.createdAt.getTime() : 0
+                }
+                {...notification}
+              />
+            ))}
+          </TransitionGroup>
+          {!isMinimized && (
+            <ClearAllNotifications>
+              <ClearAllNotificationsButton
+                disabled={notifications.length === 0}
+                onClick={cleanupNotifications}
+              >
+                Clear all
+              </ClearAllNotificationsButton>
+            </ClearAllNotifications>
+          )}
+        </Content>
+      )}
     </Wrapper>
   )
 }
