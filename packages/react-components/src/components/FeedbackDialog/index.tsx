@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { AlertDialog } from "../AlertDialog";
 import { Box } from "../Box";
 import { Button } from "../Button";
@@ -120,17 +120,19 @@ const Footer = ({
 };
 
 type Props = {
-  trigger: ({
+  trigger?: ({
     setOpen,
   }: {
     setOpen: (open: boolean) => void;
   }) => React.ReactNode;
   onSubmit: (values: Values) => Promise<void>;
+  onClose?: () => void;
   title?: string;
   subtitle?: string;
   initialMessage?: string;
   afterMessage?: React.ReactNode;
   withEmailInput?: boolean;
+  defaultOpen?: boolean;
 };
 
 type ErrorList = Record<string, string>;
@@ -143,11 +145,17 @@ export const FeedbackDialog = ({
   initialMessage,
   afterMessage,
   onSubmit,
+  onClose = () => {},
+  defaultOpen = false,
 }: Props) => {
   const [errors, setErrors] = useState<ErrorList>({});
   const [message, setMessage] = useState<string>(initialMessage ?? "");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen]);
 
   const validateFields = (
     schema: Joi.ObjectSchema,
@@ -183,9 +191,11 @@ export const FeedbackDialog = ({
 
   return (
     <AlertDialog.Root open={open}>
-      <AlertDialog.Trigger asChild>
-        <ForwardRef>{trigger({ setOpen })}</ForwardRef>
-      </AlertDialog.Trigger>
+      {trigger && (
+        <AlertDialog.Trigger asChild>
+          <ForwardRef>{trigger({ setOpen })}</ForwardRef>
+        </AlertDialog.Trigger>
+      )}
 
       <AlertDialog.Portal>
         <ForwardRef>
@@ -210,6 +220,7 @@ export const FeedbackDialog = ({
                     message: e.target.message.value,
                   });
                   setOpen(false);
+                  onClose();
                 } catch (error) {
                   Promise.reject(error);
                 } finally {
@@ -234,7 +245,10 @@ export const FeedbackDialog = ({
                   <Button
                     type="button"
                     skin="transparent"
-                    onClick={() => setOpen(false)}
+                    onClick={() => {
+                      setOpen(false);
+                      onClose();
+                    }}
                   >
                     <X size={18} />
                   </Button>
@@ -298,6 +312,7 @@ export const FeedbackDialog = ({
                   setErrors({});
                   setMessage("");
                   setOpen(false);
+                  onClose();
                 }}
               />
             </Card>
