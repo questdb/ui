@@ -76,6 +76,7 @@ const DocSearchStyles = css`
 
   .DocSearch-Hit-title {
     font-size: 100%;
+    overflow: hidden;
   }
 
   .DocSearch-Logo .cls-1,

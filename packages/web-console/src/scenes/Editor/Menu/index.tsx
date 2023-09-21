@@ -245,6 +245,16 @@ const Menu = () => {
           indexName="questdb"
           placeholder="Search documentation"
           translations={{ button: { buttonText: "Search documentation" } }}
+          hitComponent={({ hit, children }) => (
+            <a href={hit.url} target="_blank" rel="noreferrer">
+              {children}
+            </a>
+          )}
+          navigator={{
+            navigate({ itemUrl }) {
+              return window.open(itemUrl, "_blank")
+            },
+          }}
         />
         <DropdownMenu.Root modal={false}>
           <DropdownMenu.Trigger asChild>
