@@ -42,7 +42,6 @@ import { Slack } from "styled-icons/boxicons-logos"
 import {
   ErrorButton,
   IconWithTooltip,
-  Input,
   Link,
   PaneMenu,
   PopperToggle,
@@ -163,9 +162,6 @@ const Menu = () => {
   const { quest } = useContext(QuestContext)
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
-  const [isFeedbackSubmitting, setIsFeedbackSubmitting] =
-    useState<boolean>(false)
-  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState<boolean>(false)
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
@@ -281,7 +277,6 @@ const Menu = () => {
                   email: string
                   message: string
                 }) => {
-                  setIsFeedbackSubmitting(true)
                   try {
                     await quest.sendFeedback({
                       email,
@@ -294,8 +289,6 @@ const Menu = () => {
                   } catch (err) {
                     toast.error("Something went wrong. Please try again later.")
                     throw err
-                  } finally {
-                    setIsFeedbackSubmitting(false)
                   }
                 }}
               />

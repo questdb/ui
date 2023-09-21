@@ -57,7 +57,7 @@ export const Page = ({ children, icon, title }: Props) => {
       <Sidebar>
         <Logo />
         <Button
-          skin="transparent"
+          skin="secondary"
           type="button"
           onClick={() => dispatch(actions.console.setActivePanel("console"))}
         >

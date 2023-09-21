@@ -99,7 +99,7 @@ const Console = () => {
                 placement="bottom"
                 trigger={
                   <Button
-                    skin="transparent"
+                    skin="secondary"
                     onClick={() =>
                       updateSettings(
                         StoreKey.RESULTS_SPLITTER_BASIS,
