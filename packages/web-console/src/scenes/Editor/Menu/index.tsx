@@ -35,9 +35,9 @@ import {
   Notification2,
   Play,
   Stop,
+  Question,
 } from "styled-icons/remix-line"
 import { Menu as _MenuIcon } from "styled-icons/remix-fill"
-import { HelpCircle } from "styled-icons/boxicons-regular"
 import { Slack } from "styled-icons/boxicons-logos"
 
 import {
@@ -50,6 +50,7 @@ import {
   PopperToggle,
   SecondaryButton,
   SuccessButton,
+  Text,
   toast,
   Tooltip,
   TransitionDuration,
@@ -57,7 +58,7 @@ import {
   useKeyPress,
   useScreenSize,
 } from "../../../components"
-import { FeedbackDialog } from "@questdb/react-components"
+import { Button, DropdownMenu, FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 
@@ -138,35 +139,31 @@ const SideMenuMenuButton = styled(TransparentButton)`
   }
 `
 
-const MenuButton = styled(SecondaryButton)`
-  margin-right: 1rem;
+const MenuItems = styled.div`
+  display: grid;
+  gap: 1rem;
+  grid-auto-flow: column;
+  align-items: center;
+`
+
+const DropdownMenuItem = styled(DropdownMenu.Item)`
+  color: ${({ theme }) => theme.color.foreground};
 `
 
 const MenuLink: React.FunctionComponent<{
   href: string
-  icon: React.ReactNode
-  tooltipText: string
-}> = ({ href, icon, tooltipText }) => {
-  const Trigger = (
-    <MenuButton>
-      <Link
-        color="foreground"
-        hoverColor="foreground"
-        href={href}
-        rel="noreferrer"
-        target="_blank"
-      >
-        {icon}
-      </Link>
-    </MenuButton>
-  )
-
-  return (
-    <PopperHover delay={350} placement="bottom" trigger={Trigger}>
-      <Tooltip>{tooltipText}</Tooltip>
-    </PopperHover>
-  )
-}
+  text: string
+}> = ({ href, text }) => (
+  <Link
+    color="foreground"
+    hoverColor="foreground"
+    href={href}
+    rel="noreferrer"
+    target="_blank"
+  >
+    {text}
+  </Link>
+)
 
 const Menu = () => {
   const dispatch = useDispatch()
@@ -175,6 +172,7 @@ const Menu = () => {
   const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] =
     useState<boolean>(false)
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState<boolean>(false)
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
@@ -265,85 +263,99 @@ const Menu = () => {
 
       <Separator />
 
-      <FeedbackDialog
-        withEmailInput
-        title="Web Console feedback"
-        subtitle="Let us know your thoughts"
-        trigger={({ setOpen }) => (
-          <MenuButton onClick={() => setOpen(true)}>
-            <Chat3 size="18px" />
-            {!sm && <span>Feedback</span>}
-          </MenuButton>
-        )}
-        onSubmit={async ({
-          email,
-          message,
-        }: {
-          email: string
-          message: string
-        }) => {
-          setIsFeedbackSubmitting(true)
-          try {
-            await quest.sendFeedback({
-              email,
-              message,
-              telemetryConfig,
-            })
-            toast.success(
-              "Thank you for your feedback! Our team will review it shortly.",
-            )
-          } catch (err) {
-            toast.error("Something went wrong. Please try again later.")
-            throw err
-          } finally {
-            setIsFeedbackSubmitting(false)
+      <MenuItems>
+        <DocsearchInput
+          id="docsearch-input"
+          placeholder="Search documentation"
+          title="Search..."
+        />
+
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <Button skin="secondary" prefixIcon={<Question size="18px" />}>
+              Help
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content>
+            <DropdownMenuItem onSelect={(e: Event) => e.preventDefault()}>
+              <Chat3 size="18px" />
+              <FeedbackDialog
+                withEmailInput
+                title="Web Console feedback"
+                subtitle="Let us know your thoughts"
+                trigger={({ setOpen }) => (
+                  <Text color="foreground" onClick={() => setOpen(true)}>
+                    Feedback
+                  </Text>
+                )}
+                onSubmit={async ({
+                  email,
+                  message,
+                }: {
+                  email: string
+                  message: string
+                }) => {
+                  setIsFeedbackSubmitting(true)
+                  try {
+                    await quest.sendFeedback({
+                      email,
+                      message,
+                      telemetryConfig,
+                    })
+                    toast.success(
+                      "Thank you for your feedback! Our team will review it shortly.",
+                    )
+                  } catch (err) {
+                    toast.error("Something went wrong. Please try again later.")
+                    throw err
+                  } finally {
+                    setIsFeedbackSubmitting(false)
+                  }
+                }}
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Question size="18px" />
+              <MenuLink
+                href="https://questdb.io/docs/develop/web-console/"
+                text="Web Console Docs"
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Slack size="18px" />
+              <MenuLink
+                href="https://slack.questdb.io/"
+                text="Slack community"
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
+              <Command size="18px" />
+              <Text color="foreground">Shortcuts</Text>
+            </DropdownMenuItem>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+
+        <IconWithTooltip
+          icon={
+            <Button
+              skin="secondary"
+              onClick={() => dispatch(actions.console.setActivePanel("news"))}
+            >
+              <Notification2 size="18px" />
+            </Button>
           }
-        }}
-      />
-
-      <MenuLink
-        href="https://slack.questdb.io/"
-        icon={<Slack size="18px" />}
-        tooltipText="Questions? Join our Slack"
-      />
-
-      <MenuLink
-        href="https://questdb.io/docs/develop/web-console/"
-        icon={<HelpCircle size="18px" />}
-        tooltipText="Go to Web Console help"
-      />
+          placement="bottom"
+          tooltip="QuestDB News"
+        />
+      </MenuItems>
 
       <PopperToggle
         active={shortcutsPopperActive}
         onToggle={handleShortcutsToggle}
-        trigger={
-          <MenuButton>
-            <Command size="18px" />
-            {!sm && <span>Shortcuts</span>}
-          </MenuButton>
-        }
-        placement="bottom"
+        trigger={<div style={{ height: "4rem" }} />}
       >
         <Shortcuts />
       </PopperToggle>
-
-      <DocsearchInput
-        id="docsearch-input"
-        placeholder="Search documentation"
-        title="Search..."
-      />
-
-      <IconWithTooltip
-        icon={
-          <SecondaryButton
-            onClick={() => dispatch(actions.console.setActivePanel("news"))}
-          >
-            <Notification2 size="18px" />
-          </SecondaryButton>
-        }
-        placement="bottom"
-        tooltip="QuestDB News"
-      />
 
       {sm && (
         <SideMenuMenuButton onClick={handleSideMenuButtonClick}>
