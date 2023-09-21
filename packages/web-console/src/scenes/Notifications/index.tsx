@@ -134,7 +134,7 @@ const Notifications = () => {
             <Notification isMinimized={true} {...lastNotification} />
           )}
         </LatestNotification>
-        <Button skin="secondary" size="sm" onClick={toggleMinimized}>
+        <Button skin="transparent" onClick={toggleMinimized}>
           {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
         </Button>
       </Menu>
