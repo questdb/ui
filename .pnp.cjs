@@ -60,6 +60,259 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "SOFT"\
         }]\
       ]],\
+      ["@algolia/autocomplete-core", [\
+        ["npm:1.9.3", {\
+          "packageLocation": "./.yarn/cache/@algolia-autocomplete-core-npm-1.9.3-e43f49f9c4-ce78048568.zip/node_modules/@algolia/autocomplete-core/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-core", "npm:1.9.3"],\
+            ["@algolia/autocomplete-plugin-algolia-insights", "virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3"],\
+            ["@algolia/autocomplete-shared", "virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/autocomplete-plugin-algolia-insights", [\
+        ["npm:1.9.3", {\
+          "packageLocation": "./.yarn/cache/@algolia-autocomplete-plugin-algolia-insights-npm-1.9.3-340befcbfe-030695bf69.zip/node_modules/@algolia/autocomplete-plugin-algolia-insights/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-plugin-algolia-insights", "npm:1.9.3"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3", {\
+          "packageLocation": "./.yarn/__virtual__/@algolia-autocomplete-plugin-algolia-insights-virtual-2bb6936057/0/cache/@algolia-autocomplete-plugin-algolia-insights-npm-1.9.3-340befcbfe-030695bf69.zip/node_modules/@algolia/autocomplete-plugin-algolia-insights/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-plugin-algolia-insights", "virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3"],\
+            ["@algolia/autocomplete-shared", "virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3"],\
+            ["@types/search-insights", null],\
+            ["search-insights", null]\
+          ],\
+          "packagePeers": [\
+            "@types/search-insights",\
+            "search-insights"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/autocomplete-preset-algolia", [\
+        ["npm:1.9.3", {\
+          "packageLocation": "./.yarn/cache/@algolia-autocomplete-preset-algolia-npm-1.9.3-ac8ef6572f-1ab3273d30.zip/node_modules/@algolia/autocomplete-preset-algolia/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-preset-algolia", "npm:1.9.3"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:bcc1bf54ea8e073e12f317a790ae8be8a0fd7c44213663d8ab92ce4ccd4f880d3291ddd7bd486770a7311627f2cb28bafc7d1293ac14fd680ec5cb3c9ad6902d#npm:1.9.3", {\
+          "packageLocation": "./.yarn/__virtual__/@algolia-autocomplete-preset-algolia-virtual-3a3e937c07/0/cache/@algolia-autocomplete-preset-algolia-npm-1.9.3-ac8ef6572f-1ab3273d30.zip/node_modules/@algolia/autocomplete-preset-algolia/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-preset-algolia", "virtual:bcc1bf54ea8e073e12f317a790ae8be8a0fd7c44213663d8ab92ce4ccd4f880d3291ddd7bd486770a7311627f2cb28bafc7d1293ac14fd680ec5cb3c9ad6902d#npm:1.9.3"],\
+            ["@algolia/autocomplete-shared", "virtual:3a3e937c071015f6db207507295556b75ddf59eca2eaa78733e5d2ea72d19a0ddd859f102c6557f61e8ae39960874e2a4e974cf9ddbb6cfca5081caf9a504044#npm:1.9.3"],\
+            ["@algolia/client-search", null],\
+            ["@types/algolia__client-search", null],\
+            ["@types/algoliasearch", null],\
+            ["algoliasearch", "npm:4.20.0"]\
+          ],\
+          "packagePeers": [\
+            "@algolia/client-search",\
+            "@types/algolia__client-search",\
+            "@types/algoliasearch",\
+            "algoliasearch"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/autocomplete-shared", [\
+        ["npm:1.9.3", {\
+          "packageLocation": "./.yarn/cache/@algolia-autocomplete-shared-npm-1.9.3-e918a6f29f-06014c8b08.zip/node_modules/@algolia/autocomplete-shared/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-shared", "npm:1.9.3"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:3a3e937c071015f6db207507295556b75ddf59eca2eaa78733e5d2ea72d19a0ddd859f102c6557f61e8ae39960874e2a4e974cf9ddbb6cfca5081caf9a504044#npm:1.9.3", {\
+          "packageLocation": "./.yarn/__virtual__/@algolia-autocomplete-shared-virtual-71c7fb6811/0/cache/@algolia-autocomplete-shared-npm-1.9.3-e918a6f29f-06014c8b08.zip/node_modules/@algolia/autocomplete-shared/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-shared", "virtual:3a3e937c071015f6db207507295556b75ddf59eca2eaa78733e5d2ea72d19a0ddd859f102c6557f61e8ae39960874e2a4e974cf9ddbb6cfca5081caf9a504044#npm:1.9.3"],\
+            ["@algolia/client-search", null],\
+            ["@types/algolia__client-search", null],\
+            ["@types/algoliasearch", null],\
+            ["algoliasearch", "npm:4.20.0"]\
+          ],\
+          "packagePeers": [\
+            "@algolia/client-search",\
+            "@types/algolia__client-search",\
+            "@types/algoliasearch",\
+            "algoliasearch"\
+          ],\
+          "linkType": "HARD"\
+        }],\
+        ["virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3", {\
+          "packageLocation": "./.yarn/__virtual__/@algolia-autocomplete-shared-virtual-83220e7124/0/cache/@algolia-autocomplete-shared-npm-1.9.3-e918a6f29f-06014c8b08.zip/node_modules/@algolia/autocomplete-shared/",\
+          "packageDependencies": [\
+            ["@algolia/autocomplete-shared", "virtual:e43f49f9c4b0b79b7c26afac683aa5070c1650d6eacf0e2b77c7c724e199519c182f1efd9af873be52aeab798379f6dd0b4be56338f2bf30b86bdb7333b66f63#npm:1.9.3"],\
+            ["@algolia/client-search", null],\
+            ["@types/algolia__client-search", null],\
+            ["@types/algoliasearch", null],\
+            ["algoliasearch", null]\
+          ],\
+          "packagePeers": [\
+            "@algolia/client-search",\
+            "@types/algolia__client-search",\
+            "@types/algoliasearch",\
+            "algoliasearch"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/cache-browser-local-storage", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-cache-browser-local-storage-npm-4.20.0-41fde46270-b9ca7e190a.zip/node_modules/@algolia/cache-browser-local-storage/",\
+          "packageDependencies": [\
+            ["@algolia/cache-browser-local-storage", "npm:4.20.0"],\
+            ["@algolia/cache-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/cache-common", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-cache-common-npm-4.20.0-3006b59130-a46377de8a.zip/node_modules/@algolia/cache-common/",\
+          "packageDependencies": [\
+            ["@algolia/cache-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/cache-in-memory", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-cache-in-memory-npm-4.20.0-0cf4013dd0-3d67dcfae4.zip/node_modules/@algolia/cache-in-memory/",\
+          "packageDependencies": [\
+            ["@algolia/cache-in-memory", "npm:4.20.0"],\
+            ["@algolia/cache-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/client-account", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-client-account-npm-4.20.0-12742378b6-b59e9c7a32.zip/node_modules/@algolia/client-account/",\
+          "packageDependencies": [\
+            ["@algolia/client-account", "npm:4.20.0"],\
+            ["@algolia/client-common", "npm:4.20.0"],\
+            ["@algolia/client-search", "npm:4.20.0"],\
+            ["@algolia/transporter", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/client-analytics", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-client-analytics-npm-4.20.0-4a78826b8d-0be4120ab7.zip/node_modules/@algolia/client-analytics/",\
+          "packageDependencies": [\
+            ["@algolia/client-analytics", "npm:4.20.0"],\
+            ["@algolia/client-common", "npm:4.20.0"],\
+            ["@algolia/client-search", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"],\
+            ["@algolia/transporter", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/client-common", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-client-common-npm-4.20.0-918bd58d1f-88a27b5f8b.zip/node_modules/@algolia/client-common/",\
+          "packageDependencies": [\
+            ["@algolia/client-common", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"],\
+            ["@algolia/transporter", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/client-personalization", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-client-personalization-npm-4.20.0-7aec20c3e2-ddb92ebe13.zip/node_modules/@algolia/client-personalization/",\
+          "packageDependencies": [\
+            ["@algolia/client-personalization", "npm:4.20.0"],\
+            ["@algolia/client-common", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"],\
+            ["@algolia/transporter", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/client-search", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-client-search-npm-4.20.0-6e29619eed-9fb6624dab.zip/node_modules/@algolia/client-search/",\
+          "packageDependencies": [\
+            ["@algolia/client-search", "npm:4.20.0"],\
+            ["@algolia/client-common", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"],\
+            ["@algolia/transporter", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/logger-common", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-logger-common-npm-4.20.0-8ebb472f8b-06ed28f76b.zip/node_modules/@algolia/logger-common/",\
+          "packageDependencies": [\
+            ["@algolia/logger-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/logger-console", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-logger-console-npm-4.20.0-de270d72b7-721dffe375.zip/node_modules/@algolia/logger-console/",\
+          "packageDependencies": [\
+            ["@algolia/logger-console", "npm:4.20.0"],\
+            ["@algolia/logger-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/requester-browser-xhr", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-requester-browser-xhr-npm-4.20.0-5d2966daa1-669790c7df.zip/node_modules/@algolia/requester-browser-xhr/",\
+          "packageDependencies": [\
+            ["@algolia/requester-browser-xhr", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/requester-common", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-requester-common-npm-4.20.0-c8e15696c6-8580ffd2be.zip/node_modules/@algolia/requester-common/",\
+          "packageDependencies": [\
+            ["@algolia/requester-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/requester-node-http", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-requester-node-http-npm-4.20.0-e12b90b81e-7857114b59.zip/node_modules/@algolia/requester-node-http/",\
+          "packageDependencies": [\
+            ["@algolia/requester-node-http", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@algolia/transporter", [\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/@algolia-transporter-npm-4.20.0-ee6af3fcca-f834d5c8fc.zip/node_modules/@algolia/transporter/",\
+          "packageDependencies": [\
+            ["@algolia/transporter", "npm:4.20.0"],\
+            ["@algolia/cache-common", "npm:4.20.0"],\
+            ["@algolia/logger-common", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["@ampproject/remapping", [\
         ["npm:2.2.0", {\
           "packageLocation": "./.yarn/cache/@ampproject-remapping-npm-2.2.0-114878fa50-d74d170d06.zip/node_modules/@ampproject/remapping/",\
@@ -5228,6 +5481,49 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["@docsearch/css", [\
+        ["npm:3.5.2", {\
+          "packageLocation": "./.yarn/cache/@docsearch-css-npm-3.5.2-f2e6573831-d1d60dd230.zip/node_modules/@docsearch/css/",\
+          "packageDependencies": [\
+            ["@docsearch/css", "npm:3.5.2"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@docsearch/react", [\
+        ["npm:3.5.2", {\
+          "packageLocation": "./.yarn/cache/@docsearch-react-npm-3.5.2-158b26333e-4b4584c2c7.zip/node_modules/@docsearch/react/",\
+          "packageDependencies": [\
+            ["@docsearch/react", "npm:3.5.2"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.2", {\
+          "packageLocation": "./.yarn/__virtual__/@docsearch-react-virtual-bcc1bf54ea/0/cache/@docsearch-react-npm-3.5.2-158b26333e-4b4584c2c7.zip/node_modules/@docsearch/react/",\
+          "packageDependencies": [\
+            ["@docsearch/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.2"],\
+            ["@algolia/autocomplete-core", "npm:1.9.3"],\
+            ["@algolia/autocomplete-preset-algolia", "virtual:bcc1bf54ea8e073e12f317a790ae8be8a0fd7c44213663d8ab92ce4ccd4f880d3291ddd7bd486770a7311627f2cb28bafc7d1293ac14fd680ec5cb3c9ad6902d#npm:1.9.3"],\
+            ["@docsearch/css", "npm:3.5.2"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/react-dom", "npm:16.9.8"],\
+            ["@types/search-insights", null],\
+            ["algoliasearch", "npm:4.20.0"],\
+            ["react", "npm:17.0.2"],\
+            ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
+            ["search-insights", null]\
+          ],\
+          "packagePeers": [\
+            "@types/react-dom",\
+            "@types/react",\
+            "@types/search-insights",\
+            "react-dom",\
+            "react",\
+            "search-insights"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["@emotion/cache", [\
         ["npm:10.0.29", {\
           "packageLocation": "./.yarn/cache/@emotion-cache-npm-10.0.29-076efd3781-78b37fb0c2.zip/node_modules/@emotion/cache/",\
@@ -6586,6 +6882,8 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@babel/preset-env", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.20.2"],\
             ["@babel/preset-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.17.12"],\
             ["@babel/preset-typescript", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.18.6"],\
+            ["@docsearch/css", "npm:3.5.2"],\
+            ["@docsearch/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.2"],\
             ["@hookform/resolvers", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.8.5"],\
             ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.5"],\
             ["@popperjs/core", "npm:2.4.2"],\
@@ -6618,7 +6916,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["date-fns", "npm:2.14.0"],\
             ["dexie", "npm:3.2.4"],\
             ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
-            ["docsearch.js", "npm:2.6.3"],\
             ["dotenv", "npm:10.0.0"],\
             ["echarts", "npm:5.3.2"],\
             ["eslint", "npm:8.15.0"],\
@@ -13522,13 +13819,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["agentkeepalive", [\
-        ["npm:2.2.0", {\
-          "packageLocation": "./.yarn/cache/agentkeepalive-npm-2.2.0-5f0351daab-f781322103.zip/node_modules/agentkeepalive/",\
-          "packageDependencies": [\
-            ["agentkeepalive", "npm:2.2.0"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:4.2.1", {\
           "packageLocation": "./.yarn/cache/agentkeepalive-npm-4.2.1-b86a9fb343-39cb49ed8c.zip/node_modules/agentkeepalive/",\
           "packageDependencies": [\
@@ -13667,25 +13957,24 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["algoliasearch", [\
-        ["npm:3.35.1", {\
-          "packageLocation": "./.yarn/cache/algoliasearch-npm-3.35.1-f18e86228a-9d8ef7d206.zip/node_modules/algoliasearch/",\
+        ["npm:4.20.0", {\
+          "packageLocation": "./.yarn/cache/algoliasearch-npm-4.20.0-afd5d8b7ad-0789549444.zip/node_modules/algoliasearch/",\
           "packageDependencies": [\
-            ["algoliasearch", "npm:3.35.1"],\
-            ["agentkeepalive", "npm:2.2.0"],\
-            ["debug", "virtual:2bcc47d217f870e3d52f0e55493dc34fd3da852877f7db32fa2940cc320151746026495daf6a34a974488cf5a949d93be1e2dc1ffba036faf081a9b15fcd2252#npm:2.6.9"],\
-            ["envify", "npm:4.1.0"],\
-            ["es6-promise", "npm:4.2.8"],\
-            ["events", "npm:1.1.1"],\
-            ["foreach", "npm:2.0.6"],\
-            ["global", "npm:4.4.0"],\
-            ["inherits", "npm:2.0.4"],\
-            ["isarray", "npm:2.0.5"],\
-            ["load-script", "npm:1.0.0"],\
-            ["object-keys", "npm:1.1.1"],\
-            ["querystring-es3", "npm:0.2.1"],\
-            ["reduce", "npm:1.0.2"],\
-            ["semver", "npm:5.7.1"],\
-            ["tunnel-agent", "npm:0.6.0"]\
+            ["algoliasearch", "npm:4.20.0"],\
+            ["@algolia/cache-browser-local-storage", "npm:4.20.0"],\
+            ["@algolia/cache-common", "npm:4.20.0"],\
+            ["@algolia/cache-in-memory", "npm:4.20.0"],\
+            ["@algolia/client-account", "npm:4.20.0"],\
+            ["@algolia/client-analytics", "npm:4.20.0"],\
+            ["@algolia/client-common", "npm:4.20.0"],\
+            ["@algolia/client-personalization", "npm:4.20.0"],\
+            ["@algolia/client-search", "npm:4.20.0"],\
+            ["@algolia/logger-common", "npm:4.20.0"],\
+            ["@algolia/logger-console", "npm:4.20.0"],\
+            ["@algolia/requester-browser-xhr", "npm:4.20.0"],\
+            ["@algolia/requester-common", "npm:4.20.0"],\
+            ["@algolia/requester-node-http", "npm:4.20.0"],\
+            ["@algolia/transporter", "npm:4.20.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -14134,16 +14423,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/atob-npm-2.1.2-bcb583261e-dfeeeb7009.zip/node_modules/atob/",\
           "packageDependencies": [\
             ["atob", "npm:2.1.2"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["autocomplete.js", [\
-        ["npm:0.36.0", {\
-          "packageLocation": "./.yarn/cache/autocomplete.js-npm-0.36.0-03cd64506e-b820cb7d38.zip/node_modules/autocomplete.js/",\
-          "packageDependencies": [\
-            ["autocomplete.js", "npm:0.36.0"],\
-            ["immediate", "npm:3.3.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -16894,22 +17173,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
-      ["docsearch.js", [\
-        ["npm:2.6.3", {\
-          "packageLocation": "./.yarn/cache/docsearch.js-npm-2.6.3-e74f6e862d-e6a84727f0.zip/node_modules/docsearch.js/",\
-          "packageDependencies": [\
-            ["docsearch.js", "npm:2.6.3"],\
-            ["algoliasearch", "npm:3.35.1"],\
-            ["autocomplete.js", "npm:0.36.0"],\
-            ["hogan.js", "npm:3.0.2"],\
-            ["request", "npm:2.88.2"],\
-            ["stack-utils", "npm:1.0.5"],\
-            ["to-factory", "npm:1.0.0"],\
-            ["zepto", "npm:1.2.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
       ["doctrine", [\
         ["npm:1.5.0", {\
           "packageLocation": "./.yarn/cache/doctrine-npm-1.5.0-7395afc15e-7ce8102a05.zip/node_modules/doctrine/",\
@@ -17342,17 +17605,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
-      ["envify", [\
-        ["npm:4.1.0", {\
-          "packageLocation": "./.yarn/cache/envify-npm-4.1.0-6fd4a01c66-ee48873a56.zip/node_modules/envify/",\
-          "packageDependencies": [\
-            ["envify", "npm:4.1.0"],\
-            ["esprima", "npm:4.0.1"],\
-            ["through", "npm:2.3.8"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
       ["envinfo", [\
         ["npm:7.8.1", {\
           "packageLocation": "./.yarn/cache/envinfo-npm-7.8.1-f320033691-de736c98d6.zip/node_modules/envinfo/",\
@@ -17495,15 +17747,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/es5-shim-npm-4.6.7-cfbc820543-f2f60cf3d9.zip/node_modules/es5-shim/",\
           "packageDependencies": [\
             ["es5-shim", "npm:4.6.7"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["es6-promise", [\
-        ["npm:4.2.8", {\
-          "packageLocation": "./.yarn/cache/es6-promise-npm-4.2.8-c9f5b11f66-95614a8887.zip/node_modules/es6-promise/",\
-          "packageDependencies": [\
-            ["es6-promise", "npm:4.2.8"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -18274,13 +18517,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["events", [\
-        ["npm:1.1.1", {\
-          "packageLocation": "./.yarn/cache/events-npm-1.1.1-ca9e5d580e-40431eb005.zip/node_modules/events/",\
-          "packageDependencies": [\
-            ["events", "npm:1.1.1"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:3.3.0", {\
           "packageLocation": "./.yarn/cache/events-npm-3.3.0-c280bc7e48-f6f487ad21.zip/node_modules/events/",\
           "packageDependencies": [\
@@ -18891,15 +19127,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/for-in-npm-1.0.2-37e3d7aae5-09f4ae93ce.zip/node_modules/for-in/",\
           "packageDependencies": [\
             ["for-in", "npm:1.0.2"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["foreach", [\
-        ["npm:2.0.6", {\
-          "packageLocation": "./.yarn/cache/foreach-npm-2.0.6-32ea85c4a8-f7b6849454.zip/node_modules/foreach/",\
-          "packageDependencies": [\
-            ["foreach", "npm:2.0.6"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -19758,26 +19985,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
-      ["har-schema", [\
-        ["npm:2.0.0", {\
-          "packageLocation": "./.yarn/cache/har-schema-npm-2.0.0-3a318c0ca5-d8946348f3.zip/node_modules/har-schema/",\
-          "packageDependencies": [\
-            ["har-schema", "npm:2.0.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["har-validator", [\
-        ["npm:5.1.5", {\
-          "packageLocation": "./.yarn/cache/har-validator-npm-5.1.5-bd9ac162f5-b998a7269c.zip/node_modules/har-validator/",\
-          "packageDependencies": [\
-            ["har-validator", "npm:5.1.5"],\
-            ["ajv", "npm:6.12.6"],\
-            ["har-schema", "npm:2.0.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
       ["hard-rejection", [\
         ["npm:2.1.0", {\
           "packageLocation": "./.yarn/cache/hard-rejection-npm-2.1.0-a80f2a977d-7baaf80a0c.zip/node_modules/hard-rejection/",\
@@ -20038,17 +20245,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["history", "npm:5.3.0"],\
             ["@babel/runtime", "npm:7.17.9"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["hogan.js", [\
-        ["npm:3.0.2", {\
-          "packageLocation": "./.yarn/cache/hogan.js-npm-3.0.2-f32eb3ab4e-c7bbff84fa.zip/node_modules/hogan.js/",\
-          "packageDependencies": [\
-            ["hogan.js", "npm:3.0.2"],\
-            ["mkdirp", "npm:0.3.0"],\
-            ["nopt", "npm:1.0.10"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -20360,16 +20556,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["http-signature", [\
-        ["npm:1.2.0", {\
-          "packageLocation": "./.yarn/cache/http-signature-npm-1.2.0-ee92426f34-3324598712.zip/node_modules/http-signature/",\
-          "packageDependencies": [\
-            ["http-signature", "npm:1.2.0"],\
-            ["assert-plus", "npm:1.0.0"],\
-            ["jsprim", "npm:1.4.2"],\
-            ["sshpk", "npm:1.17.0"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:1.3.6", {\
           "packageLocation": "./.yarn/cache/http-signature-npm-1.3.6-5b2eff4373-10be2af476.zip/node_modules/http-signature/",\
           "packageDependencies": [\
@@ -20487,15 +20673,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/ignore-npm-5.2.0-fc4b58a4f3-6b1f926792.zip/node_modules/ignore/",\
           "packageDependencies": [\
             ["ignore", "npm:5.2.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["immediate", [\
-        ["npm:3.3.0", {\
-          "packageLocation": "./.yarn/cache/immediate-npm-3.3.0-d00fd9df7d-634b430510.zip/node_modules/immediate/",\
-          "packageDependencies": [\
-            ["immediate", "npm:3.3.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -22342,17 +22519,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["jsprim", [\
-        ["npm:1.4.2", {\
-          "packageLocation": "./.yarn/cache/jsprim-npm-1.4.2-1ae6cade9a-2ad1b9fdcc.zip/node_modules/jsprim/",\
-          "packageDependencies": [\
-            ["jsprim", "npm:1.4.2"],\
-            ["assert-plus", "npm:1.0.0"],\
-            ["extsprintf", "npm:1.3.0"],\
-            ["json-schema", "npm:0.4.0"],\
-            ["verror", "npm:1.10.0"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:2.0.2", {\
           "packageLocation": "./.yarn/cache/jsprim-npm-2.0.2-8c40f3719c-d175f6b199.zip/node_modules/jsprim/",\
           "packageDependencies": [\
@@ -22560,15 +22726,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["parse-json", "npm:2.2.0"],\
             ["pify", "npm:2.3.0"],\
             ["strip-bom", "npm:3.0.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["load-script", [\
-        ["npm:1.0.0", {\
-          "packageLocation": "./.yarn/cache/load-script-npm-1.0.0-32a3163a57-8458e3f07b.zip/node_modules/load-script/",\
-          "packageDependencies": [\
-            ["load-script", "npm:1.0.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -23774,13 +23931,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["mkdirp", [\
-        ["npm:0.3.0", {\
-          "packageLocation": "./.yarn/cache/mkdirp-npm-0.3.0-349e59be6d-3ec9cda8bd.zip/node_modules/mkdirp/",\
-          "packageDependencies": [\
-            ["mkdirp", "npm:0.3.0"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:0.5.6", {\
           "packageLocation": "./.yarn/cache/mkdirp-npm-0.5.6-dcd5a6b97b-0c91b721bb.zip/node_modules/mkdirp/",\
           "packageDependencies": [\
@@ -24028,14 +24178,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["nopt", [\
-        ["npm:1.0.10", {\
-          "packageLocation": "./.yarn/cache/nopt-npm-1.0.10-f3db192976-f62575acea.zip/node_modules/nopt/",\
-          "packageDependencies": [\
-            ["nopt", "npm:1.0.10"],\
-            ["abbrev", "npm:1.1.1"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:5.0.0", {\
           "packageLocation": "./.yarn/cache/nopt-npm-5.0.0-304b40fbfe-d35fdec187.zip/node_modules/nopt/",\
           "packageDependencies": [\
@@ -24161,15 +24303,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/num2fraction-npm-1.2.2-dc0a0a80ad-1da9c6797b.zip/node_modules/num2fraction/",\
           "packageDependencies": [\
             ["num2fraction", "npm:1.2.2"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["oauth-sign", [\
-        ["npm:0.9.0", {\
-          "packageLocation": "./.yarn/cache/oauth-sign-npm-0.9.0-7aa9422221-8f5497a127.zip/node_modules/oauth-sign/",\
-          "packageDependencies": [\
-            ["oauth-sign", "npm:0.9.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -25639,15 +25772,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
-      ["querystring-es3", [\
-        ["npm:0.2.1", {\
-          "packageLocation": "./.yarn/cache/querystring-es3-npm-0.2.1-f4632f2760-691e8d6b8b.zip/node_modules/querystring-es3/",\
-          "packageDependencies": [\
-            ["querystring-es3", "npm:0.2.1"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
       ["queue-microtask", [\
         ["npm:1.2.3", {\
           "packageLocation": "./.yarn/cache/queue-microtask-npm-1.2.3-fcc98e4e2d-b676f8c040.zip/node_modules/queue-microtask/",\
@@ -26637,16 +26761,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
-      ["reduce", [\
-        ["npm:1.0.2", {\
-          "packageLocation": "./.yarn/cache/reduce-npm-1.0.2-577cd4d4f6-a704c16c2d.zip/node_modules/reduce/",\
-          "packageDependencies": [\
-            ["reduce", "npm:1.0.2"],\
-            ["object-keys", "npm:1.1.1"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
       ["redux", [\
         ["npm:4.0.5", {\
           "packageLocation": "./.yarn/cache/redux-npm-4.0.5-aca53e621f-23689ba431.zip/node_modules/redux/",\
@@ -27057,35 +27171,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/repeat-string-npm-1.6.1-bc8e388655-1b809fc6db.zip/node_modules/repeat-string/",\
           "packageDependencies": [\
             ["repeat-string", "npm:1.6.1"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["request", [\
-        ["npm:2.88.2", {\
-          "packageLocation": "./.yarn/cache/request-npm-2.88.2-f4a57c72c4-4e112c087f.zip/node_modules/request/",\
-          "packageDependencies": [\
-            ["request", "npm:2.88.2"],\
-            ["aws-sign2", "npm:0.7.0"],\
-            ["aws4", "npm:1.11.0"],\
-            ["caseless", "npm:0.12.0"],\
-            ["combined-stream", "npm:1.0.8"],\
-            ["extend", "npm:3.0.2"],\
-            ["forever-agent", "npm:0.6.1"],\
-            ["form-data", "npm:2.3.3"],\
-            ["har-validator", "npm:5.1.5"],\
-            ["http-signature", "npm:1.2.0"],\
-            ["is-typedarray", "npm:1.0.0"],\
-            ["isstream", "npm:0.1.2"],\
-            ["json-stringify-safe", "npm:5.0.1"],\
-            ["mime-types", "npm:2.1.35"],\
-            ["oauth-sign", "npm:0.9.0"],\
-            ["performance-now", "npm:2.1.0"],\
-            ["qs", "npm:6.5.3"],\
-            ["safe-buffer", "npm:5.2.1"],\
-            ["tough-cookie", "npm:2.5.0"],\
-            ["tunnel-agent", "npm:0.6.0"],\
-            ["uuid", "npm:3.4.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -28162,14 +28247,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["stack-utils", [\
-        ["npm:1.0.5", {\
-          "packageLocation": "./.yarn/cache/stack-utils-npm-1.0.5-4dbf82b2c1-f82baf8d89.zip/node_modules/stack-utils/",\
-          "packageDependencies": [\
-            ["stack-utils", "npm:1.0.5"],\
-            ["escape-string-regexp", "npm:2.0.0"]\
-          ],\
-          "linkType": "HARD"\
-        }],\
         ["npm:2.0.6", {\
           "packageLocation": "./.yarn/cache/stack-utils-npm-2.0.6-2be1099696-052bf4d25b.zip/node_modules/stack-utils/",\
           "packageDependencies": [\
@@ -29193,15 +29270,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/tmpl-npm-1.0.5-d399ba37e2-cd922d9b85.zip/node_modules/tmpl/",\
           "packageDependencies": [\
             ["tmpl", "npm:1.0.5"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["to-factory", [\
-        ["npm:1.0.0", {\
-          "packageLocation": "./.yarn/cache/to-factory-npm-1.0.0-23ec9f7920-33791593b3.zip/node_modules/to-factory/",\
-          "packageDependencies": [\
-            ["to-factory", "npm:1.0.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -31190,15 +31258,6 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/yocto-queue-npm-0.1.0-c6c9a7db29-f77b3d8d00.zip/node_modules/yocto-queue/",\
           "packageDependencies": [\
             ["yocto-queue", "npm:0.1.0"]\
-          ],\
-          "linkType": "HARD"\
-        }]\
-      ]],\
-      ["zepto", [\
-        ["npm:1.2.0", {\
-          "packageLocation": "./.yarn/cache/zepto-npm-1.2.0-cf3d374b32-e24c8c4d1a.zip/node_modules/zepto/",\
-          "packageDependencies": [\
-            ["zepto", "npm:1.2.0"]\
           ],\
           "linkType": "HARD"\
         }]\

@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 import React from "react"
-import docsearch from "docsearch.js"
 import { useCallback, useEffect, useState, useContext } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
@@ -46,13 +45,11 @@ import {
   Input,
   Link,
   PaneMenu,
-  PopperHover,
   PopperToggle,
   SecondaryButton,
   SuccessButton,
   Text,
   toast,
-  Tooltip,
   TransitionDuration,
   TransparentButton,
   useKeyPress,
@@ -67,6 +64,9 @@ import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { QuestContext } from "../../../providers"
+import { DocSearch } from "@docsearch/react"
+
+import "@docsearch/css"
 
 const Wrapper = styled(PaneMenu)<{ _display: string }>`
   z-index: 15;
@@ -79,13 +79,6 @@ const Wrapper = styled(PaneMenu)<{ _display: string }>`
 
 const Separator = styled.div`
   flex: 1;
-`
-
-const DocsearchInput = styled(Input)`
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `
 
 const QueryPickerButton = styled(SecondaryButton)<{
@@ -205,24 +198,6 @@ const Menu = () => {
   }, [escPress])
 
   useEffect(() => {
-    docsearch({
-      apiKey: "b2a69b4869a2a85284a82fb57519dcda",
-      indexName: "questdb",
-      inputSelector: "#docsearch-input",
-      handleSelected: (input, event, suggestion, datasetNumber, context) => {
-        if (context.selectionMethod === "click") {
-          input.setVal("")
-          const win = window.open(suggestion.url, "_blank")
-
-          if (win) {
-            win.focus()
-          }
-        }
-      },
-    })
-  }, [])
-
-  useEffect(() => {
     if (!sm && opened) {
       dispatch(actions.console.toggleSideMenu())
     }
@@ -264,12 +239,13 @@ const Menu = () => {
       <Separator />
 
       <MenuItems>
-        <DocsearchInput
-          id="docsearch-input"
+        <DocSearch
+          appId="QL9L2YL7AQ"
+          apiKey="2f67aeacbe73ad08a49efb9214ea27f3"
+          indexName="questdb"
           placeholder="Search documentation"
-          title="Search..."
+          translations={{ button: { buttonText: "Search documentation" } }}
         />
-
         <DropdownMenu.Root modal={false}>
           <DropdownMenu.Trigger asChild>
             <Button skin="secondary" prefixIcon={<Question size="18px" />}>

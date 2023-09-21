@@ -25,7 +25,6 @@
 import { editor } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import { BusEvent } from "../../../consts"
-import { actions } from "../../../store"
 import { Dispatch } from "redux"
 
 import {
@@ -45,6 +44,7 @@ enum Command {
   FOCUS_GRID = "focus_grid",
   ADD_NEW_TAB = "add_new_tab",
   CLOSE_ACTIVE_TAB = "close_active_tab",
+  SEARCH_DOCS = "search_docs",
 }
 
 export const registerEditorActions = ({
@@ -103,6 +103,19 @@ export const registerEditorActions = ({
         typeof activeId?.value === "number"
       ) {
         editorContext.deleteBuffer(activeId.value)
+      }
+    },
+  })
+
+  editor.addAction({
+    id: Command.SEARCH_DOCS,
+    label: "Search QuestDB Docs",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
+    run: () => {
+      const docSearchButton =
+        document.querySelector<HTMLButtonElement>(".DocSearch-Button")
+      if (docSearchButton) {
+        docSearchButton.click()
       }
     },
   })
