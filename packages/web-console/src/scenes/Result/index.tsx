@@ -38,8 +38,6 @@ import {
   PaneContent,
   PaneWrapper,
   PopperHover,
-  PrimaryToggleButton,
-  SecondaryButton,
   Tooltip,
   useScreenSize,
 } from "../../components"
@@ -48,6 +46,7 @@ import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { BusEvent } from "../../consts"
 import { ViewMode } from "scenes/Console/types"
+import { Button } from "@questdb/react-components"
 
 const Root = styled.div`
   display: flex;
@@ -188,36 +187,36 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
     {
       tooltipText: "Freeze left column",
       trigger: (
-        <PrimaryToggleButton
+        <Button
+          skin={gridFreezeLeftState > 0 ? "success" : "secondary"}
           onClick={handleGridColumnFreezeGridColumnToggle}
-          selected={gridFreezeLeftState > 0}
         >
           <TableFreezeColumnIcon size="18px" />
-        </PrimaryToggleButton>
+        </Button>
       ),
     },
     {
       tooltipText: "Move selected column to the front",
       trigger: (
-        <SecondaryButton onClick={handleShuffleGridColumnToFrontClick}>
+        <Button skin="secondary" onClick={handleShuffleGridColumnToFrontClick}>
           <HandPointLeft size="18px" />
-        </SecondaryButton>
+        </Button>
       ),
     },
     {
       tooltipText: "Reset grid layout",
       trigger: (
-        <SecondaryButton onClick={handleGridLayoutResetClick}>
+        <Button skin="secondary" onClick={handleGridLayoutResetClick}>
           <Reset size="18px" />
-        </SecondaryButton>
+        </Button>
       ),
     },
     {
       tooltipText: "Refresh",
       trigger: (
-        <SecondaryButton onClick={handleRefreshClick}>
+        <Button skin="secondary" onClick={handleRefreshClick}>
           <Refresh size="18px" />
-        </SecondaryButton>
+        </Button>
       ),
     },
   ]
@@ -278,9 +277,9 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
           delay={350}
           placement="bottom"
           trigger={
-            <SecondaryButton onClick={handleExportClick}>
+            <Button skin="secondary" onClick={handleExportClick}>
               <Download2 size="18px" />
-            </SecondaryButton>
+            </Button>
           }
         >
           <Tooltip>Download result as a CSV file</Tooltip>
