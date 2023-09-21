@@ -5,6 +5,7 @@ export { Button } from "./components/Button";
 export { Card } from "./components/Card";
 export { Checkbox } from "./components/Checkbox";
 export { Dialog } from "./components/Dialog";
+export { DropdownMenu } from "./components/DropdownMenu";
 export { FeedbackDialog } from "./components/FeedbackDialog";
 export { ForwardRef } from "./components/ForwardRef";
 export { Heading } from "./components/Heading";
