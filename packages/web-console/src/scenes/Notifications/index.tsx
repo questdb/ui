@@ -37,11 +37,11 @@ import {
   PaneMenu,
   PaneWrapper,
   Text,
-  SecondaryButton,
   useScreenSize,
 } from "../../components"
 import { actions, selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "styled-icons/remix-line"
+import { Button } from "@questdb/react-components"
 
 import Notification from "./Notification"
 
@@ -81,10 +81,6 @@ const ClearAllNotifications = styled.div`
   width: 100%;
   justify-content: center;
   margin-top: auto;
-`
-
-const ClearAllNotificationsButton = styled(SecondaryButton)`
-  margin-top: 1rem;
 `
 
 const Notifications = () => {
@@ -138,9 +134,9 @@ const Notifications = () => {
             <Notification isMinimized={true} {...lastNotification} />
           )}
         </LatestNotification>
-        <SecondaryButton onClick={toggleMinimized}>
+        <Button skin="secondary" size="sm" onClick={toggleMinimized}>
           {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
-        </SecondaryButton>
+        </Button>
       </Menu>
       {!isMinimized && (
         <Content minimized={isMinimized} ref={contentRef}>
@@ -157,12 +153,13 @@ const Notifications = () => {
           </TransitionGroup>
           {!isMinimized && (
             <ClearAllNotifications>
-              <ClearAllNotificationsButton
+              <Button
+                skin="secondary"
                 disabled={notifications.length === 0}
                 onClick={cleanupNotifications}
               >
                 Clear all
-              </ClearAllNotificationsButton>
+              </Button>
             </ClearAllNotifications>
           )}
         </Content>
