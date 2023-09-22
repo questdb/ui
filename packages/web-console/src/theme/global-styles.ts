@@ -36,7 +36,7 @@ const DocSearchStyles = css`
     height: 3rem;
     border-radius: 0.4rem;
     background: ${({ theme }) => theme.color.selection};
-    color: ${({ theme }) => theme.color.gray2};
+    color: ${({ theme }) => theme.color.foreground};
     border: none;
   }
 
@@ -44,7 +44,6 @@ const DocSearchStyles = css`
     border: none;
     background: ${({ theme }) => theme.color.comment};
     box-shadow: none;
-    color: ${({ theme }) => theme.color.foreground};
   }
 
   .DocSearch-Button-Placeholder {
@@ -52,9 +51,9 @@ const DocSearchStyles = css`
   }
 
   .DocSearch-Button .DocSearch-Search-Icon {
-    color: ${({ theme }) => theme.color.gray2};
-    width: 1.8rem;
-    height: 1.8rem;
+    color: ${({ theme }) => theme.color.foreground};
+    width: 1.4rem;
+    height: 1.4rem;
   }
 
   .DocSearch-Button:hover .DocSearch-Search-Icon {

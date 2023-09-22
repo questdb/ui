@@ -239,8 +239,8 @@ const Menu = () => {
           appId="QL9L2YL7AQ"
           apiKey="2f67aeacbe73ad08a49efb9214ea27f3"
           indexName="questdb"
-          placeholder="Search documentation"
-          translations={{ button: { buttonText: "Search documentation" } }}
+          placeholder="Search docs"
+          translations={{ button: { buttonText: "Search docs" } }}
           hitComponent={({ hit, children }) => (
             <a href={hit.url} target="_blank" rel="noreferrer">
               {children}
