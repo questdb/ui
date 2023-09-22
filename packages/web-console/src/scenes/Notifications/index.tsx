@@ -129,7 +129,7 @@ const Notifications = () => {
           <TerminalBoxIcon size="18px" />
           Log
         </Header>
-        <LatestNotification>
+        <LatestNotification data-hook="notifications-collapsed">
           {isMinimized && lastNotification && (
             <Notification isMinimized={true} {...lastNotification} />
           )}
@@ -140,7 +140,7 @@ const Notifications = () => {
       </Menu>
       {!isMinimized && (
         <Content minimized={isMinimized} ref={contentRef}>
-          <TransitionGroup className="notifications">
+          <TransitionGroup data-hook="notifications-expanded">
             {notifications.map((notification) => (
               <Notification
                 isMinimized={false}

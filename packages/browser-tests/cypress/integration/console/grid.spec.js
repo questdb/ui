@@ -21,13 +21,13 @@ describe("questdb grid", () => {
     cy.wait(100);
 
     cy.getGridRows()
-      .should("have.length", 8)
+      .should("have.length", 9)
       .getGridRow(0)
       .should("contain", "1");
 
     cy.getGridViewport().scrollTo("bottom");
-    cy.getGridRows().should("have.length", 8);
-    cy.getGridRow(0).should("contain", "93");
+    cy.getGridRows().should("have.length", 9);
+    cy.getGridRow(0).should("contain", "92");
     cy.matchImageSnapshot();
   });
 

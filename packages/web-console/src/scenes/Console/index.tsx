@@ -39,8 +39,10 @@ const Bottom = styled.div`
   flex: 1;
 `
 
-const ToggleTablesIcon = styled(ChevronDoubleLeft)<{ collapsed: boolean }>`
-  transform: rotate(${({ collapsed }) => (collapsed ? "180deg" : "0deg")});
+const ToggleTablesIcon = styled(ChevronDoubleLeft)<{ splitterbasis: number }>`
+  transform: rotate(
+    ${({ splitterbasis }) => (splitterbasis === 0 ? "180deg" : "0deg")}
+  );
 `
 
 const viewModes: {
@@ -109,7 +111,7 @@ const Console = () => {
                   >
                     <ToggleTablesIcon
                       size="16px"
-                      collapsed={resultsSplitterBasis === 0}
+                      splitterbasis={resultsSplitterBasis}
                     />
                   </Button>
                 }

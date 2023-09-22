@@ -315,6 +315,7 @@ const Schema = ({
           skin="secondary"
           onClick={() => dispatch(actions.console.setActivePanel("import"))}
           prefixIcon={<Upload2 size="18px" />}
+          data-hook="navigation-import-button"
         >
           Import
         </Button>
