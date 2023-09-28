@@ -26,10 +26,14 @@ import "core-js/features/promise"
 import "./js/console"
 import "docsearch.js/dist/cdn/docsearch.min.css"
 
+import { hot } from "react-hot-loader/root"
 import React from "react"
 import ReactDOM from "react-dom"
 import { Provider } from "react-redux"
 import { applyMiddleware, compose, createStore } from "redux"
+import { persistStore, persistReducer } from "redux-persist"
+import { PersistGate } from "redux-persist/integration/react"
+import storage from "redux-persist/lib/storage"
 import { createEpicMiddleware } from "redux-observable"
 import { ThemeProvider } from "styled-components"
 
@@ -52,7 +56,18 @@ const epicMiddleware = createEpicMiddleware<
   StoreShape
 >()
 
-const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
+const persistConfig = {
+  key: "root",
+  storage,
+}
+
+const persistedReducer = persistReducer(persistConfig, rootReducer)
+
+const store = createStore(
+  persistedReducer,
+  compose(applyMiddleware(epicMiddleware)),
+)
+const persistor = persistStore(store)
 
 epicMiddleware.run(rootEpic)
 store.dispatch(actions.console.bootstrap())
@@ -64,18 +79,21 @@ const FadeSlow = createGlobalFadeTransition(
   TransitionDuration.SLOW,
 )
 
-ReactDOM.render(
+const App = hot(() => (
   <ScreenSizeProvider>
     <Provider store={store}>
-      <ThemeProvider theme={theme}>
-        {ReactDOM.createPortal(<ToastContainer />, document.body)}
-        <LocalStorageProvider>
-          <FadeSlow />
-          <FadeReg />
-          <Layout />
-        </LocalStorageProvider>
-      </ThemeProvider>
+      <PersistGate loading={null} persistor={persistor}>
+        <ThemeProvider theme={theme}>
+          {ReactDOM.createPortal(<ToastContainer />, document.body)}
+          <LocalStorageProvider>
+            <FadeSlow />
+            <FadeReg />
+            <Layout />
+          </LocalStorageProvider>
+        </ThemeProvider>
+      </PersistGate>
     </Provider>
-  </ScreenSizeProvider>,
-  document.getElementById("root"),
-)
+  </ScreenSizeProvider>
+))
+
+ReactDOM.render(<App />, document.getElementById("root"))

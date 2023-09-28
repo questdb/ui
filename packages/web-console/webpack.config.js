@@ -67,6 +67,7 @@ const basePlugins = [
       NODE_ENV: JSON.stringify(process.env.NODE_ENV),
     },
   }),
+  new Webpack.HotModuleReplacementPlugin(),
 ]
 
 const devPlugins = [
@@ -107,7 +108,7 @@ module.exports = {
   devServer: {
     compress: true,
     host: "localhost",
-    hot: false,
+    hot: true,
     port: config.port,
     proxy: {
       context: ["/imp", "/exp", "/exec", "/chk"],
@@ -116,7 +117,7 @@ module.exports = {
   },
   devtool: config.isProduction ? false : "eval-source-map",
   mode: config.isProduction ? "production" : "development",
-  entry: "./src/index",
+  entry: ["react-hot-loader/patch", "./src/index"],
   output: {
     filename: "qdb.js",
     publicPath: config.assetPath,
