@@ -11,6 +11,36 @@ import { Notification2 } from "styled-icons/remix-line"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 
+const swing = () => {
+  let animation = ""
+  const numKeyframes = 30 // 5 sec total animation
+
+  for (let i = 0; i < numKeyframes; i++) {
+    const rotateDegree = i % 2 === 0 ? 15 : -15
+    const keyframePercent = (i / numKeyframes) * 100
+    animation += `
+      ${keyframePercent}% {
+        transform: rotate(${rotateDegree}deg);
+      }
+    `
+  }
+  return animation
+}
+
+const BellIcon = styled(Notification2)<{ hasUnreadNews: boolean }>`
+  color: ${({ theme, hasUnreadNews }) =>
+    theme.color[hasUnreadNews ? "red" : "foreground"]};
+
+  ${({ hasUnreadNews }) =>
+    hasUnreadNews &&
+    `
+  animation: 5s linear swing infinite;
+  @keyframes swing {
+    ${swing()}
+  }
+  `}
+`
+
 const Loading = styled.div`
   display: grid;
   grid-auto-flow: column;
@@ -91,13 +121,20 @@ const News = () => {
   }
 
   const clearUnreadNews = async () => {
-    const news = await quest.getNews({
-      category: "enterprise",
-      telemetryConfig,
-    })
-    const newsIds = news.map((newsItem) => newsItem.id)
-    await db.read_notifications.bulkAdd(newsIds.map((newsId) => ({ newsId })))
-    setHasUnreadNews(false)
+    if (enterpriseNews) {
+      const newsIds = enterpriseNews.map((newsItem) => newsItem.id)
+      // filter newsIds that are already in the db
+      const readNews = await db.read_notifications.toArray()
+      const readNewsIds = readNews.map((readNewsItem) => readNewsItem.newsId)
+      const filteredNewsIds = newsIds.filter(
+        (newsId) => !readNewsIds.includes(newsId),
+      )
+      await db.read_notifications.bulkPut(
+        filteredNewsIds.map((newsId) => ({ newsId })),
+        { allKeys: true },
+      )
+      setHasUnreadNews(false)
+    }
   }
 
   // Get Enterprise News on render
@@ -135,7 +172,7 @@ const News = () => {
           icon={
             <Button skin={newsOpened ? "primary" : "secondary"}>
               <UnreadItemsIcon
-                icon={<Notification2 size="18px" />}
+                icon={<BellIcon size="18px" hasUnreadNews={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
             </Button>
