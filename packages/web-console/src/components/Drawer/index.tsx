@@ -8,6 +8,20 @@ import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
 import { ContentWrapper } from "./content-wrapper"
 
+type DrawerProps = {
+  mode?: "modal" | "side"
+  children: React.ReactNode
+  title?: React.ReactNode
+  trigger: React.ReactNode
+  width?: string
+  open?: boolean
+  onOpenChange?: (isOpen: boolean) => void
+  onDismiss?: () => void
+  withCloseButton?: boolean
+  closeOnOverlayClick?: boolean
+  closeOnEscape?: boolean
+}
+
 const animateShow = css`
   @keyframes animateShow {
     from {
@@ -32,10 +46,11 @@ const animateHide = css`
 
 const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width?: string
+  mode: DrawerProps["mode"]
 }>`
   background-color: ${({ theme }) => theme.color.background};
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
-  position: fixed;
+  position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
   width: ${({ width }) => width ?? "50rem"};
@@ -48,6 +63,9 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   ${animateShow}
   ${animateHide}
 
+  ${({ mode }) =>
+    mode === "modal" &&
+    `
   &[data-state="open"] {
     animation: animateShow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -59,6 +77,7 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   &:focus {
     outline: none;
   }
+  `};
 `
 
 const StyledClose = styled(RadixDialog.Close).attrs({
@@ -80,20 +99,8 @@ const Header = styled.div`
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
 `
 
-type DrawerProps = {
-  children: React.ReactNode
-  title?: React.ReactNode
-  trigger: React.ReactNode
-  width?: string
-  open?: boolean
-  onOpenChange?: (isOpen: boolean) => void
-  onDismiss?: () => void
-  withCloseButton?: boolean
-  closeOnOverlayClick?: boolean
-  closeOnEscape?: boolean
-}
-
 export const Drawer = ({
+  mode = "modal",
   children,
   trigger,
   title,
@@ -104,37 +111,55 @@ export const Drawer = ({
   withCloseButton,
   closeOnOverlayClick = true,
   closeOnEscape = true,
-}: DrawerProps) => (
-  <RadixDialog.Root onOpenChange={onOpenChange} open={open}>
-    <RadixDialog.Trigger asChild>
-      <ForwardRef>{trigger}</ForwardRef>
-    </RadixDialog.Trigger>
-    <RadixDialog.Portal>
-      <ForwardRef>
-        <Overlay primitive={RadixDialog.Overlay} />
-      </ForwardRef>
-      <DrawerContent
-        width={width}
-        {...(onDismiss && {
-          onEscapeKeyDown: closeOnEscape ? onDismiss : undefined,
-          onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
+}: DrawerProps) => {
+  return (
+    <RadixDialog.Root
+      onOpenChange={onOpenChange}
+      open={open}
+      modal={mode === "modal"}
+    >
+      <RadixDialog.Trigger asChild>
+        <ForwardRef>{trigger}</ForwardRef>
+      </RadixDialog.Trigger>
+      <RadixDialog.Portal
+        {...(mode === "side" && {
+          container: document.getElementById("side-panel-right"),
         })}
       >
-        {(title || withCloseButton) && (
-          <Header>
-            {title && <Heading level={5}>{title}</Heading>}
-            {withCloseButton && (
-              <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
-                <Close size="18px" />
-              </StyledClose>
-            )}
-          </Header>
+        {mode === "modal" && (
+          <ForwardRef>
+            <Overlay primitive={RadixDialog.Overlay} />
+          </ForwardRef>
         )}
-        {children}
-      </DrawerContent>
-    </RadixDialog.Portal>
-  </RadixDialog.Root>
-)
+        <DrawerContent
+          mode={mode}
+          width={width}
+          {...(onDismiss && {
+            onEscapeKeyDown: closeOnEscape ? onDismiss : undefined,
+            onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
+          })}
+          {...(mode === "side" && {
+            onInteractOutside: (e) => e.preventDefault(),
+            onEscapeKeyDown: (e) => e.preventDefault(),
+            onPointerDownOutside: (e) => e.preventDefault(),
+          })}
+        >
+          {(title || withCloseButton) && (
+            <Header>
+              {title && <Heading level={5}>{title}</Heading>}
+              {withCloseButton && (
+                <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+                  <Close size="18px" />
+                </StyledClose>
+              )}
+            </Header>
+          )}
+          {children}
+        </DrawerContent>
+      </RadixDialog.Portal>
+    </RadixDialog.Root>
+  )
+}
 
 Drawer.GroupHeader = GroupHeader
 Drawer.GroupItem = GroupItem

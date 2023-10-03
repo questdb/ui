@@ -40,7 +40,6 @@ import { Menu as _MenuIcon } from "styled-icons/remix-fill"
 import { Slack } from "styled-icons/boxicons-logos"
 
 import {
-  Drawer,
   ErrorButton,
   IconWithTooltip,
   Link,
@@ -59,13 +58,12 @@ import { Button, DropdownMenu, FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 
-import QueryPicker from "../QueryPicker"
-import { Shortcuts } from "../Shortcuts"
+import QueryPicker from "../../Editor/QueryPicker"
+import { Shortcuts } from "../../Editor/Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { QuestContext } from "../../../providers"
 import { DocSearch } from "@docsearch/react"
-import News from "../../../scenes/News"
 
 import "@docsearch/css"
 
@@ -171,7 +169,6 @@ const Menu = () => {
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
   const { exampleQueriesVisited, updateSettings } = useLocalStorage()
-  const [newsOpened, setNewsOpened] = useState(false)
 
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
@@ -317,25 +314,18 @@ const Menu = () => {
           </DropdownMenu.Content>
         </DropdownMenu.Root>
 
-        <Drawer
-          mode="side"
-          title="QuestDB News"
-          withCloseButton
-          onOpenChange={setNewsOpened}
-          trigger={
-            <IconWithTooltip
-              icon={
-                <Button skin={newsOpened ? "primary" : "secondary"}>
-                  <Notification2 size="18px" />
-                </Button>
-              }
-              placement="bottom"
-              tooltip="QuestDB News"
-            />
+        <IconWithTooltip
+          icon={
+            <Button
+              skin="secondary"
+              onClick={() => dispatch(actions.console.setActivePanel("news"))}
+            >
+              <Notification2 size="18px" />
+            </Button>
           }
-        >
-          <News />
-        </Drawer>
+          placement="bottom"
+          tooltip="QuestDB News"
+        />
       </MenuItems>
 
       <PopperToggle

@@ -1,24 +1,18 @@
 import React from "react"
-import { Page, Text } from "../../components"
+import { Text } from "../../components"
 import styled from "styled-components"
-import { Settings2 } from "styled-icons/evaicons-solid"
-import { color } from "../../utils"
 import { useEffect, useState, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { NewsItem } from "../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
-import { Heading } from "@questdb/react-components"
 import ReactMarkdown from "react-markdown"
 
 const Items = styled.div`
-  background: ${({ theme }) => theme.color.backgroundLighter};
   display: grid;
   grid-auto-rows: max-content;
   gap: 4rem;
-  padding: 4rem 2rem;
   width: 100%;
-  height: 100%;
   justify-items: center;
   overflow: auto;
 `
@@ -26,11 +20,12 @@ const Items = styled.div`
 const Item = styled.div`
   display: grid;
   gap: 1rem;
-  width: 75%;
+  padding: 2rem;
 `
 
-const Icon = styled(Settings2)`
-  color: ${color("foreground")};
+const Title = styled.h2`
+  margin: 0;
+  font-size: 2rem;
 `
 
 const NewsText = styled(Text).attrs({ color: "foreground" })`
@@ -46,7 +41,7 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
 `
 
 const Thumbnail = styled.img`
-  max-width: 500px;
+  max-width: 100%;
   margin: 2rem 0;
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
@@ -66,43 +61,41 @@ const News = () => {
   }, [])
 
   return (
-    <Page title="News" icon={<Icon size="20px" />}>
-      <Items>
-        {enterpriseNews.map((newsItem, index) => (
-          <Item key={`${index}-${newsItem.title}`}>
-            <Heading level={2}>{newsItem.title}</Heading>
-            <Text color="gray2">{newsItem.date}</Text>
-            {newsItem.thumbnail &&
-              newsItem.thumbnail.length > 0 &&
-              newsItem.thumbnail[0].thumbnails.large && (
-                <Thumbnail
-                  src={newsItem.thumbnail[0].thumbnails.large.url}
-                  alt={`${newsItem.title} thumbnail`}
-                />
-              )}
+    <Items>
+      {enterpriseNews.map((newsItem, index) => (
+        <Item key={`${index}-${newsItem.title}`}>
+          <Title>{newsItem.title}</Title>
+          <Text color="gray2">{newsItem.date}</Text>
+          {newsItem.thumbnail &&
+            newsItem.thumbnail.length > 0 &&
+            newsItem.thumbnail[0].thumbnails.large && (
+              <Thumbnail
+                src={newsItem.thumbnail[0].thumbnails.large.url}
+                alt={`${newsItem.title} thumbnail`}
+              />
+            )}
 
-            <NewsText>
-              <ReactMarkdown
-                components={{
-                  a: ({ node, children, ...props }) => (
-                    <a
-                      {...(props.href?.startsWith("http")
-                        ? { target: "_blank", rel: "noopener noreferrer" }
-                        : {})}
-                      {...props}
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {newsItem.body}
-              </ReactMarkdown>
-            </NewsText>
-          </Item>
-        ))}
-      </Items>
-    </Page>
+          <NewsText>
+            <ReactMarkdown
+              components={{
+                a: ({ node, children, ...props }) => (
+                  <a
+                    {...(props.href?.startsWith("http")
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
+                    {...props}
+                  >
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {newsItem.body}
+            </ReactMarkdown>
+          </NewsText>
+        </Item>
+      ))}
+    </Items>
   )
 }
 

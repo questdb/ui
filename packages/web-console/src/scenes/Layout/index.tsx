@@ -49,6 +49,20 @@ const Page = styled.div`
   }
 `
 
+const Root = styled.div`
+  display: flex;
+  width: 100%;
+  height: 100%;
+`
+
+const Main = styled.div`
+  flex: 1;
+`
+
+const Drawer = styled.div`
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
 const Layout = () => {
   const activePanel = useSelector(selectors.console.getActivePanel)
 
@@ -58,17 +72,21 @@ const Layout = () => {
 
   return (
     <QuestProvider>
-      <Page style={{ display: activePanel === "console" ? "flex" : "none" }}>
-        <Console />
-      </Page>
+      <Root>
+        <Main>
+          <Page
+            style={{ display: activePanel === "console" ? "flex" : "none" }}
+          >
+            <Console />
+          </Page>
 
-      <Page style={{ display: activePanel === "import" ? "flex" : "none" }}>
-        <Import />
-      </Page>
+          <Page style={{ display: activePanel === "import" ? "flex" : "none" }}>
+            <Import />
+          </Page>
+        </Main>
 
-      <Page style={{ display: activePanel === "news" ? "flex" : "none" }}>
-        <News />
-      </Page>
+        <Drawer id="side-panel-right" />
+      </Root>
 
       <SideMenu />
 

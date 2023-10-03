@@ -86,4 +86,8 @@ const DocSearchStyles = css`
 
 export const GlobalStyle = createGlobalStyle`
   ${DocSearchStyles}
+
+  body {
+    color: ${({ theme }) => theme.color.foreground};
+  }
 `
