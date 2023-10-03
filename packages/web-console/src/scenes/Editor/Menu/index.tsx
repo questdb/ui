@@ -31,7 +31,6 @@ import {
   Chat3,
   Close as _CloseIcon,
   Command,
-  Notification2,
   Play,
   Stop,
   Question,
@@ -40,9 +39,7 @@ import { Menu as _MenuIcon } from "styled-icons/remix-fill"
 import { Slack } from "styled-icons/boxicons-logos"
 
 import {
-  Drawer,
   ErrorButton,
-  IconWithTooltip,
   Link,
   PaneMenu,
   PopperToggle,
@@ -58,7 +55,6 @@ import {
 import { Button, DropdownMenu, FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
-
 import QueryPicker from "../QueryPicker"
 import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
@@ -171,7 +167,6 @@ const Menu = () => {
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
   const { exampleQueriesVisited, updateSettings } = useLocalStorage()
-  const [newsOpened, setNewsOpened] = useState(false)
 
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
@@ -317,30 +312,7 @@ const Menu = () => {
           </DropdownMenu.Content>
         </DropdownMenu.Root>
 
-        <Drawer
-          mode="side"
-          title="QuestDB News"
-          withCloseButton
-          onOpenChange={(newsOpened) => {
-            setNewsOpened(newsOpened)
-            dispatch(
-              actions.console.setActivePanel(newsOpened ? "news" : "console"),
-            )
-          }}
-          trigger={
-            <IconWithTooltip
-              icon={
-                <Button skin={newsOpened ? "primary" : "secondary"}>
-                  <Notification2 size="18px" />
-                </Button>
-              }
-              placement="bottom"
-              tooltip="QuestDB News"
-            />
-          }
-        >
-          <News />
-        </Drawer>
+        <News />
       </MenuItems>
 
       <PopperToggle

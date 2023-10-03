@@ -148,6 +148,7 @@ export type NewsThumbnail = {
 }
 
 export type NewsItem = {
+  id: string
   title: string
   body: string
   thumbnail?: NewsThumbnail[]

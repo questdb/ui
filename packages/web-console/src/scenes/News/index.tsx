@@ -1,13 +1,15 @@
-import React from "react"
-import { Text } from "../../components"
+import { Text, Drawer, IconWithTooltip } from "../../components"
 import styled from "styled-components"
-import { useEffect, useState, useContext } from "react"
+import React, { useEffect, useState, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { NewsItem } from "../../utils/questdb"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
+import { useDispatch, useSelector } from "react-redux"
+import { selectors, actions } from "../../store"
 import ReactMarkdown from "react-markdown"
-import { Loader } from "@questdb/react-components"
+import { Loader, Button } from "@questdb/react-components"
+import { Notification2 } from "styled-icons/remix-line"
+import { db } from "../../store/db"
+import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 
 const Loading = styled.div`
   display: grid;
@@ -59,63 +61,133 @@ const Thumbnail = styled.img`
 `
 
 const News = () => {
+  const dispatch = useDispatch()
   const { quest } = useContext(QuestContext)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const [enterpriseNews, setEnterpriseNews] = useState<NewsItem[] | undefined>(
     undefined,
   )
+  const [newsOpened, setNewsOpened] = useState(false)
+  const [hasUnreadNews, setHasUnreadNews] = useState(false)
 
+  const getEnterpriseNews = async () => {
+    const news = await quest.getNews({
+      category: "enterprise",
+      telemetryConfig,
+    })
+    setEnterpriseNews(news)
+  }
+
+  const getUnreadNews = async () => {
+    if (enterpriseNews) {
+      const readNews = await db.read_notifications.toArray()
+      const newsIds = enterpriseNews.map((newsItem) => newsItem.id)
+      const unreadNews = newsIds.filter(
+        (newsId) =>
+          !readNews.find((readNewsItem) => readNewsItem.newsId === newsId),
+      )
+      setHasUnreadNews(unreadNews?.length > 0 ? true : false)
+    }
+  }
+
+  const clearUnreadNews = async () => {
+    const news = await quest.getNews({
+      category: "enterprise",
+      telemetryConfig,
+    })
+    const newsIds = news.map((newsItem) => newsItem.id)
+    await db.read_notifications.bulkAdd(newsIds.map((newsId) => ({ newsId })))
+    setHasUnreadNews(false)
+  }
+
+  // Get Enterprise News on render
   useEffect(() => {
-    void quest
-      .getNews({ category: "enterprise", telemetryConfig })
-      .then((news: NewsItem[]) => {
-        setEnterpriseNews(news)
-      })
+    getEnterpriseNews()
   }, [])
 
-  return (
-    <Items>
-      {enterpriseNews === undefined && (
-        <Loading>
-          <Text color="foreground">Loading news...</Text>
-          <Loader />
-        </Loading>
-      )}
-      {enterpriseNews &&
-        enterpriseNews.map((newsItem, index) => (
-          <Item key={`${index}-${newsItem.title}`}>
-            <Title>{newsItem.title}</Title>
-            <Text color="gray2">{newsItem.date}</Text>
-            {newsItem.thumbnail &&
-              newsItem.thumbnail.length > 0 &&
-              newsItem.thumbnail[0].thumbnails.large && (
-                <Thumbnail
-                  src={newsItem.thumbnail[0].thumbnails.large.url}
-                  alt={`${newsItem.title} thumbnail`}
-                />
-              )}
+  // Compute unread news
+  useEffect(() => {
+    if (enterpriseNews) {
+      void getUnreadNews()
+    }
+  }, [enterpriseNews])
 
-            <NewsText>
-              <ReactMarkdown
-                components={{
-                  a: ({ node, children, ...props }) => (
-                    <a
-                      {...(props.href?.startsWith("http")
-                        ? { target: "_blank", rel: "noopener noreferrer" }
-                        : {})}
-                      {...props}
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {newsItem.body}
-              </ReactMarkdown>
-            </NewsText>
-          </Item>
-        ))}
-    </Items>
+  // Clear unread news when news are opened
+  useEffect(() => {
+    if (newsOpened && enterpriseNews) {
+      void clearUnreadNews()
+    }
+  }, [newsOpened, enterpriseNews])
+
+  return (
+    <Drawer
+      mode="side"
+      title="QuestDB News"
+      withCloseButton
+      onOpenChange={async (newsOpened) => {
+        setNewsOpened(newsOpened)
+        dispatch(
+          actions.console.setActivePanel(newsOpened ? "news" : "console"),
+        )
+      }}
+      trigger={
+        <IconWithTooltip
+          icon={
+            <Button skin={newsOpened ? "primary" : "secondary"}>
+              <UnreadItemsIcon
+                icon={<Notification2 size="18px" />}
+                tick={hasUnreadNews}
+              />
+            </Button>
+          }
+          placement="bottom"
+          tooltip="QuestDB News"
+        />
+      }
+    >
+      <Items>
+        {enterpriseNews === undefined && (
+          <Loading>
+            <Text color="foreground">Loading news...</Text>
+            <Loader />
+          </Loading>
+        )}
+        {enterpriseNews &&
+          enterpriseNews.map((newsItem, index) => (
+            <Item key={`${index}-${newsItem.title}`}>
+              <Title>{newsItem.title}</Title>
+              <Text color="gray2">{newsItem.date}</Text>
+              {newsItem.thumbnail &&
+                newsItem.thumbnail.length > 0 &&
+                newsItem.thumbnail[0].thumbnails.large && (
+                  <Thumbnail
+                    src={newsItem.thumbnail[0].thumbnails.large.url}
+                    alt={`${newsItem.title} thumbnail`}
+                  />
+                )}
+
+              <NewsText>
+                <ReactMarkdown
+                  components={{
+                    a: ({ node, children, ...props }) => (
+                      <a
+                        {...(props.href?.startsWith("http")
+                          ? { target: "_blank", rel: "noopener noreferrer" }
+                          : {})}
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    ),
+                  }}
+                >
+                  {newsItem.body}
+                </ReactMarkdown>
+              </NewsText>
+            </Item>
+          ))}
+      </Items>
+    </Drawer>
   )
 }
 
