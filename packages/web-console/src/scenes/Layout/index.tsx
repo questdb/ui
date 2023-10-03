@@ -55,8 +55,9 @@ const Root = styled.div`
   height: 100%;
 `
 
-const Main = styled.div`
+const Main = styled.div<{ sideOpened: boolean }>`
   flex: 1;
+  width: ${({ sideOpened }) => (sideOpened ? "calc(100% - 50rem)" : "100%")};
 `
 
 const Drawer = styled.div`
@@ -73,9 +74,14 @@ const Layout = () => {
   return (
     <QuestProvider>
       <Root>
-        <Main>
+        <Main sideOpened={activePanel === "news"}>
           <Page
-            style={{ display: activePanel === "console" ? "flex" : "none" }}
+            style={{
+              display:
+                activePanel === "console" || activePanel === "news"
+                  ? "flex"
+                  : "none",
+            }}
           >
             <Console />
           </Page>

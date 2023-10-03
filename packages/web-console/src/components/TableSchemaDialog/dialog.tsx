@@ -159,6 +159,7 @@ export const Dialog = ({
 
   return (
     <Drawer
+      mode="side"
       title={
         <Box gap="0.5rem">
           <StyledTableIcon size="20px" />

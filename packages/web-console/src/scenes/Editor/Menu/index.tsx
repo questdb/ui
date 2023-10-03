@@ -321,7 +321,12 @@ const Menu = () => {
           mode="side"
           title="QuestDB News"
           withCloseButton
-          onOpenChange={setNewsOpened}
+          onOpenChange={(newsOpened) => {
+            setNewsOpened(newsOpened)
+            dispatch(
+              actions.console.setActivePanel(newsOpened ? "news" : "console"),
+            )
+          }}
           trigger={
             <IconWithTooltip
               icon={
