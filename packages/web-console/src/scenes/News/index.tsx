@@ -7,11 +7,18 @@ import { NewsItem } from "../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import ReactMarkdown from "react-markdown"
+import { Loader } from "@questdb/react-components"
+
+const Loading = styled.div`
+  display: grid;
+  grid-auto-flow: column;
+  gap: 1rem;
+  justify-self: center;
+  margin-top: 2rem;
+`
 
 const Items = styled.div`
   display: grid;
-  grid-auto-rows: max-content;
-  gap: 4rem;
   width: 100%;
   justify-items: center;
   overflow: auto;
@@ -21,6 +28,10 @@ const Item = styled.div`
   display: grid;
   gap: 1rem;
   padding: 2rem;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid ${({ theme }) => theme.color.backgroundLighter};
+  }
 `
 
 const Title = styled.h2`
@@ -50,7 +61,9 @@ const Thumbnail = styled.img`
 const News = () => {
   const { quest } = useContext(QuestContext)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [enterpriseNews, setEnterpriseNews] = useState<NewsItem[]>([])
+  const [enterpriseNews, setEnterpriseNews] = useState<NewsItem[] | undefined>(
+    undefined,
+  )
 
   useEffect(() => {
     void quest
@@ -62,39 +75,46 @@ const News = () => {
 
   return (
     <Items>
-      {enterpriseNews.map((newsItem, index) => (
-        <Item key={`${index}-${newsItem.title}`}>
-          <Title>{newsItem.title}</Title>
-          <Text color="gray2">{newsItem.date}</Text>
-          {newsItem.thumbnail &&
-            newsItem.thumbnail.length > 0 &&
-            newsItem.thumbnail[0].thumbnails.large && (
-              <Thumbnail
-                src={newsItem.thumbnail[0].thumbnails.large.url}
-                alt={`${newsItem.title} thumbnail`}
-              />
-            )}
+      {enterpriseNews === undefined && (
+        <Loading>
+          <Text color="foreground">Loading news...</Text>
+          <Loader />
+        </Loading>
+      )}
+      {enterpriseNews &&
+        enterpriseNews.map((newsItem, index) => (
+          <Item key={`${index}-${newsItem.title}`}>
+            <Title>{newsItem.title}</Title>
+            <Text color="gray2">{newsItem.date}</Text>
+            {newsItem.thumbnail &&
+              newsItem.thumbnail.length > 0 &&
+              newsItem.thumbnail[0].thumbnails.large && (
+                <Thumbnail
+                  src={newsItem.thumbnail[0].thumbnails.large.url}
+                  alt={`${newsItem.title} thumbnail`}
+                />
+              )}
 
-          <NewsText>
-            <ReactMarkdown
-              components={{
-                a: ({ node, children, ...props }) => (
-                  <a
-                    {...(props.href?.startsWith("http")
-                      ? { target: "_blank", rel: "noopener noreferrer" }
-                      : {})}
-                    {...props}
-                  >
-                    {children}
-                  </a>
-                ),
-              }}
-            >
-              {newsItem.body}
-            </ReactMarkdown>
-          </NewsText>
-        </Item>
-      ))}
+            <NewsText>
+              <ReactMarkdown
+                components={{
+                  a: ({ node, children, ...props }) => (
+                    <a
+                      {...(props.href?.startsWith("http")
+                        ? { target: "_blank", rel: "noopener noreferrer" }
+                        : {})}
+                      {...props}
+                    >
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {newsItem.body}
+              </ReactMarkdown>
+            </NewsText>
+          </Item>
+        ))}
     </Items>
   )
 }
