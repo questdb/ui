@@ -44,6 +44,8 @@ export class Storage extends Dexie {
     this.version(1).stores({
       buffers: "++id, label",
       editor_settings: "++id, key",
+    })
+    this.version(2).stores({
       read_notifications: "++id, newsId",
     })
 
