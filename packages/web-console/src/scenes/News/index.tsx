@@ -28,12 +28,11 @@ const swing = () => {
   return animation
 }
 
-const BellIcon = styled(Notification2)<{ hasUnreadNews: boolean }>`
-  color: ${({ theme, hasUnreadNews }) =>
-    theme.color[hasUnreadNews ? "red" : "foreground"]};
+const BellIcon = styled(Notification2)<{ $unread: boolean }>`
+  color: ${({ theme, $unread }) => theme.color[$unread ? "red" : "foreground"]};
 
-  ${({ hasUnreadNews }) =>
-    hasUnreadNews &&
+  ${({ $unread }) =>
+    $unread &&
     `
   animation: 5s linear swing infinite;
   @keyframes swing {
@@ -167,7 +166,7 @@ const News = () => {
           icon={
             <Button skin={newsOpened ? "primary" : "secondary"}>
               <UnreadItemsIcon
-                icon={<BellIcon size="18px" hasUnreadNews={hasUnreadNews} />}
+                icon={<BellIcon size="18px" $unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
             </Button>
