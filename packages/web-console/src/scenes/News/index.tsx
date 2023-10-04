@@ -10,6 +10,7 @@ import { Loader, Button } from "@questdb/react-components"
 import { Notification2 } from "styled-icons/remix-line"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
+import { Thumbnail } from "./thumbnail"
 
 const swing = () => {
   let animation = ""
@@ -52,7 +53,6 @@ const Loading = styled.div`
 const Items = styled.div`
   display: grid;
   width: 100%;
-  justify-items: center;
   overflow: auto;
 `
 
@@ -81,13 +81,6 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
     padding: 0.2rem 0.4rem;
     border-radius: 0.2rem;
   }
-`
-
-const Thumbnail = styled.img`
-  max-width: 100%;
-  margin: 2rem 0;
-  border-radius: ${({ theme }) => theme.borderRadius};
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
 `
 
 const News = () => {
@@ -198,8 +191,11 @@ const News = () => {
                 newsItem.thumbnail.length > 0 &&
                 newsItem.thumbnail[0].thumbnails.large && (
                   <Thumbnail
+                    containerWidth={460}
                     src={newsItem.thumbnail[0].thumbnails.large.url}
                     alt={`${newsItem.title} thumbnail`}
+                    width={newsItem.thumbnail[0].thumbnails.large.width}
+                    height={newsItem.thumbnail[0].thumbnails.large.height}
                   />
                 )}
 
