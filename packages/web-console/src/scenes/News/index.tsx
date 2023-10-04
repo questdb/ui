@@ -132,7 +132,9 @@ const News = () => {
 
   // Get Enterprise News on render
   useEffect(() => {
-    getEnterpriseNews()
+    void getEnterpriseNews()
+    window.addEventListener("focus", getEnterpriseNews)
+    return () => window.removeEventListener("focus", getEnterpriseNews)
   }, [])
 
   // Compute unread news
