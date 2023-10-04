@@ -261,11 +261,11 @@ const Menu = () => {
               <Chat3 size="18px" />
               <FeedbackDialog
                 withEmailInput
-                title="Web Console feedback"
+                title="Contact us"
                 subtitle="Let us know your thoughts"
                 trigger={({ setOpen }) => (
                   <Text color="foreground" onClick={() => setOpen(true)}>
-                    Feedback
+                    Contact us
                   </Text>
                 )}
                 onSubmit={async ({
@@ -292,17 +292,17 @@ const Menu = () => {
               />
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Question size="18px" />
-              <MenuLink
-                href="https://questdb.io/docs/develop/web-console/"
-                text="Web Console Docs"
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem>
               <Slack size="18px" />
               <MenuLink
                 href="https://slack.questdb.io/"
                 text="Slack community"
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Question size="18px" />
+              <MenuLink
+                href="https://questdb.io/docs/develop/web-console/"
+                text="Web Console Docs"
               />
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
