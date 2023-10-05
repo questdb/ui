@@ -11,7 +11,7 @@ const DocSearchStyles = css`
     --docsearch-modal-background: ${({ theme }) => theme.color.background};
     --docsearch-modal-shadow: inset 1px 1px 0 0 #2c2e40, 0 3px 8px 0 #000309;
     /* Search box */
-    --docsearch-searchbox-background: rgba(255, 255, 255, 0.1);
+    --docsearch-searchbox-background: #2d303e;
     --docsearch-searchbox-focus-background: #141725;
     /* Hit */
     --docsearch-hit-color: ${({ theme }) => theme.color.foreground};
@@ -35,7 +35,6 @@ const DocSearchStyles = css`
   .DocSearch-Button {
     height: 3rem;
     border-radius: 0.4rem;
-    background: ${({ theme }) => theme.color.selection};
     color: ${({ theme }) => theme.color.foreground};
     border: none;
   }
