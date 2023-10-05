@@ -252,7 +252,7 @@ const Menu = () => {
         />
         <DropdownMenu.Root modal={false}>
           <DropdownMenu.Trigger asChild>
-            <Button skin="secondary" prefixIcon={<Question size="18px" />}>
+            <Button skin="transparent" prefixIcon={<Question size="18px" />}>
               Help
             </Button>
           </DropdownMenu.Trigger>
