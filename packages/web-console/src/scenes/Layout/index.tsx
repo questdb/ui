@@ -71,16 +71,18 @@ const Layout = () => {
     window.bus.trigger(BusEvent.REACT_READY)
   }, [])
 
+  const isSideOpened = () => {
+    return ["create", "news"].includes(activePanel)
+  }
+
   return (
     <QuestProvider>
       <Root>
-        <Main sideOpened={activePanel === "news"}>
+        <Main sideOpened={isSideOpened()}>
           <Page
             style={{
               display:
-                activePanel === "console" || activePanel === "news"
-                  ? "flex"
-                  : "none",
+                activePanel === "console" || isSideOpened() ? "flex" : "none",
             }}
           >
             <Console />

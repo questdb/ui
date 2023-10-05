@@ -14,6 +14,8 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
 
 const StyledTableIcon = styled(TableIcon)`
   color: ${({ theme }) => theme.color.foreground};
@@ -77,6 +79,8 @@ export const Dialog = ({
   tables,
   ctaText,
 }: Props) => {
+  const dispatch = useDispatch()
+
   const formDefaults = {
     name,
     schemaColumns: schema,
@@ -159,6 +163,7 @@ export const Dialog = ({
 
   return (
     <Drawer
+      mode={action === "add" ? "side" : "modal"}
       title={
         <Box gap="0.5rem">
           <StyledTableIcon size="20px" />
@@ -183,6 +188,13 @@ export const Dialog = ({
           </Button>
         )
       }
+      onOpenChange={(isOpen) => {
+        if (isOpen && action === "add") {
+          dispatch(
+            actions.console.setActivePanel(isOpen ? "create" : "console"),
+          )
+        }
+      }}
       onDismiss={() => {
         resetToDefaults()
         onOpenChange(undefined)
