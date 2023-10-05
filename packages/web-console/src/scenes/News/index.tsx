@@ -7,39 +7,10 @@ import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
 import ReactMarkdown from "react-markdown"
 import { Loader, Button } from "@questdb/react-components"
-import { Notification2 } from "styled-icons/remix-line"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
-
-const swing = () => {
-  let animation = ""
-  const numKeyframes = 30 // 5 sec total animation
-
-  for (let i = 0; i < numKeyframes; i++) {
-    const rotateDegree = i % 2 === 0 ? 15 : -15
-    const keyframePercent = (i / numKeyframes) * 100
-    animation += `
-      ${keyframePercent}% {
-        transform: rotate(${rotateDegree}deg);
-      }
-    `
-  }
-  return animation
-}
-
-const BellIcon = styled(Notification2)<{ $unread: boolean }>`
-  color: ${({ theme, $unread }) => theme.color[$unread ? "red" : "foreground"]};
-
-  ${({ $unread }) =>
-    $unread &&
-    `
-  animation: 5s linear swing infinite;
-  @keyframes swing {
-    ${swing()}
-  }
-  `}
-`
+import { Bell } from "./bell"
 
 const Loading = styled.div`
   display: grid;
@@ -164,9 +135,9 @@ const News = () => {
       trigger={
         <IconWithTooltip
           icon={
-            <Button skin={newsOpened ? "primary" : "secondary"}>
+            <Button skin={newsOpened ? "secondary" : "transparent"}>
               <UnreadItemsIcon
-                icon={<BellIcon size="18px" $unread={hasUnreadNews} />}
+                icon={<Bell size="18px" unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
             </Button>
