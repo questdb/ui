@@ -12,6 +12,10 @@ import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
 
+const Content = styled(Drawer.ContentWrapper)`
+  padding-bottom: 4rem; /* to accomodate footer */
+`
+
 const Loading = styled.div`
   display: grid;
   grid-auto-flow: column;
@@ -147,51 +151,53 @@ const News = () => {
         />
       }
     >
-      <Items>
-        {enterpriseNews === undefined && (
-          <Loading>
-            <Text color="foreground">Loading news...</Text>
-            <Loader />
-          </Loading>
-        )}
-        {enterpriseNews &&
-          enterpriseNews.map((newsItem, index) => (
-            <Item key={`${index}-${newsItem.title}`}>
-              <Title>{newsItem.title}</Title>
-              <Text color="gray2">{newsItem.date}</Text>
-              {newsItem.thumbnail &&
-                newsItem.thumbnail.length > 0 &&
-                newsItem.thumbnail[0].thumbnails.large && (
-                  <Thumbnail
-                    containerWidth={460}
-                    src={newsItem.thumbnail[0].thumbnails.large.url}
-                    alt={`${newsItem.title} thumbnail`}
-                    width={newsItem.thumbnail[0].thumbnails.large.width}
-                    height={newsItem.thumbnail[0].thumbnails.large.height}
-                  />
-                )}
+      <Content>
+        <Items>
+          {enterpriseNews === undefined && (
+            <Loading>
+              <Text color="foreground">Loading news...</Text>
+              <Loader />
+            </Loading>
+          )}
+          {enterpriseNews &&
+            enterpriseNews.map((newsItem, index) => (
+              <Item key={`${index}-${newsItem.title}`}>
+                <Title>{newsItem.title}</Title>
+                <Text color="gray2">{newsItem.date}</Text>
+                {newsItem.thumbnail &&
+                  newsItem.thumbnail.length > 0 &&
+                  newsItem.thumbnail[0].thumbnails.large && (
+                    <Thumbnail
+                      containerWidth={460}
+                      src={newsItem.thumbnail[0].thumbnails.large.url}
+                      alt={`${newsItem.title} thumbnail`}
+                      width={newsItem.thumbnail[0].thumbnails.large.width}
+                      height={newsItem.thumbnail[0].thumbnails.large.height}
+                    />
+                  )}
 
-              <NewsText>
-                <ReactMarkdown
-                  components={{
-                    a: ({ node, children, ...props }) => (
-                      <a
-                        {...(props.href?.startsWith("http")
-                          ? { target: "_blank", rel: "noopener noreferrer" }
-                          : {})}
-                        {...props}
-                      >
-                        {children}
-                      </a>
-                    ),
-                  }}
-                >
-                  {newsItem.body}
-                </ReactMarkdown>
-              </NewsText>
-            </Item>
-          ))}
-      </Items>
+                <NewsText>
+                  <ReactMarkdown
+                    components={{
+                      a: ({ node, children, ...props }) => (
+                        <a
+                          {...(props.href?.startsWith("http")
+                            ? { target: "_blank", rel: "noopener noreferrer" }
+                            : {})}
+                          {...props}
+                        >
+                          {children}
+                        </a>
+                      ),
+                    }}
+                  >
+                    {newsItem.body}
+                  </ReactMarkdown>
+                </NewsText>
+              </Item>
+            ))}
+        </Items>
+      </Content>
     </Drawer>
   )
 }
