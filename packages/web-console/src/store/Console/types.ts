@@ -33,7 +33,7 @@ export type QueryGroup = {
   queries: Query[]
 }
 
-export type Panel = "console" | "settings" | "news" | "import" | "create"
+export type Panel = "console" | "settings" | "news" | "import"
 
 export type ConsoleConfigShape = Readonly<{
   githubBanner: boolean
