@@ -11,14 +11,12 @@ import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector, useDispatch } from "react-redux"
-import { selectors, actions } from "../../store"
+import { selectors } from "../../store"
 import { Tooltip } from "../../components/Tooltip"
 import { Sidebar } from "../../components/Sidebar"
-import { color } from "../../utils"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Grid, PieChart } from "styled-icons/remix-line"
+import { Database2, Grid, PieChart } from "styled-icons/remix-line"
 import { ChevronDoubleLeft } from "styled-icons/bootstrap"
-import { Button } from "@questdb/react-components"
 import { ViewMode } from "./types"
 import { Logo } from "../../components/Logo"
 
@@ -96,24 +94,23 @@ const Console = () => {
           <Top>
             <Sidebar>
               <Logo />
+
               <PopperHover
                 delay={350}
                 placement="bottom"
                 trigger={
-                  <Button
-                    skin="secondary"
+                  <Navigation
+                    direction="left"
                     onClick={() =>
                       updateSettings(
                         StoreKey.RESULTS_SPLITTER_BASIS,
                         resultsSplitterBasis === 0 ? 300 : 0,
                       )
                     }
+                    selected={resultsSplitterBasis !== 0}
                   >
-                    <ToggleTablesIcon
-                      size="16px"
-                      splitterbasis={resultsSplitterBasis}
-                    />
-                  </Button>
+                    <Database2 size="18px" />
+                  </Navigation>
                 }
               >
                 <Tooltip>
