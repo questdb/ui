@@ -30,7 +30,7 @@ const Items = styled.div`
   overflow: auto;
 `
 
-const Item = styled.div`
+const Item = styled.div<{ unread?: boolean }>`
   display: grid;
   gap: 1rem;
   padding: 2rem;
@@ -50,10 +50,22 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
     color: ${({ theme }) => theme.color.cyan};
   }
 
+  h2 {
+    font-size: 1.8rem;
+  }
+
+  h3 {
+    font-size: 1.6rem;
+  }
+
   code {
     background-color: ${({ theme }) => theme.color.selection};
     padding: 0.2rem 0.4rem;
     border-radius: 0.2rem;
+  }
+
+  li:not(:last-child) {
+    margin-bottom: 0.5rem;
   }
 `
 
@@ -61,18 +73,31 @@ const News = () => {
   const dispatch = useDispatch()
   const { quest } = useContext(QuestContext)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
+  const [isLoading, setIsLoading] = useState(false)
+  const [hasError, setHasError] = useState(false)
   const [enterpriseNews, setEnterpriseNews] = useState<NewsItem[] | undefined>(
     undefined,
   )
   const [newsOpened, setNewsOpened] = useState(false)
+  // This is to mark new items in the sidebar
+  const [unreadNewsIds, setUnreadNewsIds] = useState<string[]>([])
+  // This boolean is to animate the bell icon and display a bullet indicator
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
 
   const getEnterpriseNews = async () => {
-    const news = await quest.getNews({
-      category: "enterprise",
-      telemetryConfig,
-    })
-    setEnterpriseNews(news)
+    setIsLoading(true)
+    setHasError(false)
+    try {
+      const news = await quest.getNews({
+        category: "enterprise",
+        telemetryConfig,
+      })
+      setEnterpriseNews(news)
+    } catch (e) {
+      setHasError(true)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const getUnreadNews = async () => {
@@ -83,6 +108,7 @@ const News = () => {
         (newsId) =>
           !readNews.find((readNewsItem) => readNewsItem.newsId === newsId),
       )
+      setUnreadNewsIds(unreadNews)
       setHasUnreadNews(unreadNews?.length > 0 ? true : false)
     }
   }
@@ -118,10 +144,15 @@ const News = () => {
     }
   }, [enterpriseNews])
 
-  // Clear unread news when news are opened
+  // Clear unread news indication when news are opened.
+  // Clear `unreadNewsIds` only when user closes the news panel.
   useEffect(() => {
-    if (newsOpened && enterpriseNews) {
-      void clearUnreadNews()
+    if (enterpriseNews) {
+      if (newsOpened) {
+        void clearUnreadNews()
+      } else {
+        setUnreadNewsIds([])
+      }
     }
   }, [newsOpened, enterpriseNews])
 
@@ -153,15 +184,29 @@ const News = () => {
     >
       <Content>
         <Items>
-          {enterpriseNews === undefined && (
+          {isLoading && (
             <Loading>
               <Text color="foreground">Loading news...</Text>
               <Loader />
             </Loading>
           )}
-          {enterpriseNews &&
+          {hasError && (
+            <Loading>
+              <Text color="red">
+                Error loading news. Please try again shortly.
+              </Text>
+            </Loading>
+          )}
+          {!isLoading &&
+            !hasError &&
+            enterpriseNews &&
             enterpriseNews.map((newsItem, index) => (
-              <Item key={`${index}-${newsItem.title}`}>
+              <Item
+                key={`${index}-${newsItem.title}`}
+                unread={
+                  unreadNewsIds.find((id) => newsItem.id === id) !== undefined
+                }
+              >
                 <Title>{newsItem.title}</Title>
                 <Text color="gray2">{newsItem.date}</Text>
                 {newsItem.thumbnail &&
