@@ -172,7 +172,7 @@ const News = () => {
           icon={
             <Button skin={newsOpened ? "secondary" : "transparent"}>
               <UnreadItemsIcon
-                icon={<Bell size="18px" unread={hasUnreadNews} />}
+                icon={<Bell size="18px" $unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
             </Button>
