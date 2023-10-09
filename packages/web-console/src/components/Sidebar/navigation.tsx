@@ -8,7 +8,7 @@ type NavigationProps = Readonly<{
 export const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
   display: flex;
   flex-direction: column;
-  flex: 0 0 4rem;
+  height: 4rem;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -27,7 +27,6 @@ export const DisabledNavigation = styled.div`
   position: relative;
   height: 100%;
   width: 100%;
-  flex: 0 0 4rem;
   align-items: center;
   justify-content: center;
 

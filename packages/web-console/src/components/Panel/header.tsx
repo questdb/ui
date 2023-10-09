@@ -22,35 +22,41 @@
  *
  ******************************************************************************/
 
-export enum BusEvent {
-  MSG_ACTIVE_PANEL = "active.panel",
-  MSG_EDITOR_FOCUS = "editor.focus",
-  MSG_EDITOR_SET = "editor.set",
-  MSG_EDITOR_INSERT_COLUMN = "editor.insert.column",
-  MSG_EDITOR_INSERT_QUERY = "editor.insert.query",
-  GRID_FOCUS = "grid.focus",
-  MSG_QUERY_CANCEL = "query.in.cancel",
-  MSG_QUERY_DATASET = "query.out.dataset",
-  MSG_QUERY_ERROR = "query.out.error",
-  MSG_QUERY_EXEC = "query.in.exec",
-  MSG_QUERY_EXPORT = "query.in.export",
-  MSG_QUERY_FIND_N_EXEC = "query.build.execute",
-  MSG_QUERY_OK = "query.out.ok",
-  MSG_QUERY_RUNNING = "query.out.running",
-  MSG_QUERY_SCHEMA = "query.out.schema",
-  MSG_CONNECTION_OK = "query.connection.ok",
-  MSG_CONNECTION_ERROR = "query.connection.error",
-  REACT_READY = "react.ready",
-}
+import React from "react"
+import styled from "styled-components"
 
-export enum TelemetryTable {
-  MAIN = "telemetry",
-  CONFIG = "telemetry_config",
-  WAL = "sys.telemetry_wal",
-}
+import { color } from "../../utils"
+import { Text } from "../../components/Text"
 
-const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
+export const Root = styled.div`
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  height: 4.5rem;
+  padding: 0 1rem;
+  align-items: center;
+  background: ${color("backgroundLighter")};
+  border-top: 1px solid transparent;
+  z-index: 5;
+`
 
-export const API = `https://${BASE}.questdb.io`
+const Title = styled(Text)`
+  display: flex;
+  align-items: center;
+  padding-left: 1rem;
+  font-size: 1.8rem;
+  font-weight: 600;
+`
 
-export const BUTTON_ICON_SIZE = "30px"
+export const Header = ({
+  title,
+  afterTitle,
+}: {
+  title: React.ReactNode
+  afterTitle?: React.ReactNode
+}) => (
+  <Root>
+    <Title color="foreground">{title}</Title>
+    {afterTitle}
+  </Root>
+)

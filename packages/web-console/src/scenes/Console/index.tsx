@@ -11,14 +11,15 @@ import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector, useDispatch } from "react-redux"
-import { selectors } from "../../store"
+import { selectors, actions } from "../../store"
 import { Tooltip } from "../../components/Tooltip"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, PieChart } from "styled-icons/remix-line"
+import { Database2, Grid, PieChart, Upload2 } from "styled-icons/remix-line"
 import { ChevronDoubleLeft } from "styled-icons/bootstrap"
 import { ViewMode } from "./types"
-import { Logo } from "../../components/Logo"
+import { BUTTON_ICON_SIZE } from "../../consts/index"
+import { PrimaryToggleButton } from "../../components"
 
 const Root = styled.div`
   display: flex;
@@ -49,12 +50,12 @@ const viewModes: {
   tooltipText: string
 }[] = [
   {
-    icon: <Grid size="18px" />,
+    icon: <Grid size={BUTTON_ICON_SIZE} />,
     mode: "grid",
     tooltipText: "Grid",
   },
   {
-    icon: <PieChart size="18px" />,
+    icon: <PieChart size={BUTTON_ICON_SIZE} />,
     mode: "chart",
     tooltipText: "Chart",
   },
@@ -93,8 +94,6 @@ const Console = () => {
         >
           <Top>
             <Sidebar>
-              <Logo />
-
               <PopperHover
                 delay={350}
                 placement="bottom"
@@ -109,7 +108,7 @@ const Console = () => {
                     }
                     selected={resultsSplitterBasis !== 0}
                   >
-                    <Database2 size="18px" />
+                    <Database2 size={BUTTON_ICON_SIZE} />
                   </Navigation>
                 }
               >
@@ -129,7 +128,7 @@ const Console = () => {
             </Splitter>
           </Top>
           <Bottom>
-            <Sidebar>
+            <Sidebar align="bottom">
               {result &&
                 viewModes.map(({ icon, mode, tooltipText }) => (
                   <PopperHover
@@ -149,6 +148,13 @@ const Console = () => {
                     <Tooltip>{tooltipText}</Tooltip>
                   </PopperHover>
                 ))}
+              <PrimaryToggleButton
+                onClick={() =>
+                  dispatch(actions.console.setActivePanel("import"))
+                }
+              >
+                <Upload2 size={BUTTON_ICON_SIZE} />
+              </PrimaryToggleButton>
             </Sidebar>
             {result ? <Result viewMode={resultViewMode} /> : <ZeroState />}
           </Bottom>

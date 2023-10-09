@@ -43,6 +43,7 @@ import {
   Link,
   PaneMenu,
   PopperToggle,
+  PrimaryToggleButton,
   SecondaryButton,
   SuccessButton,
   Text,
@@ -61,12 +62,15 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { QuestContext } from "../../../providers"
 import { DocSearch } from "@docsearch/react"
-import News from "../../../scenes/News"
+import { BUTTON_ICON_SIZE } from "../../../consts/index"
 
 import "@docsearch/css"
 
 const Wrapper = styled(PaneMenu)<{ _display: string }>`
+  width: 100%;
+  background: transparent;
   z-index: 15;
+  padding-right: 0;
 
   .algolia-autocomplete {
     display: ${({ _display }) => _display} !important;
@@ -131,7 +135,6 @@ const SideMenuMenuButton = styled(TransparentButton)`
 
 const MenuItems = styled.div`
   display: grid;
-  gap: 1rem;
   grid-auto-flow: column;
   align-items: center;
 `
@@ -206,13 +209,6 @@ const Menu = () => {
         </ErrorButton>
       )}
 
-      {!running.value && (
-        <SuccessButton onClick={handleClick} title="Ctrl+Enter">
-          <Play size="18px" />
-          <span>Run</span>
-        </SuccessButton>
-      )}
-
       <Separator />
 
       {savedQueries.length > 0 && (
@@ -232,6 +228,13 @@ const Menu = () => {
 
       <Separator />
 
+      {!running.value && (
+        <SuccessButton onClick={handleClick} title="Ctrl+Enter">
+          <Play size="18px" />
+          <span>Run</span>
+        </SuccessButton>
+      )}
+
       <MenuItems>
         <DocSearch
           appId="QL9L2YL7AQ"
@@ -250,78 +253,7 @@ const Menu = () => {
             },
           }}
         />
-        <DropdownMenu.Root modal={false}>
-          <DropdownMenu.Trigger asChild>
-            <Button skin="transparent" prefixIcon={<Question size="18px" />}>
-              Help
-            </Button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content>
-            <DropdownMenuItem onSelect={(e: Event) => e.preventDefault()}>
-              <Chat3 size="18px" />
-              <FeedbackDialog
-                withEmailInput
-                title="Contact us"
-                subtitle="Let us know your thoughts"
-                trigger={({ setOpen }) => (
-                  <Text color="foreground" onClick={() => setOpen(true)}>
-                    Contact us
-                  </Text>
-                )}
-                onSubmit={async ({
-                  email,
-                  message,
-                }: {
-                  email: string
-                  message: string
-                }) => {
-                  try {
-                    await quest.sendFeedback({
-                      email,
-                      message,
-                      telemetryConfig,
-                    })
-                    toast.success(
-                      "Thank you for your feedback! Our team will review it shortly.",
-                    )
-                  } catch (err) {
-                    toast.error("Something went wrong. Please try again later.")
-                    throw err
-                  }
-                }}
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Slack size="18px" />
-              <MenuLink
-                href="https://slack.questdb.io/"
-                text="Slack community"
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Question size="18px" />
-              <MenuLink
-                href="https://questdb.io/docs/develop/web-console/"
-                text="Web Console Docs"
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
-              <Command size="18px" />
-              <Text color="foreground">Shortcuts</Text>
-            </DropdownMenuItem>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-
-        <News />
       </MenuItems>
-
-      <PopperToggle
-        active={shortcutsPopperActive}
-        onToggle={handleShortcutsToggle}
-        trigger={<div style={{ height: "4rem" }} />}
-      >
-        <Shortcuts />
-      </PopperToggle>
 
       {sm && (
         <SideMenuMenuButton onClick={handleSideMenuButtonClick}>

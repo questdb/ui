@@ -5,7 +5,12 @@ export const ContentWrapper = styled(Box).attrs({
   flexDirection: "column",
 })`
   width: 100%;
-  height: calc(100vh - 6.4rem); /* height of the header */
+  /*
+    4.5rem = top bar
+    4.5rem = drawer title
+    4.5rem = footer
+  */
+  height: calc(100vh - 4.5rem - 4.5rem - 4.5rem);
 
   form {
     width: 100%;

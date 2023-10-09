@@ -133,7 +133,6 @@ const SideMenuMenuButton = styled(TransparentButton)`
 
 const MenuItems = styled.div`
   display: grid;
-  gap: 1rem;
   grid-auto-flow: column;
   align-items: center;
 `

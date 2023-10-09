@@ -14,10 +14,8 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-
-const StyledTableIcon = styled(TableIcon)`
-  color: ${({ theme }) => theme.color.foreground};
-`
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
 
 const StyledContentWrapper = styled(Drawer.ContentWrapper)`
   --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
@@ -88,6 +86,7 @@ export const Dialog = ({
   const [defaults, setDefaults] = useState<SchemaFormValues>(formDefaults)
   const [currentValues, setCurrentValues] =
     useState<SchemaFormValues>(formDefaults)
+  const dispatch = useDispatch()
 
   const resetToDefaults = () => {
     setDefaults({
@@ -159,14 +158,8 @@ export const Dialog = ({
 
   return (
     <Drawer
-      title={
-        <Box gap="0.5rem">
-          <StyledTableIcon size="20px" />
-          <Text color="foreground">
-            {name !== "" ? `Table schema for ${name}` : "Create table"}
-          </Text>
-        </Box>
-      }
+      mode={action === "add" ? "side" : "modal"}
+      title={name !== "" ? `Table schema for ${name}` : "Create table"}
       open={open}
       trigger={
         trigger ?? (
@@ -187,9 +180,13 @@ export const Dialog = ({
         resetToDefaults()
         onOpenChange(undefined)
       }}
-      withCloseButton
-      closeOnOverlayClick={false}
-      closeOnEscape={false}
+      onOpenChange={(isOpen) => {
+        if (isOpen && action === "add") {
+          dispatch(
+            actions.console.setActivePanel(isOpen ? "create" : "console"),
+          )
+        }
+      }}
     >
       <StyledContentWrapper>
         <Form<SchemaFormValues>
@@ -310,16 +307,18 @@ export const Dialog = ({
             </Inputs>
 
             <Drawer.Actions>
-              <Form.Cancel<SchemaFormValues>
-                prefixIcon={<Undo size={18} />}
-                variant="secondary"
-                defaultValues={defaults}
-                onClick={() => {
-                  onOpenChange(undefined)
-                }}
-              >
-                Dismiss
-              </Form.Cancel>
+              {action === "import" && (
+                <Form.Cancel<SchemaFormValues>
+                  prefixIcon={<Undo size={18} />}
+                  variant="secondary"
+                  defaultValues={defaults}
+                  onClick={() => {
+                    onOpenChange(undefined)
+                  }}
+                >
+                  Dismiss
+                </Form.Cancel>
+              )}
 
               <Form.Submit
                 prefixIcon={<TableIcon size={18} />}

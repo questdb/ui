@@ -64,7 +64,7 @@ const Ul = styled.ul`
 
 const Li = styled.li`
   list-style: none;
-  padding: 0 0 0 1rem;
+  padding: 0 1rem;
 `
 
 const Leaf = (leaf: TreeNode) => {

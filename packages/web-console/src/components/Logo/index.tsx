@@ -3,6 +3,9 @@ import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import styled from "styled-components"
 import { color } from "../../utils"
+import { Information } from "styled-icons/remix-line"
+import { BUTTON_ICON_SIZE } from "../../consts/index"
+import { PrimaryToggleButton } from "../../components"
 
 const Root = styled.div`
   position: relative;
@@ -18,8 +21,13 @@ const Root = styled.div`
 export const Logo = () => {
   const dispatch = useDispatch()
   return (
-    <Root onClick={() => dispatch(actions.console.setActivePanel("console"))}>
-      <img alt="QuestDB Logo" height="26" src="/assets/favicon.svg" />
+    <Root>
+      <PrimaryToggleButton
+        onClick={() => dispatch(actions.console.setActivePanel("console"))}
+      >
+        <Information size={BUTTON_ICON_SIZE} />
+      </PrimaryToggleButton>
+      {/* <img alt="QuestDB Logo" height="23" src="/assets/favicon.svg" /> */}
     </Root>
   )
 }

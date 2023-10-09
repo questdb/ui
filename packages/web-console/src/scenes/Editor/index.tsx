@@ -44,7 +44,6 @@ const Editor = ({
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => (
   <EditorPaneWrapper ref={innerRef} {...rest}>
-    <Menu />
     <Monaco />
     <Notifications />
   </EditorPaneWrapper>

@@ -1,4 +1,9 @@
-import { Text, Drawer, IconWithTooltip } from "../../components"
+import {
+  Text,
+  Drawer,
+  IconWithTooltip,
+  PrimaryToggleButton,
+} from "../../components"
 import styled from "styled-components"
 import React, { useEffect, useState, useContext } from "react"
 import { QuestContext } from "../../providers"
@@ -11,6 +16,7 @@ import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
+import { BUTTON_ICON_SIZE } from "../../consts/index"
 
 const Content = styled(Drawer.ContentWrapper)`
   padding-bottom: 4rem; /* to accomodate footer */
@@ -160,7 +166,6 @@ const News = () => {
     <Drawer
       mode="side"
       title="QuestDB News"
-      withCloseButton
       onOpenChange={async (newsOpened) => {
         setNewsOpened(newsOpened)
         dispatch(
@@ -170,12 +175,12 @@ const News = () => {
       trigger={
         <IconWithTooltip
           icon={
-            <Button skin={newsOpened ? "secondary" : "transparent"}>
+            <PrimaryToggleButton>
               <UnreadItemsIcon
-                icon={<Bell size="18px" $unread={hasUnreadNews} />}
+                icon={<Bell size={BUTTON_ICON_SIZE} $unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
-            </Button>
+            </PrimaryToggleButton>
           }
           placement="bottom"
           tooltip="QuestDB News"

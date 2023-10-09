@@ -35,21 +35,13 @@ import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import {
-  Database2,
-  Loader3,
-  Refresh,
-  AddCircle,
-  Upload2,
-} from "styled-icons/remix-line"
+import { Loader3, Refresh } from "styled-icons/remix-line"
 
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
-  PaneMenu,
   spinAnimation,
-  Text,
   Tooltip,
   VirtualList,
 } from "../../components"
@@ -59,14 +51,13 @@ import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { BusEvent } from "../../consts"
-import { StoreKey } from "../../utils/localStorage/types"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { Box } from "../../components/Box"
-import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
 import { useEditor } from "../../providers"
 import { Button } from "@questdb/react-components"
+import { Panel } from "../../components/Panel"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -83,15 +74,6 @@ const Wrapper = styled(PaneWrapper)`
   height: 100%;
 `
 
-const Menu = styled(PaneMenu)`
-  justify-content: space-between;
-`
-
-const Header = styled(Text)`
-  display: flex;
-  align-items: center;
-`
-
 const Content = styled(PaneContent)<{
   _loading: boolean
 }>`
@@ -99,19 +81,6 @@ const Content = styled(PaneContent)<{
   font-family: ${({ theme }) => theme.fontMonospace};
   overflow: auto;
   ${({ _loading }) => _loading && loadingStyles};
-`
-
-const Actions = styled.div`
-  display: grid;
-  grid-auto-flow: column;
-  gap: 1rem;
-  height: 4rem;
-  align-items: flex-end;
-  justify-content: center;
-`
-
-const DatabaseIcon = styled(Database2)`
-  margin-right: 1rem;
 `
 
 const Loader = styled(Loader3)`
@@ -246,30 +215,28 @@ const Schema = ({
 
   return (
     <Wrapper ref={innerRef} {...rest}>
-      <Menu>
-        <Header color="foreground">
-          <DatabaseIcon size="18px" />
-          Tables
-        </Header>
-
-        <div style={{ display: "flex" }}>
-          {readOnly === false && tables && (
-            <Box align="center" gap="1rem">
-              <PopperHover
-                delay={350}
-                placement="bottom"
-                trigger={
-                  <Button onClick={fetchTables} skin="secondary">
-                    <Refresh size="18px" />
-                  </Button>
-                }
-              >
-                <Tooltip>Refresh</Tooltip>
-              </PopperHover>
-            </Box>
-          )}
-        </div>
-      </Menu>
+      <Panel.Header
+        title="Tables"
+        afterTitle={
+          <div style={{ display: "flex" }}>
+            {readOnly === false && tables && (
+              <Box align="center" gap="1rem">
+                <PopperHover
+                  delay={350}
+                  placement="bottom"
+                  trigger={
+                    <Button onClick={fetchTables} skin="transparent">
+                      <Refresh size="18px" />
+                    </Button>
+                  }
+                >
+                  <Tooltip>Refresh</Tooltip>
+                </PopperHover>
+              </Box>
+            )}
+          </div>
+        }
+      />
       <Content _loading={loading}>
         {loading ? (
           <Loader size="48px" />
@@ -284,42 +251,6 @@ const Schema = ({
         )}
         {!loading && <FlexSpacer />}
       </Content>
-
-      <Actions>
-        <TableSchemaDialog
-          action="add"
-          isEditLocked={false}
-          hasWalSetting={true}
-          walEnabled={false}
-          name=""
-          partitionBy="NONE"
-          schema={[]}
-          tables={tables}
-          timestamp=""
-          onOpenChange={(open) => setAddTableDialogOpen(open)}
-          open={addTableDialogOpen !== undefined}
-          onSchemaChange={handleAddTableSchema}
-          trigger={
-            <Button
-              skin="secondary"
-              onClick={() => setAddTableDialogOpen("add")}
-              prefixIcon={<AddCircle size="18px" />}
-            >
-              Create
-            </Button>
-          }
-          ctaText="Create"
-        />
-
-        <Button
-          skin="secondary"
-          onClick={() => dispatch(actions.console.setActivePanel("import"))}
-          prefixIcon={<Upload2 size="18px" />}
-          data-hook="navigation-import-button"
-        >
-          Import
-        </Button>
-      </Actions>
     </Wrapper>
   )
 }

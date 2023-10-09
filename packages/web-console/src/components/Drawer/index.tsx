@@ -7,6 +7,8 @@ import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
 import { ContentWrapper } from "./content-wrapper"
+import { PaneMenu } from "../../components/PaneMenu"
+import { Panel } from "../../components/Panel"
 
 type DrawerProps = {
   mode?: "modal" | "side"
@@ -48,8 +50,8 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width?: string
   mode: DrawerProps["mode"]
 }>`
-  background-color: ${({ theme }) => theme.color.background};
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
+  background-color: ${({ theme }) => theme.color.backgroundLighter};
+  border-left: 0.5rem ${({ theme }) => theme.color.background} solid;
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
@@ -57,7 +59,6 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   max-width: 100%;
   height: 100%;
   overflow: auto;
-  border-left: 1px ${({ theme }) => theme.color.selection} solid;
   z-index: 101;
 
   ${animateShow}
@@ -80,6 +81,11 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   `};
 `
 
+const Header = styled(PaneMenu)`
+  justify-content: space-between;
+  padding-left: 2rem;
+`
+
 const StyledClose = styled(RadixDialog.Close).attrs({
   "aria-label": "Close",
   asChild: true,
@@ -88,15 +94,6 @@ const StyledClose = styled(RadixDialog.Close).attrs({
   margin-left: auto;
   cursor: pointer;
   color: ${({ theme }) => theme.color.foreground};
-`
-
-const Header = styled.div`
-  display: flex;
-  padding: 2rem;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 0.1rem ${({ theme }) => theme.color.background} solid;
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
 `
 
 export const Drawer = ({
@@ -145,14 +142,16 @@ export const Drawer = ({
           })}
         >
           {(title || withCloseButton) && (
-            <Header>
-              {title && <Heading level={5}>{title}</Heading>}
-              {withCloseButton && (
-                <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
-                  <Close size="18px" />
-                </StyledClose>
-              )}
-            </Header>
+            <Panel.Header
+              title={title}
+              {...(withCloseButton && {
+                afterTitle: (
+                  <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+                    <Close size="18px" />
+                  </StyledClose>
+                ),
+              })}
+            />
           )}
           {children}
         </DrawerContent>

@@ -7,10 +7,11 @@ const Root = styled.span`
 
 const Tick = styled.span`
   position: absolute;
-  right: -0.5rem;
+  z-index: 1;
+  right: 0;
   top: 0;
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
   background-color: ${({ theme }) => theme.color.red};
 `

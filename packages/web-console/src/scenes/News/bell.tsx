@@ -22,7 +22,8 @@ const swing = css`
 `
 
 export const Bell = styled(Notification2)<{ $unread: boolean }>`
-  color: ${({ theme, $unread }) => theme.color[$unread ? "red" : "foreground"]};
+  color: ${({ theme, $unread }) =>
+    theme.color[$unread ? "foreground" : "inherit"]};
 
   ${({ $unread }) => $unread && swing}
 `

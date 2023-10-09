@@ -59,27 +59,25 @@ type RenderRefProps = Omit<Props, keyof DefaultProps> & Partial<DefaultProps>
 
 type ThemeShape = {
   background: Color
-  color: Color
 }
 
 const baseStyles = css<Props>`
   display: flex;
-  height: ${getButtonSize};
-  padding: 0 1rem;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   outline: 0;
-  opacity: ${({ selected }) => (selected ? "1" : "0.5")};
   font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize]};
   font-weight: 400;
   line-height: 1.15;
+  width: 4.5rem;
+  height: 4.5rem;
   cursor: pointer;
-  ${({ direction }) =>
-    `border-${direction || defaultProps.direction}: 3px solid transparent;`};
   ${bezierTransition};
   ${({ disabled }) => disabled && "cursor: default; pointer-events: none;"};
+  color: ${({ selected, theme }) =>
+    theme.color[selected ? "foreground" : "offWhite"]};
 
   svg + span {
     margin-left: 1rem;
@@ -89,12 +87,6 @@ const baseStyles = css<Props>`
 const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
   css<Props>`
     background: ${color(normal.background)};
-    color: ${color(normal.color)};
-    ${({ direction, selected, theme }) =>
-      selected &&
-      `border-${direction || defaultProps.direction}-color: ${
-        theme.color.pink
-      };`};
 
     &:focus {
       box-shadow: inset 0 0 0 1px ${color("foreground")};
@@ -102,7 +94,6 @@ const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
 
     &:hover:not([disabled]) {
       background: ${color(hover.background)};
-      color: ${color(hover.color)};
       opacity: 1;
     }
 
@@ -117,11 +108,9 @@ const PrimaryToggleButtonStyled = styled.button<Props>`
   ${getTheme(
     {
       background: "backgroundDarker",
-      color: "foreground",
     },
     {
       background: "comment",
-      color: "foreground",
     },
   )};
 `

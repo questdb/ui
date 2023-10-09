@@ -43,6 +43,7 @@ body {
 #root {
   position: absolute;
   display: flex;
+  flex-direction: column;
   top: 0;
   right: 0;
   bottom: 0;

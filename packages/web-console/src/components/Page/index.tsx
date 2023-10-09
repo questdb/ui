@@ -55,7 +55,6 @@ export const Page = ({ children, icon, title }: Props) => {
   return (
     <Root>
       <Sidebar>
-        <Logo />
         <Button
           skin="secondary"
           type="button"

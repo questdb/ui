@@ -86,7 +86,7 @@ const wrapperStyles = css`
 
 const HorizontalWrapper = styled.div`
   ${wrapperStyles};
-  width: 1rem;
+  width: 0.5rem;
   height: 100%;
   border-top: none;
   border-bottom: none;
@@ -97,7 +97,7 @@ const HorizontalWrapper = styled.div`
 const VerticalWrapper = styled.div`
   ${wrapperStyles};
   width: 100%;
-  height: 1rem;
+  height: 0.5rem;
   border-left: none;
   border-right: none;
   cursor: row-resize;
