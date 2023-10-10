@@ -26,7 +26,7 @@ import React, { useCallback, useEffect, useState } from "react"
 import { useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled, { createGlobalStyle } from "styled-components"
-import { Github } from "styled-icons/remix-fill"
+import { Github } from "@styled-icons/remix-fill"
 
 import { Link, Text, TransitionDuration } from "../../components"
 import { selectors } from "../../store"

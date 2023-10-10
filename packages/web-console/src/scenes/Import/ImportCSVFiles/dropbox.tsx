@@ -1,6 +1,6 @@
-import React, { useRef, useState, useCallback, useEffect } from "react"
+import React, { useRef, useState, useEffect } from "react"
 import styled from "styled-components"
-import { Search2 } from "styled-icons/remix-line"
+import { Search2 } from "@styled-icons/remix-line"
 import { Box } from "../../../components/Box"
 import { Text } from "@questdb/react-components"
 import { Button, Heading } from "@questdb/react-components"

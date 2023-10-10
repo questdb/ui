@@ -41,7 +41,7 @@ import {
   Refresh,
   ArrowLeftCircle,
   AddCircle,
-} from "styled-icons/remix-line"
+} from "@styled-icons/remix-line"
 
 import {
   PaneContent,

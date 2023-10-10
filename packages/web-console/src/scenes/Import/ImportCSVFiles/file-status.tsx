@@ -4,7 +4,7 @@ import { Badge } from "@questdb/react-components"
 import { BadgeType, ProcessedFile } from "./types"
 import { Box } from "../../../components/Box"
 import styled from "styled-components"
-import { CheckboxCircle } from "styled-icons/remix-fill"
+import { CheckboxCircle } from "@styled-icons/remix-fill"
 
 const CheckboxCircleIcon = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};

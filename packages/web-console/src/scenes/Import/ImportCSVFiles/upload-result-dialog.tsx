@@ -8,7 +8,7 @@ import {
   Table,
 } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
-import { Search } from "styled-icons/remix-line"
+import { Search } from "@styled-icons/remix-line"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 import { Drawer } from "../../../components"
