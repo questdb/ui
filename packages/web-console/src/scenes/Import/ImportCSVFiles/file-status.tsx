@@ -4,7 +4,7 @@ import { Badge } from "@questdb/react-components"
 import { BadgeType, ProcessedFile } from "./types"
 import { Box } from "../../../components/Box"
 import styled from "styled-components"
-import { CheckboxCircle } from "styled-icons/remix-fill"
+import { CheckboxCircle } from "@styled-icons/remix-fill"
 
 const CheckboxCircleIcon = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};
@@ -52,13 +52,11 @@ const mapStatusToLabel = (
         label: "Table already exists",
         type: BadgeType.WARNING,
       }
-      break
     case FileStatusType.RESERVED_NAME:
       return {
         label: "Reserved table name",
         type: BadgeType.ERROR,
       }
-      break
     case FileStatusType.DOES_NOT_EXIST:
       return {
         label: "Ready to upload",

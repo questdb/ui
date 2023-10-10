@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react"
 import { useFormContext } from "react-hook-form"
 import styled from "styled-components"
 import { Button, Input as UnstyledInput } from "@questdb/react-components"
-import { Eye, EyeOff } from "styled-icons/remix-line"
+import { Eye, EyeOff } from "@styled-icons/remix-line"
 
 export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string

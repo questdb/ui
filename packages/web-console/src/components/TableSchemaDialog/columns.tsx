@@ -7,7 +7,7 @@ import { Text } from ".."
 import { Drawer } from "../Drawer"
 import { VirtualList } from "../VirtualList"
 import { Button } from "@questdb/react-components"
-import { AddCircle, Information } from "styled-icons/remix-line"
+import { AddCircle, Information } from "@styled-icons/remix-line"
 import { Action, SchemaColumn } from "./types"
 import { Column } from "./column"
 
