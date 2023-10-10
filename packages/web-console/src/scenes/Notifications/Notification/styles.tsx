@@ -34,8 +34,11 @@ export const Wrapper = styled.div<{
   align-items: center;
   border-right: none;
   width: 100%;
-  height: ${({ isMinimized }) => (isMinimized ? "auto" : "4rem")};
-  border-bottom: 1px ${color("backgroundDarker")} solid;
+  height: ${({ isMinimized }) => (isMinimized ? "auto" : "4.5rem")};
+  ${({ isMinimized }) => !isMinimized && `
+    border-bottom: 1px ${color("backgroundDarker")} solid;
+  `}
+  
   padding: 0 1rem;
 
   ${bezierTransition};

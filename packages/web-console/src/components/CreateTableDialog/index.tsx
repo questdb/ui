@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
@@ -15,6 +15,7 @@ export const CreateTableDialog = () => {
   >(undefined)
   const dispatch = useDispatch()
   const tables = useSelector(selectors.query.getTables)
+  const activePanel = useSelector(selectors.console.getActivePanel)
   const { appendQuery } = useEditor()
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
@@ -33,6 +34,18 @@ export const CreateTableDialog = () => {
     dispatch(actions.query.toggleRunning())
   }
 
+  useEffect(() => {
+    if (activePanel === "news") {
+      setAddTableDialogOpen(undefined)
+    }
+  }, [activePanel])
+
+  useEffect(() => {
+    if (addTableDialogOpen !== undefined) {
+      dispatch(actions.console.setActivePanel("create"))
+    }
+  }, [addTableDialogOpen])
+  
   return (
     <TableSchemaDialog
       action="add"

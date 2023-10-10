@@ -89,6 +89,7 @@ const News = () => {
   const [unreadNewsIds, setUnreadNewsIds] = useState<string[]>([])
   // This boolean is to animate the bell icon and display a bullet indicator
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
+  const activePanel = useSelector(selectors.console.getActivePanel)
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)
@@ -162,12 +163,16 @@ const News = () => {
     }
   }, [newsOpened, enterpriseNews])
 
+  useEffect(() => {
+    setNewsOpened(activePanel === "news")
+  }, [activePanel])
+
   return (
     <Drawer
       mode="side"
       title="QuestDB News"
+      open={newsOpened}
       onOpenChange={async (newsOpened) => {
-        setNewsOpened(newsOpened)
         dispatch(
           actions.console.setActivePanel(newsOpened ? "news" : "console"),
         )
@@ -175,7 +180,7 @@ const News = () => {
       trigger={
         <IconWithTooltip
           icon={
-            <PrimaryToggleButton>
+            <PrimaryToggleButton onClick={() => setNewsOpened(!newsOpened)} selected={newsOpened}>
               <UnreadItemsIcon
                 icon={<Bell size={BUTTON_ICON_SIZE} $unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
