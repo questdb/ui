@@ -50,7 +50,7 @@ module.exports = {
   },
 
   output: {
-    filename: "[name].js",
+    filename: "[name].[chunkhash:5].js",
     publicPath: config.assetPath,
     path: path.resolve(__dirname, "dist"),
   },
@@ -71,7 +71,7 @@ module.exports = {
       cacheGroups: {
         commons: {
           test: /[\\/]\.yarn[\\/]/,
-          filename: "[name].[chunkhash].js",
+          filename: "[name].[chunkhash:5].js",
         },
       },
     },
@@ -86,8 +86,8 @@ module.exports = {
       target: config.backendUrl,
     },
     client: {
-      overlay: false
-    }
+      overlay: false,
+    },
   },
 
   devtool: config.isProduction ? false : "cheap-source-map",
@@ -167,7 +167,7 @@ module.exports = {
     }),
 
     new MiniCssExtractPlugin({
-      filename: "[name].css",
+      filename: "[name].[chunkhash:5].css",
     }),
 
     new Webpack.DefinePlugin({
