@@ -85,6 +85,9 @@ module.exports = {
       context: ["/imp", "/exp", "/exec", "/chk"],
       target: config.backendUrl,
     },
+    client: {
+      overlay: false
+    }
   },
 
   devtool: config.isProduction ? false : "cheap-source-map",
