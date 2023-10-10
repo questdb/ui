@@ -5,7 +5,6 @@ import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
 import { ZeroState } from "../Result/zero-state"
-import { EditorProvider } from "../../providers"
 import { useCallback } from "react"
 import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -85,81 +84,77 @@ const Console = () => {
 
   return (
     <Root>
-      <EditorProvider>
-        <Splitter
-          direction="vertical"
-          fallback={editorSplitterBasis}
-          min={100}
-          onChange={handleEditorSplitterChange}
-        >
-          <Top>
-            <Sidebar>
-              <PopperHover
-                delay={350}
-                placement="bottom"
-                trigger={
-                  <Navigation
-                    direction="left"
-                    onClick={() =>
-                      updateSettings(
-                        StoreKey.RESULTS_SPLITTER_BASIS,
-                        resultsSplitterBasis === 0 ? 300 : 0,
-                      )
-                    }
-                    selected={resultsSplitterBasis !== 0}
-                  >
-                    <Database2 size={BUTTON_ICON_SIZE} />
-                  </Navigation>
-                }
-              >
-                <Tooltip>
-                  {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
-                </Tooltip>
-              </PopperHover>
-            </Sidebar>
-            <Splitter
-              direction="horizontal"
-              fallback={resultsSplitterBasis}
-              max={500}
-              onChange={handleResultsSplitterChange}
+      <Splitter
+        direction="vertical"
+        fallback={editorSplitterBasis}
+        min={100}
+        onChange={handleEditorSplitterChange}
+      >
+        <Top>
+          <Sidebar>
+            <PopperHover
+              delay={350}
+              placement="bottom"
+              trigger={
+                <Navigation
+                  direction="left"
+                  onClick={() =>
+                    updateSettings(
+                      StoreKey.RESULTS_SPLITTER_BASIS,
+                      resultsSplitterBasis === 0 ? 300 : 0,
+                    )
+                  }
+                  selected={resultsSplitterBasis !== 0}
+                >
+                  <Database2 size={BUTTON_ICON_SIZE} />
+                </Navigation>
+              }
             >
-              {!sm && <Schema />}
-              <Editor />
-            </Splitter>
-          </Top>
-          <Bottom>
-            <Sidebar align="bottom">
-              {result &&
-                viewModes.map(({ icon, mode, tooltipText }) => (
-                  <PopperHover
-                    key={mode}
-                    delay={350}
-                    placement="right"
-                    trigger={
-                      <Navigation
-                        direction="left"
-                        onClick={() => setResultViewMode(mode)}
-                        selected={resultViewMode === mode}
-                      >
-                        {icon}
-                      </Navigation>
-                    }
-                  >
-                    <Tooltip>{tooltipText}</Tooltip>
-                  </PopperHover>
-                ))}
-              <PrimaryToggleButton
-                onClick={() =>
-                  dispatch(actions.console.setActivePanel("import"))
-                }
-              >
-                <Upload2 size={BUTTON_ICON_SIZE} />
-              </PrimaryToggleButton>
-            </Sidebar>
-            {result ? <Result viewMode={resultViewMode} /> : <ZeroState />}
-          </Bottom>
-        </Splitter>
-      </EditorProvider>
+              <Tooltip>
+                {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
+              </Tooltip>
+            </PopperHover>
+          </Sidebar>
+          <Splitter
+            direction="horizontal"
+            fallback={resultsSplitterBasis}
+            max={500}
+            onChange={handleResultsSplitterChange}
+          >
+            {!sm && <Schema />}
+            <Editor />
+          </Splitter>
+        </Top>
+        <Bottom>
+          <Sidebar align="bottom">
+            {result &&
+              viewModes.map(({ icon, mode, tooltipText }) => (
+                <PopperHover
+                  key={mode}
+                  delay={350}
+                  placement="right"
+                  trigger={
+                    <Navigation
+                      direction="left"
+                      onClick={() => setResultViewMode(mode)}
+                      selected={resultViewMode === mode}
+                    >
+                      {icon}
+                    </Navigation>
+                  }
+                >
+                  <Tooltip>{tooltipText}</Tooltip>
+                </PopperHover>
+              ))}
+            <PrimaryToggleButton
+              onClick={() => dispatch(actions.console.setActivePanel("import"))}
+            >
+              <Upload2 size={BUTTON_ICON_SIZE} />
+            </PrimaryToggleButton>
+          </Sidebar>
+          {result ? <Result viewMode={resultViewMode} /> : <ZeroState />}
+        </Bottom>
+      </Splitter>
     </Root>
   )
 }

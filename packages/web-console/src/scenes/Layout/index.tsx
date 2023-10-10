@@ -49,6 +49,7 @@ import { DropdownMenu, FeedbackDialog } from "@questdb/react-components"
 import { color } from "../../utils"
 import { BUTTON_ICON_SIZE } from "../../consts/index"
 import { Shortcuts } from "../Editor/Shortcuts"
+import { EditorProvider } from "../../providers/EditorProvider"
 
 const Page = styled.div`
   display: flex;
@@ -127,99 +128,103 @@ const Layout = () => {
     <QuestProvider>
       <TopBar />
 
-      <Root>
-        <Main sideOpened={isSideOpened()}>
-          <Page
-            style={{
-              display:
-                activePanel === "console" || isSideOpened() ? "flex" : "none",
-            }}
-          >
-            <Console />
-          </Page>
+      <EditorProvider>
+        <Root>
+          <Main sideOpened={isSideOpened()}>
+            <Page
+              style={{
+                display:
+                  activePanel === "console" || isSideOpened() ? "flex" : "none",
+              }}
+            >
+              <Console />
+            </Page>
 
-          <Page style={{ display: activePanel === "import" ? "flex" : "none" }}>
-            <Import />
-          </Page>
-        </Main>
+            <Page
+              style={{ display: activePanel === "import" ? "flex" : "none" }}
+            >
+              <Import />
+            </Page>
+          </Main>
 
-        <Drawer id="side-panel-right" />
+          <Drawer id="side-panel-right" />
 
-        <Sidebar>
-          <DropdownMenu.Root modal={false}>
-            <DropdownMenu.Trigger asChild>
-              <PrimaryToggleButton>
-                <Question size={BUTTON_ICON_SIZE} />
-              </PrimaryToggleButton>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content>
-              <DropdownMenuItem onSelect={(e: Event) => e.preventDefault()}>
-                <Chat3 size="18px" />
-                <FeedbackDialog
-                  withEmailInput
-                  title="Contact us"
-                  subtitle="Let us know your thoughts"
-                  trigger={({ setOpen }) => (
-                    <Text color="foreground" onClick={() => setOpen(true)}>
-                      Contact us
-                    </Text>
-                  )}
-                  onSubmit={async ({
-                    email,
-                    message,
-                  }: {
-                    email: string
-                    message: string
-                  }) => {
-                    try {
-                      await quest.sendFeedback({
-                        email,
-                        message,
-                        telemetryConfig,
-                      })
-                      toast.success(
-                        "Thank you for your feedback! Our team will review it shortly.",
-                      )
-                    } catch (err) {
-                      toast.error(
-                        "Something went wrong. Please try again later.",
-                      )
-                      throw err
-                    }
-                  }}
-                />
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Slack size="18px" />
-                <MenuLink
-                  href="https://slack.questdb.io/"
-                  text="Slack community"
-                />
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Question size="18px" />
-                <MenuLink
-                  href="https://questdb.io/docs/develop/web-console/"
-                  text="Web Console Docs"
-                />
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
-                <Command size="18px" />
-                <Text color="foreground">Shortcuts</Text>
-              </DropdownMenuItem>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-          <News />
-          <CreateTableDialog />
-          <PopperToggle
-            active={shortcutsPopperActive}
-            onToggle={handleShortcutsToggle}
-            trigger={<div style={{ height: "4rem" }} />}
-          >
-            <Shortcuts />
-          </PopperToggle>
-        </Sidebar>
-      </Root>
+          <Sidebar>
+            <DropdownMenu.Root modal={false}>
+              <DropdownMenu.Trigger asChild>
+                <PrimaryToggleButton>
+                  <Question size={BUTTON_ICON_SIZE} />
+                </PrimaryToggleButton>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content>
+                <DropdownMenuItem onSelect={(e: Event) => e.preventDefault()}>
+                  <Chat3 size="18px" />
+                  <FeedbackDialog
+                    withEmailInput
+                    title="Contact us"
+                    subtitle="Let us know your thoughts"
+                    trigger={({ setOpen }) => (
+                      <Text color="foreground" onClick={() => setOpen(true)}>
+                        Contact us
+                      </Text>
+                    )}
+                    onSubmit={async ({
+                      email,
+                      message,
+                    }: {
+                      email: string
+                      message: string
+                    }) => {
+                      try {
+                        await quest.sendFeedback({
+                          email,
+                          message,
+                          telemetryConfig,
+                        })
+                        toast.success(
+                          "Thank you for your feedback! Our team will review it shortly.",
+                        )
+                      } catch (err) {
+                        toast.error(
+                          "Something went wrong. Please try again later.",
+                        )
+                        throw err
+                      }
+                    }}
+                  />
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Slack size="18px" />
+                  <MenuLink
+                    href="https://slack.questdb.io/"
+                    text="Slack community"
+                  />
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Question size="18px" />
+                  <MenuLink
+                    href="https://questdb.io/docs/develop/web-console/"
+                    text="Web Console Docs"
+                  />
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
+                  <Command size="18px" />
+                  <Text color="foreground">Shortcuts</Text>
+                </DropdownMenuItem>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+            <News />
+            <CreateTableDialog />
+            <PopperToggle
+              active={shortcutsPopperActive}
+              onToggle={handleShortcutsToggle}
+              trigger={<div style={{ height: "4rem" }} />}
+            >
+              <Shortcuts />
+            </PopperToggle>
+          </Sidebar>
+        </Root>
+      </EditorProvider>
 
       <SideMenu />
 
