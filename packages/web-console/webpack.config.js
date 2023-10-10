@@ -23,15 +23,19 @@
  ******************************************************************************/
 
 const path = require("path")
-const { CleanWebpackPlugin } = require("clean-webpack-plugin")
 const CopyWebpackPlugin = require("copy-webpack-plugin")
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin")
 const HtmlWebpackPlugin = require("html-webpack-plugin")
 const MiniCssExtractPlugin = require("mini-css-extract-plugin")
 const Webpack = require("webpack")
+const ReactRefreshWebpackPlugin = require("@pmmmwh/react-refresh-webpack-plugin")
 
 const monacoConfig = require("./monaco.config")
 require("dotenv").config()
+
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = "development"
+}
 
 const config = {
   port: 9999,
@@ -40,91 +44,57 @@ const config = {
   isProduction: process.env.NODE_ENV === "production",
 }
 
-if (!process.env.NODE_ENV) {
-  process.env.NODE_ENV = "development"
-}
-
-const basePlugins = [
-  new CleanWebpackPlugin(),
-  new HtmlWebpackPlugin({
-    template: "src/index.html",
-    minify: {
-      minifyCSS: false,
-      minifyJS: false,
-      minifyURLs: true,
-      removeComments: true,
-      removeRedundantAttributes: true,
-      removeScriptTypeAttributes: true,
-      removeStyleLinkTypeAttributes: true,
-      useShortDoctype: true,
-    },
-  }),
-  new MiniCssExtractPlugin({
-    filename: "qdb.css",
-  }),
-  new Webpack.DefinePlugin({
-    "process.env": {
-      NODE_ENV: JSON.stringify(process.env.NODE_ENV),
-    },
-  }),
-]
-
-const devPlugins = [
-  new ForkTsCheckerWebpackPlugin({
-    eslint: {
-      // @TODO
-      enabled: false,
-      files: "./src/**/*.ts[x]",
-    },
-  }),
-  new CopyWebpackPlugin({
-    patterns: [
-      { from: "./assets/", to: "assets/" },
-      ...monacoConfig.assetCopyPatterns,
-      ...monacoConfig.sourceMapCopyPatterns,
-    ],
-  }),
-]
-
-const prodPlugins = [
-  new CopyWebpackPlugin({
-    patterns: [
-      { from: "./assets/", to: "assets/" },
-      ...monacoConfig.assetCopyPatterns,
-    ],
-  }),
-]
-
-const devLoaders = [
-  {
-    test: /\.(ts|js)x$/,
-    exclude: /node_modules/,
-    use: "stylelint-custom-processor-loader",
-  },
-]
-
 module.exports = {
+  entry: {
+    qdb: "./src/index.tsx",
+  },
+
+  output: {
+    filename: "[name].js",
+    publicPath: config.assetPath,
+    path: path.resolve(__dirname, "dist"),
+  },
+
+  watchOptions: {
+    ignored: /[\\/]\.yarn[\\/]/,
+  },
+
+  cache: {
+    type: "memory",
+  },
+
+  optimization: {
+    splitChunks: {
+      chunks: "all",
+      hidePathInfo: true,
+      name: "vendor",
+      cacheGroups: {
+        commons: {
+          test: /[\\/]\.yarn[\\/]/,
+          filename: "[name].[chunkhash].js",
+        },
+      },
+    },
+  },
+
   devServer: {
-    compress: true,
     host: "localhost",
-    hot: false,
+    hot: true,
     port: config.port,
     proxy: {
       context: ["/imp", "/exp", "/exec", "/chk"],
       target: config.backendUrl,
     },
   },
-  devtool: config.isProduction ? false : "eval-source-map",
+
+  devtool: config.isProduction ? false : "cheap-source-map",
   mode: config.isProduction ? "production" : "development",
-  entry: "./src/index",
-  output: {
-    filename: "qdb.js",
-    publicPath: config.assetPath,
-    path: path.resolve(__dirname, "dist"),
-  },
+
   resolve: {
     extensions: [".ts", ".tsx", ".js"],
+    symlinks: false,
   },
+
   module: {
     rules: [
       {
@@ -133,24 +103,105 @@ module.exports = {
       },
       {
         test: /\.(ts|js)x?$/,
-        exclude: /node_modules/,
+        include: path.resolve(__dirname, "src"),
         loader: "babel-loader",
+        options: {
+          plugins: [
+            [
+              "styled-components",
+              {
+                displayName: true,
+                minify: false,
+                pure: true,
+                ssr: false,
+              },
+            ],
+            !config.isProduction && require.resolve("react-refresh/babel"),
+          ].filter(Boolean),
+
+          presets: [
+            [
+              "@babel/preset-env",
+              { targets: { node: "current" }, modules: false },
+            ],
+            "@babel/preset-react",
+            "@babel/preset-typescript",
+          ],
+        },
       },
+
       {
         test: /\.css$/i,
         use: [MiniCssExtractPlugin.loader, "css-loader"],
       },
+
       {
         test: /\.s[ac]ss$/i,
         use: [MiniCssExtractPlugin.loader, "css-loader", "sass-loader"],
       },
-      ...(config.isProduction ? [] : devLoaders),
-    ],
+
+      !config.isProduction && {
+        test: /\.(ts|js)x$/,
+        include: path.resolve(__dirname, "src"),
+        use: "stylelint-custom-processor-loader",
+      },
+    ].filter(Boolean),
   },
+
   plugins: [
-    ...basePlugins,
-    ...(config.isProduction ? prodPlugins : devPlugins),
-  ],
+    new HtmlWebpackPlugin({
+      template: "src/index.html",
+      minify: {
+        minifyCSS: false,
+        minifyJS: false,
+        minifyURLs: true,
+        removeComments: true,
+        removeRedundantAttributes: true,
+        removeScriptTypeAttributes: true,
+        removeStyleLinkTypeAttributes: true,
+        useShortDoctype: true,
+      },
+    }),
+
+    new MiniCssExtractPlugin({
+      filename: "[name].css",
+    }),
+
+    new Webpack.DefinePlugin({
+      "process.env": {
+        NODE_ENV: JSON.stringify(process.env.NODE_ENV),
+      },
+    }),
+
+    config.isProduction &&
+      new CopyWebpackPlugin({
+        patterns: [
+          { from: "./assets/", to: "assets/" },
+          ...monacoConfig.assetCopyPatterns,
+        ],
+      }),
+
+    !config.isProduction &&
+      new ForkTsCheckerWebpackPlugin({
+        eslint: {
+          // @TODO
+          enabled: false,
+          files: "./src/**/*.ts[x]",
+        },
+      }),
+
+    !config.isProduction &&
+      new CopyWebpackPlugin({
+        patterns: [
+          { from: "./assets/", to: "assets/" },
+          ...monacoConfig.assetCopyPatterns,
+          ...monacoConfig.sourceMapCopyPatterns,
+        ],
+      }),
+
+    !config.isProduction && new ReactRefreshWebpackPlugin(),
+  ].filter(Boolean),
+
   stats: {
     all: false,
     chunks: true,
