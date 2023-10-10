@@ -30,7 +30,6 @@ import { Download2, Refresh } from "styled-icons/remix-line"
 import { Reset } from "styled-icons/boxicons-regular"
 import { HandPointLeft } from "styled-icons/fa-regular"
 import { TableFreezeColumn } from "styled-icons/fluentui-system-filled"
-import { Sidebar } from "../../components/Sidebar"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 
@@ -69,10 +68,16 @@ const Content = styled(PaneContent)`
   }
 `
 
-const StyledSidebar = styled(Sidebar)`
+const Actions = styled.div`
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
   gap: 1rem;
-  padding-top: 5.5rem;
-  width: 5.8rem;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 4.5rem;
+  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`
@@ -225,6 +230,32 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
   return (
     <Root>
       <Wrapper>
+        <Actions>
+          {viewMode === "grid" &&
+            gridActions.map((action, index) => (
+              <PopperHover
+                key={index}
+                delay={350}
+                placement="bottom"
+                trigger={action.trigger}
+              >
+                <Tooltip>{action.tooltipText}</Tooltip>
+              </PopperHover>
+            ))}
+
+          <PopperHover
+            delay={350}
+            placement="bottom"
+            trigger={
+              <Button skin="secondary" onClick={handleExportClick}>
+                <Download2 size="18px" />
+              </Button>
+            }
+          >
+            <Tooltip>Download result as a CSV file</Tooltip>
+          </PopperHover>
+        </Actions>
+
         <Content>
           <div id="grid" />
 
@@ -260,32 +291,6 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
           </div>
         </Content>
       </Wrapper>
-
-      <StyledSidebar>
-        {viewMode === "grid" &&
-          gridActions.map((action, index) => (
-            <PopperHover
-              key={index}
-              delay={350}
-              placement="bottom"
-              trigger={action.trigger}
-            >
-              <Tooltip>{action.tooltipText}</Tooltip>
-            </PopperHover>
-          ))}
-
-        <PopperHover
-          delay={350}
-          placement="bottom"
-          trigger={
-            <Button skin="secondary" onClick={handleExportClick}>
-              <Download2 size="18px" />
-            </Button>
-          }
-        >
-          <Tooltip>Download result as a CSV file</Tooltip>
-        </PopperHover>
-      </StyledSidebar>
     </Root>
   )
 }
