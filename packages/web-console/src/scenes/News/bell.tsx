@@ -1,5 +1,5 @@
 import styled, { css, keyframes } from "styled-components"
-import { Notification2 } from "styled-icons/remix-line"
+import { Notification2 } from "@styled-icons/remix-line"
 
 const angle = "10deg"
 const swingFrames = keyframes`

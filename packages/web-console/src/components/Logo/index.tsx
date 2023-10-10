@@ -3,7 +3,7 @@ import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import styled from "styled-components"
 import { color } from "../../utils"
-import { Information } from "styled-icons/remix-line"
+import { Information } from "@styled-icons/remix-line"
 import { BUTTON_ICON_SIZE } from "../../consts/index"
 import { PrimaryToggleButton } from "../../components"
 

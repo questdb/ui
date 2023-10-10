@@ -36,8 +36,8 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
-import { Chat3, Command, Question } from "styled-icons/remix-line"
-import { Slack } from "styled-icons/boxicons-logos"
+import { Chat3, Command, Question } from "@styled-icons/remix-line"
+import { Slack } from "@styled-icons/boxicons-logos"
 import {
   PrimaryToggleButton,
   Text,
