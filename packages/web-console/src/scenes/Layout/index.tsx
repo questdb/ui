@@ -149,7 +149,7 @@ const Layout = () => {
 
           <Drawer id="side-panel-right" />
 
-          <Sidebar>
+          <Sidebar align="top">
             <DropdownMenu.Root modal={false}>
               <DropdownMenu.Trigger asChild>
                 <PrimaryToggleButton>

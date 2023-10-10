@@ -91,7 +91,7 @@ const Console = () => {
         onChange={handleEditorSplitterChange}
       >
         <Top>
-          <Sidebar>
+          <Sidebar align="top">
             <PopperHover
               delay={350}
               placement="bottom"
