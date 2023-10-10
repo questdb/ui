@@ -33,7 +33,7 @@ import React, {
   useState,
 } from "react"
 import styled, { createGlobalStyle, css } from "styled-components"
-import { DragIndicator } from "styled-icons/material"
+import { DragIndicator } from "@styled-icons/material"
 
 import { color } from "../../utils"
 

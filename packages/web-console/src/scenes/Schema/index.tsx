@@ -35,7 +35,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import { Loader3, Refresh } from "styled-icons/remix-line"
+import { Loader3, Refresh } from "@styled-icons/remix-line"
 
 import {
   PaneContent,

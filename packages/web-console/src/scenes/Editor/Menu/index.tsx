@@ -34,9 +34,9 @@ import {
   Play,
   Stop,
   Question,
-} from "styled-icons/remix-line"
-import { Menu as _MenuIcon } from "styled-icons/remix-fill"
-import { Slack } from "styled-icons/boxicons-logos"
+} from "@styled-icons/remix-line"
+import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
+import { Slack } from "@styled-icons/boxicons-logos"
 
 import {
   ErrorButton,

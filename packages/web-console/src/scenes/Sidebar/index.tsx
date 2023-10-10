@@ -25,8 +25,8 @@
 import React from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import { CodeSSlash, Notification2 } from "styled-icons/remix-line"
-import { Upload2 } from "styled-icons/remix-line"
+import { CodeSSlash, Notification2 } from "@styled-icons/remix-line"
+import { Upload2 } from "@styled-icons/remix-line"
 
 import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
 import { actions, selectors } from "../../store"

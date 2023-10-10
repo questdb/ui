@@ -3,7 +3,7 @@ import { ProcessedFile } from "./types"
 import { Button } from "@questdb/react-components"
 import { PopperHover, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
-import { Close, Upload2 } from "styled-icons/remix-line"
+import { Close, Upload2 } from "@styled-icons/remix-line"
 import { UploadSettingsDialog } from "./upload-settings-dialog"
 import { UploadModeSettings } from "../../../utils"
 

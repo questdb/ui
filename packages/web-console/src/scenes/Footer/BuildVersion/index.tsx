@@ -33,11 +33,11 @@ import {
   formatVersion,
   Versions,
 } from "./services"
-import { ExternalLink, ArrowUpCircle } from "styled-icons/remix-line"
+import { ExternalLink, ArrowUpCircle } from "@styled-icons/remix-line"
 import { Release } from "../../../utils/questdb"
-import { Team } from "styled-icons/remix-line"
-import { BuildingMultiple } from "styled-icons/fluentui-system-filled"
-import { ShieldLockFill } from "styled-icons/bootstrap"
+import { Team } from "@styled-icons/remix-line"
+import { BuildingMultiple } from "@styled-icons/fluentui-system-filled"
+import { ShieldLockFill } from "@styled-icons/bootstrap/ShieldLockFill"
 
 const Wrapper = styled.div`
   display: flex;

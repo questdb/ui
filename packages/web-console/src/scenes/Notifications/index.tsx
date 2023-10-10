@@ -40,9 +40,8 @@ import {
   useScreenSize,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { TerminalBox, Subtract, ArrowUpS } from "styled-icons/remix-line"
+import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
-
 import Notification from "./Notification"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
