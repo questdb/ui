@@ -26,8 +26,8 @@ import React, { useCallback, useState } from "react"
 import styled from "styled-components"
 import Notifications from "./Notifications"
 import { PaneContent, Text, PrimaryToggleButton, Page } from "../../components"
-import { Settings2 } from "styled-icons/evaicons-solid"
-import { Popup } from "styled-icons/entypo"
+import { Settings2 } from "@styled-icons/evaicons-solid"
+import { Popup } from "@styled-icons/entypo"
 import { color } from "../../utils"
 
 const Root = styled.div`

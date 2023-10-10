@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { CloudOff } from "styled-icons/remix-line"
+import { CloudOff } from "@styled-icons/remix-line"
 import { Text } from "../../../components"
 import { ErrorResult } from "../../../utils"
 

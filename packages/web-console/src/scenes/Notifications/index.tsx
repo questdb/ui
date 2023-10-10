@@ -43,7 +43,7 @@ import {
 } from "../../components"
 import { actions, selectors } from "../../store"
 import { LocalStorageContext } from "../../providers/LocalStorageProvider"
-import { TerminalBox, Subtract, ArrowUpS } from "styled-icons/remix-line"
+import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 
 import Notification from "./Notification"
 

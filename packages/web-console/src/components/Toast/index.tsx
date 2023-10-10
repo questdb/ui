@@ -14,11 +14,16 @@ import {
   CloseCircle,
   ErrorWarning,
   Information,
-} from "styled-icons/remix-line"
-import { StyledIconProps } from "@styled-icons/styled-icon"
+} from "@styled-icons/remix-line"
 import { theme } from "../../theme"
 
 import "react-toastify/dist/ReactToastify.css"
+
+interface StyledIconProps
+  extends React.PropsWithRef<React.SVGProps<SVGSVGElement>> {
+  size?: number | string
+  title?: string | null
+}
 
 export const toast = _toast
 

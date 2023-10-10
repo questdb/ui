@@ -35,10 +35,10 @@ import {
   Database2,
   Play,
   Stop,
-} from "styled-icons/remix-line"
-import { Menu as _MenuIcon } from "styled-icons/remix-fill"
-import { HelpCircle } from "styled-icons/boxicons-regular"
-import { Slack } from "styled-icons/boxicons-logos"
+} from "@styled-icons/remix-line"
+import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
+import { HelpCircle } from "@styled-icons/boxicons-regular"
+import { Slack } from "@styled-icons/boxicons-logos"
 
 import {
   ErrorButton,

@@ -1,6 +1,6 @@
 import React from "react"
 import { Button } from "@questdb/react-components"
-import { Information } from "styled-icons/remix-line"
+import { Information } from "@styled-icons/remix-line"
 import { PopperHover } from "../../components/PopperHover"
 import { Tooltip } from "../Tooltip"
 
