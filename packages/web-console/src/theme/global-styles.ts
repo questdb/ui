@@ -36,7 +36,7 @@ const DocSearchStyles = css`
     height: 3rem;
     border-radius: 0.4rem;
     color: ${({ theme }) => theme.color.foreground};
-    border: none;
+    border: 1px solid var(--docsearch-searchbox-background);
   }
 
   .DocSearch-Button:hover {
