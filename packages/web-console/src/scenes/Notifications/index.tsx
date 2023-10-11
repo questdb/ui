@@ -48,6 +48,7 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
   overflow: auto;
   max-height: 35rem;
+  ${({ theme }) => `border-top: 2px ${theme.color.backgroundDarker} solid;`}
 `
 
 const Menu = styled(PaneMenu)`
