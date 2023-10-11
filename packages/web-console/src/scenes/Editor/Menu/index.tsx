@@ -202,13 +202,6 @@ const Menu = () => {
 
   return (
     <Wrapper _display={sm ? "none" : "inline"}>
-      {running.value && (
-        <ErrorButton onClick={handleClick}>
-          <Stop size="18px" />
-          <span>Cancel</span>
-        </ErrorButton>
-      )}
-
       <Separator />
 
       {savedQueries.length > 0 && (
@@ -227,6 +220,13 @@ const Menu = () => {
       )}
 
       <Separator />
+
+      {running.value && (
+        <ErrorButton onClick={handleClick}>
+          <Stop size="18px" />
+          <span>Cancel</span>
+        </ErrorButton>
+      )}
 
       {!running.value && (
         <SuccessButton
