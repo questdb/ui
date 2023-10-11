@@ -32,11 +32,11 @@ import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
-
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  Text,
   Tooltip,
   useScreenSize,
 } from "../../components"
@@ -82,6 +82,10 @@ const Actions = styled.div`
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`
   transform: scaleX(-1);
+`
+
+const RowCount = styled(Text)`
+  margin-right: 1rem;
 `
 
 const Result = ({ viewMode }: { viewMode: ViewMode }) => {
@@ -227,10 +231,21 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
     },
   ]
 
+  useEffect(() => {
+    if (result?.type === QuestDB.Type.DQL) {
+      setCount(result.count)
+    }
+  }, [result])
+
   return (
     <Root>
       <Wrapper>
         <Actions>
+          {count && (
+            <RowCount color="foreground">
+              {`${count.toLocaleString()} row${count > 1 ? "s" : ""}`}
+            </RowCount>
+          )}
           {viewMode === "grid" &&
             gridActions.map((action, index) => (
               <PopperHover
