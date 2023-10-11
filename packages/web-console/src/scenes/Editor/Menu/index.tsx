@@ -60,7 +60,7 @@ import QueryPicker from "../QueryPicker"
 import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { QuestContext } from "../../../providers"
+import { QuestContext, useEditor } from "../../../providers"
 import { DocSearch } from "@docsearch/react"
 import { BUTTON_ICON_SIZE } from "../../../consts/index"
 
@@ -170,7 +170,7 @@ const Menu = () => {
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
   const { exampleQueriesVisited, updateSettings } = useLocalStorage()
-
+  const { inFocus: editorInFocus } = useEditor()
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
   }, [dispatch])
@@ -229,7 +229,11 @@ const Menu = () => {
       <Separator />
 
       {!running.value && (
-        <SuccessButton onClick={handleClick} title="Ctrl+Enter">
+        <SuccessButton
+          title="Ctrl+Enter"
+          disabled={!editorInFocus}
+          {...(editorInFocus && { onClick: handleClick })}
+        >
           <Play size="18px" />
           <span>Run</span>
         </SuccessButton>

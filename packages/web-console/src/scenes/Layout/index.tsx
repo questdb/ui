@@ -126,9 +126,8 @@ const Layout = () => {
 
   return (
     <QuestProvider>
-      <TopBar />
-
       <EditorProvider>
+        <TopBar />
         <Root>
           <Main sideOpened={isSideOpened()}>
             <Page
@@ -224,11 +223,11 @@ const Layout = () => {
             </PopperToggle>
           </Sidebar>
         </Root>
+
+        <SideMenu />
+
+        <Footer />
       </EditorProvider>
-
-      <SideMenu />
-
-      <Footer />
     </QuestProvider>
   )
 }
