@@ -8,6 +8,8 @@ export const DropdownMenu = {
     cursor: pointer;
   `,
 
+  Portal: styled(RadixDropdownMenu.Portal)``,
+
   Content: styled(RadixDropdownMenu.Content)`
     display: grid;
     gap: 0.5rem;
