@@ -180,14 +180,17 @@ const News = () => {
       trigger={
         <IconWithTooltip
           icon={
-            <PrimaryToggleButton onClick={() => setNewsOpened(!newsOpened)} selected={newsOpened}>
+            <PrimaryToggleButton
+              onClick={() => setNewsOpened(!newsOpened)}
+              selected={newsOpened}
+            >
               <UnreadItemsIcon
                 icon={<Bell size={BUTTON_ICON_SIZE} $unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
             </PrimaryToggleButton>
           }
-          placement="bottom"
+          placement="left"
           tooltip="QuestDB News"
         />
       }

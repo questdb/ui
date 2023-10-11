@@ -8,6 +8,7 @@ import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
 import { useEditor } from "../../providers"
 import { PrimaryToggleButton } from "../../components"
 import { BUTTON_ICON_SIZE } from "../../consts"
+import { IconWithTooltip } from "../../components/IconWithTooltip"
 
 export const CreateTableDialog = () => {
   const [addTableDialogOpen, setAddTableDialogOpen] = useState<
@@ -45,7 +46,7 @@ export const CreateTableDialog = () => {
       dispatch(actions.console.setActivePanel("create"))
     }
   }, [addTableDialogOpen])
-  
+
   return (
     <TableSchemaDialog
       action="add"
@@ -61,16 +62,22 @@ export const CreateTableDialog = () => {
       open={addTableDialogOpen !== undefined}
       onSchemaChange={handleAddTableSchema}
       trigger={
-        <PrimaryToggleButton
-          selected={addTableDialogOpen !== undefined}
-          onClick={() =>
-            setAddTableDialogOpen(
-              addTableDialogOpen === undefined ? "add" : undefined,
-            )
+        <IconWithTooltip
+          icon={
+            <PrimaryToggleButton
+              selected={addTableDialogOpen !== undefined}
+              onClick={() =>
+                setAddTableDialogOpen(
+                  addTableDialogOpen === undefined ? "add" : undefined,
+                )
+              }
+            >
+              <TableIcon size={BUTTON_ICON_SIZE} />
+            </PrimaryToggleButton>
           }
-        >
-          <TableIcon size={BUTTON_ICON_SIZE} />
-        </PrimaryToggleButton>
+          placement="left"
+          tooltip="Create table"
+        />
       }
       ctaText="Create"
     />
