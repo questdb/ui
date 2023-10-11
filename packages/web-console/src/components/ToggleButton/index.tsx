@@ -88,10 +88,6 @@ const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
   css<Props>`
     background: ${color(normal.background)};
 
-    &:focus {
-      box-shadow: inset 0 0 0 1px ${color("foreground")};
-    }
-
     &:hover:not([disabled]) {
       background: ${color(hover.background)};
       opacity: 1;
