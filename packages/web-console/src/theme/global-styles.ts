@@ -40,7 +40,6 @@ const DocSearchStyles = css`
   }
 
   .DocSearch-Button:hover {
-    border: none;
     background: ${({ theme }) => theme.color.comment};
     box-shadow: none;
   }
