@@ -28,7 +28,7 @@ import styled from "styled-components"
 import { color } from "../../utils"
 import { Text } from "../../components/Text"
 
-export const Root = styled.div`
+export const Root = styled.div<{ shadow?: boolean }>`
   position: relative;
   display: flex;
   justify-content: space-between;
@@ -38,6 +38,12 @@ export const Root = styled.div`
   background: ${color("backgroundLighter")};
   border-top: 1px solid transparent;
   z-index: 5;
+
+  ${({ shadow }) =>
+    shadow &&
+    `
+      box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.65)
+  `}
 `
 
 const Title = styled(Text)`
@@ -51,11 +57,13 @@ const Title = styled(Text)`
 export const Header = ({
   title,
   afterTitle,
+  shadow,
 }: {
   title: React.ReactNode
   afterTitle?: React.ReactNode
+  shadow?: boolean
 }) => (
-  <Root>
+  <Root shadow={shadow}>
     <Title color="foreground">{title}</Title>
     {afterTitle}
   </Root>

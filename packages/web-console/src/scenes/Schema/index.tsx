@@ -113,17 +113,12 @@ const Schema = ({
   const { updateSettings } = useLocalStorage()
   const dispatch = useDispatch()
   const { appendQuery } = useEditor()
+  const [scrollAtTop, setScrollAtTop] = useState(false)
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
 
   const handleChange = useCallback((name: string) => {
     setOpened(name)
   }, [])
-
-  const handleScrollingStateChange = useCallback(
-    (isScrolling) => {
-      setIsScrolling(isScrolling)
-    },
-    [setIsScrolling],
-  )
 
   const listItemContent = useCallback(
     (index: number) => {
@@ -213,6 +208,10 @@ const Schema = ({
     })
   }, [errorRef, fetchTables])
 
+  useEffect(() => {
+    setScrollAtTop(scrollerRef.current?.scrollTop === 0)
+  }, [isScrolling])
+
   return (
     <Wrapper ref={innerRef} {...rest}>
       <Panel.Header
@@ -236,6 +235,7 @@ const Schema = ({
             )}
           </div>
         }
+        shadow={!scrollAtTop}
       />
       <Content _loading={loading}>
         {loading ? (
@@ -244,9 +244,10 @@ const Schema = ({
           <LoadingError error={loadingError} />
         ) : (
           <VirtualList
-            isScrolling={handleScrollingStateChange}
+            isScrolling={setIsScrolling}
             itemContent={listItemContent}
             totalCount={tables?.length}
+            scrollerRef={(ref) => (scrollerRef.current = ref as HTMLDivElement)}
           />
         )}
         {!loading && <FlexSpacer />}
