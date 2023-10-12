@@ -197,7 +197,7 @@ const News = () => {
     >
       <Content>
         <Items>
-          {isLoading && (
+          {isLoading && !enterpriseNews && (
             <Loading>
               <Text color="foreground">Loading news...</Text>
               <Loader />
@@ -210,7 +210,7 @@ const News = () => {
               </Text>
             </Loading>
           )}
-          {!isLoading &&
+          {(!isLoading || enterpriseNews) &&
             !hasError &&
             enterpriseNews &&
             enterpriseNews.map((newsItem, index) => (
