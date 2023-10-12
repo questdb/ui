@@ -46,7 +46,7 @@ const Root = styled.div<{ odd: boolean; disabled: boolean }>`
   gap: 1rem;
   grid-template-columns: 40px auto;
   padding: 2rem;
-  ${({ odd }) => odd && "background-color: #272833;"};
+  ${({ odd }) => odd && "background-color: #242531;"};
 
   ${({ disabled }) =>
     !disabled &&
