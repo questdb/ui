@@ -137,7 +137,6 @@ export const Splitter = ({
   min: minRaw,
   onChange,
 }: Props) => {
-  const [offset, setOffset] = useState(0)
   const [originalPosition, setOriginalPosition] = useState(0)
   const [ghostPosition, setGhostPosition] = useState(0)
   const [pressed, setPressed] = useState(false)
@@ -193,8 +192,6 @@ export const Splitter = ({
         const clientPosition =
           direction === "horizontal" ? "clientX" : "clientY"
         const coordinate = direction === "horizontal" ? "x" : "y"
-        const offset =
-          splitter.current.parentElement.getBoundingClientRect()[coordinate]
         let position = 0
 
         if (window.TouchEvent && event.nativeEvent instanceof TouchEvent) {
@@ -206,7 +203,6 @@ export const Splitter = ({
         }
 
         setOriginalPosition(position)
-        setOffset(offset)
         setPressed(true)
 
         document.addEventListener("mouseup", handleMouseUp)
@@ -280,7 +276,7 @@ export const Splitter = ({
           <>
             <HorizontalGhost
               style={{
-                left: `${ghostPosition - offset}px`,
+                left: `${ghostPosition}px`,
               }}
             />
             <PreventUserSelectionHorizontal />
@@ -312,7 +308,7 @@ export const Splitter = ({
         <>
           <VerticalGhost
             style={{
-              top: `${ghostPosition - offset}px`,
+              top: `${ghostPosition}px`,
             }}
           />
           <PreventUserSelectionVertical />
