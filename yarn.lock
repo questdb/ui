@@ -3000,6 +3000,7 @@ __metadata:
     "@styled-icons/fa-regular": 10.47.0
     "@styled-icons/fluentui-system-filled": 10.47.0
     "@styled-icons/material": 10.47.0
+    "@styled-icons/remix-editor": ^10.46.0
     "@styled-icons/remix-fill": 10.46.0
     "@styled-icons/remix-line": 10.46.0
     "@styled-icons/styled-icon": ^10.7.0
@@ -5221,6 +5222,19 @@ __metadata:
     react: "*"
     styled-components: "*"
   checksum: f1267ea3b2c520b4b6c3f9430c1e2b9bb2c3713f8741be9b522e79d2ba050c417a1506e48de1215e03682942cd1bfbca61f0abf78984661dfed6a2cd3d7d3893
+  languageName: node
+  linkType: hard
+
+"@styled-icons/remix-editor@npm:^10.46.0":
+  version: 10.46.0
+  resolution: "@styled-icons/remix-editor@npm:10.46.0"
+  dependencies:
+    "@babel/runtime": ^7.19.0
+    "@styled-icons/styled-icon": ^10.7.0
+  peerDependencies:
+    react: "*"
+    styled-components: "*"
+  checksum: d72340d2de4711d0ac4a36e57860178b115fa691f930744ae25405c34c45027d2073d147cf2ef39d40e32dad5d3e7f8341b297b1dae386b0a2a90df1675a6422
   languageName: node
   linkType: hard
 

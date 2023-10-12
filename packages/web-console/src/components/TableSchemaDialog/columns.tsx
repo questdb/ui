@@ -6,8 +6,7 @@ import { Form } from "../Form"
 import { Text } from ".."
 import { Drawer } from "../Drawer"
 import { VirtualList } from "../VirtualList"
-import { Button } from "@questdb/react-components"
-import { AddCircle, Information } from "@styled-icons/remix-line"
+import { Information } from "@styled-icons/remix-line"
 import { Action, SchemaColumn } from "./types"
 import { Column } from "./column"
 
@@ -36,21 +35,6 @@ const Error = styled(Drawer.GroupItem).attrs({ direction: "column" })`
   align-items: center;
 `
 
-const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
-  <Drawer.GroupItem direction="column">
-    <AddBox>
-      <Button
-        prefixIcon={<AddCircle size="18px" />}
-        skin="transparent"
-        onClick={onAdd}
-        type="button"
-      >
-        Add column
-      </Button>
-    </AddBox>
-  </Drawer.GroupItem>
-)
-
 export const Columns = ({
   action,
   isEditLocked,
@@ -65,15 +49,6 @@ export const Columns = ({
 
   const watchTimestamp = watch("timestamp")
   const watchSchemaColumns = getValues()["schemaColumns"]
-
-  const addColumn = () => {
-    append({
-      name: "",
-      type: action === "import" ? "" : "STRING",
-      pattern: "",
-      precision: "",
-    })
-  }
 
   const listItemContent = useCallback(
     (index: number) => {
@@ -99,10 +74,6 @@ export const Columns = ({
             }}
             timestamp={watchTimestamp}
           />
-
-          {index === watchSchemaColumns.length - 1 && !isEditLocked && (
-            <AddColumn onAdd={addColumn} />
-          )}
         </>
       )
     },
@@ -134,14 +105,12 @@ export const Columns = ({
           </Error>
         ))}
       <SchemaRoot>
-        {watchSchemaColumns.length > 0 ? (
+        {watchSchemaColumns.length > 0 && (
           <VirtualList
             itemContent={listItemContent}
             totalCount={watchSchemaColumns.length}
             followOutput={true}
           />
-        ) : (
-          !isEditLocked && <AddColumn onAdd={addColumn} />
         )}
       </SchemaRoot>
 

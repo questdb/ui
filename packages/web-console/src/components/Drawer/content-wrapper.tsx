@@ -10,7 +10,7 @@ export const ContentWrapper = styled(Box).attrs({
     4.5rem = drawer title
     4.5rem = footer
   */
-  height: calc(100vh - 4.5rem - 4.5rem - 4.5rem);
+  height: calc(100vh - 4.5rem - 4.5rem);
 
   form {
     width: 100%;

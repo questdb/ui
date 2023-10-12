@@ -1,7 +1,7 @@
 import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
-import { ForwardRef, Heading, Overlay } from "@questdb/react-components"
+import { ForwardRef, Overlay } from "@questdb/react-components"
 import { Close } from "@styled-icons/remix-line"
 import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
@@ -14,6 +14,7 @@ type DrawerProps = {
   mode?: "modal" | "side"
   children: React.ReactNode
   title?: React.ReactNode
+  afterTitle?: React.ReactNode
   trigger: React.ReactNode
   width?: string
   open?: boolean
@@ -101,6 +102,7 @@ export const Drawer = ({
   children,
   trigger,
   title,
+  afterTitle,
   width,
   open,
   onOpenChange,
@@ -144,6 +146,7 @@ export const Drawer = ({
           {(title || withCloseButton) && (
             <Panel.Header
               title={title}
+              afterTitle={afterTitle}
               {...(withCloseButton && {
                 afterTitle: (
                   <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>

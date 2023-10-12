@@ -8,7 +8,6 @@ type NavigationProps = Readonly<{
 export const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
   display: flex;
   flex-direction: column;
-  height: 4rem;
   align-items: center;
   justify-content: center;
   cursor: pointer;

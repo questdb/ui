@@ -6319,6 +6319,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@styled-icons/fa-regular", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
             ["@styled-icons/fluentui-system-filled", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
             ["@styled-icons/material", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
+            ["@styled-icons/remix-editor", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
             ["@styled-icons/remix-fill", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
             ["@styled-icons/remix-line", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
             ["@styled-icons/styled-icon", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.7.0"],\
@@ -9892,6 +9893,34 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/__virtual__/@styled-icons-material-virtual-d455743164/0/cache/@styled-icons-material-npm-10.47.0-0b2b704576-f1267ea3b2.zip/node_modules/@styled-icons/material/",\
           "packageDependencies": [\
             ["@styled-icons/material", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
+            ["@babel/runtime", "npm:7.23.1"],\
+            ["@styled-icons/styled-icon", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.7.0"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/styled-components", "npm:5.1.7"],\
+            ["react", "npm:17.0.2"],\
+            ["styled-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.1.1"]\
+          ],\
+          "packagePeers": [\
+            "@types/react",\
+            "@types/styled-components",\
+            "react",\
+            "styled-components"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@styled-icons/remix-editor", [\
+        ["npm:10.46.0", {\
+          "packageLocation": "./.yarn/cache/@styled-icons-remix-editor-npm-10.46.0-72d68f03ca-d72340d2de.zip/node_modules/@styled-icons/remix-editor/",\
+          "packageDependencies": [\
+            ["@styled-icons/remix-editor", "npm:10.46.0"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0", {\
+          "packageLocation": "./.yarn/__virtual__/@styled-icons-remix-editor-virtual-e1583928fe/0/cache/@styled-icons-remix-editor-npm-10.46.0-72d68f03ca-d72340d2de.zip/node_modules/@styled-icons/remix-editor/",\
+          "packageDependencies": [\
+            ["@styled-icons/remix-editor", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
             ["@babel/runtime", "npm:7.23.1"],\
             ["@styled-icons/styled-icon", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.7.0"],\
             ["@types/react", "npm:17.0.2"],\

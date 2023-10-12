@@ -64,6 +64,11 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
     font-size: 1.6rem;
   }
 
+  p {
+    font-size: ${({ theme }) => theme.fontSize.lg};
+    line-height: 1.75;
+  }
+
   code {
     background-color: ${({ theme }) => theme.color.selection};
     padding: 0.2rem 0.4rem;

@@ -3,8 +3,8 @@ import { Button } from "@questdb/react-components"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"
-import { Table as TableIcon, Edit } from "@styled-icons/remix-line"
-import { InfoCircle, Undo } from "@styled-icons/boxicons-regular"
+import { AddCircle, Table as TableIcon, Edit } from "@styled-icons/remix-line"
+import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
@@ -16,9 +16,12 @@ import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
+import { Panel } from "../../components/Panel"
+import { useFieldArray } from "react-hook-form"
 
 const StyledContentWrapper = styled(Drawer.ContentWrapper)`
   --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
+  height: calc(100vh - 4.5rem - 4.5rem);
 `
 
 const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
@@ -57,6 +60,41 @@ type Props = {
   trigger?: React.ReactNode
   tables?: QuestDB.Table[]
   ctaText: string
+}
+
+const Actions = ({
+  action,
+  ctaText,
+}: {
+  action: Props["action"]
+  ctaText: Props["ctaText"]
+}) => {
+  const { append } = useFieldArray({
+    name: "schemaColumns",
+  })
+
+  return (
+    <Box gap="1rem">
+      <Button
+        prefixIcon={<AddCircle size="18px" />}
+        skin="secondary"
+        onClick={() => {
+          append({
+            name: "",
+            type: action === "import" ? "" : "STRING",
+            pattern: "",
+            precision: "",
+          })
+        }}
+        type="button"
+      >
+        Add column
+      </Button>
+      <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
+        {ctaText}
+      </Form.Submit>
+    </Box>
+  )
 }
 
 export const Dialog = ({
@@ -159,7 +197,6 @@ export const Dialog = ({
   return (
     <Drawer
       mode={action === "add" ? "side" : "modal"}
-      title={name !== "" ? `Table schema for ${name}` : "Create table"}
       open={open}
       trigger={
         trigger ?? (
@@ -199,6 +236,10 @@ export const Dialog = ({
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}
           validationSchema={validationSchema}
         >
+          <Panel.Header
+            title={name !== "" ? `Table schema for ${name}` : "Create table"}
+            afterTitle={<Actions ctaText={ctaText} action={action} />}
+          />
           <Items>
             <Inputs>
               <Drawer.GroupItem direction="column">
@@ -305,28 +346,6 @@ export const Dialog = ({
 
               <Columns action={action} isEditLocked={isEditLocked} />
             </Inputs>
-
-            <Drawer.Actions>
-              {action === "import" && (
-                <Form.Cancel<SchemaFormValues>
-                  prefixIcon={<Undo size={18} />}
-                  variant="secondary"
-                  defaultValues={defaults}
-                  onClick={() => {
-                    onOpenChange(undefined)
-                  }}
-                >
-                  Dismiss
-                </Form.Cancel>
-              )}
-
-              <Form.Submit
-                prefixIcon={<TableIcon size={18} />}
-                variant="success"
-              >
-                {ctaText}
-              </Form.Submit>
-            </Drawer.Actions>
           </Items>
         </Form>
       </StyledContentWrapper>
