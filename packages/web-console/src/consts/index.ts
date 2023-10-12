@@ -53,4 +53,4 @@ const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
 
 export const API = `https://${BASE}.questdb.io`
 
-export const BUTTON_ICON_SIZE = "30px"
+export const BUTTON_ICON_SIZE = "26px"

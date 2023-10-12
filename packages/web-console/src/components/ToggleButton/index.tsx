@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React, { forwardRef, Ref } from "react"
-import styled, { css } from "styled-components"
+import styled, { css, ThemeConsumer } from "styled-components"
 
 import type { Color, FontSize } from "../../types"
 import { color } from "../../utils"
@@ -65,14 +65,16 @@ const baseStyles = css<Props>`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: ${({ selected, theme }) =>
+    selected ? "#2d303e" : "transparent"};
   border: none;
   outline: 0;
   font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize]};
   font-weight: 400;
   line-height: 1.15;
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 0.4rem;
   cursor: pointer;
   ${bezierTransition};
   ${({ disabled }) => disabled && "cursor: default; pointer-events: none;"};
@@ -86,15 +88,12 @@ const baseStyles = css<Props>`
 
 const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
   css<Props>`
-    background: ${color(normal.background)};
-
     &:hover:not([disabled]) {
       background: ${color(hover.background)};
       opacity: 1;
     }
 
     &:active:not([disabled]) {
-      background: ${color(hover.background)};
       filter: brightness(90%);
     }
   `

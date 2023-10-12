@@ -57,12 +57,13 @@ export const Help = () => {
   const handleShortcutsToggle = useCallback((active) => {
     setShortcutsPopperActive(active)
   }, [])
+  const [open, setOpen] = useState(false)
 
   return (
     <React.Fragment>
-      <DropdownMenu.Root modal={false}>
+      <DropdownMenu.Root modal={false} onOpenChange={setOpen}>
         <DropdownMenu.Trigger asChild>
-          <HelpButton>
+          <HelpButton {...(open && { selected: true })}>
             <IconWithTooltip
               icon={
                 <TooltipWrapper>
@@ -131,11 +132,10 @@ export const Help = () => {
           </DropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
-
       <PopperToggle
         active={shortcutsPopperActive}
         onToggle={handleShortcutsToggle}
-        trigger={<div style={{ height: "0" }} />}
+        trigger={<React.Fragment />}
       >
         <Shortcuts />
       </PopperToggle>
