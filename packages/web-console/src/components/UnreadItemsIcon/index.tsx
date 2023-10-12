@@ -7,7 +7,6 @@ const Root = styled.span`
 
 const Tick = styled.span`
   position: absolute;
-  z-index: 1;
   right: 0;
   top: 0;
   width: 1.5rem;
@@ -36,9 +35,9 @@ type Props = {
 
 export const UnreadItemsIcon = ({ icon, label, tick, count }: Props) => (
   <Root>
-    {tick && <Tick />}
     {typeof count === "number" && count > 0 && <Count>{count}</Count>}
     {icon}
+    {tick && <Tick />}
     {label && <span>{label}</span>}
   </Root>
 )
