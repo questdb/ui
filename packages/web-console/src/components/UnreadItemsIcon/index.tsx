@@ -9,8 +9,8 @@ const Tick = styled.span`
   position: absolute;
   right: 0;
   top: 0;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.3rem;
+  height: 1.3rem;
   border-radius: 50%;
   background-color: ${({ theme }) => theme.color.red};
 `
