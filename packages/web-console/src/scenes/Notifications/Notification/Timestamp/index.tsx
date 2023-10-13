@@ -22,13 +22,29 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { useMemo } from "react"
 import styled from "styled-components"
 import { Text } from "../../../../components"
-import { format } from "date-fns/fp"
+import { format, Locale } from "date-fns"
+import { enUS, fr, es, de, ja, ko, zhCN } from "date-fns/locale"
 
 type Props = {
   createdAt: Date
+}
+
+function localeFromLanguage(language: string) {
+  const localeMap: { [key: string]: Locale } = {
+    "en-US": enUS, // English (United States)
+    "fr-FR": fr, // French (France)
+    "es-ES": es, // Spanish (Spain)
+    "de-DE": de, // German (Germany)
+    "ja-JP": ja, // Japanese (Japan)
+    "ko-KR": ko, // Korean (South Korea),
+    "zh-CN": zhCN, // Chinese (Simplified, China)
+  }
+
+  // If the language is not found in the map, default to English (United States)
+  return localeMap[language] || enUS
 }
 
 const TimestampText = styled(Text)`
@@ -36,6 +52,16 @@ const TimestampText = styled(Text)`
   margin-right: 0.5rem;
 `
 
-export const Timestamp = ({ createdAt }: Props) => (
-  <TimestampText color="gray2">[{format("HH:mm:ss", createdAt)}]</TimestampText>
-)
+export const Timestamp = ({ createdAt }: Props) => {
+  const userLocale = useMemo(() => {
+    return navigator.languages && navigator.languages.length
+      ? navigator.languages[0]
+      : navigator.language
+  }, [])
+
+  return (
+    <TimestampText color="gray2">
+      [{format(createdAt, "pppp", { locale: localeFromLanguage(userLocale) })}]
+    </TimestampText>
+  )
+}
