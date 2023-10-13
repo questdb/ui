@@ -231,8 +231,9 @@ const Menu = () => {
       {!running.value && (
         <SuccessButton
           title="Ctrl+Enter"
-          disabled={!editorInFocus}
-          {...(editorInFocus && { onClick: handleClick })}
+          // disabled={!editorInFocus}
+          onClick={handleClick}
+          // {...(editorInFocus && { onClick: handleClick })}
         >
           <Play size="18px" />
           <span>Run</span>
