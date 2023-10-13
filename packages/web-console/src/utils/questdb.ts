@@ -21,7 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { isServerError } from "utils";
+import { isServerError } from "../utils";
 import { BusEvent } from "../consts"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
 
