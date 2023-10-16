@@ -17,8 +17,7 @@ import * as QuestDB from "../../utils/questdb"
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import { Panel } from "../../components/Panel"
-import { useFieldArray } from "react-hook-form"
-import { InsertRowBottom, InsertRowTop } from "@styled-icons/remix-editor"
+import { Actions } from "./actions"
 
 const StyledContentWrapper = styled(Drawer.ContentWrapper)`
   --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
@@ -61,93 +60,6 @@ type Props = {
   trigger?: React.ReactNode
   tables?: QuestDB.Table[]
   ctaText: string
-}
-
-const Actions = ({
-  action,
-  ctaText,
-  lastFocusedIndex,
-  columnCount,
-}: {
-  action: Props["action"]
-  ctaText: Props["ctaText"]
-  lastFocusedIndex?: number
-  columnCount: number
-}) => {
-  const newEntry = {
-    name: "",
-    type: action === "import" ? "" : "STRING",
-    pattern: "",
-    precision: "",
-  }
-
-  const { insert } = useFieldArray({
-    name: "schemaColumns",
-  })
-
-  console.log(
-    "insert previous at",
-    lastFocusedIndex !== undefined ? "last index" : "column count",
-    lastFocusedIndex,
-  )
-
-  return (
-    <Box gap="1rem">
-      <PopperHover
-        trigger={
-          <Button
-            disabled={columnCount === 0}
-            skin="secondary"
-            type="button"
-            onClick={() =>
-              insert(
-                lastFocusedIndex !== undefined ? lastFocusedIndex : columnCount,
-                newEntry,
-              )
-            }
-          >
-            <InsertRowTop size="20px" />
-          </Button>
-        }
-        placement="bottom"
-      >
-        <Tooltip>
-          {lastFocusedIndex !== undefined
-            ? `Insert column above ${lastFocusedIndex + 1}`
-            : `Insert column`}
-        </Tooltip>
-      </PopperHover>
-
-      <PopperHover
-        trigger={
-          <Button
-            skin="secondary"
-            type="button"
-            onClick={() =>
-              insert(
-                lastFocusedIndex !== undefined
-                  ? lastFocusedIndex + 1
-                  : columnCount,
-                newEntry,
-              )
-            }
-          >
-            <InsertRowBottom size="20px" />
-          </Button>
-        }
-        placement="bottom"
-      >
-        <Tooltip>
-          {lastFocusedIndex !== undefined
-            ? `Insert column below ${lastFocusedIndex + 1}`
-            : `Insert column`}
-        </Tooltip>
-      </PopperHover>
-      <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
-        {ctaText}
-      </Form.Submit>
-    </Box>
-  )
 }
 
 export const Dialog = ({
