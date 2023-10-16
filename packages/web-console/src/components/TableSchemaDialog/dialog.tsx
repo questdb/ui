@@ -158,6 +158,12 @@ export const Dialog = ({
     }
   }, [schema])
 
+  useEffect(() => {
+    if (open) {
+      setLastFocusedIndex(undefined)
+    }
+  }, [open])
+
   const columnCount = defaults.schemaColumns.length
 
   return (
@@ -209,7 +215,6 @@ export const Dialog = ({
                 ctaText={ctaText}
                 action={action}
                 lastFocusedIndex={lastFocusedIndex}
-                columnCount={currentValues.schemaColumns.length}
               />
             }
           />

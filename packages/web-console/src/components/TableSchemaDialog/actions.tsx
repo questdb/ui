@@ -1,24 +1,22 @@
 import React from "react"
 import { Button } from "@questdb/react-components"
 import { Box } from "../Box"
-import { Table as TableIcon } from "@styled-icons/remix-line"
+import { DeleteBin2, Table as TableIcon } from "@styled-icons/remix-line"
 import { Form } from "../Form"
 import { PopperHover } from "../PopperHover"
 import { Tooltip } from "../Tooltip"
-import { useFieldArray } from "react-hook-form"
-import type { Action } from "./types"
+import { useFieldArray, useFormContext } from "react-hook-form"
+import type { Action, SchemaColumn } from "./types"
 import { InsertRowBottom, InsertRowTop } from "@styled-icons/remix-editor"
 
 export const Actions = ({
   action,
   ctaText,
   lastFocusedIndex,
-  columnCount,
 }: {
   action: Action
   ctaText: string
   lastFocusedIndex?: number
-  columnCount: number
 }) => {
   const newEntry = {
     name: "",
@@ -30,18 +28,49 @@ export const Actions = ({
   const { insert } = useFieldArray({
     name: "schemaColumns",
   })
+  const { getValues, setValue } = useFormContext()
+  const watchSchemaColumns = getValues()["schemaColumns"]
 
   return (
     <Box gap="1rem">
       <PopperHover
         trigger={
           <Button
-            disabled={columnCount === 0}
+            disabled={
+              watchSchemaColumns.length === 0 || lastFocusedIndex === undefined
+            }
+            skin="secondary"
+            type="button"
+            onClick={() => {
+              setValue(
+                "schemaColumns",
+                watchSchemaColumns.filter(
+                  (_: SchemaColumn, i: number) => i !== lastFocusedIndex,
+                ),
+              )
+            }}
+          >
+            <DeleteBin2 size="18px" />
+          </Button>
+        }
+        placement="bottom"
+      >
+        <Tooltip>
+          {lastFocusedIndex !== undefined &&
+            `Remove column ${lastFocusedIndex + 1}`}
+        </Tooltip>
+      </PopperHover>
+      <PopperHover
+        trigger={
+          <Button
+            disabled={watchSchemaColumns.length === 0}
             skin="secondary"
             type="button"
             onClick={() =>
               insert(
-                lastFocusedIndex !== undefined ? lastFocusedIndex : columnCount,
+                lastFocusedIndex !== undefined
+                  ? lastFocusedIndex
+                  : watchSchemaColumns.length,
                 newEntry,
               )
             }
@@ -67,7 +96,7 @@ export const Actions = ({
               insert(
                 lastFocusedIndex !== undefined
                   ? lastFocusedIndex + 1
-                  : columnCount,
+                  : watchSchemaColumns.length,
                 newEntry,
               )
             }

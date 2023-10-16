@@ -1,6 +1,6 @@
 import React, { useCallback } from "react"
 import styled from "styled-components"
-import { useFieldArray, useFormContext } from "react-hook-form"
+import { useFormContext } from "react-hook-form"
 import { Box } from "../Box"
 import { Form } from "../Form"
 import { Text } from ".."
@@ -61,14 +61,6 @@ export const Columns = ({
             disabled={isEditLocked}
             index={index}
             onFocus={onColumnFocus}
-            onRemove={(index) => {
-              setValue(
-                "schemaColumns",
-                watchSchemaColumns.filter(
-                  (_: SchemaColumn, i: number) => i !== index,
-                ),
-              )
-            }}
             onSetTimestamp={(name) => {
               setValue("timestamp", watchTimestamp === name ? "" : name)
             }}

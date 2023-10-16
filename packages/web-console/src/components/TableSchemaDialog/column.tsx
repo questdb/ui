@@ -3,7 +3,6 @@ import { Form } from "../../components/Form"
 import { IconWithTooltip, Text } from "../../components"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
-import { DeleteBin2 } from "@styled-icons/remix-line"
 import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
@@ -34,32 +33,12 @@ const supportedColumnTypes: { label: string; value: string }[] = [
 
 const IndexNumber = styled(Text).attrs({ color: "foreground" })``
 
-const RemoveButton = styled(Button).attrs({
-  skin: "transparent",
-  type: "button",
-})`
-  display: none;
-`
-
 const Root = styled.div<{ odd: boolean; disabled: boolean }>`
   display: grid;
   gap: 1rem;
   grid-template-columns: 40px auto;
   padding: 2rem;
   ${({ odd }) => odd && "background-color: #242531;"};
-
-  ${({ disabled }) =>
-    !disabled &&
-    `
-    &:hover {
-      ${RemoveButton} {
-        display: block;
-      }
-      ${IndexNumber} {
-        display: none;
-      }
-    }
-  `}
 `
 
 const Index = styled(Box).attrs({
@@ -80,7 +59,6 @@ export const Column = ({
   disabled,
   column,
   index,
-  onRemove,
   onSetTimestamp,
   onFocus,
   timestamp,
@@ -89,7 +67,6 @@ export const Column = ({
   disabled: boolean
   column: SchemaColumn
   index: number
-  onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
   onFocus: (index: number) => void
   timestamp: string
@@ -108,11 +85,6 @@ export const Column = ({
       onFocus={() => onFocus(index)}
     >
       <Index>
-        {!disabled && (
-          <RemoveButton onClick={() => onRemove(index)} type="button">
-            <DeleteBin2 size="18px" />
-          </RemoveButton>
-        )}
         <IndexNumber color="foreground">{index + 1}</IndexNumber>
       </Index>
 
