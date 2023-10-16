@@ -55,7 +55,6 @@ const Root = styled.div`
 
 const Wrapper = styled(PaneWrapper)`
   overflow: hidden;
-  width: calc(100vw - 4rem - 5.8rem - 4.5rem); /* substract both sidebars */
 `
 
 const Content = styled(PaneContent)`
