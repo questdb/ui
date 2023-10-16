@@ -82,6 +82,7 @@ export const Column = ({
   index,
   onRemove,
   onSetTimestamp,
+  onFocus,
   timestamp,
 }: {
   action: Action
@@ -90,6 +91,7 @@ export const Column = ({
   index: number
   onRemove: (index: number) => void
   onSetTimestamp: (name: string) => void
+  onFocus: (index: number) => void
   timestamp: string
 }) => {
   const [name, setName] = useState(column.name)
@@ -99,7 +101,12 @@ export const Column = ({
   }
 
   return (
-    <Root key={column.name} odd={index % 2 !== 0} disabled={disabled}>
+    <Root
+      key={column.name}
+      odd={index % 2 !== 0}
+      disabled={disabled}
+      onFocus={() => onFocus(index)}
+    >
       <Index>
         {!disabled && (
           <RemoveButton onClick={() => onRemove(index)} type="button">

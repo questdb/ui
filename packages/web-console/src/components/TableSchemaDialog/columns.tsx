@@ -38,14 +38,13 @@ const Error = styled(Drawer.GroupItem).attrs({ direction: "column" })`
 export const Columns = ({
   action,
   isEditLocked,
+  onColumnFocus,
 }: {
   action: Action
   isEditLocked: boolean
+  onColumnFocus: (index: number) => void
 }) => {
   const { formState, getValues, setValue, watch } = useFormContext()
-  const { append } = useFieldArray({
-    name: "schemaColumns",
-  })
 
   const watchTimestamp = watch("timestamp")
   const watchSchemaColumns = getValues()["schemaColumns"]
@@ -61,6 +60,7 @@ export const Columns = ({
             column={column}
             disabled={isEditLocked}
             index={index}
+            onFocus={onColumnFocus}
             onRemove={(index) => {
               setValue(
                 "schemaColumns",
