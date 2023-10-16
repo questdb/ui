@@ -215,6 +215,7 @@ export const Dialog = ({
                 ctaText={ctaText}
                 action={action}
                 lastFocusedIndex={lastFocusedIndex}
+                onAdded={setLastFocusedIndex}
               />
             }
           />
@@ -326,6 +327,7 @@ export const Dialog = ({
                 action={action}
                 isEditLocked={isEditLocked}
                 onColumnFocus={setLastFocusedIndex}
+                lastFocusedIndex={lastFocusedIndex}
               />
             </Inputs>
           </Items>

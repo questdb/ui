@@ -62,6 +62,7 @@ export const Column = ({
   onSetTimestamp,
   onFocus,
   timestamp,
+  lastFocusedIndex,
 }: {
   action: Action
   disabled: boolean
@@ -70,6 +71,7 @@ export const Column = ({
   onSetTimestamp: (name: string) => void
   onFocus: (index: number) => void
   timestamp: string
+  lastFocusedIndex?: number
 }) => {
   const [name, setName] = useState(column.name)
 
@@ -99,6 +101,7 @@ export const Column = ({
               name={`schemaColumns.${index}.name`}
               autoComplete="off"
               required
+              {...(lastFocusedIndex === index && { autoFocus: true })}
             />
           </Form.Item>
 

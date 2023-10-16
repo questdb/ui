@@ -39,10 +39,12 @@ export const Columns = ({
   action,
   isEditLocked,
   onColumnFocus,
+  lastFocusedIndex,
 }: {
   action: Action
   isEditLocked: boolean
   onColumnFocus: (index: number) => void
+  lastFocusedIndex?: number
 }) => {
   const { formState, getValues, setValue, watch } = useFormContext()
 
@@ -60,6 +62,7 @@ export const Columns = ({
             column={column}
             disabled={isEditLocked}
             index={index}
+            lastFocusedIndex={lastFocusedIndex}
             onFocus={onColumnFocus}
             onSetTimestamp={(name) => {
               setValue("timestamp", watchTimestamp === name ? "" : name)

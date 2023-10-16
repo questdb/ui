@@ -13,10 +13,12 @@ export const Actions = ({
   action,
   ctaText,
   lastFocusedIndex,
+  onAdded,
 }: {
   action: Action
   ctaText: string
   lastFocusedIndex?: number
+  onAdded: (index: number) => void
 }) => {
   const newEntry = {
     name: "",
@@ -63,17 +65,19 @@ export const Actions = ({
       <PopperHover
         trigger={
           <Button
-            disabled={watchSchemaColumns.length === 0}
+            disabled={
+              watchSchemaColumns.length === 0 || lastFocusedIndex === undefined
+            }
             skin="secondary"
             type="button"
-            onClick={() =>
-              insert(
+            onClick={() => {
+              const index =
                 lastFocusedIndex !== undefined
                   ? lastFocusedIndex
-                  : watchSchemaColumns.length,
-                newEntry,
-              )
-            }
+                  : watchSchemaColumns.length
+              insert(index, newEntry)
+              onAdded(index)
+            }}
           >
             <InsertRowTop size="20px" />
           </Button>
@@ -92,14 +96,14 @@ export const Actions = ({
           <Button
             skin="secondary"
             type="button"
-            onClick={() =>
-              insert(
+            onClick={() => {
+              const index =
                 lastFocusedIndex !== undefined
                   ? lastFocusedIndex + 1
-                  : watchSchemaColumns.length,
-                newEntry,
-              )
-            }
+                  : watchSchemaColumns.length
+              insert(index, newEntry)
+              onAdded(index)
+            }}
           >
             <InsertRowBottom size="20px" />
           </Button>
