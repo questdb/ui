@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+import { isServerError } from "../utils";
 import { BusEvent } from "../consts"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
 
@@ -77,6 +78,7 @@ type RawResult = RawDqlResult | RawDdlResult | RawErrorResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
+  status: number
 }
 
 export type QueryRawResult =
@@ -328,17 +330,18 @@ export class Client {
       }
     }
 
-    const errorPayload = {
-      error: `QuestDB is not reachable [${response.status}]`,
-      position: -1,
-      query,
-      type: Type.ERROR,
+    const errorPayload: Record<string, string | number> = {
+      status: response.status,
+      error: response.statusText,
     }
 
-    bus.trigger(BusEvent.MSG_CONNECTION_ERROR, {
-      ...errorPayload,
-      status: response.status,
-    })
+    if (isServerError(response)) {
+      errorPayload.error = `QuestDB is not reachable [${response.status}]`;
+      errorPayload.position = -1;
+      errorPayload.query = query;
+      errorPayload.type = Type.ERROR;
+      bus.trigger(BusEvent.MSG_CONNECTION_ERROR, errorPayload)
+    }
 
     // eslint-disable-next-line prefer-promise-reject-errors
     return await Promise.reject(errorPayload)
