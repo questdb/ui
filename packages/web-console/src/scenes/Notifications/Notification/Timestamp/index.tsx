@@ -22,10 +22,11 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { useMemo } from "react"
 import styled from "styled-components"
 import { Text } from "../../../../components"
-import { format } from "date-fns/fp"
+import { format } from "date-fns"
+import { fetchUserLocale, getLocaleFromLanguage } from "../../../../utils"
 
 type Props = {
   createdAt: Date
@@ -36,6 +37,14 @@ const TimestampText = styled(Text)`
   margin-right: 0.5rem;
 `
 
-export const Timestamp = ({ createdAt }: Props) => (
-  <TimestampText color="gray2">[{format("HH:mm:ss", createdAt)}]</TimestampText>
-)
+export const Timestamp = ({ createdAt }: Props) => {
+  const userLocale = useMemo(fetchUserLocale, [])
+
+  return (
+    <TimestampText color="gray2">
+      [
+      {format(createdAt, "pppp", { locale: getLocaleFromLanguage(userLocale) })}
+      ]
+    </TimestampText>
+  )
+}
