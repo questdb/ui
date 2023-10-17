@@ -18,7 +18,7 @@ export const Actions = ({
   action: Action
   ctaText: string
   lastFocusedIndex?: number
-  onAdded: (index: number) => void
+  onAdded: (index?: number) => void
 }) => {
   const newEntry = {
     name: "",
@@ -50,6 +50,7 @@ export const Actions = ({
                   (_: SchemaColumn, i: number) => i !== lastFocusedIndex,
                 ),
               )
+              onAdded(undefined)
             }}
           >
             <DeleteBin2 size="18px" />
