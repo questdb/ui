@@ -62,46 +62,42 @@ type Props = Readonly<{
   onChange?: (value: number) => void
 }>
 
-const HorizontalDragIcon = styled(DragIndicator)`
-  position: absolute;
-`
-
-const VerticalDragIcon = styled(HorizontalDragIcon)`
-  transform: rotate(90deg);
-`
-
 const wrapperStyles = css`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: ${color("backgroundDarker")};
-  color: ${color("gray1")};
-
-  &:hover {
-    background: ${color("selection")};
-    color: ${color("foreground")};
-  }
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const HorizontalWrapper = styled.div`
-  ${wrapperStyles};
-  width: 0.5rem;
+  ${wrapperStyles}
+  width: 0.2rem;
   height: 100%;
-  border-top: none;
-  border-bottom: none;
-  cursor: ew-resize;
-  flex-shrink: 0;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
+const HorizontalHysteresis = styled.div`
+  width: 1rem;
+  height: 100%;
+  position: absolute;
+  cursor: col-resize;
+  left: -0.5rem;
 `
 
 const VerticalWrapper = styled.div`
-  ${wrapperStyles};
+  ${wrapperStyles}
   width: 100%;
-  height: 0.5rem;
-  border-left: none;
-  border-right: none;
+  height: 0.2rem;
   cursor: row-resize;
-  flex-shrink: 0;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
+const VerticalHysteresis = styled.div`
+  width: 100%;
+  height: 1rem;
+  position: absolute;
+  cursor: row-resize;
+  top: -0.5rem;
 `
 
 const ghostSize = 10
@@ -267,7 +263,7 @@ export const Splitter = ({
           onTouchStart={handleMouseDown}
           ref={splitter}
         >
-          <HorizontalDragIcon size="16px" />
+          <HorizontalHysteresis />
         </HorizontalWrapper>
 
         {children[1]}
@@ -299,7 +295,7 @@ export const Splitter = ({
         onTouchStart={handleMouseDown}
         ref={splitter}
       >
-        <VerticalDragIcon size="16px" />
+        <VerticalHysteresis />
       </VerticalWrapper>
 
       {children[1]}
