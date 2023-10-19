@@ -27,7 +27,6 @@ import React, {
   forwardRef,
   Ref,
   useRef,
-  useCallback,
   useEffect,
   useState,
   useContext,
@@ -44,7 +43,6 @@ import {
   PopperHover,
   spinAnimation,
   Tooltip,
-  VirtualList,
 } from "../../components"
 import { actions, selectors } from "../../store"
 import { color, ErrorResult } from "../../utils"
@@ -92,8 +90,6 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
-const VIRTUAL_SCROLL_THRESHOLD = 200
-
 const Schema = ({
   innerRef,
   ...rest
@@ -126,16 +122,6 @@ const Schema = ({
       partitionBy={table.partitionBy}
       walEnabled={table.walEnabled}
     />
-  )
-
-  const listItemContent = useCallback(
-    (index: number) => {
-      if (tables) {
-        const table = tables[index]
-        return renderTable(table)
-      }
-    },
-    [handleChange, isScrolling, opened, tables],
   )
 
   const fetchTables = () => {
@@ -186,12 +172,6 @@ const Schema = ({
     })
   }, [])
 
-  useEffect(() => {
-    if (tables && tables?.length >= VIRTUAL_SCROLL_THRESHOLD) {
-      setScrollAtTop(scrollerRef.current?.scrollTop === 0)
-    }
-  }, [isScrolling, tables])
-
   return (
     <Wrapper ref={innerRef} {...rest}>
       <Panel.Header
@@ -219,27 +199,26 @@ const Schema = ({
       />
       <Content
         _loading={loading}
-        {...(tables &&
-          tables?.length < VIRTUAL_SCROLL_THRESHOLD && {
-            ref: scrollerRef,
-            onScroll: () => {
-              setScrollAtTop(scrollerRef?.current?.scrollTop === 0)
-            },
-          })}
+        ref={scrollerRef}
+        onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
       >
         {loading ? (
           <Loader size="48px" />
         ) : loadingError ? (
           <LoadingError error={loadingError} />
-        ) : tables && tables?.length >= VIRTUAL_SCROLL_THRESHOLD ? (
-          <VirtualList
-            isScrolling={setIsScrolling}
-            itemContent={listItemContent}
-            totalCount={tables?.length}
-            scrollerRef={(ref) => (scrollerRef.current = ref as HTMLDivElement)}
-          />
         ) : (
-          tables && tables?.map(renderTable)
+          tables?.map((table, key) => (
+            <Table
+              designatedTimestamp={table.designatedTimestamp}
+              expanded={table.name === opened}
+              isScrolling={isScrolling}
+              key={table.name}
+              name={table.name}
+              onChange={handleChange}
+              partitionBy={table.partitionBy}
+              walEnabled={table.walEnabled}
+            />
+          ))
         )}
         {!loading && <FlexSpacer />}
       </Content>
