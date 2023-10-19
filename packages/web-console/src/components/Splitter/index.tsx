@@ -115,6 +115,7 @@ const HorizontalGhost = styled.div`
   ${ghostStyles};
   width: ${ghostSize}px;
   top: 0;
+  transform: translateX(-50%);
   bottom: 0;
 `
 
@@ -122,6 +123,7 @@ const VerticalGhost = styled.div`
   ${ghostStyles};
   height: ${ghostSize}px;
   left: 0;
+  transform: translateY(-50%);
   right: 0;
 `
 
