@@ -51,7 +51,6 @@ import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { BusEvent } from "../../consts"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { Box } from "../../components/Box"
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
@@ -106,11 +105,7 @@ const Schema = ({
   const [opened, setOpened] = useState<string>()
   const [refresh, setRefresh] = useState(Date.now())
   const [isScrolling, setIsScrolling] = useState(false)
-  const [addTableDialogOpen, setAddTableDialogOpen] = useState<
-    string | undefined
-  >(undefined)
   const { readOnly } = useSelector(selectors.console.getConfig)
-  const { updateSettings } = useLocalStorage()
   const dispatch = useDispatch()
   const { appendQuery } = useEditor()
   const [scrollAtTop, setScrollAtTop] = useState(false)
@@ -120,24 +115,25 @@ const Schema = ({
     setOpened(name)
   }, [])
 
+  const renderTable = (table: QuestDB.Table) => (
+    <Table
+      designatedTimestamp={table.designatedTimestamp}
+      expanded={table.name === opened}
+      isScrolling={isScrolling}
+      key={table.name}
+      name={table.name}
+      onChange={handleChange}
+      partitionBy={table.partitionBy}
+      refresh={refresh}
+      walEnabled={table.walEnabled}
+    />
+  )
+
   const listItemContent = useCallback(
     (index: number) => {
       if (tables) {
         const table = tables[index]
-
-        return (
-          <Table
-            designatedTimestamp={table.designatedTimestamp}
-            expanded={table.name === opened}
-            isScrolling={isScrolling}
-            key={table.name}
-            name={table.name}
-            onChange={handleChange}
-            partitionBy={table.partitionBy}
-            refresh={refresh}
-            walEnabled={table.walEnabled}
-          />
-        )
+        return renderTable(table)
       }
     },
     [handleChange, isScrolling, opened, refresh, tables],
@@ -242,14 +238,14 @@ const Schema = ({
           <Loader size="48px" />
         ) : loadingError ? (
           <LoadingError error={loadingError} />
-        ) : (
+        ) : tables && tables?.length >= 200 ? (
           <VirtualList
             isScrolling={setIsScrolling}
             itemContent={listItemContent}
             totalCount={tables?.length}
             scrollerRef={(ref) => (scrollerRef.current = ref as HTMLDivElement)}
           />
-        )}
+        ) : tables && tables?.map(renderTable)}
         {!loading && <FlexSpacer />}
       </Content>
     </Wrapper>
