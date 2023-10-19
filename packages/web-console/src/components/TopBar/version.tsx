@@ -30,6 +30,7 @@ const Details = styled(Box).attrs({ align: "center" })`
   border-radius: 0.8rem;
   padding: 0 1rem;
   font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: ${({ theme }) => theme.fontSize.xs};
   color: ${({ theme }) => theme.color.foreground};
   background: #2d303e;
 `
