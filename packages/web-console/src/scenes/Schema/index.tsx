@@ -106,7 +106,7 @@ const Schema = ({
   const [isScrolling, setIsScrolling] = useState(false)
   const { readOnly } = useSelector(selectors.console.getConfig)
   const dispatch = useDispatch()
-  const [scrollAtTop, setScrollAtTop] = useState(false)
+  const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
   const handleChange = useCallback((name: string) => {
@@ -187,8 +187,10 @@ const Schema = ({
   }, [errorRef, fetchTables])
 
   useEffect(() => {
-    setScrollAtTop(scrollerRef.current?.scrollTop === 0)
-  }, [isScrolling])
+    if (tables && tables?.length >= VIRTUAL_SCROLL_THRESHOLD) {
+      setScrollAtTop(scrollerRef.current?.scrollTop === 0)
+    }
+  }, [isScrolling, tables])
 
   return (
     <Wrapper ref={innerRef} {...rest}>
