@@ -30,12 +30,13 @@ import React, {
   useCallback,
   useEffect,
   useState,
+  useContext,
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import { Loader3, Refresh } from "@styled-icons/remix-line"
+import { Loader3, Refresh, Search } from "@styled-icons/remix-line"
 
 import {
   PaneContent,
@@ -54,6 +55,7 @@ import { BusEvent } from "../../consts"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
+import { QuestContext } from "../../providers"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -96,22 +98,22 @@ const Schema = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
-  const [quest] = useState(new QuestDB.Client())
+  const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [opened, setOpened] = useState<string>()
-  const [refresh, setRefresh] = useState(Date.now())
   const [isScrolling, setIsScrolling] = useState(false)
+  const [searchVisible, setSearchVisible] = useState(false)
   const { readOnly } = useSelector(selectors.console.getConfig)
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
-  const handleChange = useCallback((name: string) => {
-    setOpened(name)
-  }, [])
+  const handleChange = (name: string) => {
+    setOpened(name === opened ? undefined : name)
+  }
 
   const renderTable = (table: QuestDB.Table) => (
     <Table
@@ -122,7 +124,6 @@ const Schema = ({
       name={table.name}
       onChange={handleChange}
       partitionBy={table.partitionBy}
-      refresh={refresh}
       walEnabled={table.walEnabled}
     />
   )
@@ -134,22 +135,21 @@ const Schema = ({
         return renderTable(table)
       }
     },
-    [handleChange, isScrolling, opened, refresh, tables],
+    [handleChange, isScrolling, opened, tables],
   )
 
-  const fetchTables = useCallback(() => {
+  const fetchTables = () => {
     setLoading(true)
     combineLatest(
       from(quest.showTables()).pipe(startWith(null)),
       of(true).pipe(delay(1000), startWith(false)),
     ).subscribe(
-      ([response, loading]) => {
+      ([response]) => {
         if (response && response.type === QuestDB.Type.DQL) {
           setLoadingError(null)
           errorRef.current = null
           setTables(response.data)
           dispatch(actions.query.setTables(response.data))
-          setRefresh(Date.now())
         } else {
           setLoading(false)
         }
@@ -161,7 +161,7 @@ const Schema = ({
         setLoading(false)
       },
     )
-  }, [quest])
+  }
 
   useEffect(() => {
     void fetchTables()
@@ -180,11 +180,11 @@ const Schema = ({
 
     window.bus.on(BusEvent.MSG_CONNECTION_OK, () => {
       // The connection has been re-established, as we have an error in memory
-      if (errorRef.current) {
+      if (errorRef.current !== null) {
         void fetchTables()
       }
     })
-  }, [errorRef, fetchTables])
+  }, [])
 
   useEffect(() => {
     if (tables && tables?.length >= VIRTUAL_SCROLL_THRESHOLD) {
@@ -199,7 +199,7 @@ const Schema = ({
         afterTitle={
           <div style={{ display: "flex" }}>
             {readOnly === false && tables && (
-              <Box align="center" gap="1rem">
+              <Box align="center" gap="0">
                 <PopperHover
                   delay={350}
                   placement="bottom"
