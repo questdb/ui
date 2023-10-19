@@ -90,6 +90,8 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
+const VIRTUAL_SCROLL_THRESHOLD = 200
+
 const Schema = ({
   innerRef,
   ...rest
@@ -213,19 +215,30 @@ const Schema = ({
         }
         shadow={!scrollAtTop}
       />
-      <Content _loading={loading}>
+      <Content
+        _loading={loading}
+        {...(tables &&
+          tables?.length < VIRTUAL_SCROLL_THRESHOLD && {
+            ref: scrollerRef,
+            onScroll: () => {
+              setScrollAtTop(scrollerRef?.current?.scrollTop === 0)
+            },
+          })}
+      >
         {loading ? (
           <Loader size="48px" />
         ) : loadingError ? (
           <LoadingError error={loadingError} />
-        ) : tables && tables?.length >= 200 ? (
+        ) : tables && tables?.length >= VIRTUAL_SCROLL_THRESHOLD ? (
           <VirtualList
             isScrolling={setIsScrolling}
             itemContent={listItemContent}
             totalCount={tables?.length}
             scrollerRef={(ref) => (scrollerRef.current = ref as HTMLDivElement)}
           />
-        ) : tables && tables?.map(renderTable)}
+        ) : (
+          tables && tables?.map(renderTable)
+        )}
         {!loading && <FlexSpacer />}
       </Content>
     </Wrapper>
