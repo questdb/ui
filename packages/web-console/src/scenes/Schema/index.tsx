@@ -52,9 +52,6 @@ import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { BusEvent } from "../../consts"
 import { Box } from "../../components/Box"
-import { SchemaFormValues } from "components/TableSchemaDialog/types"
-import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
-import { useEditor } from "../../providers"
 import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 
@@ -107,7 +104,6 @@ const Schema = ({
   const [isScrolling, setIsScrolling] = useState(false)
   const { readOnly } = useSelector(selectors.console.getConfig)
   const dispatch = useDispatch()
-  const { appendQuery } = useEditor()
   const [scrollAtTop, setScrollAtTop] = useState(false)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
 
@@ -164,22 +160,6 @@ const Schema = ({
       },
     )
   }, [quest])
-
-  const handleAddTableSchema = (values: SchemaFormValues) => {
-    const { name, partitionBy, timestamp, schemaColumns, walEnabled } = values
-    const tableSchemaQuery = formatTableSchemaQuery({
-      name,
-      partitionBy,
-      timestamp,
-      walEnabled: walEnabled === "true",
-      schemaColumns: schemaColumns.map((column) => ({
-        column: column.name,
-        type: column.type,
-      })),
-    })
-    appendQuery(tableSchemaQuery, { appendAt: "end" })
-    dispatch(actions.query.toggleRunning())
-  }
 
   useEffect(() => {
     void fetchTables()
