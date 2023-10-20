@@ -111,21 +111,9 @@ const Schema = ({
     setOpened(name === opened ? undefined : name)
   }
 
-  const renderTable = (table: QuestDB.Table) => (
-    <Table
-      designatedTimestamp={table.designatedTimestamp}
-      expanded={table.name === opened}
-      isScrolling={isScrolling}
-      key={table.name}
-      name={table.name}
-      onChange={handleChange}
-      partitionBy={table.partitionBy}
-      walEnabled={table.walEnabled}
-    />
-  )
-
   const fetchTables = () => {
     setLoading(true)
+    setOpened(undefined)
     combineLatest(
       from(quest.showTables()).pipe(startWith(null)),
       of(true).pipe(delay(1000), startWith(false)),
@@ -207,7 +195,7 @@ const Schema = ({
         ) : loadingError ? (
           <LoadingError error={loadingError} />
         ) : (
-          tables?.map((table, key) => (
+          tables?.map((table) => (
             <Table
               designatedTimestamp={table.designatedTimestamp}
               expanded={table.name === opened}
