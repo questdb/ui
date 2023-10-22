@@ -52,7 +52,7 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   mode: DrawerProps["mode"]
 }>`
   background-color: ${({ theme }) => theme.color.backgroundLighter};
-  border-left: 0.5rem ${({ theme }) => theme.color.background} solid;
+  border-left: 0.2rem ${({ theme }) => theme.color.background} solid;
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
