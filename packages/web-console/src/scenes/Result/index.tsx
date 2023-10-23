@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import $ from "jquery"
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
@@ -38,7 +38,6 @@ import {
   PopperHover,
   Text,
   Tooltip,
-  useScreenSize,
 } from "../../components"
 import { selectors } from "../../store"
 import { color } from "../../utils"
@@ -46,6 +45,7 @@ import * as QuestDB from "../../utils/questdb"
 import { BusEvent } from "../../consts"
 import { ViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
+import type { IQuestDBGrid } from "../../js/console/grid.js"
 
 const Root = styled.div`
   display: flex;
@@ -91,10 +91,9 @@ const RowCount = styled(Text)`
 
 const Result = ({ viewMode }: { viewMode: ViewMode }) => {
   const [count, setCount] = useState<number | undefined>()
-  const { sm } = useScreenSize()
   const result = useSelector(selectors.query.getResult)
   const activePanel = useSelector(selectors.console.getActivePanel)
-  const gridRef = useRef<any | undefined>()
+  const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
 
   useEffect(() => {
@@ -138,33 +137,6 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
     })
   }, [])
 
-  const handleExportClick = useCallback(() => {
-    const sql = gridRef.current.getSQL()
-    if (sql) {
-      bus.trigger(BusEvent.MSG_QUERY_EXPORT, { q: sql })
-    }
-  }, [])
-
-  const handleRefreshClick = useCallback(() => {
-    const sql = gridRef.current.getSQL()
-    if (sql) {
-      bus.trigger(BusEvent.MSG_QUERY_EXEC, { q: sql })
-    }
-  }, [])
-
-  const handleGridLayoutResetClick = useCallback(() => {
-    gridRef.current.clearCustomLayout()
-  }, [])
-
-  const handleShuffleGridColumnToFrontClick = useCallback(() => {
-    gridRef.current.shuffleFocusedColumnToFront()
-  }, [])
-
-  const handleGridColumnFreezeGridColumnToggle = useCallback(() => {
-    gridRef.current.toggleFreezeLeft()
-    gridRef.current.focus()
-  }, [])
-
   useEffect(() => {
     if (result?.type === QuestDB.Type.DQL) {
       setCount(result.count)
@@ -181,16 +153,16 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
 
     if (viewMode === "grid") {
       chart.style.display = "none"
-      gridRef.current.show()
+      gridRef?.current?.show()
     } else {
-      gridRef.current.hide()
+      gridRef?.current?.hide()
       chart.style.display = "flex"
     }
   }, [viewMode])
 
   useEffect(() => {
     if (activePanel === "console") {
-      gridRef.current.render()
+      gridRef?.current?.render()
     }
   }, [activePanel])
 
@@ -200,7 +172,10 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
       trigger: (
         <Button
           skin={gridFreezeLeftState > 0 ? "success" : "secondary"}
-          onClick={handleGridColumnFreezeGridColumnToggle}
+          onClick={() => {
+            gridRef?.current?.toggleFreezeLeft()
+            gridRef?.current?.focus()
+          }}
         >
           <TableFreezeColumnIcon size="18px" />
         </Button>
@@ -209,7 +184,10 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
     {
       tooltipText: "Move selected column to the front",
       trigger: (
-        <Button skin="secondary" onClick={handleShuffleGridColumnToFrontClick}>
+        <Button
+          skin="secondary"
+          onClick={gridRef?.current?.shuffleFocusedColumnToFront}
+        >
           <HandPointLeft size="18px" />
         </Button>
       ),
@@ -217,7 +195,7 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
     {
       tooltipText: "Reset grid layout",
       trigger: (
-        <Button skin="secondary" onClick={handleGridLayoutResetClick}>
+        <Button skin="secondary" onClick={gridRef?.current?.clearCustomLayout}>
           <Reset size="18px" />
         </Button>
       ),
@@ -225,7 +203,15 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
     {
       tooltipText: "Refresh",
       trigger: (
-        <Button skin="secondary" onClick={handleRefreshClick}>
+        <Button
+          skin="secondary"
+          onClick={() => {
+            const sql = gridRef?.current?.getSQL()
+            if (sql) {
+              bus.trigger(BusEvent.MSG_QUERY_EXEC, { q: sql })
+            }
+          }}
+        >
           <Refresh size="18px" />
         </Button>
       ),
@@ -263,7 +249,15 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
             delay={350}
             placement="bottom"
             trigger={
-              <Button skin="secondary" onClick={handleExportClick}>
+              <Button
+                skin="secondary"
+                onClick={() => {
+                  const sql = gridRef?.current?.getSQL()
+                  if (sql) {
+                    bus.trigger(BusEvent.MSG_QUERY_EXPORT, { q: sql })
+                  }
+                }}
+              >
                 <Download2 size="18px" />
               </Button>
             }

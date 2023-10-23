@@ -1,25 +1,32 @@
 export interface IQuestDBGrid {
-    focus(): void
+  focus(): void
 
-    show(): void
+  show(): void
 
-    hide(): void
+  hide(): void
 
-    render(): void
+  render(): void
 
-    addEventListener(eventName: string, fn: (event: CustomEvent) => void)
+  addEventListener(eventName: string, fn: (event: CustomEvent) => void)
 
-    setData(data: any): void
+  setData(data: any): void
 
-    getSQL(): string
+  getSQL(): string
 
-    clearCustomLayout(): void
+  clearCustomLayout(): void
 
-    toggleFreezeLeft(): void
+  toggleFreezeLeft(): void
+
+  shuffleFocusedColumnToFront(): void
 }
 
 export function grid(
-    root: HTMLElement | null
-    , paginationFn?: (sql: string, lo: number, hi: number, rendererFn: (data: any) => void) => void
-    , id?: string
+  root: HTMLElement | null,
+  paginationFn?: (
+    sql: string,
+    lo: number,
+    hi: number,
+    rendererFn: (data: any) => void,
+  ) => void,
+  id?: string,
 ): IQuestDBGrid
