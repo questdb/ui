@@ -74,6 +74,8 @@ const Actions = styled.div`
   gap: 1rem;
   align-items: center;
   justify-content: flex-end;
+  padding: 0 1rem;
+
   width: 100%;
   height: 4.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
