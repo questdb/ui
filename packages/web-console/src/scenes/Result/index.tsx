@@ -50,7 +50,7 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 const Root = styled.div`
   display: flex;
   flex: 1;
-  width: 100%;
+  width: calc(100% - 4.5rem);
 `
 
 const Wrapper = styled(PaneWrapper)`
