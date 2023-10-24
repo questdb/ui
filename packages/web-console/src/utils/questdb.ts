@@ -348,22 +348,37 @@ export class Client {
   }
 
   async showTables(): Promise<QueryResult<Table>> {
-    const response = await this.query<Table>("tables();")
+    type BackwardsCompatibleTable = Table & {
+      /** @deprecated use `table_name` instead  */
+      name: string
+    }
+
+    const response = await this.query<BackwardsCompatibleTable>("tables();")
 
     if (response.type === Type.DQL) {
       return {
         ...response,
-        data: response.data.slice().sort((a, b) => {
-          if (a.table_name > b.table_name) {
-            return 1
-          }
+        data: response.data
+          .slice()
+          .sort((a, b) => {
+            const aName = a.table_name ?? a.name
+            const bName = b.table_name ?? b.name
+            if (aName > bName) {
+              return 1
+            }
 
-          if (a.table_name < b.table_name) {
-            return -1
-          }
+            if (aName < bName) {
+              return -1
+            }
 
-          return 0
-        }),
+            return 0
+          })
+
+          // @TODO: remove this once upstream questdb releases version with `table_name`
+          .map((table) => ({
+            ...table,
+            table_name: table.table_name ?? table.name,
+          })),
       }
     }
 
