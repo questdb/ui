@@ -99,7 +99,7 @@ export type QueryResult<T extends Record<string, any>> =
   | DdlResult
 
 export type Table = {
-  name: string
+  table_name: string
   partitionBy: string
   designatedTimestamp: string
   walEnabled: boolean
@@ -354,11 +354,11 @@ export class Client {
       return {
         ...response,
         data: response.data.slice().sort((a, b) => {
-          if (a.name > b.name) {
+          if (a.table_name > b.table_name) {
             return 1
           }
 
-          if (a.name < b.name) {
+          if (a.table_name < b.table_name) {
             return -1
           }
 

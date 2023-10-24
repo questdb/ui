@@ -41,7 +41,7 @@ type Props = QuestDB.Table &
     description?: string
     isScrolling: boolean
     refresh: number
-    name: string
+    table_name: string
     partitionBy: string
     expanded?: boolean
     onChange?: (name: string) => void
@@ -115,13 +115,13 @@ const Table = ({
   isScrolling,
   refresh,
   designatedTimestamp,
-  name,
+  table_name,
   partitionBy,
   expanded = false,
   walEnabled,
   onChange = () => {},
 }: Props) => {
-  const currentName = useRef(name)
+  const currentName = useRef(table_name)
   const [quest] = useState(new QuestDB.Client())
   const [columns, setColumns] = useState<QuestDB.Column[]>()
 
@@ -129,22 +129,22 @@ const Table = ({
   // Currently it is loading columns, but that's already covered by `onOpen` in <Tree/> below.
   // however, it can only be removed once `refresh` is handled elsewhere.
   useEffect(() => {
-    if (name === currentName.current) {
+    if (table_name === currentName.current) {
       return
     }
     combineLatest(
-      from(quest.showColumns(name)).pipe(startWith(null)),
+      from(quest.showColumns(table_name)).pipe(startWith(null)),
       of(true).pipe(delay(1000), startWith(false)),
     ).subscribe(([response]) => {
       if (response && response.type === QuestDB.Type.DQL) {
         setColumns(response.data)
       }
     })
-  }, [refresh, quest, name])
+  }, [refresh, quest, table_name])
 
   const tree: TreeNode[] = [
     {
-      name,
+      name: table_name,
       kind: "table",
       initiallyOpen: expanded,
       children: [
@@ -153,8 +153,8 @@ const Table = ({
           initiallyOpen: true,
           wrapper: Columns,
           async onOpen({ setChildren }) {
-            onChange(name)
-            const response = (await quest.showColumns(name)) ?? []
+            onChange(table_name)
+            const response = (await quest.showColumns(table_name)) ?? []
 
             if (response && response.type === QuestDB.Type.DQL) {
               setColumns(response.data)
@@ -184,11 +184,11 @@ const Table = ({
 
       render({ toggleOpen, isLoading }) {
         return (
-          <ContextMenuTrigger id={name}>
+          <ContextMenuTrigger id={table_name}>
             <Title
               description={description}
               kind="table"
-              name={name}
+              name={table_name  }
               onClick={() => toggleOpen()}
               partitionBy={partitionBy}
               walEnabled={walEnabled}
@@ -205,7 +205,7 @@ const Table = ({
     <Wrapper _height={columns ? columns.length * 30 : 0}>
       {!isScrolling && (
         <ContextualMenu
-          name={name}
+          name={table_name}
           partitionBy={partitionBy}
           walEnabled={walEnabled}
         />
