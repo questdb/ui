@@ -1,24 +1,25 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { Splitter, useScreenSize, PopperHover } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
-import { ZeroState } from "../Result/zero-state"
+import { ZeroState } from "./zero-state"
 import { useCallback } from "react"
 import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
-import { useSelector, useDispatch } from "react-redux"
+import { useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
 import { Tooltip } from "../../components/Tooltip"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
 import { Database2, Grid, PieChart, Upload2 } from "@styled-icons/remix-line"
-import { ChevronDoubleLeft } from "@styled-icons/bootstrap"
-import { ViewMode } from "./types"
+import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts/index"
 import { PrimaryToggleButton } from "../../components"
+import { Import } from "./import"
+import { use } from "echarts"
 
 const Root = styled.div`
   display: flex;
@@ -37,15 +38,15 @@ const Bottom = styled.div`
   flex: 1;
 `
 
-const ToggleTablesIcon = styled(ChevronDoubleLeft)<{ splitterbasis: number }>`
-  transform: rotate(
-    ${({ splitterbasis }) => (splitterbasis === 0 ? "180deg" : "0deg")}
-  );
+const Tab = styled.div`
+  display: flex;
+  width: calc(100% - 4.5rem);
+  height: 100%;
 `
 
 const viewModes: {
   icon: React.ReactNode
-  mode: ViewMode
+  mode: ResultViewMode
   tooltipText: string
 }[] = [
   {
@@ -60,27 +61,59 @@ const viewModes: {
   },
 ]
 
+type BottomPanel = "result" | "zeroState" | "import"
+
 const Console = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
-  const dispatch = useDispatch()
-  const [resultViewMode, setResultViewMode] = useState<ViewMode>("grid")
+  const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
+  const [bottomPanel, setBottomPanel] = useState<BottomPanel>("zeroState")
+  const resultRef = React.useRef<HTMLDivElement>(null)
+  const zeroStateRef = React.useRef<HTMLDivElement>(null)
+  const importRef = React.useRef<HTMLDivElement>(null)
+
+  const showPanel = (panel: BottomPanel) => {
+    if (resultRef.current) {
+      resultRef.current.style.display = panel === "result" ? "flex" : "none"
+    }
+    if (zeroStateRef.current) {
+      zeroStateRef.current.style.display =
+        panel === "zeroState" ? "flex" : "none"
+    }
+    if (importRef.current) {
+      importRef.current.style.display = panel === "import" ? "flex" : "none"
+    }
+  }
 
   const handleEditorSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)
     setTimeout(() => {
-      window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
+      window.bus.trigger(BusEvent.MSG_active_sidebar)
     }, 0)
   }, [])
 
   const handleResultsSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, value)
     setTimeout(() => {
-      window.bus.trigger(BusEvent.MSG_ACTIVE_PANEL)
+      window.bus.trigger(BusEvent.MSG_active_sidebar)
     }, 0)
   }, [])
+
+  useEffect(() => {
+    if (resultRef.current && result) {
+      setBottomPanel("result")
+    } else if (zeroStateRef.current) {
+      setBottomPanel("zeroState")
+    }
+  }, [result])
+
+  useEffect(() => {
+    if (bottomPanel) {
+      showPanel(bottomPanel)
+    }
+  }, [bottomPanel])
 
   return (
     <Root>
@@ -136,8 +169,13 @@ const Console = () => {
                   trigger={
                     <Navigation
                       direction="left"
-                      onClick={() => setResultViewMode(mode)}
-                      selected={resultViewMode === mode}
+                      onClick={() => {
+                        setBottomPanel("result")
+                        setResultViewMode(mode)
+                      }}
+                      selected={
+                        bottomPanel === "result" && resultViewMode === mode
+                      }
                     >
                       {icon}
                     </Navigation>
@@ -147,12 +185,21 @@ const Console = () => {
                 </PopperHover>
               ))}
             <PrimaryToggleButton
-              onClick={() => dispatch(actions.console.setActivePanel("import"))}
+              onClick={() => setBottomPanel("import")}
+              selected={bottomPanel === "import"}
             >
               <Upload2 size={BUTTON_ICON_SIZE} />
             </PrimaryToggleButton>
           </Sidebar>
-          {result ? <Result viewMode={resultViewMode} /> : <ZeroState />}
+          <Tab ref={resultRef}>
+            {result && <Result viewMode={resultViewMode} />}
+          </Tab>
+          <Tab ref={zeroStateRef}>
+            <ZeroState />
+          </Tab>
+          <Tab ref={importRef}>
+            <Import />
+          </Tab>
         </Bottom>
       </Splitter>
     </Root>

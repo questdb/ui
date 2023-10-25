@@ -27,7 +27,6 @@ import styled from "styled-components"
 import { BusEvent } from "../../consts"
 import Footer from "../Footer"
 import Console from "../Console"
-import Import from "../Import"
 import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
@@ -71,11 +70,7 @@ const Drawer = styled.div`
 `
 
 const Layout = () => {
-  const activePanel = useSelector(selectors.console.getActivePanel)
-
-  const isSideOpened = () => {
-    return ["create", "news"].includes(activePanel)
-  }
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
   useEffect(() => {
     window.bus.trigger(BusEvent.REACT_READY)
@@ -86,20 +81,9 @@ const Layout = () => {
       <EditorProvider>
         <TopBar />
         <Root>
-          <Main sideOpened={isSideOpened()}>
-            <Page
-              style={{
-                display:
-                  activePanel === "console" || isSideOpened() ? "flex" : "none",
-              }}
-            >
+          <Main sideOpened={activeSidebar !== undefined}>
+            <Page>
               <Console />
-            </Page>
-
-            <Page
-              style={{ display: activePanel === "import" ? "flex" : "none" }}
-            >
-              <Import />
             </Page>
           </Main>
 

@@ -1,6 +1,5 @@
 import React from "react"
 import styled from "styled-components"
-import { Page } from "../../components"
 import { ImportCSVFiles } from "./ImportCSVFiles"
 import { BusEvent } from "../../consts"
 
@@ -14,21 +13,19 @@ const Root = styled.div`
 
 const Import = () => {
   return (
-    <Page>
-      <Root>
-        <ImportCSVFiles
-          onImported={(result) => {
-            if (result.status === "OK") {
-              bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
-              bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, {
-                query: `"${result.location}"`,
-                options: { appendAt: "end" },
-              })
-            }
-          }}
-        />
-      </Root>
-    </Page>
+    <Root>
+      <ImportCSVFiles
+        onImported={(result) => {
+          if (result.status === "OK") {
+            bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+            bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, {
+              query: `"${result.location}"`,
+              options: { appendAt: "end" },
+            })
+          }
+        }}
+      />
+    </Root>
   )
 }
 

@@ -94,7 +94,7 @@ const News = () => {
   const [unreadNewsIds, setUnreadNewsIds] = useState<string[]>([])
   // This boolean is to animate the bell icon and display a bullet indicator
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
-  const activePanel = useSelector(selectors.console.getActivePanel)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)
@@ -169,8 +169,8 @@ const News = () => {
   }, [newsOpened, enterpriseNews])
 
   useEffect(() => {
-    setNewsOpened(activePanel === "news")
-  }, [activePanel])
+    setNewsOpened(activeSidebar === "news")
+  }, [activeSidebar])
 
   return (
     <Drawer
@@ -179,7 +179,7 @@ const News = () => {
       open={newsOpened}
       onOpenChange={async (newsOpened) => {
         dispatch(
-          actions.console.setActivePanel(newsOpened ? "news" : "console"),
+          actions.console.setActiveSidebar(newsOpened ? "news" : undefined),
         )
       }}
       trigger={

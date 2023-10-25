@@ -192,7 +192,7 @@ export const Dialog = ({
       onOpenChange={(isOpen) => {
         if (isOpen && action === "add") {
           dispatch(
-            actions.console.setActivePanel(isOpen ? "create" : "console"),
+            actions.console.setActiveSidebar(isOpen ? "create" : undefined),
           )
         }
       }}

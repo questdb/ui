@@ -317,7 +317,7 @@ const Menu = () => {
           icon={
             <Button
               skin="secondary"
-              onClick={() => dispatch(actions.console.setActivePanel("news"))}
+              onClick={() => dispatch(actions.console.setActiveSidebar("news"))}
             >
               <Notification2 size="18px" />
             </Button>

@@ -33,7 +33,7 @@ export type QueryGroup = {
   queries: Query[]
 }
 
-export type Panel = "console" | "settings" | "news" | "import" | "create"
+export type Panel = "news" | "create" | undefined
 
 export type ConsoleConfigShape = Readonly<{
   githubBanner: boolean
@@ -44,7 +44,7 @@ export type ConsoleConfigShape = Readonly<{
 export type ConsoleStateShape = Readonly<{
   config?: ConsoleConfigShape
   sideMenuOpened: boolean
-  activePanel: Panel
+  activeSidebar: Panel
 }>
 
 export enum ConsoleAT {
@@ -52,7 +52,7 @@ export enum ConsoleAT {
   REFRESH_AUTH_TOKEN = "CONSOLE/REFRESH_AUTH_TOKEN",
   SET_CONFIG = "CONSOLE/SET_CONFIG",
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
-  SET_ACTIVE_PANEL = "CONSOLE/SET_ACTIVE_PANEL",
+  SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
 }
 
 export type BootstrapAction = Readonly<{
@@ -73,9 +73,9 @@ type ToggleSideMenuAction = Readonly<{
   type: ConsoleAT.TOGGLE_SIDE_MENU
 }>
 
-type SetActivePanelAction = Readonly<{
+type setActiveSidebarAction = Readonly<{
   payload: Panel
-  type: ConsoleAT.SET_ACTIVE_PANEL
+  type: ConsoleAT.SET_ACTIVE_SIDEBAR
 }>
 
 export type ConsoleAction =
@@ -83,4 +83,4 @@ export type ConsoleAction =
   | RefreshAuthTokenAction
   | SetConfigAction
   | ToggleSideMenuAction
-  | SetActivePanelAction
+  | setActiveSidebarAction

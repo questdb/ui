@@ -43,14 +43,14 @@ import { selectors } from "../../store"
 import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { BusEvent } from "../../consts"
-import { ViewMode } from "scenes/Console/types"
+import { ResultViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 
 const Root = styled.div`
   display: flex;
   flex: 1;
-  width: calc(100% - 4.5rem);
+  width: 100%;
 `
 
 const Wrapper = styled(PaneWrapper)`
@@ -89,10 +89,10 @@ const RowCount = styled(Text)`
   margin-right: 1rem;
 `
 
-const Result = ({ viewMode }: { viewMode: ViewMode }) => {
+const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
-  const activePanel = useSelector(selectors.console.getActivePanel)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
 
@@ -161,10 +161,8 @@ const Result = ({ viewMode }: { viewMode: ViewMode }) => {
   }, [viewMode])
 
   useEffect(() => {
-    if (activePanel === "console") {
-      gridRef?.current?.render()
-    }
-  }, [activePanel])
+    gridRef?.current?.render()
+  }, [activeSidebar])
 
   const gridActions = [
     {

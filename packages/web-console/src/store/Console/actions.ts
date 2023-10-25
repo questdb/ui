@@ -42,9 +42,9 @@ const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
   type: ConsoleAT.SET_CONFIG,
 })
 
-const setActivePanel = (panel: Panel): ConsoleAction => ({
+const setActiveSidebar = (panel: Panel): ConsoleAction => ({
   payload: panel,
-  type: ConsoleAT.SET_ACTIVE_PANEL,
+  type: ConsoleAT.SET_ACTIVE_SIDEBAR,
 })
 
 const toggleSideMenu = (): ConsoleAction => ({
@@ -56,5 +56,5 @@ export default {
   refreshAuthToken,
   setConfig,
   toggleSideMenu,
-  setActivePanel,
+  setActiveSidebar,
 }

@@ -1,4 +1,3 @@
-import { Panel } from "./types"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -22,7 +21,7 @@ import { Panel } from "./types"
  *  limitations under the License.
  *
  ******************************************************************************/
-import { ConsoleConfigShape, StoreShape } from "types"
+import { ConsoleConfigShape, StoreShape, Panel } from "types"
 
 import { defaultConfig } from "./reducers"
 
@@ -32,11 +31,11 @@ const getConfig: (store: StoreShape) => ConsoleConfigShape = (store) =>
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
   store.console.sideMenuOpened
 
-const getActivePanel: (store: StoreShape) => Panel = (store) =>
-  store.console.activePanel
+const getActiveSidebar: (store: StoreShape) => Panel = (store) =>
+  store.console.activeSidebar
 
 export default {
   getConfig,
   getSideMenuOpened,
-  getActivePanel,
+  getActiveSidebar,
 }

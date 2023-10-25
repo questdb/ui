@@ -1,1 +1,1 @@
-export type ViewMode = "chart" | "grid"
+export type ResultViewMode = "chart" | "grid"

@@ -16,7 +16,7 @@ export const CreateTableDialog = () => {
   >(undefined)
   const dispatch = useDispatch()
   const tables = useSelector(selectors.query.getTables)
-  const activePanel = useSelector(selectors.console.getActivePanel)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const { appendQuery } = useEditor()
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
@@ -36,14 +36,14 @@ export const CreateTableDialog = () => {
   }
 
   useEffect(() => {
-    if (activePanel === "news") {
+    if (activeSidebar === "news") {
       setAddTableDialogOpen(undefined)
     }
-  }, [activePanel])
+  }, [activeSidebar])
 
   useEffect(() => {
     if (addTableDialogOpen !== undefined) {
-      dispatch(actions.console.setActivePanel("create"))
+      dispatch(actions.console.setActiveSidebar("create"))
     }
   }, [addTableDialogOpen])
 
