@@ -60,7 +60,7 @@ export const DropBox = ({ files, onFilesDropped, dialogOpen }: Props) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(
-      e.type === "dragenter" || e.type === "dragover" ? true : false,
+      e.type === "dragenter" || e.type === "dragover",
     )
   }
 
