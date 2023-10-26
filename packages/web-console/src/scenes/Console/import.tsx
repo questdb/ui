@@ -1,9 +1,11 @@
 import React from "react"
-import { PaneContent } from "../../components/PaneContent"
-import { PaneWrapper } from "../../components/PaneWrapper"
+import { PaneContent, PaneWrapper } from "../../components"
+import { ImportFile } from "../../modules/Import/import-file"
 
 export const Import = () => (
   <PaneWrapper>
-    <PaneContent>import</PaneContent>
+    <PaneContent>
+      <ImportFile />
+    </PaneContent>
   </PaneWrapper>
 )
