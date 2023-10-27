@@ -4,6 +4,7 @@ import { Search2 } from "@styled-icons/remix-line"
 import { ImportContext } from "./import-file"
 import { Text } from "../../components"
 import { Button, Box, Heading } from "@questdb/react-components"
+import { QuestContext } from "../../providers"
 
 const Root = styled(Box).attrs({ flexDirection: "column" })<{
   isDragging: boolean
@@ -37,9 +38,26 @@ const CautionText = styled(Text)`
     color: ${({ theme }) => theme.color.foreground};
   }
 `
+// 25MB
+const CHUNK_BYTE_OFFSET= 2.5e+7
+
+const getFileChunk = (file: File, byteOffset: number) => {
+  return new Promise((resolve, reject) => {
+    const timeStart = performance.now()
+    const reader = new FileReader()
+    reader.onload = () => {
+      const timeEnd = performance.now()
+      console.info(`${file.name} split time: ${timeEnd - timeStart}ms`)
+      resolve(reader.result)
+    }
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file.slice(0, byteOffset))
+  })
+}
 
 export const DropBox = () => {
   const { dispatch } = useContext(ImportContext)
+  const { quest } = useContext(QuestContext)
   const [isDragging, setIsDragging] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -49,23 +67,30 @@ export const DropBox = () => {
     setIsDragging(e.type === "dragenter" || e.type === "dragover")
   }
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
-    onFileAdded(Array.from(e.dataTransfer.files)[0])
+    await onFileAdded(Array.from(e.dataTransfer.files)[0])
   }
 
-  const handlePaste = (event: Event) => {
+  const handlePaste = async (event: Event) => {
     const clipboardEvent = event as ClipboardEvent
     const clipboardFiles = clipboardEvent.clipboardData?.files
     if (clipboardFiles) {
-      onFileAdded(Array.from(clipboardFiles)[0])
+      await onFileAdded(Array.from(clipboardFiles)[0])
     }
   }
 
-  const onFileAdded = (file: File) => {
-    dispatch({ step: "settings", file })
+  const onFileAdded = async (file: File) => {
+    const fileChunk =
+      file.size > CHUNK_BYTE_OFFSET
+        ? await (async () => {
+            const chunk = await getFileChunk(file, CHUNK_BYTE_OFFSET)
+            return new File([chunk as ArrayBuffer], file.name) as File
+          })()
+        : file
+    dispatch({ step: "settings", file, fileChunk })
   }
 
   useEffect(() => {

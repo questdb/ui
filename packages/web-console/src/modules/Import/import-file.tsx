@@ -6,11 +6,13 @@ import { Result } from "./result"
 type State = {
   step: "dropbox" | "settings" | "result"
   file?: File
+  fileChunk?: File
 }
 
 const initialState: State = {
   step: "dropbox",
   file: undefined,
+  fileChunk: undefined,
 }
 
 export const ImportContext = createContext({

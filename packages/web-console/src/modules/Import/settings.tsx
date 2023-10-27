@@ -6,7 +6,7 @@ export const Settings = () => {
 
   return (
     <span onClick={() => dispatch({ step: "result" })}>
-      Settings, click to upload {state.file?.name}
+      Settings for the chunk: {state.fileChunk?.name}
     </span>
   )
 }

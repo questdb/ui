@@ -59,9 +59,7 @@ export const DropBox = ({ files, onFilesDropped, dialogOpen }: Props) => {
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragging(
-      e.type === "dragenter" || e.type === "dragover",
-    )
+    setIsDragging(e.type === "dragenter" || e.type === "dragover")
   }
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
