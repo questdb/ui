@@ -41,7 +41,7 @@ import { Help } from "./help"
 const Page = styled.div`
   display: flex;
   width: 100%;
-  height: calc(100% - 4rem);
+  height: 100%;
   flex-direction: column;
   flex: 1;
   overflow: hidden;
@@ -56,11 +56,13 @@ const Page = styled.div`
 const Root = styled.div`
   display: flex;
   width: 100%;
-  height: 100%;
+  flex: 1;
+  overflow-y: auto;
 `
 
 const Main = styled.div<{ sideOpened: boolean }>`
   flex: 1;
+  display: flex;
   width: ${({ sideOpened }) =>
     sideOpened ? "calc(100% - 50rem - 4.5rem)" : "calc(100% - 4.5rem)"};
 `

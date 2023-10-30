@@ -35,12 +35,14 @@ const Top = styled.div`
 const Bottom = styled.div`
   display: flex;
   flex: 1;
+  min-height: 0px;
 `
 
 const Tab = styled.div`
   display: flex;
   width: calc(100% - 4.5rem);
   height: 100%;
+  overflow: auto;
 `
 
 const viewModes: {
