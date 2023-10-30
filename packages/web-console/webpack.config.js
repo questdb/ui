@@ -167,7 +167,7 @@ module.exports = {
     }),
 
     new MiniCssExtractPlugin({
-      filename: "[name].[chunkhash:5].css",
+      filename: config.isProduction ? "[name].[chunkhash:5].css" : "[name].css",
     }),
 
     new Webpack.DefinePlugin({
