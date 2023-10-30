@@ -24,7 +24,7 @@
 
 import { editor } from "monaco-editor"
 import { BusEvent } from "../../../consts"
-import { appendQuery } from "./utils"
+import { appendQuery, AppendQueryOptions } from "./utils"
 
 export const registerLegacyEventBusEvents = ({
   editor,
@@ -39,11 +39,17 @@ export const registerLegacyEventBusEvents = ({
     insertTextAtCursor(column)
   })
 
-  window.bus.on(BusEvent.MSG_QUERY_FIND_N_EXEC, (_event, query: string) => {
-    const text = `${query};`
-    appendQuery(editor, text)
-    toggleRunning()
-  })
+  window.bus.on(
+    BusEvent.MSG_QUERY_FIND_N_EXEC,
+    (
+      _event,
+      { query, options }: { query: string; options?: AppendQueryOptions },
+    ) => {
+      const text = `${query};`
+      appendQuery(editor, text, options)
+      toggleRunning()
+    },
+  )
 
   window.bus.on(BusEvent.MSG_QUERY_EXEC, () => {
     toggleRunning(true)

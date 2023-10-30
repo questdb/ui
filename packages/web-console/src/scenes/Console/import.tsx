@@ -1,11 +1,22 @@
 import React from "react"
 import { PaneContent, PaneWrapper } from "../../components"
-import { ImportFile } from "../../modules/Import/import-file"
+import { ImportCSVFiles } from "../Import/ImportCSVFiles"
+import { BusEvent } from "../../consts"
 
 export const Import = () => (
   <PaneWrapper>
     <PaneContent>
-      <ImportFile />
+      <ImportCSVFiles
+        onImported={(result) => {
+          if (result.status === "OK") {
+            bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+            bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, {
+              query: `"${result.location}"`,
+              options: { appendAt: "end" },
+            })
+          }
+        }}
+      />
     </PaneContent>
   </PaneWrapper>
 )
