@@ -19,7 +19,6 @@ import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts/index"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
-import { use } from "echarts"
 
 const Root = styled.div`
   display: flex;
@@ -90,14 +89,14 @@ const Console = () => {
   const handleEditorSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)
     setTimeout(() => {
-      window.bus.trigger(BusEvent.MSG_active_sidebar)
+      window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
     }, 0)
   }, [])
 
   const handleResultsSplitterChange = useCallback((value) => {
     updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, value)
     setTimeout(() => {
-      window.bus.trigger(BusEvent.MSG_active_sidebar)
+      window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
     }, 0)
   }, [])
 

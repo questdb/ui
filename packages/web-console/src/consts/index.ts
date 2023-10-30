@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 export enum BusEvent {
-  MSG_active_sidebar = "active.panel",
+  MSG_ACTIVE_SIDEBAR = "active.panel",
   MSG_EDITOR_FOCUS = "editor.focus",
   MSG_EDITOR_SET = "editor.set",
   MSG_EDITOR_INSERT_COLUMN = "editor.insert.column",
