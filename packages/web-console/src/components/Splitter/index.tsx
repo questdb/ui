@@ -244,7 +244,7 @@ export const Splitter = ({
     display: "flex",
     flexGrow: 0,
     flexBasis: basis ?? fallback,
-    flexShrink: 0,
+    flexShrink: 1,
   }
 
   if (children.length === 1) {
