@@ -125,7 +125,6 @@ const Console = () => {
         <Top>
           <Sidebar align="top">
             <PopperHover
-              delay={350}
               placement="bottom"
               trigger={
                 <Navigation
@@ -163,7 +162,6 @@ const Console = () => {
               viewModes.map(({ icon, mode, tooltipText }) => (
                 <PopperHover
                   key={mode}
-                  delay={350}
                   placement="right"
                   trigger={
                     <Navigation
@@ -183,12 +181,19 @@ const Console = () => {
                   <Tooltip>{tooltipText}</Tooltip>
                 </PopperHover>
               ))}
-            <PrimaryToggleButton
-              onClick={() => setBottomPanel("import")}
-              selected={bottomPanel === "import"}
+            <PopperHover
+              placement="right"
+              trigger={
+                <PrimaryToggleButton
+                  onClick={() => setBottomPanel("import")}
+                  selected={bottomPanel === "import"}
+                >
+                  <Upload2 size={BUTTON_ICON_SIZE} />
+                </PrimaryToggleButton>
+              }
             >
-              <Upload2 size={BUTTON_ICON_SIZE} />
-            </PrimaryToggleButton>
+              <Tooltip>Import files from CSV</Tooltip>
+            </PopperHover>
           </Sidebar>
           <Tab ref={resultRef}>
             {result && <Result viewMode={resultViewMode} />}

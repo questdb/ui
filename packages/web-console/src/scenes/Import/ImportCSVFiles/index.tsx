@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react"
+import styled from "styled-components"
 import { Box } from "../../../components/Box"
 import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
@@ -11,7 +12,7 @@ import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
-import { useIsVisible } from "../../../components/Hooks"
+import { useIsVisible } from "../../../components"
 import {
   extractPrecionFromGeohash,
   isGeoHash,
@@ -23,6 +24,10 @@ import {
 type Props = {
   onImported: (result: UploadResult) => void
 }
+
+const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
+  padding: 2rem;
+`
 
 export const ImportCSVFiles = ({ onImported }: Props) => {
   const { quest } = useContext(QuestContext)
@@ -144,7 +149,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
   }, [isVisible])
 
   return (
-    <Box gap="4rem" flexDirection="column" ref={rootRef}>
+    <Root ref={rootRef}>
       <DropBox
         files={filesDropped}
         onFilesDropped={handleDrop}
@@ -246,6 +251,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
           setFilesDropped(processedFiles)
         }}
       />
-    </Box>
+    </Root>
   )
 }
