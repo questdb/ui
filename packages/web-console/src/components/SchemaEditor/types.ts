@@ -29,13 +29,11 @@ export type RequestColumn = {
   file_column_name: string
   file_column_index: number
   table_column_name: string
-  column_type: ColumnType
-} & {
-  column_type: ColumnType.TIMESTAMP | ColumnType.DATE
-  formats: Timestamp[]
+  column_type: keyof typeof ColumnType
+  formats?: Timestamp[]
 }
 
 export type SchemaRequest = {
-  columns: Array<RequestColumn>
-  formats: Record<ColumnType.TIMESTAMP | ColumnType.DATE, Timestamp[]>
+  columns: RequestColumn[]
+  formats: Record<"DATE" | "TIMESTAMP", Timestamp[]>
 }
