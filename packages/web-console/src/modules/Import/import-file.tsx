@@ -5,12 +5,14 @@ import { Result } from "./result"
 
 type State = {
   step: "dropbox" | "settings" | "result"
+  flow: "new_table" | "existing"
   file?: File
   fileChunk?: File
 }
 
 const initialState: State = {
   step: "dropbox",
+  flow: "new_table",
   file: undefined,
   fileChunk: undefined,
 }

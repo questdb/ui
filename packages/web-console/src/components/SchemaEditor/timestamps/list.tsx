@@ -16,7 +16,7 @@ const Root = styled.ul`
 export const TimestampList = ({}: Props) => {
   //@TODO hook up to API/context
   const [data, setData] = useState<{ [key: React.Key]: Timestamp }>({
-    [uuid()]: { pattern: DEFAULT_TIMESTAMP_FORMAT, supplier: "client" },
+    [uuid()]: { pattern: DEFAULT_TIMESTAMP_FORMAT },
   })
 
   const onChipClose = (key: React.Key) => {
@@ -34,11 +34,9 @@ export const TimestampList = ({}: Props) => {
   const onAdd = () => {
     setData({
       ...data,
-      [uuid()]: { pattern: "", supplier: "client" },
+      [uuid()]: { pattern: "" },
     })
   }
-
-  
 
   return (
     <Root>
