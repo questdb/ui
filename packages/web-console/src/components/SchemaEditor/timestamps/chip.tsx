@@ -23,6 +23,8 @@ const Chip = styled.li`
   border-radius: ${({ theme }) => theme.borderRadius};
   padding: 2rem 1rem;
   display: flex;
+  align-items: center;
+
   gap: 1rem;
   font-size: 12px;
   white-space: nowrap;
@@ -52,7 +54,9 @@ export const TimestampChip = ({
   onSave,
   onClose,
 }: Props) => {
-  const [state, setState] = useState<State>(State.SAVED)
+  const [state, setState] = useState<State>(
+    data.pattern.length ? State.SAVED : State.EDIT,
+  )
   const [value, setValue] = useState(data.pattern)
 
   useEffect(() => {
@@ -74,12 +78,16 @@ export const TimestampChip = ({
     setValue(value)
   }
 
+  const save = () => {
+    onSave(id, value)
+    setState(State.SAVED)
+  }
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault()
 
-      onSave(id, value)
-      setState(State.SAVED)
+      save()
     }
   }
 
@@ -94,13 +102,17 @@ export const TimestampChip = ({
     <Chip className={state} onClick={onBodyClick}>
       {state === State.SAVED && <span>{data.pattern}</span>}
       {state === State.EDIT && (
-        <input
-          type="text"
-          value={value}
-          onChange={onValueEdit}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={handleKeyDown}
-        />
+        <>
+          <input
+            type="text"
+            value={value}
+            onChange={onValueEdit}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={handleKeyDown}
+            autoFocus
+          />
+          <button onClick={() => save()}>✔</button>
+        </>
       )}
       <Close onClick={handleClose} />
     </Chip>

@@ -34,7 +34,7 @@ export const TimestampList = ({}: Props) => {
   const onAdd = () => {
     setData({
       ...data,
-      [uuid()]: { pattern: DEFAULT_TIMESTAMP_FORMAT, supplier: "client" },
+      [uuid()]: { pattern: "", supplier: "client" },
     })
   }
 
