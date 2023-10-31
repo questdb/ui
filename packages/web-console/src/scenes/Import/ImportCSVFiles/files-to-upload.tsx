@@ -35,7 +35,7 @@ const StyledTable = styled(Table)`
   }
 
   tbody td {
-    background: ${({ theme }) => theme.color.backgroundDarker};
+    background: #242531;
 
     &:first-child {
       border-top-left-radius: ${({ theme }) => theme.borderRadius};
@@ -51,7 +51,7 @@ const StyledTable = styled(Table)`
 
 const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
   width: 100%;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: #242531;
   border-radius: ${({ theme }) => theme.borderRadius};
   padding: 1rem;
 `
