@@ -117,6 +117,7 @@ export const TimestampFormatChip = ({
             onClick={(e) => e.stopPropagation()}
             onKeyDown={handleKeyDown}
             autoFocus
+            onFocus={(e) => setState(State.EDIT)}
           />
           <button onClick={() => save()}>✔</button>
         </>

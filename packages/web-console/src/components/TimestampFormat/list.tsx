@@ -1,7 +1,7 @@
 import React, { useState } from "react"
 import styled from "styled-components"
 import type { TimestampFormat } from "../../modules/Import/SchemaEditor/types"
-import { DEFAULT_TIMESTAMP_FORMAT } from "../TableSchemaDialog/const"
+import { DEFAULT_TIMESTAMP_FORMAT } from "../../components/TableSchemaDialog/const"
 import { TimestampFormatChip } from "./chip"
 import { uuid } from "../../scenes/Import/ImportCSVFiles/utils"
 
@@ -32,6 +32,7 @@ export const TimestampFormatList = ({}: Props) => {
   }
 
   const onAdd = () => {
+    console.log('onAdd', data)
     setData({
       ...data,
       [uuid()]: { pattern: "" },

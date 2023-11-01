@@ -5,6 +5,7 @@ import { Panel } from "../../components/Panel"
 import { SchemaEditor } from "./SchemaEditor"
 import { ImportContext } from "./import-file"
 import { GlobalTimestampsPanel } from "./timestamps"
+import { MOCK__getSchemaRequest } from "./api"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -16,6 +17,8 @@ const Content = styled(PaneContent)`
   }
 `
 
+const data = MOCK__getSchemaRequest()
+
 export const Settings = () => {
   const { state, dispatch } = useContext(ImportContext)
 
@@ -24,7 +27,7 @@ export const Settings = () => {
       <Panel.Header title="Verify and import stuff go here" />
       <Content>
         <GlobalTimestampsPanel />
-        <SchemaEditor /> 
+        <SchemaEditor data={data}/> 
         <PaneWrapper>
           <Panel.Header title="Settings" shadow />
           <PaneContent>
