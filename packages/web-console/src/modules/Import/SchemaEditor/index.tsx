@@ -6,15 +6,51 @@ import { PaneContent, PaneWrapper } from "../../../components"
 import { Panel } from "../../../components/Panel"
 import { ColumnType, RequestColumn, SchemaRequest } from "./types"
 import styled from "styled-components"
+import { Nav, NavGroup, Subheader } from "../panel"
+import { Search2 } from "@styled-icons/remix-line"
+import { Input } from "../../../components"
+import { StyledIconBase } from "@styled-icons/styled-icon"
 
 type Props = { data: SchemaRequest }
 type Column = RequestColumn
+
+const StyledSearchNav = styled(Nav)`
+  padding-block: 0;
+
+  ${StyledIconBase} {
+    margin-right: -3rem;
+  }
+`
+
+const StyledSearchInput = styled(Input)`
+  background-color: transparent;
+
+  padding-left: 3rem;
+`
+const SearchInput = (props: any) => {
+  return (
+    <StyledSearchNav>
+      <Search2 size="18px" /> <StyledSearchInput {...props} />
+    </StyledSearchNav>
+  )
+}
 
 export const SchemaEditor = ({ data }: Props) => {
   const { state, dispatch } = useContext(ImportContext)
   return (
     <PaneWrapper>
-      <Panel.Header title="Schema" shadow />
+      <Subheader>
+        <NavGroup>
+          {/** NOTE: hypothetically this is the control for flow as well */}
+          <SearchInput />
+          <Nav>Delimiter</Nav>
+          <Nav>Partition by hour</Nav>
+        </NavGroup>
+        <NavGroup>
+          <Nav>X</Nav>
+          <Nav>Y</Nav>
+        </NavGroup>
+      </Subheader>
       <PaneContent>
         <p>Flow: {state.flow}</p>
         <Table<Column>
