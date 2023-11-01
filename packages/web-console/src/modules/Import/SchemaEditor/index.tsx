@@ -1,8 +1,8 @@
 import React, { useContext } from "react"
 import { Table } from "@questdb/react-components"
-import { ImportContext } from "../../modules/Import/import-file"
-import { PaneContent, PaneWrapper } from "../../components"
-import { Panel } from "../../components/Panel"
+import { ImportContext } from "../import-file"
+import { PaneContent, PaneWrapper } from "../../../components"
+import { Panel } from "../../../components/Panel"
 
 type Props = {}
 

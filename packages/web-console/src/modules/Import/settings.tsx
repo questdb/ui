@@ -2,7 +2,7 @@ import React, { useContext } from "react"
 import styled from "styled-components"
 import { PaneContent, PaneWrapper } from "../../components"
 import { Panel } from "../../components/Panel"
-import { SchemaEditor } from "../../components/SchemaEditor"
+import { SchemaEditor } from "./SchemaEditor"
 import { ImportContext } from "./import-file"
 import { GlobalTimestampsPanel } from "./timestamps"
 
@@ -24,7 +24,7 @@ export const Settings = () => {
       <Panel.Header title="Verify and import stuff go here" />
       <Content>
         <GlobalTimestampsPanel />
-        <SchemaEditor />
+        <SchemaEditor /> 
         <PaneWrapper>
           <Panel.Header title="Settings" shadow />
           <PaneContent>

@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { PaneContent, PaneWrapper } from "../../components"
 import { Panel } from "../../components/Panel"
-import { TimestampList } from "../../components/SchemaEditor/timestamps/list"
+import { TimestampFormatList } from "../../components/TimestampFormat/list"
 
 type Props = {}
 
@@ -18,7 +18,7 @@ export const GlobalTimestampsPanel  = ({}: Props) => {
                 shadow
             />
             <Content>
-                <TimestampList />
+                <TimestampFormatList />
             </Content>
         </Wrapper>
     )

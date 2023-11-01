@@ -1,21 +1,21 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import type { Timestamp } from "../types"
-import { DEFAULT_TIMESTAMP_FORMAT } from "../../TableSchemaDialog/const"
-import { TimestampChip } from "./chip"
-import { uuid } from "../../../scenes/Import/ImportCSVFiles/utils"
+import type { TimestampFormat } from "../../modules/Import/SchemaEditor/types"
+import { DEFAULT_TIMESTAMP_FORMAT } from "../TableSchemaDialog/const"
+import { TimestampFormatChip } from "./chip"
+import { uuid } from "../../scenes/Import/ImportCSVFiles/utils"
 
 type Props = {}
 
 const Root = styled.ul`
   display: flex;
-  gap: 2rem;
+  gap: 1rem;
   flex-wrap: wrap;
 `
 
-export const TimestampList = ({}: Props) => {
+export const TimestampFormatList = ({}: Props) => {
   //@TODO hook up to API/context
-  const [data, setData] = useState<{ [key: React.Key]: Timestamp }>({
+  const [data, setData] = useState<{ [key: React.Key]: TimestampFormat }>({
     [uuid()]: { pattern: DEFAULT_TIMESTAMP_FORMAT },
   })
 
@@ -41,7 +41,7 @@ export const TimestampList = ({}: Props) => {
   return (
     <Root>
       {Object.entries(data).map(([key, ts]) => (
-        <TimestampChip
+        <TimestampFormatChip
           key={key}
           id={key}
           data={ts}

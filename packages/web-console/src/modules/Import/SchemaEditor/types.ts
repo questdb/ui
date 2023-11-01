@@ -1,4 +1,4 @@
-export type Timestamp = {
+export type TimestampFormat = {
   pattern: string
   locale?: null
   utf8?: boolean
@@ -30,10 +30,10 @@ export type RequestColumn = {
   file_column_index: number
   table_column_name: string
   column_type: keyof typeof ColumnType
-  formats?: Timestamp[]
+  formats?: TimestampFormat[]
 }
 
 export type SchemaRequest = {
   columns: RequestColumn[]
-  formats: Record<"DATE" | "TIMESTAMP", Timestamp[]>
+  formats: { [key in "DATE" | "TIMESTAMP"]?: TimestampFormat[] }
 }
