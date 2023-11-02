@@ -7,7 +7,7 @@ import { StyledIconBase } from "@styled-icons/styled-icon"
 import { Search2 } from "@styled-icons/remix-line"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../../store"
-import Fuse from "fuse.js"
+import Fuse, { RangeTuple } from "fuse.js"
 
 const StyledSearchNav = styled(Nav)`
   padding-block: 0;
@@ -33,21 +33,50 @@ const TableNameInput = ({ value, onChange, ...props }: any) => {
   )
 }
 
+type TableMatch = {
+  name: string
+  matches?: readonly RangeTuple[]
+}
+
+const getHighlightedText = (text: string, indices: readonly RangeTuple[] = []) => {
+  const ret: React.ReactNode[] = []
+  let nextUnmatchedIndex = 0
+
+  for (const region of indices) {
+    const start = region[0],
+      end = region[1] + 1
+    ret.push(text.substring(nextUnmatchedIndex, start))
+    ret.push(<mark>{text.substring(start, end)}</mark>)
+
+    nextUnmatchedIndex = end
+  }
+
+  ret.push(text.substring(nextUnmatchedIndex))
+
+  return ret
+}
+
 export const TableNameMenu = () => {
   const [nameValue, setNameValue] = useState<string>("")
   const tables = useSelector(selectors.query.getTables)
   const fuse = new Fuse(tables, {
     keys: ["name"],
+    includeMatches: true,
   })
 
-  const [results, setResults] = useState<string[]>([])
+  const [results, setResults] = useState<TableMatch[]>([])
 
   useEffect(() => {
     if (nameValue.length > 0) {
-      const fuseResults = fuse.search(nameValue).map(({ item }) => item.name)
+      const fuseResults = fuse
+        .search(nameValue)
+        .map(({ item: { name }, matches }) => ({
+          name,
+          matches: matches?.[0].indices,
+        }))
       setResults(fuseResults)
     } else {
-      setResults(tables.map(({ name }) => name))
+      setResults(tables.map(({ name }) => ({ name })))
     }
   }, [nameValue])
 
@@ -70,8 +99,10 @@ export const TableNameMenu = () => {
           }}
         >
           <ul>
-            {results.map((name) => (
-              <li>{name}</li>
+            {results.map(({ name, matches }) => (
+              <li>
+                {getHighlightedText(name, matches)}
+              </li>
             ))}
           </ul>
         </div>
