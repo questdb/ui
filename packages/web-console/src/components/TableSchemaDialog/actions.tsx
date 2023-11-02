@@ -14,11 +14,13 @@ export const Actions = ({
   ctaText,
   lastFocusedIndex,
   onAdded,
+  isEditLocked,
 }: {
   action: Action
   ctaText: string
   lastFocusedIndex?: number
   onAdded: (index?: number) => void
+  isEditLocked?: boolean
 }) => {
   const newEntry = {
     name: "",
@@ -35,88 +37,94 @@ export const Actions = ({
 
   return (
     <Box gap="1rem">
-      <PopperHover
-        trigger={
-          <Button
-            disabled={
-              watchSchemaColumns.length === 0 || lastFocusedIndex === undefined
+      {!isEditLocked && (
+        <React.Fragment>
+          <PopperHover
+            trigger={
+              <Button
+                disabled={
+                  watchSchemaColumns.length === 0 ||
+                  lastFocusedIndex === undefined
+                }
+                skin="secondary"
+                type="button"
+                onClick={() => {
+                  setValue(
+                    "schemaColumns",
+                    watchSchemaColumns.filter(
+                      (_: SchemaColumn, i: number) => i !== lastFocusedIndex,
+                    ),
+                  )
+                  onAdded(undefined)
+                }}
+              >
+                <DeleteBin2 size="18px" />
+              </Button>
             }
-            skin="secondary"
-            type="button"
-            onClick={() => {
-              setValue(
-                "schemaColumns",
-                watchSchemaColumns.filter(
-                  (_: SchemaColumn, i: number) => i !== lastFocusedIndex,
-                ),
-              )
-              onAdded(undefined)
-            }}
+            placement="bottom"
           >
-            <DeleteBin2 size="18px" />
-          </Button>
-        }
-        placement="bottom"
-      >
-        <Tooltip>
-          {lastFocusedIndex !== undefined &&
-            `Remove column ${lastFocusedIndex + 1}`}
-        </Tooltip>
-      </PopperHover>
-      <PopperHover
-        trigger={
-          <Button
-            disabled={
-              watchSchemaColumns.length === 0 || lastFocusedIndex === undefined
+            <Tooltip>
+              {lastFocusedIndex !== undefined &&
+                `Remove column ${lastFocusedIndex + 1}`}
+            </Tooltip>
+          </PopperHover>
+          <PopperHover
+            trigger={
+              <Button
+                disabled={
+                  watchSchemaColumns.length === 0 ||
+                  lastFocusedIndex === undefined
+                }
+                skin="secondary"
+                type="button"
+                onClick={() => {
+                  const index =
+                    lastFocusedIndex !== undefined
+                      ? lastFocusedIndex
+                      : watchSchemaColumns.length
+                  insert(index, newEntry)
+                  onAdded(index)
+                }}
+              >
+                <InsertRowTop size="20px" />
+              </Button>
             }
-            skin="secondary"
-            type="button"
-            onClick={() => {
-              const index =
-                lastFocusedIndex !== undefined
-                  ? lastFocusedIndex
-                  : watchSchemaColumns.length
-              insert(index, newEntry)
-              onAdded(index)
-            }}
+            placement="bottom"
           >
-            <InsertRowTop size="20px" />
-          </Button>
-        }
-        placement="bottom"
-      >
-        <Tooltip>
-          {lastFocusedIndex !== undefined
-            ? `Insert column above ${lastFocusedIndex + 1}`
-            : `Insert column`}
-        </Tooltip>
-      </PopperHover>
+            <Tooltip>
+              {lastFocusedIndex !== undefined
+                ? `Insert column above ${lastFocusedIndex + 1}`
+                : `Insert column`}
+            </Tooltip>
+          </PopperHover>
 
-      <PopperHover
-        trigger={
-          <Button
-            skin="secondary"
-            type="button"
-            onClick={() => {
-              const index =
-                lastFocusedIndex !== undefined
-                  ? lastFocusedIndex + 1
-                  : watchSchemaColumns.length
-              insert(index, newEntry)
-              onAdded(index)
-            }}
+          <PopperHover
+            trigger={
+              <Button
+                skin="secondary"
+                type="button"
+                onClick={() => {
+                  const index =
+                    lastFocusedIndex !== undefined
+                      ? lastFocusedIndex + 1
+                      : watchSchemaColumns.length
+                  insert(index, newEntry)
+                  onAdded(index)
+                }}
+              >
+                <InsertRowBottom size="20px" />
+              </Button>
+            }
+            placement="bottom"
           >
-            <InsertRowBottom size="20px" />
-          </Button>
-        }
-        placement="bottom"
-      >
-        <Tooltip>
-          {lastFocusedIndex !== undefined
-            ? `Insert column below ${lastFocusedIndex + 1}`
-            : `Insert column`}
-        </Tooltip>
-      </PopperHover>
+            <Tooltip>
+              {lastFocusedIndex !== undefined
+                ? `Insert column below ${lastFocusedIndex + 1}`
+                : `Insert column`}
+            </Tooltip>
+          </PopperHover>
+        </React.Fragment>
+      )}
       <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
         {ctaText}
       </Form.Submit>

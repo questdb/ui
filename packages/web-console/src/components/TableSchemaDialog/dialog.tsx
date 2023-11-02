@@ -213,6 +213,7 @@ export const Dialog = ({
               <Actions
                 ctaText={ctaText}
                 action={action}
+                isEditLocked={isEditLocked}
                 lastFocusedIndex={lastFocusedIndex}
                 onAdded={setLastFocusedIndex}
               />
