@@ -21,7 +21,6 @@ import { Actions } from "./actions"
 
 const StyledContentWrapper = styled(Drawer.ContentWrapper)`
   --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
-  height: calc(100vh - 4.5rem - 4.5rem);
 `
 
 const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
@@ -197,7 +196,7 @@ export const Dialog = ({
         }
       }}
     >
-      <StyledContentWrapper>
+      <StyledContentWrapper mode={action === "add" ? "side" : "modal"}>
         <Form<SchemaFormValues>
           name="table-schema"
           defaultValues={defaults}

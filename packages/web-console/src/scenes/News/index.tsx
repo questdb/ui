@@ -11,16 +11,12 @@ import { NewsItem } from "../../utils/questdb"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
 import ReactMarkdown from "react-markdown"
-import { Loader, Button } from "@questdb/react-components"
+import { Loader } from "@questdb/react-components"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
 import { BUTTON_ICON_SIZE } from "../../consts/index"
-
-const Content = styled(Drawer.ContentWrapper)`
-  padding-bottom: 4rem; /* to accomodate footer */
-`
 
 const Loading = styled.div`
   display: grid;
@@ -121,7 +117,7 @@ const News = () => {
           !readNews.find((readNewsItem) => readNewsItem.newsId === newsId),
       )
       setUnreadNewsIds(unreadNews)
-      setHasUnreadNews(unreadNews?.length > 0 ? true : false)
+      setHasUnreadNews(unreadNews?.length > 0)
     }
   }
 
@@ -200,7 +196,7 @@ const News = () => {
         />
       }
     >
-      <Content>
+      <Drawer.ContentWrapper mode="side">
         <Items>
           {isLoading && !enterpriseNews && (
             <Loading>
@@ -260,7 +256,7 @@ const News = () => {
               </Item>
             ))}
         </Items>
-      </Content>
+      </Drawer.ContentWrapper>
     </Drawer>
   )
 }
