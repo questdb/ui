@@ -7,7 +7,7 @@ import { Panel } from "../../../components/Panel"
 import { ColumnType, RequestColumn, SchemaRequest } from "./types"
 import styled from "styled-components"
 import { Nav, NavGroup, Subheader } from "../panel"
-import { SearchInput, PartitionMenu, DelimiterMenu } from "./actions"
+import { TableNameMenu, PartitionMenu, DelimiterMenu } from "./actions"
 
 type Props = { data: SchemaRequest }
 type Column = RequestColumn
@@ -19,7 +19,7 @@ export const SchemaEditor = ({ data }: Props) => {
       <Subheader>
         <NavGroup>
           {/** NOTE: hypothetically this is the control for flow as well */}
-          <SearchInput />
+          <TableNameMenu />
           <DelimiterMenu />
           <PartitionMenu />
         </NavGroup>

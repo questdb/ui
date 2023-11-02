@@ -1,3 +1,3 @@
 export * from './partition-by'
-export * from './search'
+export * from './table-name'
 export * from './set-delimiter'
