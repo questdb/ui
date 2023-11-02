@@ -7,7 +7,7 @@ export const Import = () => (
   <PaneWrapper>
     <PaneContent>
       <ImportCSVFiles
-        onImported={(result) => {
+        onViewData={(result) => {
           if (result.status === "OK") {
             bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
             bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, {

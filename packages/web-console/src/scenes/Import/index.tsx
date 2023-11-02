@@ -15,7 +15,7 @@ const Import = () => {
   return (
     <Root>
       <ImportCSVFiles
-        onImported={(result) => {
+        onViewData={(result) => {
           if (result.status === "OK") {
             bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
             bus.trigger(BusEvent.MSG_QUERY_FIND_N_EXEC, {

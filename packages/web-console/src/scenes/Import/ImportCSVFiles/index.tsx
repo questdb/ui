@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Box } from "../../../components/Box"
-import { DropBox } from "./dropbox"
 import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
@@ -25,14 +24,14 @@ import { Upload } from "./upload"
 type State = "upload" | "list"
 
 type Props = {
-  onImported: (result: UploadResult) => void
+  onViewData: (result: UploadResult) => void
 }
 
 const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
   flex: 1;
 `
 
-export const ImportCSVFiles = ({ onImported }: Props) => {
+export const ImportCSVFiles = ({ onViewData }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -167,6 +166,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
         <FilesToUpload
           dialogOpen={dialogOpen}
           files={filesDropped}
+          onViewData={onViewData}
           onFilesDropped={handleDrop}
           onDialogToggle={setDialogOpen}
           onFileUpload={async (id) => {
@@ -218,9 +218,6 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                     : file.schema,
                 error: response.status === "OK" ? undefined : response.status,
               })
-              if (response.status === "OK") {
-                onImported(response)
-              }
               setIsUploading(file, false)
             } catch (err) {
               setIsUploading(file, false)

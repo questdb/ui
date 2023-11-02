@@ -1,19 +1,19 @@
 import React, { useEffect, useRef } from "react"
 import styled from "styled-components"
-import { Heading, Table, Select } from "@questdb/react-components"
+import { Heading, Table, Select, Button } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { PopperHover, Text, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
 import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
 import { FileStatus } from "./file-status"
-import { Information } from "@styled-icons/remix-line"
+import { Grid, Information } from "@styled-icons/remix-line"
 import { FiletypeCsv } from "@styled-icons/bootstrap/FiletypeCsv"
 import { ProcessedFile } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
 import { Dialog as TableSchemaDialog } from "../../../components/TableSchemaDialog/dialog"
 import { UploadResultDialog } from "./upload-result-dialog"
-import { shortenText } from "../../../utils"
+import { shortenText, UploadResult } from "../../../utils"
 import { DropBox } from "./dropbox"
 
 const Root = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
@@ -76,6 +76,7 @@ type Props = {
   onFileUpload: (id: string) => void
   onFilePropertyChange: (id: string, file: Partial<ProcessedFile>) => void
   onFilesDropped: (files: File[]) => void
+  onViewData: (result: UploadResult) => void
   dialogOpen: boolean
 }
 
@@ -86,6 +87,7 @@ export const FilesToUpload = ({
   onFilePropertyChange,
   onFileUpload,
   onFilesDropped,
+  onViewData,
   dialogOpen,
 }: Props) => {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
@@ -145,7 +147,7 @@ export const FilesToUpload = ({
               {
                 header: "File",
                 align: "flex-start",
-                ...(files.length > 0 && { width: "350px" }),
+                ...(files.length > 0 && { width: "400px" }),
                 render: ({ data }) => {
                   const file = (
                     <FileTextBox align="center" gap="1rem">
@@ -170,9 +172,23 @@ export const FilesToUpload = ({
                         {data.fileObject.name.length <= 20 && file}
                         <Box gap="1rem" align="center">
                           <FileStatus file={data} />
-                          {!data.isUploading && data.uploadResult && (
-                            <UploadResultDialog file={data} />
-                          )}
+                          {!data.isUploading &&
+                            data.uploadResult !== undefined && (
+                              <React.Fragment>
+                                <UploadResultDialog file={data} />
+                                <Button
+                                  skin="secondary"
+                                  prefixIcon={<Grid size="18px" />}
+                                  onClick={() =>
+                                    onViewData(
+                                      data.uploadResult as UploadResult,
+                                    )
+                                  }
+                                >
+                                  Result
+                                </Button>
+                              </React.Fragment>
+                            )}
                         </Box>
                         {(data.uploadResult &&
                           data.uploadResult.rowsRejected > 0) ||
