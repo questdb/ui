@@ -2,38 +2,15 @@ import React, { useContext } from "react"
 import { Table } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { ImportContext } from "../import-file"
-import { PaneContent, PaneWrapper } from "../../../components"
+import { PaneContent, PaneWrapper, Input } from "../../../components"
 import { Panel } from "../../../components/Panel"
 import { ColumnType, RequestColumn, SchemaRequest } from "./types"
 import styled from "styled-components"
 import { Nav, NavGroup, Subheader } from "../panel"
-import { Search2 } from "@styled-icons/remix-line"
-import { Input } from "../../../components"
-import { StyledIconBase } from "@styled-icons/styled-icon"
+import { SearchInput, PartitionMenu, DelimiterMenu } from "./actions"
 
 type Props = { data: SchemaRequest }
 type Column = RequestColumn
-
-const StyledSearchNav = styled(Nav)`
-  padding-block: 0;
-
-  ${StyledIconBase} {
-    margin-right: -3rem;
-  }
-`
-
-const StyledSearchInput = styled(Input)`
-  background-color: transparent;
-
-  padding-left: 3rem;
-`
-const SearchInput = (props: any) => {
-  return (
-    <StyledSearchNav>
-      <Search2 size="18px" /> <StyledSearchInput {...props} />
-    </StyledSearchNav>
-  )
-}
 
 export const SchemaEditor = ({ data }: Props) => {
   const { state, dispatch } = useContext(ImportContext)
@@ -43,8 +20,8 @@ export const SchemaEditor = ({ data }: Props) => {
         <NavGroup>
           {/** NOTE: hypothetically this is the control for flow as well */}
           <SearchInput />
-          <Nav>Delimiter</Nav>
-          <Nav>Partition by hour</Nav>
+          <DelimiterMenu />
+          <PartitionMenu />
         </NavGroup>
         <NavGroup>
           <Nav>X</Nav>

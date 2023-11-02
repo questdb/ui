@@ -2,6 +2,8 @@ import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu";
 import styled from "styled-components";
 
 export const DropdownMenu = {
+  ...RadixDropdownMenu,
+
   Root: RadixDropdownMenu.Root,
 
   Trigger: styled(RadixDropdownMenu.Trigger)`
