@@ -25,8 +25,9 @@ import {
   ConsoleConfigShape,
   ConsoleAction,
   ConsoleAT,
-  Panel,
-} from "../../types"
+  Sidebar,
+  BottomPanel,
+} from "./types"
 
 const bootstrap = (): ConsoleAction => ({
   type: ConsoleAT.BOOTSTRAP,
@@ -42,9 +43,14 @@ const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
   type: ConsoleAT.SET_CONFIG,
 })
 
-const setActiveSidebar = (panel: Panel): ConsoleAction => ({
+const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_SIDEBAR,
+})
+
+const setActiveBottomPanel = (panel: BottomPanel): ConsoleAction => ({
+  payload: panel,
+  type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL,
 })
 
 const toggleSideMenu = (): ConsoleAction => ({
@@ -57,4 +63,5 @@ export default {
   setConfig,
   toggleSideMenu,
   setActiveSidebar,
+  setActiveBottomPanel,
 }

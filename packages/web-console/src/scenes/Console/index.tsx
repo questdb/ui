@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react"
+import { useDispatch } from "react-redux"
 import styled from "styled-components"
 import { Splitter, useScreenSize, PopperHover } from "../../components"
 import Editor from "../Editor"
@@ -10,7 +11,7 @@ import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector } from "react-redux"
-import { selectors } from "../../store"
+import { actions, selectors } from "../../store"
 import { Tooltip } from "../../components/Tooltip"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
@@ -19,6 +20,7 @@ import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts/index"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
+import { BottomPanel } from "../../store/Console/types"
 
 const Root = styled.div`
   display: flex;
@@ -62,15 +64,14 @@ const viewModes: {
   },
 ]
 
-type BottomPanel = "result" | "zeroState" | "import"
-
 const Console = () => {
+  const dispatch = useDispatch()
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
+  const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
-  const [bottomPanel, setBottomPanel] = useState<BottomPanel>("zeroState")
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
   const importRef = React.useRef<HTMLDivElement>(null)
@@ -104,17 +105,15 @@ const Console = () => {
 
   useEffect(() => {
     if (resultRef.current && result) {
-      setBottomPanel("result")
+      dispatch(actions.console.setActiveBottomPanel("result"))
     } else if (zeroStateRef.current) {
-      setBottomPanel("zeroState")
+      dispatch(actions.console.setActiveBottomPanel("zeroState"))
     }
   }, [result])
 
   useEffect(() => {
-    if (bottomPanel) {
-      showPanel(bottomPanel)
-    }
-  }, [bottomPanel])
+    showPanel(activeBottomPanel)
+  }, [activeBottomPanel])
 
   return (
     <Root>
@@ -169,11 +168,12 @@ const Console = () => {
                     <Navigation
                       direction="left"
                       onClick={() => {
-                        setBottomPanel("result")
+                        dispatch(actions.console.setActiveBottomPanel("result"))
                         setResultViewMode(mode)
                       }}
                       selected={
-                        bottomPanel === "result" && resultViewMode === mode
+                        activeBottomPanel === "result" &&
+                        resultViewMode === mode
                       }
                     >
                       {icon}
@@ -187,8 +187,10 @@ const Console = () => {
               placement="right"
               trigger={
                 <PrimaryToggleButton
-                  onClick={() => setBottomPanel("import")}
-                  selected={bottomPanel === "import"}
+                  onClick={() => {
+                    dispatch(actions.console.setActiveBottomPanel("import"))
+                  }}
+                  selected={activeBottomPanel === "import"}
                 >
                   <Upload2 size={BUTTON_ICON_SIZE} />
                 </PrimaryToggleButton>

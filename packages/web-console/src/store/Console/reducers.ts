@@ -32,6 +32,7 @@ import {
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
   activeSidebar: undefined,
+  activeBottomPanel: "zeroState",
 }
 
 export const defaultConfig: ConsoleConfigShape = {
@@ -66,6 +67,13 @@ const _console = (
       return {
         ...state,
         activeSidebar: action.payload,
+      }
+    }
+
+    case ConsoleAT.SET_ACTIVE_BOTTOM_PANEL: {
+      return {
+        ...state,
+        activeBottomPanel: action.payload,
       }
     }
 

@@ -36,9 +36,7 @@ export const CreateTableDialog = () => {
   }
 
   useEffect(() => {
-    if (activeSidebar === "news") {
-      setAddTableDialogOpen(undefined)
-    }
+    setAddTableDialogOpen(activeSidebar === "create" ? "add" : undefined)
   }, [activeSidebar])
 
   useEffect(() => {
@@ -67,8 +65,10 @@ export const CreateTableDialog = () => {
             <PrimaryToggleButton
               selected={addTableDialogOpen !== undefined}
               onClick={() =>
-                setAddTableDialogOpen(
-                  addTableDialogOpen === undefined ? "add" : undefined,
+                dispatch(
+                  actions.console.setActiveSidebar(
+                    addTableDialogOpen ? undefined : "create",
+                  ),
                 )
               }
             >
