@@ -49,6 +49,7 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   overflow: auto;
   max-height: 35rem;
   ${({ theme }) => `border-top: 2px ${theme.color.backgroundDarker} solid;`}
+  background: ${({ theme }) => theme.color.backgroundLighter};
 `
 
 const Menu = styled(PaneMenu)`
