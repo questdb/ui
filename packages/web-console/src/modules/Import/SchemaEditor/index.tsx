@@ -10,19 +10,21 @@ import styled from "styled-components"
 import { Nav, NavGroup, Subheader } from "../panel"
 import { TableNameMenu, PartitionMenu, DelimiterMenu } from "./actions"
 
-const BadgeContainer = styled(Box)`
-  flex: 1;
-`
-
 const DetailBadge = styled(Badge)`
   gap: 1rem;
   justify-content: space-between;
   small {
     opacity: 0.6;
+
+    max-width: 20ch;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+`
+
+const PrecisionBadge = styled(DetailBadge)`
+  width: 100%;
 `
 
 type Props = { data: SchemaRequest }
@@ -35,7 +37,7 @@ export const SchemaEditor = ({ data }: Props) => {
       <Subheader>
         <NavGroup>
           {/** NOTE: hypothetically this is the control for flow as well */}
-          <TableNameMenu />
+          <TableNameMenu initData={{ tableName: state.fileChunk?.name ?? "" }} />
           <DelimiterMenu />
           <PartitionMenu />
         </NavGroup>
@@ -54,7 +56,7 @@ export const SchemaEditor = ({ data }: Props) => {
               ),
             },
             {
-              header: "Index",
+              // header: "Index",
               render: ({ data: { file_column_index } }) => (
                 <div>{file_column_index}</div>
               ),
@@ -85,14 +87,14 @@ export const SchemaEditor = ({ data }: Props) => {
               render: ({ data: { column_type, precision, formats } }) =>
                 column_type === "DATE" || column_type === "TIMESTAMP"
                   ? formats!.length > 0 && (
-                      <DetailBadge type={BadgeType.INFO}>
+                      <PrecisionBadge type={BadgeType.INFO}>
                         <small>{formats![0].pattern}</small>
                         {formats!.length > 1 && (
                           <small>+ {formats!.length - 1}</small>
                         )}
                         {/* @TODO chevron down */}
                         <span>v</span>
-                      </DetailBadge>
+                      </PrecisionBadge>
                     )
                   : column_type === "GEOHASH" && (
                       <DetailBadge type={BadgeType.INFO}>

@@ -32,7 +32,7 @@ export const TimestampFormatList = ({}: Props) => {
   }
 
   const onAdd = () => {
-    console.log('onAdd', data)
+    console.log("onAdd", data)
     setData({
       ...data,
       [uuid()]: { pattern: "" },
@@ -50,7 +50,9 @@ export const TimestampFormatList = ({}: Props) => {
           onSave={onChipEdit}
         />
       ))}
-      <button onClick={onAdd}>+</button>
+      <button type="button" onClick={onAdd}>
+        +
+      </button>
     </Root>
   )
 }
