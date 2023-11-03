@@ -1,5 +1,5 @@
 import React, { useContext } from "react"
-import { Table, Badge, Box } from "@questdb/react-components"
+import { Table, Badge, Box, DropdownMenu } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { BadgeType } from "../../../scenes/Import/ImportCSVFiles/types"
 import { ImportContext } from "../import-file"
@@ -28,9 +28,11 @@ const DetailBadge = styled(Badge)`
   }
 `
 
-const PrecisionBadge = styled(DetailBadge)`
+const FormatMenuTrigger = styled.div`
   width: 100%;
 `
+
+const PrecisionBadge = styled(DetailBadge)``
 
 type Props = { data: SchemaRequest }
 type Column = RequestColumn
@@ -92,26 +94,35 @@ export const SchemaEditor = ({ data }: Props) => {
               render: ({ data: { column_type, precision, formats } }) =>
                 column_type === "DATE" || column_type === "TIMESTAMP"
                   ? formats!.length > 0 && (
-                      <PopperToggle
-                        trigger={
-                          <PrecisionBadge type={BadgeType.INFO}>
-                            <small>{formats![0].pattern}</small>
-                            {formats!.length > 1 && (
-                              <small>+ {formats!.length - 1}</small>
-                            )}
-                            {/* @TODO chevron down */}
-                            <span>v</span>
-                          </PrecisionBadge>
-                        }
-                      >
-                        <div>test</div>
-                      </PopperToggle>
+                      <DropdownMenu.Root modal={false}>
+                        <DropdownMenu.Trigger asChild>
+                          <FormatMenuTrigger>
+                            <DetailBadge type={BadgeType.INFO}>
+                              <small>{formats![0].pattern}</small>
+                              {formats!.length > 1 && (
+                                <small>+ {formats!.length - 1}</small>
+                              )}
+                              {/* @TODO chevron down */}
+                              <span>v</span>
+                            </DetailBadge>
+                          </FormatMenuTrigger>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content align="end">
+                            {formats!.map(({ pattern }) => (
+                              <DropdownMenu.Item key={pattern}>
+                                {pattern}
+                              </DropdownMenu.Item>
+                            ))}
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
                     )
                   : column_type === "GEOHASH" && (
-                      <DetailBadge type={BadgeType.INFO}>
+                      <PrecisionBadge type={BadgeType.INFO}>
                         <small>Precision</small>
                         {precision}
-                      </DetailBadge>
+                      </PrecisionBadge>
                     ),
             },
           ]}
