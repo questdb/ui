@@ -115,7 +115,7 @@ export const TableNameMenu = ({}: Props) => {
       <TableNameInput
         onFocus={() => toggleFocused(true)}
         onBlur={(e: any) => {
-          if (e.relatedTarget.className === "result") return
+          if ((e.relatedTarget?.className ?? "") === "result") return
           toggleFocused(false)
         }}
         {...inputProps}
@@ -136,7 +136,6 @@ export const TableNameMenu = ({}: Props) => {
                 className="result"
                 tabIndex={-1}
                 onClick={(e) => {
-                  console.log(e)
                   setValue("table_name", name)
                   toggleFocused(false)
                 }}

@@ -3,7 +3,12 @@ import { Table, Badge, Box } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { BadgeType } from "../../../scenes/Import/ImportCSVFiles/types"
 import { ImportContext } from "../import-file"
-import { PaneContent, PaneWrapper, Input } from "../../../components"
+import {
+  PaneContent,
+  PaneWrapper,
+  Input,
+  PopperToggle,
+} from "../../../components"
 import { Panel } from "../../../components/Panel"
 import { ColumnType, RequestColumn, SchemaRequest } from "./types"
 import styled from "styled-components"
@@ -37,7 +42,7 @@ export const SchemaEditor = ({ data }: Props) => {
       <Subheader>
         <NavGroup>
           {/** NOTE: hypothetically this is the control for flow as well */}
-          <TableNameMenu/>
+          <TableNameMenu />
           <DelimiterMenu />
           <PartitionMenu />
         </NavGroup>
@@ -87,14 +92,20 @@ export const SchemaEditor = ({ data }: Props) => {
               render: ({ data: { column_type, precision, formats } }) =>
                 column_type === "DATE" || column_type === "TIMESTAMP"
                   ? formats!.length > 0 && (
-                      <PrecisionBadge type={BadgeType.INFO}>
-                        <small>{formats![0].pattern}</small>
-                        {formats!.length > 1 && (
-                          <small>+ {formats!.length - 1}</small>
-                        )}
-                        {/* @TODO chevron down */}
-                        <span>v</span>
-                      </PrecisionBadge>
+                      <PopperToggle
+                        trigger={
+                          <PrecisionBadge type={BadgeType.INFO}>
+                            <small>{formats![0].pattern}</small>
+                            {formats!.length > 1 && (
+                              <small>+ {formats!.length - 1}</small>
+                            )}
+                            {/* @TODO chevron down */}
+                            <span>v</span>
+                          </PrecisionBadge>
+                        }
+                      >
+                        <div>test</div>
+                      </PopperToggle>
                     )
                   : column_type === "GEOHASH" && (
                       <DetailBadge type={BadgeType.INFO}>

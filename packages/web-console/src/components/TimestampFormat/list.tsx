@@ -32,7 +32,6 @@ export const TimestampFormatList = ({}: Props) => {
   }
 
   const onAdd = () => {
-    console.log("onAdd", data)
     setData({
       ...data,
       [uuid()]: { pattern: "" },
