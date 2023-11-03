@@ -14,6 +14,11 @@ export const MOCK__getSchemaRequest = (): SchemaRequest => {
             locale: null,
             utf8: false,
           },
+          {
+            pattern: "abcd",
+            locale: null,
+            utf8: false,
+          },
         ],
       },
       {

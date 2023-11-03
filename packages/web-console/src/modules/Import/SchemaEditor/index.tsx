@@ -1,6 +1,7 @@
 import React, { useContext } from "react"
-import { Table } from "@questdb/react-components"
+import { Table, Badge, Box } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
+import { BadgeType } from "../../../scenes/Import/ImportCSVFiles/types"
 import { ImportContext } from "../import-file"
 import { PaneContent, PaneWrapper, Input } from "../../../components"
 import { Panel } from "../../../components/Panel"
@@ -8,6 +9,21 @@ import { ColumnType, RequestColumn, SchemaRequest } from "./types"
 import styled from "styled-components"
 import { Nav, NavGroup, Subheader } from "../panel"
 import { TableNameMenu, PartitionMenu, DelimiterMenu } from "./actions"
+
+const BadgeContainer = styled(Box)`
+  flex: 1;
+`
+
+const DetailBadge = styled(Badge)`
+  gap: 1rem;
+  justify-content: space-between;
+  small {
+    opacity: 0.6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+`
 
 type Props = { data: SchemaRequest }
 type Column = RequestColumn
@@ -66,16 +82,24 @@ export const SchemaEditor = ({ data }: Props) => {
               ),
             },
             {
-              render: ({ data: { column_type, precision, formats } }) => (
-                <>
-                  {(column_type === "DATE" || column_type === "TIMESTAMP") && (
-                    <span>
-                      {formats!.map(({ pattern }) => pattern).join(",")}
-                    </span>
-                  )}
-                  {column_type === "GEOHASH" && <span>{precision}</span>}
-                </>
-              ),
+              render: ({ data: { column_type, precision, formats } }) =>
+                column_type === "DATE" || column_type === "TIMESTAMP"
+                  ? formats!.length > 0 && (
+                      <DetailBadge type={BadgeType.INFO}>
+                        <small>{formats![0].pattern}</small>
+                        {formats!.length > 1 && (
+                          <small>+ {formats!.length - 1}</small>
+                        )}
+                        {/* @TODO chevron down */}
+                        <span>v</span>
+                      </DetailBadge>
+                    )
+                  : column_type === "GEOHASH" && (
+                      <DetailBadge type={BadgeType.INFO}>
+                        <small>Precision</small>
+                        {precision}
+                      </DetailBadge>
+                    ),
             },
           ]}
           rows={data.columns}
