@@ -7,6 +7,7 @@ import { ImportContext } from "./import-file"
 import { GlobalTimestampsPanel } from "./timestamps"
 import { MOCK__getSchemaRequest } from "./api"
 import { Form } from "../../components/Form"
+import { PartitionBy } from "./SchemaEditor/types"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -20,6 +21,7 @@ const Content = styled(PaneContent)`
 
 type FormSchema = {
   table_name: string
+  partitionBy: keyof typeof PartitionBy
 }
 
 export const Settings = () => {
@@ -30,10 +32,11 @@ export const Settings = () => {
     <Form<FormSchema>
       name="import_schema"
       onSubmit={function (data: any, event?: any) {
-        throw new Error("Function not implemented.")
+        alert("submit")
       }}
       defaultValues={{
         table_name: state.fileChunk?.name ?? "",
+        partitionBy: "NONE",
       }}
     >
       <Wrapper>

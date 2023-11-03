@@ -18,8 +18,9 @@ import Fuse, { RangeTuple } from "fuse.js"
 import { useFormContext } from "react-hook-form"
 import { ImportContext } from "../../import-file"
 
-const StyledSearchNav = styled(Nav)`
-  padding-block: 0;
+const StyledSearchNav = styled(Nav).attrs({
+  as: "div",
+})`
   position: relative;
 
   ${StyledIconBase} {

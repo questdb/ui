@@ -5,7 +5,9 @@ type SubheaderProps = {
   children: React.ReactNode
 }
 
-export const Subheader = styled.nav<SubheaderProps>`
+export const Subheader = styled.nav.attrs({
+  type: "button",
+})`
   position: relative;
   height: 4.5rem;
   padding: 0.5rem 0.5rem;
@@ -24,20 +26,25 @@ export const NavGroup = styled.section`
   height: 100%;
 `
 
-export const Nav = styled.div`
-  all: unset;  
+export const Nav = styled.button`
+  all: unset;
   background: ${({ theme }) => theme.color.transparent};
   color: ${({ theme }) => theme.color.foreground};
-  
+
   display: flex;
   align-items: center;
-  gap: .75rem;
+  gap: 0.75rem;
 
-  padding: .25rem .75rem;
+  padding: 0.25rem 0.75rem;
 
   border-bottom: 1px solid ${({ theme }) => theme.color.transparent};
 
   &:hover {
-    border-color: ${({ theme }) => theme.color.selection}
+    border-color: ${({ theme }) => theme.color.selection};
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    pointer-events: none;
   }
 `
