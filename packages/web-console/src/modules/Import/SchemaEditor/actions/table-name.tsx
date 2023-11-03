@@ -4,6 +4,7 @@ import React, {
   useRef,
   useState,
   useCallback,
+  useContext,
 } from "react"
 import { Nav } from "../../panel"
 import styled from "styled-components"
@@ -15,6 +16,7 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../../store"
 import Fuse, { RangeTuple } from "fuse.js"
 import { useFormContext } from "react-hook-form"
+import { ImportContext } from "../../import-file"
 
 const StyledSearchNav = styled(Nav)`
   padding-block: 0;
@@ -74,6 +76,8 @@ const getHighlightedText = (
 type Props = {}
 
 export const TableNameMenu = ({}: Props) => {
+  const { dispatch } = useContext(ImportContext)
+
   const tables = useSelector(selectors.query.getTables)
   const fuse = new Fuse(tables, {
     keys: ["name"],
@@ -94,7 +98,6 @@ export const TableNameMenu = ({}: Props) => {
   } = useFormContext()
 
   useEffect(() => {
-    console.log(tableName)
     if (tableName.length > 0) {
       const fuseResults = fuse
         .search(tableName)
@@ -106,6 +109,14 @@ export const TableNameMenu = ({}: Props) => {
     } else {
       setResults(tables.map(({ name }) => ({ name })))
     }
+  }, [tableName])
+
+  useEffect(() => {
+    dispatch({
+      flow: tables.some(({ name }) => name === tableName)
+        ? "existing"
+        : "new_table",
+    })
   }, [tableName])
 
   const shouldShowResults = isFocused && results.length > 0
