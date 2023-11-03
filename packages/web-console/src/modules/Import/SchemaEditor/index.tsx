@@ -37,7 +37,7 @@ export const SchemaEditor = ({ data }: Props) => {
       <Subheader>
         <NavGroup>
           {/** NOTE: hypothetically this is the control for flow as well */}
-          <TableNameMenu initData={{ tableName: state.fileChunk?.name ?? "" }} />
+          <TableNameMenu/>
           <DelimiterMenu />
           <PartitionMenu />
         </NavGroup>

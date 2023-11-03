@@ -32,6 +32,9 @@ export const Settings = () => {
       onSubmit={function (data: any, event?: any) {
         throw new Error("Function not implemented.")
       }}
+      defaultValues={{
+        table_name: state.fileChunk?.name ?? "",
+      }}
     >
       <Wrapper>
         <Panel.Header title="Verify and import stuff go here" />

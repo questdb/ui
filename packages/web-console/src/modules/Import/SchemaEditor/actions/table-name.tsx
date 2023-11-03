@@ -71,23 +71,19 @@ const getHighlightedText = (
   return ret
 }
 
-type Props = {
-  initData: {
-    tableName: string
-  }
-}
+type Props = {}
 
-export const TableNameMenu = ({ initData }: Props) => {
+export const TableNameMenu = ({}: Props) => {
   const tables = useSelector(selectors.query.getTables)
   const fuse = new Fuse(tables, {
     keys: ["name"],
     includeMatches: true,
   })
 
-  const { watch, register } = useFormContext()
-  const tableName = watch("table_name", initData.tableName)
+  const { watch, register, setValue } = useFormContext()
 
   const { onBlur: _onBlur, ...inputProps } = register("table_name")
+  const tableName = watch("table_name")
 
   const [results, setResults] = useState<TableMatch[]>([])
   const [isFocused, toggleFocused] = useState(false)
@@ -98,6 +94,7 @@ export const TableNameMenu = ({ initData }: Props) => {
   } = useFormContext()
 
   useEffect(() => {
+    console.log(tableName)
     if (tableName.length > 0) {
       const fuseResults = fuse
         .search(tableName)
@@ -117,7 +114,10 @@ export const TableNameMenu = ({ initData }: Props) => {
     <StyledSearchNav>
       <TableNameInput
         onFocus={() => toggleFocused(true)}
-        onBlur={() => toggleFocused(false)}
+        onBlur={(e: any) => {
+          if (e.relatedTarget.className === "result") return
+          toggleFocused(false)
+        }}
         {...inputProps}
       />
       {shouldShowResults ? (
@@ -132,7 +132,18 @@ export const TableNameMenu = ({ initData }: Props) => {
         >
           <ul>
             {results.map(({ name, matches }) => (
-              <li>{getHighlightedText(name, matches)}</li>
+              <li
+                className="result"
+                tabIndex={-1}
+                onClick={(e) => {
+                  console.log(e)
+                  setValue("table_name", name)
+                  toggleFocused(false)
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                {getHighlightedText(name, matches)}
+              </li>
             ))}
           </ul>
         </div>
