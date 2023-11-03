@@ -76,9 +76,18 @@ export const SchemaEditor = ({ data }: Props) => {
             },
             {
               header: "Destination",
-              render: ({ data: { table_column_name } }) => (
-                <input type="text" value={table_column_name} />
-              ),
+              render: ({ data: { table_column_name } }) =>
+                state.flow === "new_table" ? (
+                  <input type="text" value={table_column_name} />
+                ) : (
+                  <select name="" id="" defaultValue={table_column_name}>
+                    {data.columns.map(({ table_column_name }) => (
+                      <option value={table_column_name}>
+                        {table_column_name}
+                      </option>
+                    ))}
+                  </select>
+                ),
             },
             {
               header: "Datatype",
