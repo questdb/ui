@@ -1,6 +1,7 @@
 import React from "react"
 import { DropdownMenu } from "@questdb/react-components"
 import { Nav } from "../../../../modules/Import/panel"
+import { PartitionBy } from "../types"
 
 export const PartitionMenu = () => {
   return (
@@ -10,8 +11,9 @@ export const PartitionMenu = () => {
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content align="start">
-          <span>test</span>
-          <DropdownMenu.Item>hi</DropdownMenu.Item>
+          {Object.entries(PartitionBy).map(([key, label]) => 
+            <DropdownMenu.Item key={key} textValue={key}>{label}</DropdownMenu.Item>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

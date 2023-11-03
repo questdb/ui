@@ -25,6 +25,14 @@ export enum ColumnType {
   UUID = "UUID",
 }
 
+export enum PartitionBy {
+  NONE = "None",
+  HOUR = "Hour",
+  DAY = "Day",
+  MONTH = "Month",
+  YEAR = "Year",
+}
+
 export type RequestColumn = {
   file_column_name: string
   file_column_index: number
