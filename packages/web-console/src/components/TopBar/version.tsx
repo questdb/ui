@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react"
-import styled from "styled-components"
+import React, { useContext, useEffect, useState } from "react"
+import styled, { css } from "styled-components"
 import { QuestContext } from "../../providers"
-import { useContext } from "react"
-import { Badge, Box } from "@questdb/react-components"
+import { Box } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
-import { Text } from "../../components"
+import { Text } from "../Text"
 import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
 
 enum Environment {
@@ -12,6 +11,7 @@ enum Environment {
   PROD = "prod",
   TEST = "test",
   STAGING = "staging",
+  CLOUD = "cloud",
 }
 
 type ServerDetails = {
@@ -25,21 +25,50 @@ const Root = styled(Box).attrs({ align: "center" })`
   margin-left: 0.5rem;
 `
 
-const Details = styled(Box).attrs({ align: "center" })`
+const Tag = styled(Box).attrs({ align: "center" })`
   height: 2.8rem;
   border-radius: 0.8rem;
   padding: 0 1rem;
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: ${({ theme }) => theme.fontSize.xs};
+`
+
+const Details = styled(Tag)`
   color: ${({ theme }) => theme.color.foreground};
   background: #2d303e;
+  font-size: ${({ theme }) => theme.fontSize.lg};
+  font-weight: 600;
+`
+
+const Badge = styled(Tag)<{ environment: Environment }>`
+  color: ${({ theme }) => theme.color.foreground};
+
+  ${({ environment, theme }) =>
+    environment === Environment.PROD &&
+    `
+    background: #c7072d;
+  `}
+
+  ${({ environment, theme }) =>
+    [Environment.DEV, Environment.TEST, Environment.STAGING].includes(
+      environment,
+    ) &&
+    `
+    background: #9c5507;
+  `}
+
+  ${({ environment, theme }) =>
+    environment === Environment.CLOUD &&
+    `
+    background: #2d303e;
+  `}
 `
 
 const envStatusMap = {
-  [Environment.PROD]: BadgeType.SUCCESS,
+  [Environment.PROD]: BadgeType.ERROR,
   [Environment.DEV]: BadgeType.WARNING,
   [Environment.TEST]: BadgeType.WARNING,
   [Environment.STAGING]: BadgeType.WARNING,
+  [Environment.CLOUD]: BadgeType.INFO,
 }
 
 export const Version = () => {
@@ -62,7 +91,7 @@ export const Version = () => {
   }
 
   useEffect(() => {
-    fetchServerDetails()
+    void fetchServerDetails()
   }, [])
 
   return (
@@ -71,7 +100,7 @@ export const Version = () => {
       {serverDetails && (
         <Box gap="0.5rem">
           <Details>{serverDetails.domain}</Details>
-          <Badge type={envStatusMap[serverDetails.environment]}>
+          <Badge environment={serverDetails.environment}>
             {serverDetails.environment}
           </Badge>
         </Box>
