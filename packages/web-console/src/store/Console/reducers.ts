@@ -31,6 +31,7 @@ import {
 
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
+  activeTopPanel: "tables",
   activeSidebar: undefined,
   activeBottomPanel: "zeroState",
 }
@@ -60,6 +61,13 @@ const _console = (
       return {
         ...state,
         sideMenuOpened: !state.sideMenuOpened,
+      }
+    }
+
+    case ConsoleAT.SET_ACTIVE_TOP_PANEL: {
+      return {
+        ...state,
+        activeTopPanel: action.payload,
       }
     }
 

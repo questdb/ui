@@ -12,12 +12,12 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
-import { Tooltip } from "../../components/Tooltip"
+import { Tooltip } from "../../components"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
 import { Database2, Grid, PieChart, Upload2 } from "@styled-icons/remix-line"
 import { ResultViewMode } from "./types"
-import { BUTTON_ICON_SIZE } from "../../consts/index"
+import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
@@ -130,12 +130,17 @@ const Console = () => {
               trigger={
                 <Navigation
                   direction="left"
-                  onClick={() =>
+                  onClick={() => {
+                    dispatch(
+                      actions.console.setActiveTopPanel(
+                        resultsSplitterBasis === 0 ? "tables" : undefined,
+                      ),
+                    )
                     updateSettings(
                       StoreKey.RESULTS_SPLITTER_BASIS,
                       resultsSplitterBasis === 0 ? 300 : 0,
                     )
-                  }
+                  }}
                   selected={resultsSplitterBasis !== 0}
                 >
                   <Database2 size={BUTTON_ICON_SIZE} />
