@@ -30,21 +30,21 @@ const Badge = styled(Tag)<{ instance_rgb: ServerDetails["instance_rgb"] }>`
   background: #bbbbbb;
 
   ${({ theme, instance_rgb }) =>
-    instance_rgb === "R" &&
+    instance_rgb === "r" &&
     `
     color: ${theme.color.foreground};
     background: #c7072d;
   `}
 
   ${({ theme, instance_rgb }) =>
-    instance_rgb === "G" &&
+    instance_rgb === "g" &&
     `
     color: ${theme.color.foreground};
     background: #00aa3b;
   `}
 
   ${({ theme, instance_rgb }) =>
-    instance_rgb === "B" &&
+    instance_rgb === "b" &&
     `
     color: ${theme.color.foreground};
     background: #007aff;
@@ -66,7 +66,7 @@ export const Version = () => {
       if (response.type === QuestDB.Type.DQL && response.count === 1) {
         setServerDetails({
           instance_name: response.dataset[0][0] as string,
-          instance_rgb: response.dataset[0][1] as string,
+          instance_rgb: (response.dataset[0][1] as string).toLowerCase(),
         })
       }
     } catch (e) {
