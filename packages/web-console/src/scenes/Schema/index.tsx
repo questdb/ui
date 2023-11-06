@@ -45,7 +45,7 @@ import {
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { color, ErrorResult } from "../../utils"
+import { color, ErrorResult, isServerError } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
@@ -129,7 +129,9 @@ const Schema = ({
         }
       },
       (error) => {
-        setLoadingError(error)
+        if (isServerError(error)) {
+          setLoadingError(error)
+        }
       },
       () => {
         setLoading(false)
@@ -198,10 +200,10 @@ const Schema = ({
           tables?.map((table) => (
             <Table
               designatedTimestamp={table.designatedTimestamp}
-              expanded={table.name === opened}
+              expanded={table.table_name === opened}
               isScrolling={isScrolling}
-              key={table.name}
-              name={table.name}
+              key={table.table_name}
+              table_name={table.table_name}
               onChange={handleChange}
               partitionBy={table.partitionBy}
               walEnabled={table.walEnabled}

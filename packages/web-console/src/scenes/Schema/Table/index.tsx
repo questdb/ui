@@ -40,7 +40,7 @@ type Props = QuestDB.Table &
     designatedTimestamp: string
     description?: string
     isScrolling: boolean
-    name: string
+    table_name: string
     partitionBy: string
     expanded?: boolean
     onChange: (name: string) => void
@@ -113,7 +113,7 @@ const Table = ({
   description,
   isScrolling,
   designatedTimestamp,
-  name,
+  table_name,
   partitionBy,
   expanded = false,
   walEnabled,
@@ -124,21 +124,21 @@ const Table = ({
   const tables = useSelector(selectors.query.getTables)
 
   const showColumns = async (name: string) => {
-    const response = await quest.showColumns(name)
+    const response = await quest.showColumns(table_name)
     if (response && response.type === QuestDB.Type.DQL) {
       setColumns(response.data)
     }
   }
 
   useEffect(() => {
-    if (tables && expanded && name) {
-      void showColumns(name)
+    if (tables && expanded && table_name) {
+      void showColumns(table_name)
     }
-  }, [tables, name])
+  }, [tables, table_name])
 
   const tree: TreeNode[] = [
     {
-      name,
+      name: table_name,
       kind: "table",
       initiallyOpen: expanded,
       children: [
@@ -147,8 +147,8 @@ const Table = ({
           initiallyOpen: true,
           wrapper: Columns,
           async onOpen({ setChildren }) {
-            onChange(name)
-            const response = (await quest.showColumns(name)) ?? []
+            onChange(table_name)
+            const response = (await quest.showColumns(table_name)) ?? []
 
             if (response && response.type === QuestDB.Type.DQL) {
               setColumns(response.data)
@@ -178,14 +178,14 @@ const Table = ({
 
       render({ toggleOpen, isLoading }) {
         return (
-          <ContextMenuTrigger id={name}>
+          <ContextMenuTrigger id={table_name}>
             <Title
               description={description}
               kind="table"
-              name={name}
+              name={table_name}
               onClick={() => {
                 toggleOpen()
-                onChange(name)
+                onChange(table_name)
               }}
               partitionBy={partitionBy}
               walEnabled={walEnabled}
@@ -202,7 +202,7 @@ const Table = ({
     <Wrapper _height={columns ? columns.length * 30 : 0}>
       {!isScrolling && (
         <ContextualMenu
-          name={name}
+          name={table_name}
           partitionBy={partitionBy}
           walEnabled={walEnabled}
         />

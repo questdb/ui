@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 export * from "./copyToClipboard"
+export * from "./isServerError"
 export * from "./fetch"
 export * from "./fromFetch"
 export * from "./questdb"
@@ -31,3 +32,5 @@ export * from "./styled"
 export * from "./formatSql"
 export * from "./platform"
 export * from "./pick"
+export * from "./fetchUserLocale"
+export * from "./getLocaleFromLanguage"

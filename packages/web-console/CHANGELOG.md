@@ -16,6 +16,19 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.2.8 - 2023.10.16
+
+### Changed
+
+- Update Webpack config, add hot module reloading, enable webpack tree-shaking,
+  reduce build size [#205](https://github.com/questdb/ui/pull/205)
+
+### Fixed
+
+- table list disappears after erroneous SQL execution
+  [#204](https://github.com/questdb/ui/pull/204)
+- render crash when grid is empty [#198](https://github.com/questdb/ui/pull/198)
+
 ## 0.2.7 - 2023.09.08
 
 ### Changed

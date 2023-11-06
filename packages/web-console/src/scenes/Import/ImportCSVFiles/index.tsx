@@ -88,7 +88,7 @@ export const ImportCSVFiles = ({ onViewData }: Props) => {
         const partitionBy =
           result.status === FileCheckStatus.EXISTS && tables
             ? await (async () => {
-                const table = tables.find((t) => t.name === file.name)
+                const table = tables.find((t) => t.table_name === file.name)
                 return table?.partitionBy ?? "NONE"
               })()
             : "NONE"
@@ -96,7 +96,7 @@ export const ImportCSVFiles = ({ onViewData }: Props) => {
         const timestamp =
           result.status === FileCheckStatus.EXISTS && tables
             ? await (async () => {
-                const table = tables.find((t) => t.name === file.name)
+                const table = tables.find((t) => t.table_name === file.name)
                 return table?.designatedTimestamp ?? ""
               })()
             : ""

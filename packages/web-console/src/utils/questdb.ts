@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+import { isServerError } from "../utils";
 import { BusEvent } from "../consts"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
 
@@ -77,6 +78,7 @@ type RawResult = RawDqlResult | RawDdlResult | RawErrorResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
+  status: number
 }
 
 export type QueryRawResult =
@@ -97,7 +99,7 @@ export type QueryResult<T extends Record<string, any>> =
   | DdlResult
 
 export type Table = {
-  name: string
+  table_name: string
   partitionBy: string
   designatedTimestamp: string
   walEnabled: boolean
@@ -355,39 +357,55 @@ export class Client {
       }
     }
 
-    const errorPayload = {
-      error: `QuestDB is not reachable [${response.status}]`,
-      position: -1,
-      query,
-      type: Type.ERROR,
+    const errorPayload: Record<string, string | number> = {
+      status: response.status,
+      error: response.statusText,
     }
 
-    bus.trigger(BusEvent.MSG_CONNECTION_ERROR, {
-      ...errorPayload,
-      status: response.status,
-    })
+    if (isServerError(response)) {
+      errorPayload.error = `QuestDB is not reachable [${response.status}]`;
+      errorPayload.position = -1;
+      errorPayload.query = query;
+      errorPayload.type = Type.ERROR;
+      bus.trigger(BusEvent.MSG_CONNECTION_ERROR, errorPayload)
+    }
 
     // eslint-disable-next-line prefer-promise-reject-errors
     return await Promise.reject(errorPayload)
   }
 
   async showTables(): Promise<QueryResult<Table>> {
-    const response = await this.query<Table>("tables();")
+    type BackwardsCompatibleTable = Table & {
+      /** @deprecated use `table_name` instead  */
+      name: string
+    }
+
+    const response = await this.query<BackwardsCompatibleTable>("tables();")
 
     if (response.type === Type.DQL) {
       return {
         ...response,
-        data: response.data.slice().sort((a, b) => {
-          if (a.name > b.name) {
-            return 1
-          }
+        data: response.data
+          .slice()
+          .sort((a, b) => {
+            const aName = a.table_name ?? a.name
+            const bName = b.table_name ?? b.name
+            if (aName > bName) {
+              return 1
+            }
 
-          if (a.name < b.name) {
-            return -1
-          }
+            if (aName < bName) {
+              return -1
+            }
 
-          return 0
-        }),
+            return 0
+          })
+
+          // @TODO: remove this once upstream questdb releases version with `table_name`
+          .map((table) => ({
+            ...table,
+            table_name: table.table_name ?? table.name,
+          })),
       }
     }
 
