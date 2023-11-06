@@ -21,7 +21,7 @@ const Tag = styled(Box).attrs({ align: "center" })`
   border-radius: 0.8rem;
   padding: 0 1rem;
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 600;
 `
 
