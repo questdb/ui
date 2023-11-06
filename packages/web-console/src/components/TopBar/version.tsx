@@ -21,27 +21,32 @@ const Tag = styled(Box).attrs({ align: "center" })`
   border-radius: 0.8rem;
   padding: 0 1rem;
   font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: 1.5rem;
+  font-weight: 600;
 `
 
 const Badge = styled(Tag)<{ instance_rgb: ServerDetails["instance_rgb"] }>`
-  color: ${({ theme }) => theme.color.foreground};
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  color: #191a21;
+  background: #bbbbbb;
 
-  ${({ instance_rgb }) =>
+  ${({ theme, instance_rgb }) =>
     instance_rgb === "R" &&
     `
+    color: ${theme.color.foreground};
     background: #c7072d;
   `}
 
-  ${({ instance_rgb }) =>
+  ${({ theme, instance_rgb }) =>
     instance_rgb === "G" &&
     `
+    color: ${theme.color.foreground};
     background: #00aa3b;
   `}
 
-  ${({ instance_rgb }) =>
+  ${({ theme, instance_rgb }) =>
     instance_rgb === "B" &&
     `
+    color: ${theme.color.foreground};
     background: #007aff;
   `}
 `
