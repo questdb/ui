@@ -1,22 +1,13 @@
 import React, { useContext, useEffect, useState } from "react"
-import styled, { css } from "styled-components"
+import styled from "styled-components"
 import { QuestContext } from "../../providers"
 import { Box } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
 import { Text } from "../Text"
-import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
-
-enum Environment {
-  DEV = "dev",
-  PROD = "prod",
-  TEST = "test",
-  STAGING = "staging",
-  CLOUD = "cloud",
-}
 
 type ServerDetails = {
-  domain: string
-  environment: Environment
+  instance_name: string | null
+  instance_rgb: string | null
 }
 
 const Root = styled(Box).attrs({ align: "center" })`
@@ -32,61 +23,49 @@ const Tag = styled(Box).attrs({ align: "center" })`
   font-family: ${({ theme }) => theme.fontMonospace};
 `
 
-const Details = styled(Tag)`
+const Badge = styled(Tag)<{ instance_rgb: ServerDetails["instance_rgb"] }>`
   color: ${({ theme }) => theme.color.foreground};
-  background: #2d303e;
-  font-size: ${({ theme }) => theme.fontSize.lg};
-  font-weight: 600;
-`
+  background: ${({ theme }) => theme.color.backgroundLighter};
 
-const Badge = styled(Tag)<{ environment: Environment }>`
-  color: ${({ theme }) => theme.color.foreground};
-
-  ${({ environment, theme }) =>
-    environment === Environment.PROD &&
+  ${({ instance_rgb }) =>
+    instance_rgb === "R" &&
     `
     background: #c7072d;
   `}
 
-  ${({ environment, theme }) =>
-    [Environment.DEV, Environment.TEST, Environment.STAGING].includes(
-      environment,
-    ) &&
+  ${({ instance_rgb }) =>
+    instance_rgb === "G" &&
     `
-    background: #9c5507;
+    background: #00aa3b;
   `}
 
-  ${({ environment, theme }) =>
-    environment === Environment.CLOUD &&
+  ${({ instance_rgb }) =>
+    instance_rgb === "B" &&
     `
-    background: #2d303e;
+    background: #007aff;
   `}
 `
-
-const envStatusMap = {
-  [Environment.PROD]: BadgeType.ERROR,
-  [Environment.DEV]: BadgeType.WARNING,
-  [Environment.TEST]: BadgeType.WARNING,
-  [Environment.STAGING]: BadgeType.WARNING,
-  [Environment.CLOUD]: BadgeType.INFO,
-}
 
 export const Version = () => {
   const { quest } = useContext(QuestContext)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
 
   const fetchServerDetails = async () => {
-    const response = await quest.queryRaw("select build", {
-      limit: "0,1",
-    })
-    if (response.type === QuestDB.Type.DQL && response.count === 1) {
-      setServerDetails({
-        // TODO: uncomment when the SQL is ready
-        // domain: response.dataset[0][0] as string,
-        // environment: response.dataset[0][1] as string,
-        domain: location.hostname,
-        environment: Environment.PROD,
-      })
+    try {
+      const response = await quest.queryRaw(
+        "SELECT instance_name, instance_rgb",
+        {
+          limit: "0,1",
+        },
+      )
+      if (response.type === QuestDB.Type.DQL && response.count === 1) {
+        setServerDetails({
+          instance_name: response.dataset[0][0] as string,
+          instance_rgb: response.dataset[0][1] as string,
+        })
+      }
+    } catch (e) {
+      return
     }
   }
 
@@ -99,9 +78,8 @@ export const Version = () => {
       <Text color="foreground">Web Console</Text>
       {serverDetails && (
         <Box gap="0.5rem">
-          <Details>{serverDetails.domain}</Details>
-          <Badge environment={serverDetails.environment}>
-            {serverDetails.environment}
+          <Badge instance_rgb={serverDetails.instance_rgb}>
+            {serverDetails.instance_name}
           </Badge>
         </Box>
       )}
