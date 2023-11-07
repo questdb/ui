@@ -24,7 +24,6 @@
 
 import React, {
   useCallback,
-  useContext,
   useState,
   useEffect,
   useRef,
@@ -38,19 +37,19 @@ import {
   PaneMenu,
   PaneWrapper,
   Text,
-  SecondaryButton,
   useScreenSize,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { LocalStorageContext } from "../../providers/LocalStorageProvider"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
-
+import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
   overflow: auto;
   max-height: 35rem;
+  ${({ theme }) => `border-top: 2px ${theme.color.backgroundDarker} solid;`}
+  background: ${({ theme }) => theme.color.backgroundLighter};
 `
 
 const Menu = styled(PaneMenu)`
@@ -69,6 +68,11 @@ const Header = styled(Text)`
   align-items: center;
 `
 
+const LatestNotification = styled.div`
+  margin-left: 1rem;
+  flex: 1;
+`
+
 const TerminalBoxIcon = styled(TerminalBox)`
   margin-right: 1rem;
 `
@@ -80,13 +84,8 @@ const ClearAllNotifications = styled.div`
   margin-top: auto;
 `
 
-const ClearAllNotificationsButton = styled(SecondaryButton)`
-  margin-top: 1rem;
-`
-
 const Notifications = () => {
   const notifications = useSelector(selectors.query.getNotifications)
-  const { isNotificationEnabled } = useContext(LocalStorageContext)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -122,9 +121,7 @@ const Notifications = () => {
     }
   }, [sm])
 
-  if (!isNotificationEnabled) {
-    return <></>
-  }
+  const lastNotification = notifications[notifications.length - 1]
 
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
@@ -133,32 +130,41 @@ const Notifications = () => {
           <TerminalBoxIcon size="18px" />
           Log
         </Header>
-        <SecondaryButton onClick={toggleMinimized}>
+        <LatestNotification data-hook="notifications-collapsed">
+          {isMinimized && lastNotification && (
+            <Notification isMinimized={true} {...lastNotification} />
+          )}
+        </LatestNotification>
+        <Button skin="transparent" onClick={toggleMinimized}>
           {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
-        </SecondaryButton>
+        </Button>
       </Menu>
-      <Content minimized={isMinimized} ref={contentRef}>
-        <TransitionGroup className="notifications">
-          {notifications.map((notification) => (
-            <Notification
-              key={
-                notification.createdAt ? notification.createdAt.getTime() : 0
-              }
-              {...notification}
-            />
-          ))}
-        </TransitionGroup>
-        {!isMinimized && (
-          <ClearAllNotifications>
-            <ClearAllNotificationsButton
-              disabled={notifications.length === 0}
-              onClick={cleanupNotifications}
-            >
-              Clear all
-            </ClearAllNotificationsButton>
-          </ClearAllNotifications>
-        )}
-      </Content>
+      {!isMinimized && (
+        <Content minimized={isMinimized} ref={contentRef}>
+          <TransitionGroup data-hook="notifications-expanded">
+            {notifications.map((notification) => (
+              <Notification
+                isMinimized={false}
+                key={
+                  notification.createdAt ? notification.createdAt.getTime() : 0
+                }
+                {...notification}
+              />
+            ))}
+          </TransitionGroup>
+          {!isMinimized && (
+            <ClearAllNotifications>
+              <Button
+                skin="secondary"
+                disabled={notifications.length === 0}
+                onClick={cleanupNotifications}
+              >
+                Clear all
+              </Button>
+            </ClearAllNotifications>
+          )}
+        </Content>
+      )}
     </Wrapper>
   )
 }

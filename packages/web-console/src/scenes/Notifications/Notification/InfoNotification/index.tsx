@@ -28,9 +28,9 @@ import { NotificationShape } from "types"
 import { Timestamp } from "../Timestamp"
 
 export const InfoNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent } = props
+  const { createdAt, content, sideContent, isMinimized } = props
   return (
-    <Wrapper>
+    <Wrapper isMinimized={isMinimized}>
       <Timestamp createdAt={createdAt} />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>

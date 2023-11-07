@@ -305,7 +305,7 @@ export function quickVis(root, msgBus) {
   function bind() {
     viewport = div.find(".quick-vis-canvas")[0]
     $(window).resize(resize)
-    bus.on(qdb.MSG_ACTIVE_PANEL, resize)
+    bus.on(qdb.MSG_ACTIVE_SIDEBAR, resize)
     echart = echarts.init(viewport, eChartsMacarons)
     bus.on(qdb.MSG_QUERY_DATASET, updatePickers)
     bus.on(qdb.MSG_QUERY_CANCEL, cancelDraw)

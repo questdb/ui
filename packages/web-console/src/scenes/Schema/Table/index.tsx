@@ -22,9 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useEffect, useState, useRef } from "react"
-import { from, combineLatest, of } from "rxjs"
-import { delay, startWith } from "rxjs/operators"
+import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { Loader4 } from "@styled-icons/remix-line"
 import { Tree, collapseTransition, spinAnimation } from "../../../components"
@@ -34,17 +32,18 @@ import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
 import ContextualMenu from "./ContextualMenu"
+import { useSelector } from "react-redux"
+import { selectors } from "../../../store"
 
 type Props = QuestDB.Table &
   Readonly<{
     designatedTimestamp: string
     description?: string
     isScrolling: boolean
-    refresh: number
     table_name: string
     partitionBy: string
     expanded?: boolean
-    onChange?: (name: string) => void
+    onChange: (name: string) => void
   }>
 
 const Wrapper = styled.div`
@@ -113,34 +112,29 @@ const columnRender =
 const Table = ({
   description,
   isScrolling,
-  refresh,
   designatedTimestamp,
   table_name,
   partitionBy,
   expanded = false,
   walEnabled,
-  onChange = () => {},
+  onChange,
 }: Props) => {
-  const currentName = useRef(table_name)
   const [quest] = useState(new QuestDB.Client())
   const [columns, setColumns] = useState<QuestDB.Column[]>()
+  const tables = useSelector(selectors.query.getTables)
 
-  // The following `useEffect` should be removed.
-  // Currently it is loading columns, but that's already covered by `onOpen` in <Tree/> below.
-  // however, it can only be removed once `refresh` is handled elsewhere.
-  useEffect(() => {
-    if (table_name === currentName.current) {
-      return
+  const showColumns = async (name: string) => {
+    const response = await quest.showColumns(table_name)
+    if (response && response.type === QuestDB.Type.DQL) {
+      setColumns(response.data)
     }
-    combineLatest(
-      from(quest.showColumns(table_name)).pipe(startWith(null)),
-      of(true).pipe(delay(1000), startWith(false)),
-    ).subscribe(([response]) => {
-      if (response && response.type === QuestDB.Type.DQL) {
-        setColumns(response.data)
-      }
-    })
-  }, [refresh, quest, table_name])
+  }
+
+  useEffect(() => {
+    if (tables && expanded && table_name) {
+      void showColumns(table_name)
+    }
+  }, [tables, table_name])
 
   const tree: TreeNode[] = [
     {
@@ -188,8 +182,11 @@ const Table = ({
             <Title
               description={description}
               kind="table"
-              name={table_name  }
-              onClick={() => toggleOpen()}
+              name={table_name}
+              onClick={() => {
+                toggleOpen()
+                onChange(table_name)
+              }}
               partitionBy={partitionBy}
               walEnabled={walEnabled}
               suffix={isLoading && <Loader size="18px" />}

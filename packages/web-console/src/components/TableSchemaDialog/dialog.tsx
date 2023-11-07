@@ -4,7 +4,7 @@ import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"
 import { Table as TableIcon, Edit } from "@styled-icons/remix-line"
-import { InfoCircle, Undo } from "@styled-icons/boxicons-regular"
+import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
@@ -14,10 +14,10 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-
-const StyledTableIcon = styled(TableIcon)`
-  color: ${({ theme }) => theme.color.foreground};
-`
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
+import { Panel } from "../../components/Panel"
+import { Actions } from "./actions"
 
 const StyledContentWrapper = styled(Drawer.ContentWrapper)`
   --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
@@ -88,6 +88,8 @@ export const Dialog = ({
   const [defaults, setDefaults] = useState<SchemaFormValues>(formDefaults)
   const [currentValues, setCurrentValues] =
     useState<SchemaFormValues>(formDefaults)
+  const [lastFocusedIndex, setLastFocusedIndex] = useState<number | undefined>()
+  const dispatch = useDispatch()
 
   const resetToDefaults = () => {
     setDefaults({
@@ -155,18 +157,17 @@ export const Dialog = ({
     }
   }, [schema])
 
+  useEffect(() => {
+    if (open) {
+      setLastFocusedIndex(undefined)
+    }
+  }, [open])
+
   const columnCount = defaults.schemaColumns.length
 
   return (
     <Drawer
-      title={
-        <Box gap="0.5rem">
-          <StyledTableIcon size="20px" />
-          <Text color="foreground">
-            {name !== "" ? `Table schema for ${name}` : "Create table"}
-          </Text>
-        </Box>
-      }
+      mode={action === "add" ? "side" : "modal"}
       open={open}
       trigger={
         trigger ?? (
@@ -187,11 +188,15 @@ export const Dialog = ({
         resetToDefaults()
         onOpenChange(undefined)
       }}
-      withCloseButton
-      closeOnOverlayClick={false}
-      closeOnEscape={false}
+      onOpenChange={(isOpen) => {
+        if (isOpen && action === "add") {
+          dispatch(
+            actions.console.setActiveSidebar(isOpen ? "create" : undefined),
+          )
+        }
+      }}
     >
-      <StyledContentWrapper>
+      <StyledContentWrapper mode={action === "add" ? "side" : "modal"}>
         <Form<SchemaFormValues>
           name="table-schema"
           defaultValues={defaults}
@@ -202,6 +207,18 @@ export const Dialog = ({
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}
           validationSchema={validationSchema}
         >
+          <Panel.Header
+            title={name !== "" ? `Table schema for ${name}` : "Create table"}
+            afterTitle={
+              <Actions
+                ctaText={ctaText}
+                action={action}
+                isEditLocked={isEditLocked}
+                lastFocusedIndex={lastFocusedIndex}
+                onAdded={setLastFocusedIndex}
+              />
+            }
+          />
           <Items>
             <Inputs>
               <Drawer.GroupItem direction="column">
@@ -306,28 +323,13 @@ export const Dialog = ({
                 <Text color="foreground">Columns</Text>
               </Drawer.GroupHeader>
 
-              <Columns action={action} isEditLocked={isEditLocked} />
+              <Columns
+                action={action}
+                isEditLocked={isEditLocked}
+                onColumnFocus={setLastFocusedIndex}
+                lastFocusedIndex={lastFocusedIndex}
+              />
             </Inputs>
-
-            <Drawer.Actions>
-              <Form.Cancel<SchemaFormValues>
-                prefixIcon={<Undo size={18} />}
-                variant="secondary"
-                defaultValues={defaults}
-                onClick={() => {
-                  onOpenChange(undefined)
-                }}
-              >
-                Dismiss
-              </Form.Cancel>
-
-              <Form.Submit
-                prefixIcon={<TableIcon size={18} />}
-                variant="success"
-              >
-                {ctaText}
-              </Form.Submit>
-            </Drawer.Actions>
           </Items>
         </Form>
       </StyledContentWrapper>

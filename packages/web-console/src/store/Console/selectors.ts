@@ -21,7 +21,13 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { ConsoleConfigShape, StoreShape } from "types"
+import {
+  ConsoleConfigShape,
+  StoreShape,
+  Sidebar,
+  BottomPanel,
+  TopPanel,
+} from "types"
 
 import { defaultConfig } from "./reducers"
 
@@ -31,7 +37,19 @@ const getConfig: (store: StoreShape) => ConsoleConfigShape = (store) =>
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
   store.console.sideMenuOpened
 
+const getActiveTopPanel: (store: StoreShape) => TopPanel = (store) =>
+  store.console.activeTopPanel
+
+const getActiveSidebar: (store: StoreShape) => Sidebar = (store) =>
+  store.console.activeSidebar
+
+const getActiveBottomPanel: (store: StoreShape) => BottomPanel = (store) =>
+  store.console.activeBottomPanel
+
 export default {
   getConfig,
   getSideMenuOpened,
+  getActiveTopPanel,
+  getActiveSidebar,
+  getActiveBottomPanel,
 }

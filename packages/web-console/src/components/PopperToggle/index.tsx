@@ -43,7 +43,7 @@ type Props = Readonly<{
   placement: Placement
   modifiers: Options["modifiers"]
   onToggle?: (_active: boolean) => void
-  trigger: ReactNode
+  trigger?: ReactNode
 }>
 
 export const PopperToggle = ({

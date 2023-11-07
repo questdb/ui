@@ -37,12 +37,16 @@ type EditorSettings = {
 export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
+  read_notifications!: Table<{ newsId: string }, number>
 
   constructor() {
     super("web-console")
     this.version(1).stores({
       buffers: "++id, label",
       editor_settings: "++id, key",
+    })
+    this.version(2).stores({
+      read_notifications: "++id, newsId",
     })
 
     // add initial buffer on db creation

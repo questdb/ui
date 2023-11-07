@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 import React from "react"
-import docsearch from "docsearch.js"
 import { useCallback, useEffect, useState, useContext } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
@@ -32,42 +31,46 @@ import {
   Chat3,
   Close as _CloseIcon,
   Command,
-  Database2,
   Play,
   Stop,
+  Question,
 } from "@styled-icons/remix-line"
 import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
-import { HelpCircle } from "@styled-icons/boxicons-regular"
 import { Slack } from "@styled-icons/boxicons-logos"
 
 import {
   ErrorButton,
-  Input,
   Link,
   PaneMenu,
-  PopperHover,
   PopperToggle,
+  PrimaryToggleButton,
   SecondaryButton,
   SuccessButton,
+  Text,
   toast,
-  Tooltip,
   TransitionDuration,
   TransparentButton,
   useKeyPress,
   useScreenSize,
 } from "../../../components"
-import { FeedbackDialog } from "@questdb/react-components"
+import { Button, DropdownMenu, FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
-
 import QueryPicker from "../QueryPicker"
 import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { QuestContext } from "../../../providers"
+import { QuestContext, useEditor } from "../../../providers"
+import { DocSearch } from "@docsearch/react"
+import { BUTTON_ICON_SIZE } from "../../../consts/index"
+
+import "@docsearch/css"
 
 const Wrapper = styled(PaneMenu)<{ _display: string }>`
+  width: 100%;
+  background: transparent;
   z-index: 15;
+  padding-right: 0;
 
   .algolia-autocomplete {
     display: ${({ _display }) => _display} !important;
@@ -77,13 +80,6 @@ const Wrapper = styled(PaneMenu)<{ _display: string }>`
 
 const Separator = styled.div`
   flex: 1;
-`
-
-const DocsearchInput = styled(Input)`
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `
 
 const QueryPickerButton = styled(SecondaryButton)<{
@@ -109,10 +105,6 @@ const QueryPickerButton = styled(SecondaryButton)<{
 
 const MenuIcon = styled(_MenuIcon)`
   color: ${color("foreground")};
-`
-
-const ShowSchemaButton = styled(SecondaryButton)`
-  margin-right: 1rem;
 `
 
 const CloseIcon = styled(_CloseIcon)`
@@ -141,52 +133,44 @@ const SideMenuMenuButton = styled(TransparentButton)`
   }
 `
 
-const MenuButton = styled(SecondaryButton)`
-  margin-right: 1rem;
+const MenuItems = styled.div`
+  display: grid;
+  grid-auto-flow: column;
+  align-items: center;
+`
+
+const DropdownMenuItem = styled(DropdownMenu.Item)`
+  color: ${({ theme }) => theme.color.foreground};
 `
 
 const MenuLink: React.FunctionComponent<{
   href: string
-  icon: React.ReactNode
-  tooltipText: string
-}> = ({ href, icon, tooltipText }) => {
-  const Trigger = (
-    <MenuButton>
-      <Link
-        color="foreground"
-        hoverColor="foreground"
-        href={href}
-        rel="noreferrer"
-        target="_blank"
-      >
-        {icon}
-      </Link>
-    </MenuButton>
-  )
-
-  return (
-    <PopperHover delay={350} placement="bottom" trigger={Trigger}>
-      <Tooltip>{tooltipText}</Tooltip>
-    </PopperHover>
-  )
-}
+  text: string
+}> = ({ href, text }) => (
+  <Link
+    color="foreground"
+    hoverColor="foreground"
+    href={href}
+    rel="noreferrer"
+    target="_blank"
+  >
+    {text}
+  </Link>
+)
 
 const Menu = () => {
   const dispatch = useDispatch()
   const { quest } = useContext(QuestContext)
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
-  const [isFeedbackSubmitting, setIsFeedbackSubmitting] =
-    useState<boolean>(false)
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
-  const { resultsSplitterBasis, exampleQueriesVisited, updateSettings } =
-    useLocalStorage()
-
+  const { exampleQueriesVisited, updateSettings } = useLocalStorage()
+  const { inFocus: editorInFocus } = useEditor()
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
   }, [dispatch])
@@ -205,31 +189,10 @@ const Menu = () => {
   const handleSideMenuButtonClick = useCallback(() => {
     dispatch(actions.console.toggleSideMenu())
   }, [dispatch])
-  const handleShowSchemaClick = useCallback(() => {
-    updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, 300)
-  }, [])
 
   useEffect(() => {
     setQueriesPopperActive(false)
   }, [escPress])
-
-  useEffect(() => {
-    docsearch({
-      apiKey: "b2a69b4869a2a85284a82fb57519dcda",
-      indexName: "questdb",
-      inputSelector: "#docsearch-input",
-      handleSelected: (input, event, suggestion, datasetNumber, context) => {
-        if (context.selectionMethod === "click") {
-          input.setVal("")
-          const win = window.open(suggestion.url, "_blank")
-
-          if (win) {
-            win.focus()
-          }
-        }
-      },
-    })
-  }, [])
 
   useEffect(() => {
     if (!sm && opened) {
@@ -239,34 +202,6 @@ const Menu = () => {
 
   return (
     <Wrapper _display={sm ? "none" : "inline"}>
-      {resultsSplitterBasis === 0 && (
-        <PopperHover
-          delay={350}
-          placement="bottom"
-          trigger={
-            <ShowSchemaButton onClick={handleShowSchemaClick}>
-              <Database2 size="18px" />
-            </ShowSchemaButton>
-          }
-        >
-          <Tooltip>Show tables</Tooltip>
-        </PopperHover>
-      )}
-
-      {running.value && (
-        <ErrorButton onClick={handleClick}>
-          <Stop size="18px" />
-          <span>Cancel</span>
-        </ErrorButton>
-      )}
-
-      {!running.value && (
-        <SuccessButton onClick={handleClick} title="Ctrl+Enter">
-          <Play size="18px" />
-          <span>Run</span>
-        </SuccessButton>
-      )}
-
       <Separator />
 
       {savedQueries.length > 0 && (
@@ -286,73 +221,44 @@ const Menu = () => {
 
       <Separator />
 
-      <FeedbackDialog
-        withEmailInput
-        title="Web Console feedback"
-        subtitle="Let us know your thoughts"
-        trigger={({ setOpen }) => (
-          <MenuButton onClick={() => setOpen(true)}>
-            <Chat3 size="18px" />
-            {!sm && <span>Feedback</span>}
-          </MenuButton>
-        )}
-        onSubmit={async ({
-          email,
-          message,
-        }: {
-          email: string
-          message: string
-        }) => {
-          setIsFeedbackSubmitting(true)
-          try {
-            await quest.sendFeedback({
-              email,
-              message,
-              telemetryConfig,
-            })
-            toast.success(
-              "Thank you for your feedback! Our team will review it shortly.",
-            )
-          } catch (err) {
-            toast.error("Something went wrong. Please try again later.")
-            throw err
-          } finally {
-            setIsFeedbackSubmitting(false)
-          }
-        }}
-      />
+      {running.value && (
+        <ErrorButton onClick={handleClick}>
+          <Stop size="18px" />
+          <span>Cancel</span>
+        </ErrorButton>
+      )}
 
-      <MenuLink
-        href="https://slack.questdb.io/"
-        icon={<Slack size="18px" />}
-        tooltipText="Questions? Join our Slack"
-      />
+      {!running.value && (
+        <SuccessButton
+          title="Ctrl+Enter"
+          // disabled={!editorInFocus}
+          onClick={handleClick}
+          // {...(editorInFocus && { onClick: handleClick })}
+        >
+          <Play size="18px" />
+          <span>Run</span>
+        </SuccessButton>
+      )}
 
-      <MenuLink
-        href="https://questdb.io/docs/develop/web-console/"
-        icon={<HelpCircle size="18px" />}
-        tooltipText="Go to Web Console help"
-      />
-
-      <PopperToggle
-        active={shortcutsPopperActive}
-        onToggle={handleShortcutsToggle}
-        trigger={
-          <MenuButton>
-            <Command size="18px" />
-            {!sm && <span>Shortcuts</span>}
-          </MenuButton>
-        }
-        placement="bottom"
-      >
-        <Shortcuts />
-      </PopperToggle>
-
-      <DocsearchInput
-        id="docsearch-input"
-        placeholder="Search documentation"
-        title="Search..."
-      />
+      <MenuItems>
+        <DocSearch
+          appId="QL9L2YL7AQ"
+          apiKey="2f67aeacbe73ad08a49efb9214ea27f3"
+          indexName="questdb"
+          placeholder="Search docs"
+          translations={{ button: { buttonText: "Search docs" } }}
+          hitComponent={({ hit, children }) => (
+            <a href={hit.url} target="_blank" rel="noreferrer">
+              {children}
+            </a>
+          )}
+          navigator={{
+            navigate({ itemUrl }) {
+              return window.open(itemUrl, "_blank")
+            },
+          }}
+        />
+      </MenuItems>
 
       {sm && (
         <SideMenuMenuButton onClick={handleSideMenuButtonClick}>

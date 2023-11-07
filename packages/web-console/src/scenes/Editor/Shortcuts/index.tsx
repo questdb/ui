@@ -26,7 +26,7 @@ const List = styled.div`
 
 const ListTitle = styled(Text)`
   padding: 0.6rem 1.2rem;
-  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
   border-top: 1px solid ${({ theme }) => theme.color.selection};
   background: ${({ theme }) => theme.color.black40};
   width: 100%;
