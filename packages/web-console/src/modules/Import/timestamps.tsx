@@ -3,23 +3,43 @@ import styled from "styled-components"
 import { PaneContent, PaneWrapper } from "../../components"
 import { Panel } from "../../components/Panel"
 import { TimestampFormatList } from "../../components/TimestampFormat/list"
+import { Nav, NavGroup, Subheader } from "./panel"
+import { ArrowRightS } from "@styled-icons/remix-line"
 
-type Props = {}
+type Props = {
+  open: boolean
+  toggle: () => void
+}
 
 const Wrapper = styled(PaneWrapper)``
 
 const Content = styled(PaneContent)``
 
-export const GlobalTimestampsPanel  = ({}: Props) => {
-    return (
-        <Wrapper>
-            <Panel.Header
-                title={"Global timestamps"}
-                shadow
+export const GlobalTimestampsPanel = ({ open = true, toggle }: Props) => {
+  return (
+    <Wrapper>
+      <Subheader>
+        <NavGroup>
+          <Nav>dummy</Nav>
+        </NavGroup>
+        <NavGroup>
+          <Nav
+            onClick={(e) => {
+              e.preventDefault()
+              toggle()
+            }}
+          >
+            <ArrowRightS
+              size={"18px"}
+              style={{ transform: `rotate(${open ? 180 : 0}deg)` }}
             />
-            <Content>
-                <TimestampFormatList />
-            </Content>
-        </Wrapper>
-    )
+          </Nav>
+        </NavGroup>
+      </Subheader>
+      <Content>
+        <p>State: {open ? "open" : "closed"}</p>
+        <TimestampFormatList />
+      </Content>
+    </Wrapper>
+  )
 }

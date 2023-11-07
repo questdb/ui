@@ -1,4 +1,4 @@
-import React, { useContext } from "react"
+import React, { useContext, useState } from "react"
 import styled from "styled-components"
 import { PaneContent, PaneWrapper } from "../../components"
 import { Panel } from "../../components/Panel"
@@ -22,11 +22,13 @@ const Content = styled(PaneContent)`
 type FormSchema = {
   table_name: string
   partitionBy: keyof typeof PartitionBy
+  delimiter: string
 }
 
 export const Settings = () => {
   const { state, dispatch } = useContext(ImportContext)
   const data = MOCK__getSchemaRequest()
+  const [TSPanelOpen, toggleTSPanel] = useState(true)
 
   return (
     <Form<FormSchema>
@@ -37,12 +39,18 @@ export const Settings = () => {
       defaultValues={{
         table_name: state.fileChunk?.name ?? "",
         partitionBy: "NONE",
+        delimiter: ",",
       }}
     >
       <Wrapper>
         <Panel.Header title="Verify and import stuff go here" />
         <Content>
-          <GlobalTimestampsPanel />
+          <GlobalTimestampsPanel
+            open={TSPanelOpen}
+            toggle={() => {
+              toggleTSPanel(!TSPanelOpen)
+            }}
+          />
           <SchemaEditor data={data} />
           <PaneWrapper>
             <Panel.Header title="Settings" shadow />

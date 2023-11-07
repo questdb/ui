@@ -18,6 +18,7 @@ export const Subheader = styled.nav.attrs({
 
   background: ${({ theme }) => theme.color.backgroundLighter};
   border-block: 1px solid black;
+  border-inline-start: 1px solid rgba(0, 0, 0, 0.5);
 `
 
 export const NavGroup = styled.section`
@@ -26,7 +27,9 @@ export const NavGroup = styled.section`
   height: 100%;
 `
 
-export const Nav = styled.button`
+export const Nav = styled.button.attrs({
+  tabIndex: 0,
+})`
   all: unset;
   background: ${({ theme }) => theme.color.transparent};
   color: ${({ theme }) => theme.color.foreground};
@@ -39,7 +42,7 @@ export const Nav = styled.button`
 
   border-bottom: 1px solid ${({ theme }) => theme.color.transparent};
 
-  &:hover {
+  &:hover, &:focus {
     border-color: ${({ theme }) => theme.color.selection};
   }
 
