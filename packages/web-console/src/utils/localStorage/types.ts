@@ -28,8 +28,6 @@ export enum StoreKey {
   EDITOR_LINE = "editor.line",
   EDITOR_COL = "editor.col",
   EXAMPLE_QUERIES_VISITED = "editor.exampleQueriesVisited",
-  NOTIFICATION_ENABLED = "notification.enabled",
-  NOTIFICATION_DELAY = "notification.delay",
   EDITOR_SPLITTER_BASIS = "splitter.editor.basis",
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
 }

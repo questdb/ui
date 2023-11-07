@@ -249,7 +249,7 @@ describe("errors", () => {
     cy.typeQuery(query).runLine();
     cy.matchErrorMarkerPosition({ left: 506, width: 42 });
 
-    cy.getNotifications().should("contain", "Invalid date");
+    cy.getCollapsedNotifications().should("contain", "Invalid date");
   });
 });
 

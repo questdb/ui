@@ -22,6 +22,8 @@
     "test:prod": "jest --ci --runInBand"
   },
   "dependencies": {
+    "@docsearch/css": "^3.5.2",
+    "@docsearch/react": "^3.5.2",
     "@hookform/resolvers": "2.8.5",
     "@monaco-editor/react": "^4.3.1",
     "@popperjs/core": "2.4.2",
@@ -38,6 +40,7 @@
     "@styled-icons/fa-regular": "10.47.0",
     "@styled-icons/fluentui-system-filled": "10.47.0",
     "@styled-icons/material": "10.47.0",
+    "@styled-icons/remix-editor": "^10.46.0",
     "@styled-icons/remix-fill": "10.46.0",
     "@styled-icons/remix-line": "10.46.0",
     "animate.css": "3.7.2",
@@ -47,7 +50,6 @@
     "date-fns": "2.14.0",
     "dexie": "^3.2.4",
     "dexie-react-hooks": "^1.1.6",
-    "docsearch.js": "2.6.3",
     "dotenv": "^10.0.0",
     "echarts": "^5.2.2",
     "intersection-observer": "^0.12.2",
@@ -61,6 +63,7 @@
     "react-dom": "16.13.1",
     "react-hook-form": "7.22.3",
     "react-is": "^18.1.0",
+    "react-markdown": "^8.0.7",
     "react-popper": "2.2.3",
     "react-redux": "7.2.0",
     "react-toastify": "^9.1.3",

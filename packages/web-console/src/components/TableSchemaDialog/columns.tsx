@@ -1,13 +1,12 @@
 import React, { useCallback } from "react"
 import styled from "styled-components"
-import { useFieldArray, useFormContext } from "react-hook-form"
+import { useFormContext } from "react-hook-form"
 import { Box } from "../Box"
 import { Form } from "../Form"
 import { Text } from ".."
 import { Drawer } from "../Drawer"
 import { VirtualList } from "../VirtualList"
-import { Button } from "@questdb/react-components"
-import { AddCircle, Information } from "@styled-icons/remix-line"
+import { Information } from "@styled-icons/remix-line"
 import { Action, SchemaColumn } from "./types"
 import { Column } from "./column"
 
@@ -36,44 +35,21 @@ const Error = styled(Drawer.GroupItem).attrs({ direction: "column" })`
   align-items: center;
 `
 
-const AddColumn = ({ onAdd }: { onAdd: () => void }) => (
-  <Drawer.GroupItem direction="column">
-    <AddBox>
-      <Button
-        prefixIcon={<AddCircle size="18px" />}
-        skin="transparent"
-        onClick={onAdd}
-        type="button"
-      >
-        Add column
-      </Button>
-    </AddBox>
-  </Drawer.GroupItem>
-)
-
 export const Columns = ({
   action,
   isEditLocked,
+  onColumnFocus,
+  lastFocusedIndex,
 }: {
   action: Action
   isEditLocked: boolean
+  onColumnFocus: (index: number) => void
+  lastFocusedIndex?: number
 }) => {
   const { formState, getValues, setValue, watch } = useFormContext()
-  const { append } = useFieldArray({
-    name: "schemaColumns",
-  })
 
   const watchTimestamp = watch("timestamp")
   const watchSchemaColumns = getValues()["schemaColumns"]
-
-  const addColumn = () => {
-    append({
-      name: "",
-      type: action === "import" ? "" : "STRING",
-      pattern: "",
-      precision: "",
-    })
-  }
 
   const listItemContent = useCallback(
     (index: number) => {
@@ -86,23 +62,13 @@ export const Columns = ({
             column={column}
             disabled={isEditLocked}
             index={index}
-            onRemove={(index) => {
-              setValue(
-                "schemaColumns",
-                watchSchemaColumns.filter(
-                  (_: SchemaColumn, i: number) => i !== index,
-                ),
-              )
-            }}
+            lastFocusedIndex={lastFocusedIndex}
+            onFocus={onColumnFocus}
             onSetTimestamp={(name) => {
               setValue("timestamp", watchTimestamp === name ? "" : name)
             }}
             timestamp={watchTimestamp}
           />
-
-          {index === watchSchemaColumns.length - 1 && !isEditLocked && (
-            <AddColumn onAdd={addColumn} />
-          )}
         </>
       )
     },
@@ -134,14 +100,12 @@ export const Columns = ({
           </Error>
         ))}
       <SchemaRoot>
-        {watchSchemaColumns.length > 0 ? (
+        {watchSchemaColumns.length > 0 && (
           <VirtualList
             itemContent={listItemContent}
             totalCount={watchSchemaColumns.length}
             followOutput={true}
           />
-        ) : (
-          !isEditLocked && <AddColumn onAdd={addColumn} />
         )}
       </SchemaRoot>
 

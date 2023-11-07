@@ -53,6 +53,7 @@ export type ColorShape = {
   inherit: string
   tooltipBackground: string
   graphLegend: string
+  offWhite: string
 }
 
 export type FontSizeShape = {

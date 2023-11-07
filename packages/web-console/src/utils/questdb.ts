@@ -131,6 +131,33 @@ export type Release = {
   published_at: string
 }
 
+export type NewsThumbnail = {
+  id: string
+  width: number
+  height: number
+  url: string
+  filename: string
+  size: number
+  type: string
+  thumbnails: Record<
+    "small" | "large" | "full",
+    {
+      url: string
+      width: number
+      height: number
+    }
+  >
+}
+
+export type NewsItem = {
+  id: string
+  title: string
+  body: string
+  thumbnail?: NewsThumbnail[]
+  status: "published" | "draft"
+  date: string
+}
+
 export enum FileCheckStatus {
   EXISTS = "Exists",
   DOES_NOT_EXIST = "Does not exist",
@@ -159,10 +186,10 @@ export type SchemaColumn = {
 type UploadOptions = {
   file: File
   name: string
-  settings: UploadModeSettings
-  schema: SchemaColumn[]
-  partitionBy: string
-  timestamp: string
+  settings?: UploadModeSettings
+  schema?: SchemaColumn[]
+  partitionBy?: string
+  timestamp?: string
   onProgress: (progress: number) => void
 }
 
@@ -413,19 +440,23 @@ export class Client {
     onProgress,
   }: UploadOptions): Promise<UploadResult> {
     const formData = new FormData()
-    formData.append("schema", JSON.stringify(schema))
+    if (schema) {
+      formData.append("schema", JSON.stringify(schema))
+    }
     formData.append("data", file)
-    const serializedSettings = Object.keys(settings).reduce(
-      (acc, key) => ({
-        ...acc,
-        [key]: settings[key as keyof UploadModeSettings].toString(),
-      }),
-      {},
-    )
+    const serializedSettings = settings
+      ? Object.keys(settings).reduce(
+          (acc, key) => ({
+            ...acc,
+            [key]: settings[key as keyof UploadModeSettings].toString(),
+          }),
+          {},
+        )
+      : {}
     const params = {
       fmt: "json",
       name,
-      partitionBy,
+      ...(partitionBy ? { partitionBy } : {}),
       ...(timestamp ? { timestamp } : {}),
       ...serializedSettings,
     }
@@ -495,6 +526,24 @@ export class Client {
         },
       )
       return (await response.json()) as { status: string }
+    } catch (error) {
+      // eslint-disable-next-line prefer-promise-reject-errors
+      throw error
+    }
+  }
+
+  async getNews({
+    category,
+    telemetryConfig,
+  }: {
+    category: string
+    telemetryConfig?: TelemetryConfigShape
+  }) {
+    try {
+      const response: Response = await fetch(
+        `https://cloud.questdb.com/api/news?category=${category}&telemetryUserId=${telemetryConfig?.id}`,
+      )
+      return (await response.json()) as NewsItem[]
     } catch (error) {
       // eslint-disable-next-line prefer-promise-reject-errors
       throw error

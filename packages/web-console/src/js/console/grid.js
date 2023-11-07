@@ -1430,7 +1430,7 @@ export function grid(rootElement, _paginationFn, id) {
     if (data.length === 0) {
       return true
     }
-    return data[0].length === 0
+    return data[loPage].length === 0
   }
 
   function render() {
@@ -2067,7 +2067,9 @@ export function grid(rootElement, _paginationFn, id) {
     if (json) {
       layoutStoreCache = JSON.parse(json)
     }
-    window.onresize = render
+
+    const resizeObserver = new ResizeObserver(render)
+    resizeObserver.observe(grid)
   }
 
   bind()

@@ -39,6 +39,7 @@ export type NotificationShape = Readonly<{
   line2?: ReactNode
   type: NotificationType
   jitCompiled?: boolean
+  isMinimized?: boolean
 }>
 
 export type RunningShape = Readonly<{

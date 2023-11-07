@@ -35,6 +35,7 @@ type Props = {
 const TimestampText = styled(Text)`
   display: flex;
   margin-right: 0.5rem;
+  white-space: nowrap;
 `
 
 export const Timestamp = ({ createdAt }: Props) => {

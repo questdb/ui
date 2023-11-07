@@ -55,6 +55,7 @@ const color: ColorShape = {
   inherit: "inherit",
   tooltipBackground: "#6272a4",
   graphLegend: "#6e7078",
+  offWhite: "#bdbdbd",
 }
 
 const fontSize: FontSizeShape = {

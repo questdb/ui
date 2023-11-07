@@ -43,6 +43,7 @@ body {
 #root {
   position: absolute;
   display: flex;
+  flex-direction: column;
   top: 0;
   right: 0;
   bottom: 0;
@@ -50,8 +51,8 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   background: #21222c;
 }
 
@@ -238,6 +239,7 @@ ol.unstyled {
 /* FOOTER */
 
 #footer {
+  position: relative;
   display: flex;
   background: #21222c;
   flex: 0 0 4rem;

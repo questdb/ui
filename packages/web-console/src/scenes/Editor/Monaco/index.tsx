@@ -67,7 +67,7 @@ const Content = styled(PaneContent)`
     &:after {
       content: "◃";
       font-size: 2.5rem;
-      transform: rotate(180deg) scaleX(0.8);
+      transform: rotate(180deg) scaleX(0.8) translateY(-2px);
       color: ${color("green")};
     }
   }

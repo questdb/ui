@@ -29,12 +29,11 @@ import { color } from "../../utils"
 export const PaneMenu = styled.div`
   position: relative;
   display: flex;
-  height: 4rem;
+  justify-content: space-between;
+  height: 4.5rem;
   padding: 0 1rem;
   align-items: center;
-  background: ${color("backgroundDarker")};
-  box-shadow: 0 6px 6px -6px ${color("black")};
-  border-bottom: 1px solid ${color("black")};
+  background: ${color("backgroundLighter")};
   border-top: 1px solid transparent;
   z-index: 5;
 `

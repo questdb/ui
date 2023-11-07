@@ -25,7 +25,6 @@
 import { editor } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import { BusEvent } from "../../../consts"
-import { actions } from "../../../store"
 import { Dispatch } from "redux"
 
 import {
@@ -43,9 +42,9 @@ import { bufferStore } from "../../../store/buffers"
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
-  CLEANUP_NOTIFICATIONS = "clean_notifications",
   ADD_NEW_TAB = "add_new_tab",
   CLOSE_ACTIVE_TAB = "close_active_tab",
+  SEARCH_DOCS = "search_docs",
 }
 
 export const registerEditorActions = ({
@@ -83,15 +82,6 @@ export const registerEditorActions = ({
   })
 
   editor.addAction({
-    id: Command.CLEANUP_NOTIFICATIONS,
-    label: "Clear all notifications",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
-    run: () => {
-      dispatch(actions.query.cleanupNotifications())
-    },
-  })
-
-  editor.addAction({
     id: Command.ADD_NEW_TAB,
     label: "Add new tab",
     keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
@@ -113,6 +103,19 @@ export const registerEditorActions = ({
         typeof activeId?.value === "number"
       ) {
         editorContext.deleteBuffer(activeId.value)
+      }
+    },
+  })
+
+  editor.addAction({
+    id: Command.SEARCH_DOCS,
+    label: "Search QuestDB Docs",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
+    run: () => {
+      const docSearchButton =
+        document.querySelector<HTMLButtonElement>(".DocSearch-Button")
+      if (docSearchButton) {
+        docSearchButton.click()
       }
     },
   })

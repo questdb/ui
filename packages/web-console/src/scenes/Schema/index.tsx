@@ -27,32 +27,22 @@ import React, {
   forwardRef,
   Ref,
   useRef,
-  useCallback,
   useEffect,
   useState,
+  useContext,
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import {
-  Database2,
-  Loader3,
-  Refresh,
-  ArrowLeftCircle,
-  AddCircle,
-} from "@styled-icons/remix-line"
+import { Loader3, Refresh, Search } from "@styled-icons/remix-line"
 
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
-  PaneMenu,
-  SecondaryButton,
   spinAnimation,
-  Text,
   Tooltip,
-  VirtualList,
 } from "../../components"
 import { actions, selectors } from "../../store"
 import { color, ErrorResult, isServerError } from "../../utils"
@@ -60,13 +50,10 @@ import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { BusEvent } from "../../consts"
-import { StoreKey } from "../../utils/localStorage/types"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { Box } from "../../components/Box"
-import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
-import { SchemaFormValues } from "components/TableSchemaDialog/types"
-import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
-import { useEditor } from "../../providers"
+import { Button } from "@questdb/react-components"
+import { Panel } from "../../components/Panel"
+import { QuestContext } from "../../providers"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -83,15 +70,6 @@ const Wrapper = styled(PaneWrapper)`
   height: 100%;
 `
 
-const Menu = styled(PaneMenu)`
-  justify-content: space-between;
-`
-
-const Header = styled(Text)`
-  display: flex;
-  align-items: center;
-`
-
 const Content = styled(PaneContent)<{
   _loading: boolean
 }>`
@@ -99,14 +77,6 @@ const Content = styled(PaneContent)<{
   font-family: ${({ theme }) => theme.fontMonospace};
   overflow: auto;
   ${({ _loading }) => _loading && loadingStyles};
-`
-
-const DatabaseIcon = styled(Database2)`
-  margin-right: 1rem;
-`
-
-const HideSchemaButton = styled(SecondaryButton)`
-  margin-left: 1rem;
 `
 
 const Loader = styled(Loader3)`
@@ -124,69 +94,36 @@ const Schema = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
-  const [quest] = useState(new QuestDB.Client())
+  const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [opened, setOpened] = useState<string>()
-  const [refresh, setRefresh] = useState(Date.now())
   const [isScrolling, setIsScrolling] = useState(false)
-  const [addTableDialogOpen, setAddTableDialogOpen] = useState<
-    string | undefined
-  >(undefined)
+  const [searchVisible, setSearchVisible] = useState(false)
   const { readOnly } = useSelector(selectors.console.getConfig)
-  const { updateSettings } = useLocalStorage()
   const dispatch = useDispatch()
-  const { appendQuery } = useEditor()
+  const [scrollAtTop, setScrollAtTop] = useState(true)
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
 
-  const handleChange = useCallback((name: string) => {
-    setOpened(name)
-  }, [])
+  const handleChange = (name: string) => {
+    setOpened(name === opened ? undefined : name)
+  }
 
-  const handleScrollingStateChange = useCallback(
-    (isScrolling) => {
-      setIsScrolling(isScrolling)
-    },
-    [setIsScrolling],
-  )
-
-  const listItemContent = useCallback(
-    (index: number) => {
-      if (tables) {
-        const table = tables[index]
-
-        return (
-          <Table
-            designatedTimestamp={table.designatedTimestamp}
-            expanded={table.table_name === opened}
-            isScrolling={isScrolling}
-            key={table.table_name}
-            table_name={table.table_name}
-            onChange={handleChange}
-            partitionBy={table.partitionBy}
-            refresh={refresh}
-            walEnabled={table.walEnabled}
-          />
-        )
-      }
-    },
-    [handleChange, isScrolling, opened, refresh, tables],
-  )
-
-  const fetchTables = useCallback(() => {
+  const fetchTables = () => {
     setLoading(true)
+    setOpened(undefined)
     combineLatest(
       from(quest.showTables()).pipe(startWith(null)),
       of(true).pipe(delay(1000), startWith(false)),
     ).subscribe(
-      ([response, loading]) => {
+      ([response]) => {
         if (response && response.type === QuestDB.Type.DQL) {
           setLoadingError(null)
           errorRef.current = null
           setTables(response.data)
           dispatch(actions.query.setTables(response.data))
-          setRefresh(Date.now())
         } else {
           setLoading(false)
         }
@@ -200,26 +137,6 @@ const Schema = ({
         setLoading(false)
       },
     )
-  }, [quest])
-
-  const handleHideSchemaClick = useCallback(() => {
-    updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, 0)
-  }, [])
-
-  const handleAddTableSchema = (values: SchemaFormValues) => {
-    const { name, partitionBy, timestamp, schemaColumns, walEnabled } = values
-    const tableSchemaQuery = formatTableSchemaQuery({
-      name,
-      partitionBy,
-      timestamp,
-      walEnabled: walEnabled === "true",
-      schemaColumns: schemaColumns.map((column) => ({
-        column: column.name,
-        type: column.type,
-      })),
-    })
-    appendQuery(tableSchemaQuery, { appendAt: "end" })
-    dispatch(actions.query.toggleRunning())
   }
 
   useEffect(() => {
@@ -239,82 +156,59 @@ const Schema = ({
 
     window.bus.on(BusEvent.MSG_CONNECTION_OK, () => {
       // The connection has been re-established, as we have an error in memory
-      if (errorRef.current) {
+      if (errorRef.current !== null) {
         void fetchTables()
       }
     })
-  }, [errorRef, fetchTables])
+  }, [])
 
   return (
     <Wrapper ref={innerRef} {...rest}>
-      <Menu>
-        <Header color="foreground">
-          <DatabaseIcon size="18px" />
-          Tables
-        </Header>
-
-        <div style={{ display: "flex" }}>
-          {readOnly === false && tables && (
-            <Box align="center" gap="1rem">
-              <TableSchemaDialog
-                action="add"
-                isEditLocked={false}
-                hasWalSetting={true}
-                walEnabled={false}
-                name=""
-                partitionBy="NONE"
-                schema={[]}
-                tables={tables}
-                timestamp=""
-                onOpenChange={(open) => setAddTableDialogOpen(open)}
-                open={addTableDialogOpen !== undefined}
-                onSchemaChange={handleAddTableSchema}
-                trigger={
-                  <SecondaryButton onClick={() => setAddTableDialogOpen("add")}>
-                    <AddCircle size="18px" />
-                    <span>Create</span>
-                  </SecondaryButton>
-                }
-                ctaText="Create"
-              />
-              <PopperHover
-                delay={350}
-                placement="bottom"
-                trigger={
-                  <SecondaryButton onClick={fetchTables}>
-                    <Refresh size="18px" />
-                  </SecondaryButton>
-                }
-              >
-                <Tooltip>Refresh</Tooltip>
-              </PopperHover>
-            </Box>
-          )}
-          <PopperHover
-            delay={350}
-            placement="bottom"
-            trigger={
-              <HideSchemaButton onClick={handleHideSchemaClick}>
-                <ArrowLeftCircle size="18px" />
-              </HideSchemaButton>
-            }
-          >
-            <Tooltip>Hide tables</Tooltip>
-          </PopperHover>
-        </div>
-      </Menu>
-
-      <Content _loading={loading}>
+      <Panel.Header
+        title="Tables"
+        afterTitle={
+          <div style={{ display: "flex" }}>
+            {readOnly === false && tables && (
+              <Box align="center" gap="0">
+                <PopperHover
+                  delay={350}
+                  placement="bottom"
+                  trigger={
+                    <Button onClick={fetchTables} skin="transparent">
+                      <Refresh size="18px" />
+                    </Button>
+                  }
+                >
+                  <Tooltip>Refresh</Tooltip>
+                </PopperHover>
+              </Box>
+            )}
+          </div>
+        }
+        shadow={!scrollAtTop}
+      />
+      <Content
+        _loading={loading}
+        ref={scrollerRef}
+        onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
+      >
         {loading ? (
           <Loader size="48px" />
         ) : loadingError ? (
           <LoadingError error={loadingError} />
         ) : (
-          <VirtualList
-            isScrolling={handleScrollingStateChange}
-            itemContent={listItemContent}
-            totalCount={tables?.length}
-          />
+          tables?.map((table) => (
+            <Table
+              designatedTimestamp={table.designatedTimestamp}
+              expanded={table.table_name === opened}
+              isScrolling={isScrolling}
+              key={table.table_name}
+              table_name={table.table_name}
+              onChange={handleChange}
+              partitionBy={table.partitionBy}
+              walEnabled={table.walEnabled}
+            />
+          ))
         )}
         {!loading && <FlexSpacer />}
       </Content>
