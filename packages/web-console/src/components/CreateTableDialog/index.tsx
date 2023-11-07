@@ -63,6 +63,7 @@ export const CreateTableDialog = () => {
         <IconWithTooltip
           icon={
             <PrimaryToggleButton
+              data-hook="create-table-panel-button"
               selected={addTableDialogOpen !== undefined}
               onClick={() =>
                 dispatch(

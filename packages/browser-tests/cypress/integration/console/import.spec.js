@@ -5,8 +5,9 @@ describe("questdb import", () => {
     cy.visit("http://localhost:9999");
   });
 
-  it("display import screen", () => {
-    cy.get('[data-hook="navigation-import-button"]').click();
+  it("display import panel", () => {
+    cy.get('[data-hook="import-panel-button"]').click();
+    cy.get('[data-hook="import-dropbox"]').should("be.visible");
     cy.matchImageSnapshot();
   });
 });

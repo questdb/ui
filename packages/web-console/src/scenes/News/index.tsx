@@ -182,6 +182,7 @@ const News = () => {
         <IconWithTooltip
           icon={
             <PrimaryToggleButton
+              data-hook="news-panel-button"
               onClick={() => setNewsOpened(!newsOpened)}
               selected={newsOpened}
             >

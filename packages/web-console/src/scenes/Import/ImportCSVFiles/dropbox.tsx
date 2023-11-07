@@ -102,6 +102,7 @@ export const DropBox = ({
       onDragLeave={handleDrag}
       onDrop={handleDrop}
       isDragging={isDragging}
+      data-hook="import-dropbox"
     >
       {render({ duplicates, addToQueue })}
     </Root>

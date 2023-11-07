@@ -63,7 +63,10 @@ export const Help = () => {
     <React.Fragment>
       <DropdownMenu.Root modal={false} onOpenChange={setOpen}>
         <DropdownMenu.Trigger asChild>
-          <HelpButton {...(open && { selected: true })}>
+          <HelpButton
+            {...(open && { selected: true })}
+            data-hook="help-panel-button"
+          >
             <IconWithTooltip
               icon={
                 <TooltipWrapper>

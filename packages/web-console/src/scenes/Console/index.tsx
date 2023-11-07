@@ -129,6 +129,7 @@ const Console = () => {
               placement="bottom"
               trigger={
                 <Navigation
+                  data-hook="tables-panel-button"
                   direction="left"
                   onClick={() => {
                     dispatch(
@@ -171,6 +172,7 @@ const Console = () => {
                   placement="right"
                   trigger={
                     <Navigation
+                      data-hook={`${mode}-panel-button`}
                       direction="left"
                       onClick={() => {
                         dispatch(actions.console.setActiveBottomPanel("result"))
@@ -196,6 +198,7 @@ const Console = () => {
                     dispatch(actions.console.setActiveBottomPanel("import"))
                   }}
                   selected={activeBottomPanel === "import"}
+                  data-hook="import-panel-button"
                 >
                   <Upload2 size={BUTTON_ICON_SIZE} />
                 </PrimaryToggleButton>
