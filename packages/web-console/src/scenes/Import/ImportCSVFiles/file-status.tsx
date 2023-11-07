@@ -10,6 +10,11 @@ const CheckboxCircleIcon = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};
 `
 
+const StyledBox = styled(Box)`
+  gap: 0.5rem;
+  white-space: nowrap;
+`
+
 const mapStatusToLabel = (
   file: ProcessedFile,
 ):
@@ -70,9 +75,9 @@ export const FileStatus = ({ file }: { file: ProcessedFile }) => {
   return mappedStatus ? (
     <Box gap="1rem" align="flex-start" flexDirection="column">
       <Badge type={mappedStatus.type}>
-        <Box gap="0.5rem">
+        <StyledBox>
           {mappedStatus.icon} {mappedStatus.label}
-        </Box>
+        </StyledBox>
       </Badge>
     </Box>
   ) : (

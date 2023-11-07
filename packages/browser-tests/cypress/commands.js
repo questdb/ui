@@ -121,4 +121,10 @@ Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"));
 
-Cypress.Commands.add("getNotifications", () => cy.get(".notifications"));
+Cypress.Commands.add("getCollapsedNotifications", () =>
+  cy.get('[data-hook="notifications-collapsed"]')
+);
+
+Cypress.Commands.add("getExpandedNotifications", () =>
+  cy.get('[data-hook="notifications-expanded"]')
+);

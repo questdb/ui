@@ -62,46 +62,42 @@ type Props = Readonly<{
   onChange?: (value: number) => void
 }>
 
-const HorizontalDragIcon = styled(DragIndicator)`
-  position: absolute;
-`
-
-const VerticalDragIcon = styled(HorizontalDragIcon)`
-  transform: rotate(90deg);
-`
-
 const wrapperStyles = css`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: ${color("backgroundDarker")};
-  color: ${color("gray1")};
-
-  &:hover {
-    background: ${color("selection")};
-    color: ${color("foreground")};
-  }
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const HorizontalWrapper = styled.div`
-  ${wrapperStyles};
+  ${wrapperStyles}
+  width: 0.2rem;
+  height: 100%;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
+const HorizontalHysteresis = styled.div`
   width: 1rem;
   height: 100%;
-  border-top: none;
-  border-bottom: none;
-  cursor: ew-resize;
-  flex-shrink: 0;
+  position: absolute;
+  cursor: col-resize;
+  left: -0.5rem;
 `
 
 const VerticalWrapper = styled.div`
-  ${wrapperStyles};
+  ${wrapperStyles}
+  width: 100%;
+  height: 0.2rem;
+  cursor: row-resize;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
+const VerticalHysteresis = styled.div`
   width: 100%;
   height: 1rem;
-  border-left: none;
-  border-right: none;
+  position: absolute;
   cursor: row-resize;
-  flex-shrink: 0;
+  top: -0.5rem;
 `
 
 const ghostSize = 10
@@ -119,6 +115,7 @@ const HorizontalGhost = styled.div`
   ${ghostStyles};
   width: ${ghostSize}px;
   top: 0;
+  transform: translateX(-50%);
   bottom: 0;
 `
 
@@ -126,6 +123,7 @@ const VerticalGhost = styled.div`
   ${ghostStyles};
   height: ${ghostSize}px;
   left: 0;
+  transform: translateY(-50%);
   right: 0;
 `
 
@@ -137,7 +135,6 @@ export const Splitter = ({
   min: minRaw,
   onChange,
 }: Props) => {
-  const [offset, setOffset] = useState(0)
   const [originalPosition, setOriginalPosition] = useState(0)
   const [ghostPosition, setGhostPosition] = useState(0)
   const [pressed, setPressed] = useState(false)
@@ -193,8 +190,6 @@ export const Splitter = ({
         const clientPosition =
           direction === "horizontal" ? "clientX" : "clientY"
         const coordinate = direction === "horizontal" ? "x" : "y"
-        const offset =
-          splitter.current.parentElement.getBoundingClientRect()[coordinate]
         let position = 0
 
         if (window.TouchEvent && event.nativeEvent instanceof TouchEvent) {
@@ -206,7 +201,6 @@ export const Splitter = ({
         }
 
         setOriginalPosition(position)
-        setOffset(offset)
         setPressed(true)
 
         document.addEventListener("mouseup", handleMouseUp)
@@ -250,7 +244,7 @@ export const Splitter = ({
     display: "flex",
     flexGrow: 0,
     flexBasis: basis ?? fallback,
-    flexShrink: 0,
+    flexShrink: 1,
   }
 
   if (children.length === 1) {
@@ -271,7 +265,7 @@ export const Splitter = ({
           onTouchStart={handleMouseDown}
           ref={splitter}
         >
-          <HorizontalDragIcon size="16px" />
+          <HorizontalHysteresis />
         </HorizontalWrapper>
 
         {children[1]}
@@ -280,7 +274,7 @@ export const Splitter = ({
           <>
             <HorizontalGhost
               style={{
-                left: `${ghostPosition - offset}px`,
+                left: `${ghostPosition}px`,
               }}
             />
             <PreventUserSelectionHorizontal />
@@ -303,7 +297,7 @@ export const Splitter = ({
         onTouchStart={handleMouseDown}
         ref={splitter}
       >
-        <VerticalDragIcon size="16px" />
+        <VerticalHysteresis />
       </VerticalWrapper>
 
       {children[1]}
@@ -312,7 +306,7 @@ export const Splitter = ({
         <>
           <VerticalGhost
             style={{
-              top: `${ghostPosition - offset}px`,
+              top: `${ghostPosition}px`,
             }}
           />
           <PreventUserSelectionVertical />

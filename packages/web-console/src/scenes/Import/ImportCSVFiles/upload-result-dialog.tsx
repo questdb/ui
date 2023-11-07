@@ -30,7 +30,7 @@ const StyledTable = styled(Table)`
   }
 
   tbody td {
-    background: ${({ theme }) => theme.color.backgroundLighter};
+    background: #242531;
 
     &:first-child {
       border-top-left-radius: ${({ theme }) => theme.borderRadius};

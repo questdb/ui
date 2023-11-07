@@ -40,8 +40,6 @@ const defaultConfig: LocalConfig = {
   authPayload: "",
   editorCol: 10,
   editorLine: 10,
-  isNotificationEnabled: true,
-  notificationDelay: 5,
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
@@ -51,8 +49,6 @@ type ContextProps = {
   authPayload: string
   editorCol: number
   editorLine: number
-  notificationDelay: number
-  isNotificationEnabled: boolean
   editorSplitterBasis: number
   resultsSplitterBasis: number
   updateSettings: (key: StoreKey, value: SettingsType) => void
@@ -63,8 +59,6 @@ const defaultValues: ContextProps = {
   authPayload: "",
   editorCol: 1,
   editorLine: 1,
-  isNotificationEnabled: true,
-  notificationDelay: 5,
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
   updateSettings: (key: StoreKey, value: SettingsType) => undefined,
@@ -84,18 +78,6 @@ export const LocalStorageProvider = ({
   )
   const [editorLine, setEditorLine] = useState<number>(
     parseInteger(getValue(StoreKey.EDITOR_LINE), defaultConfig.editorLine),
-  )
-  const [isNotificationEnabled, setIsNotificationEnabled] = useState<boolean>(
-    parseBoolean(
-      getValue(StoreKey.NOTIFICATION_ENABLED),
-      defaultConfig.isNotificationEnabled,
-    ),
-  )
-  const [notificationDelay, setNotificationDelay] = useState<number>(
-    parseInteger(
-      getValue(StoreKey.NOTIFICATION_DELAY),
-      defaultConfig.notificationDelay,
-    ),
   )
   const [editorSplitterBasis, seteditorSplitterBasis] = useState<number>(
     parseInteger(
@@ -134,16 +116,6 @@ export const LocalStorageProvider = ({
       case StoreKey.EXAMPLE_QUERIES_VISITED:
         setExampleQueriesVisited(value === "true")
         break
-      case StoreKey.NOTIFICATION_ENABLED:
-        setIsNotificationEnabled(
-          parseBoolean(value, defaultConfig.isNotificationEnabled),
-        )
-        break
-      case StoreKey.NOTIFICATION_DELAY:
-        setNotificationDelay(
-          parseInteger(value, defaultConfig.notificationDelay),
-        )
-        break
       case StoreKey.EDITOR_SPLITTER_BASIS:
         seteditorSplitterBasis(
           parseInteger(value, defaultConfig.editorSplitterBasis),
@@ -163,8 +135,6 @@ export const LocalStorageProvider = ({
         authPayload,
         editorCol,
         editorLine,
-        isNotificationEnabled,
-        notificationDelay,
         editorSplitterBasis,
         resultsSplitterBasis,
         updateSettings,

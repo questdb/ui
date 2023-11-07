@@ -23,35 +23,34 @@
  ******************************************************************************/
 
 import $ from "jquery"
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
-import { Download2, Grid, PieChart, Refresh } from "@styled-icons/remix-line"
+import { Download2, Refresh } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
-
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
-
 import {
   PaneContent,
-  PaneMenu,
   PaneWrapper,
   PopperHover,
-  PrimaryToggleButton,
-  SecondaryButton,
   Text,
   Tooltip,
-  useScreenSize,
 } from "../../components"
 import { selectors } from "../../store"
 import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { BusEvent } from "../../consts"
+import { ResultViewMode } from "scenes/Console/types"
+import { Button } from "@questdb/react-components"
+import type { IQuestDBGrid } from "../../js/console/grid.js"
 
-const Menu = styled(PaneMenu)`
-  justify-content: space-between;
+const Root = styled.div`
+  display: flex;
+  flex: 1;
+  width: 100%;
 `
 
 const Wrapper = styled(PaneWrapper)`
@@ -59,6 +58,7 @@ const Wrapper = styled(PaneWrapper)`
 `
 
 const Content = styled(PaneContent)`
+  flex: 1 1 0;
   color: ${color("foreground")};
 
   *::selection {
@@ -67,47 +67,33 @@ const Content = styled(PaneContent)`
   }
 `
 
-const ButtonWrapper = styled.div`
-  display: flex;
+const Actions = styled.div`
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 1rem;
   align-items: center;
-`
+  justify-content: flex-end;
+  padding: 0 1rem;
 
-const RowCount = styled(Text)`
-  margin-right: 2rem;
-`
-
-const RefreshButton = styled(SecondaryButton)`
-  margin-right: 1rem;
-`
-
-const ResetGridLayoutButton = styled(SecondaryButton)`
-  margin-right: 1rem;
-`
-
-const ShuffleGridColumnToFrontButton = styled(SecondaryButton)`
-  margin-right: 1rem;
-`
-
-const ToggleGridColumnFreezeButton = styled(PrimaryToggleButton)`
-  height: 4rem;
-  width: 4.5rem;
-  margin-right: 1rem;
+  width: 100%;
+  height: 4.5rem;
+  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`
   transform: scaleX(-1);
 `
-const ToggleButton = styled(PrimaryToggleButton)`
-  height: 4rem;
-  width: 8.5rem;
+
+const RowCount = styled(Text)`
+  margin-right: 1rem;
 `
 
-const Result = () => {
-  const [selected, setSelected] = useState<"chart" | "grid">("grid")
+const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const [count, setCount] = useState<number | undefined>()
-  const { sm } = useScreenSize()
   const result = useSelector(selectors.query.getResult)
-  const gridRef = useRef<any | undefined>()
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
 
   useEffect(() => {
@@ -138,10 +124,6 @@ const Result = () => {
       _grid.setData(data)
     })
 
-    bus.on(BusEvent.MSG_ACTIVE_PANEL, function () {
-      _grid.render()
-    })
-
     _grid.addEventListener("header.click", function (event: CustomEvent) {
       bus.trigger("editor.insert.column", event.detail.columnName)
     })
@@ -153,41 +135,6 @@ const Result = () => {
     _grid.addEventListener("freeze.state", function (event: CustomEvent) {
       setGridFreezeLeftState(event.detail.freezeLeft)
     })
-  }, [])
-
-  const handleChartClick = useCallback(() => {
-    setSelected("chart")
-  }, [])
-
-  const handleGridClick = useCallback(() => {
-    setSelected("grid")
-  }, [])
-
-  const handleExportClick = useCallback(() => {
-    const sql = gridRef.current.getSQL()
-    if (sql) {
-      bus.trigger(BusEvent.MSG_QUERY_EXPORT, { q: sql })
-    }
-  }, [])
-
-  const handleRefreshClick = useCallback(() => {
-    const sql = gridRef.current.getSQL()
-    if (sql) {
-      bus.trigger(BusEvent.MSG_QUERY_EXEC, { q: sql })
-    }
-  }, [])
-
-  const handleGridLayoutResetClick = useCallback(() => {
-    gridRef.current.clearCustomLayout()
-  }, [])
-
-  const handleShuffleGridColumnToFrontClick = useCallback(() => {
-    gridRef.current.shuffleFocusedColumnToFront()
-  }, [])
-
-  const handleGridColumnFreezeGridColumnToggle = useCallback(() => {
-    gridRef.current.toggleFreezeLeft()
-    gridRef.current.focus()
   }, [])
 
   useEffect(() => {
@@ -204,154 +151,155 @@ const Result = () => {
       return
     }
 
-    if (selected === "grid") {
+    if (viewMode === "grid") {
       chart.style.display = "none"
-      gridRef.current.show()
+      gridRef?.current?.show()
     } else {
-      gridRef.current.hide()
+      gridRef?.current?.hide()
       chart.style.display = "flex"
     }
-  }, [selected])
+  }, [viewMode])
+
+  useEffect(() => {
+    gridRef?.current?.render()
+  }, [activeSidebar])
+
+  const gridActions = [
+    {
+      tooltipText: "Freeze left column",
+      trigger: (
+        <Button
+          skin={gridFreezeLeftState > 0 ? "success" : "secondary"}
+          onClick={() => {
+            gridRef?.current?.toggleFreezeLeft()
+            gridRef?.current?.focus()
+          }}
+        >
+          <TableFreezeColumnIcon size="18px" />
+        </Button>
+      ),
+    },
+    {
+      tooltipText: "Move selected column to the front",
+      trigger: (
+        <Button
+          skin="secondary"
+          onClick={gridRef?.current?.shuffleFocusedColumnToFront}
+        >
+          <HandPointLeft size="18px" />
+        </Button>
+      ),
+    },
+    {
+      tooltipText: "Reset grid layout",
+      trigger: (
+        <Button skin="secondary" onClick={gridRef?.current?.clearCustomLayout}>
+          <Reset size="18px" />
+        </Button>
+      ),
+    },
+    {
+      tooltipText: "Refresh",
+      trigger: (
+        <Button
+          skin="secondary"
+          onClick={() => {
+            const sql = gridRef?.current?.getSQL()
+            if (sql) {
+              bus.trigger(BusEvent.MSG_QUERY_EXEC, { q: sql })
+            }
+          }}
+        >
+          <Refresh size="18px" />
+        </Button>
+      ),
+    },
+  ]
+
+  useEffect(() => {
+    if (result?.type === QuestDB.Type.DQL) {
+      setCount(result.count)
+    }
+  }, [result])
 
   return (
-    <Wrapper>
-      <Menu>
-        <ButtonWrapper>
-          <ToggleButton
-            onClick={handleGridClick}
-            selected={selected === "grid"}
-          >
-            <Grid size="18px" />
-            <span>Grid</span>
-          </ToggleButton>
-
-          <ToggleButton
-            onClick={handleChartClick}
-            selected={selected === "chart"}
-          >
-            <PieChart size="18px" />
-            <span>Chart</span>
-          </ToggleButton>
-        </ButtonWrapper>
-
-        <ButtonWrapper>
-          {count && !sm && (
+    <Root>
+      <Wrapper>
+        <Actions>
+          {count && (
             <RowCount color="foreground">
               {`${count.toLocaleString()} row${count > 1 ? "s" : ""}`}
             </RowCount>
           )}
-
-          {!sm && (
-            <PopperHover
-              delay={350}
-              placement="bottom"
-              trigger={
-                <ToggleGridColumnFreezeButton
-                  onClick={handleGridColumnFreezeGridColumnToggle}
-                  selected={gridFreezeLeftState > 0}
-                >
-                  <TableFreezeColumnIcon size="18px" />
-                </ToggleGridColumnFreezeButton>
-              }
-            >
-              <Tooltip>Freeze left column</Tooltip>
-            </PopperHover>
-          )}
-
-          {!sm && (
-            <PopperHover
-              delay={350}
-              placement="bottom"
-              trigger={
-                <ShuffleGridColumnToFrontButton
-                  onClick={handleShuffleGridColumnToFrontClick}
-                >
-                  <HandPointLeft size="18px" />
-                </ShuffleGridColumnToFrontButton>
-              }
-            >
-              <Tooltip>Move selected column to the front</Tooltip>
-            </PopperHover>
-          )}
-
-          {!sm && (
-            <PopperHover
-              delay={350}
-              placement="bottom"
-              trigger={
-                <ResetGridLayoutButton onClick={handleGridLayoutResetClick}>
-                  <Reset size="18px" />
-                </ResetGridLayoutButton>
-              }
-            >
-              <Tooltip>Reset grid layout</Tooltip>
-            </PopperHover>
-          )}
-
-          {!sm && (
-            <PopperHover
-              delay={350}
-              placement="bottom"
-              trigger={
-                <RefreshButton onClick={handleRefreshClick}>
-                  <Refresh size="18px" />
-                </RefreshButton>
-              }
-            >
-              <Tooltip>Refresh</Tooltip>
-            </PopperHover>
-          )}
+          {viewMode === "grid" &&
+            gridActions.map((action, index) => (
+              <PopperHover
+                key={index}
+                delay={350}
+                placement="bottom"
+                trigger={action.trigger}
+              >
+                <Tooltip>{action.tooltipText}</Tooltip>
+              </PopperHover>
+            ))}
 
           <PopperHover
             delay={350}
             placement="bottom"
             trigger={
-              <SecondaryButton onClick={handleExportClick}>
+              <Button
+                skin="secondary"
+                onClick={() => {
+                  const sql = gridRef?.current?.getSQL()
+                  if (sql) {
+                    bus.trigger(BusEvent.MSG_QUERY_EXPORT, { q: sql })
+                  }
+                }}
+              >
                 <Download2 size="18px" />
-                <span>CSV</span>
-              </SecondaryButton>
+              </Button>
             }
           >
             <Tooltip>Download result as a CSV file</Tooltip>
           </PopperHover>
-        </ButtonWrapper>
-      </Menu>
+        </Actions>
 
-      <Content>
-        <div id="grid" />
+        <Content>
+          <div id="grid" />
 
-        <div id="quick-vis">
-          <div className="quick-vis-controls">
-            <form className="v-fit" role="form">
-              <div className="form-group">
-                <label>Chart type</label>
-                <select id="_qvis_frm_chart_type">
-                  <option>bar</option>
-                  <option>line</option>
-                  <option>area</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Labels</label>
-                <select id="_qvis_frm_axis_x" />
-              </div>
-              <div className="form-group">
-                <label>Series</label>
-                <select id="_qvis_frm_axis_y" multiple />
-              </div>
-              <button
-                className="button-primary js-chart-draw"
-                id="_qvis_frm_draw"
-              >
-                <i className="icon icon-play" />
-                <span>Draw</span>
-              </button>
-            </form>
+          <div id="quick-vis">
+            <div className="quick-vis-controls">
+              <form className="v-fit" role="form">
+                <div className="form-group">
+                  <label>Chart type</label>
+                  <select id="_qvis_frm_chart_type">
+                    <option>bar</option>
+                    <option>line</option>
+                    <option>area</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Labels</label>
+                  <select id="_qvis_frm_axis_x" />
+                </div>
+                <div className="form-group">
+                  <label>Series</label>
+                  <select id="_qvis_frm_axis_y" multiple />
+                </div>
+                <button
+                  className="button-primary js-chart-draw"
+                  id="_qvis_frm_draw"
+                >
+                  <i className="icon icon-play" />
+                  <span>Draw</span>
+                </button>
+              </form>
+            </div>
+            <div className="quick-vis-canvas" />
           </div>
-          <div className="quick-vis-canvas" />
-        </div>
-      </Content>
-    </Wrapper>
+        </Content>
+      </Wrapper>
+    </Root>
   )
 }
 

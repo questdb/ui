@@ -42,9 +42,9 @@ const ZapIcon = styled(Zap)`
 `
 
 export const SuccessNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent, jitCompiled } = props
+  const { createdAt, content, sideContent, jitCompiled, isMinimized } = props
   return (
-    <Wrapper>
+    <Wrapper isMinimized={isMinimized}>
       <Timestamp createdAt={createdAt} />
       {jitCompiled ? (
         <IconWithTooltip

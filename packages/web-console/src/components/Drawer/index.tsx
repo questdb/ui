@@ -1,12 +1,29 @@
 import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
-import { ForwardRef, Heading, Overlay } from "@questdb/react-components"
+import { ForwardRef, Overlay } from "@questdb/react-components"
 import { Close } from "@styled-icons/remix-line"
 import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
 import { ContentWrapper } from "./content-wrapper"
+import { PaneMenu } from "../../components/PaneMenu"
+import { Panel } from "../../components/Panel"
+
+type DrawerProps = {
+  mode?: "modal" | "side"
+  children: React.ReactNode
+  title?: React.ReactNode
+  afterTitle?: React.ReactNode
+  trigger: React.ReactNode
+  width?: string
+  open?: boolean
+  onOpenChange?: (isOpen: boolean) => void
+  onDismiss?: () => void
+  withCloseButton?: boolean
+  closeOnOverlayClick?: boolean
+  closeOnEscape?: boolean
+}
 
 const animateShow = css`
   @keyframes animateShow {
@@ -32,22 +49,25 @@ const animateHide = css`
 
 const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width?: string
+  mode: DrawerProps["mode"]
 }>`
-  background-color: ${({ theme }) => theme.color.background};
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
-  position: fixed;
+  background-color: ${({ theme }) => theme.color.backgroundLighter};
+  border-left: 0.2rem ${({ theme }) => theme.color.background} solid;
+  position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
   width: ${({ width }) => width ?? "50rem"};
   max-width: 100%;
   height: 100%;
   overflow: auto;
-  border-left: 1px ${({ theme }) => theme.color.selection} solid;
   z-index: 101;
 
   ${animateShow}
   ${animateHide}
 
+  ${({ mode }) =>
+    mode === "modal" &&
+    `
   &[data-state="open"] {
     animation: animateShow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -59,6 +79,12 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   &:focus {
     outline: none;
   }
+  `};
+`
+
+const Header = styled(PaneMenu)`
+  justify-content: space-between;
+  padding-left: 2rem;
 `
 
 const StyledClose = styled(RadixDialog.Close).attrs({
@@ -71,32 +97,12 @@ const StyledClose = styled(RadixDialog.Close).attrs({
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const Header = styled.div`
-  display: flex;
-  padding: 2rem;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 0.1rem ${({ theme }) => theme.color.background} solid;
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
-`
-
-type DrawerProps = {
-  children: React.ReactNode
-  title?: React.ReactNode
-  trigger: React.ReactNode
-  width?: string
-  open?: boolean
-  onOpenChange?: (isOpen: boolean) => void
-  onDismiss?: () => void
-  withCloseButton?: boolean
-  closeOnOverlayClick?: boolean
-  closeOnEscape?: boolean
-}
-
 export const Drawer = ({
+  mode = "modal",
   children,
   trigger,
   title,
+  afterTitle,
   width,
   open,
   onOpenChange,
@@ -104,37 +110,58 @@ export const Drawer = ({
   withCloseButton,
   closeOnOverlayClick = true,
   closeOnEscape = true,
-}: DrawerProps) => (
-  <RadixDialog.Root onOpenChange={onOpenChange} open={open}>
-    <RadixDialog.Trigger asChild>
-      <ForwardRef>{trigger}</ForwardRef>
-    </RadixDialog.Trigger>
-    <RadixDialog.Portal>
-      <ForwardRef>
-        <Overlay primitive={RadixDialog.Overlay} />
-      </ForwardRef>
-      <DrawerContent
-        width={width}
-        {...(onDismiss && {
-          onEscapeKeyDown: closeOnEscape ? onDismiss : undefined,
-          onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
+}: DrawerProps) => {
+  return (
+    <RadixDialog.Root
+      onOpenChange={onOpenChange}
+      open={open}
+      modal={mode === "modal"}
+    >
+      <RadixDialog.Trigger asChild>
+        <ForwardRef>{trigger}</ForwardRef>
+      </RadixDialog.Trigger>
+      <RadixDialog.Portal
+        {...(mode === "side" && {
+          container: document.getElementById("side-panel-right"),
         })}
       >
-        {(title || withCloseButton) && (
-          <Header>
-            {title && <Heading level={5}>{title}</Heading>}
-            {withCloseButton && (
-              <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
-                <Close size="18px" />
-              </StyledClose>
-            )}
-          </Header>
+        {mode === "modal" && (
+          <ForwardRef>
+            <Overlay primitive={RadixDialog.Overlay} />
+          </ForwardRef>
         )}
-        {children}
-      </DrawerContent>
-    </RadixDialog.Portal>
-  </RadixDialog.Root>
-)
+        <DrawerContent
+          mode={mode}
+          width={width}
+          {...(onDismiss && {
+            onEscapeKeyDown: closeOnEscape ? onDismiss : undefined,
+            onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
+          })}
+          {...(mode === "side" && {
+            onInteractOutside: (e) => e.preventDefault(),
+            onEscapeKeyDown: (e) => e.preventDefault(),
+            onPointerDownOutside: (e) => e.preventDefault(),
+          })}
+        >
+          {(title || withCloseButton) && (
+            <Panel.Header
+              title={title}
+              afterTitle={afterTitle}
+              {...(withCloseButton && {
+                afterTitle: (
+                  <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+                    <Close size="18px" />
+                  </StyledClose>
+                ),
+              })}
+            />
+          )}
+          {children}
+        </DrawerContent>
+      </RadixDialog.Portal>
+    </RadixDialog.Root>
+  )
+}
 
 Drawer.GroupHeader = GroupHeader
 Drawer.GroupItem = GroupItem

@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 export enum BusEvent {
-  MSG_ACTIVE_PANEL = "active.panel",
+  MSG_ACTIVE_SIDEBAR = "active.panel",
   MSG_EDITOR_FOCUS = "editor.focus",
   MSG_EDITOR_SET = "editor.set",
   MSG_EDITOR_INSERT_COLUMN = "editor.insert.column",
@@ -52,3 +52,5 @@ export enum TelemetryTable {
 const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
 
 export const API = `https://${BASE}.questdb.io`
+
+export const BUTTON_ICON_SIZE = "26px"

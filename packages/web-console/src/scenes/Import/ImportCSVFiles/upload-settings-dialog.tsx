@@ -30,6 +30,10 @@ const Inputs = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
 
 const Option = styled(Drawer.GroupItem)`
   width: 100%;
+
+  &:nth-child(even) {
+    background: #242531;
+  }
 `
 
 const InputWrapper = styled.div`
@@ -207,7 +211,32 @@ export const UploadSettingsDialog = ({
         setSettings(initialState)
         onOpenChange(false)
       }}
-      withCloseButton
+      afterTitle={
+        <Box gap="1rem">
+          <Button
+            prefixIcon={<Undo size={18} />}
+            skin="secondary"
+            onClick={() => {
+              setSettings(initialState)
+              onOpenChange(false)
+            }}
+            type="button"
+          >
+            Dismiss
+          </Button>
+
+          <Button
+            prefixIcon={<Settings4 size={18} />}
+            skin="success"
+            onClick={() => {
+              onSubmit(settings)
+              onOpenChange(false)
+            }}
+          >
+            Submit
+          </Button>
+        </Box>
+      }
     >
       <Drawer.ContentWrapper>
         <Items>
@@ -273,31 +302,6 @@ export const UploadSettingsDialog = ({
               </Option>
             ))}
           </Inputs>
-
-          <Drawer.Actions>
-            <Button
-              prefixIcon={<Undo size={18} />}
-              skin="secondary"
-              onClick={() => {
-                setSettings(initialState)
-                onOpenChange(false)
-              }}
-              type="button"
-            >
-              Dismiss
-            </Button>
-
-            <Button
-              prefixIcon={<Settings4 size={18} />}
-              skin="success"
-              onClick={() => {
-                onSubmit(settings)
-                onOpenChange(false)
-              }}
-            >
-              Submit
-            </Button>
-          </Drawer.Actions>
         </Items>
       </Drawer.ContentWrapper>
     </Drawer>

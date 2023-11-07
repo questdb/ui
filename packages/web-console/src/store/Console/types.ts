@@ -33,6 +33,12 @@ export type QueryGroup = {
   queries: Query[]
 }
 
+export type TopPanel = "tables" | undefined
+
+export type Sidebar = "news" | "create" | undefined
+
+export type BottomPanel = "result" | "zeroState" | "import"
+
 export type ConsoleConfigShape = Readonly<{
   githubBanner: boolean
   readOnly?: boolean
@@ -42,6 +48,9 @@ export type ConsoleConfigShape = Readonly<{
 export type ConsoleStateShape = Readonly<{
   config?: ConsoleConfigShape
   sideMenuOpened: boolean
+  activeTopPanel: TopPanel
+  activeSidebar: Sidebar
+  activeBottomPanel: BottomPanel
 }>
 
 export enum ConsoleAT {
@@ -49,6 +58,9 @@ export enum ConsoleAT {
   REFRESH_AUTH_TOKEN = "CONSOLE/REFRESH_AUTH_TOKEN",
   SET_CONFIG = "CONSOLE/SET_CONFIG",
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
+  SET_ACTIVE_TOP_PANEL = "CONSOLE/SET_ACTIVE_TOP_PANEL",
+  SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
+  SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
 }
 
 export type BootstrapAction = Readonly<{
@@ -69,8 +81,26 @@ type ToggleSideMenuAction = Readonly<{
   type: ConsoleAT.TOGGLE_SIDE_MENU
 }>
 
+type setActiveTopPanelAction = Readonly<{
+  payload: TopPanel
+  type: ConsoleAT.SET_ACTIVE_TOP_PANEL
+}>
+
+type setActiveSidebarAction = Readonly<{
+  payload: Sidebar
+  type: ConsoleAT.SET_ACTIVE_SIDEBAR
+}>
+
+type setActiveBottomPanelAction = Readonly<{
+  payload: BottomPanel
+  type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL
+}>
+
 export type ConsoleAction =
   | BootstrapAction
   | RefreshAuthTokenAction
   | SetConfigAction
   | ToggleSideMenuAction
+  | setActiveTopPanelAction
+  | setActiveSidebarAction
+  | setActiveBottomPanelAction

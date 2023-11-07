@@ -38,6 +38,7 @@ export type EditorContext = {
   deleteBuffer: (id: number) => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
+  inFocus: boolean
 }
 
 const defaultValues = {
@@ -52,6 +53,7 @@ const defaultValues = {
   deleteBuffer: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
+  inFocus: false,
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -66,6 +68,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
+  const [inFocus, setInFocus] = useState(false)
 
   const ranOnce = useRef(false)
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
@@ -206,10 +209,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         updateBuffer,
         editorReadyTrigger: (editor) => {
           editor.focus()
+          setInFocus(true)
+          editor.onDidFocusEditorWidget(() => setInFocus(true))
+          editor.onDidBlurEditorWidget(() => setInFocus(false))
           if (activeBuffer.editorViewState) {
             editor.restoreViewState(activeBuffer.editorViewState)
           }
         },
+        inFocus,
       }}
     >
       {children}

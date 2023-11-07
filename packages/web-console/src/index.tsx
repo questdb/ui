@@ -24,7 +24,6 @@
 
 import "core-js/features/promise"
 import "./js/console"
-import "docsearch.js/dist/cdn/docsearch.min.css"
 
 import React from "react"
 import ReactDOM from "react-dom"
@@ -32,7 +31,7 @@ import { Provider } from "react-redux"
 import { applyMiddleware, compose, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
 import { ThemeProvider } from "styled-components"
-
+import { GlobalStyle } from "./theme/global-styles"
 import {
   createGlobalFadeTransition,
   ScreenSizeProvider,
@@ -68,6 +67,7 @@ ReactDOM.render(
   <ScreenSizeProvider>
     <Provider store={store}>
       <ThemeProvider theme={theme}>
+        <GlobalStyle />
         {ReactDOM.createPortal(<ToastContainer />, document.body)}
         <LocalStorageProvider>
           <FadeSlow />

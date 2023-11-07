@@ -1,5 +1,5 @@
 import { Locale } from "date-fns"
-import { enUS, fr, es, de, ja, ko, zhCN } from "date-fns/locale"
+import { enGB, enUS, fr, es, de, ja, ko, zhCN } from "date-fns/locale"
 
 /**
  * Function to retrieve a date-fns Locale object based on a specified language code.
@@ -13,6 +13,7 @@ import { enUS, fr, es, de, ja, ko, zhCN } from "date-fns/locale"
  */
 export const getLocaleFromLanguage = (language: string) => {
   const localeMap: { [key: string]: Locale } = {
+    "en-GB": enGB, // English (United Kingdom)
     "en-US": enUS, // English (United States)
     "fr-FR": fr, // French (France)
     "es-ES": es, // Spanish (Spain)
