@@ -7,6 +7,9 @@ export const Import = () => (
   <PaneWrapper>
     <PaneContent>
       <ImportCSVFiles
+        onUpload={(result) => {
+          bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+        }}
         onViewData={(result) => {
           if (result.status === "OK") {
             bus.trigger(BusEvent.MSG_QUERY_SCHEMA)

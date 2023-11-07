@@ -25,13 +25,14 @@ type State = "upload" | "list"
 
 type Props = {
   onViewData: (result: UploadResult) => void
+  onUpload: (result: UploadResult) => void
 }
 
 const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
   flex: 1;
 `
 
-export const ImportCSVFiles = ({ onViewData }: Props) => {
+export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const { quest } = useContext(QuestContext)
   const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -219,6 +220,7 @@ export const ImportCSVFiles = ({ onViewData }: Props) => {
                 error: response.status === "OK" ? undefined : response.status,
               })
               setIsUploading(file, false)
+              onUpload(response)
             } catch (err) {
               setIsUploading(file, false)
               setFileProperties(file.id, {
