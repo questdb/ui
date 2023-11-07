@@ -16,6 +16,19 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.2.9 - 2023.11.07
+
+### Added
+- General UI refresh, new News UI, new CSV Import UI [#199](https://github.com/questdb/ui/pull/199)
+
+### Changed
+- Enable HMR for CSS and improve overflow behaviour of bottom panel [#214](https://github.com/questdb/ui/pull/214)
+- Rename Table.name to Table.table_name [#212](https://github.com/questdb/ui/pull/212)
+
+### Fixed
+- Escape HTML characters in the grid [#218](https://github.com/questdb/ui/pull/218)
+- Fix showTables for Backwards Compatibility with name Property in QuestDB [#213](https://github.com/questdb/ui/pull/213)
+
 ## 0.2.8 - 2023.10.16
 
 ### Changed
