@@ -17,7 +17,7 @@ type Props = {
   onSave: (key: React.Key, value: string) => void
 } & Pick<React.InputHTMLAttributes<HTMLInputElement>, "disabled" | "onChange">
 
-const Close = styled(CloseOutline).attrs({ size: "18px" })``
+const Close = styled(CloseOutline).attrs({ size: "18px", strokeWidth: "4px" })``
 
 const Chip = styled.li`
   border-radius: ${({ theme }) => theme.borderRadius};
@@ -46,6 +46,15 @@ const Chip = styled.li`
     ${Close} {
       pointer-events: none;
     }
+  }
+
+  button {
+    background: unset;
+    width: unset;
+    display: inline-block;
+    color: inherit;
+
+    border-color: transparent;
   }
 `
 
@@ -90,11 +99,15 @@ export const TimestampFormatChip = ({
     setState(State.SAVED)
   }
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === "Enter") {
       e.preventDefault()
 
-      save()
+      if (state === State.EDIT) {
+        save()
+      } else if (state === State.SAVED) {
+        setState(State.EDIT)
+      }
     }
   }
 
@@ -122,7 +135,9 @@ export const TimestampFormatChip = ({
           <button onClick={() => save()}>✔</button>
         </>
       )}
-      <Close onClick={handleClose} />
+      <button onClick={handleClose}>
+        <Close />
+      </button>
     </Chip>
   )
 }
