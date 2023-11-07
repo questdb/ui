@@ -24,6 +24,9 @@ type FormSchema = {
   table_name: string
   partitionBy: keyof typeof PartitionBy
   delimiter: string
+  formats: {
+    behavior: "ADD" | "OVERRIDE"
+  }
 }
 
 export const Settings = () => {
