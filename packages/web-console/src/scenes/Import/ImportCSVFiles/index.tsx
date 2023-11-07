@@ -14,7 +14,7 @@ import { selectors } from "../../../store"
 import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
 import { useIsVisible } from "../../../components"
 import {
-  extractPrecionFromGeohash,
+  extractPrecisionFromGeohash,
   isGeoHash,
   mapColumnTypeToQuestDB,
   mapColumnTypeToUI,
@@ -78,7 +78,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                     type: mapColumnTypeToUI(column.type),
                     pattern: DEFAULT_TIMESTAMP_FORMAT,
                     precision: isGeoHash(column.type)
-                      ? extractPrecionFromGeohash(column.type)
+                      ? extractPrecisionFromGeohash(column.type)
                       : "",
                   }))
                 }
@@ -210,7 +210,7 @@ export const ImportCSVFiles = ({ onImported }: Props) => {
                                   : DEFAULT_TIMESTAMP_FORMAT
                                 : "",
                             precision: isGeoHash(c.type)
-                              ? extractPrecionFromGeohash(c.type)
+                              ? extractPrecisionFromGeohash(c.type)
                               : undefined,
                           },
                         } as SchemaColumn

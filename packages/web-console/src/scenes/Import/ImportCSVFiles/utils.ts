@@ -2,7 +2,7 @@ import { SchemaColumn } from "components/TableSchemaDialog/types"
 
 export const isGeoHash = (type: string) => type.startsWith("GEOHASH")
 
-export const extractPrecionFromGeohash = (geohash: string) => {
+export const extractPrecisionFromGeohash = (geohash: string) => {
   const regex = /\(([^)]+)\)/g
   const matches = regex.exec(geohash)
   if (matches && matches.length > 1) {
