@@ -52,6 +52,7 @@
     "dexie-react-hooks": "^1.1.6",
     "dotenv": "^10.0.0",
     "echarts": "^5.2.2",
+    "fuse.js": "^7.0.0",
     "intersection-observer": "^0.12.2",
     "joi": "17.5.0",
     "jquery": "3.5.1",
