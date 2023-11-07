@@ -1,9 +1,9 @@
-import React from "react"
+import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { selectors } from "../../store"
 import { Start } from "../../modules/ZeroState/start"
-import { useSelector } from "react-redux"
 import { PaneContent, PaneWrapper } from "../../components"
+import * as QuestDB from "../../utils/questdb"
+import { QuestContext } from "../../providers"
 
 const StyledPaneContent = styled(PaneContent)`
   align-items: center;
@@ -11,11 +11,32 @@ const StyledPaneContent = styled(PaneContent)`
 `
 
 export const ZeroState = () => {
-  const tables = useSelector(selectors.query.getTables)
+  const { quest } = useContext(QuestContext)
+  const [loading, setLoading] = useState(true)
+  const [tables, setTables] = useState<QuestDB.Table[]>([])
+
+  const fetchTables = async () => {
+    try {
+      const response = await quest.showTables()
+      if (response && response.type === QuestDB.Type.DQL) {
+        setTables(response.data)
+      }
+    } catch (error) {
+      return
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void fetchTables()
+  }, [])
 
   return (
     <PaneWrapper>
-      <StyledPaneContent>{tables.length <= 2 && <Start />}</StyledPaneContent>
+      <StyledPaneContent>
+        {!loading && tables.length <= 2 && <Start />}
+      </StyledPaneContent>
     </PaneWrapper>
   )
 }
