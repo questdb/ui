@@ -8,6 +8,7 @@ import { GlobalTimestampsPanel } from "./timestamps"
 import { MOCK__getSchemaRequest } from "./api"
 import { Form } from "../../components/Form"
 import { PartitionBy } from "./SchemaEditor/types"
+import { DataPreview } from "./preview"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -26,7 +27,7 @@ type FormSchema = {
 }
 
 export const Settings = () => {
-  const { state, dispatch } = useContext(ImportContext)
+  const { state } = useContext(ImportContext)
   const data = MOCK__getSchemaRequest()
   const [TSPanelOpen, toggleTSPanel] = useState(true)
 
@@ -52,14 +53,7 @@ export const Settings = () => {
             }}
           />
           <SchemaEditor data={data} />
-          <PaneWrapper>
-            <Panel.Header title="Settings" shadow />
-            <PaneContent>
-              <div onClick={() => dispatch({ step: "result" })}>
-                Settings for the chunk: {state.fileChunk?.name}
-              </div>
-            </PaneContent>
-          </PaneWrapper>
+          <DataPreview />
         </Content>
       </Wrapper>
     </Form>
