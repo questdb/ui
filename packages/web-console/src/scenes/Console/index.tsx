@@ -125,33 +125,35 @@ const Console = () => {
       >
         <Top>
           <Sidebar align="top">
-            <PopperHover
-              placement="bottom"
-              trigger={
-                <Navigation
-                  data-hook="tables-panel-button"
-                  direction="left"
-                  onClick={() => {
-                    dispatch(
-                      actions.console.setActiveTopPanel(
-                        resultsSplitterBasis === 0 ? "tables" : undefined,
-                      ),
-                    )
-                    updateSettings(
-                      StoreKey.RESULTS_SPLITTER_BASIS,
-                      resultsSplitterBasis === 0 ? 300 : 0,
-                    )
-                  }}
-                  selected={resultsSplitterBasis !== 0}
-                >
-                  <Database2 size={BUTTON_ICON_SIZE} />
-                </Navigation>
-              }
-            >
-              <Tooltip>
-                {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
-              </Tooltip>
-            </PopperHover>
+            {!sm && (
+              <PopperHover
+                placement="bottom"
+                trigger={
+                  <Navigation
+                    data-hook="tables-panel-button"
+                    direction="left"
+                    onClick={() => {
+                      dispatch(
+                        actions.console.setActiveTopPanel(
+                          resultsSplitterBasis === 0 ? "tables" : undefined,
+                        ),
+                      )
+                      updateSettings(
+                        StoreKey.RESULTS_SPLITTER_BASIS,
+                        resultsSplitterBasis === 0 ? 300 : 0,
+                      )
+                    }}
+                    selected={resultsSplitterBasis !== 0}
+                  >
+                    <Database2 size={BUTTON_ICON_SIZE} />
+                  </Navigation>
+                }
+              >
+                <Tooltip>
+                  {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
+                </Tooltip>
+              </PopperHover>
+            )}
           </Sidebar>
           <Splitter
             direction="horizontal"
