@@ -31,12 +31,16 @@ const Root = styled.div`
 `
 
 const Top = styled.div`
+  display: flex;
+  height: 100%;
+  flex: 1;
   position: relative;
   overflow: hidden;
 `
 
 const Bottom = styled.div`
   display: flex;
+  height: 100%;
   flex: 1;
   min-height: 0px;
 `
@@ -119,120 +123,130 @@ const Console = () => {
 
   return (
     <Root>
-      <Splitter
-        direction="vertical"
-        fallback={editorSplitterBasis}
-        min={100}
-        onChange={handleEditorSplitterChange}
+      <Allotment
+        vertical={true}
+        onDragEnd={(sizes) => {
+          updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, sizes[0])
+          setTimeout(() => {
+            window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
+          }, 0)
+        }}
       >
-        <Top>
-          <Sidebar align="top">
-            {!sm && (
-              <PopperHover
-                placement="bottom"
-                trigger={
-                  <Navigation
-                    data-hook="tables-panel-button"
-                    direction="left"
-                    onClick={() => {
-                      dispatch(
-                        actions.console.setActiveTopPanel(
-                          resultsSplitterBasis === 0 ? "tables" : undefined,
-                        ),
-                      )
-                      updateSettings(
-                        StoreKey.RESULTS_SPLITTER_BASIS,
-                        resultsSplitterBasis === 0 ? 300 : 0,
-                      )
-                    }}
-                    selected={resultsSplitterBasis !== 0}
-                  >
-                    <Database2 size={BUTTON_ICON_SIZE} />
-                  </Navigation>
-                }
-              >
-                <Tooltip>
-                  {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
-                </Tooltip>
-              </PopperHover>
-            )}
-          </Sidebar>
-          <Allotment
-            ref={horizontalSplitterRef}
-            onDragEnd={(sizes) => {
-              updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
-              setTimeout(() => {
-                window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
-              }, 0)
-            }}
-            snap
-          >
-            <Allotment.Pane
-              preferredSize={resultsSplitterBasis}
-              visible={resultsSplitterBasis !== 0 && !sm}
-            >
-              <Schema />
-            </Allotment.Pane>
-            <Allotment.Pane>
-              <Editor />
-            </Allotment.Pane>
-          </Allotment>
-        </Top>
-        <Bottom>
-          <Sidebar align="bottom">
-            {result &&
-              viewModes.map(({ icon, mode, tooltipText }) => (
+        <Allotment.Pane minSize={100} preferredSize={editorSplitterBasis}>
+          <Top>
+            <Sidebar align="top">
+              {!sm && (
                 <PopperHover
-                  key={mode}
-                  placement="right"
+                  placement="bottom"
                   trigger={
                     <Navigation
-                      data-hook={`${mode}-panel-button`}
+                      data-hook="tables-panel-button"
                       direction="left"
                       onClick={() => {
-                        dispatch(actions.console.setActiveBottomPanel("result"))
-                        setResultViewMode(mode)
+                        dispatch(
+                          actions.console.setActiveTopPanel(
+                            resultsSplitterBasis === 0 ? "tables" : undefined,
+                          ),
+                        )
+                        updateSettings(
+                          StoreKey.RESULTS_SPLITTER_BASIS,
+                          resultsSplitterBasis === 0 ? 300 : 0,
+                        )
                       }}
-                      selected={
-                        activeBottomPanel === "result" &&
-                        resultViewMode === mode
-                      }
+                      selected={resultsSplitterBasis !== 0}
                     >
-                      {icon}
+                      <Database2 size={BUTTON_ICON_SIZE} />
                     </Navigation>
                   }
                 >
-                  <Tooltip>{tooltipText}</Tooltip>
+                  <Tooltip>
+                    {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
+                  </Tooltip>
                 </PopperHover>
-              ))}
-            <PopperHover
-              placement="right"
-              trigger={
-                <PrimaryToggleButton
-                  onClick={() => {
-                    dispatch(actions.console.setActiveBottomPanel("import"))
-                  }}
-                  selected={activeBottomPanel === "import"}
-                  data-hook="import-panel-button"
-                >
-                  <Upload2 size={BUTTON_ICON_SIZE} />
-                </PrimaryToggleButton>
-              }
+              )}
+            </Sidebar>
+            <Allotment
+              ref={horizontalSplitterRef}
+              onDragEnd={(sizes) => {
+                updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
+                setTimeout(() => {
+                  window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
+                }, 0)
+              }}
+              snap
             >
-              <Tooltip>Import files from CSV</Tooltip>
-            </PopperHover>
-          </Sidebar>
-          <Tab ref={resultRef}>
-            {result && <Result viewMode={resultViewMode} />}
-          </Tab>
-          <Tab ref={zeroStateRef}>
-            <ZeroState />
-          </Tab>
-          <Tab ref={importRef}>
-            <Import />
-          </Tab>
-        </Bottom>
-      </Splitter>
+              <Allotment.Pane
+                preferredSize={resultsSplitterBasis}
+                visible={resultsSplitterBasis !== 0 && !sm}
+              >
+                <Schema />
+              </Allotment.Pane>
+              <Allotment.Pane>
+                <Editor />
+              </Allotment.Pane>
+            </Allotment>
+          </Top>
+        </Allotment.Pane>
+
+        <Allotment.Pane minSize={100}>
+          <Bottom>
+            <Sidebar align="bottom">
+              {result &&
+                viewModes.map(({ icon, mode, tooltipText }) => (
+                  <PopperHover
+                    key={mode}
+                    placement="right"
+                    trigger={
+                      <Navigation
+                        data-hook={`${mode}-panel-button`}
+                        direction="left"
+                        onClick={() => {
+                          dispatch(
+                            actions.console.setActiveBottomPanel("result"),
+                          )
+                          setResultViewMode(mode)
+                        }}
+                        selected={
+                          activeBottomPanel === "result" &&
+                          resultViewMode === mode
+                        }
+                      >
+                        {icon}
+                      </Navigation>
+                    }
+                  >
+                    <Tooltip>{tooltipText}</Tooltip>
+                  </PopperHover>
+                ))}
+              <PopperHover
+                placement="right"
+                trigger={
+                  <PrimaryToggleButton
+                    onClick={() => {
+                      dispatch(actions.console.setActiveBottomPanel("import"))
+                    }}
+                    selected={activeBottomPanel === "import"}
+                    data-hook="import-panel-button"
+                  >
+                    <Upload2 size={BUTTON_ICON_SIZE} />
+                  </PrimaryToggleButton>
+                }
+              >
+                <Tooltip>Import files from CSV</Tooltip>
+              </PopperHover>
+            </Sidebar>
+            <Tab ref={resultRef}>
+              {result && <Result viewMode={resultViewMode} />}
+            </Tab>
+            <Tab ref={zeroStateRef}>
+              <ZeroState />
+            </Tab>
+            <Tab ref={importRef}>
+              <Import />
+            </Tab>
+          </Bottom>
+        </Allotment.Pane>
+      </Allotment>
     </Root>
   )
 }

@@ -36,6 +36,16 @@ const DocSearchStyles = css`
     --separator-border: ${({ theme }) => theme.color.backgroundDarker};
     --sash-size: 2rem;
     --sash-hover-size: 0.5rem;
+    .allotment-module_splitView__L-yRc.allotment-module_separatorBorder__x-rDS.allotment-module_vertical__WSwwa
+      > .allotment-module_splitViewContainer__rQnVa
+      > .allotment-module_splitViewView__MGZ6O:not(:first-child)::before {
+      height: 2px;
+    }
+    .allotment-module_splitView__L-yRc.allotment-module_separatorBorder__x-rDS.allotment-module_horizontal__7doS8
+      > .allotment-module_splitViewContainer__rQnVa
+      > .allotment-module_splitViewView__MGZ6O:not(:first-child)::before {
+      width: 2px;
+    }
   }
 
   .DocSearch-Button {
