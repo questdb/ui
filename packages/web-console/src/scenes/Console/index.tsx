@@ -71,6 +71,7 @@ const Console = () => {
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
+  const { readOnly } = useSelector(selectors.console.getConfig)
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
@@ -196,9 +197,12 @@ const Console = () => {
               placement="right"
               trigger={
                 <PrimaryToggleButton
-                  onClick={() => {
-                    dispatch(actions.console.setActiveBottomPanel("import"))
-                  }}
+                  readOnly={readOnly}
+                  {...(!readOnly && {
+                    onClick: () => {
+                      dispatch(actions.console.setActiveBottomPanel("import"))
+                    },
+                  })}
                   selected={activeBottomPanel === "import"}
                   data-hook="import-panel-button"
                 >
@@ -206,7 +210,11 @@ const Console = () => {
                 </PrimaryToggleButton>
               }
             >
-              <Tooltip>Import files from CSV</Tooltip>
+              <Tooltip>
+                {readOnly
+                  ? "To use this feature, turn off read-only mode in the configuration file"
+                  : "Import files from CSV"}
+              </Tooltip>
             </PopperHover>
           </Sidebar>
           <Tab ref={resultRef}>
