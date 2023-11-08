@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { useDispatch } from "react-redux"
 import styled from "styled-components"
-import { Splitter, useScreenSize, PopperHover } from "../../components"
+import { useScreenSize, PopperHover } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
 import { ZeroState } from "./zero-state"
-import { useCallback } from "react"
 import { BusEvent } from "../../consts"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -94,20 +93,6 @@ const Console = () => {
       importRef.current.style.display = panel === "import" ? "flex" : "none"
     }
   }
-
-  const handleEditorSplitterChange = useCallback((value) => {
-    updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, value)
-    setTimeout(() => {
-      window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
-    }, 0)
-  }, [])
-
-  const handleResultsSplitterChange = useCallback((value) => {
-    updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, value)
-    setTimeout(() => {
-      window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
-    }, 0)
-  }, [])
 
   useEffect(() => {
     if (resultRef.current && result) {
