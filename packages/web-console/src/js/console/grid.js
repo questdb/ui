@@ -34,14 +34,13 @@ const hashString = (str) => {
 
 const escapeHtml = (text) => {
   const map = {
-    "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     '"': "&quot;",
     "'": "&#039;",
   }
 
-  return text.replace(/[&<>"']/g, (m) => map[m])
+  return text.replace(/[<>"']/g, (m) => map[m])
 }
 
 export function grid(rootElement, _paginationFn, id) {
