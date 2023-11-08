@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react"
+import React, { useContext, useRef, useState } from "react"
 import styled from "styled-components"
 import { PaneContent, PaneWrapper } from "../../components"
 import { Panel } from "../../components/Panel"
@@ -7,7 +7,7 @@ import { ImportContext } from "./import-file"
 import { GlobalTimestampsPanel } from "./timestamps"
 import { MOCK__getSchemaRequest } from "./api"
 import { Form } from "../../components/Form"
-import { PartitionBy } from "./SchemaEditor/types"
+import { PartitionBy, TimestampFormat } from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
 import { Allotment } from "allotment"
 
@@ -20,6 +20,7 @@ type FormSchema = {
   partitionBy: keyof typeof PartitionBy
   delimiter: string
   formats: {
+    patterns: TimestampFormat[]
     behavior: "ADD" | "OVERRIDE"
   }
 }
@@ -28,6 +29,7 @@ export const Settings = () => {
   const { state } = useContext(ImportContext)
   const data = MOCK__getSchemaRequest()
   const [TSPanelOpen, toggleTSPanel] = useState(true)
+  const TSPanelRef = useRef(null)
 
   return (
     <Wrapper>
@@ -47,7 +49,7 @@ export const Settings = () => {
             style: { flex: 1 },
           }}
         >
-          <Allotment>
+          <Allotment ref={TSPanelRef} minSize={300}>
             <Allotment.Pane>
               <GlobalTimestampsPanel
                 open={TSPanelOpen}
@@ -56,7 +58,7 @@ export const Settings = () => {
                 }}
               />
             </Allotment.Pane>
-            <Allotment.Pane>
+            <Allotment.Pane preferredSize="65%">
               <SchemaEditor data={data} />
             </Allotment.Pane>
             <Allotment.Pane>
