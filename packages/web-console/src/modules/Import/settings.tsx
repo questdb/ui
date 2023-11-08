@@ -9,16 +9,11 @@ import { MOCK__getSchemaRequest } from "./api"
 import { Form } from "../../components/Form"
 import { PartitionBy } from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
+import { Allotment } from "allotment"
 
 const Wrapper = styled(PaneWrapper)``
 
-const Content = styled(PaneContent)`
-  flex-direction: row;
-
-  > div {
-    flex: 1;
-  }
-`
+const Content = styled(PaneContent)``
 
 type FormSchema = {
   table_name: string
@@ -35,30 +30,41 @@ export const Settings = () => {
   const [TSPanelOpen, toggleTSPanel] = useState(true)
 
   return (
-    <Form<FormSchema>
-      name="import_schema"
-      onSubmit={function (data: any, event?: any) {
-        alert("submit")
-      }}
-      defaultValues={{
-        table_name: state.fileChunk?.name ?? "",
-        partitionBy: "NONE",
-        delimiter: ",",
-      }}
-    >
-      <Wrapper>
+    <Wrapper>
+      <Content>
         <Panel.Header title="Verify and import stuff go here" />
-        <Content>
-          <GlobalTimestampsPanel
-            open={TSPanelOpen}
-            toggle={() => {
-              toggleTSPanel(!TSPanelOpen)
-            }}
-          />
-          <SchemaEditor data={data} />
-          <DataPreview />
-        </Content>
-      </Wrapper>
-    </Form>
+        <Form<FormSchema>
+          name="import_schema"
+          onSubmit={function (data: any, event?: any) {
+            alert("submit")
+          }}
+          defaultValues={{
+            table_name: state.fileChunk?.name ?? "",
+            partitionBy: "NONE",
+            delimiter: ",",
+          }}
+          formProps={{
+            style: { flex: 1 },
+          }}
+        >
+          <Allotment>
+            <Allotment.Pane>
+              <GlobalTimestampsPanel
+                open={TSPanelOpen}
+                toggle={() => {
+                  toggleTSPanel(!TSPanelOpen)
+                }}
+              />
+            </Allotment.Pane>
+            <Allotment.Pane>
+              <SchemaEditor data={data} />
+            </Allotment.Pane>
+            <Allotment.Pane>
+              <DataPreview />
+            </Allotment.Pane>
+          </Allotment>
+        </Form>
+      </Content>
+    </Wrapper>
   )
 }
