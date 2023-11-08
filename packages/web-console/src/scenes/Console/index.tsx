@@ -21,6 +21,7 @@ import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
+import { Allotment, AllotmentHandle } from "allotment"
 
 const Root = styled.div`
   display: flex;
@@ -75,6 +76,7 @@ const Console = () => {
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
   const importRef = React.useRef<HTMLDivElement>(null)
+  const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
 
   const showPanel = (panel: BottomPanel) => {
     if (resultRef.current) {
@@ -155,15 +157,26 @@ const Console = () => {
               </PopperHover>
             )}
           </Sidebar>
-          <Splitter
-            direction="horizontal"
-            fallback={resultsSplitterBasis}
-            max={500}
-            onChange={handleResultsSplitterChange}
+          <Allotment
+            ref={horizontalSplitterRef}
+            onDragEnd={(sizes) => {
+              updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
+              setTimeout(() => {
+                window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
+              }, 0)
+            }}
+            snap
           >
-            {!sm && <Schema />}
-            <Editor />
-          </Splitter>
+            <Allotment.Pane
+              preferredSize={resultsSplitterBasis}
+              visible={resultsSplitterBasis !== 0 && !sm}
+            >
+              <Schema />
+            </Allotment.Pane>
+            <Allotment.Pane>
+              <Editor />
+            </Allotment.Pane>
+          </Allotment>
         </Top>
         <Bottom>
           <Sidebar align="bottom">

@@ -30,6 +30,12 @@ const DocSearchStyles = css`
     );
     --docsearch-key-shadow: inset 0 -2px 0 0 #282d55, inset 0 0 1px 1px #51577d,
       0 2px 2px 0 rgba(3, 4, 9, 0.3);
+
+    // Allotment styling
+    --focus-border: ${({ theme }) => theme.color.purple};
+    --separator-border: ${({ theme }) => theme.color.backgroundDarker};
+    --sash-size: 2rem;
+    --sash-hover-size: 0.5rem;
   }
 
   .DocSearch-Button {
