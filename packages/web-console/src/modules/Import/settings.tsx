@@ -14,7 +14,12 @@ import { DEFAULT_TIMESTAMP_FORMAT } from "../../components/TableSchemaDialog/con
 
 const Wrapper = styled(PaneWrapper)``
 
-const Content = styled(PaneContent)``
+const Content = styled(PaneContent)`
+  .split-view-view {
+    display: flex;
+    overflow: auto !important;
+  }
+`
 
 type FormSchema = {
   table_name: string
