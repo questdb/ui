@@ -10,6 +10,7 @@ import { Form } from "../../components/Form"
 import { PartitionBy, TimestampFormat } from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
 import { Allotment } from "allotment"
+import { DEFAULT_TIMESTAMP_FORMAT } from "../../components/TableSchemaDialog/const"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -44,6 +45,14 @@ export const Settings = () => {
             table_name: state.fileChunk?.name ?? "",
             partitionBy: "NONE",
             delimiter: ",",
+            formats: {
+              patterns: [
+                {
+                  pattern: DEFAULT_TIMESTAMP_FORMAT,
+                },
+              ],
+              behavior: "ADD",
+            },
           }}
           formProps={{
             style: { flex: 1 },

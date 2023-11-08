@@ -10,7 +10,7 @@ const common = [
 ]
 
 export const DelimiterMenu = () => {
-  const { watch } = useFormContext()
+  const { watch, setValue } = useFormContext()
   const delimiter = watch("delimiter")
   return (
     <DropdownMenu.Root>
@@ -23,7 +23,10 @@ export const DelimiterMenu = () => {
         <DropdownMenu.Content align="start">
           <span>Common options</span>
           {common.map(([label, value]) => (
-            <DropdownMenu.Item key={label}>
+            <DropdownMenu.Item
+              key={label}
+              onClick={() => setValue("delimiter", value)}
+            >
               <span>{label}</span> <small>{value}</small>
             </DropdownMenu.Item>
           ))}
