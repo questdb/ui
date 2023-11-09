@@ -7,7 +7,11 @@ import { ImportContext } from "./import-file"
 import { GlobalTimestampsPanel } from "./timestamps"
 import { MOCK__getSchemaRequest } from "./api"
 import { Form } from "../../components/Form"
-import { PartitionBy, TimestampFormat } from "./SchemaEditor/types"
+import {
+  PartitionBy,
+  RequestColumn,
+  TimestampFormat,
+} from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
 import { Allotment } from "allotment"
 import { DEFAULT_TIMESTAMP_FORMAT } from "../../components/TableSchemaDialog/const"
@@ -23,6 +27,7 @@ const Content = styled(PaneContent)`
 
 type FormSchema = {
   table_name: string
+  columns: RequestColumn[]
   partitionBy: keyof typeof PartitionBy
   delimiter: string
   formats: {
@@ -48,14 +53,11 @@ export const Settings = () => {
           }}
           defaultValues={{
             table_name: state.fileChunk?.name ?? "",
+            columns: data.columns,
             partitionBy: "NONE",
             delimiter: ",",
             formats: {
-              patterns: [
-                {
-                  pattern: DEFAULT_TIMESTAMP_FORMAT,
-                },
-              ],
+              patterns: data.formats["TIMESTAMP"],
               behavior: "ADD",
             },
           }}
@@ -73,7 +75,7 @@ export const Settings = () => {
               />
             </Allotment.Pane>
             <Allotment.Pane preferredSize="65%">
-              <SchemaEditor data={data} />
+              <SchemaEditor />
             </Allotment.Pane>
             <Allotment.Pane>
               <DataPreview />

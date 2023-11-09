@@ -1,19 +1,13 @@
 import React, { useContext } from "react"
-import { Table, Badge, Box, DropdownMenu } from "@questdb/react-components"
-import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
+import { Table, Badge, DropdownMenu } from "@questdb/react-components"
 import { BadgeType } from "../../../scenes/Import/ImportCSVFiles/types"
 import { ImportContext } from "../import-file"
-import {
-  PaneContent,
-  PaneWrapper,
-  Input,
-  PopperToggle,
-} from "../../../components"
-import { Panel } from "../../../components/Panel"
-import { ColumnType, RequestColumn, SchemaRequest } from "./types"
+import { PaneContent, PaneWrapper } from "../../../components"
+import { ColumnType, RequestColumn, TimestampFormat } from "./types"
 import styled from "styled-components"
 import { Nav, NavGroup, Subheader } from "../panel"
 import { TableNameMenu, PartitionMenu, DelimiterMenu } from "./actions"
+import { useFieldArray, useFormContext } from "react-hook-form"
 
 const DetailBadge = styled(Badge)`
   gap: 1rem;
@@ -34,16 +28,18 @@ const FormatMenuTrigger = styled.div`
 
 const PrecisionBadge = styled(DetailBadge)``
 
-type Props = { data: SchemaRequest }
-type Column = RequestColumn
+type Props = {}
+type Column = RequestColumn & { id: string }
 
-export const SchemaEditor = ({ data }: Props) => {
-  const { state, dispatch } = useContext(ImportContext)
+export const SchemaEditor = ({}: Props) => {
+  const { state } = useContext(ImportContext)
+  const { watch, register, getValues } = useFormContext()
+  const { fields } = useFieldArray({ name: "columns" })
+
   return (
     <PaneWrapper>
       <Subheader>
         <NavGroup>
-          {/** NOTE: hypothetically this is the control for flow as well */}
           <TableNameMenu />
           <DelimiterMenu />
           <PartitionMenu />
@@ -58,41 +54,59 @@ export const SchemaEditor = ({ data }: Props) => {
         <Table<Column>
           columns={[
             {
-              render: () => (
-                <input type="checkbox" name="" id="" defaultChecked={true} />
+              render: ({ data: field, index }) => (
+                <input
+                  type="checkbox"
+                  key={field.id}
+                  {...register(`columns.${index}.enabled`)} // TODO
+                  defaultChecked={true}
+                />
               ),
             },
             {
               // header: "Index",
-              render: ({ data: { file_column_index } }) => (
-                <div>{file_column_index}</div>
+              render: ({ data: field, index }) => (
+                <div>{getValues(`columns.${index}.file_column_index`)}</div>
               ),
             },
             {
               header: "Source",
-              render: ({ data: { file_column_name } }) => (
-                <div>{file_column_name}</div>
+              //
+              render: ({ data: field, index }) => (
+                <div>{getValues(`columns.${index}.file_column_name`)}</div>
               ),
             },
             {
               header: "Destination",
-              render: ({ data: { table_column_name } }) =>
+              // table_column_name
+              render: ({ data: field, index }) =>
                 state.flow === "new_table" ? (
-                  <input type="text" value={table_column_name} />
+                  <input
+                    type="text"
+                    {...register(`columns.${index}.table_column_name`, {
+                      shouldUnregister: true,
+                    })}
+                  />
                 ) : (
-                  <select name="" id="" defaultValue={table_column_name}>
-                    {data.columns.map(({ table_column_name }) => (
-                      <option value={table_column_name}>
-                        {table_column_name}
-                      </option>
-                    ))}
+                  <select
+                    {...register(`columns.${index}.table_column_name`, {
+                      shouldUnregister: true,
+                    })}
+                  >
+                    {(watch("columns") as RequestColumn[]).map(
+                      ({ table_column_name }) => (
+                        <option value={table_column_name}>
+                          {table_column_name}
+                        </option>
+                      ),
+                    )}
                   </select>
                 ),
             },
             {
               header: "Datatype",
-              render: ({ data: { column_type } }) => (
-                <select name="" id="" defaultValue={column_type}>
+              render: ({ data: field, index }) => (
+                <select {...register(`columns.${index}.column_type`)}>
                   {Object.entries(ColumnType).map(([label, value]) => (
                     <option value={value}>{label}</option>
                   ))}
@@ -100,42 +114,53 @@ export const SchemaEditor = ({ data }: Props) => {
               ),
             },
             {
-              render: ({ data: { column_type, precision, formats } }) =>
-                column_type === "DATE" || column_type === "TIMESTAMP"
-                  ? formats!.length > 0 && (
-                      <DropdownMenu.Root modal={false}>
-                        <DropdownMenu.Trigger asChild>
-                          <FormatMenuTrigger>
-                            <DetailBadge type={BadgeType.INFO}>
-                              <small>{formats![0].pattern}</small>
-                              {formats!.length > 1 && (
-                                <small>+ {formats!.length - 1}</small>
-                              )}
-                              {/* @TODO chevron down */}
-                              <span>v</span>
-                            </DetailBadge>
-                          </FormatMenuTrigger>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content align="end">
-                            {formats!.map(({ pattern }) => (
-                              <DropdownMenu.Item key={pattern}>
-                                {pattern}
-                              </DropdownMenu.Item>
-                            ))}
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu.Root>
-                    )
-                  : column_type === "GEOHASH" && (
-                      <PrecisionBadge type={BadgeType.INFO}>
-                        <small>Precision</small>
-                        {precision}
-                      </PrecisionBadge>
-                    ),
+              // { column_type, precision, formats }
+              render: ({ data: field, index }) => {
+                const prefixField = (key: string) => `columns.${index}.${field}`
+                const [column_type, precision, formats] = getValues(
+                  ["column_type", "precision", "formats"].map(prefixField),
+                )
+                if (
+                  column_type === "DATE" ||
+                  (column_type === "TIMESTAMP" && formats.length > 0)
+                ) {
+                  return (
+                    <DropdownMenu.Root modal={false}>
+                      <DropdownMenu.Trigger asChild>
+                        <FormatMenuTrigger>
+                          <DetailBadge type={BadgeType.INFO}>
+                            <small>{formats![0].pattern}</small>
+                            {formats.length > 1 && (
+                              <small>+ {formats!.length - 1}</small>
+                            )}
+                            {/* @TODO chevron down */}
+                            <span>v</span>
+                          </DetailBadge>
+                        </FormatMenuTrigger>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content align="end">
+                          {(formats as TimestampFormat[]).map(({ pattern }) => (
+                            <DropdownMenu.Item key={pattern}>
+                              {pattern}
+                            </DropdownMenu.Item>
+                          ))}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu.Root>
+                  )
+                } else if (column_type === "GEOHASH") {
+                  return (
+                    <PrecisionBadge type={BadgeType.INFO}>
+                      <small>Precision</small>
+                      {precision}
+                    </PrecisionBadge>
+                  )
+                }
+              },
             },
           ]}
-          rows={data.columns}
+          rows={fields as Column[]}
         />
       </PaneContent>
     </PaneWrapper>
