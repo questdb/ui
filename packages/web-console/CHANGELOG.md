@@ -16,6 +16,14 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.3.0 - 2023.11.08
+
+### Changed
+- allow ampersand in the grid output [#222](https://github.com/questdb/ui/pull/222)
+
+### Fixed
+- Disable create table/import UI in read-only mode [#221](https://github.com/questdb/ui/pull/221)
+
 ## 0.2.9 - 2023.11.07
 
 ### Added
