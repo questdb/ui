@@ -39,12 +39,14 @@ const defaultProps: {
   selected: boolean
   size: ButtonProps["size"]
   type: ButtonProps["type"]
+  readOnly?: boolean
 } = {
   direction: "bottom",
   fontSize: "md",
   selected: false,
   size: "md",
   type: "button",
+  readOnly: false,
 }
 
 type DefaultProps = typeof defaultProps
@@ -52,6 +54,7 @@ type DefaultProps = typeof defaultProps
 type Props = Readonly<{
   direction: Direction
   selected: boolean
+  readOnly?: boolean
 }> &
   ButtonProps
 
@@ -96,6 +99,13 @@ const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
     &:active:not([disabled]) {
       filter: brightness(90%);
     }
+
+    ${({ readOnly }) =>
+      readOnly &&
+      `
+      filter: brightness(0.5);
+      cursor: default;
+    `}
   `
 
 const PrimaryToggleButtonStyled = styled.button<Props>`

@@ -75,6 +75,7 @@ const Console = () => {
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
+  const { readOnly } = useSelector(selectors.console.getConfig)
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
@@ -206,15 +207,31 @@ const Console = () => {
               <PopperHover
                 placement="right"
                 trigger={
-                  <PrimaryToggleButton
-                    onClick={() => {
-                      dispatch(actions.console.setActiveBottomPanel("import"))
-                    }}
-                    selected={activeBottomPanel === "import"}
-                    data-hook="import-panel-button"
+                  <PopperHover
+                    placement="right"
+                    trigger={
+                      <PrimaryToggleButton
+                        readOnly={readOnly}
+                        {...(!readOnly && {
+                          onClick: () => {
+                            dispatch(
+                              actions.console.setActiveBottomPanel("import"),
+                            )
+                          },
+                        })}
+                        selected={activeBottomPanel === "import"}
+                        data-hook="import-panel-button"
+                      >
+                        <Upload2 size={BUTTON_ICON_SIZE} />
+                      </PrimaryToggleButton>
+                    }
                   >
-                    <Upload2 size={BUTTON_ICON_SIZE} />
-                  </PrimaryToggleButton>
+                    <Tooltip>
+                      {readOnly
+                        ? "To use this feature, turn off read-only mode in the configuration file"
+                        : "Import files from CSV"}
+                    </Tooltip>
+                  </PopperHover>
                 }
               >
                 <Tooltip>Import files from CSV</Tooltip>

@@ -17,6 +17,7 @@ export const CreateTableDialog = () => {
   const dispatch = useDispatch()
   const tables = useSelector(selectors.query.getTables)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const { readOnly } = useSelector(selectors.console.getConfig)
   const { appendQuery } = useEditor()
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
@@ -64,20 +65,27 @@ export const CreateTableDialog = () => {
           icon={
             <PrimaryToggleButton
               data-hook="create-table-panel-button"
+              readOnly={readOnly}
               selected={addTableDialogOpen !== undefined}
-              onClick={() =>
-                dispatch(
-                  actions.console.setActiveSidebar(
-                    addTableDialogOpen ? undefined : "create",
-                  ),
-                )
-              }
+              {...(!readOnly && {
+                onClick: () => {
+                  dispatch(
+                    actions.console.setActiveSidebar(
+                      addTableDialogOpen ? undefined : "create",
+                    ),
+                  )
+                },
+              })}
             >
               <TableIcon size={BUTTON_ICON_SIZE} />
             </PrimaryToggleButton>
           }
           placement="left"
-          tooltip="Create table"
+          tooltip={
+            readOnly
+              ? "To use this feature, turn off read-only mode in the configuration file"
+              : "Create table"
+          }
         />
       }
       ctaText="Create"
