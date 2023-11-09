@@ -12,13 +12,20 @@ import { useFieldArray, useFormContext } from "react-hook-form"
 const DetailBadge = styled(Badge)`
   gap: 1rem;
   justify-content: space-between;
+
   small {
     opacity: 0.6;
+    display: inline-block;
 
-    max-width: 20ch;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    &:first-child {
+      max-width: 20ch;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    & + small {
+      margin-inline-start: 1rem;
+    }
   }
 `
 
@@ -29,13 +36,15 @@ const FormatMenuTrigger = styled.div`
 const PrecisionBadge = styled(DetailBadge)``
 
 type Props = { initData: RequestColumn[] }
-type Column = RequestColumn & { id: string }
+type Column = RequestColumn & { id: string; enabled: boolean }
 
 export const SchemaEditor = ({ initData }: Props) => {
   const { state } = useContext(ImportContext)
   const { register, setValue, getValues } = useFormContext()
   const { fields } = useFieldArray({ name: "columns" })
 
+  const isFieldDisabled = (index: number) =>
+    getValues(`columns.${index}.enabled`) === false
   return (
     <PaneWrapper>
       <Subheader>
@@ -58,13 +67,12 @@ export const SchemaEditor = ({ initData }: Props) => {
                 <input
                   type="checkbox"
                   key={field.id}
-                  {...register(`columns.${index}.enabled`)} // TODO
+                  {...register(`columns.${index}.enabled`)}
                   defaultChecked={true}
                 />
               ),
             },
             {
-              // header: "Index",
               render: ({ data: field, index }) => (
                 <div key={field.id}>{field.file_column_index}</div>
               ),
@@ -77,12 +85,12 @@ export const SchemaEditor = ({ initData }: Props) => {
             },
             {
               header: "Destination",
-              // table_column_name
               render: ({ data: field, index }) =>
                 state.flow === "new_table" ? (
                   <input
                     type="text"
                     key={field.id}
+                    disabled={isFieldDisabled(index)}
                     {...register(`columns.${index}.table_column_name`, {
                       shouldUnregister: true,
                     })}
@@ -90,6 +98,7 @@ export const SchemaEditor = ({ initData }: Props) => {
                 ) : (
                   <select
                     key={field.id}
+                    disabled={isFieldDisabled(index)}
                     {...register(`columns.${index}.table_column_name`, {
                       shouldUnregister: true,
                     })}
@@ -111,7 +120,7 @@ export const SchemaEditor = ({ initData }: Props) => {
                 <select
                   key={field.id}
                   {...register(`columns.${index}.column_type`)}
-                  disabled={state.flow === "existing"}
+                  disabled={isFieldDisabled(index) || state.flow === "existing"}
                 >
                   {Object.entries(ColumnType).map(([label, value]) => (
                     <option key={`${field.id}-${value}`} value={value}>
@@ -122,7 +131,6 @@ export const SchemaEditor = ({ initData }: Props) => {
               ),
             },
             {
-              // { column_type, precision, formats }
               render: ({ data: field, index }) => {
                 const { column_type, precision, formats } = getValues(
                   `columns.${index}`,
@@ -136,10 +144,10 @@ export const SchemaEditor = ({ initData }: Props) => {
                       <DropdownMenu.Trigger asChild>
                         <FormatMenuTrigger>
                           <DetailBadge type={BadgeType.INFO}>
-                            <small>{formats![0].pattern}</small>
+                            <span><small>{formats![0].pattern}</small>
                             {formats!.length > 1 && (
                               <small>+ {formats!.length - 1}</small>
-                            )}
+                            )}</span>
                             {/* @TODO chevron down */}
                             <span>v</span>
                           </DetailBadge>
