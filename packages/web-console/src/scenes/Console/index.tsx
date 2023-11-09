@@ -114,7 +114,7 @@ const Console = () => {
         onDragEnd={(sizes) => {
           updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, sizes[0])
           setTimeout(() => {
-            window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
+            window.bus.trigger(BusEvent.MSG_PANEL_RESIZE)
           }, 0)
         }}
       >
@@ -156,7 +156,7 @@ const Console = () => {
               onDragEnd={(sizes) => {
                 updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
                 setTimeout(() => {
-                  window.bus.trigger(BusEvent.MSG_ACTIVE_SIDEBAR)
+                  window.bus.trigger(BusEvent.MSG_PANEL_RESIZE)
                 }, 0)
               }}
               snap
@@ -207,34 +207,25 @@ const Console = () => {
               <PopperHover
                 placement="right"
                 trigger={
-                  <PopperHover
-                    placement="right"
-                    trigger={
-                      <PrimaryToggleButton
-                        readOnly={readOnly}
-                        {...(!readOnly && {
-                          onClick: () => {
-                            dispatch(
-                              actions.console.setActiveBottomPanel("import"),
-                            )
-                          },
-                        })}
-                        selected={activeBottomPanel === "import"}
-                        data-hook="import-panel-button"
-                      >
-                        <Upload2 size={BUTTON_ICON_SIZE} />
-                      </PrimaryToggleButton>
-                    }
+                  <PrimaryToggleButton
+                    readOnly={readOnly}
+                    {...(!readOnly && {
+                      onClick: () => {
+                        dispatch(actions.console.setActiveBottomPanel("import"))
+                      },
+                    })}
+                    selected={activeBottomPanel === "import"}
+                    data-hook="import-panel-button"
                   >
-                    <Tooltip>
-                      {readOnly
-                        ? "To use this feature, turn off read-only mode in the configuration file"
-                        : "Import files from CSV"}
-                    </Tooltip>
-                  </PopperHover>
+                    <Upload2 size={BUTTON_ICON_SIZE} />
+                  </PrimaryToggleButton>
                 }
               >
-                <Tooltip>Import files from CSV</Tooltip>
+                <Tooltip>
+                  {readOnly
+                    ? "To use this feature, turn off read-only mode in the configuration file"
+                    : "Import files from CSV"}
+                </Tooltip>
               </PopperHover>
             </Sidebar>
             <Tab ref={resultRef}>

@@ -124,6 +124,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       _grid.setData(data)
     })
 
+    bus.on(BusEvent.MSG_PANEL_RESIZE, function () {
+      _grid.render()
+    })
+
     _grid.addEventListener("header.click", function (event: CustomEvent) {
       bus.trigger("editor.insert.column", event.detail.columnName)
     })
