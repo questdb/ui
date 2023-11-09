@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { CloseOutline } from "@styled-icons/evaicons-outline"
 import styled from "styled-components"
 import type { TimestampFormat } from "../../modules/Import/SchemaEditor/types"
@@ -27,7 +27,6 @@ const Chip = styled.li`
   &.edit {
     cursor: pointer;
     background: green;
-    padding-block: 0.5rem;
   }
 
   &.saved {

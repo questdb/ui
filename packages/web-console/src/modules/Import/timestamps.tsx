@@ -1,7 +1,6 @@
 import React from "react"
 import styled from "styled-components"
 import { PaneContent, PaneWrapper } from "../../components"
-import { Panel } from "../../components/Panel"
 import { TimestampFormatList } from "../../components/TimestampFormat/list"
 import { Nav, NavGroup, Subheader } from "./panel"
 import { ArrowRightS } from "@styled-icons/remix-line"
@@ -35,7 +34,9 @@ export const GlobalTimestampsPanel = ({ open = true, toggle }: Props) => {
                 style={{
                   opacity: +override,
                 }}
-              >✔</small>
+              >
+                ✔
+              </small>
             </Nav>
           )}
         </NavGroup>

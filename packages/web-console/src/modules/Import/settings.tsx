@@ -1,7 +1,7 @@
 import React, { useContext, useRef, useState } from "react"
 import styled from "styled-components"
-import { PaneContent, PaneWrapper } from "../../components"
-import { Panel } from "../../components/Panel"
+import { PaneContent, PaneWrapper, PrimaryToggleButton } from "../../components"
+import { Root as PanelHeader } from "../../components/Panel/header"
 import { SchemaEditor } from "./SchemaEditor"
 import { ImportContext } from "./import-file"
 import { GlobalTimestampsPanel } from "./timestamps"
@@ -14,7 +14,6 @@ import {
 } from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
 import { Allotment } from "allotment"
-import { DEFAULT_TIMESTAMP_FORMAT } from "../../components/TableSchemaDialog/const"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -24,6 +23,8 @@ const Content = styled(PaneContent)`
     overflow: auto !important;
   }
 `
+
+const Header = styled(PanelHeader)``
 
 type FormSchema = {
   table_name: string
@@ -45,7 +46,11 @@ export const Settings = () => {
   return (
     <Wrapper>
       <Content>
-        <Panel.Header title="Verify and import stuff go here" />
+        <Header>
+          <PrimaryToggleButton selected={TSPanelOpen} onClick={() => toggleTSPanel(!TSPanelOpen)}>
+            FMTS
+          </PrimaryToggleButton>
+        </Header>
         <Form<FormSchema>
           name="import_schema"
           onSubmit={function (data: any, event?: any) {
@@ -66,7 +71,7 @@ export const Settings = () => {
           }}
         >
           <Allotment ref={TSPanelRef} minSize={300}>
-            <Allotment.Pane>
+            <Allotment.Pane visible={TSPanelOpen}>
               <GlobalTimestampsPanel
                 open={TSPanelOpen}
                 toggle={() => {
