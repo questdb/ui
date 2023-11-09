@@ -28,12 +28,12 @@ const FormatMenuTrigger = styled.div`
 
 const PrecisionBadge = styled(DetailBadge)``
 
-type Props = {initData: RequestColumn[]}
+type Props = { initData: RequestColumn[] }
 type Column = RequestColumn & { id: string }
 
-export const SchemaEditor = ({initData}: Props) => {
+export const SchemaEditor = ({ initData }: Props) => {
   const { state } = useContext(ImportContext)
-  const { register } = useFormContext()
+  const { register, setValue, getValues } = useFormContext()
   const { fields } = useFieldArray({ name: "columns" })
 
   return (
@@ -89,27 +89,34 @@ export const SchemaEditor = ({initData}: Props) => {
                   />
                 ) : (
                   <select
-                  key={field.id}
+                    key={field.id}
                     {...register(`columns.${index}.table_column_name`, {
                       shouldUnregister: true,
                     })}
                   >
-                    {initData.map(
-                      ({ table_column_name }) => (
-                        <option value={table_column_name} key={`${field.id}-${table_column_name}`}>
-                          {table_column_name}
-                        </option>
-                      ),
-                    )}
+                    {initData.map(({ table_column_name }) => (
+                      <option
+                        value={table_column_name}
+                        key={`${field.id}-${table_column_name}`}
+                      >
+                        {table_column_name}
+                      </option>
+                    ))}
                   </select>
                 ),
             },
             {
               header: "Datatype",
               render: ({ data: field, index }) => (
-                <select key={field.id} {...register(`columns.${index}.column_type`)}>
+                <select
+                  key={field.id}
+                  {...register(`columns.${index}.column_type`)}
+                  disabled={state.flow === "existing"}
+                >
                   {Object.entries(ColumnType).map(([label, value]) => (
-                    <option key={`${field.id}-${value}`} value={value}>{label}</option>
+                    <option key={`${field.id}-${value}`} value={value}>
+                      {label}
+                    </option>
                   ))}
                 </select>
               ),
@@ -117,7 +124,9 @@ export const SchemaEditor = ({initData}: Props) => {
             {
               // { column_type, precision, formats }
               render: ({ data: field, index }) => {
-                const { column_type, precision, formats } = field
+                const { column_type, precision, formats } = getValues(
+                  `columns.${index}`,
+                )
                 if (
                   column_type === "DATE" ||
                   (column_type === "TIMESTAMP" && formats!.length > 0)

@@ -36,7 +36,7 @@ export const MOCK__getSchemaRequest = (): SchemaRequest => {
       },
       {
         file_column_name: "source_column_3",
-        file_column_index: 1,
+        file_column_index: 2,
         column_type: "GEOHASH",
         table_column_name: "destination_column_3",
         precision: "5"
