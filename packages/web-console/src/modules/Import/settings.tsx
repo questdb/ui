@@ -75,7 +75,7 @@ export const Settings = () => {
               />
             </Allotment.Pane>
             <Allotment.Pane preferredSize="65%">
-              <SchemaEditor />
+              <SchemaEditor initData={data.columns}/>
             </Allotment.Pane>
             <Allotment.Pane>
               <DataPreview />

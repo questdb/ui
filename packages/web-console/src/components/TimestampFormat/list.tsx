@@ -19,8 +19,6 @@ export const TimestampFormatList = ({}: Props) => {
     name: "formats.patterns",
   })
 
-  console.log('fields', fields)
-
   const onChipClose = (index: number) => {
     remove(index)
   }

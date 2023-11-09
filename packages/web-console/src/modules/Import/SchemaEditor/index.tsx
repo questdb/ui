@@ -28,12 +28,12 @@ const FormatMenuTrigger = styled.div`
 
 const PrecisionBadge = styled(DetailBadge)``
 
-type Props = {}
+type Props = {initData: RequestColumn[]}
 type Column = RequestColumn & { id: string }
 
-export const SchemaEditor = ({}: Props) => {
+export const SchemaEditor = ({initData}: Props) => {
   const { state } = useContext(ImportContext)
-  const { watch, register, getValues } = useFormContext()
+  const { register } = useFormContext()
   const { fields } = useFieldArray({ name: "columns" })
 
   return (
@@ -66,14 +66,13 @@ export const SchemaEditor = ({}: Props) => {
             {
               // header: "Index",
               render: ({ data: field, index }) => (
-                <div>{getValues(`columns.${index}.file_column_index`)}</div>
+                <div key={field.id}>{field.file_column_index}</div>
               ),
             },
             {
               header: "Source",
-              //
               render: ({ data: field, index }) => (
-                <div>{getValues(`columns.${index}.file_column_name`)}</div>
+                <div key={field.id}>{field.file_column_name}</div>
               ),
             },
             {
@@ -83,19 +82,21 @@ export const SchemaEditor = ({}: Props) => {
                 state.flow === "new_table" ? (
                   <input
                     type="text"
+                    key={field.id}
                     {...register(`columns.${index}.table_column_name`, {
                       shouldUnregister: true,
                     })}
                   />
                 ) : (
                   <select
+                  key={field.id}
                     {...register(`columns.${index}.table_column_name`, {
                       shouldUnregister: true,
                     })}
                   >
-                    {(watch("columns") as RequestColumn[]).map(
+                    {initData.map(
                       ({ table_column_name }) => (
-                        <option value={table_column_name}>
+                        <option value={table_column_name} key={`${field.id}-${table_column_name}`}>
                           {table_column_name}
                         </option>
                       ),
@@ -106,9 +107,9 @@ export const SchemaEditor = ({}: Props) => {
             {
               header: "Datatype",
               render: ({ data: field, index }) => (
-                <select {...register(`columns.${index}.column_type`)}>
+                <select key={field.id} {...register(`columns.${index}.column_type`)}>
                   {Object.entries(ColumnType).map(([label, value]) => (
-                    <option value={value}>{label}</option>
+                    <option key={`${field.id}-${value}`} value={value}>{label}</option>
                   ))}
                 </select>
               ),
@@ -116,21 +117,18 @@ export const SchemaEditor = ({}: Props) => {
             {
               // { column_type, precision, formats }
               render: ({ data: field, index }) => {
-                const prefixField = (key: string) => `columns.${index}.${field}`
-                const [column_type, precision, formats] = getValues(
-                  ["column_type", "precision", "formats"].map(prefixField),
-                )
+                const { column_type, precision, formats } = field
                 if (
                   column_type === "DATE" ||
-                  (column_type === "TIMESTAMP" && formats.length > 0)
+                  (column_type === "TIMESTAMP" && formats!.length > 0)
                 ) {
                   return (
-                    <DropdownMenu.Root modal={false}>
+                    <DropdownMenu.Root modal={false} key={field.id}>
                       <DropdownMenu.Trigger asChild>
                         <FormatMenuTrigger>
                           <DetailBadge type={BadgeType.INFO}>
                             <small>{formats![0].pattern}</small>
-                            {formats.length > 1 && (
+                            {formats!.length > 1 && (
                               <small>+ {formats!.length - 1}</small>
                             )}
                             {/* @TODO chevron down */}
@@ -141,7 +139,7 @@ export const SchemaEditor = ({}: Props) => {
                       <DropdownMenu.Portal>
                         <DropdownMenu.Content align="end">
                           {(formats as TimestampFormat[]).map(({ pattern }) => (
-                            <DropdownMenu.Item key={pattern}>
+                            <DropdownMenu.Item key={`${field.id}-${pattern}`}>
                               {pattern}
                             </DropdownMenu.Item>
                           ))}
@@ -153,7 +151,7 @@ export const SchemaEditor = ({}: Props) => {
                   return (
                     <PrecisionBadge type={BadgeType.INFO}>
                       <small>Precision</small>
-                      {precision}
+                      {precision!}
                     </PrecisionBadge>
                   )
                 }
