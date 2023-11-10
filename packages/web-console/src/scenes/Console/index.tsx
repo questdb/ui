@@ -73,6 +73,8 @@ const Console = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
+  const [savedResultsSplitterBasis, setSavedResultsSplitterBasis] =
+    useState(resultsSplitterBasis)
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { readOnly } = useSelector(selectors.console.getConfig)
@@ -133,7 +135,9 @@ const Console = () => {
                         )
                         updateSettings(
                           StoreKey.RESULTS_SPLITTER_BASIS,
-                          resultsSplitterBasis === 0 ? 300 : 0,
+                          resultsSplitterBasis === 0
+                            ? savedResultsSplitterBasis
+                            : 0,
                         )
                       }}
                       selected={resultsSplitterBasis !== 0}
@@ -151,6 +155,7 @@ const Console = () => {
             <Allotment
               ref={horizontalSplitterRef}
               onDragEnd={(sizes) => {
+                setSavedResultsSplitterBasis(sizes[0])
                 updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
               }}
               snap
