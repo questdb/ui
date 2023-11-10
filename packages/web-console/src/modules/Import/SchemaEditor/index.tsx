@@ -54,8 +54,11 @@ export const SchemaEditor = ({ initData }: Props) => {
           <PartitionMenu />
         </NavGroup>
         <NavGroup>
-          <Nav>X</Nav>
-          <Nav>Y</Nav>
+          {state.flow === "existing" && (
+            <Nav>W</Nav> // Append vs overwrite
+          )}
+          <Nav>X</Nav> {/* Header stuff */}
+          <Nav>Y</Nav> {/* on error */}
         </NavGroup>
       </Subheader>
       <PaneContent>
@@ -144,10 +147,12 @@ export const SchemaEditor = ({ initData }: Props) => {
                       <DropdownMenu.Trigger asChild>
                         <FormatMenuTrigger>
                           <DetailBadge type={BadgeType.INFO}>
-                            <span><small>{formats![0].pattern}</small>
-                            {formats!.length > 1 && (
-                              <small>+ {formats!.length - 1}</small>
-                            )}</span>
+                            <span>
+                              <small>{formats![0].pattern}</small>
+                              {formats!.length > 1 && (
+                                <small>+ {formats!.length - 1}</small>
+                              )}
+                            </span>
                             {/* @TODO chevron down */}
                             <span>v</span>
                           </DetailBadge>

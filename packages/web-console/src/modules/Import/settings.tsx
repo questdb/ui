@@ -1,6 +1,6 @@
 import React, { useContext, useRef, useState } from "react"
 import styled from "styled-components"
-import { PaneContent, PaneWrapper, PrimaryToggleButton } from "../../components"
+import { PaneContent, PaneWrapper } from "../../components"
 import { Root as PanelHeader } from "../../components/Panel/header"
 import { SchemaEditor } from "./SchemaEditor"
 import { ImportContext } from "./import-file"
@@ -14,7 +14,6 @@ import {
 } from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
 import { Allotment, AllotmentHandle } from "allotment"
-import { isUndefined } from "util"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -49,8 +48,7 @@ export const Settings = () => {
   return (
     <Wrapper>
       <Content>
-        <Header>
-        </Header>
+        <Header></Header>
         <Form<FormSchema>
           name="import_schema"
           onSubmit={function (data: any, event?: any) {
@@ -71,16 +69,15 @@ export const Settings = () => {
           }}
         >
           <Allotment ref={allotmentRef} minSize={MIN_PANEL_SIZE}>
-            <Allotment.Pane>
+            <Allotment.Pane preferredSize={300}>
               <GlobalTimestampsPanel
                 open={TSPanelOpen}
                 toggle={() => {
                   if (TSPanelOpen) {
-                    allotmentRef.current?.resize([-Infinity])
+                    allotmentRef.current?.resize([MIN_PANEL_SIZE])
                   } else {
                     allotmentRef.current?.resize([300])
                   }
-
                   toggleTSPanel(!TSPanelOpen)
                 }}
               />
@@ -88,7 +85,7 @@ export const Settings = () => {
             <Allotment.Pane preferredSize="65%">
               <SchemaEditor initData={data.columns} />
             </Allotment.Pane>
-            <Allotment.Pane>
+            <Allotment.Pane preferredSize={300}>
               <DataPreview />
             </Allotment.Pane>
           </Allotment>
