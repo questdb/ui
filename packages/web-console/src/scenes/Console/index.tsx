@@ -72,8 +72,9 @@ const Console = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
-  const [savedResultsSplitterBasis, setSavedResultsSplitterBasis] =
-    useState(resultsSplitterBasis)
+  const [savedResultsSplitterBasis, setSavedResultsSplitterBasis] = useState(
+    resultsSplitterBasis !== 0 ? resultsSplitterBasis : 300,
+  )
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { readOnly } = useSelector(selectors.console.getConfig)
