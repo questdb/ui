@@ -5,6 +5,8 @@ import { Box } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
 import { User as UserIcon } from "@styled-icons/remix-line"
 import { Text } from "../Text"
+import { selectors } from "../../store"
+import { useSelector } from "react-redux"
 
 type ServerDetails = {
   instance_name: string | null
@@ -63,6 +65,7 @@ const User = styled(Box).attrs({ gap: "0.5rem" })`
 
 export const Version = () => {
   const { quest } = useContext(QuestContext)
+  const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
 
   const fetchServerDetails = async () => {
@@ -88,6 +91,12 @@ export const Version = () => {
   useEffect(() => {
     void fetchServerDetails()
   }, [])
+
+  useEffect(() => {
+    if (result && result.type === QuestDB.Type.DDL) {
+      void fetchServerDetails()
+    }
+  }, [result])
 
   return (
     <Root>
