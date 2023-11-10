@@ -39,6 +39,7 @@ export type RequestColumn = {
   table_column_name: string
   column_type: keyof typeof ColumnType
   formats?: TimestampFormat[]
+  designated?: boolean
   precision?: string
 }
 

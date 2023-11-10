@@ -134,6 +134,24 @@ export const SchemaEditor = ({ initData }: Props) => {
               ),
             },
             {
+              // extra details
+              render: ({ data: field, index }) => {
+                const column_type = getValues(`columns.${index}.column_type`)
+                if (column_type === "TIMESTAMP") {
+                  return (
+                    <input
+                      type="checkbox"
+                      key={field.id}
+                      {...register(`columns.${index}.designated`)}
+                      defaultChecked={false}
+                    />
+                  )
+                } else if (column_type === "GEOHASH") {
+                  return <span>ⓘ</span>
+                }
+              },
+            },
+            {
               render: ({ data: field, index }) => {
                 const { column_type, precision, formats } = getValues(
                   `columns.${index}`,

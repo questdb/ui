@@ -1,17 +1,18 @@
 import React from "react"
 import { DropdownMenu } from "@questdb/react-components"
 import { Nav } from "../../../../modules/Import/panel"
-import { PartitionBy } from "../types"
+import { PartitionBy, RequestColumn } from "../types"
 import { useFormContext } from "react-hook-form"
 
 export const PartitionMenu = () => {
   const { watch, setValue } = useFormContext()
   const partitionBy = watch("partitionBy")
+  const enabled = (watch("columns") as RequestColumn[]).some((col) => col.designated)
 
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <Nav>
+        <Nav disabled={!enabled}>
           <span>
             Partition{" "}
             <small>
