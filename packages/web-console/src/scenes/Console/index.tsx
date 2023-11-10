@@ -113,9 +113,6 @@ const Console = () => {
         vertical={true}
         onDragEnd={(sizes) => {
           updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, sizes[0])
-          setTimeout(() => {
-            window.bus.trigger(BusEvent.MSG_PANEL_RESIZE)
-          }, 0)
         }}
       >
         <Allotment.Pane minSize={100} preferredSize={editorSplitterBasis}>
@@ -155,9 +152,6 @@ const Console = () => {
               ref={horizontalSplitterRef}
               onDragEnd={(sizes) => {
                 updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
-                setTimeout(() => {
-                  window.bus.trigger(BusEvent.MSG_PANEL_RESIZE)
-                }, 0)
               }}
               snap
             >

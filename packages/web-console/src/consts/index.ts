@@ -40,7 +40,6 @@ export enum BusEvent {
   MSG_QUERY_SCHEMA = "query.out.schema",
   MSG_CONNECTION_OK = "query.connection.ok",
   MSG_CONNECTION_ERROR = "query.connection.error",
-  MSG_PANEL_RESIZE = "panel.resize",
   REACT_READY = "react.ready",
 }
 
