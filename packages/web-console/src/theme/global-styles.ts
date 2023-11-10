@@ -34,7 +34,7 @@ const DocSearchStyles = css`
     // Allotment styling
     --focus-border: ${({ theme }) => theme.color.purple};
     --separator-border: ${({ theme }) => theme.color.backgroundDarker};
-    --sash-size: 2rem;
+    --sash-size: 1rem !important;
     --sash-hover-size: 0.5rem;
     .allotment-module_splitView__L-yRc.allotment-module_separatorBorder__x-rDS.allotment-module_vertical__WSwwa
       > .allotment-module_splitViewContainer__rQnVa
