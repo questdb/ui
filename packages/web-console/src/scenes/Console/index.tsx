@@ -154,7 +154,9 @@ const Console = () => {
             <Allotment
               ref={horizontalSplitterRef}
               onDragEnd={(sizes) => {
-                setSavedResultsSplitterBasis(sizes[0])
+                if (sizes[0] !== 0) {
+                  setSavedResultsSplitterBasis(sizes[0])
+                }
                 updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
               }}
               snap
