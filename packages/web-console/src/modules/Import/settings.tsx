@@ -13,7 +13,8 @@ import {
   TimestampFormat,
 } from "./SchemaEditor/types"
 import { DataPreview } from "./preview"
-import { Allotment } from "allotment"
+import { Allotment, AllotmentHandle } from "allotment"
+import { isUndefined } from "util"
 
 const Wrapper = styled(PaneWrapper)``
 
@@ -25,6 +26,8 @@ const Content = styled(PaneContent)`
 `
 
 const Header = styled(PanelHeader)``
+
+const MIN_PANEL_SIZE = 45
 
 type FormSchema = {
   table_name: string
@@ -41,15 +44,12 @@ export const Settings = () => {
   const { state } = useContext(ImportContext)
   const data = MOCK__getSchemaRequest()
   const [TSPanelOpen, toggleTSPanel] = useState(true)
-  const TSPanelRef = useRef(null)
+  const allotmentRef = useRef<AllotmentHandle>(null)
 
   return (
     <Wrapper>
       <Content>
         <Header>
-          <PrimaryToggleButton selected={TSPanelOpen} onClick={() => toggleTSPanel(!TSPanelOpen)}>
-            FMTS
-          </PrimaryToggleButton>
         </Header>
         <Form<FormSchema>
           name="import_schema"
@@ -70,17 +70,23 @@ export const Settings = () => {
             style: { flex: 1 },
           }}
         >
-          <Allotment ref={TSPanelRef} minSize={300}>
-            <Allotment.Pane visible={TSPanelOpen}>
+          <Allotment ref={allotmentRef} minSize={MIN_PANEL_SIZE}>
+            <Allotment.Pane>
               <GlobalTimestampsPanel
                 open={TSPanelOpen}
                 toggle={() => {
+                  if (TSPanelOpen) {
+                    allotmentRef.current?.resize([-Infinity])
+                  } else {
+                    allotmentRef.current?.resize([300])
+                  }
+
                   toggleTSPanel(!TSPanelOpen)
                 }}
               />
             </Allotment.Pane>
             <Allotment.Pane preferredSize="65%">
-              <SchemaEditor initData={data.columns}/>
+              <SchemaEditor initData={data.columns} />
             </Allotment.Pane>
             <Allotment.Pane>
               <DataPreview />

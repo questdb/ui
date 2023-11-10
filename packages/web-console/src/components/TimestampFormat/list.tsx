@@ -1,30 +1,23 @@
-import React, { useState } from "react"
+import React from "react"
 import styled from "styled-components"
-import type { TimestampFormat } from "../../modules/Import/SchemaEditor/types"
-import { DEFAULT_TIMESTAMP_FORMAT } from "../../components/TableSchemaDialog/const"
 import { TimestampFormatChip } from "./chip"
-import { uuid } from "../../scenes/Import/ImportCSVFiles/utils"
-import { useFieldArray, useFormContext } from "react-hook-form"
+import { useFieldArray } from "react-hook-form"
 
-type Props = {}
+type Props = Pick<
+  ReturnType<typeof useFieldArray>,
+  "fields" | "remove" | "update"
+>
 
 const Root = styled.ul`
+  padding: unset;
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
 `
 
-export const TimestampFormatList = ({}: Props) => {
-  const { fields, append, remove, update } = useFieldArray({
-    name: "formats.patterns",
-  })
-
+export const TimestampFormatList = ({ fields, remove, update }: Props) => {
   const onChipClose = (index: number) => {
     remove(index)
-  }
-
-  const onAdd = () => {
-    append({ pattern: "" })
   }
 
   return (
@@ -38,9 +31,6 @@ export const TimestampFormatList = ({}: Props) => {
           onSave={update}
         />
       ))}
-      <button type="button" onClick={onAdd}>
-        +
-      </button>
     </Root>
   )
 }

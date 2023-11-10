@@ -29,6 +29,7 @@ export const NavGroup = styled.section`
 
 export const Nav = styled.button.attrs({
   tabIndex: 0,
+  type: "button"
 })`
   all: unset;
   background: ${({ theme }) => theme.color.transparent};

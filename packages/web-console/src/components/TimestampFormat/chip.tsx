@@ -114,7 +114,6 @@ export const TimestampFormatChip = ({
           />
           <button
             onClick={(e) => {
-              e.preventDefault()
               save(pattern)
             }}
           >
