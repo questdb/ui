@@ -6,18 +6,17 @@ import { useFormContext } from "react-hook-form"
 
 export const PartitionMenu = () => {
   const { watch, setValue } = useFormContext()
-  const partitionBy = watch("partitionBy")
-  const enabled = (watch("columns") as RequestColumn[]).some((col) => col.designated)
+  const partitionBy = watch("partitionBy") as keyof typeof PartitionBy
+  const enabled = (watch("columns") as RequestColumn[]).some(
+    (col) => col.designated,
+  )
 
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <Nav disabled={!enabled}>
           <span>
-            Partition{" "}
-            <small>
-              {PartitionBy[partitionBy as keyof typeof PartitionBy]}
-            </small>
+            Partition <small>{PartitionBy[partitionBy]}</small>
           </span>
         </Nav>
       </DropdownMenu.Trigger>
@@ -28,12 +27,14 @@ export const PartitionMenu = () => {
           avoidCollisions={false}
         >
           {Object.entries(PartitionBy).map(([key, label]) => (
-            <DropdownMenu.Item
+            <DropdownMenu.CheckboxItem
               key={key}
+              checked={partitionBy === key}
               onSelect={() => setValue("partitionBy", key)}
             >
+              <DropdownMenu.ItemIndicator>✔</DropdownMenu.ItemIndicator>
               {label}
-            </DropdownMenu.Item>
+            </DropdownMenu.CheckboxItem>
           ))}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

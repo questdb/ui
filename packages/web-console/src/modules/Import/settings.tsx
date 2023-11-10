@@ -82,7 +82,7 @@ export const Settings = () => {
                 }}
               />
             </Allotment.Pane>
-            <Allotment.Pane preferredSize="65%">
+            <Allotment.Pane>
               <SchemaEditor initData={data.columns} />
             </Allotment.Pane>
             <Allotment.Pane preferredSize={300}>
