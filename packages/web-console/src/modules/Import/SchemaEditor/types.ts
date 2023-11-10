@@ -38,6 +38,7 @@ export type RequestColumn = {
   file_column_index: number
   table_column_name: string
   column_type: keyof typeof ColumnType
+  column_ignored?: boolean
   formats?: TimestampFormat[]
   designated?: boolean
   precision?: string

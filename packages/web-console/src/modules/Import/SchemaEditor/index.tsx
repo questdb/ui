@@ -3,6 +3,7 @@ import { Table, Badge, DropdownMenu } from "@questdb/react-components"
 import { BadgeType } from "../../../scenes/Import/ImportCSVFiles/types"
 import { ImportContext } from "../import-file"
 import { PaneContent, PaneWrapper } from "../../../components"
+import { Form } from "../../../components/Form"
 import { ColumnType, RequestColumn, TimestampFormat } from "./types"
 import styled from "styled-components"
 import { Nav, NavGroup, Subheader } from "../panel"
@@ -36,15 +37,15 @@ const FormatMenuTrigger = styled.div`
 const PrecisionBadge = styled(DetailBadge)``
 
 type Props = { initData: RequestColumn[] }
-type Column = RequestColumn & { id: string; enabled: boolean }
+type Column = RequestColumn & { id: string }
 
 export const SchemaEditor = ({ initData }: Props) => {
   const { state } = useContext(ImportContext)
-  const { register, setValue, getValues } = useFormContext()
+  const { getValues } = useFormContext()
   const { fields } = useFieldArray({ name: "columns" })
 
-  const isFieldDisabled = (index: number) =>
-    getValues(`columns.${index}.enabled`) === false
+  const isColumnIgnored = (index: number) =>
+    getValues(`columns.${index}.column_ignored`) === false
   return (
     <PaneWrapper>
       <Subheader>
@@ -67,10 +68,9 @@ export const SchemaEditor = ({ initData }: Props) => {
           columns={[
             {
               render: ({ data: field, index }) => (
-                <input
-                  type="checkbox"
+                <Form.Checkbox
                   key={field.id}
-                  {...register(`columns.${index}.enabled`)}
+                  name={`columns.${index}.column_ignored`}
                   defaultChecked={true}
                 />
               ),
@@ -90,47 +90,36 @@ export const SchemaEditor = ({ initData }: Props) => {
               header: "Destination",
               render: ({ data: field, index }) =>
                 state.flow === "new_table" ? (
-                  <input
-                    type="text"
+                  <Form.Input
                     key={field.id}
-                    disabled={isFieldDisabled(index)}
-                    {...register(`columns.${index}.table_column_name`, {
-                      shouldUnregister: true,
-                    })}
+                    disabled={isColumnIgnored(index)}
+                    name={`columns.${index}.table_column_name`}
                   />
                 ) : (
-                  <select
+                  <Form.Select
                     key={field.id}
-                    disabled={isFieldDisabled(index)}
-                    {...register(`columns.${index}.table_column_name`, {
-                      shouldUnregister: true,
-                    })}
-                  >
-                    {initData.map(({ table_column_name }) => (
-                      <option
-                        value={table_column_name}
-                        key={`${field.id}-${table_column_name}`}
-                      >
-                        {table_column_name}
-                      </option>
-                    ))}
-                  </select>
+                    disabled={isColumnIgnored(index)}
+                    name={`columns.${index}.table_column_name`}
+                    options={initData.map(({ table_column_name }) => ({
+                      label: table_column_name,
+                      value: table_column_name,
+                    }))}
+                    defaultValue={initData[index]?.table_column_name}
+                  />
                 ),
             },
             {
               header: "Datatype",
               render: ({ data: field, index }) => (
-                <select
+                <Form.Select
                   key={field.id}
-                  {...register(`columns.${index}.column_type`)}
-                  disabled={isFieldDisabled(index) || state.flow === "existing"}
-                >
-                  {Object.entries(ColumnType).map(([label, value]) => (
-                    <option key={`${field.id}-${value}`} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  name={`columns.${index}.column_type`}
+                  disabled={isColumnIgnored(index) || state.flow === "existing"}
+                  options={Object.entries(ColumnType).map(([label, value]) => ({
+                    label,
+                    value,
+                  }))}
+                />
               ),
             },
             {
@@ -139,10 +128,12 @@ export const SchemaEditor = ({ initData }: Props) => {
                 const column_type = getValues(`columns.${index}.column_type`)
                 if (column_type === "TIMESTAMP") {
                   return (
-                    <input
-                      type="checkbox"
+                    <Form.Checkbox
                       key={field.id}
-                      {...register(`columns.${index}.designated`)}
+                      disabled={
+                        isColumnIgnored(index) || state.flow === "existing"
+                      }
+                      name={`columns.${index}.designated`}
                       defaultChecked={false}
                     />
                   )
