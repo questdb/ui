@@ -30,6 +30,22 @@ const DocSearchStyles = css`
     );
     --docsearch-key-shadow: inset 0 -2px 0 0 #282d55, inset 0 0 1px 1px #51577d,
       0 2px 2px 0 rgba(3, 4, 9, 0.3);
+
+    // Allotment styling
+    --focus-border: ${({ theme }) => theme.color.purple};
+    --separator-border: ${({ theme }) => theme.color.backgroundDarker};
+    --sash-size: 1rem !important;
+    --sash-hover-size: 0.5rem;
+    .allotment-module_splitView__L-yRc.allotment-module_separatorBorder__x-rDS.allotment-module_vertical__WSwwa
+      > .allotment-module_splitViewContainer__rQnVa
+      > .allotment-module_splitViewView__MGZ6O:not(:first-child)::before {
+      height: 2px;
+    }
+    .allotment-module_splitView__L-yRc.allotment-module_separatorBorder__x-rDS.allotment-module_horizontal__7doS8
+      > .allotment-module_splitViewContainer__rQnVa
+      > .allotment-module_splitViewView__MGZ6O:not(:first-child)::before {
+      width: 2px;
+    }
   }
 
   .DocSearch-Button {

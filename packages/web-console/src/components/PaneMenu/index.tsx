@@ -35,5 +35,4 @@ export const PaneMenu = styled.div`
   align-items: center;
   background: ${color("backgroundLighter")};
   border-top: 1px solid transparent;
-  z-index: 5;
 `

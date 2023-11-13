@@ -35,8 +35,10 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
-import { EditorProvider } from "../../providers/EditorProvider"
+import { EditorProvider } from "../../providers"
 import { Help } from "./help"
+
+import "allotment/dist/style.css"
 
 const Page = styled.div`
   display: flex;
