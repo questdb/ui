@@ -65,7 +65,7 @@ export const GlobalTimestampsPanel = ({ toggle }: Props) => {
   )
 }
 
-GlobalTimestampsPanel.Closed = ({ toggle }: Props) => (
+GlobalTimestampsPanel.Collapsed = ({ toggle }: Props) => (
   <Wrapper>
     <Subheader>
       <Nav onClick={() => toggle()}>

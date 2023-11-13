@@ -13,7 +13,7 @@ import { ImportContext } from "../../import-file"
 
 const StyledSearchNav = styled(Nav).attrs({
   as: "div",
-  type: undefined,
+  // isContentEditable: true,
 })`
   position: relative;
 
@@ -63,6 +63,17 @@ export const TableNameMenu = ({}: Props) => {
   })
 
   const { watch, register, setFocus, setValue } = useFormContext()
+  const [inputFocused, toggleInputFocused] = useState(false)
+
+  const focusInput = () => {
+    setFocus("table_name")
+    toggleInputFocused(true)
+  }
+
+  const blurInput = () => {
+    console.log("blurred")
+    toggleInputFocused(false)
+  }
 
   const tableName = watch("table_name")
 
@@ -78,7 +89,8 @@ export const TableNameMenu = ({}: Props) => {
         }))
       setResults(fuseResults)
     } else {
-      setResults(tables.map(({ name }) => ({ name })))
+      setResults([])
+      // setResults(tables.map(({ name }) => ({ name })))
     }
   }, [tableName])
 
@@ -89,22 +101,28 @@ export const TableNameMenu = ({}: Props) => {
         : "new_table",
     })
   }, [tableName])
-  const shouldShowResults = results.length > 0
+
+  console.log(inputFocused)
+
+  const shouldShowResults = inputFocused || results.length > 0
 
   return (
     <DropdownMenu.Root open={shouldShowResults} modal={false}>
       <DropdownMenu.Trigger asChild>
-        <StyledSearchNav
-          onFocus={(e) => {
-            setFocus("table_name")
-          }}
-        >
+        <StyledSearchNav onClick={focusInput}>
           <Controller
             name="table_name"
-            render={({ field: { ref, ...inputProps } }) => (
+            render={({ field: { onBlur, ...inputProps } }) => (
               <>
                 <Search2 size="18px" style={{ zIndex: 1 }} />
-                <StyledSearchInput {...inputProps} />
+                <StyledSearchInput
+                  {...inputProps}
+                  autoComplete={"off"}
+                  onBlur={() => {
+                    blurInput()
+                    onBlur()
+                  }}
+                />
               </>
             )}
           />

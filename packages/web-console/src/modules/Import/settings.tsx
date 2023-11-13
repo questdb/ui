@@ -77,7 +77,7 @@ export const Settings = () => {
               </Allotment.Pane>
             ) : (
               <Allotment.Pane key={'panel-closed'} minSize={MIN_PANEL_SIZE} maxSize={MIN_PANEL_SIZE}>
-                <GlobalTimestampsPanel.Closed
+                <GlobalTimestampsPanel.Collapsed
                   toggle={() => toggleTSPanel(true)}
                 />
               </Allotment.Pane>
