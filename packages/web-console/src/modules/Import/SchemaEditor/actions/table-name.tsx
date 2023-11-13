@@ -104,26 +104,32 @@ export const TableNameMenu = ({}: Props) => {
             setInputFocused(true)
           }}
           onBlur={(e) => {
+            if (resultsRef.current?.contains(e.relatedTarget as Node)) {
+              return
+            }
             setInputFocused(false)
           }}
         />
-        {results && (
+        {shouldShowResults && (
           <div
             style={{
               background: "black",
               position: "absolute",
               top: "100%",
               width: "100%",
+              // zIndex: "2",
             }}
           >
             <ul style={{ padding: "unset", width: "100%" }} ref={resultsRef}>
               {results.map(({ name, matches }) => (
                 <button
+                  tabIndex={0}
                   type="button"
                   key={name}
                   onClick={(e) => {
+                    e.preventDefault()
                     setValue("table_name", name)
-                    setInputFocused(true)
+                    setInputFocused(false)
                   }}
                   style={{ display: "block", width: "100%" }}
                 >
