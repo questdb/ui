@@ -16,14 +16,11 @@ const StyledSearchNav = styled(Nav).attrs({
   // isContentEditable: true,
 })`
   position: relative;
-
-  ${StyledIconBase} {
-    margin-right: -3rem;
-  }
 ` as typeof Nav
 
 const StyledSearchInput = styled(FormInput)`
   padding-left: 3rem;
+  margin-left: -1rem;
 `
 type TableMatch = {
   name: string
@@ -62,18 +59,15 @@ export const TableNameMenu = ({}: Props) => {
     includeMatches: true,
   })
 
-  const { watch, register, setFocus, setValue } = useFormContext()
-  const [inputFocused, toggleInputFocused] = useState(false)
+  const { watch, setFocus, setValue } = useFormContext()
+  const inputElement = document.getElementById("table_name_input")
 
-  const focusInput = () => {
-    setFocus("table_name")
-    toggleInputFocused(true)
-  }
-
-  const blurInput = () => {
-    console.log("blurred")
-    toggleInputFocused(false)
-  }
+  // useEffect(() => {
+  //   const inputElement = document.getElementById("table_name_input")
+  //   toggleInputFocused(
+  //     document.activeElement === inputElement
+  //   )
+  // }, [document.activeElement])
 
   const tableName = watch("table_name")
 
@@ -102,29 +96,28 @@ export const TableNameMenu = ({}: Props) => {
     })
   }, [tableName])
 
-  console.log(inputFocused)
-
-  const shouldShowResults = inputFocused || results.length > 0
+  const shouldShowResults =
+    inputElement === document.activeElement && results.length > 0
 
   return (
     <DropdownMenu.Root open={shouldShowResults} modal={false}>
       <DropdownMenu.Trigger asChild>
-        <StyledSearchNav onClick={focusInput}>
-          <Controller
+        <StyledSearchNav onClick={() => setFocus("table_name")}>
+          <StyledSearchInput
             name="table_name"
-            render={({ field: { onBlur, ...inputProps } }) => (
-              <>
-                <Search2 size="18px" style={{ zIndex: 1 }} />
-                <StyledSearchInput
-                  {...inputProps}
-                  autoComplete={"off"}
-                  onBlur={() => {
-                    blurInput()
-                    onBlur()
-                  }}
-                />
-              </>
-            )}
+            id="table_name_input"
+            autoComplete="off"
+            placeholder="Enter table name or search"
+            prefixContent={
+              <Search2
+                size="18px"
+                style={{
+                  zIndex: 1,
+                  alignSelf: "center",
+                  marginRight: "-1rem",
+                }}
+              />
+            }
           />
         </StyledSearchNav>
       </DropdownMenu.Trigger>
@@ -150,43 +143,5 @@ export const TableNameMenu = ({}: Props) => {
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
-    // <StyledSearchNav>
-    //   <TableNameInput
-    //     onFocus={() => toggleFocused(true)}
-    //     onBlur={(e: any) => {
-    //       if ((e.relatedTarget?.className ?? "") === "result") return
-    //       toggleFocused(false)
-    //     }}
-    //     {...inputProps}
-    //   />
-
-    //   {/* {shouldShowResults ? (
-    //     <div
-    //       style={{
-    //         position: "absolute",
-    //         top: "100%",
-    //         left: "6px",
-    //         right: "6px",
-    //         background: "black",
-    //       }}
-    //     >
-    //       <ul>
-    //         {results.map(({ name, matches }) => (
-    //           <li
-    //             className="result"
-    //             tabIndex={-1}
-    //             onClick={(e) => {
-    //               setValue("table_name", name)
-    //               toggleFocused(false)
-    //             }}
-    //             style={{ cursor: "pointer" }}
-    //           >
-    //             {getHighlightedText(name, matches)}
-    //           </li>
-    //         ))}
-    //       </ul>
-    //     </div>
-    //   ) : null} */}
-    // </StyledSearchNav>
   )
 }

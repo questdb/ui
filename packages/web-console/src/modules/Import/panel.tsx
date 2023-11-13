@@ -1,13 +1,6 @@
-import { PaneContent, PaneWrapper } from "../../components"
 import styled from "styled-components"
 
-type SubheaderProps = {
-  children: React.ReactNode
-}
-
-export const Subheader = styled.nav.attrs({
-  type: "button",
-})`
+export const Subheader = styled.nav.attrs({})`
   position: relative;
   height: 4.5rem;
   padding: 0.5rem 0.5rem;
@@ -29,7 +22,7 @@ export const NavGroup = styled.section`
 
 export const Nav = styled.button.attrs({
   tabIndex: 0,
-  type: "button"
+  type: "button",
 })`
   all: unset;
   background: ${({ theme }) => theme.color.transparent};
@@ -43,12 +36,14 @@ export const Nav = styled.button.attrs({
 
   border-bottom: 1px solid ${({ theme }) => theme.color.transparent};
 
-  &:hover, &:focus {
+  &:hover,
+  &:focus {
     border-color: ${({ theme }) => theme.color.selection};
   }
 
-  &:disabled {
+  &:disabled,
+  &.disabled {
     opacity: 0.6;
-    pointer-events: none;
+    cursor: not-allowed;
   }
 `

@@ -5,6 +5,7 @@ import { TimestampFormatList } from "../../components/TimestampFormat/list"
 import { Nav, NavGroup, Subheader } from "./panel"
 import { ArrowLeftS, ArrowRightS } from "@styled-icons/remix-line"
 import { useFieldArray, useFormContext } from "react-hook-form"
+import { withTooltip } from "../../utils"
 
 type Props = {
   toggle: () => void
@@ -39,23 +40,31 @@ export const GlobalTimestampsPanel = ({ toggle }: Props) => {
               ✔
             </small>
           </Nav>
-          <Nav
-            onClick={(e) => {
-              append({ pattern: "" })
-            }}
-          >
-            +
-          </Nav>
+          {withTooltip(
+            <Nav
+              onClick={(e) => {
+                append({ pattern: "" })
+              }}
+            >
+              +
+            </Nav>,
+            "Add new",
+            { placement: "top" },
+          )}
         </NavGroup>
         <NavGroup>
-          <Nav
-            onClick={(e) => {
-              e.preventDefault()
-              toggle()
-            }}
-          >
-            <ArrowLeftS size="18px" />
-          </Nav>
+          {withTooltip(
+            <Nav
+              onClick={(e) => {
+                e.preventDefault()
+                toggle()
+              }}
+            >
+              <ArrowLeftS size="18px" />
+            </Nav>,
+            "Collapse menu",
+            { placement: "top" },
+          )}
         </NavGroup>
       </Subheader>
       <Content>

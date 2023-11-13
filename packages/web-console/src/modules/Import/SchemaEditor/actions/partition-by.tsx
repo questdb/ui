@@ -3,6 +3,19 @@ import { DropdownMenu } from "@questdb/react-components"
 import { Nav } from "../../../../modules/Import/panel"
 import { PartitionBy, RequestColumn } from "../types"
 import { useFormContext } from "react-hook-form"
+import { withTooltip } from "../../../../utils"
+
+const MenuNav = ({
+  disabled,
+  value,
+}: {
+  disabled: boolean
+  value: React.ReactNode
+}) => (
+  <Nav disabled={disabled}>
+    Partition <small>{value}</small>
+  </Nav>
+)
 
 export const PartitionMenu = () => {
   const { watch, setValue } = useFormContext()
@@ -11,10 +24,20 @@ export const PartitionMenu = () => {
     (col) => col.designated,
   )
 
+  if (!enabled) {
+    return withTooltip(
+      <Nav aria-disabled={true} className={"disabled"}>
+        <span>Partition</span>
+      </Nav>,
+      "Select one TIMESTAMP column as designated to enable partitioning.",
+      { placement: "top" },
+    )
+  }
+
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <Nav disabled={!enabled}>
+        <Nav>
           <span>
             Partition <small>{PartitionBy[partitionBy]}</small>
           </span>

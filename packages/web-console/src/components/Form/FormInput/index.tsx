@@ -11,6 +11,7 @@ export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   showPassword?: boolean
   autoFocus?: boolean
   autoComplete?: string
+  prefixContent?: React.ReactNode
 }
 
 const Wrapper = styled.div<{ autoComplete: FormInputProps["autoComplete"] }>`
@@ -51,6 +52,7 @@ export const FormInput = ({
   showPassword,
   autoFocus,
   autoComplete,
+  prefixContent,
   ...rest
 }: FormInputProps) => {
   const { register, setFocus } = useFormContext()
@@ -69,6 +71,7 @@ export const FormInput = ({
 
   return (
     <Wrapper autoComplete={autoComplete}>
+      {prefixContent}
       <Input
         {...register(name, {
           valueAsNumber: type === "number",

@@ -11,7 +11,7 @@ const common = [
 ]
 
 export const DelimiterMenu = () => {
-  const { watch, setValue } = useFormContext()
+  const { watch, setValue, setFocus } = useFormContext()
   const delimiter = watch("delimiter")
   return (
     <DropdownMenu.Root>
@@ -22,7 +22,7 @@ export const DelimiterMenu = () => {
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content align="start">
-          <DropdownMenu.Item>
+          <DropdownMenu.Item tabIndex={0} onFocus={(e) => setFocus("delimiter")}>
             <Form.Input
               name={"delimiter"}
               onClick={(e) => {
@@ -37,6 +37,7 @@ export const DelimiterMenu = () => {
               key={label}
               checked={delimiter === value}
               onClick={() => setValue("delimiter", value)}
+              tabIndex={0}
             >
               <DropdownMenu.ItemIndicator>✔</DropdownMenu.ItemIndicator>
               <span>{label}</span> <small>{value}</small>
