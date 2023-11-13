@@ -1,19 +1,16 @@
 import React, { useEffect, useState, useContext, useRef } from "react"
-import { DropdownMenu } from "@questdb/react-components"
 import { Nav } from "../../panel"
 import styled from "styled-components"
 import { FormInput } from "../../../../components/Form/FormInput"
-import { StyledIconBase } from "@styled-icons/styled-icon"
 import { Search2 } from "@styled-icons/remix-line"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../../store"
 import Fuse, { RangeTuple } from "fuse.js"
-import { useFormContext, Controller } from "react-hook-form"
+import { useFormContext } from "react-hook-form"
 import { ImportContext } from "../../import-file"
 
 const StyledSearchNav = styled(Nav).attrs({
   as: "div",
-  // isContentEditable: true,
 })`
   position: relative;
 ` as typeof Nav
@@ -38,7 +35,9 @@ const getHighlightedText = (
     const start = region[0],
       end = region[1] + 1
     ret.push(text.substring(nextUnmatchedIndex, start))
-    ret.push(<mark>{text.substring(start, end)}</mark>)
+    ret.push(
+      <mark key={`${text}-${start}-${end}`}>{text.substring(start, end)}</mark>,
+    )
 
     nextUnmatchedIndex = end
   }
@@ -52,26 +51,18 @@ type Props = {}
 
 export const TableNameMenu = ({}: Props) => {
   const { dispatch } = useContext(ImportContext)
-
+  const { watch, setValue } = useFormContext()
   const tables = useSelector(selectors.query.getTables)
+
+  const tableName = watch("table_name")
+
   const fuse = new Fuse(tables, {
     keys: ["name"],
     includeMatches: true,
   })
 
-  const { watch, setFocus, setValue } = useFormContext()
-  const inputElement = document.getElementById("table_name_input")
-
-  // useEffect(() => {
-  //   const inputElement = document.getElementById("table_name_input")
-  //   toggleInputFocused(
-  //     document.activeElement === inputElement
-  //   )
-  // }, [document.activeElement])
-
-  const tableName = watch("table_name")
-
   const [results, setResults] = useState<TableMatch[]>([])
+  const resultsRef = useRef<HTMLUListElement | null>(null)
 
   useEffect(() => {
     if (tableName.length > 0) {
@@ -83,8 +74,7 @@ export const TableNameMenu = ({}: Props) => {
         }))
       setResults(fuseResults)
     } else {
-      setResults([])
-      // setResults(tables.map(({ name }) => ({ name })))
+      setResults(tables.map(({ name }) => ({ name })))
     }
   }, [tableName])
 
@@ -96,52 +86,55 @@ export const TableNameMenu = ({}: Props) => {
     })
   }, [tableName])
 
-  const shouldShowResults =
-    inputElement === document.activeElement && results.length > 0
+  const [isInputFocused, setInputFocused] = useState(false)
+
+  const shouldShowResults = isInputFocused && results.length > 0
 
   return (
-    <DropdownMenu.Root open={shouldShowResults} modal={false}>
-      <DropdownMenu.Trigger asChild>
-        <StyledSearchNav onClick={() => setFocus("table_name")}>
-          <StyledSearchInput
-            name="table_name"
-            id="table_name_input"
-            autoComplete="off"
-            placeholder="Enter table name or search"
-            prefixContent={
-              <Search2
-                size="18px"
-                style={{
-                  zIndex: 1,
-                  alignSelf: "center",
-                  marginRight: "-1rem",
-                }}
-              />
-            }
-          />
-        </StyledSearchNav>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          onCloseAutoFocus={(e) => {
-            e.preventDefault()
-            setFocus("table_name")
+    <>
+      <StyledSearchNav>
+        <StyledSearchInput
+          key={"table_name"}
+          name="table_name"
+          id="table_name_input"
+          autoComplete="off"
+          placeholder="Enter table name or search"
+          prefixContent={<Search2 size="18px" />}
+          onFocus={(e) => {
+            setInputFocused(true)
           }}
-        >
-          {results.map(({ name, matches }) => (
-            <DropdownMenu.CheckboxItem
-              key={name}
-              checked={tableName === name}
-              onSelect={() => {
-                setValue("table_name", name)
-              }}
-            >
-              <DropdownMenu.ItemIndicator>✔</DropdownMenu.ItemIndicator>
-              {getHighlightedText(name, matches)}
-            </DropdownMenu.CheckboxItem>
-          ))}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+          onBlur={(e) => {
+            setInputFocused(false)
+          }}
+        />
+        {results && (
+          <div
+            style={{
+              background: "black",
+              position: "absolute",
+              top: "100%",
+              width: "100%",
+            }}
+          >
+            <ul style={{ padding: "unset", width: "100%" }} ref={resultsRef}>
+              {results.map(({ name, matches }) => (
+                <button
+                  type="button"
+                  key={name}
+                  onClick={(e) => {
+                    setValue("table_name", name)
+                    setInputFocused(true)
+                  }}
+                  style={{ display: "block", width: "100%" }}
+                >
+                  {tableName === name && <span>✔ </span>}
+                  {getHighlightedText(name, matches)}
+                </button>
+              ))}
+            </ul>
+          </div>
+        )}
+      </StyledSearchNav>
+    </>
   )
 }
