@@ -5821,6 +5821,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["@juggle/resize-observer", [\
+        ["npm:3.4.0", {\
+          "packageLocation": "./.yarn/cache/@juggle-resize-observer-npm-3.4.0-659544c6b5-2505028c05.zip/node_modules/@juggle/resize-observer/",\
+          "packageDependencies": [\
+            ["@juggle/resize-observer", "npm:3.4.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["@leichtgewicht/ip-codec", [\
         ["npm:2.0.4", {\
           "packageLocation": "./.yarn/cache/@leichtgewicht-ip-codec-npm-2.0.4-dd4d657af8-468de1f04d.zip/node_modules/@leichtgewicht/ip-codec/",\
@@ -6334,6 +6343,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/throttle-debounce", "npm:2.1.0"],\
             ["@typescript-eslint/eslint-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.62.0"],\
             ["@typescript-eslint/parser", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.62.0"],\
+            ["allotment", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.19.3"],\
             ["animate.css", "npm:3.7.2"],\
             ["babel-jest", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:29.7.0"],\
             ["babel-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:8.3.0"],\
@@ -11910,6 +11920,38 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["allotment", [\
+        ["npm:1.19.3", {\
+          "packageLocation": "./.yarn/cache/allotment-npm-1.19.3-a6a4640830-6b4295cfc9.zip/node_modules/allotment/",\
+          "packageDependencies": [\
+            ["allotment", "npm:1.19.3"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.19.3", {\
+          "packageLocation": "./.yarn/__virtual__/allotment-virtual-dee3ce9eaa/0/cache/allotment-npm-1.19.3-a6a4640830-6b4295cfc9.zip/node_modules/allotment/",\
+          "packageDependencies": [\
+            ["allotment", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.19.3"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/react-dom", "npm:16.9.8"],\
+            ["classnames", "npm:2.3.2"],\
+            ["eventemitter3", "npm:5.0.1"],\
+            ["lodash.clamp", "npm:4.0.3"],\
+            ["lodash.debounce", "npm:4.0.8"],\
+            ["lodash.isequal", "npm:4.5.0"],\
+            ["react", "npm:17.0.2"],\
+            ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
+            ["use-resize-observer", "virtual:dee3ce9eaabb18c04c67b3acbd50e46a103b03aa4af6cedff42cf90c868cb401010ac974c68a7abaf4a4ae78730c5e26c4ee4ef201b350e694dd09a81b492c7e#npm:9.1.0"]\
+          ],\
+          "packagePeers": [\
+            "@types/react-dom",\
+            "@types/react",\
+            "react-dom",\
+            "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["animate.css", [\
         ["npm:3.7.2", {\
           "packageLocation": "./.yarn/cache/animate.css-npm-3.7.2-caa8db9d0e-7262dfe8fb.zip/node_modules/animate.css/",\
@@ -16399,6 +16441,13 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["eventemitter3", "npm:4.0.7"]\
           ],\
           "linkType": "HARD"\
+        }],\
+        ["npm:5.0.1", {\
+          "packageLocation": "./.yarn/cache/eventemitter3-npm-5.0.1-5e423b7df3-543d6c858a.zip/node_modules/eventemitter3/",\
+          "packageDependencies": [\
+            ["eventemitter3", "npm:5.0.1"]\
+          ],\
+          "linkType": "HARD"\
         }]\
       ]],\
       ["events", [\
@@ -20768,6 +20817,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["lodash.clamp", [\
+        ["npm:4.0.3", {\
+          "packageLocation": "./.yarn/cache/lodash.clamp-npm-4.0.3-e1fd419f1d-02baa03ebb.zip/node_modules/lodash.clamp/",\
+          "packageDependencies": [\
+            ["lodash.clamp", "npm:4.0.3"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["lodash.debounce", [\
         ["npm:4.0.8", {\
           "packageLocation": "./.yarn/cache/lodash.debounce-npm-4.0.8-f1d6e09799-a3f527d22c.zip/node_modules/lodash.debounce/",\
@@ -20800,6 +20858,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/lodash.invokemap-npm-4.6.0-d358fce989-646ceebbef.zip/node_modules/lodash.invokemap/",\
           "packageDependencies": [\
             ["lodash.invokemap", "npm:4.6.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["lodash.isequal", [\
+        ["npm:4.5.0", {\
+          "packageLocation": "./.yarn/cache/lodash.isequal-npm-4.5.0-f8b0f64d63-da27515dc5.zip/node_modules/lodash.isequal/",\
+          "packageDependencies": [\
+            ["lodash.isequal", "npm:4.5.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -28095,6 +28162,33 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           ],\
           "packagePeers": [\
             "@types/react",\
+            "react"\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["use-resize-observer", [\
+        ["npm:9.1.0", {\
+          "packageLocation": "./.yarn/cache/use-resize-observer-npm-9.1.0-ee1d268d88-92be0ac34a.zip/node_modules/use-resize-observer/",\
+          "packageDependencies": [\
+            ["use-resize-observer", "npm:9.1.0"]\
+          ],\
+          "linkType": "SOFT"\
+        }],\
+        ["virtual:dee3ce9eaabb18c04c67b3acbd50e46a103b03aa4af6cedff42cf90c868cb401010ac974c68a7abaf4a4ae78730c5e26c4ee4ef201b350e694dd09a81b492c7e#npm:9.1.0", {\
+          "packageLocation": "./.yarn/__virtual__/use-resize-observer-virtual-00ed56491a/0/cache/use-resize-observer-npm-9.1.0-ee1d268d88-92be0ac34a.zip/node_modules/use-resize-observer/",\
+          "packageDependencies": [\
+            ["use-resize-observer", "virtual:dee3ce9eaabb18c04c67b3acbd50e46a103b03aa4af6cedff42cf90c868cb401010ac974c68a7abaf4a4ae78730c5e26c4ee4ef201b350e694dd09a81b492c7e#npm:9.1.0"],\
+            ["@juggle/resize-observer", "npm:3.4.0"],\
+            ["@types/react", "npm:17.0.2"],\
+            ["@types/react-dom", "npm:16.9.8"],\
+            ["react", "npm:17.0.2"],\
+            ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"]\
+          ],\
+          "packagePeers": [\
+            "@types/react-dom",\
+            "@types/react",\
+            "react-dom",\
             "react"\
           ],\
           "linkType": "HARD"\
