@@ -6,20 +6,22 @@ import { Search2 } from "@styled-icons/remix-line"
 import { Box } from "../../../components/Box"
 import { Text } from "@questdb/react-components"
 import { Button, Heading } from "@questdb/react-components"
+import { isCloud } from "../../../utils"
 
-const Actions = styled(Box).attrs({ flexDirection: "column" })`
+const Actions = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
   margin: auto;
 `
 
-const Caution = styled.div`
-  margin-top: auto;
+const Info = styled.div`
+  margin-top: 1rem;
   padding: 2rem;
-  width: 100%;
   background: ${({ theme }) => theme.color.backgroundDarker};
+  border-radius: ${({ theme }) => theme.borderRadius};
   text-align: center;
 `
 
-const CautionText = styled(Text)`
+const InfoText = styled(Text)`
+  line-height: 1.75;
   color: #8b8fa7;
 
   a {
@@ -32,6 +34,17 @@ type Props = {
   onFilesDropped: (files: File[]) => void
   dialogOpen: boolean
 }
+
+const CopySQLLink = () => (
+  <a
+    href="https://questdb.io/docs/guides/import-csv/#import-csv-via-copy-sql"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    COPY SQL
+  </a>
+)
+
 export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -80,21 +93,22 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
                 name and try again.
               </Text>
             )}
+            <Info>
+              {isCloud() ? (
+                <InfoText>
+                  Note: <CopySQLLink /> is not available in the QuestDB Cloud
+                  for CSV import.
+                </InfoText>
+              ) : (
+                <InfoText>
+                  Suitable for small batches of CSV file upload.
+                  <br />
+                  For database migrations, we recommend the <CopySQLLink />{" "}
+                  command.
+                </InfoText>
+              )}
+            </Info>
           </Actions>
-          <Caution>
-            <CautionText>
-              Suitable for small batches of CSV file upload. For database
-              migrations, we recommend the{" "}
-              <a
-                href="https://questdb.io/docs/guides/importing-data"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                COPY SQL
-              </a>{" "}
-              command.
-            </CautionText>
-          </Caution>
         </React.Fragment>
       )}
     />
