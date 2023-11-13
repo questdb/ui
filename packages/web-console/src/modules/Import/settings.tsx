@@ -68,20 +68,20 @@ export const Settings = () => {
             style: { flex: 1 },
           }}
         >
-          <Allotment ref={allotmentRef} minSize={MIN_PANEL_SIZE}>
-            <Allotment.Pane preferredSize={300}>
-              <GlobalTimestampsPanel
-                open={TSPanelOpen}
-                toggle={() => {
-                  if (TSPanelOpen) {
-                    allotmentRef.current?.resize([MIN_PANEL_SIZE])
-                  } else {
-                    allotmentRef.current?.resize([300])
-                  }
-                  toggleTSPanel(!TSPanelOpen)
-                }}
-              />
-            </Allotment.Pane>
+          <Allotment ref={allotmentRef}>
+            {TSPanelOpen ? (
+              <Allotment.Pane key={'panel-open'}>
+                <GlobalTimestampsPanel
+                  toggle={() => toggleTSPanel(false)}
+                />
+              </Allotment.Pane>
+            ) : (
+              <Allotment.Pane key={'panel-closed'} minSize={MIN_PANEL_SIZE} maxSize={MIN_PANEL_SIZE}>
+                <GlobalTimestampsPanel.Closed
+                  toggle={() => toggleTSPanel(true)}
+                />
+              </Allotment.Pane>
+            )}
             <Allotment.Pane>
               <SchemaEditor initData={data.columns} />
             </Allotment.Pane>

@@ -7,7 +7,6 @@ import { ArrowLeftS, ArrowRightS } from "@styled-icons/remix-line"
 import { useFieldArray, useFormContext } from "react-hook-form"
 
 type Props = {
-  open: boolean
   toggle: () => void
 }
 
@@ -15,24 +14,12 @@ const Wrapper = styled(PaneWrapper)``
 
 const Content = styled(PaneContent)``
 
-export const GlobalTimestampsPanel = ({ open = true, toggle }: Props) => {
+export const GlobalTimestampsPanel = ({ toggle }: Props) => {
   const { watch, setValue } = useFormContext()
   const { fields, append, remove, update } = useFieldArray({
     name: "formats.patterns",
   })
   const override = watch("formats.behavior", "ADD") === "OVERRIDE"
-
-  if (!open) {
-    return (
-      <Wrapper>
-        <Subheader>
-          <Nav onClick={() => toggle()}>
-            <ArrowRightS size="18px"/>
-          </Nav>
-        </Subheader>
-      </Wrapper>
-    )
-  }
 
   return (
     <Wrapper>
@@ -77,3 +64,13 @@ export const GlobalTimestampsPanel = ({ open = true, toggle }: Props) => {
     </Wrapper>
   )
 }
+
+GlobalTimestampsPanel.Closed = ({ toggle }: Props) => (
+  <Wrapper>
+    <Subheader>
+      <Nav onClick={() => toggle()}>
+        <ArrowRightS size="18px" />
+      </Nav>
+    </Subheader>
+  </Wrapper>
+)
