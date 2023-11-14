@@ -37,6 +37,7 @@ import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
 import { EditorProvider } from "../../providers/EditorProvider"
 import { Help } from "./help"
+import "allotment/dist/style.css"
 
 const Page = styled.div`
   display: flex;

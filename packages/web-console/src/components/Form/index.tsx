@@ -32,6 +32,7 @@ export type Props<TFormValues> = {
   validationSchema?: Schema
   defaultValues?: UseFormProps<TFormValues>["defaultValues"]
   preventSubmitOnEnter?: boolean
+  formProps?: React.HTMLProps<HTMLFormElement>
 }
 
 export const Form = <
@@ -46,6 +47,7 @@ export const Form = <
   validationSchema,
   defaultValues,
   preventSubmitOnEnter,
+  formProps,
 }: Props<TFormValues>) => {
   let props: UseFormProps<TFormValues> = {}
 
@@ -93,6 +95,7 @@ export const Form = <
         onSubmit={handleSubmit}
         method={method}
         onKeyDown={handleKeyDown}
+        {...formProps}
       >
         {children}
       </form>

@@ -31,3 +31,4 @@ export * from "./styled"
 export * from "./formatSql"
 export * from "./platform"
 export * from "./pick"
+export * from './withTooltip'

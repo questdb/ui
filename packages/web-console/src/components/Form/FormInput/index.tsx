@@ -11,24 +11,35 @@ export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   showPassword?: boolean
   autoFocus?: boolean
   autoComplete?: string
+  prefixContent?: React.ReactNode
 }
 
 const Wrapper = styled.div<{ autoComplete: FormInputProps["autoComplete"] }>`
   display: flex;
   width: 100%;
+  align-items: center;
   ${(props) =>
     props.autoComplete === "off" &&
     `
-    // Hide the LastPass+NordPass icons
-    [data-lastpass-icon-root],
-    span[data-np-uid] {
-      display: none !important;
-    }
+  // Hide the LastPass+NordPass icons
+  [data-lastpass-icon-root],
+  span[data-np-uid] {
+    display: none !important;
+  }
   `}
+`
+
+const FloatingContent = styled.div`
+  z-index: 1;
 `
 
 const Input = styled(UnstyledInput)<FormInputProps>`
   ${(props) => props.disabled && `opacity: 0.7;`}
+
+  ${FloatingContent} ~ & {
+    padding-inline-start: 3rem;
+    margin-inline-start: -2.5rem;
+  }
 `
 
 const ToggleButton = styled(Button)<{ last?: boolean }>`
@@ -51,6 +62,7 @@ export const FormInput = ({
   showPassword,
   autoFocus,
   autoComplete,
+  prefixContent,
   ...rest
 }: FormInputProps) => {
   const { register, setFocus } = useFormContext()
@@ -69,6 +81,7 @@ export const FormInput = ({
 
   return (
     <Wrapper autoComplete={autoComplete}>
+      {prefixContent && <FloatingContent>{prefixContent}</FloatingContent>}
       <Input
         {...register(name, {
           valueAsNumber: type === "number",
