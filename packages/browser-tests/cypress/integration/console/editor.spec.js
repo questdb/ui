@@ -284,4 +284,14 @@ describe("running query with F9", () => {
     cy.F9();
     cy.getGridRow(0).should("contain", "3");
   });
+
+  it("should execute a correct query when line comment is present", () => {
+    cy.clearEditor();
+    cy.typeQuery(
+      "select * from long_sequence(1); -- comment\nselect * from long_sequence(2);{upArrow}{rightArrow}{rightArrow}"
+    );
+    cy.F9();
+    cy.getGridRows().should("have.length", 2);
+    cy.getCursorQueryDecoration().should("have.length", 1);
+  });
 });
