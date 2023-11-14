@@ -17,7 +17,7 @@ type ServerDetails = {
 const Root = styled(Box).attrs({ align: "center" })`
   gap: 1.5rem;
   flex-shrink: 0;
-  margin-left: 0.5rem;
+  padding-left: 1.5rem;
 `
 
 const Tag = styled(Box).attrs({ align: "center" })`
@@ -89,12 +89,12 @@ export const Version = () => {
   }
 
   useEffect(() => {
-    void fetchServerDetails()
+    fetchServerDetails()
   }, [])
 
   useEffect(() => {
     if (result && result.type === QuestDB.Type.DDL) {
-      void fetchServerDetails()
+      fetchServerDetails()
     }
   }, [result])
 

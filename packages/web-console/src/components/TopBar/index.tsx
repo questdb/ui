@@ -11,7 +11,6 @@ const Root = styled(Box).attrs({
   width: 100%;
   height: 4.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
-  padding: 0 1rem;
 `
 
 export const TopBar = () => {
