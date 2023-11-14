@@ -94,20 +94,31 @@ export class Storage extends Dexie {
         )
       }
 
-      const queryParams = new URLSearchParams(window.location.search)
-      if (queryParams.has("returnTo")) {
-        this.editor_settings.put({
-          key: "returnTo",
-          value: queryParams.get("returnTo") ?? "",
-        })
+      const url = new URL(window.location.href)
+      const keys = ["returnTo", "returnToLabel"]
+
+      for await (const key of keys) {
+        if (url.searchParams.has(key)) {
+          const value = url.searchParams.get(key) ?? ""
+
+          const hasValue =
+            (await this.editor_settings.where("key").equals(key).count()) !== 0
+
+          if (hasValue) {
+            this.editor_settings.where("key").equals(key).modify({ value })
+          } else {
+            this.editor_settings.add({
+              key,
+              value,
+            })
+          }
+
+          url.searchParams.delete(key)
+        }
       }
 
-      if (queryParams.has("returnTolabel")) {
-        this.editor_settings.put({
-          key: "returnToLabel",
-          value: queryParams.get("returnToLabel") ?? "",
-        })
-      }
+      // clear search params from the address bar
+      window.history.replaceState({}, "", url)
     })
   }
 }
