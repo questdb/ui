@@ -3,7 +3,7 @@ import React from "react"
 import { PopperHover, Tooltip } from "../../components"
 import { ArrowLeftShort } from "@styled-icons/bootstrap"
 
-const Icon = styled.button`
+const Icon = styled.a`
   appearance: none;
   background: transparent;
   color: inherit;
@@ -25,11 +25,11 @@ const Icon = styled.button`
 `
 
 type Props = {
-  label?: string
-  onClick: () => void
+  label?: React.ReactNode
+  href: string
 }
 
-export const BackButton = ({ onClick, label = "Back to the Cloud" }: Props) => (
+export const BackButton = ({ href, label }: Props) => (
   <PopperHover
     placement="right"
     modifiers={[
@@ -41,11 +41,11 @@ export const BackButton = ({ onClick, label = "Back to the Cloud" }: Props) => (
       },
     ]}
     trigger={
-      <Icon onClick={onClick}>
+      <Icon href={href} rel="noopener noreferrer">
         <ArrowLeftShort size={20} />
       </Icon>
     }
   >
-    <Tooltip>{label}</Tooltip>
+    <Tooltip>{label || "Back to the Cloud"}</Tooltip>
   </PopperHover>
 )
