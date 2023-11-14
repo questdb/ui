@@ -36,6 +36,7 @@ type Props = Readonly<{
 }>
 
 const EditorPaneWrapper = styled(PaneWrapper)`
+  height: 100%;
   overflow: hidden;
 `
 
