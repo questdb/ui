@@ -65,9 +65,20 @@ export class Storage extends Dexie {
           value: valueFromDeprecatedStorage ?? "",
         }),
       )
+
       this.editor_settings.add({
         key: "activeBufferId",
         value: fallbackBuffer.id,
+      })
+
+      this.editor_settings.add({
+        key: "returnTo",
+        value: "",
+      })
+
+      this.editor_settings.add({
+        key: "returnToLabel",
+        value: "",
       })
     })
 
@@ -81,6 +92,21 @@ export class Storage extends Dexie {
             value: "",
           }),
         )
+      }
+
+      const queryParams = new URLSearchParams(window.location.search)
+      if (queryParams.has("returnTo")) {
+        this.editor_settings.put({
+          key: "returnTo",
+          value: queryParams.get("returnTo") ?? "",
+        })
+      }
+
+      if (queryParams.has("returnTolabel")) {
+        this.editor_settings.put({
+          key: "returnToLabel",
+          value: queryParams.get("returnToLabel") ?? "",
+        })
       }
     })
   }

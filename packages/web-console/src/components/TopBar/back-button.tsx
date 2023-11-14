@@ -25,10 +25,11 @@ const Icon = styled.button`
 `
 
 type Props = {
+  label?: string
   onClick: () => void
 }
 
-export const BackButton = ({ onClick }: Props) => (
+export const BackButton = ({ onClick, label = "Back to the Cloud" }: Props) => (
   <PopperHover
     placement="right"
     modifiers={[
@@ -45,6 +46,6 @@ export const BackButton = ({ onClick }: Props) => (
       </Icon>
     }
   >
-    <Tooltip>Back to the Cloud</Tooltip>
+    <Tooltip>{label}</Tooltip>
   </PopperHover>
 )
