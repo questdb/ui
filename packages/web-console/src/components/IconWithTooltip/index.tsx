@@ -7,21 +7,8 @@ type Props = {
   placement: Placement
 }
 
-export const IconWithTooltip = ({ icon, tooltip, placement }: Props) => {
-  return (
-    <PopperHover
-      modifiers={[
-        {
-          name: "offset",
-          options: {
-            offset: [-15, 0],
-          },
-        },
-      ]}
-      placement={placement}
-      trigger={icon}
-    >
-      <Tooltip>{tooltip}</Tooltip>
-    </PopperHover>
-  )
-}
+export const IconWithTooltip = ({ icon, tooltip, placement }: Props) => (
+  <PopperHover placement={placement} trigger={icon}>
+    <Tooltip>{tooltip}</Tooltip>
+  </PopperHover>
+)
