@@ -16,6 +16,17 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.3.1 - 2023.11.15
+
+### Added
+
+- Add current_user info in the top bar [#225](https://github.com/questdb/ui/pull/225)
+- Update pane splitters to real time [#220](https://github.com/questdb/ui/pull/220)
+- Add 'return to Cloud' button [#232](https://github.com/questdb/ui/pull/232)
+
+### Changed
+- Update SQL Grammar to v1.0.14 [#233](https://github.com/questdb/ui/pull/233)
+
 ## 0.3.0 - 2023.11.08
 
 ### Changed
