@@ -1,35 +1,19 @@
 import styled from "styled-components"
 import React from "react"
-import { PopperHover, Tooltip } from "../../components"
-import { ArrowLeftShort } from "@styled-icons/bootstrap"
+import { PopperHover, PrimaryToggleButton, Tooltip } from "../../components"
+import { ArrowLeft } from "@styled-icons/remix-line"
+import { BUTTON_ICON_SIZE } from "../../consts"
 
-const Icon = styled.a`
-  appearance: none;
-  background: transparent;
-  color: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 5.5rem;
-  border: 0;
-  border-right: 2px solid #2c2e3d;
-  cursor: pointer;
-  transition: background 0.2s ease-in-out;
-  margin: 0.5rem 0 0.5rem 0.5rem;
-  border-radius: 6px 0 0 6px;
-
-  &:hover {
-    background: #2c2e3d;
-    border-color: #404040;
-  }
+const Root = styled(PrimaryToggleButton)`
+  margin-left: 0.5rem;
 `
 
 type Props = {
   label?: React.ReactNode
-  href: string
+  onClick?: () => void
 }
 
-export const BackButton = ({ href, label }: Props) => (
+export const BackButton = ({ onClick, label }: Props) => (
   <PopperHover
     placement="right"
     modifiers={[
@@ -41,9 +25,9 @@ export const BackButton = ({ href, label }: Props) => (
       },
     ]}
     trigger={
-      <Icon href={href} rel="noopener noreferrer">
-        <ArrowLeftShort size={20} />
-      </Icon>
+      <Root onClick={onClick}>
+        <ArrowLeft size={BUTTON_ICON_SIZE} />
+      </Root>
     }
   >
     <Tooltip>{label || "Back to the Cloud"}</Tooltip>

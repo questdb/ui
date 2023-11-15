@@ -35,7 +35,9 @@ export const TopBar = () => {
       {editorSettings?.returnTo && (
         <BackButton
           label={editorSettings?.returnToLabel}
-          href={editorSettings?.returnTo as string}
+          onClick={() => {
+            window.location.href = editorSettings.returnTo as string
+          }}
         />
       )}
       <Version />
