@@ -8,7 +8,7 @@ import { useLiveQuery } from "dexie-react-hooks"
 import { db } from "../../store/db"
 
 const Root = styled(Box).attrs({
-  align: "cneter",
+  align: "center",
   justifyContent: "space-between",
 })`
   width: 100%;
