@@ -111,7 +111,10 @@ export const Dialog = ({
         if (!isValidTableName(value)) {
           return helpers.error("string.validTableName")
         }
-        if (action === "add" && tables?.find((table) => table.table_name === value)) {
+        if (
+          action === "add" &&
+          tables?.find((table) => table.table_name === value)
+        ) {
           return helpers.error("string.uniqueTableName")
         }
         return value
@@ -144,7 +147,7 @@ export const Dialog = ({
         }
         return value
       })
-      .unique((a, b) => a.table_name === b.table_name)
+      .unique((a, b) => a.name === b.name)
       .messages({
         "array.required": "Please add at least one column",
         "array.unique": "Column names must be unique",
