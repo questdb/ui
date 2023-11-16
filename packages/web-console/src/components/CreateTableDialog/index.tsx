@@ -31,6 +31,7 @@ export const CreateTableDialog = () => {
         column: column.name,
         type: column.type,
       })),
+      dedup: false,
     })
     appendQuery(tableSchemaQuery, { appendAt: "end" })
     dispatch(actions.query.toggleRunning())

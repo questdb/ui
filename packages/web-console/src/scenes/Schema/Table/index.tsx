@@ -118,6 +118,7 @@ const Table = ({
   expanded = false,
   walEnabled,
   onChange,
+  dedup,
 }: Props) => {
   const [quest] = useState(new QuestDB.Client())
   const [columns, setColumns] = useState<QuestDB.Column[]>()
@@ -205,6 +206,7 @@ const Table = ({
           name={table_name}
           partitionBy={partitionBy}
           walEnabled={walEnabled}
+          dedup={dedup}
         />
       )}
 

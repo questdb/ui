@@ -26,43 +26,26 @@ import { useCallback, useEffect, useState, useContext } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
-import {
-  Add,
-  Chat3,
-  Close as _CloseIcon,
-  Command,
-  Play,
-  Stop,
-  Question,
-} from "@styled-icons/remix-line"
+import { Add, Close as _CloseIcon, Play, Stop } from "@styled-icons/remix-line"
 import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
-import { Slack } from "@styled-icons/boxicons-logos"
 
 import {
   ErrorButton,
-  Link,
   PaneMenu,
   PopperToggle,
-  PrimaryToggleButton,
   SecondaryButton,
   SuccessButton,
-  Text,
-  toast,
   TransitionDuration,
   TransparentButton,
   useKeyPress,
   useScreenSize,
 } from "../../../components"
-import { Button, DropdownMenu, FeedbackDialog } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"
-import { Shortcuts } from "../Shortcuts"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { QuestContext, useEditor } from "../../../providers"
 import { DocSearch } from "@docsearch/react"
-import { BUTTON_ICON_SIZE } from "../../../consts/index"
 
 import "@docsearch/css"
 
@@ -70,7 +53,7 @@ const Wrapper = styled(PaneMenu)<{ _display: string }>`
   width: 100%;
   background: transparent;
   z-index: 15;
-  padding-right: 0;
+  padding-right: 1rem;
 
   .algolia-autocomplete {
     display: ${({ _display }) => _display} !important;
@@ -139,38 +122,15 @@ const MenuItems = styled.div`
   align-items: center;
 `
 
-const DropdownMenuItem = styled(DropdownMenu.Item)`
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const MenuLink: React.FunctionComponent<{
-  href: string
-  text: string
-}> = ({ href, text }) => (
-  <Link
-    color="foreground"
-    hoverColor="foreground"
-    href={href}
-    rel="noreferrer"
-    target="_blank"
-  >
-    {text}
-  </Link>
-)
-
 const Menu = () => {
   const dispatch = useDispatch()
-  const { quest } = useContext(QuestContext)
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
-  const [shortcutsPopperActive, setShortcutsPopperActive] = useState<boolean>()
   const escPress = useKeyPress("Escape")
   const { savedQueries } = useSelector(selectors.console.getConfig)
   const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const { sm } = useScreenSize()
   const { exampleQueriesVisited, updateSettings } = useLocalStorage()
-  const { inFocus: editorInFocus } = useEditor()
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
   }, [dispatch])
@@ -179,9 +139,6 @@ const Menu = () => {
       updateSettings(StoreKey.EXAMPLE_QUERIES_VISITED, true)
     }
     setQueriesPopperActive(active)
-  }, [])
-  const handleShortcutsToggle = useCallback((active) => {
-    setShortcutsPopperActive(active)
   }, [])
   const handleHidePicker = useCallback(() => {
     setQueriesPopperActive(false)
@@ -229,12 +186,7 @@ const Menu = () => {
       )}
 
       {!running.value && (
-        <SuccessButton
-          title="Ctrl+Enter"
-          // disabled={!editorInFocus}
-          onClick={handleClick}
-          // {...(editorInFocus && { onClick: handleClick })}
-        >
+        <SuccessButton title="Ctrl+Enter" onClick={handleClick}>
           <Play size="18px" />
           <span>Run</span>
         </SuccessButton>

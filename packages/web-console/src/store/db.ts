@@ -65,9 +65,20 @@ export class Storage extends Dexie {
           value: valueFromDeprecatedStorage ?? "",
         }),
       )
+
       this.editor_settings.add({
         key: "activeBufferId",
         value: fallbackBuffer.id,
+      })
+
+      this.editor_settings.add({
+        key: "returnTo",
+        value: "",
+      })
+
+      this.editor_settings.add({
+        key: "returnToLabel",
+        value: "",
       })
     })
 
@@ -82,6 +93,35 @@ export class Storage extends Dexie {
           }),
         )
       }
+
+      const url = new URL(window.location.href)
+      const keys = ["returnTo", "returnToLabel"]
+
+      await Promise.all(
+        keys.map(async (key) => {
+          if (url.searchParams.has(key)) {
+            const value = url.searchParams.get(key) ?? ""
+
+            const hasValue =
+              (await this.editor_settings.where("key").equals(key).count()) !==
+              0
+
+            if (hasValue) {
+              this.editor_settings.where("key").equals(key).modify({ value })
+            } else {
+              this.editor_settings.add({
+                key,
+                value,
+              })
+            }
+
+            url.searchParams.delete(key)
+          }
+        }),
+      )
+
+      // clear search params from the address bar
+      window.history.replaceState({}, "", url)
     })
   }
 }
