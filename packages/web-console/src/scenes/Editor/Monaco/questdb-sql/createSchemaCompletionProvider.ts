@@ -1,12 +1,14 @@
 import { Table } from "../../../../utils"
 import * as monaco from "monaco-editor"
-import { CompletionItemKind } from "./types"
+import { CompletionItemKind, Column } from "./types"
 
-export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
+export const createSchemaCompletionProvider = (
+  tables: Table[] = [],
+  informationSchemaColumns: Column[] = [],
+) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
-    triggerCharacters: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz \"".split(
-      "",
-    ),
+    triggerCharacters:
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "'.split(""),
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
 
@@ -15,6 +17,13 @@ export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
         startColumn: 1,
         endLineNumber: position.lineNumber,
         endColumn: word.startColumn,
+      })
+
+      const textAfterPosition = model.getValueInRange({
+        startLineNumber: position.lineNumber,
+        startColumn: word.endColumn,
+        endLineNumber: position.lineNumber,
+        endColumn: model.getLineMaxColumn(position.lineNumber),
       })
 
       const range = {
@@ -31,22 +40,31 @@ export const createSchemaCompletionProvider = (questDBTables: Table[] = []) => {
         endColumn: word.endColumn + 1,
       })
 
+      if (/SELECT\s$/gim.test(textUntilPosition)) {
+        if (/ FROM \S*$/gim.test(textAfterPosition)) {
+          console.log("columns from table")
+        } else {
+          console.log("all column")
+        }
+      }
+
       if (
         word.word ||
         /(FROM|INTO|TABLE) $/gim.test(textUntilPosition) ||
         (/'$/gim.test(textUntilPosition) && !textUntilPosition.endsWith("= '"))
       ) {
-        const openQuote = textUntilPosition.substr(-1) === "\"";
-        const nextCharQuote = nextChar == "\"";
+        const openQuote = textUntilPosition.substr(-1) === '"'
+        const nextCharQuote = nextChar == '"'
         return {
-          suggestions: questDBTables.map((item) => {
+          suggestions: tables.map((item) => {
             return {
               label: item.table_name,
               kind: CompletionItemKind.Class,
-              insertText:
-              openQuote
-                  ? item.table_name + (nextCharQuote ? "" : "\"")
-                  :  /^[a-z0-9_]+$/i.test(item.table_name) ? item.table_name : `"${item.table_name}"`,
+              insertText: openQuote
+                ? item.table_name + (nextCharQuote ? "" : '"')
+                : /^[a-z0-9_]+$/i.test(item.table_name)
+                ? item.table_name
+                : `"${item.table_name}"`,
               range,
             }
           }),

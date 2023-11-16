@@ -357,8 +357,9 @@ const MonacoEditor = () => {
     }
   }, [quest, dispatch, running])
 
-  useEffect(() => {
+  const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current) {
+      // TODO: fetch columns via `information_schema.columns()` and pass into the completion handle
       schemaCompletionHandle?.dispose()
       setSchemaCompletionHandle(
         monacoRef.current.languages.registerCompletionItemProvider(
@@ -367,6 +368,10 @@ const MonacoEditor = () => {
         ),
       )
     }
+  }
+
+  useEffect(() => {
+    setCompletionProvider()
   }, [tables, monacoRef, editorReady])
 
   return (

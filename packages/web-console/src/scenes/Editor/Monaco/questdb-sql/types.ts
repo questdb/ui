@@ -4,3 +4,9 @@ export enum CompletionItemKind {
   Operator = 11,
   Keyword = 17,
 }
+
+export type Column = {
+  table_name: string
+  column_name: string
+  column_type: string
+}
