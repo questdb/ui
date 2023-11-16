@@ -85,6 +85,10 @@ Cypress.Commands.add("getAutocomplete", () =>
 
 Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
 
+Cypress.Commands.add("getCursorQueryDecoration", () =>
+  cy.get(".cursorQueryDecoration")
+);
+
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
   const numbers = Array.from(
