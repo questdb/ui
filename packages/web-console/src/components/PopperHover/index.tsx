@@ -65,7 +65,6 @@ export const PopperHover = ({
     container,
     {
       modifiers: [
-        ...modifiers,
         {
           name: "arrow",
           options: { element: arrowElement },
@@ -78,6 +77,8 @@ export const PopperHover = ({
           name: "eventListeners",
           enabled: active,
         },
+
+        ...modifiers,
       ],
       placement,
     },
