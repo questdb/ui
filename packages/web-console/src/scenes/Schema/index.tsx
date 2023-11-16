@@ -207,6 +207,7 @@ const Schema = ({
               onChange={handleChange}
               partitionBy={table.partitionBy}
               walEnabled={table.walEnabled}
+              dedup={table.dedup}
             />
           ))
         )}
