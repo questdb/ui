@@ -16,6 +16,15 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.3.2 - 2023.11.16
+
+### Added
+- Add `DEDUP` support in `Copy schema to clipboard` [#235](https://github.com/questdb/ui/pull/235)
+
+### Fixed
+- Fix table schema form on already existing tables [#236](https://github.com/questdb/ui/pull/236)
+- Fix query execution when line comments are present [#231](https://github.com/questdb/ui/pull/231)
+
 ## 0.3.1 - 2023.11.15
 
 ### Added

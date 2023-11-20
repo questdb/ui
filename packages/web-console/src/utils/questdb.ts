@@ -21,7 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { isServerError } from "../utils";
+import { isServerError } from "../utils"
 import { BusEvent } from "../consts"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
 
@@ -103,6 +103,7 @@ export type Table = {
   partitionBy: string
   designatedTimestamp: string
   walEnabled: boolean
+  dedup: boolean
 }
 
 export type Column = {
@@ -113,6 +114,7 @@ export type Column = {
   symbolCached: boolean
   symbolCapacity: number
   type: string
+  upsertKey: boolean
 }
 
 export type Options = {
@@ -181,6 +183,7 @@ export type SchemaColumn = {
   name: string
   type: string
   pattern?: string
+  upsertKey?: boolean
 }
 
 type UploadOptions = {
@@ -363,10 +366,10 @@ export class Client {
     }
 
     if (isServerError(response)) {
-      errorPayload.error = `QuestDB is not reachable [${response.status}]`;
-      errorPayload.position = -1;
-      errorPayload.query = query;
-      errorPayload.type = Type.ERROR;
+      errorPayload.error = `QuestDB is not reachable [${response.status}]`
+      errorPayload.position = -1
+      errorPayload.query = query
+      errorPayload.type = Type.ERROR
       bus.trigger(BusEvent.MSG_CONNECTION_ERROR, errorPayload)
     }
 

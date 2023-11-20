@@ -45,7 +45,11 @@ export const getSelectedText = (
 export const getQueryFromCursor = (
   editor: IStandaloneCodeEditor,
 ): Request | undefined => {
-  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  const text = editor
+    .getValue({ preserveBOM: false, lineEnding: "\n" })
+    .replace(/"[^"]*"|'[^']*'|`[^`]*`|(--\s?.*$)/gm, (match, group) => {
+      return group ? "" : match
+    })
   const position = editor.getPosition()
 
   let row = 0
