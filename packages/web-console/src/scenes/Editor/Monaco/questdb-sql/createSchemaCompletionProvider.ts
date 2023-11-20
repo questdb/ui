@@ -1,10 +1,10 @@
 import { Table } from "../../../../utils"
 import * as monaco from "monaco-editor"
-import { CompletionItemKind, Column } from "./types"
+import { CompletionItemKind, InformationSchemaColumn } from "./types"
 
 export const createSchemaCompletionProvider = (
   tables: Table[] = [],
-  informationSchemaColumns: Column[] = [],
+  informationSchemaColumns: InformationSchemaColumn[] = [],
 ) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
@@ -40,11 +40,42 @@ export const createSchemaCompletionProvider = (
         endColumn: word.endColumn + 1,
       })
 
+      const tableContext = textAfterPosition
+        .replace(/FROM /gim, "")
+        .replace(" ", "")
+
       if (/SELECT\s$/gim.test(textUntilPosition)) {
-        if (/ FROM \S*$/gim.test(textAfterPosition)) {
-          console.log("columns from table")
+        if (tableContext !== "") {
+          return {
+            suggestions: informationSchemaColumns
+              .filter((item) => item.table_name === tableContext)
+              .map((item) => {
+                return {
+                  label: {
+                    label: item.column_name,
+                    detail: ` (${item.data_type})`,
+                  },
+                  kind: CompletionItemKind.Class,
+                  insertText: item.column_name,
+                  range,
+                }
+              }),
+          }
         } else {
-          console.log("all column")
+          return {
+            suggestions: informationSchemaColumns.map((item) => {
+              return {
+                label: {
+                  label: item.column_name,
+                  detail: ` (${item.table_name}, ${item.data_type})`,
+                },
+                kind: CompletionItemKind.Class,
+                insertText: item.column_name,
+                sortText: item.table_name,
+                range,
+              }
+            }),
+          }
         }
       }
 
@@ -55,6 +86,7 @@ export const createSchemaCompletionProvider = (
       ) {
         const openQuote = textUntilPosition.substr(-1) === '"'
         const nextCharQuote = nextChar == '"'
+        // TODO: if a column (one or more) is selected, only show the tables that have that column name
         return {
           suggestions: tables.map((item) => {
             return {

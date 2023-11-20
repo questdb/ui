@@ -32,6 +32,7 @@ import Loader from "../Loader"
 import styled from "styled-components"
 import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
+import { InformationSchemaColumn } from "./questdb-sql/types"
 
 loader.config({
   paths: {
@@ -359,14 +360,18 @@ const MonacoEditor = () => {
 
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current) {
-      // TODO: fetch columns via `information_schema.columns()` and pass into the completion handle
-      schemaCompletionHandle?.dispose()
-      setSchemaCompletionHandle(
-        monacoRef.current.languages.registerCompletionItemProvider(
-          QuestDBLanguageName,
-          createSchemaCompletionProvider(tables),
-        ),
+      const response = await quest.query<InformationSchemaColumn>(
+        "information_schema.columns()",
       )
+      if (response.type === QuestDB.Type.DQL) {
+        schemaCompletionHandle?.dispose()
+        setSchemaCompletionHandle(
+          monacoRef.current.languages.registerCompletionItemProvider(
+            QuestDBLanguageName,
+            createSchemaCompletionProvider(tables, response.data),
+          ),
+        )
+      }
     }
   }
 

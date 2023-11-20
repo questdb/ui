@@ -5,8 +5,9 @@ export enum CompletionItemKind {
   Keyword = 17,
 }
 
-export type Column = {
+export type InformationSchemaColumn = {
   table_name: string
+  ordinal_position: number
   column_name: string
-  column_type: string
+  data_type: string
 }
