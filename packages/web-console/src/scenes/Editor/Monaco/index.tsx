@@ -121,13 +121,6 @@ const MonacoEditor = () => {
   const beforeMount = (monaco: Monaco) => {
     registerLanguageAddons(monaco)
 
-    setSchemaCompletionHandle(
-      monaco.languages.registerCompletionItemProvider(
-        QuestDBLanguageName,
-        createSchemaCompletionProvider(tables),
-      ),
-    )
-
     monaco.editor.defineTheme("dracula", dracula)
   }
 
@@ -359,7 +352,7 @@ const MonacoEditor = () => {
   }, [quest, dispatch, running])
 
   const setCompletionProvider = async () => {
-    if (editorReady && monacoRef?.current) {
+    if (editorReady && monacoRef?.current && editorRef?.current) {
       const response = await quest.query<InformationSchemaColumn>(
         "information_schema.columns()",
       )
@@ -368,7 +361,11 @@ const MonacoEditor = () => {
         setSchemaCompletionHandle(
           monacoRef.current.languages.registerCompletionItemProvider(
             QuestDBLanguageName,
-            createSchemaCompletionProvider(tables, response.data),
+            createSchemaCompletionProvider(
+              editorRef.current,
+              tables,
+              response.data,
+            ),
           ),
         )
       }

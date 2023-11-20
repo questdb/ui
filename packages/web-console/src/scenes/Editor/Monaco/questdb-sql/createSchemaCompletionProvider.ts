@@ -1,8 +1,27 @@
 import { Table } from "../../../../utils"
 import * as monaco from "monaco-editor"
 import { CompletionItemKind, InformationSchemaColumn } from "./types"
+import { editor, IRange } from "monaco-editor"
+import IStandaloneCodeEditor = editor.IStandaloneCodeEditor
+import { findMatches, getQueryFromCursor } from "../utils"
+
+const getColumnCompletion = (
+  column: InformationSchemaColumn,
+  range: IRange,
+) => ({
+  label: {
+    label: column.column_name,
+    detail: ` (${column.table_name})`,
+    description: column.data_type,
+  },
+  kind: CompletionItemKind.Class,
+  insertText: column.column_name,
+  sortText: column.table_name,
+  range,
+})
 
 export const createSchemaCompletionProvider = (
+  editor: IStandaloneCodeEditor,
   tables: Table[] = [],
   informationSchemaColumns: InformationSchemaColumn[] = [],
 ) => {
@@ -12,93 +31,89 @@ export const createSchemaCompletionProvider = (
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
 
-      const textUntilPosition = model.getValueInRange({
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: position.lineNumber,
-        endColumn: word.startColumn,
-      })
+      const queryAtCursor = getQueryFromCursor(editor)
 
-      const textAfterPosition = model.getValueInRange({
-        startLineNumber: position.lineNumber,
-        startColumn: word.endColumn,
-        endLineNumber: position.lineNumber,
-        endColumn: model.getLineMaxColumn(position.lineNumber),
-      })
+      if (queryAtCursor) {
+        const matches = findMatches(model, queryAtCursor.query)
+        if (matches.length > 0) {
+          const cursorMatch = matches.find(
+            (m) => m.range.startLineNumber === queryAtCursor.row + 1,
+          )
 
-      const range = {
-        startLineNumber: position.lineNumber,
-        endLineNumber: position.lineNumber,
-        startColumn: word.startColumn,
-        endColumn: word.endColumn,
-      }
+          const textUntilPosition = model.getValueInRange({
+            startLineNumber: cursorMatch?.range.startLineNumber ?? 1,
+            startColumn: cursorMatch?.range.startColumn ?? 1,
+            endLineNumber: position.lineNumber,
+            endColumn: word.startColumn,
+          })
 
-      const nextChar = model.getValueInRange({
-        startLineNumber: position.lineNumber,
-        startColumn: word.endColumn,
-        endLineNumber: position.lineNumber,
-        endColumn: word.endColumn + 1,
-      })
+          const textAfterPosition = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: word.endColumn,
+            endLineNumber:
+              cursorMatch?.range.endLineNumber ?? position.lineNumber,
+            endColumn:
+              cursorMatch?.range.endColumn ??
+              model.getLineMaxColumn(position.lineNumber),
+          })
 
-      const tableContext = textAfterPosition
-        .replace(/FROM /gim, "")
-        .replace(" ", "")
-        .replace(";", "")
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+          }
 
-      if (
-        word.word ||
-        /(FROM|INTO|TABLE)\s$/gim.test(textUntilPosition) ||
-        (/'$/gim.test(textUntilPosition) && !textUntilPosition.endsWith("= '"))
-      ) {
-        const openQuote = textUntilPosition.substr(-1) === '"'
-        const nextCharQuote = nextChar == '"'
-        return {
-          suggestions: tables.map((item) => {
+          const nextChar = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: word.endColumn,
+            endLineNumber: position.lineNumber,
+            endColumn: word.endColumn + 1,
+          })
+
+          const tableContext = textAfterPosition
+            .replace(/FROM /gim, "")
+            .replace(" ", "")
+            .replace(";", "")
+
+          if (
+            word.word ||
+            /(FROM|INTO|TABLE)\s$/gim.test(textUntilPosition) ||
+            (/'$/gim.test(textUntilPosition) &&
+              !textUntilPosition.endsWith("= '"))
+          ) {
+            const openQuote = textUntilPosition.substr(-1) === '"'
+            const nextCharQuote = nextChar == '"'
             return {
-              label: item.table_name,
-              kind: CompletionItemKind.Class,
-              insertText: openQuote
-                ? item.table_name + (nextCharQuote ? "" : '"')
-                : /^[a-z0-9_]+$/i.test(item.table_name)
-                ? item.table_name
-                : `"${item.table_name}"`,
-              range,
-            }
-          }),
-        }
-      }
-
-      if (/SELECT.*(?:,.*)?$/gim.test(textUntilPosition)) {
-        if (tableContext !== "") {
-          return {
-            suggestions: informationSchemaColumns
-              .filter((item) => item.table_name === tableContext)
-              .map((item) => {
+              suggestions: tables.map((item) => {
                 return {
-                  label: {
-                    label: item.column_name,
-                    detail: ` (${item.data_type})`,
-                  },
+                  label: item.table_name,
                   kind: CompletionItemKind.Class,
-                  insertText: item.column_name,
+                  insertText: openQuote
+                    ? item.table_name + (nextCharQuote ? "" : '"')
+                    : /^[a-z0-9_]+$/i.test(item.table_name)
+                    ? item.table_name
+                    : `"${item.table_name}"`,
                   range,
                 }
               }),
+            }
           }
-        } else {
-          return {
-            suggestions: informationSchemaColumns.map((item) => {
+
+          if (/SELECT.*(?:,.*)?$/gim.test(textUntilPosition)) {
+            if (tableContext !== "") {
               return {
-                label: {
-                  label: item.column_name,
-                  detail: ` (${item.table_name}, ${item.data_type})`,
-                },
-                kind: CompletionItemKind.Class,
-                insertText: item.column_name,
-                sortText: item.table_name,
-                range,
+                suggestions: informationSchemaColumns
+                  .filter((item) => item.table_name === tableContext)
+                  .map((item) => getColumnCompletion(item, range)),
               }
-            }),
+            } else {
+              return {
+                suggestions: informationSchemaColumns.map((item) =>
+                  getColumnCompletion(item, range),
+                ),
+              }
+            }
           }
         }
       }
