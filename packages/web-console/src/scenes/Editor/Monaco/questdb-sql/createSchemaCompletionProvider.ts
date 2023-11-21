@@ -28,7 +28,7 @@ export const createSchemaCompletionProvider = (
 ) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n "'.split(""),
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
 
