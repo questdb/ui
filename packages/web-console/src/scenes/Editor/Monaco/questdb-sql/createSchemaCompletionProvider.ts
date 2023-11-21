@@ -27,7 +27,7 @@ export const createSchemaCompletionProvider = (
 ) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n "'.split(""),
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
 
@@ -77,8 +77,7 @@ export const createSchemaCompletionProvider = (
             .replace(";", "")
 
           if (
-            word.word ||
-            /(FROM|INTO|TABLE)\s$/gim.test(textUntilPosition) ||
+            /(FROM|INTO|TABLE|JOIN)\s$/gim.test(textUntilPosition) ||
             (/'$/gim.test(textUntilPosition) &&
               !textUntilPosition.endsWith("= '"))
           ) {
@@ -100,7 +99,7 @@ export const createSchemaCompletionProvider = (
             }
           }
 
-          if (/SELECT.*(?:,.*)?$/gim.test(textUntilPosition)) {
+          if (/SELECT.*(?:,.*)?(?:WHERE )?$/gim.test(textUntilPosition)) {
             if (tableContext !== "") {
               return {
                 suggestions: informationSchemaColumns
