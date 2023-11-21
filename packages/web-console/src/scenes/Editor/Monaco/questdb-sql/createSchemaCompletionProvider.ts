@@ -27,11 +27,13 @@ export const createSchemaCompletionProvider = (
 ) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n "'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "'.split(""),
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
 
       const queryAtCursor = getQueryFromCursor(editor)
+
+      let tableContext = ""
 
       if (queryAtCursor) {
         const matches = findMatches(model, queryAtCursor.query)
@@ -40,21 +42,16 @@ export const createSchemaCompletionProvider = (
             (m) => m.range.startLineNumber === queryAtCursor.row + 1,
           )
 
+          const tableMatch = queryAtCursor.query.match(/FROM\s+([^ ]+)/)
+          if (tableMatch && tableMatch[1]) {
+            tableContext = tableMatch[1]
+          }
+
           const textUntilPosition = model.getValueInRange({
             startLineNumber: cursorMatch?.range.startLineNumber ?? 1,
             startColumn: cursorMatch?.range.startColumn ?? 1,
             endLineNumber: position.lineNumber,
             endColumn: word.startColumn,
-          })
-
-          const textAfterPosition = model.getValueInRange({
-            startLineNumber: position.lineNumber,
-            startColumn: word.endColumn,
-            endLineNumber:
-              cursorMatch?.range.endLineNumber ?? position.lineNumber,
-            endColumn:
-              cursorMatch?.range.endColumn ??
-              model.getLineMaxColumn(position.lineNumber),
           })
 
           const range = {
@@ -87,11 +84,6 @@ export const createSchemaCompletionProvider = (
             }
           })
 
-          const tableContext = textAfterPosition
-            .replace(/FROM /gim, "")
-            .replace(" ", "")
-            .replace(";", "")
-
           if (
             /(FROM|INTO|TABLE|JOIN)\s$/gim.test(textUntilPosition) ||
             (/'$/gim.test(textUntilPosition) &&
@@ -102,15 +94,16 @@ export const createSchemaCompletionProvider = (
             }
           }
 
-          if (/SELECT.*(?:,.*)?(?:WHERE )?$/gim.test(textUntilPosition)) {
+          if (
+            /SELECT.*?(?:,(?:COLUMN )?)?(?:WHERE )?(?: BY )?$/gim.test(
+              textUntilPosition,
+            )
+          ) {
             if (tableContext !== "") {
               return {
-                suggestions: [
-                  ...informationSchemaColumns
-                    .filter((item) => item.table_name === tableContext)
-                    .map((item) => getColumnCompletion(item, range)),
-                  ...tableSuggestions,
-                ],
+                suggestions: informationSchemaColumns
+                  .filter((item) => item.table_name === tableContext)
+                  .map((item) => getColumnCompletion(item, range)),
               }
             } else {
               return {
