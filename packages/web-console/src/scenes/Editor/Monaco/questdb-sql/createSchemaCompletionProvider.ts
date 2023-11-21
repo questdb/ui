@@ -98,7 +98,8 @@ export const createSchemaCompletionProvider = (
           if (
             /SELECT.*?(?:,(?:COLUMN )?)?(?:WHERE )?(?: BY )?$/gim.test(
               textUntilPosition,
-            )
+            ) &&
+            position.column !== 1
           ) {
             if (tableContext !== "") {
               return {
@@ -115,6 +116,12 @@ export const createSchemaCompletionProvider = (
                   ...tableSuggestions,
                 ],
               }
+            }
+          }
+
+          if (word.word) {
+            return {
+              suggestions: tableSuggestions,
             }
           }
         }
