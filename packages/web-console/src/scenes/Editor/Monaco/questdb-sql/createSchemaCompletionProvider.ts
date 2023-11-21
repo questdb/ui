@@ -14,7 +14,7 @@ const getColumnCompletion = (
     detail: ` (${column.table_name})`,
     description: column.data_type,
   },
-  kind: CompletionItemKind.Class,
+  kind: CompletionItemKind.Enum,
   insertText: column.column_name,
   sortText: column.table_name,
   range,
@@ -71,6 +71,22 @@ export const createSchemaCompletionProvider = (
             endColumn: word.endColumn + 1,
           })
 
+          const openQuote = textUntilPosition.substr(-1) === '"'
+          const nextCharQuote = nextChar == '"'
+
+          const tableSuggestions = tables.map((item) => {
+            return {
+              label: item.table_name,
+              kind: CompletionItemKind.Class,
+              insertText: openQuote
+                ? item.table_name + (nextCharQuote ? "" : '"')
+                : /^[a-z0-9_]+$/i.test(item.table_name)
+                ? item.table_name
+                : `"${item.table_name}"`,
+              range,
+            }
+          })
+
           const tableContext = textAfterPosition
             .replace(/FROM /gim, "")
             .replace(" ", "")
@@ -81,36 +97,29 @@ export const createSchemaCompletionProvider = (
             (/'$/gim.test(textUntilPosition) &&
               !textUntilPosition.endsWith("= '"))
           ) {
-            const openQuote = textUntilPosition.substr(-1) === '"'
-            const nextCharQuote = nextChar == '"'
             return {
-              suggestions: tables.map((item) => {
-                return {
-                  label: item.table_name,
-                  kind: CompletionItemKind.Class,
-                  insertText: openQuote
-                    ? item.table_name + (nextCharQuote ? "" : '"')
-                    : /^[a-z0-9_]+$/i.test(item.table_name)
-                    ? item.table_name
-                    : `"${item.table_name}"`,
-                  range,
-                }
-              }),
+              suggestions: tableSuggestions,
             }
           }
 
           if (/SELECT.*(?:,.*)?(?:WHERE )?$/gim.test(textUntilPosition)) {
             if (tableContext !== "") {
               return {
-                suggestions: informationSchemaColumns
-                  .filter((item) => item.table_name === tableContext)
-                  .map((item) => getColumnCompletion(item, range)),
+                suggestions: [
+                  ...informationSchemaColumns
+                    .filter((item) => item.table_name === tableContext)
+                    .map((item) => getColumnCompletion(item, range)),
+                  ...tableSuggestions,
+                ],
               }
             } else {
               return {
-                suggestions: informationSchemaColumns.map((item) =>
-                  getColumnCompletion(item, range),
-                ),
+                suggestions: [
+                  ...informationSchemaColumns.map((item) =>
+                    getColumnCompletion(item, range),
+                  ),
+                  ...tableSuggestions,
+                ],
               }
             }
           }
