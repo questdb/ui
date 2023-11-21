@@ -1,7 +1,8 @@
 import { Table } from "../../../../utils"
 import * as monaco from "monaco-editor"
-import { CompletionItemKind, InformationSchemaColumn } from "./types"
+import { InformationSchemaColumn } from "./types"
 import { editor, IRange } from "monaco-editor"
+import { languages } from "monaco-editor"
 import IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 import { findMatches, getQueryFromCursor } from "../utils"
 
@@ -14,7 +15,7 @@ const getColumnCompletion = (
     detail: ` (${column.table_name})`,
     description: column.data_type,
   },
-  kind: CompletionItemKind.Enum,
+  kind: languages.CompletionItemKind.Enum,
   insertText: column.column_name,
   sortText: column.table_name,
   range,
@@ -74,7 +75,7 @@ export const createSchemaCompletionProvider = (
           const tableSuggestions = tables.map((item) => {
             return {
               label: item.table_name,
-              kind: CompletionItemKind.Class,
+              kind: languages.CompletionItemKind.Class,
               insertText: openQuote
                 ? item.table_name + (nextCharQuote ? "" : '"')
                 : /^[a-z0-9_]+$/i.test(item.table_name)

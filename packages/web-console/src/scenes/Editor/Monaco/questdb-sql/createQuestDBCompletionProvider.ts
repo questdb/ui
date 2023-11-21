@@ -1,7 +1,7 @@
 import * as monaco from "monaco-editor"
-import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
 import { operators } from "./operators"
-import { CompletionItemKind } from "./types"
+import { languages } from "monaco-editor"
+import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
 
 export const createQuestDBCompletionProvider = () => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
@@ -20,7 +20,7 @@ export const createQuestDBCompletionProvider = () => {
           ...functions.map((qdbFunction) => {
             return {
               label: qdbFunction,
-              kind: CompletionItemKind.Function,
+              kind: languages.CompletionItemKind.Function,
               insertText: qdbFunction,
               range,
             }
@@ -28,7 +28,7 @@ export const createQuestDBCompletionProvider = () => {
           ...dataTypes.map((item) => {
             return {
               label: item,
-              kind: CompletionItemKind.Keyword,
+              kind: languages.CompletionItemKind.Keyword,
               insertText: item,
               range,
             }
@@ -37,7 +37,7 @@ export const createQuestDBCompletionProvider = () => {
             const keyword = item.toUpperCase()
             return {
               label: keyword,
-              kind: CompletionItemKind.Keyword,
+              kind: languages.CompletionItemKind.Keyword,
               insertText: keyword,
               range,
             }
@@ -46,7 +46,7 @@ export const createQuestDBCompletionProvider = () => {
             const operator = item.toUpperCase()
             return {
               label: operator,
-              kind: CompletionItemKind.Operator,
+              kind: languages.CompletionItemKind.Operator,
               insertText: operator.toUpperCase(),
               range,
             }
