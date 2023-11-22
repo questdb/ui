@@ -5911,7 +5911,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@monaco-editor/loader", "virtual:6a35c957f58a973615d9553ff1544194e428e2ee959fffee765c3d60cada70b8bd3f9f9fb7ce2ce030f8b82c99e8ae959012703afc68b055eb3e43405749c3b0#npm:1.4.0"],\
             ["@types/monaco-editor", null],\
-            ["monaco-editor", "npm:0.30.1"],\
+            ["monaco-editor", "npm:0.44.0"],\
             ["state-local", "npm:1.0.7"]\
           ],\
           "packagePeers": [\
@@ -5937,7 +5937,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/monaco-editor", null],\
             ["@types/react", "npm:17.0.2"],\
             ["@types/react-dom", "npm:16.9.8"],\
-            ["monaco-editor", "npm:0.30.1"],\
+            ["monaco-editor", "npm:0.44.0"],\
             ["react", "npm:17.0.2"],\
             ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"]\
           ],\
@@ -6381,7 +6381,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["joi", "npm:17.5.0"],\
             ["jquery", "npm:3.5.1"],\
             ["mini-css-extract-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.6"],\
-            ["monaco-editor", "npm:0.30.1"],\
+            ["monaco-editor", "npm:0.44.0"],\
             ["prettier", "npm:2.8.8"],\
             ["prop-types", "npm:15.8.1"],\
             ["ramda", "npm:0.27.1"],\
@@ -22008,10 +22008,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["monaco-editor", [\
-        ["npm:0.30.1", {\
-          "packageLocation": "./.yarn/cache/monaco-editor-npm-0.30.1-f255ef74d8-474b8b2f25.zip/node_modules/monaco-editor/",\
+        ["npm:0.44.0", {\
+          "packageLocation": "./.yarn/cache/monaco-editor-npm-0.44.0-888dafb151-6e561b23e5.zip/node_modules/monaco-editor/",\
           "packageDependencies": [\
-            ["monaco-editor", "npm:0.30.1"]\
+            ["monaco-editor", "npm:0.44.0"]\
           ],\
           "linkType": "HARD"\
         }]\
