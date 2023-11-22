@@ -91,7 +91,9 @@ export const createSchemaCompletionProvider = (
           })
 
           if (
-            /(FROM|INTO|TABLE|JOIN)\s$/gim.test(textUntilPosition) ||
+            /(FROM|INTO|(ALTER|BACKUP|DROP|REINDEX|RENAME|TRUNCATE|VACUUM) TABLE|JOIN|UPDATE)\s$/gim.test(
+              textUntilPosition,
+            ) ||
             (/'$/gim.test(textUntilPosition) &&
               !textUntilPosition.endsWith("= '"))
           ) {

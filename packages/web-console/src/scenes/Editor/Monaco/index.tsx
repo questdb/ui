@@ -86,12 +86,6 @@ const Content = styled(PaneContent)`
   }
 `
 
-enum Command {
-  EXECUTE = "execute",
-  FOCUS_GRID = "focus_grid",
-  CLEANUP_NOTIFICATIONS = "clean_notifications",
-}
-
 const MonacoEditor = () => {
   const editorContext = useEditor()
   const {
