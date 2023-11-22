@@ -43,9 +43,14 @@ export const createSchemaCompletionProvider = (
             (m) => m.range.startLineNumber === queryAtCursor.row + 1,
           )
 
-          const tableMatch = queryAtCursor.query.match(/FROM\s+([^ ]+)/)
-          if (tableMatch && tableMatch[1]) {
-            tableContext = tableMatch[1]
+          const fromMatch = queryAtCursor.query.match(/(FROM)\s+([^ ]+)/)
+          const alterTableMatch = queryAtCursor.query.match(
+            /(ALTER TABLE)\s+([^ ]+)/,
+          )
+          if (fromMatch && fromMatch[2]) {
+            tableContext = fromMatch[2]
+          } else if (alterTableMatch && alterTableMatch[2]) {
+            tableContext = alterTableMatch[2]
           }
 
           const textUntilPosition = model.getValueInRange({
@@ -96,7 +101,7 @@ export const createSchemaCompletionProvider = (
           }
 
           if (
-            /SELECT.*?(?:,(?:COLUMN )?)?(?:WHERE )?(?: BY )?$/gim.test(
+            /(?:SELECT.*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?$|ALTER COLUMN )/gim.test(
               textUntilPosition,
             ) &&
             position.column !== 1
