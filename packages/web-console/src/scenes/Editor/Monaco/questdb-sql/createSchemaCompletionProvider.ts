@@ -1,4 +1,4 @@
-import { Table } from "../../../../utils"
+import { Table, uniq } from "../../../../utils"
 import * as monaco from "monaco-editor"
 import { InformationSchemaColumn } from "./types"
 import { editor, IRange } from "monaco-editor"
@@ -9,14 +9,19 @@ import { findMatches, getQueryFromCursor } from "../utils"
 const getColumnCompletion = (
   column: InformationSchemaColumn,
   range: IRange,
+  withTableName?: boolean,
 ) => ({
   label: {
-    label: column.column_name,
-    detail: ` (${column.table_name})`,
+    label: withTableName
+      ? `${column.table_name}.${column.column_name}`
+      : column.column_name,
+    detail: withTableName ? "" : ` (${column.table_name})`,
     description: column.data_type,
   },
   kind: languages.CompletionItemKind.Enum,
-  insertText: column.column_name,
+  insertText: withTableName
+    ? `${column.table_name}.${column.column_name}`
+    : column.column_name,
   sortText: column.table_name,
   range,
 })
@@ -28,13 +33,13 @@ export const createSchemaCompletionProvider = (
 ) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n "'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n ."'.split(""),
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
 
       const queryAtCursor = getQueryFromCursor(editor)
 
-      let tableContext = ""
+      let tableContext: string[] = []
 
       if (queryAtCursor) {
         const matches = findMatches(model, queryAtCursor.query)
@@ -43,14 +48,18 @@ export const createSchemaCompletionProvider = (
             (m) => m.range.startLineNumber === queryAtCursor.row + 1,
           )
 
-          const fromMatch = queryAtCursor.query.match(/(FROM)\s+([^ ]+)/)
+          const fromMatch = queryAtCursor.query.match(/(?<=FROM\s)([^ )]+)/gim)
+          const joinMatch = queryAtCursor.query.match(/(JOIN)\s+([^ ]+)/)
           const alterTableMatch = queryAtCursor.query.match(
             /(ALTER TABLE)\s+([^ ]+)/,
           )
-          if (fromMatch && fromMatch[2]) {
-            tableContext = fromMatch[2]
+          if (fromMatch) {
+            tableContext = uniq(fromMatch)
           } else if (alterTableMatch && alterTableMatch[2]) {
-            tableContext = alterTableMatch[2]
+            tableContext.push(alterTableMatch[2])
+          }
+          if (joinMatch && joinMatch[2]) {
+            tableContext.push(joinMatch[2])
           }
 
           const textUntilPosition = model.getValueInRange({
@@ -103,16 +112,20 @@ export const createSchemaCompletionProvider = (
           }
 
           if (
-            /(?:SELECT.*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?$|ALTER COLUMN )/gim.test(
+            /(?:SELECT.*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?(?: ON )?$|ALTER COLUMN )/gim.test(
               textUntilPosition,
             ) &&
             position.column !== 1
           ) {
-            if (tableContext !== "") {
+            if (tableContext.length > 0) {
+              const withTableName =
+                textUntilPosition.match(/\sON\s/gim) !== null
               return {
                 suggestions: informationSchemaColumns
-                  .filter((item) => item.table_name === tableContext)
-                  .map((item) => getColumnCompletion(item, range)),
+                  .filter((item) => tableContext.includes(item.table_name))
+                  .map((item) =>
+                    getColumnCompletion(item, range, withTableName),
+                  ),
               }
             } else {
               return {
