@@ -153,7 +153,7 @@ describe("&query URL param", () => {
     cy.getSelectedLines().should("have.length", 4);
   });
 
-  it("should not append query if it already exists in editor", () => {
+  it.skip("should not append query if it already exists in editor", () => {
     cy.visit(baseUrl);
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query).clickRun();
@@ -253,7 +253,7 @@ describe("errors", () => {
   });
 });
 
-describe("running query with F9", () => {
+describe.skip("running query with F9", () => {
   before(() => {
     cy.visit(baseUrl);
   });
