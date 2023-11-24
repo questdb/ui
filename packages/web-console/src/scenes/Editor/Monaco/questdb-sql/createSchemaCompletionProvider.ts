@@ -112,7 +112,7 @@ export const createSchemaCompletionProvider = (
           }
 
           if (
-            /(?:SELECT.*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?(?: ON )?$|ALTER COLUMN )/gim.test(
+            /(?:(SELECT|UPDATE).*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?(?: ON )?(?: SET )?$|ALTER COLUMN )/gim.test(
               textUntilPosition,
             ) &&
             position.column !== 1
