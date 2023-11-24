@@ -347,19 +347,28 @@ const MonacoEditor = () => {
 
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
-      const response = await quest.query<InformationSchemaColumn>(
-        "information_schema.columns()",
-      )
-      if (response.type === QuestDB.Type.DQL) {
-        schemaCompletionHandle?.dispose()
+      schemaCompletionHandle?.dispose()
+      try {
+        const response = await quest.query<InformationSchemaColumn>(
+          "information_schema.columns()",
+        )
+        if (response.type === QuestDB.Type.DQL) {
+          setSchemaCompletionHandle(
+            monacoRef.current.languages.registerCompletionItemProvider(
+              QuestDBLanguageName,
+              createSchemaCompletionProvider(
+                editorRef.current,
+                tables,
+                response.data,
+              ),
+            ),
+          )
+        }
+      } catch (e) {
         setSchemaCompletionHandle(
           monacoRef.current.languages.registerCompletionItemProvider(
             QuestDBLanguageName,
-            createSchemaCompletionProvider(
-              editorRef.current,
-              tables,
-              response.data,
-            ),
+            createSchemaCompletionProvider(editorRef.current, tables),
           ),
         )
       }
