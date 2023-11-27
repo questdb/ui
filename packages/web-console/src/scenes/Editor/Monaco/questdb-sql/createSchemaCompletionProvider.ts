@@ -6,25 +6,48 @@ import { languages } from "monaco-editor"
 import IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 import { findMatches, getQueryFromCursor } from "../utils"
 
-const getColumnCompletion = (
-  column: InformationSchemaColumn,
+export const getColumnCompletions = (
+  columns: InformationSchemaColumn[],
   range: IRange,
   withTableName?: boolean,
-) => ({
-  label: {
-    label: withTableName
-      ? `${column.table_name}.${column.column_name}`
-      : column.column_name,
-    detail: withTableName ? "" : ` (${column.table_name})`,
-    description: column.data_type,
-  },
-  kind: languages.CompletionItemKind.Enum,
-  insertText: withTableName
-    ? `${column.table_name}.${column.column_name}`
-    : column.column_name,
-  sortText: column.table_name,
-  range,
-})
+) => {
+  // For JOIN ON ... completions, return `table.column` text
+  if (withTableName) {
+    return columns.map((item) => ({
+      label: {
+        label: `${item.table_name}.${item.column_name}`,
+        detail: "",
+        description: item.data_type,
+      },
+      kind: languages.CompletionItemKind.Enum,
+      insertText: `${item.table_name}.${item.column_name}`,
+      sortText: item.table_name,
+      range,
+    }))
+    // For everything else, return a list of unique column names.
+  } else {
+    return uniq(columns.map((item) => item.column_name)).map((columnName) => {
+      const tableNames = columns
+        .filter((item) => item.column_name === columnName)
+        .map((item) => item.table_name)
+      return {
+        label: {
+          label: columnName,
+          detail: ` (${tableNames.sort().join(", ")})`,
+          // If the column is present in multiple tables, show their list here, otherwise return the column type.
+          description:
+            tableNames.length > 1
+              ? ""
+              : columns.find((item) => item.column_name === columnName)
+                  ?.data_type,
+        },
+        kind: languages.CompletionItemKind.Enum,
+        insertText: columnName,
+        range,
+      }
+    })
+  }
+}
 
 export const createSchemaCompletionProvider = (
   editor: IStandaloneCodeEditor,
@@ -121,18 +144,18 @@ export const createSchemaCompletionProvider = (
               const withTableName =
                 textUntilPosition.match(/\sON\s/gim) !== null
               return {
-                suggestions: informationSchemaColumns
-                  .filter((item) => tableContext.includes(item.table_name))
-                  .map((item) =>
-                    getColumnCompletion(item, range, withTableName),
+                suggestions: getColumnCompletions(
+                  informationSchemaColumns.filter((item) =>
+                    tableContext.includes(item.table_name),
                   ),
+                  range,
+                  withTableName,
+                ),
               }
             } else {
               return {
                 suggestions: [
-                  ...informationSchemaColumns.map((item) =>
-                    getColumnCompletion(item, range),
-                  ),
+                  ...getColumnCompletions(informationSchemaColumns, range),
                   ...tableSuggestions,
                 ],
               }
