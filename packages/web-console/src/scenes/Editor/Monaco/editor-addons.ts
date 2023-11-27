@@ -133,11 +133,11 @@ export const registerLanguageAddons = (monaco: Monaco) => {
     QuestDBLanguageName,
     QuestDBLanguageConf,
   )
-
-  monaco.languages.registerCompletionItemProvider(
-    QuestDBLanguageName,
-    createQuestDBCompletionProvider(),
-  )
+  //
+  // monaco.languages.registerCompletionItemProvider(
+  //   QuestDBLanguageName,
+  //   createQuestDBCompletionProvider(),
+  // )
 
   monaco.languages.registerDocumentFormattingEditProvider(
     QuestDBLanguageName,

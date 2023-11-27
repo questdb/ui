@@ -5,6 +5,45 @@ import { editor, IRange } from "monaco-editor"
 import { languages } from "monaco-editor"
 import IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 import { findMatches, getQueryFromCursor } from "../utils"
+import { operators } from "./operators"
+import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
+
+const getLanguageCompletions = (range: IRange) => [
+  ...functions.map((qdbFunction) => {
+    return {
+      label: qdbFunction,
+      kind: languages.CompletionItemKind.Function,
+      insertText: qdbFunction,
+      range,
+    }
+  }),
+  ...dataTypes.map((item) => {
+    return {
+      label: item,
+      kind: languages.CompletionItemKind.Keyword,
+      insertText: item,
+      range,
+    }
+  }),
+  ...keywords.map((item) => {
+    const keyword = item.toUpperCase()
+    return {
+      label: keyword,
+      kind: languages.CompletionItemKind.Keyword,
+      insertText: keyword,
+      range,
+    }
+  }),
+  ...operators.map((item) => {
+    const operator = item.toUpperCase()
+    return {
+      label: operator,
+      kind: languages.CompletionItemKind.Operator,
+      insertText: operator.toUpperCase(),
+      range,
+    }
+  }),
+]
 
 export const getColumnCompletions = (
   columns: InformationSchemaColumn[],
@@ -21,7 +60,7 @@ export const getColumnCompletions = (
       },
       kind: languages.CompletionItemKind.Enum,
       insertText: `${item.table_name}.${item.column_name}`,
-      sortText: item.table_name,
+      sortText: "1",
       range,
     }))
     // For everything else, return a list of unique column names.
@@ -43,6 +82,7 @@ export const getColumnCompletions = (
         },
         kind: languages.CompletionItemKind.Enum,
         insertText: columnName,
+        sortText: "1",
         range,
       }
     })
@@ -118,6 +158,7 @@ export const createSchemaCompletionProvider = (
                 : /^[a-z0-9_]+$/i.test(item.table_name)
                 ? item.table_name
                 : `"${item.table_name}"`,
+              sortText: "1",
               range,
             }
           })
@@ -144,19 +185,23 @@ export const createSchemaCompletionProvider = (
               const withTableName =
                 textUntilPosition.match(/\sON\s/gim) !== null
               return {
-                suggestions: getColumnCompletions(
-                  informationSchemaColumns.filter((item) =>
-                    tableContext.includes(item.table_name),
+                suggestions: [
+                  ...getColumnCompletions(
+                    informationSchemaColumns.filter((item) =>
+                      tableContext.includes(item.table_name),
+                    ),
+                    range,
+                    withTableName,
                   ),
-                  range,
-                  withTableName,
-                ),
+                  ...getLanguageCompletions(range),
+                ],
               }
             } else {
               return {
                 suggestions: [
                   ...getColumnCompletions(informationSchemaColumns, range),
                   ...tableSuggestions,
+                  ...getLanguageCompletions(range),
                 ],
               }
             }
@@ -164,7 +209,10 @@ export const createSchemaCompletionProvider = (
 
           if (word.word) {
             return {
-              suggestions: tableSuggestions,
+              suggestions: [
+                ...tableSuggestions,
+                ...getLanguageCompletions(range),
+              ],
             }
           }
         }
