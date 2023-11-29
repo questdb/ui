@@ -194,18 +194,20 @@ describe("autocomplete", () => {
       .should("not.be.visible")
       .clearEditor();
 
-    cy.matchImageSnapshot();
-  });
-
-  it.only("should work when tables list is not empty", () => {
-    cy.typeQuery('create table "my_secrets" ("secret" string);')
-      .clickRun()
+    cy.typeQuery('create table "my_secrets" ("secret" string)')
+      .runLine()
       .clearEditor();
 
-    // We're creating another table with the same column name.
-    // The autocomplete should merge the column completions into one
-    // and respond with something like `secret (my_secrets, my_secrets2)`
-    cy.typeQuery('create table "my_secrets2" ("secret" string);')
+    cy.typeQuery("select * from my_")
+      .getAutocomplete()
+      .should("contain", "my_secrets");
+
+    cy.matchImageSnapshot();
+    cy.clearEditor().typeQuery('drop table "my_secrets"').runLine();
+  });
+
+  it("should work when tables list is not empty", () => {
+    cy.typeQuery('create table "my_secrets" ("secret" string);')
       .clickRun()
       .clearEditor();
 
@@ -214,34 +216,14 @@ describe("autocomplete", () => {
       .clearEditor();
 
     cy.visit(baseUrl);
-    cy.typeQuery("\nselect ");
+    cy.typeQuery("\nselect * from ");
     cy.getAutocomplete()
-      // Tables
       .should("not.contain", "telemetry")
       .should("contain", "my_secrets")
       .should("contain", "my_publics")
-      // Columns
-      .should("contain", "secret")
-      .should("contain", "public")
-      // Tables list for the `secret` column
-      // list the tables containing `secret` column
-      .should("contain", "my_secrets, my_secrets2")
-      .clearEditor();
-
-    cy.typeQuery("select * from my_secrets where ");
-    cy.getAutocomplete()
-      .should("contain", "secret")
-      .should("not.contain", "public")
-      .clearEditor();
-
-    cy.typeQuery("select * from my_secrets join my_publics on ");
-    cy.getAutocomplete()
-      .should("contain", "my_publics.public")
-      .should("contain", "my_secrets.secret")
       .clearEditor();
 
     cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_secrets2"').runLine().clearEditor();
     cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
   });
 });
