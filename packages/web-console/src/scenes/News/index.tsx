@@ -197,7 +197,7 @@ const News = () => {
         />
       }
     >
-      <Drawer.ContentWrapper mode="side">
+      <Drawer.ContentWrapper mode="side" data-hook="news-content">
         <Items>
           {isLoading && !enterpriseNews && (
             <Loading>
