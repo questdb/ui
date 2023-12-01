@@ -44,16 +44,18 @@ const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
   type: ConsoleAT.SET_CONFIG,
 })
 
-const setActiveTopPanel = (panel: TopPanel): ConsoleAction => ({
+const setActiveTopPanel = (panel: TopPanel | undefined): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_TOP_PANEL,
 })
-const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
+const setActiveSidebar = (panel: Sidebar | undefined): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_SIDEBAR,
 })
 
-const setActiveBottomPanel = (panel: BottomPanel): ConsoleAction => ({
+const setActiveBottomPanel = (
+  panel: BottomPanel | undefined,
+): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL,
 })

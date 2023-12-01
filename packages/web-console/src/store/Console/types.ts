@@ -33,9 +33,9 @@ export type QueryGroup = {
   queries: Query[]
 }
 
-export type TopPanel = "tables" | undefined
+export type TopPanel = "tables"
 
-export type Sidebar = "news" | "create" | undefined
+export type Sidebar = "news" | "create"
 
 export type BottomPanel = "result" | "zeroState" | "import"
 
@@ -48,9 +48,9 @@ export type ConsoleConfigShape = Readonly<{
 export type ConsoleStateShape = Readonly<{
   config?: ConsoleConfigShape
   sideMenuOpened: boolean
-  activeTopPanel: TopPanel
-  activeSidebar: Sidebar
-  activeBottomPanel: BottomPanel
+  activeTopPanel?: TopPanel
+  activeSidebar?: Sidebar
+  activeBottomPanel?: BottomPanel
 }>
 
 export enum ConsoleAT {
@@ -82,17 +82,17 @@ type ToggleSideMenuAction = Readonly<{
 }>
 
 type setActiveTopPanelAction = Readonly<{
-  payload: TopPanel
+  payload?: TopPanel
   type: ConsoleAT.SET_ACTIVE_TOP_PANEL
 }>
 
 type setActiveSidebarAction = Readonly<{
-  payload: Sidebar
+  payload?: Sidebar
   type: ConsoleAT.SET_ACTIVE_SIDEBAR
 }>
 
 type setActiveBottomPanelAction = Readonly<{
-  payload: BottomPanel
+  payload?: BottomPanel
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL
 }>
 

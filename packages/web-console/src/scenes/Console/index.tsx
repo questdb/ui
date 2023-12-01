@@ -84,13 +84,16 @@ const Console = () => {
   const importRef = React.useRef<HTMLDivElement>(null)
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
 
-  const showPanel = (panel: BottomPanel) => {
+  const showPanel = (panel: BottomPanel | undefined) => {
     if (resultRef.current) {
-      resultRef.current.style.display = panel === "result" ? "flex" : "none"
+      resultRef.current.style.display =
+        panel === "result" && result ? "flex" : "none"
     }
     if (zeroStateRef.current) {
       zeroStateRef.current.style.display =
-        panel === "zeroState" ? "flex" : "none"
+        panel === "zeroState" || (panel === "result" && !result)
+          ? "flex"
+          : "none"
     }
     if (importRef.current) {
       importRef.current.style.display = panel === "import" ? "flex" : "none"
@@ -100,7 +103,7 @@ const Console = () => {
   useEffect(() => {
     if (resultRef.current && result) {
       dispatch(actions.console.setActiveBottomPanel("result"))
-    } else if (zeroStateRef.current) {
+    } else if (activeBottomPanel === "zeroState") {
       dispatch(actions.console.setActiveBottomPanel("zeroState"))
     }
   }, [result])
