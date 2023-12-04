@@ -1,6 +1,6 @@
 import React from "react"
 import { Chat3, Command, Question } from "@styled-icons/remix-line"
-import { Slack, StackOverflow } from "@styled-icons/boxicons-logos"
+import { Github, Slack, StackOverflow } from "@styled-icons/boxicons-logos"
 import {
   Text,
   toast,
@@ -138,6 +138,13 @@ export const Help = () => {
             <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
               <Command size="18px" />
               <Text color="foreground">Shortcuts</Text>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Github size="18px" />
+              <MenuLink
+                href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
+                text={`Build id: ${process.env.COMMIT_HASH}`}
+              />
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu.Portal>
