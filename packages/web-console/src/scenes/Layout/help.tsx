@@ -143,7 +143,7 @@ export const Help = () => {
               <Github size="18px" />
               <MenuLink
                 href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
-                text={`Build id: ${process.env.COMMIT_HASH}`}
+                text={`Commit id: ${process.env.COMMIT_HASH}`}
               />
             </DropdownMenuItem>
           </DropdownMenuContent>
