@@ -117,14 +117,6 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     gridRef.current = _grid
     quickVis($("#quick-vis"), window.bus as unknown as ReturnType<typeof $>)
 
-    eventBus.subscribe(EventType.GRID_FOCUS, () => {
-      _grid.focus()
-    })
-
-    eventBus.subscribe<QueryRawResult>(EventType.MSG_QUERY_DATASET, (data) => {
-      _grid.setData(data)
-    })
-
     _grid.addEventListener("header.click", function (event: CustomEvent) {
       eventBus.publish(
         EventType.MSG_EDITOR_INSERT_COLUMN,
@@ -144,6 +136,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   useEffect(() => {
     if (result?.type === QuestDB.Type.DQL) {
       setCount(result.count)
+      gridRef?.current?.setData(result)
     }
   }, [result])
 

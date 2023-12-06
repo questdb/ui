@@ -21,6 +21,4 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import "../../modules/EventBus"
-
 import "../../styles/main.scss"

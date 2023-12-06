@@ -37,8 +37,6 @@ import {
 import { QuestDBLanguageName } from "./utils"
 import type { EditorContext } from "../../../providers"
 import { bufferStore } from "../../../store/buffers"
-import { eventBus } from "../../../modules/EventBus"
-import { EventType } from "../../../modules/EventBus/types"
 
 enum Command {
   EXECUTE = "execute",
@@ -61,15 +59,6 @@ export const registerEditorActions = ({
   dispatch: Dispatch
   editorContext: EditorContext
 }) => {
-  editor.addAction({
-    id: Command.FOCUS_GRID,
-    label: "Focus Grid",
-    keybindings: [monaco.KeyCode.F2],
-    run: () => {
-      eventBus.publish(EventType.GRID_FOCUS)
-    },
-  })
-
   editor.addAction({
     id: Command.EXECUTE,
     label: "Execute command",
