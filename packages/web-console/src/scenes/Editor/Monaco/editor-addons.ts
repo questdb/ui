@@ -24,20 +24,21 @@
 
 import { editor } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
-import { BusEvent } from "../../../consts"
 import { Dispatch } from "redux"
 
 import {
   conf as QuestDBLanguageConf,
-  language as QuestDBLanguage,
   createQuestDBCompletionProvider,
   documentFormattingEditProvider,
   documentRangeFormattingEditProvider,
+  language as QuestDBLanguage,
 } from "./questdb-sql"
 
 import { QuestDBLanguageName } from "./utils"
-import type { EditorContext } from "../../../providers/EditorProvider"
+import type { EditorContext } from "../../../providers"
 import { bufferStore } from "../../../store/buffers"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 
 enum Command {
   EXECUTE = "execute",
@@ -65,7 +66,7 @@ export const registerEditorActions = ({
     label: "Focus Grid",
     keybindings: [monaco.KeyCode.F2],
     run: () => {
-      window.bus.trigger(BusEvent.GRID_FOCUS)
+      eventBus.publish(EventType.GRID_FOCUS)
     },
   })
 

@@ -40,12 +40,13 @@ import {
   Tooltip,
 } from "../../components"
 import { selectors } from "../../store"
-import { color } from "../../utils"
+import { color, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import { BusEvent } from "../../consts"
 import { ResultViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const Root = styled.div`
   display: flex;
@@ -116,20 +117,23 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     gridRef.current = _grid
     quickVis($("#quick-vis"), window.bus as unknown as ReturnType<typeof $>)
 
-    bus.on(BusEvent.GRID_FOCUS, function () {
+    eventBus.subscribe(EventType.GRID_FOCUS, () => {
       _grid.focus()
     })
 
-    bus.on(BusEvent.MSG_QUERY_DATASET, function (x, data) {
+    eventBus.subscribe<QueryRawResult>(EventType.MSG_QUERY_DATASET, (data) => {
       _grid.setData(data)
     })
 
     _grid.addEventListener("header.click", function (event: CustomEvent) {
-      bus.trigger("editor.insert.column", event.detail.columnName)
+      eventBus.publish(
+        EventType.MSG_EDITOR_INSERT_COLUMN,
+        event.detail.columnName,
+      )
     })
 
     _grid.addEventListener("yield.focus", function () {
-      bus.trigger(BusEvent.MSG_EDITOR_FOCUS)
+      eventBus.publish(EventType.MSG_EDITOR_FOCUS)
     })
 
     _grid.addEventListener("freeze.state", function (event: CustomEvent) {
@@ -206,7 +210,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           onClick={() => {
             const sql = gridRef?.current?.getSQL()
             if (sql) {
-              bus.trigger(BusEvent.MSG_QUERY_EXEC, { q: sql })
+              eventBus.publish(EventType.MSG_QUERY_EXEC, { q: sql })
             }
           }}
         >
@@ -252,7 +256,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 onClick={() => {
                   const sql = gridRef?.current?.getSQL()
                   if (sql) {
-                    bus.trigger(BusEvent.MSG_QUERY_EXPORT, { q: sql })
+                    eventBus.publish(EventType.MSG_QUERY_EXPORT, { q: sql })
                   }
                 }}
               >

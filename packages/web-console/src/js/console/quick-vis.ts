@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+// @ts-nocheck
 
 import "echarts/lib/chart/bar"
 import "echarts/lib/chart/line"
@@ -32,23 +33,27 @@ import { LegendComponent, GridComponent } from "echarts/components"
 import $ from "jquery"
 import SlimSelect from "slim-select"
 
-import * as qdb from "./globals"
 import eChartsMacarons from "./utils/macarons"
 import { arrayEquals } from "./array-equals"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 echarts.use([LegendComponent, GridComponent])
 
-export function quickVis(root, msgBus) {
-  var bus = msgBus
-  var div = root
+export function quickVis(
+  root: ReturnType<typeof jQuery>,
+  msgBus: ReturnType<typeof jQuery>,
+) {
+  let bus = msgBus
+  let div = root
   const btnDraw = $("#_qvis_frm_draw")
-  var viewport
-  var echart
-  var query
-  var queryExecutionTimestamp
-  var xAxis
-  var yAxis
-  var chartType
+  let viewport
+  let echart: echarts.ECharts
+  let query: any
+  let queryExecutionTimestamp: number
+  let xAxis: unknown
+  let yAxis: string | any[]
+  let chartType: string | string[]
   const columnSet = new Set()
   const blankChartOptions = {
     title: {},
@@ -69,9 +74,9 @@ export function quickVis(root, msgBus) {
     ],
   }
 
-  var cachedResponse
-  var cachedQuery
-  var hActiveRequest
+  let cachedResponse: any
+  let cachedQuery: any
+  let hActiveRequest: JQuery.jqXHR<any> | null
 
   const chartTypePicker = new SlimSelect({
     select: "#_qvis_frm_chart_type",
@@ -89,8 +94,8 @@ export function quickVis(root, msgBus) {
     echart.resize()
   }
 
-  function addToSet(array, set) {
-    for (var i = 0; i < array.length; i++) {
+  function addToSet(array: string | any[], set: Set<unknown>) {
+    for (let i = 0; i < array.length; i++) {
       set.add(array[i])
     }
   }
@@ -106,7 +111,7 @@ export function quickVis(root, msgBus) {
   }
 
   // draw server response
-  function draw(r) {
+  function draw(r: { columns: any; dataset: any }) {
     try {
       let i
       // create column name to index map
@@ -194,7 +199,7 @@ export function quickVis(root, msgBus) {
 
   function handleServerResponse(r) {
     hActiveRequest = null
-    bus.trigger(qdb.MSG_QUERY_OK, {
+    eventBus.publish(EventType.MSG_QUERY_OK, {
       delta: new Date().getTime() - queryExecutionTimestamp,
       count: r.count,
     })
@@ -206,7 +211,7 @@ export function quickVis(root, msgBus) {
   function handleServerError(r) {
     hActiveRequest = null
     setDrawBtnToDraw()
-    bus.trigger(qdb.MSG_QUERY_ERROR, {
+    eventBus.publish(EventType.MSG_QUERY_ERROR, {
       query: cachedQuery,
       r: r.responseJSON,
       status: r.status,
@@ -245,7 +250,7 @@ export function quickVis(root, msgBus) {
 
       // expand the set into HTTP query parameter value
       // we only need columns used in chart rather than all columns in the result set
-      var urlColumns = ""
+      let urlColumns = ""
       columnSet.forEach(function (value) {
         if (urlColumns !== "") {
           urlColumns += ","
@@ -261,7 +266,7 @@ export function quickVis(root, msgBus) {
       // time the query because control that displays query success expected time delta
       queryExecutionTimestamp = new Date().getTime()
       hActiveRequest = $.get("/exec", requestParams)
-      bus.trigger(qdb.MSG_QUERY_RUNNING)
+      eventBus.publish(EventType.MSG_QUERY_RUNNING)
       hActiveRequest.done(handleServerResponse).fail(handleServerError)
     }
   }
@@ -270,10 +275,10 @@ export function quickVis(root, msgBus) {
     echart.setOption(blankChartOptions, true)
   }
 
-  function updatePickers(e, data) {
-    var x = []
+  function updatePickers(e: any, data: { columns: any; query: any }) {
+    let x = []
     const columns = data.columns
-    for (var i = 0; i < columns.length; i++) {
+    for (let i = 0; i < columns.length; i++) {
       x[i] = { text: columns[i].name, value: columns[i].name }
     }
     xAxisPicker.setData(x)
@@ -295,9 +300,9 @@ export function quickVis(root, msgBus) {
 
   function btnDrawClick() {
     if (hActiveRequest) {
-      bus.trigger(qdb.MSG_QUERY_CANCEL)
+      eventBus.publish(EventType.MSG_QUERY_CANCEL)
     } else {
-      bus.trigger(qdb.MSG_CHART_DRAW)
+      eventBus.publish(EventType.MSG_CHART_DRAW)
     }
     return false
   }
@@ -305,11 +310,12 @@ export function quickVis(root, msgBus) {
   function bind() {
     viewport = div.find(".quick-vis-canvas")[0]
     $(window).resize(resize)
-    bus.on(qdb.MSG_ACTIVE_SIDEBAR, resize)
+    eventBus.subscribe(EventType.MSG_ACTIVE_SIDEBAR, resize)
+    // @ts-ignore
     echart = echarts.init(viewport, eChartsMacarons)
-    bus.on(qdb.MSG_QUERY_DATASET, updatePickers)
-    bus.on(qdb.MSG_QUERY_CANCEL, cancelDraw)
-    bus.on(qdb.MSG_CHART_DRAW, executeQueryAndDraw)
+    eventBus.subscribe(EventType.MSG_QUERY_DATASET, updatePickers)
+    eventBus.subscribe(EventType.MSG_QUERY_CANCEL, cancelDraw)
+    eventBus.subscribe(EventType.MSG_CHART_DRAW, executeQueryAndDraw)
     btnDraw.click(btnDrawClick)
     clearChart()
   }

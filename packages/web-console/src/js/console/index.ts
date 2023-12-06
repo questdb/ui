@@ -21,11 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import $ from "jquery"
+import "../../modules/EventBus"
 
 import "../../styles/main.scss"
-import "./splitter"
-
-let messageBus = $({})
-window.bus = messageBus
