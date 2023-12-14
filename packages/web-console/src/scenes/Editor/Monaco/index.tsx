@@ -356,7 +356,7 @@ const MonacoEditor = () => {
         dispatch(actions.query.stopRunning())
       }
     }
-  }, [quest, dispatch, running])
+  }, [running])
 
   useEffect(() => {
     if (editorReady && monacoRef?.current) {

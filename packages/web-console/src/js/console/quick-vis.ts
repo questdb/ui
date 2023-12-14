@@ -275,7 +275,7 @@ export function quickVis(
     echart.setOption(blankChartOptions, true)
   }
 
-  function updatePickers(e: any, data: { columns: any; query: any }) {
+  function updatePickers(data: { columns: any; query: any }) {
     let x = []
     const columns = data.columns
     for (let i = 0; i < columns.length; i++) {
