@@ -173,6 +173,7 @@ module.exports = {
     new Webpack.DefinePlugin({
       "process.env": {
         NODE_ENV: JSON.stringify(process.env.NODE_ENV),
+        COMMIT_HASH: JSON.stringify(process.env.COMMIT_HASH),
       },
     }),
 
