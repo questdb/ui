@@ -300,9 +300,9 @@ export function quickVis(
 
   function btnDrawClick() {
     if (hActiveRequest) {
-      eventBus.publish(EventType.MSG_QUERY_CANCEL)
+      cancelDraw()
     } else {
-      eventBus.publish(EventType.MSG_CHART_DRAW)
+      executeQueryAndDraw()
     }
     return false
   }
@@ -314,8 +314,6 @@ export function quickVis(
     // @ts-ignore
     echart = echarts.init(viewport, eChartsMacarons)
     eventBus.subscribe(EventType.MSG_QUERY_DATASET, updatePickers)
-    eventBus.subscribe(EventType.MSG_QUERY_CANCEL, cancelDraw)
-    eventBus.subscribe(EventType.MSG_CHART_DRAW, executeQueryAndDraw)
     btnDraw.click(btnDrawClick)
     clearChart()
   }

@@ -39,6 +39,10 @@ $spacing-s: 4px !default;
 
 @import "slim-select/src/slim-select/slimselect.scss";
 
+.ss-main .ss-multi-selected .ss-values .ss-value {
+  animation: none;
+}
+
 .ss-content .ss-search input {
   background: #fafafa;
   color: #585858;
