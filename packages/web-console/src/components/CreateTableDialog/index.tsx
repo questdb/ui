@@ -38,12 +38,12 @@ export const CreateTableDialog = () => {
   }
 
   useEffect(() => {
-    setAddTableDialogOpen(activeSidebar === "create" ? "add" : undefined)
+    setAddTableDialogOpen(activeSidebar === "p2" ? "add" : undefined)
   }, [activeSidebar])
 
   useEffect(() => {
     if (addTableDialogOpen !== undefined) {
-      dispatch(actions.console.setActiveSidebar("create"))
+      dispatch(actions.console.setActiveSidebar("p2"))
     }
   }, [addTableDialogOpen])
 
@@ -72,7 +72,7 @@ export const CreateTableDialog = () => {
                 onClick: () => {
                   dispatch(
                     actions.console.setActiveSidebar(
-                      addTableDialogOpen ? undefined : "create",
+                      addTableDialogOpen ? undefined : "p2",
                     ),
                   )
                 },

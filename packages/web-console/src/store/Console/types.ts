@@ -33,11 +33,11 @@ export type QueryGroup = {
   queries: Query[]
 }
 
-export type TopPanel = "tables"
+export type TopPanel = "p1"
 
-export type Sidebar = "news" | "create"
+export type Sidebar = "p1" | "p2"
 
-export type BottomPanel = "result" | "zeroState" | "import"
+export type BottomPanel = "p0" | "p1" | "p2"
 
 export type ConsoleConfigShape = Readonly<{
   githubBanner: boolean

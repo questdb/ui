@@ -66,9 +66,7 @@ export const Start = () => {
       </StyledHeading>
       <Actions>
         <Action
-          onClick={() =>
-            dispatch(actions.console.setActiveBottomPanel("import"))
-          }
+          onClick={() => dispatch(actions.console.setActiveBottomPanel("p2"))}
         >
           <img
             alt="File upload icon"
@@ -79,7 +77,7 @@ export const Start = () => {
           <Heading level={5}>Import CSV</Heading>
         </Action>
         <Action
-          onClick={() => dispatch(actions.console.setActiveSidebar("create"))}
+          onClick={() => dispatch(actions.console.setActiveSidebar("p2"))}
         >
           <img
             alt="Create table icon"

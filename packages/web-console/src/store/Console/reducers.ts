@@ -33,15 +33,13 @@ import {
 } from "./types"
 
 const getValidSidebar = (sidebar?: Sidebar) =>
-  sidebar && ["create", "news"].includes(sidebar) ? sidebar : undefined
+  sidebar && ["p1", "p2"].includes(sidebar) ? sidebar : undefined
 
 const getValidTopPanel = (topPanel?: TopPanel) =>
-  topPanel && ["tables"].includes(topPanel) ? topPanel : undefined
+  topPanel && ["p1"].includes(topPanel) ? topPanel : undefined
 
 const getValidBottomPanel = (bottomPanel?: BottomPanel): BottomPanel =>
-  bottomPanel && ["result", "zeroState", "import"].includes(bottomPanel)
-    ? bottomPanel
-    : "zeroState"
+  bottomPanel && ["p0", "p1", "p2"].includes(bottomPanel) ? bottomPanel : "p0"
 
 export const getInitialState = (): ConsoleStateShape => {
   const url = new URL(window.location.href)
