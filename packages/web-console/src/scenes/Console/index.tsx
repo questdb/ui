@@ -102,8 +102,10 @@ const Console = () => {
 
   useEffect(() => {
     if (resultRef.current && result) {
+      showPanel("result")
       dispatch(actions.console.setActiveBottomPanel("result"))
     } else if (activeBottomPanel === "zeroState") {
+      showPanel("zeroState")
       dispatch(actions.console.setActiveBottomPanel("zeroState"))
     }
   }, [result])
