@@ -86,7 +86,7 @@ const Content = styled(PaneContent)`
   }
 `
 
-const LINE_NUMBERS_MIN_CHARS = 5
+const DEFAULT_LINE_CHARS = 5
 
 const MonacoEditor = () => {
   const editorContext = useEditor()
@@ -111,8 +111,12 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+
+  // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
-    LINE_NUMBERS_MIN_CHARS,
+    DEFAULT_LINE_CHARS +
+      activeBuffer.value.split("\n").length.toString().length -
+      1,
   )
 
   const toggleRunning = (isRefresh: boolean = false) => {
@@ -123,6 +127,17 @@ const MonacoEditor = () => {
     registerLanguageAddons(monaco)
 
     monaco.editor.defineTheme("dracula", dracula)
+  }
+
+  // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
+  // This width is represented in char numbers.
+  const setLineCharsWidth = () => {
+    const lineCount = editorRef.current?.getModel()?.getLineCount()
+    if (lineCount) {
+      setLineNumbersMinChars(
+        DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
+      )
+    }
   }
 
   const handleEditorClick = (e: BaseSyntheticEvent) => {
@@ -206,7 +221,6 @@ const MonacoEditor = () => {
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
-
     setEditorReady(true)
     editorReadyTrigger(editor)
 
@@ -226,7 +240,7 @@ const MonacoEditor = () => {
       const lineCount = editorRef.current?.getModel()?.getLineCount()
       if (lineCount) {
         setLineNumbersMinChars(
-          LINE_NUMBERS_MIN_CHARS + (lineCount.toString().length - 1),
+          DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
         )
       }
       renderLineMarkings(monaco, editor)
