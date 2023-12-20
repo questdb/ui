@@ -1,23 +1,23 @@
-import React, { useContext, useEffect, useRef, useState } from "react"
 import type { BaseSyntheticEvent } from "react"
-import Editor, { Monaco, loader } from "@monaco-editor/react"
+import React, { useContext, useEffect, useRef, useState } from "react"
+import Editor, { loader, Monaco } from "@monaco-editor/react"
 import dracula from "./dracula"
-import { editor } from "monaco-editor"
 import type { IDisposable, IRange } from "monaco-editor"
+import { editor } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
+import type { Request } from "./utils"
 import {
   appendQuery,
+  clearModelMarkers,
+  findMatches,
   getErrorRange,
+  getQueryFromCursor,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
   setErrorMarker,
-  clearModelMarkers,
-  getQueryFromCursor,
-  findMatches,
 } from "./utils"
-import type { Request } from "./utils"
 import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { PaneContent, Text } from "../../../components"
@@ -86,6 +86,8 @@ const Content = styled(PaneContent)`
   }
 `
 
+const LINE_NUMBERS_MIN_CHARS = 5
+
 const MonacoEditor = () => {
   const editorContext = useEditor()
   const {
@@ -109,6 +111,9 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+  const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
+    LINE_NUMBERS_MIN_CHARS,
+  )
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -216,6 +221,14 @@ const MonacoEditor = () => {
     })
 
     editor.onDidChangeCursorPosition(() => {
+      // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
+      // This width is represented in char numbers.
+      const lineCount = editorRef.current?.getModel()?.getLineCount()
+      if (lineCount) {
+        setLineNumbersMinChars(
+          LINE_NUMBERS_MIN_CHARS + (lineCount.toString().length - 1),
+        )
+      }
       renderLineMarkings(monaco, editor)
     })
 
@@ -403,6 +416,7 @@ const MonacoEditor = () => {
           selectOnLineNumbers: false,
           scrollBeyondLastLine: false,
           tabSize: 2,
+          lineNumbersMinChars: lineNumbersMinChars,
         }}
         theme="vs-dark"
       />
