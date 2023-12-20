@@ -2778,7 +2778,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@monaco-editor/react@npm:^4.3.1":
+"@monaco-editor/react@npm:^4.6.0":
   version: 4.6.0
   resolution: "@monaco-editor/react@npm:4.6.0"
   dependencies:
@@ -2991,7 +2991,7 @@ __metadata:
     "@docsearch/css": ^3.5.2
     "@docsearch/react": ^3.5.2
     "@hookform/resolvers": 2.8.5
-    "@monaco-editor/react": ^4.3.1
+    "@monaco-editor/react": ^4.6.0
     "@pmmmwh/react-refresh-webpack-plugin": ^0.5.11
     "@popperjs/core": 2.4.2
     "@questdb/react-components": "workspace:^"
@@ -3062,7 +3062,7 @@ __metadata:
     joi: 17.5.0
     jquery: 3.5.1
     mini-css-extract-plugin: ^2.6.0
-    monaco-editor: ^0.30.1
+    monaco-editor: ^0.44.0
     prettier: ^2.5.1
     prop-types: ^15.8.1
     ramda: 0.27.1
@@ -15144,10 +15144,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"monaco-editor@npm:^0.30.1":
-  version: 0.30.1
-  resolution: "monaco-editor@npm:0.30.1"
-  checksum: 474b8b2f252eaa9d0c02a9b3b9ff587abfbe7e39bb825441e9277d983a80807eca049a26900706113139e0f8c1d664ad346aa25f3c3a30aab0ac3518943e1bed
+"monaco-editor@npm:^0.44.0":
+  version: 0.44.0
+  resolution: "monaco-editor@npm:0.44.0"
+  checksum: 6e561b23e5e9090cbdbb820dae5895a8bf9d537acc09281756a8c428960da0481461c72f387cc9a2e14bff69ab4359186c98df2dd29d6d109f1ab7189b573a35
   languageName: node
   linkType: hard
 

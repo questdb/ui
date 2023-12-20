@@ -28,7 +28,6 @@ import { Dispatch } from "redux"
 
 import {
   conf as QuestDBLanguageConf,
-  createQuestDBCompletionProvider,
   documentFormattingEditProvider,
   documentRangeFormattingEditProvider,
   language as QuestDBLanguage,
@@ -122,11 +121,6 @@ export const registerLanguageAddons = (monaco: Monaco) => {
   monaco.languages.setLanguageConfiguration(
     QuestDBLanguageName,
     QuestDBLanguageConf,
-  )
-
-  monaco.languages.registerCompletionItemProvider(
-    QuestDBLanguageName,
-    createQuestDBCompletionProvider(),
   )
 
   monaco.languages.registerDocumentFormattingEditProvider(
