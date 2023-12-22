@@ -86,11 +86,21 @@ export const createSchemaCompletionProvider = (
             }
           }
 
+          // get text value in the current line
+          const textInLine = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          })
+          // check if `textInLine` contains whitespaces only
+          const isWhitespaceOnly = /^\s*$/.test(textInLine)
+
           if (
             /(?:(SELECT|UPDATE).*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?(?: ON )?(?: SET )?$|ALTER COLUMN )/gim.test(
               textUntilPosition,
             ) &&
-            position.column !== 1
+            !isWhitespaceOnly
           ) {
             if (tableContext.length > 0) {
               const withTableName =
