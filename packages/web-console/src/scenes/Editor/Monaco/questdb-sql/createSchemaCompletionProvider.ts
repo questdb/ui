@@ -8,6 +8,10 @@ import { getTableCompletions } from "./getTableCompletions"
 import { getColumnCompletions } from "./getColumnCompletions"
 import { getLanguageCompletions } from "./getLanguageCompletions"
 
+const trimQuotesFromTableName = (tableName: string) => {
+  return tableName.replace(/(^")|("$)/g, "")
+}
+
 export const createSchemaCompletionProvider = (
   editor: IStandaloneCodeEditor,
   tables: Table[] = [],
@@ -43,6 +47,8 @@ export const createSchemaCompletionProvider = (
           if (joinMatch && joinMatch[2]) {
             tableContext.push(joinMatch[2])
           }
+
+          tableContext = tableContext.map(trimQuotesFromTableName)
 
           const textUntilPosition = model.getValueInRange({
             startLineNumber: cursorMatch?.range.startLineNumber ?? 1,
