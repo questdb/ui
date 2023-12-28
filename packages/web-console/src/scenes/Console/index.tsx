@@ -20,6 +20,7 @@ import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
 import { Allotment, AllotmentHandle } from "allotment"
+import { Import as ImportIcon } from "../../components/icons/import"
 
 const Root = styled.div`
   display: flex;
@@ -218,7 +219,7 @@ const Console = () => {
                     selected={activeBottomPanel === "import"}
                     data-hook="import-panel-button"
                   >
-                    <Upload2 size={BUTTON_ICON_SIZE} />
+                    <ImportIcon size={BUTTON_ICON_SIZE} />
                   </PrimaryToggleButton>
                 }
               >
