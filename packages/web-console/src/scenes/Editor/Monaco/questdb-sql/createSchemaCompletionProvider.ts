@@ -31,9 +31,9 @@ export const createSchemaCompletionProvider = (
           )
 
           const fromMatch = queryAtCursor.query.match(/(?<=FROM\s)([^ )]+)/gim)
-          const joinMatch = queryAtCursor.query.match(/(JOIN)\s+([^ ]+)/)
+          const joinMatch = queryAtCursor.query.match(/(JOIN)\s+([^ ]+)/i)
           const alterTableMatch = queryAtCursor.query.match(
-            /(ALTER TABLE)\s+([^ ]+)/,
+            /(ALTER TABLE)\s+([^ ]+)/i,
           )
           if (fromMatch) {
             tableContext = uniq(fromMatch)
