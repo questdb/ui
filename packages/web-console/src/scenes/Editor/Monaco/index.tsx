@@ -32,6 +32,8 @@ import Loader from "../Loader"
 import styled from "styled-components"
 import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
+import { InformationSchemaColumn } from "./questdb-sql/types"
+import IEditorDecorationsCollection = editor.IEditorDecorationsCollection
 
 loader.config({
   paths: {
@@ -66,8 +68,9 @@ const Content = styled(PaneContent)`
 
     &:after {
       content: "◃";
-      font-size: 2.5rem;
-      transform: rotate(180deg) scaleX(0.8) translateY(-2px);
+      font-size: 1.6rem;
+      font-weight: 600;
+      transform: rotate(180deg) scaleX(0.8);
       color: ${color("green")};
     }
   }
@@ -82,12 +85,6 @@ const Content = styled(PaneContent)`
     background: ${color("red")};
   }
 `
-
-enum Command {
-  EXECUTE = "execute",
-  FOCUS_GRID = "focus_grid",
-  CLEANUP_NOTIFICATIONS = "clean_notifications",
-}
 
 const MonacoEditor = () => {
   const editorContext = useEditor()
@@ -109,7 +106,7 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
-  const decorationsRef = useRef<string[]>([])
+  const decorationsRef = useRef<IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
 
@@ -119,13 +116,6 @@ const MonacoEditor = () => {
 
   const beforeMount = (monaco: Monaco) => {
     registerLanguageAddons(monaco)
-
-    setSchemaCompletionHandle(
-      monaco.languages.registerCompletionItemProvider(
-        QuestDBLanguageName,
-        createSchemaCompletionProvider(tables),
-      ),
-    )
 
     monaco.editor.defineTheme("dracula", dracula)
   }
@@ -152,55 +142,53 @@ const MonacoEditor = () => {
           (m) => m.range.startLineNumber === queryAtCursor.row + 1,
         )
         if (cursorMatch) {
-          decorationsRef.current = editor.deltaDecorations(
-            decorationsRef.current,
-            [
-              {
-                range: new monaco.Range(
-                  cursorMatch.range.startLineNumber,
-                  1,
-                  cursorMatch.range.endLineNumber,
-                  1,
-                ),
-                options: {
-                  isWholeLine: true,
-                  linesDecorationsClassName: `cursorQueryDecoration ${
-                    hasError ? "hasError" : ""
-                  }`,
-                },
+          decorationsRef.current?.clear()
+          decorationsRef.current = editor.createDecorationsCollection([
+            {
+              range: new monaco.Range(
+                cursorMatch.range.startLineNumber,
+                1,
+                cursorMatch.range.endLineNumber,
+                1,
+              ),
+              options: {
+                isWholeLine: true,
+                linesDecorationsClassName: `cursorQueryDecoration ${
+                  hasError ? "hasError" : ""
+                }`,
               },
-              {
-                range: new monaco.Range(
-                  cursorMatch.range.startLineNumber,
-                  1,
-                  cursorMatch.range.startLineNumber,
-                  1,
-                ),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: "cursorQueryGlyph",
-                },
+            },
+            {
+              range: new monaco.Range(
+                cursorMatch.range.startLineNumber,
+                1,
+                cursorMatch.range.startLineNumber,
+                1,
+              ),
+              options: {
+                isWholeLine: false,
+                glyphMarginClassName: "cursorQueryGlyph",
               },
-              ...(errorRangeRef.current &&
-              cursorMatch.range.startLineNumber !==
-                errorRangeRef.current.startLineNumber
-                ? [
-                    {
-                      range: new monaco.Range(
-                        errorRangeRef.current.startLineNumber,
-                        0,
-                        errorRangeRef.current.startLineNumber,
-                        0,
-                      ),
-                      options: {
-                        isWholeLine: false,
-                        glyphMarginClassName: "errorGlyph",
-                      },
+            },
+            ...(errorRangeRef.current &&
+            cursorMatch.range.startLineNumber !==
+              errorRangeRef.current.startLineNumber
+              ? [
+                  {
+                    range: new monaco.Range(
+                      errorRangeRef.current.startLineNumber,
+                      0,
+                      errorRangeRef.current.startLineNumber,
+                      0,
+                    ),
+                    options: {
+                      isWholeLine: false,
+                      glyphMarginClassName: "errorGlyph",
                     },
-                  ]
-                : []),
-            ],
-          )
+                  },
+                ]
+              : []),
+          ])
         }
       }
     }
@@ -357,16 +345,38 @@ const MonacoEditor = () => {
     }
   }, [quest, dispatch, running])
 
-  useEffect(() => {
-    if (editorReady && monacoRef?.current) {
+  const setCompletionProvider = async () => {
+    if (editorReady && monacoRef?.current && editorRef?.current) {
       schemaCompletionHandle?.dispose()
-      setSchemaCompletionHandle(
-        monacoRef.current.languages.registerCompletionItemProvider(
-          QuestDBLanguageName,
-          createSchemaCompletionProvider(tables),
-        ),
-      )
+      try {
+        const response = await quest.query<InformationSchemaColumn>(
+          "information_schema.columns()",
+        )
+        if (response.type === QuestDB.Type.DQL) {
+          setSchemaCompletionHandle(
+            monacoRef.current.languages.registerCompletionItemProvider(
+              QuestDBLanguageName,
+              createSchemaCompletionProvider(
+                editorRef.current,
+                tables,
+                response.data,
+              ),
+            ),
+          )
+        }
+      } catch (e) {
+        setSchemaCompletionHandle(
+          monacoRef.current.languages.registerCompletionItemProvider(
+            QuestDBLanguageName,
+            createSchemaCompletionProvider(editorRef.current, tables),
+          ),
+        )
+      }
     }
+  }
+
+  useEffect(() => {
+    setCompletionProvider()
   }, [tables, monacoRef, editorReady])
 
   return (
