@@ -85,24 +85,27 @@ const Console = () => {
   const importRef = React.useRef<HTMLDivElement>(null)
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
 
-  const showPanel = (panel: BottomPanel) => {
+  const showPanel = (panel: BottomPanel | undefined) => {
     if (resultRef.current) {
-      resultRef.current.style.display = panel === "result" ? "flex" : "none"
+      resultRef.current.style.display =
+        panel === "p1" && result ? "flex" : "none"
     }
     if (zeroStateRef.current) {
       zeroStateRef.current.style.display =
-        panel === "zeroState" ? "flex" : "none"
+        panel === "p0" || (panel === "p1" && !result) ? "flex" : "none"
     }
     if (importRef.current) {
-      importRef.current.style.display = panel === "import" ? "flex" : "none"
+      importRef.current.style.display = panel === "p2" ? "flex" : "none"
     }
   }
 
   useEffect(() => {
     if (resultRef.current && result) {
-      dispatch(actions.console.setActiveBottomPanel("result"))
-    } else if (zeroStateRef.current) {
-      dispatch(actions.console.setActiveBottomPanel("zeroState"))
+      showPanel("p1")
+      dispatch(actions.console.setActiveBottomPanel("p1"))
+    } else if (activeBottomPanel === "p0") {
+      showPanel("p0")
+      dispatch(actions.console.setActiveBottomPanel("p0"))
     }
   }, [result])
 
@@ -131,7 +134,7 @@ const Console = () => {
                       onClick={() => {
                         dispatch(
                           actions.console.setActiveTopPanel(
-                            resultsSplitterBasis === 0 ? "tables" : undefined,
+                            resultsSplitterBasis === 0 ? "p1" : undefined,
                           ),
                         )
                         updateSettings(
@@ -189,14 +192,11 @@ const Console = () => {
                         data-hook={`${mode}-panel-button`}
                         direction="left"
                         onClick={() => {
-                          dispatch(
-                            actions.console.setActiveBottomPanel("result"),
-                          )
+                          dispatch(actions.console.setActiveBottomPanel("p1"))
                           setResultViewMode(mode)
                         }}
                         selected={
-                          activeBottomPanel === "result" &&
-                          resultViewMode === mode
+                          activeBottomPanel === "p1" && resultViewMode === mode
                         }
                       >
                         {icon}
@@ -213,10 +213,10 @@ const Console = () => {
                     readOnly={readOnly}
                     {...(!readOnly && {
                       onClick: () => {
-                        dispatch(actions.console.setActiveBottomPanel("import"))
+                        dispatch(actions.console.setActiveBottomPanel("p2"))
                       },
                     })}
-                    selected={activeBottomPanel === "import"}
+                    selected={activeBottomPanel === "p2"}
                     data-hook="import-panel-button"
                   >
                     <ImportIcon size={BUTTON_ICON_SIZE} />

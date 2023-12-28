@@ -24,9 +24,7 @@
 
 import { combineReducers } from "redux"
 
-import _console, {
-  initialState as consoleInitialState,
-} from "./Console/reducers"
+import _console, { getInitialState } from "./Console/reducers"
 
 import query, { initialState as queryInitialState } from "./Query/reducers"
 import telemetry, {
@@ -40,7 +38,7 @@ const rootReducer = combineReducers({
 })
 
 export const initialState = {
-  console: consoleInitialState,
+  console: getInitialState(),
   query: queryInitialState,
   telemetry: telemetryInitialState,
 }

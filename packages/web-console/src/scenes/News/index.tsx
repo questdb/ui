@@ -165,7 +165,7 @@ const News = () => {
   }, [newsOpened, enterpriseNews])
 
   useEffect(() => {
-    setNewsOpened(activeSidebar === "news")
+    setNewsOpened(activeSidebar === "p1")
   }, [activeSidebar])
 
   return (
@@ -175,7 +175,7 @@ const News = () => {
       open={newsOpened}
       onOpenChange={async (newsOpened) => {
         dispatch(
-          actions.console.setActiveSidebar(newsOpened ? "news" : undefined),
+          actions.console.setActiveSidebar(newsOpened ? "p1" : undefined),
         )
       }}
       trigger={
@@ -197,7 +197,7 @@ const News = () => {
         />
       }
     >
-      <Drawer.ContentWrapper mode="side">
+      <Drawer.ContentWrapper mode="side" data-hook="news-content">
         <Items>
           {isLoading && !enterpriseNews && (
             <Loading>

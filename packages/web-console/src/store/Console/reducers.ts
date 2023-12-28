@@ -27,13 +27,42 @@ import {
   ConsoleAction,
   ConsoleAT,
   ConsoleStateShape,
-} from "../../types"
+  TopPanel,
+  Sidebar,
+  BottomPanel,
+} from "./types"
 
-export const initialState: ConsoleStateShape = {
-  sideMenuOpened: false,
-  activeTopPanel: "tables",
-  activeSidebar: undefined,
-  activeBottomPanel: "zeroState",
+const getValidSidebar = (sidebar?: Sidebar) =>
+  sidebar && ["p1", "p2"].includes(sidebar) ? sidebar : undefined
+
+const getValidTopPanel = (topPanel?: TopPanel) =>
+  topPanel && ["p1"].includes(topPanel) ? topPanel : undefined
+
+const getValidBottomPanel = (bottomPanel?: BottomPanel): BottomPanel =>
+  bottomPanel && ["p0", "p1", "p2"].includes(bottomPanel) ? bottomPanel : "p0"
+
+export const getInitialState = (): ConsoleStateShape => {
+  const url = new URL(window.location.href)
+  const bottomPanel = (url.searchParams.get("bottomPanel") ?? "") as BottomPanel
+  const sidebar = (url.searchParams.get("sidebar") ?? "") as Sidebar
+  const topPanel = (url.searchParams.get("topPanel") ?? "") as TopPanel
+
+  return {
+    sideMenuOpened: getValidSidebar(sidebar) !== undefined,
+    activeTopPanel: getValidTopPanel(topPanel),
+    activeSidebar: getValidSidebar(sidebar),
+    activeBottomPanel: getValidBottomPanel(bottomPanel),
+  } as ConsoleStateShape
+}
+
+const setUrlParam = (key: string, value?: TopPanel | BottomPanel | Sidebar) => {
+  const url = new URL(window.location.href)
+  if (value) {
+    url.searchParams.set(key, value)
+  } else {
+    url.searchParams.delete(key)
+  }
+  window.history.replaceState({}, "", url.toString())
 }
 
 export const defaultConfig: ConsoleConfigShape = {
@@ -43,9 +72,10 @@ export const defaultConfig: ConsoleConfigShape = {
 }
 
 const _console = (
-  state = initialState,
+  state = getInitialState(),
   action: ConsoleAction,
 ): ConsoleStateShape => {
+  const url = new URL(window.location.href)
   switch (action.type) {
     case ConsoleAT.SET_CONFIG: {
       return {
@@ -65,6 +95,7 @@ const _console = (
     }
 
     case ConsoleAT.SET_ACTIVE_TOP_PANEL: {
+      setUrlParam("topPanel", getValidTopPanel(action.payload))
       return {
         ...state,
         activeTopPanel: action.payload,
@@ -72,6 +103,7 @@ const _console = (
     }
 
     case ConsoleAT.SET_ACTIVE_SIDEBAR: {
+      setUrlParam("sidebar", getValidSidebar(action.payload))
       return {
         ...state,
         activeSidebar: action.payload,
@@ -79,6 +111,7 @@ const _console = (
     }
 
     case ConsoleAT.SET_ACTIVE_BOTTOM_PANEL: {
+      setUrlParam("bottomPanel", getValidBottomPanel(action.payload))
       return {
         ...state,
         activeBottomPanel: action.payload,
