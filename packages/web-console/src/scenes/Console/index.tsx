@@ -73,8 +73,8 @@ const Console = () => {
   const { sm } = useScreenSize()
   const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
     useLocalStorage()
-  const [savedResultsSplitterBasis, setSavedResultsSplitterBasis] = useState(
-    resultsSplitterBasis !== 0 ? resultsSplitterBasis : 300,
+  const [savedEditorSplitterBasis, setSavedEditorSplitterBasis] = useState(
+    editorSplitterBasis !== 0 ? editorSplitterBasis : 300,
   )
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
@@ -115,10 +115,10 @@ const Console = () => {
       <Allotment
         vertical={true}
         onDragEnd={(sizes) => {
-          updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, sizes[0])
+          updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
         }}
       >
-        <Allotment.Pane minSize={100} preferredSize={editorSplitterBasis}>
+        <Allotment.Pane minSize={100} preferredSize={resultsSplitterBasis}>
           <Top>
             <Sidebar align="top">
               {!sm && (
@@ -131,13 +131,13 @@ const Console = () => {
                       onClick={() => {
                         dispatch(
                           actions.console.setActiveTopPanel(
-                            resultsSplitterBasis === 0 ? "tables" : undefined,
+                            editorSplitterBasis === 0 ? "tables" : undefined,
                           ),
                         )
                         updateSettings(
-                          StoreKey.RESULTS_SPLITTER_BASIS,
-                          resultsSplitterBasis === 0
-                            ? savedResultsSplitterBasis
+                          StoreKey.EDITOR_SPLITTER_BASIS,
+                          editorSplitterBasis === 0
+                            ? savedEditorSplitterBasis
                             : 0,
                         )
                       }}
@@ -157,15 +157,15 @@ const Console = () => {
               ref={horizontalSplitterRef}
               onDragEnd={(sizes) => {
                 if (sizes[0] !== 0) {
-                  setSavedResultsSplitterBasis(sizes[0])
+                  setSavedEditorSplitterBasis(sizes[0])
                 }
-                updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
+                updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, sizes[0])
               }}
               snap
             >
               <Allotment.Pane
-                preferredSize={resultsSplitterBasis}
-                visible={resultsSplitterBasis !== 0 && !sm}
+                preferredSize={editorSplitterBasis}
+                visible={editorSplitterBasis !== 0 && !sm}
               >
                 <Schema />
               </Allotment.Pane>
