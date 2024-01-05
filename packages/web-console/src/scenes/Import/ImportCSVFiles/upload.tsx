@@ -54,17 +54,13 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
   useEffect(() => {
     void quest
       .query<Parameter>(
-        `
-          with
-          data as (show parameters)
-          select value = null as is_disabled from data
-          where
-            property_path ilike 'cairo.sql.copy.root'
-        `,
+        `(show parameters) where property_path ilike 'cairo.sql.copy.root'`,
       )
       .then((result) => {
         if (result.type === "dql" && result.count > 0) {
-          setCopyEnabled(result.data[0].value !== null)
+          setCopyEnabled(
+            result.data[0].value !== null && result.data[0].value !== "null",
+          )
         }
       })
   }, [quest])
@@ -124,8 +120,8 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
                 </InfoText>
               ) : (
                 <InfoText>
-                  Note: <CopySQLLink /> is not available in QuestDB Cloud for
-                  CSV import.
+                  Note: <CopySQLLink /> is not available for CSV Import on this
+                  database.
                 </InfoText>
               )}
             </Info>
