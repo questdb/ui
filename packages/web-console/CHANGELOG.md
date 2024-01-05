@@ -16,7 +16,7 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
-## 0.3.3 - 2023.11.16
+## 0.3.3 - 2024.01.05
 
 ### Added
 - Enhanced SQL editor autocomplete [#241](https://github.com/questdb/ui/pull/241)
