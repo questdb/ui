@@ -96,7 +96,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
             <Info>
               {isCloud() ? (
                 <InfoText>
-                  Note: <CopySQLLink /> is not available in the QuestDB Cloud
+                  Note: <CopySQLLink /> is not available in QuestDB Cloud
                   for CSV import.
                 </InfoText>
               ) : (
