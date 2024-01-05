@@ -23,8 +23,7 @@ import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
-import { BusEvent } from "../../../consts"
-import type { ErrorResult } from "../../../utils/questdb"
+import type { ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
@@ -32,6 +31,8 @@ import Loader from "../Loader"
 import styled from "styled-components"
 import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 import { InformationSchemaColumn } from "./questdb-sql/types"
 import IEditorDecorationsCollection = editor.IEditorDecorationsCollection
 
@@ -310,7 +311,7 @@ const MonacoEditor = () => {
                   ),
                 }),
               )
-              bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+              eventBus.publish(EventType.MSG_QUERY_SCHEMA)
             }
 
             if (result.type === QuestDB.Type.DQL) {
@@ -328,7 +329,7 @@ const MonacoEditor = () => {
                   ),
                 }),
               )
-              bus.trigger(BusEvent.MSG_QUERY_DATASET, result)
+              eventBus.publish(EventType.MSG_QUERY_DATASET, result)
             }
           })
           .catch((error: ErrorResult) => {
@@ -370,7 +371,7 @@ const MonacoEditor = () => {
         dispatch(actions.query.stopRunning())
       }
     }
-  }, [quest, dispatch, running])
+  }, [running])
 
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {

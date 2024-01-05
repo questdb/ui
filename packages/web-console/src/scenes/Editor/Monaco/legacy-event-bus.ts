@@ -23,8 +23,9 @@
  ******************************************************************************/
 
 import { editor } from "monaco-editor"
-import { BusEvent } from "../../../consts"
 import { appendQuery, AppendQueryOptions } from "./utils"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 
 export const registerLegacyEventBusEvents = ({
   editor,
@@ -35,36 +36,34 @@ export const registerLegacyEventBusEvents = ({
   insertTextAtCursor: (text: string) => void
   toggleRunning: (isRefresh?: boolean) => void
 }) => {
-  window.bus.on(BusEvent.MSG_EDITOR_INSERT_COLUMN, (_event, column) => {
-    insertTextAtCursor(column)
+  eventBus.subscribe<string>(EventType.MSG_EDITOR_INSERT_COLUMN, (column) => {
+    if (column) {
+      insertTextAtCursor(column)
+    }
   })
 
-  window.bus.on(
-    BusEvent.MSG_QUERY_FIND_N_EXEC,
-    (
-      _event,
-      { query, options }: { query: string; options?: AppendQueryOptions },
-    ) => {
-      const text = `${query};`
-      appendQuery(editor, text, options)
-      toggleRunning()
-    },
-  )
-
-  window.bus.on(BusEvent.MSG_QUERY_EXEC, () => {
-    toggleRunning(true)
-  })
-
-  window.bus.on(
-    BusEvent.MSG_QUERY_EXPORT,
-    (_event, request?: { q: string }) => {
-      if (request) {
-        window.location.href = `/exp?query=${encodeURIComponent(request.q)}`
+  eventBus.subscribe<{ query: string; options?: AppendQueryOptions }>(
+    EventType.MSG_QUERY_FIND_N_EXEC,
+    (payload) => {
+      if (payload) {
+        const text = `${payload.query};`
+        appendQuery(editor, text, payload.options)
+        toggleRunning()
       }
     },
   )
 
-  window.bus.on(BusEvent.MSG_EDITOR_FOCUS, () => {
+  eventBus.subscribe(EventType.MSG_QUERY_EXEC, () => {
+    toggleRunning(true)
+  })
+
+  eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXPORT, (payload) => {
+    if (payload) {
+      window.location.href = `/exp?query=${encodeURIComponent(payload.q)}`
+    }
+  })
+
+  eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {
     const position = editor.getPosition()
     if (position) {
       editor.setPosition({

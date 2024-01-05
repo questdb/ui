@@ -22,8 +22,9 @@
  *
  ******************************************************************************/
 import { isServerError } from "../utils"
-import { BusEvent } from "../consts"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
+import { eventBus } from "../modules/EventBus"
+import { EventType } from "../modules/EventBus/types"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -316,7 +317,7 @@ export class Client {
         })
       }
 
-      bus.trigger(BusEvent.MSG_CONNECTION_ERROR, genericErrorPayload)
+      eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
       // eslint-disable-next-line prefer-promise-reject-errors
       return await Promise.reject(genericErrorPayload)
@@ -333,7 +334,7 @@ export class Client {
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
       const data = (await response.json()) as RawResult
 
-      bus.trigger(BusEvent.MSG_CONNECTION_OK)
+      eventBus.publish(EventType.MSG_CONNECTION_OK)
 
       if (data.ddl) {
         return {
@@ -370,7 +371,7 @@ export class Client {
       errorPayload.position = -1
       errorPayload.query = query
       errorPayload.type = Type.ERROR
-      bus.trigger(BusEvent.MSG_CONNECTION_ERROR, errorPayload)
+      eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
     }
 
     // eslint-disable-next-line prefer-promise-reject-errors

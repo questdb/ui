@@ -3011,6 +3011,7 @@ __metadata:
     "@styled-icons/remix-fill": 10.46.0
     "@styled-icons/remix-line": 10.46.0
     "@styled-icons/styled-icon": ^10.7.0
+    "@types/echarts": ^4.9.22
     "@types/jquery": 3.5.1
     "@types/node": ^17.0.41
     "@types/ramda": 0.27.40
@@ -3052,6 +3053,7 @@ __metadata:
     eslint-plugin-react: 7.22.0
     eslint-plugin-react-hooks: 4.2.0
     eslint-plugin-standard: 5.0.0
+    eventemitter3: ^5.0.1
     file-loader: 6.0.0
     fork-ts-checker-webpack-plugin: 6.1.0
     html-webpack-plugin: ^5.5.0
@@ -5466,6 +5468,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/echarts@npm:^4.9.22":
+  version: 4.9.22
+  resolution: "@types/echarts@npm:4.9.22"
+  dependencies:
+    "@types/zrender": "*"
+  checksum: f33a94c96dc3302751e4c1825e779e08ddd2369f96120cc56ba53a64198d0a021587eccf81465e6ce8689d625ae7e2c946e5787d6376386b29c8ecc58300880e
+  languageName: node
+  linkType: hard
+
 "@types/eslint-scope@npm:^3.7.3":
   version: 3.7.5
   resolution: "@types/eslint-scope@npm:3.7.5"
@@ -6106,6 +6117,13 @@ __metadata:
   dependencies:
     "@types/node": "*"
   checksum: 3377916a2d493cb2422b167fb7dfff8cb3ea045a9489dab4955858719bf7fe6808e5f6a51ee819904fb7f623f7ac092b87f9d6a857ea1214a45070d19c8b3d7e
+  languageName: node
+  linkType: hard
+
+"@types/zrender@npm:*":
+  version: 4.0.6
+  resolution: "@types/zrender@npm:4.0.6"
+  checksum: 07115466bf90d3f4fa86ad47bc5013b7c68371d2cb37e9411af0d8c4511025b56163d29efc36c19b9918e4672ee63c8a175eb50d299d9bcab193b879517d7ac7
   languageName: node
   linkType: hard
 
@@ -10255,7 +10273,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eventemitter3@npm:^5.0.0":
+"eventemitter3@npm:^5.0.0, eventemitter3@npm:^5.0.1":
   version: 5.0.1
   resolution: "eventemitter3@npm:5.0.1"
   checksum: 543d6c858ab699303c3c32e0f0f47fc64d360bf73c3daf0ac0b5079710e340d6fe9f15487f94e66c629f5f82cd1a8678d692f3dbb6f6fcd1190e1b97fcad36f8
