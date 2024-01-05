@@ -16,6 +16,21 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.3.3 - 2024.01.05
+
+### Added
+- Enhanced SQL editor autocomplete [#241](https://github.com/questdb/ui/pull/241)
+- Commit hash info [#249](https://github.com/questdb/ui/pull/249)
+
+### Changed
+- CSV Import disclaimer texts [#229](https://github.com/questdb/ui/pull/229)
+- Replace jQuery event bus with eventemitter3 [#250](https://github.com/questdb/ui/pull/250)
+- New Import icon [#258](https://github.com/questdb/ui/pull/258)
+
+### Fixed
+- Fix issues with Run button in editor gutter [#257](https://github.com/questdb/ui/pull/257)
+- Fix results and editor panel size configs [#260](https://github.com/questdb/ui/pull/260)
+
 ## 0.3.2 - 2023.11.16
 
 ### Added
