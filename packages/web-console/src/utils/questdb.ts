@@ -213,6 +213,15 @@ export type UploadResult = {
   status: string
 }
 
+export type Parameter = {
+  property_path: string
+  env_var_name: string
+  value: string | null
+  value_source: string
+  sensitive: boolean
+  dynamic: boolean
+}
+
 export class Client {
   private readonly _host: string
   private _controllers: AbortController[] = []
