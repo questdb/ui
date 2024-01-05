@@ -34,7 +34,8 @@ import { selectors } from "../../store"
 import GithubBanner from "./GithubBanner"
 import BuildVersion from "./BuildVersion"
 import ConnectionStatus from "./ConnectionStatus"
-import { BusEvent } from "../../consts"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const Wrapper = styled.div`
   position: absolute;
@@ -97,11 +98,11 @@ const Footer = () => {
       setShowBanner(true)
     }, 2e3)
 
-    window.bus.on(BusEvent.MSG_CONNECTION_ERROR, () => {
+    eventBus.subscribe(EventType.MSG_CONNECTION_ERROR, () => {
       setShowBuildVersion(false)
     })
 
-    window.bus.on(BusEvent.MSG_CONNECTION_OK, () => {
+    eventBus.subscribe(EventType.MSG_CONNECTION_OK, () => {
       setShowBuildVersion(true)
     })
   }, [])

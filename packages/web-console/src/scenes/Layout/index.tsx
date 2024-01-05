@@ -22,9 +22,8 @@
  *
  ******************************************************************************/
 
-import React, { useEffect } from "react"
+import React from "react"
 import styled from "styled-components"
-import { BusEvent } from "../../consts"
 import Footer from "../Footer"
 import Console from "../Console"
 import SideMenu from "../SideMenu"
@@ -75,10 +74,6 @@ const Drawer = styled.div`
 
 const Layout = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-
-  useEffect(() => {
-    window.bus.trigger(BusEvent.REACT_READY)
-  }, [])
 
   return (
     <QuestProvider>

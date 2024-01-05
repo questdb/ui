@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react"
 import styled from "styled-components"
 import { color } from "../../../utils"
-import { BusEvent } from "../../../consts"
 import { Text } from "../../../components"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 
 const Wrapper = styled.div`
   display: flex;
@@ -24,11 +25,11 @@ const StatusIcon = styled.div<{ isConnected: boolean }>`
 const ConnectionStatus = () => {
   const [isConnected, setIsConnected] = useState<boolean>(true)
   useEffect(() => {
-    window.bus.on(BusEvent.MSG_CONNECTION_OK, () => {
+    eventBus.subscribe(EventType.MSG_CONNECTION_OK, () => {
       setIsConnected(true)
     })
 
-    window.bus.on(BusEvent.MSG_CONNECTION_ERROR, () => {
+    eventBus.subscribe(EventType.MSG_CONNECTION_ERROR, () => {
       setIsConnected(false)
     })
   }, [isConnected])
