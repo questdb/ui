@@ -5911,7 +5911,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@monaco-editor/loader", "virtual:6a35c957f58a973615d9553ff1544194e428e2ee959fffee765c3d60cada70b8bd3f9f9fb7ce2ce030f8b82c99e8ae959012703afc68b055eb3e43405749c3b0#npm:1.4.0"],\
             ["@types/monaco-editor", null],\
-            ["monaco-editor", "npm:0.30.1"],\
+            ["monaco-editor", "npm:0.44.0"],\
             ["state-local", "npm:1.0.7"]\
           ],\
           "packagePeers": [\
@@ -5937,7 +5937,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@types/monaco-editor", null],\
             ["@types/react", "npm:17.0.2"],\
             ["@types/react-dom", "npm:16.9.8"],\
-            ["monaco-editor", "npm:0.30.1"],\
+            ["monaco-editor", "npm:0.44.0"],\
             ["react", "npm:17.0.2"],\
             ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"]\
           ],\
@@ -6291,10 +6291,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["@questdb/sql-grammar", [\
-        ["npm:1.0.14", {\
-          "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.14-f7c14855d6-45dda76c23.zip/node_modules/@questdb/sql-grammar/",\
+        ["npm:1.0.15", {\
+          "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.15-5d5ff601c1-a54ee5c61a.zip/node_modules/@questdb/sql-grammar/",\
           "packageDependencies": [\
-            ["@questdb/sql-grammar", "npm:1.0.14"]\
+            ["@questdb/sql-grammar", "npm:1.0.15"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -6316,7 +6316,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@pmmmwh/react-refresh-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.5.11"],\
             ["@popperjs/core", "npm:2.4.2"],\
             ["@questdb/react-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#workspace:packages/react-components"],\
-            ["@questdb/sql-grammar", "npm:1.0.14"],\
+            ["@questdb/sql-grammar", "npm:1.0.15"],\
             ["@radix-ui/react-dialog", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.0.5"],\
             ["@styled-icons/bootstrap", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
             ["@styled-icons/boxicons-logos", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
@@ -6332,6 +6332,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@styled-icons/remix-fill", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
             ["@styled-icons/remix-line", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
             ["@styled-icons/styled-icon", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.7.0"],\
+            ["@types/echarts", "npm:4.9.22"],\
             ["@types/jquery", "npm:3.5.1"],\
             ["@types/node", "npm:17.0.45"],\
             ["@types/ramda", "npm:0.27.40"],\
@@ -6373,6 +6374,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["eslint-plugin-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.22.0"],\
             ["eslint-plugin-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0"],\
             ["eslint-plugin-standard", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.0.0"],\
+            ["eventemitter3", "npm:5.0.1"],\
             ["file-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:6.0.0"],\
             ["fork-ts-checker-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:6.1.0"],\
             ["html-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.5.3"],\
@@ -6381,7 +6383,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["joi", "npm:17.5.0"],\
             ["jquery", "npm:3.5.1"],\
             ["mini-css-extract-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.6"],\
-            ["monaco-editor", "npm:0.30.1"],\
+            ["monaco-editor", "npm:0.44.0"],\
             ["prettier", "npm:2.8.8"],\
             ["prop-types", "npm:15.8.1"],\
             ["ramda", "npm:0.27.1"],\
@@ -10313,6 +10315,16 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["@types/echarts", [\
+        ["npm:4.9.22", {\
+          "packageLocation": "./.yarn/cache/@types-echarts-npm-4.9.22-1c39453613-f33a94c96d.zip/node_modules/@types/echarts/",\
+          "packageDependencies": [\
+            ["@types/echarts", "npm:4.9.22"],\
+            ["@types/zrender", "npm:4.0.6"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["@types/eslint", [\
         ["npm:8.44.3", {\
           "packageLocation": "./.yarn/cache/@types-eslint-npm-8.44.3-d831fda907-3a0d152785.zip/node_modules/@types/eslint/",\
@@ -11043,6 +11055,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageDependencies": [\
             ["@types/yauzl", "npm:2.10.1"],\
             ["@types/node", "npm:20.8.4"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["@types/zrender", [\
+        ["npm:4.0.6", {\
+          "packageLocation": "./.yarn/cache/@types-zrender-npm-4.0.6-0d277a547e-07115466bf.zip/node_modules/@types/zrender/",\
+          "packageDependencies": [\
+            ["@types/zrender", "npm:4.0.6"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -22008,10 +22029,10 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
         }]\
       ]],\
       ["monaco-editor", [\
-        ["npm:0.30.1", {\
-          "packageLocation": "./.yarn/cache/monaco-editor-npm-0.30.1-f255ef74d8-474b8b2f25.zip/node_modules/monaco-editor/",\
+        ["npm:0.44.0", {\
+          "packageLocation": "./.yarn/cache/monaco-editor-npm-0.44.0-888dafb151-6e561b23e5.zip/node_modules/monaco-editor/",\
           "packageDependencies": [\
-            ["monaco-editor", "npm:0.30.1"]\
+            ["monaco-editor", "npm:0.44.0"]\
           ],\
           "linkType": "HARD"\
         }]\

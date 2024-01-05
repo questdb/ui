@@ -21,9 +21,10 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { isServerError } from "../utils";
-import { BusEvent } from "../consts"
+import { isServerError } from "../utils"
 import { TelemetryConfigShape } from "./../store/Telemetry/types"
+import { eventBus } from "../modules/EventBus"
+import { EventType } from "../modules/EventBus/types"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -103,6 +104,7 @@ export type Table = {
   partitionBy: string
   designatedTimestamp: string
   walEnabled: boolean
+  dedup: boolean
 }
 
 export type Column = {
@@ -113,6 +115,7 @@ export type Column = {
   symbolCached: boolean
   symbolCapacity: number
   type: string
+  upsertKey: boolean
 }
 
 export type Options = {
@@ -181,6 +184,7 @@ export type SchemaColumn = {
   name: string
   type: string
   pattern?: string
+  upsertKey?: boolean
 }
 
 type UploadOptions = {
@@ -313,7 +317,7 @@ export class Client {
         })
       }
 
-      bus.trigger(BusEvent.MSG_CONNECTION_ERROR, genericErrorPayload)
+      eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
       // eslint-disable-next-line prefer-promise-reject-errors
       return await Promise.reject(genericErrorPayload)
@@ -330,7 +334,7 @@ export class Client {
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
       const data = (await response.json()) as RawResult
 
-      bus.trigger(BusEvent.MSG_CONNECTION_OK)
+      eventBus.publish(EventType.MSG_CONNECTION_OK)
 
       if (data.ddl) {
         return {
@@ -363,11 +367,11 @@ export class Client {
     }
 
     if (isServerError(response)) {
-      errorPayload.error = `QuestDB is not reachable [${response.status}]`;
-      errorPayload.position = -1;
-      errorPayload.query = query;
-      errorPayload.type = Type.ERROR;
-      bus.trigger(BusEvent.MSG_CONNECTION_ERROR, errorPayload)
+      errorPayload.error = `QuestDB is not reachable [${response.status}]`
+      errorPayload.position = -1
+      errorPayload.query = query
+      errorPayload.type = Type.ERROR
+      eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
     }
 
     // eslint-disable-next-line prefer-promise-reject-errors

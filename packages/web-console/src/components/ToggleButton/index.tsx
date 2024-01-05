@@ -84,7 +84,8 @@ const baseStyles = css<Props>`
   color: ${({ selected, theme }) =>
     theme.color[selected ? "foreground" : "offWhite"]};
 
-  svg + span {
+  svg + span,
+  img + span {
     margin-left: 1rem;
   }
 `

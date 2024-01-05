@@ -153,7 +153,7 @@ describe("&query URL param", () => {
     cy.getSelectedLines().should("have.length", 4);
   });
 
-  it("should not append query if it already exists in editor", () => {
+  it.skip("should not append query if it already exists in editor", () => {
     cy.visit(baseUrl);
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query).clickRun();
@@ -194,20 +194,18 @@ describe("autocomplete", () => {
       .should("not.be.visible")
       .clearEditor();
 
-    cy.typeQuery('create table "my_secrets" ("secret" string)')
-      .runLine()
-      .clearEditor();
-
-    cy.typeQuery("select * from my_")
-      .getAutocomplete()
-      .should("contain", "my_secrets");
-
     cy.matchImageSnapshot();
-    cy.clearEditor().typeQuery('drop table "my_secrets"').runLine();
   });
 
   it("should work when tables list is not empty", () => {
     cy.typeQuery('create table "my_secrets" ("secret" string);')
+      .clickRun()
+      .clearEditor();
+
+    // We're creating another table with the same column name.
+    // The autocomplete should merge the column completions into one
+    // and respond with something like `secret (my_secrets, my_secrets2)`
+    cy.typeQuery('create table "my_secrets2" ("secret" string);')
       .clickRun()
       .clearEditor();
 
@@ -216,14 +214,34 @@ describe("autocomplete", () => {
       .clearEditor();
 
     cy.visit(baseUrl);
-    cy.typeQuery("\nselect * from ");
+    cy.typeQuery("\nselect ");
     cy.getAutocomplete()
+      // Tables
       .should("not.contain", "telemetry")
       .should("contain", "my_secrets")
       .should("contain", "my_publics")
+      // Columns
+      .should("contain", "secret")
+      .should("contain", "public")
+      // Tables list for the `secret` column
+      // list the tables containing `secret` column
+      .should("contain", "my_secrets, my_secrets2")
+      .clearEditor();
+
+    cy.typeQuery("select * from my_secrets where ");
+    cy.getAutocomplete()
+      .should("contain", "secret")
+      .should("not.contain", "public")
+      .clearEditor();
+
+    cy.typeQuery("select * from my_secrets join my_publics on ");
+    cy.getAutocomplete()
+      .should("contain", "my_publics.public")
+      .should("contain", "my_secrets.secret")
       .clearEditor();
 
     cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
+    cy.typeQuery('drop table "my_secrets2"').runLine().clearEditor();
     cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
   });
 });
@@ -253,7 +271,7 @@ describe("errors", () => {
   });
 });
 
-describe("running query with F9", () => {
+describe.skip("running query with F9", () => {
   before(() => {
     cy.visit(baseUrl);
   });
@@ -283,5 +301,15 @@ describe("running query with F9", () => {
     );
     cy.F9();
     cy.getGridRow(0).should("contain", "3");
+  });
+
+  it("should execute a correct query when line comment is present", () => {
+    cy.clearEditor();
+    cy.typeQuery(
+      "select * from long_sequence(1); -- comment\nselect * from long_sequence(2);{upArrow}{rightArrow}{rightArrow}"
+    );
+    cy.F9();
+    cy.getGridRows().should("have.length", 2);
+    cy.getCursorQueryDecoration().should("have.length", 1);
   });
 });

@@ -2778,7 +2778,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@monaco-editor/react@npm:^4.3.1":
+"@monaco-editor/react@npm:^4.6.0":
   version: 4.6.0
   resolution: "@monaco-editor/react@npm:4.6.0"
   dependencies:
@@ -2972,10 +2972,10 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@questdb/sql-grammar@npm:1.0.14":
-  version: 1.0.14
-  resolution: "@questdb/sql-grammar@npm:1.0.14"
-  checksum: 45dda76c23b2b7e536cbbbd3a2c9793c01859fdedb51ffdef83018adef727f79f30ee81a0c9b68f5a9e4948826cafcf9cd056020e8c9256cd0755142600c1f31
+"@questdb/sql-grammar@npm:1.0.15":
+  version: 1.0.15
+  resolution: "@questdb/sql-grammar@npm:1.0.15"
+  checksum: a54ee5c61a30b757fd031e170ed20964f1284fc368a1c9612d3310614c9ebb50b447916e72d5e4bebdd7d29f4b22b900707ab5a761eeca2e3503832908dbf167
   languageName: node
   linkType: hard
 
@@ -2991,11 +2991,11 @@ __metadata:
     "@docsearch/css": ^3.5.2
     "@docsearch/react": ^3.5.2
     "@hookform/resolvers": 2.8.5
-    "@monaco-editor/react": ^4.3.1
+    "@monaco-editor/react": ^4.6.0
     "@pmmmwh/react-refresh-webpack-plugin": ^0.5.11
     "@popperjs/core": 2.4.2
     "@questdb/react-components": "workspace:^"
-    "@questdb/sql-grammar": 1.0.14
+    "@questdb/sql-grammar": 1.0.15
     "@radix-ui/react-dialog": ^1.0.3
     "@styled-icons/bootstrap": 10.47.0
     "@styled-icons/boxicons-logos": 10.47.0
@@ -3011,6 +3011,7 @@ __metadata:
     "@styled-icons/remix-fill": 10.46.0
     "@styled-icons/remix-line": 10.46.0
     "@styled-icons/styled-icon": ^10.7.0
+    "@types/echarts": ^4.9.22
     "@types/jquery": 3.5.1
     "@types/node": ^17.0.41
     "@types/ramda": 0.27.40
@@ -3052,6 +3053,7 @@ __metadata:
     eslint-plugin-react: 7.22.0
     eslint-plugin-react-hooks: 4.2.0
     eslint-plugin-standard: 5.0.0
+    eventemitter3: ^5.0.1
     file-loader: 6.0.0
     fork-ts-checker-webpack-plugin: 6.1.0
     html-webpack-plugin: ^5.5.0
@@ -3060,7 +3062,7 @@ __metadata:
     joi: 17.5.0
     jquery: 3.5.1
     mini-css-extract-plugin: ^2.6.0
-    monaco-editor: ^0.30.1
+    monaco-editor: ^0.44.0
     prettier: ^2.5.1
     prop-types: ^15.8.1
     ramda: 0.27.1
@@ -5466,6 +5468,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/echarts@npm:^4.9.22":
+  version: 4.9.22
+  resolution: "@types/echarts@npm:4.9.22"
+  dependencies:
+    "@types/zrender": "*"
+  checksum: f33a94c96dc3302751e4c1825e779e08ddd2369f96120cc56ba53a64198d0a021587eccf81465e6ce8689d625ae7e2c946e5787d6376386b29c8ecc58300880e
+  languageName: node
+  linkType: hard
+
 "@types/eslint-scope@npm:^3.7.3":
   version: 3.7.5
   resolution: "@types/eslint-scope@npm:3.7.5"
@@ -6106,6 +6117,13 @@ __metadata:
   dependencies:
     "@types/node": "*"
   checksum: 3377916a2d493cb2422b167fb7dfff8cb3ea045a9489dab4955858719bf7fe6808e5f6a51ee819904fb7f623f7ac092b87f9d6a857ea1214a45070d19c8b3d7e
+  languageName: node
+  linkType: hard
+
+"@types/zrender@npm:*":
+  version: 4.0.6
+  resolution: "@types/zrender@npm:4.0.6"
+  checksum: 07115466bf90d3f4fa86ad47bc5013b7c68371d2cb37e9411af0d8c4511025b56163d29efc36c19b9918e4672ee63c8a175eb50d299d9bcab193b879517d7ac7
   languageName: node
   linkType: hard
 
@@ -10255,7 +10273,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eventemitter3@npm:^5.0.0":
+"eventemitter3@npm:^5.0.0, eventemitter3@npm:^5.0.1":
   version: 5.0.1
   resolution: "eventemitter3@npm:5.0.1"
   checksum: 543d6c858ab699303c3c32e0f0f47fc64d360bf73c3daf0ac0b5079710e340d6fe9f15487f94e66c629f5f82cd1a8678d692f3dbb6f6fcd1190e1b97fcad36f8
@@ -15126,10 +15144,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"monaco-editor@npm:^0.30.1":
-  version: 0.30.1
-  resolution: "monaco-editor@npm:0.30.1"
-  checksum: 474b8b2f252eaa9d0c02a9b3b9ff587abfbe7e39bb825441e9277d983a80807eca049a26900706113139e0f8c1d664ad346aa25f3c3a30aab0ac3518943e1bed
+"monaco-editor@npm:^0.44.0":
+  version: 0.44.0
+  resolution: "monaco-editor@npm:0.44.0"
+  checksum: 6e561b23e5e9090cbdbb820dae5895a8bf9d537acc09281756a8c428960da0481461c72f387cc9a2e14bff69ab4359186c98df2dd29d6d109f1ab7189b573a35
   languageName: node
   linkType: hard
 

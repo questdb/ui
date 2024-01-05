@@ -49,11 +49,12 @@ import { color, ErrorResult, isServerError } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
-import { BusEvent } from "../../consts"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -142,20 +143,19 @@ const Schema = ({
   useEffect(() => {
     void fetchTables()
 
-    window.bus.on(BusEvent.MSG_QUERY_SCHEMA, () => {
+    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
     })
 
-    window.bus.on(
-      BusEvent.MSG_CONNECTION_ERROR,
-      (_event, error: ErrorResult) => {
+    eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
+      if (error) {
         errorRef.current = error
         setLoadingError(error)
-      },
-    )
+      }
+    })
 
-    window.bus.on(BusEvent.MSG_CONNECTION_OK, () => {
-      // The connection has been re-established, as we have an error in memory
+    eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_OK, () => {
+      // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
       }
@@ -207,6 +207,7 @@ const Schema = ({
               onChange={handleChange}
               partitionBy={table.partitionBy}
               walEnabled={table.walEnabled}
+              dedup={table.dedup}
             />
           ))
         )}

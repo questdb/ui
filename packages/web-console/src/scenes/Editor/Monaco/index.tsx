@@ -1,30 +1,29 @@
-import React, { useContext, useEffect, useRef, useState } from "react"
 import type { BaseSyntheticEvent } from "react"
-import Editor, { Monaco, loader } from "@monaco-editor/react"
+import React, { useContext, useEffect, useRef, useState } from "react"
+import Editor, { loader, Monaco } from "@monaco-editor/react"
 import dracula from "./dracula"
-import { editor } from "monaco-editor"
 import type { IDisposable, IRange } from "monaco-editor"
+import { editor } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
+import type { Request } from "./utils"
 import {
   appendQuery,
+  clearModelMarkers,
+  findMatches,
   getErrorRange,
+  getQueryFromCursor,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
   setErrorMarker,
-  clearModelMarkers,
-  getQueryFromCursor,
-  findMatches,
 } from "./utils"
-import type { Request } from "./utils"
 import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { PaneContent, Text } from "../../../components"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
-import { BusEvent } from "../../../consts"
-import type { ErrorResult } from "../../../utils/questdb"
+import type { ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
@@ -32,6 +31,10 @@ import Loader from "../Loader"
 import styled from "styled-components"
 import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
+import { InformationSchemaColumn } from "./questdb-sql/types"
+import IEditorDecorationsCollection = editor.IEditorDecorationsCollection
 
 loader.config({
   paths: {
@@ -65,10 +68,11 @@ const Content = styled(PaneContent)`
     cursor: pointer;
 
     &:after {
-      content: "◃";
-      font-size: 2.5rem;
-      transform: rotate(180deg) scaleX(0.8) translateY(-2px);
-      color: ${color("green")};
+      display: block;
+      content: "";
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
+      width: 18px;
+      height: 18px;
     }
   }
 
@@ -83,11 +87,7 @@ const Content = styled(PaneContent)`
   }
 `
 
-enum Command {
-  EXECUTE = "execute",
-  FOCUS_GRID = "focus_grid",
-  CLEANUP_NOTIFICATIONS = "clean_notifications",
-}
+const DEFAULT_LINE_CHARS = 5
 
 const MonacoEditor = () => {
   const editorContext = useEditor()
@@ -109,9 +109,16 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
-  const decorationsRef = useRef<string[]>([])
+  const decorationsRef = useRef<IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+
+  // Set the initial line number width in chars based on the number of lines in the active buffer
+  const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
+    DEFAULT_LINE_CHARS +
+      activeBuffer.value.split("\n").length.toString().length -
+      1,
+  )
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
@@ -120,14 +127,18 @@ const MonacoEditor = () => {
   const beforeMount = (monaco: Monaco) => {
     registerLanguageAddons(monaco)
 
-    setSchemaCompletionHandle(
-      monaco.languages.registerCompletionItemProvider(
-        QuestDBLanguageName,
-        createSchemaCompletionProvider(tables),
-      ),
-    )
-
     monaco.editor.defineTheme("dracula", dracula)
+  }
+
+  // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
+  // This width is represented in char numbers.
+  const setLineCharsWidth = () => {
+    const lineCount = editorRef.current?.getModel()?.getLineCount()
+    if (lineCount) {
+      setLineNumbersMinChars(
+        DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
+      )
+    }
   }
 
   const handleEditorClick = (e: BaseSyntheticEvent) => {
@@ -152,55 +163,53 @@ const MonacoEditor = () => {
           (m) => m.range.startLineNumber === queryAtCursor.row + 1,
         )
         if (cursorMatch) {
-          decorationsRef.current = editor.deltaDecorations(
-            decorationsRef.current,
-            [
-              {
-                range: new monaco.Range(
-                  cursorMatch.range.startLineNumber,
-                  1,
-                  cursorMatch.range.endLineNumber,
-                  1,
-                ),
-                options: {
-                  isWholeLine: true,
-                  linesDecorationsClassName: `cursorQueryDecoration ${
-                    hasError ? "hasError" : ""
-                  }`,
-                },
+          decorationsRef.current?.clear()
+          decorationsRef.current = editor.createDecorationsCollection([
+            {
+              range: new monaco.Range(
+                cursorMatch.range.startLineNumber,
+                1,
+                cursorMatch.range.endLineNumber,
+                1,
+              ),
+              options: {
+                isWholeLine: true,
+                linesDecorationsClassName: `cursorQueryDecoration ${
+                  hasError ? "hasError" : ""
+                }`,
               },
-              {
-                range: new monaco.Range(
-                  cursorMatch.range.startLineNumber,
-                  1,
-                  cursorMatch.range.startLineNumber,
-                  1,
-                ),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: "cursorQueryGlyph",
-                },
+            },
+            {
+              range: new monaco.Range(
+                cursorMatch.range.startLineNumber,
+                1,
+                cursorMatch.range.startLineNumber,
+                1,
+              ),
+              options: {
+                isWholeLine: false,
+                glyphMarginClassName: "cursorQueryGlyph",
               },
-              ...(errorRangeRef.current &&
-              cursorMatch.range.startLineNumber !==
-                errorRangeRef.current.startLineNumber
-                ? [
-                    {
-                      range: new monaco.Range(
-                        errorRangeRef.current.startLineNumber,
-                        0,
-                        errorRangeRef.current.startLineNumber,
-                        0,
-                      ),
-                      options: {
-                        isWholeLine: false,
-                        glyphMarginClassName: "errorGlyph",
-                      },
+            },
+            ...(errorRangeRef.current &&
+            cursorMatch.range.startLineNumber !==
+              errorRangeRef.current.startLineNumber
+              ? [
+                  {
+                    range: new monaco.Range(
+                      errorRangeRef.current.startLineNumber,
+                      0,
+                      errorRangeRef.current.startLineNumber,
+                      0,
+                    ),
+                    options: {
+                      isWholeLine: false,
+                      glyphMarginClassName: "errorGlyph",
                     },
-                  ]
-                : []),
-            ],
-          )
+                  },
+                ]
+              : []),
+          ])
         }
       }
     }
@@ -213,7 +222,6 @@ const MonacoEditor = () => {
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
-
     setEditorReady(true)
     editorReadyTrigger(editor)
 
@@ -228,6 +236,14 @@ const MonacoEditor = () => {
     })
 
     editor.onDidChangeCursorPosition(() => {
+      // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
+      // This width is represented in char numbers.
+      const lineCount = editorRef.current?.getModel()?.getLineCount()
+      if (lineCount) {
+        setLineNumbersMinChars(
+          DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
+        )
+      }
       renderLineMarkings(monaco, editor)
     })
 
@@ -295,7 +311,7 @@ const MonacoEditor = () => {
                   ),
                 }),
               )
-              bus.trigger(BusEvent.MSG_QUERY_SCHEMA)
+              eventBus.publish(EventType.MSG_QUERY_SCHEMA)
             }
 
             if (result.type === QuestDB.Type.DQL) {
@@ -313,7 +329,7 @@ const MonacoEditor = () => {
                   ),
                 }),
               )
-              bus.trigger(BusEvent.MSG_QUERY_DATASET, result)
+              eventBus.publish(EventType.MSG_QUERY_DATASET, result)
             }
           })
           .catch((error: ErrorResult) => {
@@ -355,18 +371,40 @@ const MonacoEditor = () => {
         dispatch(actions.query.stopRunning())
       }
     }
-  }, [quest, dispatch, running])
+  }, [running])
+
+  const setCompletionProvider = async () => {
+    if (editorReady && monacoRef?.current && editorRef?.current) {
+      schemaCompletionHandle?.dispose()
+      try {
+        const response = await quest.query<InformationSchemaColumn>(
+          "information_schema.columns()",
+        )
+        if (response.type === QuestDB.Type.DQL) {
+          setSchemaCompletionHandle(
+            monacoRef.current.languages.registerCompletionItemProvider(
+              QuestDBLanguageName,
+              createSchemaCompletionProvider(
+                editorRef.current,
+                tables,
+                response.data,
+              ),
+            ),
+          )
+        }
+      } catch (e) {
+        setSchemaCompletionHandle(
+          monacoRef.current.languages.registerCompletionItemProvider(
+            QuestDBLanguageName,
+            createSchemaCompletionProvider(editorRef.current, tables),
+          ),
+        )
+      }
+    }
+  }
 
   useEffect(() => {
-    if (editorReady && monacoRef?.current) {
-      schemaCompletionHandle?.dispose()
-      setSchemaCompletionHandle(
-        monacoRef.current.languages.registerCompletionItemProvider(
-          QuestDBLanguageName,
-          createSchemaCompletionProvider(tables),
-        ),
-      )
-    }
+    setCompletionProvider()
   }, [tables, monacoRef, editorReady])
 
   return (
@@ -393,6 +431,7 @@ const MonacoEditor = () => {
           selectOnLineNumbers: false,
           scrollBeyondLastLine: false,
           tabSize: 2,
+          lineNumbersMinChars: lineNumbersMinChars,
         }}
         theme="vs-dark"
       />

@@ -24,19 +24,17 @@
 
 import { editor } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
-import { BusEvent } from "../../../consts"
 import { Dispatch } from "redux"
 
 import {
   conf as QuestDBLanguageConf,
-  language as QuestDBLanguage,
-  createQuestDBCompletionProvider,
   documentFormattingEditProvider,
   documentRangeFormattingEditProvider,
+  language as QuestDBLanguage,
 } from "./questdb-sql"
 
 import { QuestDBLanguageName } from "./utils"
-import type { EditorContext } from "../../../providers/EditorProvider"
+import type { EditorContext } from "../../../providers"
 import { bufferStore } from "../../../store/buffers"
 
 enum Command {
@@ -60,15 +58,6 @@ export const registerEditorActions = ({
   dispatch: Dispatch
   editorContext: EditorContext
 }) => {
-  editor.addAction({
-    id: Command.FOCUS_GRID,
-    label: "Focus Grid",
-    keybindings: [monaco.KeyCode.F2],
-    run: () => {
-      window.bus.trigger(BusEvent.GRID_FOCUS)
-    },
-  })
-
   editor.addAction({
     id: Command.EXECUTE,
     label: "Execute command",
@@ -132,11 +121,6 @@ export const registerLanguageAddons = (monaco: Monaco) => {
   monaco.languages.setLanguageConfiguration(
     QuestDBLanguageName,
     QuestDBLanguageConf,
-  )
-
-  monaco.languages.registerCompletionItemProvider(
-    QuestDBLanguageName,
-    createQuestDBCompletionProvider(),
   )
 
   monaco.languages.registerDocumentFormattingEditProvider(
