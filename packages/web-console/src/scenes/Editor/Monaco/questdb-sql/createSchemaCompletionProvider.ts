@@ -8,6 +8,10 @@ import { getTableCompletions } from "./getTableCompletions"
 import { getColumnCompletions } from "./getColumnCompletions"
 import { getLanguageCompletions } from "./getLanguageCompletions"
 
+const trimQuotesFromTableName = (tableName: string) => {
+  return tableName.replace(/(^")|("$)/g, "")
+}
+
 export const createSchemaCompletionProvider = (
   editor: IStandaloneCodeEditor,
   tables: Table[] = [],
@@ -43,6 +47,8 @@ export const createSchemaCompletionProvider = (
           if (joinMatch && joinMatch[2]) {
             tableContext.push(joinMatch[2])
           }
+
+          tableContext = tableContext.map(trimQuotesFromTableName)
 
           const textUntilPosition = model.getValueInRange({
             startLineNumber: cursorMatch?.range.startLineNumber ?? 1,
@@ -86,11 +92,21 @@ export const createSchemaCompletionProvider = (
             }
           }
 
+          // get text value in the current line
+          const textInLine = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          })
+          // check if `textInLine` contains whitespaces only
+          const isWhitespaceOnly = /^\s*$/.test(textInLine)
+
           if (
             /(?:(SELECT|UPDATE).*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?(?: ON )?(?: SET )?$|ALTER COLUMN )/gim.test(
               textUntilPosition,
             ) &&
-            position.column !== 1
+            !isWhitespaceOnly
           ) {
             if (tableContext.length > 0) {
               const withTableName =
