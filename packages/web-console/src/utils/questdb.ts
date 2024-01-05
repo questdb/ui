@@ -218,8 +218,8 @@ export type Parameter = {
   env_var_name: string
   value: string | null
   value_source: string
-  sensitive: string
-  dynamic: "false"
+  sensitive: boolean
+  dynamic: boolean
 }
 
 export class Client {
