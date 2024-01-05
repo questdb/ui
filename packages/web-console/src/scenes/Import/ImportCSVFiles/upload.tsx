@@ -1,4 +1,4 @@
-import React, { useRef } from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
 import { DropBox } from "./dropbox"
@@ -6,7 +6,8 @@ import { Search2 } from "@styled-icons/remix-line"
 import { Box } from "../../../components/Box"
 import { Text } from "@questdb/react-components"
 import { Button, Heading } from "@questdb/react-components"
-import { isCloud } from "../../../utils"
+import { Parameter } from "../../../utils"
+import { QuestContext } from "../../../providers"
 
 const Actions = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
   margin: auto;
@@ -46,7 +47,27 @@ const CopySQLLink = () => (
 )
 
 export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
+  const { quest } = useContext(QuestContext)
+  const [copyEnabled, setCopyEnabled] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    void quest
+      .query<Parameter>(
+        `
+          with
+          data as (show parameters)
+          select value = null as is_disabled from data
+          where
+            property_path ilike 'cairo.sql.copy.root'
+        `,
+      )
+      .then((result) => {
+        if (result.type === "dql" && result.count > 0) {
+          setCopyEnabled(result.data[0].value !== null)
+        }
+      })
+  }, [quest])
 
   return (
     <DropBox
@@ -94,17 +115,17 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
               </Text>
             )}
             <Info>
-              {isCloud() ? (
-                <InfoText>
-                  Note: <CopySQLLink /> is not available in QuestDB Cloud
-                  for CSV import.
-                </InfoText>
-              ) : (
+              {copyEnabled ? (
                 <InfoText>
                   Suitable for small batches of CSV file upload.
                   <br />
                   For database migrations, we recommend the <CopySQLLink />{" "}
                   command.
+                </InfoText>
+              ) : (
+                <InfoText>
+                  Note: <CopySQLLink /> is not available in QuestDB Cloud for
+                  CSV import.
                 </InfoText>
               )}
             </Info>
