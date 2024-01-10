@@ -7,12 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Types of changes
 
-* `Added` for new features.
-* `Changed` for changes in existing functionality.
-* `Deprecated` for soon-to-be removed features.
-* `Removed` for now removed features.
-* `Fixed` for any bug fixes.
-* `Security` in case of vulnerabilities.
+- `Added` for new features.
+- `Changed` for changes in existing functionality.
+- `Deprecated` for soon-to-be removed features.
+- `Removed` for now removed features.
+- `Fixed` for any bug fixes.
+- `Security` in case of vulnerabilities.
+
+## 0.0.6 - 2024-01-10
+
+### Added
+
+- new components:
+  `<Box>`,
+  `<Button>`,
+  `<Card>`,
+  `<FeedbackDialog>`,
+  `<Heading>`,
+  `<Loader>`,
+  `<Switch>`,
+  `<TextArea>`,
+  `<icons>`,
+  `<DropdownMenu>`,
 
 ## 0.0.5 - 2023-06-02
 
@@ -40,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add `Switch` component
 
-## 0.0.3 - 2022-08-04 
+## 0.0.3 - 2022-08-04
 
 ### Added
 
