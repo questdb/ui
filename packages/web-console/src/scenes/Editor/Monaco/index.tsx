@@ -405,6 +405,10 @@ const MonacoEditor = () => {
   useEffect(() => {
     schemaCompletionHandle?.dispose()
     setCompletionProvider()
+
+    return () => {
+      schemaCompletionHandle?.dispose()
+    }
   }, [tables, monacoRef, editorReady])
 
   return (
