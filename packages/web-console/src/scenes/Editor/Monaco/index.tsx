@@ -375,7 +375,6 @@ const MonacoEditor = () => {
 
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
-      schemaCompletionHandle?.dispose()
       try {
         const response = await quest.query<InformationSchemaColumn>(
           "information_schema.columns()",
@@ -404,6 +403,7 @@ const MonacoEditor = () => {
   }
 
   useEffect(() => {
+    schemaCompletionHandle?.dispose()
     setCompletionProvider()
   }, [tables, monacoRef, editorReady])
 
