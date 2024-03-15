@@ -21,6 +21,12 @@ jobs:
         with:
           node-version: '20'
       
+      - name: Install yarn
+        run: npm install --global yarn
+
+      - name: Get yarn v4
+        run: yarn set version latest
+
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
 
