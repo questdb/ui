@@ -104,6 +104,7 @@ const MonacoEditor = () => {
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
+  const [refreshingTables, setRefreshingTables] = useState(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
@@ -376,6 +377,7 @@ const MonacoEditor = () => {
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
       schemaCompletionHandle?.dispose()
+      setRefreshingTables(true)
       try {
         const response = await quest.query<InformationSchemaColumn>(
           "information_schema.columns()",
@@ -399,12 +401,16 @@ const MonacoEditor = () => {
             createSchemaCompletionProvider(editorRef.current, tables),
           ),
         )
+      } finally {
+        setRefreshingTables(false)
       }
     }
   }
 
   useEffect(() => {
-    setCompletionProvider()
+    if (!refreshingTables) {
+      setCompletionProvider()
+    }
   }, [tables, monacoRef, editorReady])
 
   return (
