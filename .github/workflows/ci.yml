@@ -19,16 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Cleanup arn
-        run: rm -f ~/.yarn*
-      
-      - name: Install yarn
-        run: npm install --global yarn
-
-      - name: Get yarn v4
-        run: yarn set version latest
+          node-version: '18'
+          cache: 'yarn'
 
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
