@@ -20,10 +20,12 @@ export const schemaCompletionProvider = (
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n ."'.split(""),
-    provideCompletionItems(model, position) {
+    provideCompletionItems(model, position, context) {
       const word = model.getWordUntilPosition(position)
 
       const queryAtCursor = getQueryFromCursor(editor)
+
+      let usingShorthandSelectSyntax = false
 
       let tableContext: string[] = []
 
@@ -39,11 +41,19 @@ export const schemaCompletionProvider = (
           const alterTableMatch = queryAtCursor.query.match(
             /(ALTER TABLE)\s+([^ ]+)/i,
           )
+          const tableShorthandMatchSearch = queryAtCursor.query.split(" ")[0]
+
+          if (tableShorthandMatchSearch && tables.map((table) => table.table_name).includes(trimQuotesFromTableName(tableShorthandMatchSearch))) {
+            usingShorthandSelectSyntax = true
+            tableContext.push(trimQuotesFromTableName(tableShorthandMatchSearch))
+          }
+
           if (fromMatch) {
             tableContext = uniq(fromMatch)
           } else if (alterTableMatch && alterTableMatch[2]) {
             tableContext.push(alterTableMatch[2])
           }
+
           if (joinMatch && joinMatch[2]) {
             tableContext.push(joinMatch[2])
           }
@@ -100,6 +110,22 @@ export const schemaCompletionProvider = (
                 openQuote,
                 nextCharQuote,
               }),
+            }
+          }
+
+          if (usingShorthandSelectSyntax && !isWhitespaceOnly && /((WHERE|BY|ON) )/gim.test(textUntilPosition)) {
+            return {
+              suggestions: [
+                ...getColumnCompletions({
+                  columns: informationSchemaColumns.filter((item) =>
+                    tableContext.includes(item.table_name),
+                  ),
+                  range,
+                  withTableName: false,
+                  priority: CompletionItemPriority.High,
+                }),
+                ...getLanguageCompletions(range),
+              ],
             }
           }
 

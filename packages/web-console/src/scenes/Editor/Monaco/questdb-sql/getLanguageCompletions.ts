@@ -27,7 +27,9 @@ export const getLanguageCompletions = (range: IRange) => [
     return {
       label: keyword,
       kind: languages.CompletionItemKind.Keyword,
-      insertText: keyword,
+      insertText: keyword + " ${1}",
+      insertTextRules: languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      command: { id: "editor.action.triggerSuggest" },
       range,
     }
   }),
@@ -36,7 +38,9 @@ export const getLanguageCompletions = (range: IRange) => [
     return {
       label: operator,
       kind: languages.CompletionItemKind.Operator,
-      insertText: operator.toUpperCase(),
+      insertText: operator + " ${1}",
+      insertTextRules: languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      command: { id: "editor.action.triggerSuggest" },
       range,
     }
   }),
