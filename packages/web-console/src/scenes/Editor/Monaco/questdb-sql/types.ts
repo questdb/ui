@@ -12,3 +12,11 @@ export enum CompletionItemPriority {
   MediumLow = "4",
   Low = "5",
 }
+
+export type FunctionWithDoc = {
+  name: string
+  label: string
+  documentation: string
+  parameters: { label: string; documentation: string }[]
+  docsLink: string
+}

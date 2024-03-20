@@ -37,6 +37,8 @@ import { QuestDBLanguageName } from "./utils"
 import type { EditorContext } from "../../../providers"
 import { bufferStore } from "../../../store/buffers"
 
+import { hoverProvider } from "./questdb-sql/hoverProvider";
+
 enum Command {
   EXECUTE = "execute",
   FOCUS_GRID = "focus_grid",
@@ -132,4 +134,6 @@ export const registerLanguageAddons = (monaco: Monaco) => {
     QuestDBLanguageName,
     documentRangeFormattingEditProvider,
   )
+
+  monaco.languages.registerHoverProvider(QuestDBLanguageName, hoverProvider)
 }

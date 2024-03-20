@@ -12,7 +12,7 @@ const trimQuotesFromTableName = (tableName: string) => {
   return tableName.replace(/(^")|("$)/g, "")
 }
 
-export const createSchemaCompletionProvider = (
+export const schemaCompletionProvider = (
   editor: IStandaloneCodeEditor,
   tables: Table[] = [],
   informationSchemaColumns: InformationSchemaColumn[] = [],

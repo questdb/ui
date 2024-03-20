@@ -29,7 +29,7 @@ import { NotificationType } from "../../../types"
 import QueryResult from "../QueryResult"
 import Loader from "../Loader"
 import styled from "styled-components"
-import { createSchemaCompletionProvider } from "./questdb-sql"
+import { schemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -191,25 +191,7 @@ const MonacoEditor = () => {
                 isWholeLine: false,
                 glyphMarginClassName: "cursorQueryGlyph",
               },
-            },
-            ...(errorRangeRef.current &&
-            cursorMatch.range.startLineNumber !==
-              errorRangeRef.current.startLineNumber
-              ? [
-                  {
-                    range: new monaco.Range(
-                      errorRangeRef.current.startLineNumber,
-                      0,
-                      errorRangeRef.current.startLineNumber,
-                      0,
-                    ),
-                    options: {
-                      isWholeLine: false,
-                      glyphMarginClassName: "errorGlyph",
-                    },
-                  },
-                ]
-              : []),
+            }
           ])
         }
       }
@@ -386,7 +368,7 @@ const MonacoEditor = () => {
           setSchemaCompletionHandle(
             monacoRef.current.languages.registerCompletionItemProvider(
               QuestDBLanguageName,
-              createSchemaCompletionProvider(
+              schemaCompletionProvider(
                 editorRef.current,
                 tables,
                 response.data,
@@ -398,7 +380,7 @@ const MonacoEditor = () => {
         setSchemaCompletionHandle(
           monacoRef.current.languages.registerCompletionItemProvider(
             QuestDBLanguageName,
-            createSchemaCompletionProvider(editorRef.current, tables),
+            schemaCompletionProvider(editorRef.current, tables),
           ),
         )
       } finally {

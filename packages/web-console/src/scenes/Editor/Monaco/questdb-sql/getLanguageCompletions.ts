@@ -8,7 +8,9 @@ export const getLanguageCompletions = (range: IRange) => [
     return {
       label: qdbFunction,
       kind: languages.CompletionItemKind.Function,
-      insertText: qdbFunction,
+      insertText: qdbFunction + "(${1})${2}",
+      insertTextRules: languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      command: { id: "editor.action.triggerParameterHints" },
       range,
     }
   }),

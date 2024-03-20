@@ -6386,6 +6386,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["monaco-editor", "npm:0.44.0"],\
             ["prettier", "npm:2.8.8"],\
             ["prop-types", "npm:15.8.1"],\
+            ["questdb-sql-ast-parser", "npm:1.0.3"],\
             ["ramda", "npm:0.27.1"],\
             ["react", "npm:17.0.2"],\
             ["react-contextmenu", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.14.0"],\
@@ -15247,6 +15248,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["discontinuous-range", [\
+        ["npm:1.0.0", {\
+          "packageLocation": "./.yarn/cache/discontinuous-range-npm-1.0.0-572abfd975-8ee88d7082.zip/node_modules/discontinuous-range/",\
+          "packageDependencies": [\
+            ["discontinuous-range", "npm:1.0.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["dns-equal", [\
         ["npm:1.0.0", {\
           "packageLocation": "./.yarn/cache/dns-equal-npm-1.0.0-d83b1d6d4e-a8471ac849.zip/node_modules/dns-equal/",\
@@ -22037,6 +22047,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["moo", [\
+        ["npm:0.5.2", {\
+          "packageLocation": "./.yarn/cache/moo-npm-0.5.2-8fca66e02b-5a41ddf105.zip/node_modules/moo/",\
+          "packageDependencies": [\
+            ["moo", "npm:0.5.2"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["mri", [\
         ["npm:1.2.0", {\
           "packageLocation": "./.yarn/cache/mri-npm-1.2.0-8ecee0357d-83f515abbc.zip/node_modules/mri/",\
@@ -22139,6 +22158,19 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/natural-compare-lite-npm-1.4.0-12b6b308ed-5222ac3986.zip/node_modules/natural-compare-lite/",\
           "packageDependencies": [\
             ["natural-compare-lite", "npm:1.4.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["nearley", [\
+        ["npm:2.20.1", {\
+          "packageLocation": "./.yarn/cache/nearley-npm-2.20.1-2e130941d3-42c2c330c1.zip/node_modules/nearley/",\
+          "packageDependencies": [\
+            ["nearley", "npm:2.20.1"],\
+            ["commander", "npm:2.20.3"],\
+            ["moo", "npm:0.5.2"],\
+            ["railroad-diagrams", "npm:1.0.0"],\
+            ["randexp", "npm:0.4.6"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -23903,6 +23935,17 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "linkType": "HARD"\
         }]\
       ]],\
+      ["questdb-sql-ast-parser", [\
+        ["npm:1.0.3", {\
+          "packageLocation": "./.yarn/cache/questdb-sql-ast-parser-npm-1.0.3-a7ada0e53a-8653fdf4b1.zip/node_modules/questdb-sql-ast-parser/",\
+          "packageDependencies": [\
+            ["questdb-sql-ast-parser", "npm:1.0.3"],\
+            ["moo", "npm:0.5.2"],\
+            ["nearley", "npm:2.20.1"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
       ["queue-microtask", [\
         ["npm:1.2.3", {\
           "packageLocation": "./.yarn/cache/queue-microtask-npm-1.2.3-fcc98e4e2d-b676f8c040.zip/node_modules/queue-microtask/",\
@@ -23917,6 +23960,15 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/quick-lru-npm-4.0.1-ef8aa17c9c-bea46e1abf.zip/node_modules/quick-lru/",\
           "packageDependencies": [\
             ["quick-lru", "npm:4.0.1"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["railroad-diagrams", [\
+        ["npm:1.0.0", {\
+          "packageLocation": "./.yarn/cache/railroad-diagrams-npm-1.0.0-ab8798413c-9e312af352.zip/node_modules/railroad-diagrams/",\
+          "packageDependencies": [\
+            ["railroad-diagrams", "npm:1.0.0"]\
           ],\
           "linkType": "HARD"\
         }]\
@@ -23947,6 +23999,17 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
           "packageLocation": "./.yarn/cache/ramda-npm-0.29.0-ec4babb485-9ab26c06eb.zip/node_modules/ramda/",\
           "packageDependencies": [\
             ["ramda", "npm:0.29.0"]\
+          ],\
+          "linkType": "HARD"\
+        }]\
+      ]],\
+      ["randexp", [\
+        ["npm:0.4.6", {\
+          "packageLocation": "./.yarn/cache/randexp-npm-0.4.6-60140c8119-3c0d440a3f.zip/node_modules/randexp/",\
+          "packageDependencies": [\
+            ["randexp", "npm:0.4.6"],\
+            ["discontinuous-range", "npm:1.0.0"],\
+            ["ret", "npm:0.1.15"]\
           ],\
           "linkType": "HARD"\
         }]\

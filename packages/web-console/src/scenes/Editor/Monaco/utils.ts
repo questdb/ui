@@ -34,6 +34,20 @@ export type Request = Readonly<{
   column: number
 }>
 
+const trimQuery = (query: string) => query.replace(/^\n+|\n+$/g, "")
+
+const trimRowPosition = (text: string, initialRowPosition: number) => {
+  let i = 0
+  let rowPosition = initialRowPosition
+  while (i < text.length && text[i] === "\n") {
+    i++
+    if (i === 1 || text[i - 1] === "\n") {
+      rowPosition++
+    }
+  }
+  return rowPosition
+}
+
 export const getSelectedText = (
   editor: IStandaloneCodeEditor,
 ): string | undefined => {
@@ -146,10 +160,11 @@ export const getQueryFromCursor = (
     const prev = sqlTextStack.pop()
 
     if (prev) {
+      const query = text.substring(prev.position, prev.limit)
       return {
         column: prev.col,
-        query: text.substring(prev.position, prev.limit),
-        row: prev.row,
+        query: trimQuery(query),
+        row: trimRowPosition(query, prev.row),
       }
     }
 
@@ -158,8 +173,8 @@ export const getQueryFromCursor = (
 
   return {
     column: startCol,
-    query: sql,
-    row: startRow,
+    query: trimQuery(sql),
+    row: trimRowPosition(sql, startRow),
   }
 }
 

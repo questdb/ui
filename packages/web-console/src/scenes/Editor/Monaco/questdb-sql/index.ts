@@ -1,4 +1,4 @@
 export * from "./conf"
 export * from "./language"
-export * from "./createSchemaCompletionProvider"
+export * from "./schemaCompletionProvider"
 export * from "./formatting"
