@@ -345,7 +345,7 @@ export const FilesToUpload = ({
                     onUpload={onFileUpload}
                     onRemove={onFileRemove}
                     onSettingsChange={(settings) => {
-                      onFilePropertyChange(data.fileObject.name, {
+                      onFilePropertyChange(data.id, {
                         settings,
                       })
                     }}
