@@ -119,11 +119,11 @@ export const Toolbar = () => {
     <Root>
       <Box gap="0.5rem">
         <Text color="foreground">Web Console</Text>
-        <IconWithTooltip
-          icon={<EnterpriseBadge>EE</EnterpriseBadge>}
-          tooltip="QuestDB Enterprise Edition"
-          placement="bottom"
-        />
+        {/*<IconWithTooltip*/}
+        {/*  icon={<EnterpriseBadge>EE</EnterpriseBadge>}*/}
+        {/*  tooltip="QuestDB Enterprise Edition"*/}
+        {/*  placement="bottom"*/}
+        {/*/>*/}
       </Box>
       <Box gap="0.5rem">
         {serverDetails && serverDetails.instance_name && (
