@@ -28,7 +28,9 @@ import {
   TopPanel,
   Sidebar,
   BottomPanel,
+  ConsoleSettingsShape,
 } from "./types"
+import { AuthPayload } from "../../modules/OAuth2/types"
 
 const bootstrap = (): ConsoleAction => ({
   type: ConsoleAT.BOOTSTRAP,
@@ -39,11 +41,15 @@ const refreshAuthToken = (init: boolean): ConsoleAction => ({
   type: ConsoleAT.REFRESH_AUTH_TOKEN,
 })
 
+const setSettings = (payload: ConsoleSettingsShape): ConsoleAction => ({
+  payload,
+  type: ConsoleAT.SET_SETTINGS,
+})
+
 const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
   payload,
   type: ConsoleAT.SET_CONFIG,
 })
-
 const setActiveTopPanel = (panel: TopPanel): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_TOP_PANEL,
@@ -70,4 +76,5 @@ export default {
   setActiveTopPanel,
   setActiveSidebar,
   setActiveBottomPanel,
+  setSettings,
 }

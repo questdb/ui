@@ -53,8 +53,8 @@ const MenuLink: React.FunctionComponent<{
 export const Help = () => {
   const { quest } = useContext(QuestContext)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [shortcutsPopperActive, setShortcutsPopperActive] = useState()
-  const handleShortcutsToggle = useCallback((active) => {
+  const [shortcutsPopperActive, setShortcutsPopperActive] = useState(false)
+  const handleShortcutsToggle = useCallback((active: boolean) => {
     setShortcutsPopperActive(active)
   }, [])
   const [open, setOpen] = useState(false)

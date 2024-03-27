@@ -21,6 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
+export * from "./AuthProvider"
 export * from "./QuestProvider"
 export * from "./EditorProvider"

@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+import { AuthPayload } from "../../modules/OAuth2/types"
 
 export type Query = {
   name?: string
@@ -39,6 +40,20 @@ export type Sidebar = "news" | "create" | undefined
 
 export type BottomPanel = "result" | "zeroState" | "import"
 
+export type ConsoleSettings = Readonly<{
+  "acl.oidc.enabled": boolean
+  "acl.oidc.client.id": string
+  "acl.oidc.host": string
+  "acl.oidc.port": number
+  "acl.oidc.tls.enabled": boolean
+  "acl.oidc.authorization.endpoint": string
+  "acl.oidc.token.endpoint": string
+  "acl.oidc.pkce.required": boolean
+  "acl.basic.auth.realm.enabled": boolean
+}>
+
+export type ConsoleSettingsShape = Readonly<ConsoleSettings>
+
 export type ConsoleConfigShape = Readonly<{
   githubBanner: boolean
   readOnly?: boolean
@@ -47,10 +62,12 @@ export type ConsoleConfigShape = Readonly<{
 
 export type ConsoleStateShape = Readonly<{
   config?: ConsoleConfigShape
+  settings?: ConsoleSettingsShape
   sideMenuOpened: boolean
   activeTopPanel: TopPanel
   activeSidebar: Sidebar
   activeBottomPanel: BottomPanel
+  authPayload?: AuthPayload
 }>
 
 export enum ConsoleAT {
@@ -61,6 +78,7 @@ export enum ConsoleAT {
   SET_ACTIVE_TOP_PANEL = "CONSOLE/SET_ACTIVE_TOP_PANEL",
   SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
+  SET_SETTINGS = "CONSOLE/SET_SETTINGS",
 }
 
 export type BootstrapAction = Readonly<{
@@ -96,6 +114,11 @@ type setActiveBottomPanelAction = Readonly<{
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL
 }>
 
+type setSettingsAction = Readonly<{
+  payload: ConsoleSettingsShape
+  type: ConsoleAT.SET_SETTINGS
+}>
+
 export type ConsoleAction =
   | BootstrapAction
   | RefreshAuthTokenAction
@@ -104,3 +127,4 @@ export type ConsoleAction =
   | setActiveTopPanelAction
   | setActiveSidebarAction
   | setActiveBottomPanelAction
+  | setSettingsAction

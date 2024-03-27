@@ -30,8 +30,7 @@ import {
   Text,
   TransitionDuration,
 } from "../../../components"
-import { color } from "../../../utils"
-import { Timings } from "../../../utils/questdb"
+import { color, Timings } from "../../../utils"
 
 type Props = Timings &
   Readonly<{
@@ -95,7 +94,7 @@ const formatTiming = (nanos: number) => {
   return `${nanos}ns`
 }
 
-const QueryResult = ({ compiler, count, execute, fetch, rowCount }: Props) => {
+const QueryResult = ({ compiler, authentication, count, execute, fetch, rowCount }: Props) => {
   return (
     <Wrapper _height={95} duration={TransitionDuration.FAST}>
       <div>
@@ -122,6 +121,9 @@ const QueryResult = ({ compiler, count, execute, fetch, rowCount }: Props) => {
         <DetailsColumn>
           <DetailsText align="right" color="gray2" size="sm">
             Count: {formatTiming(count)}
+          </DetailsText>
+          <DetailsText align="right" color="gray2" size="sm">
+            Authentication: {formatTiming(authentication)}
           </DetailsText>
           <DetailsText align="right" color="gray2" size="sm">
             Compile: {formatTiming(compiler)}

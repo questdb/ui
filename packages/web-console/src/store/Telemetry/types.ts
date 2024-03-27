@@ -41,9 +41,14 @@ export type TelemetryStateShape = Readonly<{
 }>
 
 export enum TelemetryAT {
+  START = "TELEMETRY/START",
   SET_CONFIG = "TELEMETRY/SET_CONFIG",
   SET_REMOTE_CONFIG = "TELEMETRY/SET_REMOTE_CONFIG",
 }
+
+export type StartAction = Readonly<{
+  type: TelemetryAT.START
+}>
 
 export type SetTelemetryConfigAction = Readonly<{
   payload: TelemetryConfigShape
@@ -56,5 +61,6 @@ export type SetTelemetryRemoteConfigAction = Readonly<{
 }>
 
 export type TelemetryAction =
+  | StartAction
   | SetTelemetryConfigAction
   | SetTelemetryRemoteConfigAction

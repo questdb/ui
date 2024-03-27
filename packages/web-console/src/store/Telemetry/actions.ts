@@ -29,6 +29,10 @@ import {
   TelemetryRemoteConfigShape,
 } from "../../types"
 
+const start = (): TelemetryAction => ({
+  type: TelemetryAT.START,
+})
+
 const setConfig = (payload: TelemetryConfigShape): TelemetryAction => ({
   payload,
   type: TelemetryAT.SET_CONFIG,
@@ -42,6 +46,7 @@ const setRemoteConfig = (
 })
 
 export default {
+  start,
   setConfig,
   setRemoteConfig,
 }

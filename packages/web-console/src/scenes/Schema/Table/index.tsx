@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useEffect, useState } from "react"
+import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import { Loader4 } from "@styled-icons/remix-line"
 import { Tree, collapseTransition, spinAnimation } from "../../../components"
@@ -34,6 +34,7 @@ import Row from "../Row"
 import ContextualMenu from "./ContextualMenu"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
+import { QuestContext } from "../../../providers"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -120,7 +121,7 @@ const Table = ({
   onChange,
   dedup,
 }: Props) => {
-  const [quest] = useState(new QuestDB.Client())
+  const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
   const tables = useSelector(selectors.query.getTables)
 
@@ -179,6 +180,7 @@ const Table = ({
 
       render({ toggleOpen, isLoading }) {
         return (
+          // @ts-ignore
           <ContextMenuTrigger id={table_name}>
             <Title
               description={description}

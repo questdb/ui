@@ -27,9 +27,10 @@ import {
   Sidebar,
   BottomPanel,
   TopPanel,
+  ConsoleSettingsShape,
 } from "types"
 
-import { defaultConfig } from "./reducers"
+import { defaultConfig, defaultSettings } from "./reducers"
 
 const getConfig: (store: StoreShape) => ConsoleConfigShape = (store) =>
   store.console.config ?? defaultConfig
@@ -46,10 +47,17 @@ const getActiveSidebar: (store: StoreShape) => Sidebar = (store) =>
 const getActiveBottomPanel: (store: StoreShape) => BottomPanel = (store) =>
   store.console.activeBottomPanel
 
+const getSettings: (store: StoreShape) => ConsoleSettingsShape = (store) =>
+  store.console.settings ?? defaultSettings
+
+const getAuthPayload = (store: StoreShape) => store.console.authPayload
+
 export default {
   getConfig,
   getSideMenuOpened,
   getActiveTopPanel,
   getActiveSidebar,
   getActiveBottomPanel,
+  getSettings,
+  getAuthPayload,
 }
