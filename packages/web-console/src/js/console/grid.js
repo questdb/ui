@@ -509,6 +509,7 @@ export function grid(rootElement, _paginationFn, id) {
       switch (col.type) {
         case "STRING":
         case "SYMBOL":
+        case "VARCHAR":
           return true
         default:
           return false
