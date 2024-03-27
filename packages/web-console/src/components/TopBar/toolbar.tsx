@@ -82,8 +82,8 @@ export const Toolbar = () => {
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
-
-  const basicAuthEnabled = settings["acl.basic.auth.realm.enabled"]
+  
+  const authEnabled = settings["acl.basic.auth.realm.enabled"] || settings["acl.oidc.enabled"]
 
   const fetchServerDetails = async () => {
     try {
@@ -137,7 +137,7 @@ export const Toolbar = () => {
             <Text color="foreground">{serverDetails.current_user}</Text>
           </User>
         )}
-        {!basicAuthEnabled && (
+        {authEnabled && (
           <Button
             onClick={() => logout()}
             prefixIcon={<LogoutCircle size="18px" />}
