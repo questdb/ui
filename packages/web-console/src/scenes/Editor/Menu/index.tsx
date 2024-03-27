@@ -134,7 +134,7 @@ const Menu = () => {
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
   }, [dispatch])
-  const handleQueriesToggle = useCallback((active) => {
+  const handleQueriesToggle = useCallback((active: boolean) => {
     if (!exampleQueriesVisited && active) {
       updateSettings(StoreKey.EXAMPLE_QUERIES_VISITED, true)
     }

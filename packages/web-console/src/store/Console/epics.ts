@@ -35,17 +35,35 @@ import {
   RefreshAuthTokenAction,
   StoreAction,
   StoreShape,
+  ConsoleSettingsShape,
 } from "../../types"
 import { fromFetch } from "../../utils"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 
-type AuthPayload = Readonly<
+type LegacyAuthPayload = Readonly<
   Partial<{
     expiry: number
     refreshRoute: string
   }>
 >
+
+export const getSettings: Epic<StoreAction, ConsoleAction, StoreShape> = (
+  action$,
+) =>
+  action$.pipe(
+    ofType<StoreAction, BootstrapAction>(ConsoleAT.BOOTSTRAP),
+    switchMap(() =>
+      fromFetch<ConsoleSettingsShape>("/settings").pipe(
+        map((response) => {
+          if (!response.error) {
+            return actions.console.setSettings(response.data)
+          }
+        }),
+        filter((a): a is ConsoleAction => !!a),
+      ),
+    ),
+  )
 
 export const getConfig: Epic<StoreAction, ConsoleAction, StoreShape> = (
   action$,
@@ -94,13 +112,13 @@ export const refreshToken: Epic<StoreAction, ConsoleAction, StoreShape> = (
         try {
           const { expiry, refreshRoute } = JSON.parse(
             authPayload,
-          ) as AuthPayload
+          ) as LegacyAuthPayload
 
           if (refreshRoute == null) {
             return NEVER
           }
 
-          const fetch$ = fromFetch<AuthPayload>(refreshRoute).pipe(
+          const fetch$ = fromFetch<LegacyAuthPayload>(refreshRoute).pipe(
             tap((response) => {
               if (!response.error) {
                 setValue(StoreKey.AUTH_PAYLOAD, JSON.stringify(response.data))
@@ -130,4 +148,9 @@ export const refreshToken: Epic<StoreAction, ConsoleAction, StoreShape> = (
     }),
   )
 
-export default [getConfig, triggerRefreshTokenOnBootstrap, refreshToken]
+export default [
+  getSettings,
+  getConfig,
+  triggerRefreshTokenOnBootstrap,
+  refreshToken,
+]

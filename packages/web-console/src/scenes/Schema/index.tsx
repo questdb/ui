@@ -92,9 +92,9 @@ const FlexSpacer = styled.div`
 `
 
 const Schema = ({
-  innerRef,
-  ...rest
-}: Props & { innerRef: Ref<HTMLDivElement> }) => {
+                  innerRef,
+                  ...rest
+                }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
@@ -160,6 +160,9 @@ const Schema = ({
         void fetchTables()
       }
     })
+
+    window.addEventListener("focus", fetchTables)
+    return () => window.removeEventListener("focus", fetchTables)
   }, [])
 
   return (

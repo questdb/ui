@@ -29,8 +29,6 @@ import { from, NEVER, of } from "rxjs"
 import { API, TelemetryTable } from "../../consts"
 import { actions, selectors } from "../../store"
 import {
-  BootstrapAction,
-  ConsoleAT,
   SetTelemetryConfigAction,
   SetTelemetryRemoteConfigAction,
   StoreAction,
@@ -43,6 +41,9 @@ import {
 
 import { fromFetch } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
+import { getValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
+import { AuthPayload } from "../../modules/OAuth2/types"
 
 const quest = new QuestDB.Client()
 
@@ -50,12 +51,31 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
 ) =>
   action$.pipe(
-    ofType<StoreAction, BootstrapAction>(ConsoleAT.BOOTSTRAP),
-    switchMap(() =>
-      from(
+    ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
+    switchMap(() => {
+      // Set an authorization header for the QuestDB client instance within the telemetry epic
+      const authPayload =
+        getValue(StoreKey.AUTH_PAYLOAD) !== ""
+          ? getValue(StoreKey.AUTH_PAYLOAD)
+          : "{}"
+      const token = JSON.parse(authPayload) as AuthPayload
+      if (token.access_token) {
+        quest.setCommonHeaders({
+          Authorization: `Bearer ${token.access_token}`,
+        })
+        // When OIDC is enabled telemetry cannot be enabled.
+        // The below line can be removed only if the server grants SELECT permission on
+        // the telemetry tables to all authenticated users automatically.
+        return from(
+          // How to construct Promise<QuestDB.QueryResult<TelemetryConfigShape>>
+          // with empty strings without going to the server?
+          quest.query<TelemetryConfigShape>(`select '', '', '', '', ''`),
+        )
+      }
+      return from(
         quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`),
-      ),
-    ),
+      )
+    }),
     switchMap((response) => {
       if (response.type === QuestDB.Type.DQL) {
         return of(actions.telemetry.setConfig(response.data[0]))

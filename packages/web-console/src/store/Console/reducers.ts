@@ -23,11 +23,12 @@
  ******************************************************************************/
 
 import {
-  ConsoleConfigShape,
   ConsoleAction,
   ConsoleAT,
+  ConsoleConfigShape,
+  ConsoleSettingsShape,
   ConsoleStateShape,
-} from "../../types"
+} from "./types"
 
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
@@ -40,6 +41,18 @@ export const defaultConfig: ConsoleConfigShape = {
   githubBanner: false,
   readOnly: false,
   savedQueries: [],
+}
+
+export const defaultSettings: ConsoleSettingsShape = {
+  "acl.oidc.enabled": false,
+  "acl.oidc.client.id": "",
+  "acl.oidc.host": "",
+  "acl.oidc.port": -1,
+  "acl.oidc.tls.enabled": true,
+  "acl.oidc.authorization.endpoint": "",
+  "acl.oidc.token.endpoint": "",
+  "acl.oidc.pkce.required": true,
+  "acl.basic.auth.realm.enabled": false,
 }
 
 const _console = (
@@ -82,6 +95,13 @@ const _console = (
       return {
         ...state,
         activeBottomPanel: action.payload,
+      }
+    }
+
+    case ConsoleAT.SET_SETTINGS: {
+      return {
+        ...state,
+        settings: action.payload,
       }
     }
 

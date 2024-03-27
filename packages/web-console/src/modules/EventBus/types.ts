@@ -15,5 +15,7 @@ export enum EventType {
   MSG_QUERY_SCHEMA = "query.out.schema",
   MSG_CONNECTION_OK = "query.connection.ok",
   MSG_CONNECTION_ERROR = "query.connection.error",
+  MSG_CONNECTION_UNAUTHORIZED = "query.connection.unauthorized",
+  MSG_CONNECTION_FORBIDDEN = "query.connection.forbidden",
   REACT_READY = "react.ready",
 }
