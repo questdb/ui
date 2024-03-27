@@ -77,12 +77,12 @@ const EnterpriseBadge = styled.span`
 `
 
 export const Toolbar = () => {
-  const { quest } = useContext(QuestContext)
+  const { quest, buildVersion } = useContext(QuestContext)
   const settings = useSelector(selectors.console.getSettings)
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
-  
+
   const authEnabled = settings["acl.basic.auth.realm.enabled"] || settings["acl.oidc.enabled"]
 
   const fetchServerDetails = async () => {
@@ -119,11 +119,13 @@ export const Toolbar = () => {
     <Root>
       <Box gap="0.5rem">
         <Text color="foreground">Web Console</Text>
-        {/*<IconWithTooltip*/}
-        {/*  icon={<EnterpriseBadge>EE</EnterpriseBadge>}*/}
-        {/*  tooltip="QuestDB Enterprise Edition"*/}
-        {/*  placement="bottom"*/}
-        {/*/>*/}
+        {buildVersion.kind === "enterprise" && (
+          <IconWithTooltip
+            icon={<EnterpriseBadge>EE</EnterpriseBadge>}
+            tooltip="QuestDB Enterprise Edition"
+            placement="bottom"
+          />
+        )}
       </Box>
       <Box gap="0.5rem">
         {serverDetails && serverDetails.instance_name && (

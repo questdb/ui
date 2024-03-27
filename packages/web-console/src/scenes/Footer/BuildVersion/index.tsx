@@ -25,19 +25,14 @@
 import { QuestContext } from "../../../providers"
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import * as QuestDB from "../../../utils/questdb"
 import { SecondaryButton } from "../../../components"
-import {
-  getCanUpgrade,
-  formatCommitHash,
-  formatVersion,
-  Versions,
-} from "./services"
 import { ExternalLink, ArrowUpCircle } from "@styled-icons/remix-line"
 import { Release } from "../../../utils/questdb"
 import { Team } from "@styled-icons/remix-line"
 import { BuildingMultiple } from "@styled-icons/fluentui-system-filled"
 import { ShieldLockFill } from "@styled-icons/bootstrap/ShieldLockFill"
+import { Versions } from "../../../providers/QuestProvider/types";
+import { getCanUpgrade } from "./services";
 
 const Wrapper = styled.div`
   display: flex;
@@ -92,22 +87,8 @@ const versionButtons: {
 }
 
 const BuildVersion = () => {
-  const { quest } = useContext(QuestContext)
-  const [buildVersion, setBuildVersion] = useState<Versions>({
-    kind: "open-source",
-    version: "",
-  })
-  const [commitHash, setCommitHash] = useState("")
+  const { quest, buildVersion, commitHash } = useContext(QuestContext)
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
-
-  useEffect(() => {
-    void quest.queryRaw("select build", { limit: "0,1000" }).then((result) => {
-      if (result.type === QuestDB.Type.DQL && result.count === 1) {
-        setBuildVersion(formatVersion(result.dataset[0][0] as string))
-        setCommitHash(formatCommitHash(result.dataset[0][0]))
-      }
-    })
-  }, [])
 
   useEffect(() => {
     if (buildVersion.version && buildVersion.kind.includes("open-source")) {

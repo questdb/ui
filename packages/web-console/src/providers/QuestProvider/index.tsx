@@ -22,25 +22,34 @@
  *
  ******************************************************************************/
 
-import React, { createContext, PropsWithChildren, useEffect } from "react"
-import * as QuestDB from "../utils/questdb"
+import React, { createContext, PropsWithChildren, useEffect, useState } from "react";
+import * as QuestDB from "../../utils/questdb"
 import { useSelector } from "react-redux"
-import { selectors } from "../store"
-import { useAuth } from "./AuthProvider"
-import { AuthPayload } from "../modules/OAuth2/types"
-import { getValue } from "../utils/localStorage"
-import { StoreKey } from "../utils/localStorage/types"
+import { selectors } from "../../store"
+import { useAuth } from "../AuthProvider"
+import { AuthPayload } from "../../modules/OAuth2/types"
+import { getValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
+import { formatCommitHash, formatVersion } from "./services";
+import { Versions } from "./types";
 
 const questClient = new QuestDB.Client()
 
 type Props = {}
 
 type ContextProps = {
-  quest: QuestDB.Client
+  quest: QuestDB.Client,
+  buildVersion: Versions,
+  commitHash: string
 }
 
-const defaultValues = {
+const defaultValues: ContextProps = {
   quest: questClient,
+  buildVersion: {
+    kind: "open-source",
+    version: "",
+  },
+  commitHash: "",
 }
 
 export const QuestContext = createContext<ContextProps>(defaultValues)
@@ -49,6 +58,8 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   const settings = useSelector(selectors.console.getSettings)
   const { sessionData, refreshAuthToken } = useAuth()
   const [authCheckFinished, setAuthCheckFinished] = React.useState(settings["acl.basic.auth.realm.enabled"])
+  const [buildVersion, setBuildVersion] = useState<Versions>(defaultValues.buildVersion)
+  const [commitHash, setCommitHash] = useState<string>("")
 
   const finishAuthCheck = async () => {
     // The initial check tells us if the user has permission to use the HTTP protocol.
@@ -77,9 +88,9 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
     }
   }, [sessionData])
 
-  // User has provided the basic auth credentials
   useEffect(() => {
     const token = getValue(StoreKey.REST_TOKEN)
+    // User has provided the basic auth credentials
     if (token) {
       questClient.setCommonHeaders({
         Authorization: `Bearer ${token}`,
@@ -87,7 +98,15 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
 
       void finishAuthCheck()
     }
-  })
+
+    // Get the build version info
+    questClient.queryRaw("select build", { limit: "0,1000" }).then((result) => {
+      if (result.type === QuestDB.Type.DQL && result.count === 1) {
+        setBuildVersion(formatVersion(result.dataset[0][0] as string))
+        setCommitHash(formatCommitHash(result.dataset[0][0]))
+      }
+    })
+  }, [])
 
   if (!authCheckFinished) return null
 
@@ -95,6 +114,8 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
     <QuestContext.Provider
       value={{
         quest: questClient,
+        buildVersion,
+        commitHash
       }}
     >
       {children}
