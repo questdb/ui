@@ -22,7 +22,12 @@
  *
  ******************************************************************************/
 
-import React, { createContext, PropsWithChildren, useEffect, useState } from "react";
+import React, {
+  createContext,
+  PropsWithChildren,
+  useEffect,
+  useState,
+} from "react"
 import * as QuestDB from "../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
@@ -30,16 +35,16 @@ import { useAuth } from "../AuthProvider"
 import { AuthPayload } from "../../modules/OAuth2/types"
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { formatCommitHash, formatVersion } from "./services";
-import { Versions } from "./types";
+import { formatCommitHash, formatVersion } from "./services"
+import { Versions } from "./types"
 
 const questClient = new QuestDB.Client()
 
 type Props = {}
 
 type ContextProps = {
-  quest: QuestDB.Client,
-  buildVersion: Versions,
+  quest: QuestDB.Client
+  buildVersion: Versions
   commitHash: string
 }
 
@@ -57,8 +62,14 @@ export const QuestContext = createContext<ContextProps>(defaultValues)
 export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   const settings = useSelector(selectors.console.getSettings)
   const { sessionData, refreshAuthToken } = useAuth()
-  const [authCheckFinished, setAuthCheckFinished] = React.useState(settings["acl.basic.auth.realm.enabled"])
-  const [buildVersion, setBuildVersion] = useState<Versions>(defaultValues.buildVersion)
+  const [authCheckFinished, setAuthCheckFinished] = useState(
+    settings["acl.basic.auth.realm.enabled"] ||
+      (!settings["acl.oidc.enabled"] &&
+        !settings["acl.basic.auth.realm.enabled"]),
+  )
+  const [buildVersion, setBuildVersion] = useState<Versions>(
+    defaultValues.buildVersion,
+  )
   const [commitHash, setCommitHash] = useState<string>("")
 
   const finishAuthCheck = async () => {
@@ -115,7 +126,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       value={{
         quest: questClient,
         buildVersion,
-        commitHash
+        commitHash,
       }}
     >
       {children}

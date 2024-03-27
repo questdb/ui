@@ -52,7 +52,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true)
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(
+    !settings["acl.basic.auth.realm.enabled"] && !settings["acl.oidc.enabled"],
+  )
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
     undefined,
   )
@@ -76,12 +78,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSessionData(tokenResponse)
       // Remove the code from the URL
       history.replaceState &&
-      history.replaceState(
-        null,
-        "",
-        location.pathname +
-        location.search.replace(/[\?&]code=[^&]+/, "").replace(/^&/, "?"),
-      )
+        history.replaceState(
+          null,
+          "",
+          location.pathname +
+            location.search.replace(/[\?&]code=[^&]+/, "").replace(/^&/, "?"),
+        )
     } else {
       const error = tokenResponse as unknown as OAuth2Error
       // display error message
