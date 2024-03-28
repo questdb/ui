@@ -1,4 +1,7 @@
-import { ConsoleSettingsShape, ConsoleSettings } from "../../store/Console/types"
+import {
+  ConsoleSettingsShape,
+  ConsoleSettings,
+} from "../../store/Console/types"
 
 type TokenPayload = Partial<{
   grant_type: string
@@ -10,7 +13,9 @@ type TokenPayload = Partial<{
 }>
 
 const getBaseURL = (config: ConsoleSettings) => {
-  return `${config["acl.oidc.tls.enabled"] ? "https" : "http"}://${config["acl.oidc.host"]}:${config["acl.oidc.port"]}`
+  return `${config["acl.oidc.tls.enabled"] ? "https" : "http"}://${
+    config["acl.oidc.host"]
+  }:${config["acl.oidc.port"]}`
 }
 
 export const getAuthorisationURL = ({
@@ -67,3 +72,8 @@ export const getAuthToken = async (
     },
   )
 }
+
+export const hasNoAuth = (config: ConsoleSettings) =>
+  (config["acl.basic.auth.realm.enabled"] !== undefined &&
+    !config["acl.basic.auth.realm.enabled"]) ||
+  (config["acl.oidc.enabled"] == undefined && !config["acl.oidc.enabled"])

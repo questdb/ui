@@ -37,6 +37,7 @@ import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
+import { hasNoAuth } from "../../modules/OAuth2/utils"
 
 const questClient = new QuestDB.Client()
 
@@ -63,9 +64,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   const settings = useSelector(selectors.console.getSettings)
   const { sessionData, refreshAuthToken } = useAuth()
   const [authCheckFinished, setAuthCheckFinished] = useState(
-    settings["acl.basic.auth.realm.enabled"] ||
-      (!settings["acl.oidc.enabled"] &&
-        !settings["acl.basic.auth.realm.enabled"]),
+    hasNoAuth(settings),
   )
   const [buildVersion, setBuildVersion] = useState<Versions>(
     defaultValues.buildVersion,

@@ -9,6 +9,7 @@ import {
   getAuthorisationURL,
   getAuthToken,
   getTokenExpirationDate,
+  hasNoAuth,
 } from "../modules/OAuth2/utils"
 import {
   generateCodeChallenge,
@@ -52,9 +53,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true)
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
-  const [ready, setReady] = useState(
-    !settings["acl.basic.auth.realm.enabled"] && !settings["acl.oidc.enabled"],
-  )
+  const [ready, setReady] = useState(hasNoAuth(settings))
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
     undefined,
   )
