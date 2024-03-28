@@ -51,19 +51,23 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
   const [copyEnabled, setCopyEnabled] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
-  useEffect(() => {
-    void quest
-      .query<Parameter>(
+  const enableCopyIfParamExists = async () => {
+    try {
+      const result = await quest.query<Parameter>(
         `(show parameters) where property_path ilike 'cairo.sql.copy.root'`,
       )
-      .then((result) => {
-        if (result.type === "dql" && result.count > 0) {
-          setCopyEnabled(
-            result.data[0].value !== null && result.data[0].value !== "null",
-          )
-        }
-      })
-  }, [quest])
+      if (result.type === "dql" && result.count > 0) {
+        setCopyEnabled(
+          result.data[0].value !== null && result.data[0].value !== "null",
+        )
+      }
+    } catch (ex) {
+      return
+    }
+  }
+  useEffect(() => {
+    enableCopyIfParamExists()
+  }, [])
 
   return (
     <DropBox
