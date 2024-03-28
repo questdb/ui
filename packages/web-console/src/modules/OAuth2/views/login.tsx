@@ -238,7 +238,7 @@ export const Login = ({
     }, 5000)
   }, [errorMessage])
 
-  return (
+  return settings["acl.basic.auth.realm.enabled"] ? null : (
     <div>
       <Header>
         <a href={"https://questdb.io"}>
@@ -259,19 +259,19 @@ export const Login = ({
           */}
         <Title>Please Sign In</Title>
         {settings["acl.oidc.enabled"] && (
-            <SSOCard>
-              <StyledButton
-                skin="secondary"
-                prefixIcon={<User size="18px" />}
-                onClick={() => onOAuthLogin()}
-              >
-                Continue with SSO
-              </StyledButton>
-              <Line>
-                <LineText color="gray2">or</LineText>
-              </Line>
-            </SSOCard>
-          )}
+          <SSOCard>
+            <StyledButton
+              skin="secondary"
+              prefixIcon={<User size="18px" />}
+              onClick={() => onOAuthLogin()}
+            >
+              Continue with SSO
+            </StyledButton>
+            <Line>
+              <LineText color="gray2">or</LineText>
+            </Line>
+          </SSOCard>
+        )}
         <Card hasError={errorMessage}>
           <Form<FormValues>
             name="login"

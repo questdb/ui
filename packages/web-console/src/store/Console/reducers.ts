@@ -52,7 +52,7 @@ export const defaultSettings: ConsoleSettingsShape = {
   "acl.oidc.authorization.endpoint": "",
   "acl.oidc.token.endpoint": "",
   "acl.oidc.pkce.required": true,
-  "acl.basic.auth.realm.enabled": false,
+  "acl.basic.auth.realm.enabled": undefined,
 }
 
 const _console = (

@@ -49,7 +49,7 @@ export type ConsoleSettings = Readonly<{
   "acl.oidc.authorization.endpoint": string
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean
-  "acl.basic.auth.realm.enabled": boolean
+  "acl.basic.auth.realm.enabled"?: boolean
 }>
 
 export type ConsoleSettingsShape = Readonly<ConsoleSettings>

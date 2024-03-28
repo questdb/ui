@@ -60,8 +60,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   )
   const [loggedOut, setLoggedOut] = useState(false)
 
-  const basicAuthEnabled = settings["acl.basic.auth.realm.enabled"]
-
   const setAuthToken = (tokenResponse: AuthPayload) => {
     if (tokenResponse.access_token) {
       setValue(
@@ -187,25 +185,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           )
           // Stop loading and display the login state
         } else {
-          checkIfBasicAuth()
+          uiAuthLogin()
         }
       }
-    } else if (basicAuthEnabled) {
-      // run a simple query to force basic auth by browser
-      await fetch(`${window.location.origin}/exec?query=select 42`)
-      setReady(true)
-    } else {
-      // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
-      eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
-        logout()
-      })
+    } else if (
+      // We need to explicitly check for the Boolean value, because the settings response might not come up from the API
+      // yet, and therefore be still undefined by default
+      typeof settings["acl.basic.auth.realm.enabled"] !== "undefined"
+    ) {
+      if (settings["acl.basic.auth.realm.enabled"]) {
+        await basicAuthLogin()
+      } else {
+        // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
+        eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
+          logout()
+        })
 
-      //username + pwd via login page
-      checkIfBasicAuth()
+        //username + pwd via login page
+        uiAuthLogin()
+      }
     }
   }
 
-  const checkIfBasicAuth = () => {
+  const basicAuthLogin = async () => {
+    // run a simple query to force basic auth by browser
+    const response = await fetch(
+      `${window.location.origin}/exec?query=select 42`,
+    )
+    if (response.status === 200) {
+      setReady(true)
+    } else {
+      await basicAuthLogin()
+    }
+  }
+
+  const uiAuthLogin = () => {
     // Check if user is authenticated already with basic auth
     const token = getValue(StoreKey.REST_TOKEN)
     if (token) {
@@ -289,7 +303,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         <Error
           errorMessage={errorMessage}
           onLogout={logout}
-          basicAuthEnabled={basicAuthEnabled}
+          basicAuthEnabled={settings["acl.basic.auth.realm.enabled"] ?? false}
         />
       )
     } else if (loading) {
