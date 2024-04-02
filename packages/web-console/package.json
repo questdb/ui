@@ -80,7 +80,8 @@
     "slim-select": "1.26.0",
     "sql-formatter": "^4.0.2",
     "styled-components": "5.1.1",
-    "throttle-debounce": "2.2.1"
+    "throttle-debounce": "2.2.1",
+    "ts-pattern": "4.3.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",

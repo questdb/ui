@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react"
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useReducer,
+  useState,
+} from "react"
 import { AuthPayload } from "../modules/OAuth2/types"
 import { useSelector } from "react-redux"
 import { selectors } from "../store"
@@ -21,12 +27,27 @@ import { ErrorResult } from "../utils"
 import { Logout } from "../modules/OAuth2/views/logout"
 import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
+import { match, P } from "ts-pattern"
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>
   logout: () => void
   refreshAuthToken: (settings: ConsoleSettingsShape) => Promise<AuthPayload>
   switchToOAuth: () => void
+}
+
+enum View {
+  ready,
+  loading,
+  error,
+  login,
+  loggedOut,
+}
+
+type State = { view: View; errorMessage?: string }
+
+const initialState: { view: View; errorMessage?: string } = {
+  view: View.loading,
 }
 
 const defaultValues = {
@@ -48,6 +69,8 @@ class OAuth2Error {
 
 export const AuthContext = createContext<ContextProps>(defaultValues)
 
+const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const settings = useSelector(selectors.console.getSettings)
   const [loading, setLoading] = useState(true)
@@ -58,6 +81,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     undefined,
   )
   const [loggedOut, setLoggedOut] = useState(false)
+  const [state, dispatch] = useReducer(reducer, initialState)
 
   const setAuthToken = (tokenResponse: AuthPayload) => {
     if (tokenResponse.access_token) {
@@ -84,9 +108,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       const error = tokenResponse as unknown as OAuth2Error
       // display error message
-      setErrorMessage(
-        error.error_description ?? "Error logging in. Please try again.",
-      )
+      dispatch({
+        view: View.error,
+        errorMessage:
+          error.error_description ?? "Error logging in. Please try again.",
+      })
     }
   }
 
@@ -106,6 +132,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const setupOAuth2 = async (settings: ConsoleSettingsShape) => {
     if (hasNoAuth(settings)) {
       setReady(true)
+      dispatch({ view: View.ready })
       return
     }
 
@@ -217,7 +244,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       `${window.location.origin}/exec?query=select 42`,
     )
     if (response.status === 200) {
-      setReady(true)
+      dispatch({ view: View.ready })
     } else {
       await basicAuthLogin()
     }
@@ -227,10 +254,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Check if user is authenticated already with basic auth
     const token = getValue(StoreKey.REST_TOKEN)
     if (token) {
-      setReady(true)
+      dispatch({ view: View.ready })
     } else {
       // Stop loading and display the login state
-      setLoading(false)
+      dispatch({ view: View.login })
     }
   }
 
@@ -249,7 +276,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     removeValue(StoreKey.AUTH_PAYLOAD)
     removeValue(StoreKey.REST_TOKEN)
     if (noRedirect) {
-      setLoggedOut(true)
+      dispatch({ view: View.loggedOut })
     } else {
       window.location.href = window.location.origin
     }
@@ -265,13 +292,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (sessionData) {
-      setReady(true)
+      dispatch({ view: View.ready })
     }
   }, [sessionData])
-
-  useEffect(() => {
-    if (ready) setLoading(false)
-  }, [ready])
 
   useEffect(() => {
     // If user has no access to the HTTP protocol, they will receive a 403 error response
@@ -283,59 +306,53 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           errorPayload &&
           errorPayload.error.match(/Access denied.* \[HTTP]/gm)
         ) {
-          setReady(false)
-          setErrorMessage("Unauthorized to use the Web Console.")
+          dispatch({
+            view: View.error,
+            errorMessage: "Unauthorized to use the Web Console.",
+          })
         }
       },
     )
   }, [])
 
-  if (loggedOut) {
-    return (
+  return match({ view: state.view, errorMessage })
+    .with({ view: View.loading }, () => null)
+    .with({ view: View.error, errorMessage: P.string }, ({ errorMessage }) => (
+      <Error
+        errorMessage={errorMessage}
+        onLogout={logout}
+        basicAuthEnabled={settings["acl.basic.auth.realm.enabled"] ?? false}
+      />
+    ))
+    .with({ view: View.loggedOut }, () => (
       <Logout
         onLogout={() => {
           removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
           redirectToAuthorizationUrl(true)
         }}
       />
-    )
-  }
-
-  if (!ready) {
-    if (errorMessage) {
-      return (
-        <Error
-          errorMessage={errorMessage}
-          onLogout={logout}
-          basicAuthEnabled={settings["acl.basic.auth.realm.enabled"] ?? false}
-        />
-      )
-    } else if (loading) {
-      return null
-    } else {
-      return (
-        <Login
-          onOAuthLogin={switchToOAuth}
-          onBasicAuthSuccess={() => {
-            setReady(true)
-          }}
-        />
-      )
-    }
-  }
-
-  return (
-    <AuthContext.Provider
-      value={{
-        sessionData,
-        logout,
-        refreshAuthToken,
-        switchToOAuth,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+    ))
+    .with({ view: View.login }, () => (
+      <Login
+        onOAuthLogin={switchToOAuth}
+        onBasicAuthSuccess={() => {
+          setReady(true)
+        }}
+      />
+    ))
+    .with({ view: View.ready }, () => (
+      <AuthContext.Provider
+        value={{
+          sessionData,
+          logout,
+          refreshAuthToken,
+          switchToOAuth,
+        }}
+      >
+        {children}
+      </AuthContext.Provider>
+    ))
+    .otherwise(() => null)
 }
 
 export const useAuth = () => useContext(AuthContext)
