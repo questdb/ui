@@ -73,14 +73,11 @@ const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const settings = useSelector(selectors.console.getSettings)
-  const [loading, setLoading] = useState(true)
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
-  const [ready, setReady] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
     undefined,
   )
-  const [loggedOut, setLoggedOut] = useState(false)
   const [state, dispatch] = useReducer(reducer, initialState)
 
   const setAuthToken = (tokenResponse: AuthPayload) => {
@@ -131,7 +128,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const setupOAuth2 = async (settings: ConsoleSettingsShape) => {
     if (hasNoAuth(settings)) {
-      setReady(true)
       dispatch({ view: View.ready })
       return
     }
@@ -336,7 +332,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       <Login
         onOAuthLogin={switchToOAuth}
         onBasicAuthSuccess={() => {
-          setReady(true)
+          dispatch({ view: View.ready })
         }}
       />
     ))
