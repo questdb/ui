@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true)
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
-  const [ready, setReady] = useState(hasNoAuth(settings))
+  const [ready, setReady] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
     undefined,
   )
@@ -104,6 +104,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const setupOAuth2 = async (settings: ConsoleSettingsShape) => {
+    if (hasNoAuth(settings)) {
+      setReady(true)
+      return
+    }
+
     // Proceed with the OAuth2 flow only if it's enabled on the server and by the user
     if (settings["acl.oidc.enabled"]) {
       // Loading state is for OAuth2 flow only, as basic auth has no persistence layer, and it's in-memory only

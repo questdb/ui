@@ -52,7 +52,7 @@ type ContextProps = {
 const defaultValues: ContextProps = {
   quest: questClient,
   buildVersion: {
-    kind: "open-source",
+    type: "open-source",
     version: "",
   },
   commitHash: "",
@@ -109,6 +109,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       void finishAuthCheck()
     }
 
+    // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
     questClient.queryRaw("select build", { limit: "0,1000" }).then((result) => {
       if (result.type === QuestDB.Type.DQL && result.count === 1) {

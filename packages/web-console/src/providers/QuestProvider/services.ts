@@ -9,16 +9,16 @@ export const formatVersion = (value: string): Versions => {
   if (matches) {
     const kind = (
       matches[1] ? matches[1].trim().toLowerCase() : "open-source"
-    ) as Versions["kind"]
+    ) as Versions["type"]
 
     return {
-      kind,
+      type: kind,
       version: matches[2],
     }
   }
 
   return {
-    kind: "dev",
+    type: "dev",
   }
 }
 

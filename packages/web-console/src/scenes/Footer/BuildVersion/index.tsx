@@ -64,7 +64,7 @@ const NewestRelease = styled.span`
 `
 
 const versionButtons: {
-  [key in Versions["kind"]]: { label: string; icon?: React.ReactNode }
+  [key in Versions["type"]]: { label: string; icon?: React.ReactNode }
 } = {
   dev: {
     label: "QuestDB Dev",
@@ -91,7 +91,7 @@ const BuildVersion = () => {
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
-    if (buildVersion.version && buildVersion.kind.includes("open-source")) {
+    if (buildVersion.version && buildVersion.type.includes("open-source")) {
       void quest
         .getLatestRelease()
         .then((release: Release) => {
@@ -109,7 +109,7 @@ const BuildVersion = () => {
     return null
   }
 
-  const enterpriseVersion = buildVersion.kind.includes("enterprise")
+  const enterpriseVersion = buildVersion.type.includes("enterprise")
   const upgradeAvailable = getCanUpgrade(buildVersion, newestRelease?.name)
 
   const releaseUrl = upgradeAvailable
@@ -121,7 +121,7 @@ const BuildVersion = () => {
       }`
 
   const { label, icon } =
-    versionButtons[buildVersion.kind] ??
+    versionButtons[buildVersion.type] ??
     /* fallback to `dev` if `.kind` is something unexpected */
     versionButtons.dev
 
@@ -135,7 +135,7 @@ const BuildVersion = () => {
         <ReleaseNotesButton
           enterprise={enterpriseVersion}
           title={
-            ["dev", "open-source"].includes(buildVersion.kind)
+            ["dev", "open-source"].includes(buildVersion.type)
               ? `Show ${buildVersion ? "release notes" : "commit details"}`
               : ""
           }

@@ -44,6 +44,8 @@ export const defaultConfig: ConsoleConfigShape = {
 }
 
 export const defaultSettings: ConsoleSettingsShape = {
+  "questdb.type": undefined,
+  "questdb.version": undefined,
   "acl.oidc.enabled": false,
   "acl.oidc.client.id": "",
   "acl.oidc.host": "",

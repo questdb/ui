@@ -119,7 +119,7 @@ export const Toolbar = () => {
     <Root>
       <Box gap="0.5rem">
         <Text color="foreground">Web Console</Text>
-        {buildVersion.kind === "enterprise" && (
+        {buildVersion.type === "enterprise" && (
           <IconWithTooltip
             icon={<EnterpriseBadge>EE</EnterpriseBadge>}
             tooltip="QuestDB Enterprise Edition"

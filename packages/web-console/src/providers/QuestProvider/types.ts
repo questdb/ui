@@ -1,5 +1,5 @@
 export type Versions = {
-  kind:
+  type:
     | "dev"
     | "open-source"
     | "enterprise"

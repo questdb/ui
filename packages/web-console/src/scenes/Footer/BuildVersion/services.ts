@@ -33,7 +33,7 @@ export const getCanUpgrade = (
     return false
   }
 
-  const enterpriseVersion = buildVersion.kind.includes("enterprise")
+  const enterpriseVersion = buildVersion.type.includes("enterprise")
 
   try {
     if (buildVersion.version) {

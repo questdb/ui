@@ -74,6 +74,4 @@ export const getAuthToken = async (
 }
 
 export const hasNoAuth = (config: ConsoleSettings) =>
-  (config["acl.basic.auth.realm.enabled"] !== undefined &&
-    !config["acl.basic.auth.realm.enabled"]) ||
-  (config["acl.oidc.enabled"] == undefined && !config["acl.oidc.enabled"])
+  config["questdb.type"] === "open-source"
