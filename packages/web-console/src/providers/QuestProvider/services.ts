@@ -1,4 +1,4 @@
-import { Versions } from "./types";
+import { Versions } from "./types"
 
 const buildVersionRegex =
   /Build Information: QuestDB ([\w- ]+ )?([0-9A-Za-z.-]*),/
@@ -8,7 +8,7 @@ export const formatVersion = (value: string): Versions => {
 
   if (matches) {
     const kind = (
-      matches[1] ? matches[1].trim().toLowerCase() : "open-source"
+      matches[1] ? matches[1].trim().toLowerCase() : "oss"
     ) as Versions["type"]
 
     return {

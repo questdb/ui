@@ -52,7 +52,7 @@ type ContextProps = {
 const defaultValues: ContextProps = {
   quest: questClient,
   buildVersion: {
-    type: "open-source",
+    type: "oss",
     version: "",
   },
   commitHash: "",

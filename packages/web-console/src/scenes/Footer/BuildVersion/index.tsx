@@ -31,8 +31,8 @@ import { Release } from "../../../utils/questdb"
 import { Team } from "@styled-icons/remix-line"
 import { BuildingMultiple } from "@styled-icons/fluentui-system-filled"
 import { ShieldLockFill } from "@styled-icons/bootstrap/ShieldLockFill"
-import { Versions } from "../../../providers/QuestProvider/types";
-import { getCanUpgrade } from "./services";
+import { Versions } from "../../../providers/QuestProvider/types"
+import { getCanUpgrade } from "./services"
 
 const Wrapper = styled.div`
   display: flex;
@@ -69,7 +69,7 @@ const versionButtons: {
   dev: {
     label: "QuestDB Dev",
   },
-  "open-source": {
+  oss: {
     label: "QuestDB",
   },
   enterprise: {
@@ -91,7 +91,7 @@ const BuildVersion = () => {
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
-    if (buildVersion.version && buildVersion.type.includes("open-source")) {
+    if (buildVersion.version && buildVersion.type.includes("oss")) {
       void quest
         .getLatestRelease()
         .then((release: Release) => {
@@ -135,7 +135,7 @@ const BuildVersion = () => {
         <ReleaseNotesButton
           enterprise={enterpriseVersion}
           title={
-            ["dev", "open-source"].includes(buildVersion.type)
+            ["dev", "oss"].includes(buildVersion.type)
               ? `Show ${buildVersion ? "release notes" : "commit details"}`
               : ""
           }
