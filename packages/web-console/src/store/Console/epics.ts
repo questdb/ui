@@ -58,7 +58,7 @@ export const getSettings: Epic<StoreAction, ConsoleAction, StoreShape> = (
         map((response) => {
           if (!response.error) {
             return actions.console.setSettings({
-              "questdb.type": response.data["acl.oidc.enabled"] ? "ee" : "oss",
+              "questdb.type": response.data["acl.oidc.enabled"] ? "EE" : "OSS",
               ...response.data,
             })
           }

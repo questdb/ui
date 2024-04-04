@@ -74,4 +74,4 @@ export const getAuthToken = async (
 }
 
 export const hasNoAuth = (config: ConsoleSettings) =>
-  config["questdb.type"] === "oss"
+  config["questdb.type"] === "OSS"

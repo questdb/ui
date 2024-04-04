@@ -50,7 +50,7 @@ export type ConsoleSettings = Readonly<{
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean
   "acl.basic.auth.realm.enabled"?: boolean
-  "questdb.type"?: "oss" | "ee"
+  "questdb.type"?: "OSS" | "EE"
   "questdb.version"?: string
 }>
 
