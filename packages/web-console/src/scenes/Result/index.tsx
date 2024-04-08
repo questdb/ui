@@ -92,28 +92,24 @@ const RowCount = styled(Text)`
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
+  const { quest } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
-  const { quest } = useContext(QuestContext)
 
   useEffect(() => {
     const _grid = grid(
       document.getElementById("grid"),
-      function (sql, lo, hi, rendererFn: (data: any) => void) {
-        fetch(
-          "/exec?query=" +
-            encodeURIComponent(sql) +
-            "&limit=" +
-            lo +
-            "," +
-            hi +
-            "&nm=true",
-        )
-          .then((response) => response.json())
-          .then(rendererFn)
+      async function (sql, lo, hi, rendererFn: (data: QueryRawResult) => void) {
+        const result = await quest.queryRaw(sql, {
+          limit: `${lo},${hi}`,
+          nm: true,
+        })
+        if (result.type === QuestDB.Type.DQL) {
+          rendererFn(result)
+        }
       },
     )
     gridRef.current = _grid

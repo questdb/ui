@@ -124,6 +124,7 @@ export type Column = {
 export type Options = {
   limit?: string
   explain?: boolean
+  nm?: boolean
 }
 
 export type Release = {
