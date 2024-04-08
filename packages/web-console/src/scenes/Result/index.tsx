@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import $ from "jquery"
-import React, { useEffect, useRef, useState } from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
@@ -47,6 +47,7 @@ import { Button } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { QuestContext } from "../../providers"
 
 const Root = styled.div`
   display: flex;
@@ -96,6 +97,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const { quest } = useContext(QuestContext)
 
   useEffect(() => {
     const _grid = grid(
@@ -249,7 +251,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 onClick={() => {
                   const sql = gridRef?.current?.getSQL()
                   if (sql) {
-                    eventBus.publish(EventType.MSG_QUERY_EXPORT, { q: sql })
+                    quest.exportQueryToCsv(sql)
                   }
                 }}
               >

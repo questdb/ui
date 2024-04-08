@@ -591,6 +591,29 @@ export class Client {
     })
   }
 
+  async exportQueryToCsv(query: string) {
+    try {
+      const response: Response = await fetch(
+        `${this._host}/exp?${Client.encodeParams({ query })}`,
+        { headers: this.commonHeaders },
+      )
+      const blob = await response.blob()
+      const filename = response.headers
+        .get("Content-Disposition")
+        ?.split("=")[1]
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+        ? filename.replaceAll(`"`, "")
+        : `questdb-query-${new Date().getTime()}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      throw error
+    }
+  }
+
   async getLatestRelease() {
     try {
       const response: Response = await fetch(

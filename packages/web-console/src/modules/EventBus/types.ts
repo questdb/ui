@@ -8,7 +8,6 @@ export enum EventType {
   MSG_QUERY_DATASET = "query.out.dataset",
   MSG_QUERY_ERROR = "query.out.error",
   MSG_QUERY_EXEC = "query.in.exec",
-  MSG_QUERY_EXPORT = "query.in.export",
   MSG_QUERY_FIND_N_EXEC = "query.build.execute",
   MSG_QUERY_OK = "query.out.ok",
   MSG_QUERY_RUNNING = "query.out.running",
