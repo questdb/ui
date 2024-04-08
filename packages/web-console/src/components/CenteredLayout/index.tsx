@@ -9,6 +9,6 @@ const Root = styled.div`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-export const Layout = ({ children }: { children: React.ReactNode }) => (
+export const CenteredLayout = ({ children }: { children: React.ReactNode }) => (
   <Root>{children}</Root>
 )

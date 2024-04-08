@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { QuestContext, useAuth } from "../../providers"
+import { QuestContext, useAuth, useSettings } from "../../providers"
 import { Box, Button } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
 import { User as UserIcon, LogoutCircle } from "@styled-icons/remix-line"
@@ -8,7 +8,6 @@ import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
-
 type ServerDetails = {
   instance_name: string | null
   instance_rgb: string | null
@@ -78,12 +77,13 @@ const EnterpriseBadge = styled.span`
 
 export const Toolbar = () => {
   const { quest, buildVersion } = useContext(QuestContext)
-  const settings = useSelector(selectors.console.getSettings)
+  const settings = useSettings()
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
 
-  const authEnabled = settings["acl.basic.auth.realm.enabled"] || settings["acl.oidc.enabled"]
+  const authEnabled =
+    settings["acl.basic.auth.realm.enabled"] || settings["acl.oidc.enabled"]
 
   const fetchServerDetails = async () => {
     try {

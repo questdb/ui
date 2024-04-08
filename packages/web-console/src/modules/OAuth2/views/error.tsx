@@ -1,6 +1,5 @@
 import React from "react"
-import { Layout } from "./layout"
-import { Text } from "../../../components"
+import { CenteredLayout, Text } from "../../../components"
 import { Box, Button } from "@questdb/react-components"
 import { User } from "@styled-icons/remix-line"
 
@@ -14,7 +13,7 @@ export const Error = ({
   onLogout: () => void
 }) => {
   return (
-    <Layout>
+    <CenteredLayout>
       <Box flexDirection="column" gap="2rem">
         <Text color="foreground">{errorMessage}</Text>
         {!basicAuthEnabled && (
@@ -27,6 +26,6 @@ export const Error = ({
           </Button>
         )}
       </Box>
-    </Layout>
+    </CenteredLayout>
   )
 }

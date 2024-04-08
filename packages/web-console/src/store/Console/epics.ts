@@ -35,7 +35,6 @@ import {
   RefreshAuthTokenAction,
   StoreAction,
   StoreShape,
-  ConsoleSettingsShape,
 } from "../../types"
 import { fromFetch } from "../../utils"
 import { getValue, setValue } from "../../utils/localStorage"
@@ -47,23 +46,6 @@ type LegacyAuthPayload = Readonly<
     refreshRoute: string
   }>
 >
-
-export const getSettings: Epic<StoreAction, ConsoleAction, StoreShape> = (
-  action$,
-) =>
-  action$.pipe(
-    ofType<StoreAction, BootstrapAction>(ConsoleAT.BOOTSTRAP),
-    switchMap(() =>
-      fromFetch<ConsoleSettingsShape>("/settings").pipe(
-        map((response) => {
-          if (!response.error) {
-            return actions.console.setSettings(response.data)
-          }
-        }),
-        filter((a): a is ConsoleAction => !!a),
-      ),
-    ),
-  )
 
 export const getConfig: Epic<StoreAction, ConsoleAction, StoreShape> = (
   action$,
@@ -148,9 +130,4 @@ export const refreshToken: Epic<StoreAction, ConsoleAction, StoreShape> = (
     }),
   )
 
-export default [
-  getSettings,
-  getConfig,
-  triggerRefreshTokenOnBootstrap,
-  refreshToken,
-]
+export default [getConfig, triggerRefreshTokenOnBootstrap, refreshToken]

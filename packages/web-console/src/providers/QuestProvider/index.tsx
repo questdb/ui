@@ -29,8 +29,6 @@ import React, {
   useState,
 } from "react"
 import * as QuestDB from "../../utils/questdb"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
 import { useAuth } from "../AuthProvider"
 import { AuthPayload } from "../../modules/OAuth2/types"
 import { getValue } from "../../utils/localStorage"
@@ -38,6 +36,7 @@ import { StoreKey } from "../../utils/localStorage/types"
 import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
 import { hasNoAuth } from "../../modules/OAuth2/utils"
+import { useSettings } from "../SettingsProvider"
 
 const questClient = new QuestDB.Client()
 
@@ -61,7 +60,7 @@ const defaultValues: ContextProps = {
 export const QuestContext = createContext<ContextProps>(defaultValues)
 
 export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
-  const settings = useSelector(selectors.console.getSettings)
+  const settings = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
   const [authCheckFinished, setAuthCheckFinished] = useState(
     hasNoAuth(settings),

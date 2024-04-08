@@ -24,6 +24,7 @@
 
 export * from "./Animation"
 export * from "./Button"
+export * from "./CenteredLayout"
 export * from "./Drawer"
 export * from "./Emoji"
 export * from "./Hooks"

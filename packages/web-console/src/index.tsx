@@ -44,7 +44,7 @@ import { StoreAction, StoreShape } from "./types"
 import Layout from "./scenes/Layout"
 import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
-import { AuthProvider, QuestProvider } from "./providers"
+import { AuthProvider, QuestProvider, SettingsProvider } from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,
@@ -68,17 +68,19 @@ ReactDOM.render(
   <ThemeProvider theme={theme}>
     <ScreenSizeProvider>
       <Provider store={store}>
-        <AuthProvider>
-          <QuestProvider>
-            <GlobalStyle />
-            {ReactDOM.createPortal(<ToastContainer />, document.body)}
-            <LocalStorageProvider>
-              <FadeSlow />
-              <FadeReg />
-              <Layout />
-            </LocalStorageProvider>
-          </QuestProvider>
-        </AuthProvider>
+        <SettingsProvider>
+          <AuthProvider>
+            <QuestProvider>
+              <GlobalStyle />
+              {ReactDOM.createPortal(<ToastContainer />, document.body)}
+              <LocalStorageProvider>
+                <FadeSlow />
+                <FadeReg />
+                <Layout />
+              </LocalStorageProvider>
+            </QuestProvider>
+          </AuthProvider>
+        </SettingsProvider>
       </Provider>
     </ScreenSizeProvider>
   </ThemeProvider>,

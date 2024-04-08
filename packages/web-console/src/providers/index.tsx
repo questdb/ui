@@ -24,3 +24,4 @@
 export * from "./AuthProvider"
 export * from "./QuestProvider"
 export * from "./EditorProvider"
+export * from "./SettingsProvider"

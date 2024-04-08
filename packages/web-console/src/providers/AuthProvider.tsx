@@ -6,9 +6,6 @@ import React, {
   useState,
 } from "react"
 import { AuthPayload } from "../modules/OAuth2/types"
-import { useSelector } from "react-redux"
-import { selectors } from "../store"
-import { ConsoleSettingsShape } from "../store/Console/types"
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue, removeValue, setValue } from "../utils/localStorage"
 import {
@@ -28,11 +25,13 @@ import { Logout } from "../modules/OAuth2/views/logout"
 import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
 import { match, P } from "ts-pattern"
+import { Settings } from "./SettingsProvider/types"
+import { useSettings } from "./SettingsProvider"
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>
   logout: () => void
-  refreshAuthToken: (settings: ConsoleSettingsShape) => Promise<AuthPayload>
+  refreshAuthToken: (settings: Settings) => Promise<AuthPayload>
   switchToOAuth: () => void
 }
 
@@ -72,7 +71,7 @@ export const AuthContext = createContext<ContextProps>(defaultValues)
 const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const settings = useSelector(selectors.console.getSettings)
+  const settings = useSettings()
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
@@ -113,7 +112,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const refreshAuthToken = async (settings: ConsoleSettingsShape) => {
+  const refreshAuthToken = async (settings: Settings) => {
     const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
     const response = await getAuthToken(settings, {
       grant_type: "refresh_token",
@@ -126,7 +125,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return tokenResponse
   }
 
-  const setupOAuth2 = async (settings: ConsoleSettingsShape) => {
+  const setupOAuth2 = async (settings: Settings) => {
     if (hasNoAuth(settings)) {
       dispatch({ view: View.ready })
       return
@@ -283,10 +282,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   useEffect(() => {
-    void setupOAuth2(settings)
-  }, [settings])
-
-  useEffect(() => {
     if (sessionData) {
       dispatch({ view: View.ready })
     }
@@ -309,6 +304,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       },
     )
+
+    void setupOAuth2(settings)
   }, [])
 
   return match({ view: state.view, errorMessage })

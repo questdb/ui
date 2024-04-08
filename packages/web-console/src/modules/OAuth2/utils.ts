@@ -1,7 +1,4 @@
-import {
-  ConsoleSettingsShape,
-  ConsoleSettings,
-} from "../../store/Console/types"
+import { Settings } from "../../providers/SettingsProvider/types"
 
 type TokenPayload = Partial<{
   grant_type: string
@@ -12,7 +9,7 @@ type TokenPayload = Partial<{
   refresh_token: string
 }>
 
-const getBaseURL = (config: ConsoleSettings) => {
+const getBaseURL = (config: Settings) => {
   return `${config["acl.oidc.tls.enabled"] ? "https" : "http"}://${
     config["acl.oidc.host"]
   }:${config["acl.oidc.port"]}`
@@ -24,13 +21,13 @@ export const getAuthorisationURL = ({
   login,
   redirect_uri,
 }: {
-  config: ConsoleSettings
+  config: Settings
   code_challenge: string | null
   login?: boolean
   redirect_uri: string
 }) => {
   const params = {
-    client_id: config["acl.oidc.client.id"],
+    client_id: config["acl.oidc.client.id"] || "",
     response_type: "code",
     scope: "openid profile",
     redirect_uri,
@@ -58,7 +55,7 @@ export const getTokenExpirationDate = (expires_in: number) => {
 }
 
 export const getAuthToken = async (
-  settings: ConsoleSettingsShape,
+  settings: Settings,
   payload: TokenPayload,
 ) => {
   return fetch(
@@ -73,5 +70,4 @@ export const getAuthToken = async (
   )
 }
 
-export const hasNoAuth = (config: ConsoleSettings) =>
-  config["questdb.type"] === "OSS"
+export const hasNoAuth = (config: Settings) => config["questdb.type"] === "OSS"

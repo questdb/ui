@@ -4,11 +4,10 @@ import { Button } from "@questdb/react-components"
 import { User } from "@styled-icons/remix-line"
 import { Form } from "../../../components/Form"
 import Joi from "joi"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
 import { Text } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
+import { useSettings } from "../../../providers/SettingsProvider"
 
 const Header = styled.div`
   position: absolute;
@@ -203,7 +202,7 @@ export const Login = ({
   onOAuthLogin: () => void
   onBasicAuthSuccess: () => void
 }) => {
-  const settings = useSelector(selectors.console.getSettings)
+  const settings = useSettings()
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
   const handleSubmit = async (values: FormValues) => {
     const { username, password } = values
