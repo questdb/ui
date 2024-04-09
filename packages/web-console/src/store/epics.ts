@@ -23,8 +23,6 @@
  ******************************************************************************/
 
 import { combineEpics } from "redux-observable"
-
-import consoleEpic from "./Console/epics"
 import telemetryEpic from "./Telemetry/epics"
 
-export default combineEpics(...[...consoleEpic, ...telemetryEpic])
+export default combineEpics(...[...telemetryEpic])

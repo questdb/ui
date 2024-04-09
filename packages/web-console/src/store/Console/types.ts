@@ -21,7 +21,6 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { AuthPayload } from "../../modules/OAuth2/types"
 
 export type TopPanel = "tables" | undefined
 
@@ -34,28 +33,14 @@ export type ConsoleStateShape = Readonly<{
   activeTopPanel: TopPanel
   activeSidebar: Sidebar
   activeBottomPanel: BottomPanel
-  authPayload?: AuthPayload
 }>
 
 export enum ConsoleAT {
-  BOOTSTRAP = "CONSOLE/BOOTSTRAP",
-  REFRESH_AUTH_TOKEN = "CONSOLE/REFRESH_AUTH_TOKEN",
-  SET_CONFIG = "CONSOLE/SET_CONFIG",
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
   SET_ACTIVE_TOP_PANEL = "CONSOLE/SET_ACTIVE_TOP_PANEL",
   SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
-  SET_SETTINGS = "CONSOLE/SET_SETTINGS",
 }
-
-export type BootstrapAction = Readonly<{
-  type: ConsoleAT.BOOTSTRAP
-}>
-
-export type RefreshAuthTokenAction = Readonly<{
-  payload: boolean
-  type: ConsoleAT.REFRESH_AUTH_TOKEN
-}>
 
 type ToggleSideMenuAction = Readonly<{
   type: ConsoleAT.TOGGLE_SIDE_MENU
@@ -77,8 +62,6 @@ type setActiveBottomPanelAction = Readonly<{
 }>
 
 export type ConsoleAction =
-  | BootstrapAction
-  | RefreshAuthTokenAction
   | ToggleSideMenuAction
   | setActiveTopPanelAction
   | setActiveSidebarAction

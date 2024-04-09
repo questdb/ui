@@ -35,12 +35,9 @@ const getActiveSidebar: (store: StoreShape) => Sidebar = (store) =>
 const getActiveBottomPanel: (store: StoreShape) => BottomPanel = (store) =>
   store.console.activeBottomPanel
 
-const getAuthPayload = (store: StoreShape) => store.console.authPayload
-
 export default {
   getSideMenuOpened,
   getActiveTopPanel,
   getActiveSidebar,
   getActiveBottomPanel,
-  getAuthPayload,
 }

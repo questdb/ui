@@ -55,7 +55,6 @@ const epicMiddleware = createEpicMiddleware<
 const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
 
 epicMiddleware.run(rootEpic)
-store.dispatch(actions.console.bootstrap())
 
 const FadeReg = createGlobalFadeTransition("fade-reg", TransitionDuration.REG)
 

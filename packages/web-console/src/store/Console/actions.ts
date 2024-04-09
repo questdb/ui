@@ -29,14 +29,6 @@ import {
   BottomPanel,
 } from "./types"
 
-const bootstrap = (): ConsoleAction => ({
-  type: ConsoleAT.BOOTSTRAP,
-})
-
-const refreshAuthToken = (init: boolean): ConsoleAction => ({
-  payload: init,
-  type: ConsoleAT.REFRESH_AUTH_TOKEN,
-})
 const setActiveTopPanel = (panel: TopPanel): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_TOP_PANEL,
@@ -56,8 +48,6 @@ const toggleSideMenu = (): ConsoleAction => ({
 })
 
 export default {
-  bootstrap,
-  refreshAuthToken,
   toggleSideMenu,
   setActiveTopPanel,
   setActiveSidebar,
