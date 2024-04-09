@@ -16,7 +16,7 @@ enum View {
   error = 2,
 }
 
-type State = { view: View }
+type State = { view: View; errorMessage?: React.ReactNode }
 
 const initialState = { view: View.loading }
 
@@ -26,6 +26,16 @@ const SettingContext = createContext<{
   settings: Settings
   consoleConfig: ConsoleConfig
 }>({ settings: {}, consoleConfig: {} })
+
+const settingsError = (
+  <>
+    Error connecting to the database.
+    <br />
+    Please, check if the server is running correctly.
+  </>
+)
+
+const consoleConfigError = <>Error loading the console configuration file</>
 
 export const SettingsProvider = ({
   children,
@@ -62,7 +72,7 @@ export const SettingsProvider = ({
           <Button
             skin="secondary"
             prefixIcon={<Refresh size="18px" />}
-            onClick={fetchSettings}
+            onClick={() => window.location.reload()}
           >
             Retry
           </Button>
@@ -73,37 +83,41 @@ export const SettingsProvider = ({
 
   const fetchSettings = async () => {
     try {
-      const responses = await Promise.all([
-        fetch(`${window.location.origin}/settings`),
-        fetch(`${window.location.origin}/assets/console-configuration.json`),
-      ])
-      const settingsResponse = responses[0]
-      const consoleConfigResponse = responses[1]
-      if (settingsResponse.status === 200) {
-        const settings = await settingsResponse.json()
+      const response = await fetch(`${window.location.origin}/settings`)
+      if (response.status === 200) {
+        const settings = await response.json()
         setSettings(settings)
       } else {
-        dispatch({ view: View.error })
-      }
-      if (consoleConfigResponse.status === 200) {
-        const consoleConfig = await consoleConfigResponse.json()
-        setConsoleConfig(consoleConfig)
-      } else {
-        dispatch({ view: View.error })
-      }
-      if (
-        settingsResponse.status === 200 &&
-        consoleConfigResponse.status === 200
-      ) {
-        dispatch({ view: View.ready })
+        dispatch({ view: View.error, errorMessage: settingsError })
       }
     } catch (e) {
-      dispatch({ view: View.error })
+      dispatch({ view: View.error, errorMessage: settingsError })
+    }
+  }
+
+  const fetchConsoleConfig = async () => {
+    try {
+      const response = await fetch(
+        `${window.location.origin}/assets/console-configuration.json`,
+      )
+      if (response.status === 200) {
+        const consoleConfig = await response.json()
+        setConsoleConfig(consoleConfig)
+      } else {
+        dispatch({ view: View.error, errorMessage: consoleConfigError })
+      }
+    } catch (e) {
+      dispatch({ view: View.error, errorMessage: consoleConfigError })
     }
   }
 
   useEffect(() => {
-    void fetchSettings()
+    const fetchAll = async () => {
+      await fetchSettings()
+      await fetchConsoleConfig()
+    }
+
+    fetchAll().then(() => dispatch({ view: View.ready }))
   }, [])
 
   return <>{views[state.view]()}</>
