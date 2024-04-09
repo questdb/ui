@@ -8,7 +8,7 @@ import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
-import { hasUIAuth } from "../../modules/OAuth2/utils";
+import { hasUIAuth } from "../../modules/OAuth2/utils"
 
 type ServerDetails = {
   instance_name: string | null
@@ -79,7 +79,7 @@ const EnterpriseBadge = styled.span`
 
 export const Toolbar = () => {
   const { quest, buildVersion } = useContext(QuestContext)
-  const settings = useSettings()
+  const { settings } = useSettings()
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)

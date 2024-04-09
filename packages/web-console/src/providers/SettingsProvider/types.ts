@@ -11,3 +11,20 @@ export type Settings = Partial<{
   "questdb.type"?: "OSS" | "EE"
   "questdb.version"?: string
 }>
+
+export type Query = {
+  name?: string
+  value: string
+}
+
+export type QueryGroup = {
+  title?: string
+  description?: string
+  queries: Query[]
+}
+
+export type ConsoleConfig = Partial<{
+  githubBanner: boolean
+  readOnly?: boolean
+  savedQueries: Array<Query | QueryGroup>
+}>

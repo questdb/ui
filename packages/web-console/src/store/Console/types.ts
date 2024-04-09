@@ -23,31 +23,13 @@
  ******************************************************************************/
 import { AuthPayload } from "../../modules/OAuth2/types"
 
-export type Query = {
-  name?: string
-  value: string
-}
-
-export type QueryGroup = {
-  title?: string
-  description?: string
-  queries: Query[]
-}
-
 export type TopPanel = "tables" | undefined
 
 export type Sidebar = "news" | "create" | undefined
 
 export type BottomPanel = "result" | "zeroState" | "import"
 
-export type ConsoleConfigShape = Readonly<{
-  githubBanner: boolean
-  readOnly?: boolean
-  savedQueries: Array<Query | QueryGroup>
-}>
-
 export type ConsoleStateShape = Readonly<{
-  config?: ConsoleConfigShape
   sideMenuOpened: boolean
   activeTopPanel: TopPanel
   activeSidebar: Sidebar
@@ -75,11 +57,6 @@ export type RefreshAuthTokenAction = Readonly<{
   type: ConsoleAT.REFRESH_AUTH_TOKEN
 }>
 
-type SetConfigAction = Readonly<{
-  payload: ConsoleConfigShape
-  type: ConsoleAT.SET_CONFIG
-}>
-
 type ToggleSideMenuAction = Readonly<{
   type: ConsoleAT.TOGGLE_SIDE_MENU
 }>
@@ -102,7 +79,6 @@ type setActiveBottomPanelAction = Readonly<{
 export type ConsoleAction =
   | BootstrapAction
   | RefreshAuthTokenAction
-  | SetConfigAction
   | ToggleSideMenuAction
   | setActiveTopPanelAction
   | setActiveSidebarAction

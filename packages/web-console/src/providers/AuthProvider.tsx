@@ -71,7 +71,7 @@ export const AuthContext = createContext<ContextProps>(defaultValues)
 const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const settings = useSettings()
+  const { settings } = useSettings()
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(

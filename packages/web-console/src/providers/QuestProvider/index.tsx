@@ -60,7 +60,7 @@ const defaultValues: ContextProps = {
 export const QuestContext = createContext<ContextProps>(defaultValues)
 
 export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
-  const settings = useSettings()
+  const { settings } = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
   const [authCheckFinished, setAuthCheckFinished] = useState(
     hasNoAuth(settings),

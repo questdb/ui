@@ -27,8 +27,8 @@ import styled, { css } from "styled-components"
 import { FileCode } from "@styled-icons/remix-line"
 
 import { Text, TransitionDuration } from "../../../../components"
-import type { Query } from "../../../../types"
 import { color } from "../../../../utils"
+import { Query } from "providers/SettingsProvider/types"
 
 type MouseAction = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
 

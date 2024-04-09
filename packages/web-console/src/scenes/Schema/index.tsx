@@ -31,7 +31,7 @@ import React, {
   useState,
   useContext,
 } from "react"
-import { useDispatch, useSelector } from "react-redux"
+import { useDispatch } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
@@ -44,7 +44,7 @@ import {
   spinAnimation,
   Tooltip,
 } from "../../components"
-import { actions, selectors } from "../../store"
+import { actions } from "../../store"
 import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
@@ -52,7 +52,7 @@ import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
-import { QuestContext } from "../../providers"
+import { QuestContext, useSettings } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
@@ -110,7 +110,7 @@ const Schema = ({
   const [opened, setOpened] = useState<string>()
   const [isScrolling, setIsScrolling] = useState(false)
   const [searchVisible, setSearchVisible] = useState(false)
-  const { readOnly } = useSelector(selectors.console.getConfig)
+  const { consoleConfig } = useSettings()
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -203,7 +203,7 @@ const Schema = ({
         title="Tables"
         afterTitle={
           <div style={{ display: "flex" }}>
-            {readOnly === false && tables && (
+            {consoleConfig.readOnly === false && tables && (
               <Box align="center" gap="0.5rem">
                 {tables.length > 0 && (
                   <PopperHover

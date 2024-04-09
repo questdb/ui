@@ -23,13 +23,12 @@
  ******************************************************************************/
 
 import { Epic, ofType } from "redux-observable"
-import { filter, map, switchMap, switchMapTo, tap } from "rxjs/operators"
+import { switchMap, switchMapTo, tap } from "rxjs/operators"
 import { NEVER, of, timer } from "rxjs"
 
 import { actions } from "../../store"
 import {
   BootstrapAction,
-  ConsoleConfigShape,
   ConsoleAction,
   ConsoleAT,
   RefreshAuthTokenAction,
@@ -46,23 +45,6 @@ type LegacyAuthPayload = Readonly<
     refreshRoute: string
   }>
 >
-
-export const getConfig: Epic<StoreAction, ConsoleAction, StoreShape> = (
-  action$,
-) =>
-  action$.pipe(
-    ofType<StoreAction, BootstrapAction>(ConsoleAT.BOOTSTRAP),
-    switchMap(() =>
-      fromFetch<ConsoleConfigShape>("assets/console-configuration.json").pipe(
-        map((response) => {
-          if (!response.error) {
-            return actions.console.setConfig(response.data)
-          }
-        }),
-        filter((a): a is ConsoleAction => !!a),
-      ),
-    ),
-  )
 
 export const triggerRefreshTokenOnBootstrap: Epic<
   StoreAction,
@@ -130,4 +112,4 @@ export const refreshToken: Epic<StoreAction, ConsoleAction, StoreShape> = (
     }),
   )
 
-export default [getConfig, triggerRefreshTokenOnBootstrap, refreshToken]
+export default [triggerRefreshTokenOnBootstrap, refreshToken]

@@ -202,7 +202,7 @@ export const Login = ({
   onOAuthLogin: () => void
   onBasicAuthSuccess: () => void
 }) => {
-  const settings = useSettings()
+  const { settings } = useSettings()
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
   const handleSubmit = async (values: FormValues) => {
     const { username, password } = values
