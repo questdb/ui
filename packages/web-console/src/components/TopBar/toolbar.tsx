@@ -8,6 +8,8 @@ import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
+import { hasUIAuth } from "../../modules/OAuth2/utils";
+
 type ServerDetails = {
   instance_name: string | null
   instance_rgb: string | null
@@ -82,9 +84,6 @@ export const Toolbar = () => {
   const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
 
-  const authEnabled =
-    settings["acl.basic.auth.realm.enabled"] || settings["acl.oidc.enabled"]
-
   const fetchServerDetails = async () => {
     try {
       const response = await quest.query<ServerDetails>(
@@ -139,7 +138,7 @@ export const Toolbar = () => {
             <Text color="foreground">{serverDetails.current_user}</Text>
           </User>
         )}
-        {authEnabled && (
+        {hasUIAuth(settings) && (
           <Button
             onClick={() => logout()}
             prefixIcon={<LogoutCircle size="18px" />}

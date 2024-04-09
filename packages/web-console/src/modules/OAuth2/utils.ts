@@ -71,3 +71,6 @@ export const getAuthToken = async (
 }
 
 export const hasNoAuth = (config: Settings) => config["questdb.type"] === "OSS"
+
+export const hasUIAuth = (config: Settings) =>
+  !hasNoAuth(config) && (config["acl.oidc.enabled"] || !config["acl.basic.auth.realm.enabled"])
