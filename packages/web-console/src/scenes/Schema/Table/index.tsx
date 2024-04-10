@@ -195,7 +195,12 @@ const Table = ({
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
               tableSuspended={walTables?.find((x) => x?.name === table_name)?.suspended ?? false}
-              txnOffset={walTables?.find((x) => x?.name === table_name)?.writerLagTxnCount ?? 0}
+              txnOffset={
+                (() => {
+                  const tbl = walTables?.find((x) => x?.name === table_name);
+                  return ((tbl?.sequencerTxn ?? 0) - (tbl?.writerTxn ?? 0)) ?? 0;
+                })()
+              }
             />
           </ContextMenuTrigger>
         )
