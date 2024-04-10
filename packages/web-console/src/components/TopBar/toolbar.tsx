@@ -78,7 +78,7 @@ const EnterpriseBadge = styled.span`
 `
 
 export const Toolbar = () => {
-  const { quest, buildVersion } = useContext(QuestContext)
+  const { quest } = useContext(QuestContext)
   const { settings } = useSettings()
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
@@ -118,7 +118,7 @@ export const Toolbar = () => {
     <Root>
       <Box gap="0.5rem">
         <Text color="foreground">Web Console</Text>
-        {buildVersion.type === "enterprise" && (
+        {settings["questdb.type"] === "EE" && (
           <IconWithTooltip
             icon={<EnterpriseBadge>EE</EnterpriseBadge>}
             tooltip="QuestDB Enterprise Edition"
