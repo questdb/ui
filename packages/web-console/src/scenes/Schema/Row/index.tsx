@@ -165,22 +165,16 @@ const PartitionByWrapper = styled.div`
   align-items: center;
 `
 
-const UnhealthyWrapper = styled.div`
+const SuspendedWrapper = styled.div`
   margin-right: 1rem;
   display: flex;
   align-items: center;
 `
 
-const SuspendedWrapper = styled.div`
-margin-right: 1rem;
-display: flex;
-align-items: center;
-`
-
 const OffsetWrapper = styled.div`
-margin-right: 1rem;
-display: flex;
-align-items: center;
+  margin-right: 1rem;
+  display: flex;
+  align-items: center;
 `
 
 const PieChartIcon = styled(PieChart)`
@@ -220,6 +214,7 @@ const Row = ({
   tableSuspended,
   txnOffset
 }: Props) => {
+ 
   const { insertTextAtCursor } = useEditor()
 
   const handlePlusButtonClick = useCallback(
@@ -288,7 +283,7 @@ const Row = ({
           </PartitionByWrapper>
         )}
 
-        {kind === "table" && walEnabled && tableSuspended && (
+        {kind === "table" && walEnabled && tableSuspended !== undefined && tableSuspended && (
           <SuspendedWrapper>
             <ExclamationOctagonIcon size="14px" />
             <Text color="red">SUSPENDED</Text>
@@ -301,7 +296,7 @@ const Row = ({
             <Text color="pinkDarker">TXN</Text>
           </OffsetWrapper>
         )}
-    
+
         {["column", "table"].includes(kind) && (
           <PlusButton
             onClick={handlePlusButtonClick}

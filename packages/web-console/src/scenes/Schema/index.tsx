@@ -141,6 +141,11 @@ const Schema = ({
     )
   }
 
+  const fetchTablesAndWalTables = () => {
+    fetchTables();
+    fetchWalTables();
+  }
+
 
   const fetchWalTables = () => {
     setLoading(true)
@@ -172,6 +177,7 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
+    void fetchWalTables();
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
@@ -204,7 +210,7 @@ const Schema = ({
                   delay={350}
                   placement="bottom"
                   trigger={
-                    <Button onClick={fetchTables} skin="transparent">
+                    <Button onClick={fetchTablesAndWalTables} skin="transparent">
                       <Refresh size="18px" />
                     </Button>
                   }

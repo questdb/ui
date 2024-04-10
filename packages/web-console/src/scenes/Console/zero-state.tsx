@@ -14,6 +14,7 @@ export const ZeroState = () => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(true)
   const [tables, setTables] = useState<QuestDB.Table[]>([])
+  const [walTables, setWalTables] = useState<QuestDB.WalTable[]>([])
 
   const fetchTables = async () => {
     try {
@@ -28,8 +29,22 @@ export const ZeroState = () => {
     }
   }
 
+  const fetchWalTables = async () => {
+    try {
+      const response = await quest.showWalTables()
+      if (response && response.type === QuestDB.Type.DQL) {
+        setWalTables(response.data)
+      }
+    } catch (error) {
+      return
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     void fetchTables()
+    void fetchWalTables
   }, [])
 
   return (

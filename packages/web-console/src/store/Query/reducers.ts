@@ -100,6 +100,13 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
     }
 
+    case QueryAT.SET_WAL_TABLES: {
+      return {
+        ...state,
+        walTables: action.payload.walTables
+      }
+    }
+
     default:
       return state
   }

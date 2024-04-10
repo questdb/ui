@@ -106,6 +106,7 @@ const columnRender =
         kind="column"
         name={column.column}
         onClick={() => toggleOpen()}
+        
       />
     )
 
@@ -123,6 +124,7 @@ const Table = ({
   const [quest] = useState(new QuestDB.Client())
   const [columns, setColumns] = useState<QuestDB.Column[]>()
   const tables = useSelector(selectors.query.getTables)
+  const walTables = useSelector(selectors.query.getWalTables)
 
   const showColumns = async (name: string) => {
     const response = await quest.showColumns(table_name)
@@ -170,8 +172,7 @@ const Table = ({
                 kind="folder"
                 name="Columns"
                 onClick={() => toggleOpen()}
-                suffix={isLoading && <Loader size="18px" />
-                }
+                suffix={isLoading && <Loader size="18px" />}
               />
             )
           },
@@ -193,6 +194,8 @@ const Table = ({
               walEnabled={walEnabled}
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
+              tableSuspended={walTables?.find((x) => x?.name === table_name)?.suspended ?? false}
+              txnOffset={walTables?.find((x) => x?.name === table_name)?.writerLagTxnCount ?? 0}
             />
           </ContextMenuTrigger>
         )
