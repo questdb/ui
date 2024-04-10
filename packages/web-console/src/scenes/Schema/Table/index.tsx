@@ -170,7 +170,8 @@ const Table = ({
                 kind="folder"
                 name="Columns"
                 onClick={() => toggleOpen()}
-                suffix={isLoading && <Loader size="18px" />}
+                suffix={isLoading && <Loader size="18px" />
+                }
               />
             )
           },

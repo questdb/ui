@@ -28,6 +28,8 @@ import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
+import { ExclamationOctagon } from "@styled-icons/bootstrap"
+import { ExclamationTriangle } from "@styled-icons/bootstrap"
 import { CodeSSlash } from "@styled-icons/remix-line"
 import { Information } from "@styled-icons/remix-line"
 import { Table as TableIcon } from "@styled-icons/remix-line"
@@ -58,6 +60,8 @@ type Props = Readonly<{
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
+  tableSuspended?: boolean
+  txnOffset?: number
 }>
 
 const Type = styled(Text)`
@@ -161,6 +165,24 @@ const PartitionByWrapper = styled.div`
   align-items: center;
 `
 
+const UnhealthyWrapper = styled.div`
+  margin-right: 1rem;
+  display: flex;
+  align-items: center;
+`
+
+const SuspendedWrapper = styled.div`
+margin-right: 1rem;
+display: flex;
+align-items: center;
+`
+
+const OffsetWrapper = styled.div`
+margin-right: 1rem;
+display: flex;
+align-items: center;
+`
+
 const PieChartIcon = styled(PieChart)`
   color: ${color("gray2")};
   margin-right: 0.5rem;
@@ -168,6 +190,16 @@ const PieChartIcon = styled(PieChart)`
 
 const FileListIcon = styled(FileList)`
   color: ${color("yellow")};
+  margin-right: 0.5rem;
+`
+
+const ExclamationOctagonIcon = styled(ExclamationOctagon)`
+  color: ${color("red")};
+  margin-right: 0.5rem;
+`
+
+const ExclamationTriangleIcon = styled(ExclamationTriangle)`
+  color: ${color("pinkDarker")};
   margin-right: 0.5rem;
 `
 
@@ -185,6 +217,8 @@ const Row = ({
   suffix,
   tooltip,
   type,
+  tableSuspended,
+  txnOffset
 }: Props) => {
   const { insertTextAtCursor } = useEditor()
 
@@ -254,6 +288,20 @@ const Row = ({
           </PartitionByWrapper>
         )}
 
+        {kind === "table" && walEnabled && tableSuspended && (
+          <SuspendedWrapper>
+            <ExclamationOctagonIcon size="14px" />
+            <Text color="red">SUSPENDED</Text>
+          </SuspendedWrapper>
+        )}
+
+        { kind === "table" && walEnabled && txnOffset !== undefined && txnOffset > 100 && (
+          <OffsetWrapper>
+            <ExclamationTriangleIcon size="14px" />
+            <Text color="pinkDarker">TXN</Text>
+          </OffsetWrapper>
+        )}
+    
         {["column", "table"].includes(kind) && (
           <PlusButton
             onClick={handlePlusButtonClick}

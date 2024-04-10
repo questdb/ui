@@ -107,6 +107,14 @@ export type Table = {
   dedup: boolean
 }
 
+export type WalTable = {
+  name: string
+  suspended: boolean
+  writerTxn: number
+  writerLagTxnCount: number
+  sequencerTxn: number
+}
+
 export type Column = {
   column: string
   indexed: boolean
@@ -419,6 +427,31 @@ export class Client {
             ...table,
             table_name: table.table_name ?? table.name,
           })),
+      }
+    }
+
+    return response
+  }
+
+  async showWalTables(): Promise<QueryResult<WalTable>> {
+    const response = await this.query<WalTable>("wal_tables();")
+
+    if (response.type === Type.DQL) {
+      return {
+        ...response,
+        data: response.data
+          .slice()
+          .sort((a, b) => {
+            if (a.name > b.name) {
+              return 1
+            }
+
+            if (a.name < b.name) {
+              return -1
+            }
+
+            return 0
+          })
       }
     }
 

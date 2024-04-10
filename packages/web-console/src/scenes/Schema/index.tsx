@@ -99,7 +99,8 @@ const Schema = ({
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
-  const [tables, setTables] = useState<QuestDB.Table[]>()
+  const [tables, setTables ] = useState<QuestDB.Table[]>()
+  const [walTables, setWalTables ] = useState<QuestDB.WalTable[]>()
   const [opened, setOpened] = useState<string>()
   const [isScrolling, setIsScrolling] = useState(false)
   const [searchVisible, setSearchVisible] = useState(false)
@@ -125,6 +126,35 @@ const Schema = ({
           errorRef.current = null
           setTables(response.data)
           dispatch(actions.query.setTables(response.data))
+        } else {
+          setLoading(false)
+        }
+      },
+      (error) => {
+        if (isServerError(error)) {
+          setLoadingError(error)
+        }
+      },
+      () => {
+        setLoading(false)
+      },
+    )
+  }
+
+
+  const fetchWalTables = () => {
+    setLoading(true)
+    setOpened(undefined)
+    combineLatest(
+      from(quest.showWalTables()).pipe(startWith(null)),
+      of(true).pipe(delay(1000), startWith(false)),
+    ).subscribe(
+      ([response]) => {
+        if (response && response.type === QuestDB.Type.DQL) {
+          setLoadingError(null)
+          errorRef.current = null
+          setWalTables(response.data)
+          dispatch(actions.query.setWalTables(response.data))
         } else {
           setLoading(false)
         }

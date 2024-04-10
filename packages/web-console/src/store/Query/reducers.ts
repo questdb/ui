@@ -32,6 +32,7 @@ export const initialState: QueryStateShape = {
     isRefresh: false,
   },
   maxNotifications: 20,
+  walTables: []
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {

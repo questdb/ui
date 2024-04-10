@@ -24,7 +24,7 @@
 
 import type { ReactNode } from "react"
 
-import type { QueryRawResult, Table } from "utils/questdb"
+import type { QueryRawResult, Table, WalTable } from "utils/questdb"
 
 export enum NotificationType {
   ERROR = "error",
@@ -53,6 +53,7 @@ export type QueryStateShape = Readonly<{
   result?: QueryRawResult
   running: RunningShape
   maxNotifications: number
+  walTables: WalTable[]
 }>
 
 export enum QueryAT {
@@ -63,6 +64,7 @@ export enum QueryAT {
   STOP_RUNNING = "QUERY/STOP_RUNNING",
   TOGGLE_RUNNING = "QUERY/TOGGLE_RUNNING",
   SET_TABLES = "QUERY/SET_TABLES",
+  SET_WAL_TABLES = "QUERY/SET_WAL_TABLES"
 }
 
 type AddNotificationAction = Readonly<{
@@ -102,6 +104,13 @@ type SetTablesAction = Readonly<{
   }>
 }>
 
+type SetWalTablesAction = Readonly<{
+  type: QueryAT.SET_WAL_TABLES
+  payload: Readonly<{
+    walTables: WalTable[]
+  }>
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -110,3 +119,4 @@ export type QueryAction =
   | StopRunningAction
   | ToggleRunningAction
   | SetTablesAction
+  | SetWalTablesAction

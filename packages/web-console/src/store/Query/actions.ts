@@ -24,7 +24,7 @@
 
 import type { ReactNode } from "react"
 
-import type { QueryRawResult, Table } from "utils/questdb"
+import type { QueryRawResult, Table, WalTable } from "utils/questdb"
 
 import {
   NotificationShape,
@@ -38,6 +38,13 @@ const setTables = (payload: Table[]): QueryAction => ({
     tables: payload,
   },
   type: QueryAT.SET_TABLES,
+})
+
+const setWalTables = (payload: WalTable[]): QueryAction => ({
+  payload: {
+    walTables: payload,
+  },
+  type: QueryAT.SET_WAL_TABLES,
 })
 
 const addNotification = (
@@ -84,4 +91,5 @@ export default {
   stopRunning,
   toggleRunning,
   setTables,
+  setWalTables
 }
