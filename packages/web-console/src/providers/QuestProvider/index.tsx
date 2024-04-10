@@ -63,7 +63,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   const { settings } = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
   const [authCheckFinished, setAuthCheckFinished] = useState(
-    hasNoAuth(settings),
+    hasNoAuth(settings) || settings["acl.basic.auth.realm.enabled"],
   )
   const [buildVersion, setBuildVersion] = useState<Versions>(
     defaultValues.buildVersion,

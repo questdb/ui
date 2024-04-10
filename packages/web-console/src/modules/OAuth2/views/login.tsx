@@ -238,7 +238,7 @@ export const Login = ({
   }, [errorMessage])
 
   return settings["acl.basic.auth.realm.enabled"] ? null : (
-    <div>
+    <div data-hook="auth-login">
       <Header>
         <a href={"https://questdb.io"}>
           <img
@@ -260,6 +260,7 @@ export const Login = ({
         {settings["acl.oidc.enabled"] && (
           <SSOCard>
             <StyledButton
+              data-hook="button-sso-login"
               skin="secondary"
               prefixIcon={<User size="18px" />}
               onClick={() => onOAuthLogin()}
