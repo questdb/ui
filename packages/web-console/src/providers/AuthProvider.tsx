@@ -24,7 +24,6 @@ import { ErrorResult } from "../utils"
 import { Logout } from "../modules/OAuth2/views/logout"
 import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
-import { match, P } from "ts-pattern"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
 
@@ -308,32 +307,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void setupOAuth2(settings)
   }, [])
 
-  return match({ view: state.view, errorMessage })
-    .with({ view: View.loading }, () => null)
-    .with({ view: View.error, errorMessage: P.string }, ({ errorMessage }) => (
-      <Error
-        errorMessage={errorMessage}
-        onLogout={logout}
-        basicAuthEnabled={settings["acl.basic.auth.realm.enabled"] ?? false}
-      />
-    ))
-    .with({ view: View.loggedOut }, () => (
-      <Logout
-        onLogout={() => {
-          removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-          redirectToAuthorizationUrl(true)
-        }}
-      />
-    ))
-    .with({ view: View.login }, () => (
-      <Login
-        onOAuthLogin={switchToOAuth}
-        onBasicAuthSuccess={() => {
-          dispatch({ view: View.ready })
-        }}
-      />
-    ))
-    .with({ view: View.ready }, () => (
+  const views: { [key in View]: () => React.ReactNode } = {
+    [View.loading]: () => null,
+    [View.ready]: () => (
       <AuthContext.Provider
         value={{
           sessionData,
@@ -344,8 +320,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       >
         {children}
       </AuthContext.Provider>
-    ))
-    .otherwise(() => null)
+    ),
+    [View.error]: () => (
+      <Error
+        errorMessage={errorMessage}
+        onLogout={logout}
+        basicAuthEnabled={settings["acl.basic.auth.realm.enabled"] ?? false}
+      />
+    ),
+    [View.login]: () => (
+      <Login
+        onOAuthLogin={switchToOAuth}
+        onBasicAuthSuccess={() => {
+          dispatch({ view: View.ready })
+        }}
+      />
+    ),
+    [View.loggedOut]: () => (
+      <Logout
+        onLogout={() => {
+          removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
+          redirectToAuthorizationUrl(true)
+        }}
+      />
+    ),
+  }
+
+  return <>{views[state.view]()}</>
 }
 
 export const useAuth = () => useContext(AuthContext)

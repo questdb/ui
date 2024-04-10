@@ -3099,7 +3099,6 @@ __metadata:
     stylelint-processor-styled-components: "npm:1.10.0"
     svg-react-loader: "npm:0.4.6"
     throttle-debounce: "npm:2.2.1"
-    ts-pattern: "npm:4.3.0"
     typescript: "npm:^4.6.2"
     webpack: "npm:^5"
     webpack-bundle-analyzer: "npm:^4.9.1"
@@ -19628,13 +19627,6 @@ __metadata:
     ts-node-transpile-only: dist/bin-transpile.js
     ts-script: dist/bin-script-deprecated.js
   checksum: 10/bee56d4dc96ccbafc99dfab7b73fbabc62abab2562af53cdea91c874a301b9d11e42bc33c0a032a6ed6d813dbdc9295ec73dde7b73ea4ebde02b0e22006f7e04
-  languageName: node
-  linkType: hard
-
-"ts-pattern@npm:4.3.0":
-  version: 4.3.0
-  resolution: "ts-pattern@npm:4.3.0"
-  checksum: 10/bfece8241117031bc302e7dd657afc1d4f504c64ec745ca9f9ec3ea454e441fd1491dc73e10f62c3685ee51a740699244a716c4145d98bd61b38fcc067e81f81
   languageName: node
   linkType: hard
 
