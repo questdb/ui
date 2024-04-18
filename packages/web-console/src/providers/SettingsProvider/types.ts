@@ -1,4 +1,8 @@
 export type Settings = Partial<{
+  "release.type": "OSS" | "EE"
+  "release.version": string
+  "acl.enabled": boolean
+  "acl.basic.auth.realm.enabled": boolean
   "acl.oidc.enabled": boolean
   "acl.oidc.client.id": string
   "acl.oidc.host": string
@@ -7,9 +11,6 @@ export type Settings = Partial<{
   "acl.oidc.authorization.endpoint": string
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean
-  "acl.basic.auth.realm.enabled"?: boolean
-  "questdb.type"?: "OSS" | "EE"
-  "questdb.version"?: string
 }>
 
 export type Query = {

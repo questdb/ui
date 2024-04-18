@@ -10,7 +10,10 @@ const interceptSettings = (payload) => {
 
 describe("OSS", () => {
   before(() => {
-    interceptSettings({ "questdb.type": "OSS" });
+    interceptSettings({
+      "release.type": "OSS",
+      "release.version": "1.2.3",
+    });
     cy.visit(baseUrl);
   });
 
@@ -23,6 +26,10 @@ describe("OSS", () => {
 describe("Auth - UI", () => {
   before(() => {
     interceptSettings({
+      "release.type": "EE",
+      "release.version": "1.2.3",
+      "acl.enabled": true,
+      "acl.basic.auth.realm.enabled": false,
       "acl.oidc.enabled": false,
       "acl.oidc.client.id": null,
       "acl.oidc.host": null,
@@ -31,9 +38,6 @@ describe("Auth - UI", () => {
       "acl.oidc.authorization.endpoint": null,
       "acl.oidc.token.endpoint": null,
       "acl.oidc.pkce.required": null,
-      "acl.basic.auth.realm.enabled": false,
-      "questdb.type": "EE",
-      "questdb.version": "1.2.3",
     });
     cy.visit(baseUrl);
   });
@@ -49,6 +53,10 @@ describe("Auth - UI", () => {
 describe("Auth - OIDC", () => {
   before(() => {
     interceptSettings({
+      "release.type": "EE",
+      "release.version": "1.2.3",
+      "acl.enabled": true,
+      "acl.basic.auth.realm.enabled": false,
       "acl.oidc.enabled": true,
       "acl.oidc.client.id": "test",
       "acl.oidc.host": "host",
@@ -57,9 +65,6 @@ describe("Auth - OIDC", () => {
       "acl.oidc.authorization.endpoint": "/auth",
       "acl.oidc.token.endpoint": "/token",
       "acl.oidc.pkce.required": true,
-      "acl.basic.auth.realm.enabled": false,
-      "questdb.type": "EE",
-      "questdb.version": "1.2.3",
     });
     cy.visit(baseUrl);
   });
@@ -75,6 +80,10 @@ describe("Auth - OIDC", () => {
 describe("Auth - Basic", () => {
   before(() => {
     interceptSettings({
+      "release.type": "EE",
+      "release.version": "1.2.3",
+      "acl.enabled": true,
+      "acl.basic.auth.realm.enabled": true,
       "acl.oidc.enabled": false,
       "acl.oidc.client.id": null,
       "acl.oidc.host": null,
@@ -83,12 +92,35 @@ describe("Auth - Basic", () => {
       "acl.oidc.authorization.endpoint": null,
       "acl.oidc.token.endpoint": null,
       "acl.oidc.pkce.required": null,
-      "acl.basic.auth.realm.enabled": true,
-      "questdb.type": "EE",
-      "questdb.version": "1.2.3",
     });
     cy.visit(baseUrl);
   });
+
+  it("should display the console", () => {
+    cy.wait("@settings");
+    cy.getEditor().should("be.visible");
+  });
+});
+
+describe("Auth - Disabled", () => {
+  before(() => {
+    interceptSettings({
+      "release.type": "EE",
+      "release.version": "1.2.3",
+      "acl.enabled": false,
+      "acl.basic.auth.realm.enabled": true,
+      "acl.oidc.enabled": false,
+      "acl.oidc.client.id": null,
+      "acl.oidc.host": null,
+      "acl.oidc.port": null,
+      "acl.oidc.tls.enabled": null,
+      "acl.oidc.authorization.endpoint": null,
+      "acl.oidc.token.endpoint": null,
+      "acl.oidc.pkce.required": null,
+    });
+    cy.visit(baseUrl);
+  });
+
 
   it("should display the console", () => {
     cy.wait("@settings");

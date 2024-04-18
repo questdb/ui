@@ -12,7 +12,6 @@ import {
   getAuthorisationURL,
   getAuthToken,
   getTokenExpirationDate,
-  hasNoAuth,
 } from "../modules/OAuth2/utils"
 import {
   generateCodeChallenge,
@@ -125,12 +124,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const setupOAuth2 = async (settings: Settings) => {
-    if (hasNoAuth(settings)) {
+    if (!settings["acl.enabled"]) {
       dispatch({ view: View.ready })
       return
     }
 
-    // Proceed with the OAuth2 flow only if it's enabled on the server and by the user
+    // Proceed with the OAuth2 flow only if it's enabled on the server
     if (settings["acl.oidc.enabled"]) {
       // Loading state is for OAuth2 flow only, as basic auth has no persistence layer, and it's in-memory only
       const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
@@ -179,7 +178,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const token = JSON.parse(authPayload)
         // Check if the token expired or is about to in 30 seconds
         if (
-          new Date(token.expires_at).getTime() - new Date().getTime() < 30000 &&
+          new Date(token.expires_at).getTime() - Date.now() < 30000 &&
           getValue(StoreKey.AUTH_REFRESH_TOKEN) !== ""
         ) {
           await refreshAuthToken(settings)
@@ -213,22 +212,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           uiAuthLogin()
         }
       }
-    } else if (
-      // We need to explicitly check for the Boolean value, because the settings response might not come up from the API
-      // yet, and therefore be still undefined by default
-      typeof settings["acl.basic.auth.realm.enabled"] !== "undefined"
-    ) {
-      if (settings["acl.basic.auth.realm.enabled"]) {
-        await basicAuthLogin()
-      } else {
-        // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
-        eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
-          logout()
-        })
+    } else if (settings["acl.basic.auth.realm.enabled"]) {
+      await basicAuthLogin()
+    } else {
+      // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
+      eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
+        logout()
+      })
 
-        //username + pwd via login page
-        uiAuthLogin()
-      }
+      //username + pwd via login page
+      uiAuthLogin()
     }
   }
 

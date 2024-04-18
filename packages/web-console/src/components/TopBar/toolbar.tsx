@@ -118,7 +118,7 @@ export const Toolbar = () => {
     <Root>
       <Box gap="0.5rem">
         <Text color="foreground">Web Console</Text>
-        {settings["questdb.type"] === "EE" && (
+        {settings["release.type"] === "EE" && (
           <IconWithTooltip
             icon={<EnterpriseBadge>EE</EnterpriseBadge>}
             tooltip="QuestDB Enterprise Edition"
@@ -132,7 +132,7 @@ export const Toolbar = () => {
             {serverDetails.instance_name}
           </Badge>
         )}
-        {serverDetails && serverDetails.current_user && (
+        {settings["acl.enabled"] && serverDetails && serverDetails.current_user && (
           <User>
             <UserIcon size="18px" />
             <Text color="foreground">{serverDetails.current_user}</Text>
