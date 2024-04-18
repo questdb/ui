@@ -121,7 +121,6 @@ describe("Auth - Disabled", () => {
     cy.visit(baseUrl);
   });
 
-
   it("should display the console", () => {
     cy.wait("@settings");
     cy.getEditor().should("be.visible");

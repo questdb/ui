@@ -71,4 +71,4 @@ export const getAuthToken = async (
 }
 
 export const hasUIAuth = (config: Settings) =>
-    config["acl.enabled"] && !config["acl.basic.auth.realm.enabled"]
+  config["acl.enabled"] && !config["acl.basic.auth.realm.enabled"]
