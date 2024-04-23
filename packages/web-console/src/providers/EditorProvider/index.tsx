@@ -28,7 +28,6 @@ export type EditorContext = {
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string, options?: AppendQueryOptions) => void
-  buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => Promise<void>
   addBuffer: (
@@ -46,7 +45,6 @@ const defaultValues = {
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
   appendQuery: (query: string, options?: AppendQueryOptions) => undefined,
-  buffers: [],
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
@@ -61,27 +59,27 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
-  const buffers = useLiveQuery(bufferStore.getAll, [])
-  const activeBufferId = useLiveQuery(
-    () => bufferStore.getActiveId(),
-    [],
-  )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const [inFocus, setInFocus] = useState(false)
+  const [buffersInitialised, setBuffersInitialised] = useState(false)
 
-  const ranOnce = useRef(false)
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
-    if (!ranOnce.current && buffers && activeBufferId) {
-      const buffer =
-        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
-      setActiveBufferState(buffer)
-      ranOnce.current = true
+    async function initBuffers() {
+      const buffers = await bufferStore.getAll()
+      const activeBufferId = (await bufferStore.getActiveId())?.value
+      if (buffers && activeBufferId) {
+        const buffer =
+          buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
+        setActiveBufferState(buffer)
+        setBuffersInitialised(true)
+      }
     }
-  }, [buffers, activeBufferId])
+    initBuffers()
+  }, [])
 
-  if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
+  if (!buffersInitialised) {
     return null
   }
 
@@ -201,7 +199,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             appendQuery(editorRef.current, text, options)
           }
         },
-        buffers,
         activeBuffer,
         setActiveBuffer,
         addBuffer,
