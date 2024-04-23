@@ -28,6 +28,7 @@ const Prefix = styled.div<{ disabled?: boolean }>`
   align-items: center;
   justify-content: center;
   margin-right: 0.5rem;
+  pointer-events: none;
   filter: ${({ disabled }) => (disabled ? "grayscale(100%)" : "none")};
   opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
 `;
