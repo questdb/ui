@@ -1,6 +1,7 @@
 import React from "react";
 import { ComponentStory, ComponentMeta } from "@storybook/react";
-import { Check } from "@styled-icons/remix-line";
+import styled, { css } from "styled-components";
+import { Check as BaseCheck } from "@styled-icons/remix-line";
 
 import { permutate } from "../../utils/permutate";
 import { permutateDecorator } from "../../utils/permutate-decorator";
@@ -8,6 +9,9 @@ import { sizes, Button } from "./";
 import { skins } from "./skin";
 import { color } from "../../theme/color";
 
+const Check = styled(BaseCheck)`
+  pointer-events: none;
+`;
 export default {
   title: "Button",
   component: Button,
