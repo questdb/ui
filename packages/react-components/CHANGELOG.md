@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.0.7 - 2024-04-24
+
+### Changed
+
+- Prefix divs in Button components no longer intercept pointer events.
+
 ## 0.0.6 - 2024-01-10
 
 ### Added
