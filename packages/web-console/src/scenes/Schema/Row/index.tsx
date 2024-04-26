@@ -223,7 +223,7 @@ const Row = ({
           />
         )}
 
-        {kind === "column" && !indexed && type !== "TIMESTAMP" && (
+        {kind === "column" && !indexed && name !== designatedTimestamp && (
           <DotIcon size="12px" />
         )}
 
