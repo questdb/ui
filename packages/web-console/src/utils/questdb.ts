@@ -504,12 +504,11 @@ export class Client {
   async getLatestRelease() {
     try {
       const response: Response = await fetch(
-        `https://api.github.com/repos/questdb/questdb/releases/latest`,
+        `https://github-api.questdb.io/github/latest`,
       )
       return (await response.json()) as Release
     } catch (error) {
-      // eslint-disable-next-line prefer-promise-reject-errors
-      throw error
+      return Promise.reject(error)
     }
   }
 
@@ -558,8 +557,7 @@ export class Client {
       )
       return (await response.json()) as NewsItem[]
     } catch (error) {
-      // eslint-disable-next-line prefer-promise-reject-errors
-      throw error
+      return Promise.reject(error)
     }
   }
 }
