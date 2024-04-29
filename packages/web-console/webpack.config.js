@@ -82,7 +82,7 @@ module.exports = {
     hot: true,
     port: config.port,
     proxy: {
-      context: ["/imp", "/exp", "/exec", "/chk"],
+      context: ["/imp", "/exp", "/exec", "/chk", "/settings"],
       target: config.backendUrl,
     },
     client: {

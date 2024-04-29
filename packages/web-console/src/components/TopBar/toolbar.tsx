@@ -1,12 +1,14 @@
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { QuestContext } from "../../providers"
-import { Box } from "@questdb/react-components"
+import { QuestContext, useAuth, useSettings } from "../../providers"
+import { Box, Button } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
-import { User as UserIcon } from "@styled-icons/remix-line"
+import { User as UserIcon, LogoutCircle } from "@styled-icons/remix-line"
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
+import { IconWithTooltip } from "../IconWithTooltip"
+import { hasUIAuth } from "../../modules/OAuth2/utils"
 
 type ServerDetails = {
   instance_name: string | null
@@ -18,6 +20,7 @@ const Root = styled(Box).attrs({ align: "center" })`
   gap: 1.5rem;
   flex-shrink: 0;
   padding-left: 1.5rem;
+  white-space: nowrap;
 `
 
 const Tag = styled(Box).attrs({ align: "center" })`
@@ -63,8 +66,21 @@ const User = styled(Box).attrs({ gap: "0.5rem" })`
   font-weight: 600;
 `
 
-export const Version = () => {
+const EnterpriseBadge = styled.span`
+  padding: 0 4px;
+  background: ${({ theme }) => theme.color.pinkDarker};
+  border-radius: 2px;
+  color: ${({ theme }) => theme.color.foreground};
+
+  &:not(:last-child) {
+    margin-right: 0.25rem;
+  }
+`
+
+export const Toolbar = () => {
   const { quest } = useContext(QuestContext)
+  const { settings } = useSettings()
+  const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
   const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
 
@@ -100,22 +116,38 @@ export const Version = () => {
 
   return (
     <Root>
-      <Text color="foreground">Web Console</Text>
-      {serverDetails && (
-        <Box gap="0.5rem">
-          {serverDetails.instance_name && (
-            <Badge instance_rgb={serverDetails.instance_rgb}>
-              {serverDetails.instance_name}
-            </Badge>
-          )}
-          {serverDetails.current_user && (
-            <User>
-              <UserIcon size="18px" />
-              <Text color="foreground">{serverDetails.current_user}</Text>
-            </User>
-          )}
-        </Box>
-      )}
+      <Box gap="0.5rem">
+        <Text color="foreground">Web Console</Text>
+        {settings["release.type"] === "EE" && (
+          <IconWithTooltip
+            icon={<EnterpriseBadge>EE</EnterpriseBadge>}
+            tooltip="QuestDB Enterprise Edition"
+            placement="bottom"
+          />
+        )}
+      </Box>
+      <Box gap="0.5rem">
+        {serverDetails && serverDetails.instance_name && (
+          <Badge instance_rgb={serverDetails.instance_rgb}>
+            {serverDetails.instance_name}
+          </Badge>
+        )}
+        {settings["acl.enabled"] && serverDetails && serverDetails.current_user && (
+          <User>
+            <UserIcon size="18px" />
+            <Text color="foreground">{serverDetails.current_user}</Text>
+          </User>
+        )}
+        {hasUIAuth(settings) && (
+          <Button
+            onClick={() => logout()}
+            prefixIcon={<LogoutCircle size="18px" />}
+            skin="secondary"
+          >
+            Log out
+          </Button>
+        )}
+      </Box>
     </Root>
   )
 }

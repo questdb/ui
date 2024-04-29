@@ -31,12 +31,12 @@ import React, {
   useState,
   useContext,
 } from "react"
-import { useDispatch, useSelector } from "react-redux"
+import { useDispatch } from "react-redux"
 import { from, combineLatest, of } from "rxjs"
 import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import { Loader3, Refresh, Search } from "@styled-icons/remix-line"
-
+import { FileCopy, Loader3, Refresh, Search } from "@styled-icons/remix-line"
+import { CheckboxCircle } from "@styled-icons/remix-fill"
 import {
   PaneContent,
   PaneWrapper,
@@ -44,17 +44,18 @@ import {
   spinAnimation,
   Tooltip,
 } from "../../components"
-import { actions, selectors } from "../../store"
-import { color, ErrorResult, isServerError } from "../../utils"
+import { actions } from "../../store"
+import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
-import { QuestContext } from "../../providers"
+import { QuestContext, useSettings } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -91,6 +92,12 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
+const StyledCheckboxCircle = styled(CheckboxCircle)`
+  position: absolute;
+  transform: translate(75%, -75%);
+  color: ${({ theme }) => theme.color.green};
+`
+
 const Schema = ({
   innerRef,
   ...rest
@@ -103,10 +110,11 @@ const Schema = ({
   const [opened, setOpened] = useState<string>()
   const [isScrolling, setIsScrolling] = useState(false)
   const [searchVisible, setSearchVisible] = useState(false)
-  const { readOnly } = useSelector(selectors.console.getConfig)
+  const { consoleConfig } = useSettings()
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -140,6 +148,30 @@ const Schema = ({
     )
   }
 
+  const copySchemasToClipboard = async () => {
+    if (!tables) return
+    const ddls = await Promise.all(
+      tables.map(async (table) => {
+        const columnResponse = await quest.showColumns(table.table_name)
+        if (
+          columnResponse.type === QuestDB.Type.DQL &&
+          columnResponse.data.length > 0
+        ) {
+          return formatTableSchemaQueryResult(
+            table.table_name,
+            table.partitionBy,
+            columnResponse.data,
+            table.walEnabled,
+            table.dedup,
+          )
+        }
+      }),
+    )
+    copyToClipboard(ddls.join("\n\n"))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   useEffect(() => {
     void fetchTables()
 
@@ -160,6 +192,9 @@ const Schema = ({
         void fetchTables()
       }
     })
+
+    window.addEventListener("focus", fetchTables)
+    return () => window.removeEventListener("focus", fetchTables)
   }, [])
 
   return (
@@ -168,8 +203,31 @@ const Schema = ({
         title="Tables"
         afterTitle={
           <div style={{ display: "flex" }}>
-            {readOnly === false && tables && (
-              <Box align="center" gap="0">
+            {consoleConfig.readOnly === false && tables && (
+              <Box align="center" gap="0.5rem">
+                {tables.length > 0 && (
+                  <PopperHover
+                    delay={350}
+                    placement="bottom"
+                    trigger={
+                      <Button
+                        onClick={copySchemasToClipboard}
+                        skin="transparent"
+                      >
+                        {copied && <StyledCheckboxCircle size="14px" />}
+                        <FileCopy size="18px" />
+                      </Button>
+                    }
+                  >
+                    <Tooltip>
+                      {copied
+                        ? `Copied ${tables.length} schema${
+                            tables.length > 1 ? "s" : ""
+                          } to clipboard`
+                        : "Copy schemas to clipboard"}
+                    </Tooltip>
+                  </PopperHover>
+                )}
                 <PopperHover
                   delay={350}
                   placement="bottom"

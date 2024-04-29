@@ -27,11 +27,11 @@ import styled from "styled-components"
 import { DownArrowSquare, UpArrowSquare } from "@styled-icons/boxicons-solid"
 
 import { Text, useKeyPress } from "../../../components"
-import type { Query, QueryGroup } from "../../../types"
 import { color } from "../../../utils"
 
 import QueryRow from "./Row"
 import { useEditor } from "../../../providers"
+import { Query, QueryGroup } from "providers/SettingsProvider/types"
 
 type Props = {
   hidePicker: () => void

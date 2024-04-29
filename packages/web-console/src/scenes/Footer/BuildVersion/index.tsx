@@ -25,19 +25,14 @@
 import { QuestContext } from "../../../providers"
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import * as QuestDB from "../../../utils/questdb"
 import { SecondaryButton } from "../../../components"
-import {
-  getCanUpgrade,
-  formatCommitHash,
-  formatVersion,
-  Versions,
-} from "./services"
 import { ExternalLink, ArrowUpCircle } from "@styled-icons/remix-line"
 import { Release } from "../../../utils/questdb"
 import { Team } from "@styled-icons/remix-line"
 import { BuildingMultiple } from "@styled-icons/fluentui-system-filled"
 import { ShieldLockFill } from "@styled-icons/bootstrap/ShieldLockFill"
+import { Versions } from "../../../providers/QuestProvider/types"
+import { getCanUpgrade } from "./services"
 
 const Wrapper = styled.div`
   display: flex;
@@ -69,12 +64,12 @@ const NewestRelease = styled.span`
 `
 
 const versionButtons: {
-  [key in Versions["kind"]]: { label: string; icon?: React.ReactNode }
+  [key in Versions["type"]]: { label: string; icon?: React.ReactNode }
 } = {
   dev: {
     label: "QuestDB Dev",
   },
-  "open-source": {
+  oss: {
     label: "QuestDB",
   },
   enterprise: {
@@ -92,30 +87,21 @@ const versionButtons: {
 }
 
 const BuildVersion = () => {
-  const { quest } = useContext(QuestContext)
-  const [buildVersion, setBuildVersion] = useState<Versions>({
-    kind: "open-source",
-    version: "",
-  })
-  const [commitHash, setCommitHash] = useState("")
+  const { quest, buildVersion, commitHash } = useContext(QuestContext)
   const [newestRelease, setNewestRelease] = useState<Release | null>(null)
 
   useEffect(() => {
-    void quest.queryRaw("select build", { limit: "0,1000" }).then((result) => {
-      if (result.type === QuestDB.Type.DQL && result.count === 1) {
-        setBuildVersion(formatVersion(result.dataset[0][0] as string))
-        setCommitHash(formatCommitHash(result.dataset[0][0]))
-      }
-    })
-  }, [])
-
-  useEffect(() => {
-    if (buildVersion.version && buildVersion.kind.includes("open-source")) {
-      void quest.getLatestRelease().then((release: Release) => {
-        if (release.name) {
-          setNewestRelease(release)
-        }
-      })
+    if (buildVersion.version && buildVersion.type.includes("oss")) {
+      void quest
+        .getLatestRelease()
+        .then((release: Release) => {
+          if (release.name) {
+            setNewestRelease(release)
+          }
+        })
+        .catch((e) => {
+          console.error(e)
+        })
     }
   }, [buildVersion])
 
@@ -123,7 +109,7 @@ const BuildVersion = () => {
     return null
   }
 
-  const enterpriseVersion = buildVersion.kind.includes("enterprise")
+  const enterpriseVersion = buildVersion.type.includes("enterprise")
   const upgradeAvailable = getCanUpgrade(buildVersion, newestRelease?.name)
 
   const releaseUrl = upgradeAvailable
@@ -135,7 +121,7 @@ const BuildVersion = () => {
       }`
 
   const { label, icon } =
-    versionButtons[buildVersion.kind] ??
+    versionButtons[buildVersion.type] ??
     /* fallback to `dev` if `.kind` is something unexpected */
     versionButtons.dev
 
@@ -149,7 +135,7 @@ const BuildVersion = () => {
         <ReleaseNotesButton
           enterprise={enterpriseVersion}
           title={
-            ["dev", "open-source"].includes(buildVersion.kind)
+            ["dev", "oss"].includes(buildVersion.type)
               ? `Show ${buildVersion ? "release notes" : "commit details"}`
               : ""
           }

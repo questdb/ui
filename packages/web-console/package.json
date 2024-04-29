@@ -57,6 +57,8 @@
     "intersection-observer": "^0.12.2",
     "joi": "17.5.0",
     "jquery": "3.5.1",
+    "js-base64": "^3.7.7",
+    "js-sha256": "^0.11.0",
     "monaco-editor": "^0.44.0",
     "prop-types": "^15.8.1",
     "ramda": "0.27.1",

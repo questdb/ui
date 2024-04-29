@@ -29,7 +29,6 @@ import Console from "../Console"
 import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
-import { QuestProvider } from "../../providers"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import News from "../../scenes/News"
@@ -76,32 +75,30 @@ const Layout = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
   return (
-    <QuestProvider>
-      <EditorProvider>
-        <TopBar />
-        <Root>
-          <Main sideOpened={activeSidebar !== undefined}>
-            <Page>
-              <Console />
-            </Page>
-          </Main>
+    <EditorProvider>
+      <TopBar />
+      <Root>
+        <Main sideOpened={activeSidebar !== undefined}>
+          <Page>
+            <Console />
+          </Page>
+        </Main>
 
-          <Drawer id="side-panel-right" />
+        <Drawer id="side-panel-right" />
 
-          <Sidebar align="top">
-            <Help />
+        <Sidebar align="top">
+          <Help />
 
-            <News />
+          <News />
 
-            <CreateTableDialog />
-          </Sidebar>
-        </Root>
+          <CreateTableDialog />
+        </Sidebar>
+      </Root>
 
-        <SideMenu />
+      <SideMenu />
 
-        <Footer />
-      </EditorProvider>
-    </QuestProvider>
+      <Footer />
+    </EditorProvider>
   )
 }
 

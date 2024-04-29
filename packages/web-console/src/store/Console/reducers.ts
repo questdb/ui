@@ -22,12 +22,7 @@
  *
  ******************************************************************************/
 
-import {
-  ConsoleConfigShape,
-  ConsoleAction,
-  ConsoleAT,
-  ConsoleStateShape,
-} from "../../types"
+import { ConsoleAction, ConsoleAT, ConsoleStateShape } from "./types"
 
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
@@ -36,27 +31,11 @@ export const initialState: ConsoleStateShape = {
   activeBottomPanel: "zeroState",
 }
 
-export const defaultConfig: ConsoleConfigShape = {
-  githubBanner: false,
-  readOnly: false,
-  savedQueries: [],
-}
-
 const _console = (
   state = initialState,
   action: ConsoleAction,
 ): ConsoleStateShape => {
   switch (action.type) {
-    case ConsoleAT.SET_CONFIG: {
-      return {
-        ...state,
-        config: {
-          ...defaultConfig,
-          ...action.payload,
-        },
-      }
-    }
-
     case ConsoleAT.TOGGLE_SIDE_MENU: {
       return {
         ...state,

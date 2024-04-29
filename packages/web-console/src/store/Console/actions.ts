@@ -22,27 +22,12 @@
  *
  ******************************************************************************/
 import {
-  ConsoleConfigShape,
   ConsoleAction,
   ConsoleAT,
   TopPanel,
   Sidebar,
   BottomPanel,
 } from "./types"
-
-const bootstrap = (): ConsoleAction => ({
-  type: ConsoleAT.BOOTSTRAP,
-})
-
-const refreshAuthToken = (init: boolean): ConsoleAction => ({
-  payload: init,
-  type: ConsoleAT.REFRESH_AUTH_TOKEN,
-})
-
-const setConfig = (payload: ConsoleConfigShape): ConsoleAction => ({
-  payload,
-  type: ConsoleAT.SET_CONFIG,
-})
 
 const setActiveTopPanel = (panel: TopPanel): ConsoleAction => ({
   payload: panel,
@@ -63,9 +48,6 @@ const toggleSideMenu = (): ConsoleAction => ({
 })
 
 export default {
-  bootstrap,
-  refreshAuthToken,
-  setConfig,
   toggleSideMenu,
   setActiveTopPanel,
   setActiveSidebar,

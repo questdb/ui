@@ -24,10 +24,14 @@
 
 export enum StoreKey {
   AUTH_PAYLOAD = "AUTH_PAYLOAD",
+  AUTH_REFRESH_TOKEN = "AUTH_REFRESH_TOKEN",
+  OAUTH_REDIRECT_COUNT = "oauth.redirect.count",
+  PKCE_CODE_VERIFIER = "pkce.code.verifier",
   QUERY_TEXT = "query.text",
   EDITOR_LINE = "editor.line",
   EDITOR_COL = "editor.col",
   EXAMPLE_QUERIES_VISITED = "editor.exampleQueriesVisited",
   EDITOR_SPLITTER_BASIS = "splitter.editor.basis",
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
+  REST_TOKEN = "rest.token",
 }

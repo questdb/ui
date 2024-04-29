@@ -117,8 +117,8 @@ const MonacoEditor = () => {
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
     DEFAULT_LINE_CHARS +
-      activeBuffer.value.split("\n").length.toString().length -
-      1,
+    activeBuffer.value.split("\n").length.toString().length -
+    1,
   )
 
   const toggleRunning = (isRefresh: boolean = false) => {
@@ -194,21 +194,21 @@ const MonacoEditor = () => {
             },
             ...(errorRangeRef.current &&
             cursorMatch.range.startLineNumber !==
-              errorRangeRef.current.startLineNumber
+            errorRangeRef.current.startLineNumber
               ? [
-                  {
-                    range: new monaco.Range(
-                      errorRangeRef.current.startLineNumber,
-                      0,
-                      errorRangeRef.current.startLineNumber,
-                      0,
-                    ),
-                    options: {
-                      isWholeLine: false,
-                      glyphMarginClassName: "errorGlyph",
-                    },
+                {
+                  range: new monaco.Range(
+                    errorRangeRef.current.startLineNumber,
+                    0,
+                    errorRangeRef.current.startLineNumber,
+                    0,
+                  ),
+                  options: {
+                    isWholeLine: false,
+                    glyphMarginClassName: "errorGlyph",
                   },
-                ]
+                },
+              ]
               : []),
           ])
         }
@@ -412,6 +412,11 @@ const MonacoEditor = () => {
       setCompletionProvider()
     }
   }, [tables, monacoRef, editorReady])
+
+  useEffect(() => {
+    window.addEventListener("focus", setCompletionProvider)
+    return () => window.removeEventListener("focus", setCompletionProvider)
+  }, [])
 
   return (
     <Content onClick={handleEditorClick}>

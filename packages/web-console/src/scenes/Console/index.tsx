@@ -21,6 +21,7 @@ import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
 import { Allotment, AllotmentHandle } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
+import { useSettings } from "../../providers"
 
 const Root = styled.div`
   display: flex;
@@ -78,7 +79,7 @@ const Console = () => {
   )
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
-  const { readOnly } = useSelector(selectors.console.getConfig)
+  const { consoleConfig } = useSettings()
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
@@ -210,8 +211,8 @@ const Console = () => {
                 placement="right"
                 trigger={
                   <PrimaryToggleButton
-                    readOnly={readOnly}
-                    {...(!readOnly && {
+                    readOnly={consoleConfig.readOnly}
+                    {...(!consoleConfig.readOnly && {
                       onClick: () => {
                         dispatch(actions.console.setActiveBottomPanel("import"))
                       },
@@ -224,7 +225,7 @@ const Console = () => {
                 }
               >
                 <Tooltip>
-                  {readOnly
+                  {consoleConfig.readOnly
                     ? "To use this feature, turn off read-only mode in the configuration file"
                     : "Import files from CSV"}
                 </Tooltip>

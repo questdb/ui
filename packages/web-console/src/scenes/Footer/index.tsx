@@ -23,19 +23,18 @@
  ******************************************************************************/
 
 import React, { useCallback, useEffect, useState } from "react"
-import { useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled, { createGlobalStyle } from "styled-components"
 import { Github } from "@styled-icons/remix-fill"
 
 import { Link, Text, TransitionDuration } from "../../components"
-import { selectors } from "../../store"
 
 import GithubBanner from "./GithubBanner"
 import BuildVersion from "./BuildVersion"
 import ConnectionStatus from "./ConnectionStatus"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { useSettings } from "../../providers"
 
 const Wrapper = styled.div`
   position: absolute;
@@ -91,7 +90,7 @@ const Footer = () => {
   const handleClick = useCallback(() => {
     setShowBanner(false)
   }, [])
-  const { githubBanner } = useSelector(selectors.console.getConfig)
+  const { consoleConfig } = useSettings()
 
   useEffect(() => {
     setTimeout(() => {
@@ -131,7 +130,7 @@ const Footer = () => {
       <GithubBannerTransition />
       <CSSTransition
         classNames="github-banner"
-        in={showBanner && githubBanner}
+        in={showBanner && consoleConfig.githubBanner}
         timeout={TransitionDuration.REG}
         unmountOnExit
       >
