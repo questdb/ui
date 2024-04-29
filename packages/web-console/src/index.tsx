@@ -44,6 +44,7 @@ import { StoreAction, StoreShape } from "./types"
 import Layout from "./scenes/Layout"
 import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
+import { AuthProvider, QuestProvider, SettingsProvider } from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,
@@ -54,7 +55,6 @@ const epicMiddleware = createEpicMiddleware<
 const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
 
 epicMiddleware.run(rootEpic)
-store.dispatch(actions.console.bootstrap())
 
 const FadeReg = createGlobalFadeTransition("fade-reg", TransitionDuration.REG)
 
@@ -64,18 +64,24 @@ const FadeSlow = createGlobalFadeTransition(
 )
 
 ReactDOM.render(
-  <ScreenSizeProvider>
-    <Provider store={store}>
-      <ThemeProvider theme={theme}>
-        <GlobalStyle />
-        {ReactDOM.createPortal(<ToastContainer />, document.body)}
-        <LocalStorageProvider>
-          <FadeSlow />
-          <FadeReg />
-          <Layout />
-        </LocalStorageProvider>
-      </ThemeProvider>
-    </Provider>
-  </ScreenSizeProvider>,
+  <ThemeProvider theme={theme}>
+    <ScreenSizeProvider>
+      <Provider store={store}>
+        <SettingsProvider>
+          <AuthProvider>
+            <QuestProvider>
+              <GlobalStyle />
+              {ReactDOM.createPortal(<ToastContainer />, document.body)}
+              <LocalStorageProvider>
+                <FadeSlow />
+                <FadeReg />
+                <Layout />
+              </LocalStorageProvider>
+            </QuestProvider>
+          </AuthProvider>
+        </SettingsProvider>
+      </Provider>
+    </ScreenSizeProvider>
+  </ThemeProvider>,
   document.getElementById("root"),
 )

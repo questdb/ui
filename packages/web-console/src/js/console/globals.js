@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 
-export const MSG_QUERY_EXPORT = "query.in.export"
 export const MSG_QUERY_EXEC = "query.in.exec"
 export const MSG_QUERY_CANCEL = "query.in.cancel"
 export const MSG_QUERY_RUNNING = "query.out.running"

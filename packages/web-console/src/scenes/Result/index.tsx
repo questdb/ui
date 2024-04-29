@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import $ from "jquery"
-import React, { useEffect, useRef, useState } from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
@@ -47,6 +47,7 @@ import { Button } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { QuestContext } from "../../providers"
 
 const Root = styled.div`
   display: flex;
@@ -91,6 +92,7 @@ const RowCount = styled(Text)`
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
+  const { quest } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
@@ -100,18 +102,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   useEffect(() => {
     const _grid = grid(
       document.getElementById("grid"),
-      function (sql, lo, hi, rendererFn: (data: any) => void) {
-        fetch(
-          "/exec?query=" +
-            encodeURIComponent(sql) +
-            "&limit=" +
-            lo +
-            "," +
-            hi +
-            "&nm=true",
-        )
-          .then((response) => response.json())
-          .then(rendererFn)
+      async function (sql, lo, hi, rendererFn: (data: QueryRawResult) => void) {
+        const result = await quest.queryRaw(sql, {
+          limit: `${lo},${hi}`,
+          nm: true,
+        })
+        if (result.type === QuestDB.Type.DQL) {
+          rendererFn(result)
+        }
       },
     )
     gridRef.current = _grid
@@ -249,7 +247,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 onClick={() => {
                   const sql = gridRef?.current?.getSQL()
                   if (sql) {
-                    eventBus.publish(EventType.MSG_QUERY_EXPORT, { q: sql })
+                    quest.exportQueryToCsv(sql)
                   }
                 }}
               >

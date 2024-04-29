@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 import React from "react"
-import { useCallback, useEffect, useState, useContext } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
@@ -46,6 +46,7 @@ import QueryPicker from "../QueryPicker"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { DocSearch } from "@docsearch/react"
+import { useSettings } from "../../../providers"
 
 import "@docsearch/css"
 
@@ -126,7 +127,7 @@ const Menu = () => {
   const dispatch = useDispatch()
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const escPress = useKeyPress("Escape")
-  const { savedQueries } = useSelector(selectors.console.getConfig)
+  const { consoleConfig } = useSettings()
   const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const { sm } = useScreenSize()
@@ -134,7 +135,7 @@ const Menu = () => {
   const handleClick = useCallback(() => {
     dispatch(actions.query.toggleRunning())
   }, [dispatch])
-  const handleQueriesToggle = useCallback((active) => {
+  const handleQueriesToggle = useCallback((active: boolean) => {
     if (!exampleQueriesVisited && active) {
       updateSettings(StoreKey.EXAMPLE_QUERIES_VISITED, true)
     }
@@ -161,7 +162,7 @@ const Menu = () => {
     <Wrapper _display={sm ? "none" : "inline"}>
       <Separator />
 
-      {savedQueries.length > 0 && (
+      {consoleConfig.savedQueries && consoleConfig.savedQueries.length > 0 && (
         <PopperToggle
           active={queriesPopperActive}
           onToggle={handleQueriesToggle}
@@ -172,7 +173,10 @@ const Menu = () => {
             </QueryPickerButton>
           }
         >
-          <QueryPicker hidePicker={handleHidePicker} queries={savedQueries} />
+          <QueryPicker
+            hidePicker={handleHidePicker}
+            queries={consoleConfig.savedQueries ?? []}
+          />
         </PopperToggle>
       )}
 

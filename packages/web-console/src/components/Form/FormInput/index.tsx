@@ -89,7 +89,7 @@ export const FormInput = ({
           type="button"
           last
         >
-          {passwordShown ? <Eye size="18px" /> : <EyeOff size="18px" />}
+          {passwordShown ? <Eye size="15px" /> : <EyeOff size="15px" />}
         </ToggleButton>
       )}
     </Wrapper>

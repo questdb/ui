@@ -57,12 +57,6 @@ export const registerLegacyEventBusEvents = ({
     toggleRunning(true)
   })
 
-  eventBus.subscribe<{ q: string }>(EventType.MSG_QUERY_EXPORT, (payload) => {
-    if (payload) {
-      window.location.href = `/exp?query=${encodeURIComponent(payload.q)}`
-    }
-  })
-
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {
     const position = editor.getPosition()
     if (position) {

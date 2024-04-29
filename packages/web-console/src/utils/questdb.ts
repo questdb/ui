@@ -22,9 +22,11 @@
  *
  ******************************************************************************/
 import { isServerError } from "../utils"
-import { TelemetryConfigShape } from "./../store/Telemetry/types"
+import { TelemetryConfigShape } from "../store/Telemetry/types"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
+import { AuthPayload } from "../modules/OAuth2/types"
+import { StoreKey } from "./localStorage/types"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -39,6 +41,7 @@ export enum Type {
 
 export type Timings = {
   compiler: number
+  authentication: number
   count: number
   execute: number
   fetch: number
@@ -121,6 +124,7 @@ export type Column = {
 export type Options = {
   limit?: string
   explain?: boolean
+  nm?: boolean
 }
 
 export type Release = {
@@ -225,6 +229,25 @@ export type Parameter = {
 export class Client {
   private readonly _host: string
   private _controllers: AbortController[] = []
+  private commonHeaders: Record<string, string> = {}
+  private static refreshTokenPending = false
+  private static numOfPendingQueries = 0
+  refreshTokenMethod: () => Promise<Partial<AuthPayload>> = async (): Promise<
+    Partial<AuthPayload>
+  > => {
+    return {}
+  }
+  private tokenNeedsRefresh() {
+    const authPayload = localStorage.getItem(StoreKey.AUTH_PAYLOAD)
+    const refreshToken = localStorage.getItem(StoreKey.AUTH_REFRESH_TOKEN)
+    if (authPayload) {
+      const parsed = JSON.parse(authPayload)
+      return (
+        new Date(parsed.expires_at).getTime() - new Date().getTime() < 30000 &&
+        refreshToken !== ""
+      )
+    }
+  }
 
   constructor(host?: string) {
     if (!host) {
@@ -232,6 +255,30 @@ export class Client {
     } else {
       this._host = host
     }
+  }
+
+  setCommonHeaders(headers: Record<string, string>) {
+    this.commonHeaders = headers
+  }
+
+  private refreshAuthToken = async () => {
+    Client.refreshTokenPending = true
+    await new Promise((resolve) => {
+      const interval = setInterval(async () => {
+        if (Client.numOfPendingQueries === 0) {
+          clearInterval(interval)
+          const newToken = await this.refreshTokenMethod()
+          if (newToken.access_token) {
+            this.setCommonHeaders({
+              ...this.commonHeaders,
+              Authorization: `Bearer ${newToken.access_token}`,
+            })
+          }
+          Client.refreshTokenPending = false
+          return resolve(true)
+        }
+      }, 100)
+    })
   }
 
   static encodeParams = (
@@ -298,10 +345,25 @@ export class Client {
     let response: Response
     const start = new Date()
 
+    if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
+      await this.refreshAuthToken()
+    }
+
+    await new Promise((resolve) => {
+      const interval = setInterval(() => {
+        if (!Client.refreshTokenPending) {
+          clearInterval(interval)
+          return resolve(true)
+        }
+      }, 100)
+    })
+
+    Client.numOfPendingQueries++
+
     try {
       response = await fetch(
         `${this._host}/exec?${Client.encodeParams(payload)}`,
-        { signal: controller.signal },
+        { signal: controller.signal, headers: this.commonHeaders },
       )
     } catch (error) {
       const err = {
@@ -336,14 +398,23 @@ export class Client {
       if (index >= 0) {
         this._controllers.splice(index, 1)
       }
+
+      Client.numOfPendingQueries--
     }
 
-    if (response.ok || response.status === 400) {
-      // 400 is only for SQL errors
+    if (
+      response.ok ||
+      response.status === 400 ||
+      (response.ok && response.status === 403)
+    ) {
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
       const data = (await response.json()) as RawResult
 
       eventBus.publish(EventType.MSG_CONNECTION_OK)
+
+      if (response.status === 403) {
+        eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, data)
+      }
 
       if (data.ddl) {
         return {
@@ -381,6 +452,22 @@ export class Client {
       errorPayload.query = query
       errorPayload.type = Type.ERROR
       eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
+    }
+
+    if (response.status === 401) {
+      errorPayload.error = `Unauthorized`
+      eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+    }
+
+    if (response.status === 403) {
+      const errorText = (await response.text()).trim()
+      if (errorText.startsWith("{")) {
+        const data = JSON.parse(errorText) as ErrorResult
+        errorPayload.error = data.error
+      } else {
+        errorPayload.error = errorText
+      }
+      eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
     }
 
     // eslint-disable-next-line prefer-promise-reject-errors
@@ -436,6 +523,7 @@ export class Client {
           f: "json",
           j: name,
         })}`,
+        { headers: this.commonHeaders },
       )
       return await response.json()
     } catch (error) {
@@ -477,6 +565,9 @@ export class Client {
     return new Promise((resolve, reject) => {
       let request = new XMLHttpRequest()
       request.open("POST", `${this._host}/imp?${new URLSearchParams(params)}`)
+      Object.keys(this.commonHeaders).forEach((key) => {
+        request.setRequestHeader(key, this.commonHeaders[key])
+      })
       request.upload.addEventListener("progress", (e) => {
         let percent_completed = (e.loaded / e.total) * 100
         onProgress(percent_completed)
@@ -501,15 +592,37 @@ export class Client {
     })
   }
 
+  async exportQueryToCsv(query: string) {
+    try {
+      const response: Response = await fetch(
+        `${this._host}/exp?${Client.encodeParams({ query })}`,
+        { headers: this.commonHeaders },
+      )
+      const blob = await response.blob()
+      const filename = response.headers
+        .get("Content-Disposition")
+        ?.split("=")[1]
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+        ? filename.replaceAll(`"`, "")
+        : `questdb-query-${new Date().getTime()}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      throw error
+    }
+  }
+
   async getLatestRelease() {
     try {
       const response: Response = await fetch(
-        `https://api.github.com/repos/questdb/questdb/releases/latest`,
+        `https://github-api.questdb.io/github/latest`,
       )
       return (await response.json()) as Release
     } catch (error) {
-      // eslint-disable-next-line prefer-promise-reject-errors
-      throw error
+      return Promise.reject(error)
     }
   }
 
@@ -558,8 +671,7 @@ export class Client {
       )
       return (await response.json()) as NewsItem[]
     } catch (error) {
-      // eslint-disable-next-line prefer-promise-reject-errors
-      throw error
+      return Promise.reject(error)
     }
   }
 }

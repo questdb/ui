@@ -5,7 +5,7 @@ import { selectors, actions } from "../../store"
 import { Table as TableIcon } from "@styled-icons/remix-line"
 import { SchemaFormValues } from "components/TableSchemaDialog/types"
 import { formatTableSchemaQuery } from "../../utils/formatTableSchemaQuery"
-import { useEditor } from "../../providers"
+import { useEditor, useSettings } from "../../providers"
 import { PrimaryToggleButton } from "../../components"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { IconWithTooltip } from "../../components/IconWithTooltip"
@@ -17,7 +17,7 @@ export const CreateTableDialog = () => {
   const dispatch = useDispatch()
   const tables = useSelector(selectors.query.getTables)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const { readOnly } = useSelector(selectors.console.getConfig)
+  const { consoleConfig } = useSettings()
   const { appendQuery } = useEditor()
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
@@ -66,9 +66,9 @@ export const CreateTableDialog = () => {
           icon={
             <PrimaryToggleButton
               data-hook="create-table-panel-button"
-              readOnly={readOnly}
+              readOnly={consoleConfig.readOnly}
               selected={addTableDialogOpen !== undefined}
-              {...(!readOnly && {
+              {...(!consoleConfig.readOnly && {
                 onClick: () => {
                   dispatch(
                     actions.console.setActiveSidebar(
@@ -83,7 +83,7 @@ export const CreateTableDialog = () => {
           }
           placement="left"
           tooltip={
-            readOnly
+            consoleConfig.readOnly
               ? "To use this feature, turn off read-only mode in the configuration file"
               : "Create table"
           }
