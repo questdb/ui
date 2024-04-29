@@ -16,61 +16,113 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.4.0 - 2024.04.29
+
+### Added
+
+- Added logic around authorization
+  [#272](https://github.com/questdb/ui/pull/272)
+
+### Changed
+
+- Align varchar columns left, yarn4 migration
+  [#269](https://github.com/questdb/ui/pull/269)
+
+### Fixed
+
+- Do not trigger autocomplete on newlines
+  [#267](https://github.com/questdb/ui/pull/267)
+- Get rid of autocomplete duplicates
+  [#268](https://github.com/questdb/ui/pull/268)
+- File settings not being passed on to CSV upload
+  [#271](https://github.com/questdb/ui/pull/271)
+- Capture exception if CSV Copy availability check fails
+  [#273](https://github.com/questdb/ui/pull/273)
+- Show an icon next to non-designated timestamp columns
+  [#279](https://github.com/questdb/ui/pull/279)
+
 ## 0.3.3 - 2024.01.05
 
 ### Added
-- Enhanced SQL editor autocomplete [#241](https://github.com/questdb/ui/pull/241)
+
+- Enhanced SQL editor autocomplete
+  [#241](https://github.com/questdb/ui/pull/241)
 - Commit hash info [#249](https://github.com/questdb/ui/pull/249)
 
 ### Changed
+
 - CSV Import disclaimer texts [#229](https://github.com/questdb/ui/pull/229)
-- Replace jQuery event bus with eventemitter3 [#250](https://github.com/questdb/ui/pull/250)
+- Replace jQuery event bus with eventemitter3
+  [#250](https://github.com/questdb/ui/pull/250)
 - New Import icon [#258](https://github.com/questdb/ui/pull/258)
 
 ### Fixed
-- Fix issues with Run button in editor gutter [#257](https://github.com/questdb/ui/pull/257)
-- Fix results and editor panel size configs [#260](https://github.com/questdb/ui/pull/260)
+
+- Fix issues with Run button in editor gutter
+  [#257](https://github.com/questdb/ui/pull/257)
+- Fix results and editor panel size configs
+  [#260](https://github.com/questdb/ui/pull/260)
 
 ## 0.3.2 - 2023.11.16
 
 ### Added
-- Add `DEDUP` support in `Copy schema to clipboard` [#235](https://github.com/questdb/ui/pull/235)
+
+- Add `DEDUP` support in `Copy schema to clipboard`
+  [#235](https://github.com/questdb/ui/pull/235)
 
 ### Fixed
-- Fix table schema form on already existing tables [#236](https://github.com/questdb/ui/pull/236)
-- Fix query execution when line comments are present [#231](https://github.com/questdb/ui/pull/231)
+
+- Fix table schema form on already existing tables
+  [#236](https://github.com/questdb/ui/pull/236)
+- Fix query execution when line comments are present
+  [#231](https://github.com/questdb/ui/pull/231)
 
 ## 0.3.1 - 2023.11.15
 
 ### Added
 
-- Add current_user info in the top bar [#225](https://github.com/questdb/ui/pull/225)
-- Update pane splitters to real time [#220](https://github.com/questdb/ui/pull/220)
+- Add current_user info in the top bar
+  [#225](https://github.com/questdb/ui/pull/225)
+- Update pane splitters to real time
+  [#220](https://github.com/questdb/ui/pull/220)
 - Add 'return to Cloud' button [#232](https://github.com/questdb/ui/pull/232)
 
 ### Changed
+
 - Update SQL Grammar to v1.0.14 [#233](https://github.com/questdb/ui/pull/233)
 
 ## 0.3.0 - 2023.11.08
 
 ### Changed
-- allow ampersand in the grid output [#222](https://github.com/questdb/ui/pull/222)
+
+- allow ampersand in the grid output
+  [#222](https://github.com/questdb/ui/pull/222)
 
 ### Fixed
-- Disable create table/import UI in read-only mode [#221](https://github.com/questdb/ui/pull/221)
+
+- Disable create table/import UI in read-only mode
+  [#221](https://github.com/questdb/ui/pull/221)
 
 ## 0.2.9 - 2023.11.07
 
 ### Added
-- General UI refresh, new News UI, new CSV Import UI [#199](https://github.com/questdb/ui/pull/199)
+
+- General UI refresh, new News UI, new CSV Import UI
+  [#199](https://github.com/questdb/ui/pull/199)
 
 ### Changed
-- Enable HMR for CSS and improve overflow behaviour of bottom panel [#214](https://github.com/questdb/ui/pull/214)
-- Rename Table.name to Table.table_name [#212](https://github.com/questdb/ui/pull/212)
+
+- Enable HMR for CSS and improve overflow behaviour of bottom panel
+  [#214](https://github.com/questdb/ui/pull/214)
+- Rename Table.name to Table.table_name
+  [#212](https://github.com/questdb/ui/pull/212)
 
 ### Fixed
-- Escape HTML characters in the grid [#218](https://github.com/questdb/ui/pull/218)
-- Fix showTables for Backwards Compatibility with name Property in QuestDB [#213](https://github.com/questdb/ui/pull/213)
+
+- Escape HTML characters in the grid
+  [#218](https://github.com/questdb/ui/pull/218)
+- Fix showTables for Backwards Compatibility with name Property in QuestDB
+  [#213](https://github.com/questdb/ui/pull/213)
 
 ## 0.2.8 - 2023.10.16
 
