@@ -277,7 +277,7 @@ export class Client {
           Client.refreshTokenPending = false
           return resolve(true)
         }
-      }, 100)
+      }, 50)
     })
   }
 
@@ -355,7 +355,7 @@ export class Client {
             clearInterval(interval)
             return resolve(true)
           }
-        }, 100)
+        }, 50)
       })
     }
 
