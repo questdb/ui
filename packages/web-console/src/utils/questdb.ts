@@ -343,23 +343,25 @@ export class Client {
 
     this._controllers.push(controller)
     let response: Response
-    const start = new Date()
 
     if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
       await this.refreshAuthToken()
     }
 
-    await new Promise((resolve) => {
-      const interval = setInterval(() => {
-        if (!Client.refreshTokenPending) {
-          clearInterval(interval)
-          return resolve(true)
-        }
-      }, 100)
-    })
+    if (Client.refreshTokenPending) {
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (!Client.refreshTokenPending) {
+            clearInterval(interval)
+            return resolve(true)
+          }
+        }, 100)
+      })
+    }
 
     Client.numOfPendingQueries++
 
+    const start = new Date()
     try {
       response = await fetch(
         `${this._host}/exec?${Client.encodeParams(payload)}`,
