@@ -381,7 +381,7 @@ export class Client {
 
       if (error instanceof DOMException) {
         // eslint-disable-next-line prefer-promise-reject-errors
-        return await Promise.reject({
+        return Promise.reject({
           ...err,
           error:
             error.code === 20
@@ -393,7 +393,7 @@ export class Client {
       eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
       // eslint-disable-next-line prefer-promise-reject-errors
-      return await Promise.reject(genericErrorPayload)
+      return Promise.reject(genericErrorPayload)
     } finally {
       const index = this._controllers.indexOf(controller)
 
@@ -427,7 +427,7 @@ export class Client {
 
       if (data.error) {
         // eslint-disable-next-line prefer-promise-reject-errors
-        return await Promise.reject({
+        return Promise.reject({
           ...data,
           type: Type.ERROR,
         })
@@ -473,7 +473,7 @@ export class Client {
     }
 
     // eslint-disable-next-line prefer-promise-reject-errors
-    return await Promise.reject(errorPayload)
+    return Promise.reject(errorPayload)
   }
 
   async showTables(): Promise<QueryResult<Table>> {
