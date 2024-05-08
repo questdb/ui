@@ -277,7 +277,7 @@ export class Client {
           Client.refreshTokenPending = false
           return resolve(true)
         }
-      }, 100)
+      }, 50)
     })
   }
 
@@ -343,23 +343,25 @@ export class Client {
 
     this._controllers.push(controller)
     let response: Response
-    const start = new Date()
 
     if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
       await this.refreshAuthToken()
     }
 
-    await new Promise((resolve) => {
-      const interval = setInterval(() => {
-        if (!Client.refreshTokenPending) {
-          clearInterval(interval)
-          return resolve(true)
-        }
-      }, 100)
-    })
+    if (Client.refreshTokenPending) {
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (!Client.refreshTokenPending) {
+            clearInterval(interval)
+            return resolve(true)
+          }
+        }, 50)
+      })
+    }
 
     Client.numOfPendingQueries++
 
+    const start = new Date()
     try {
       response = await fetch(
         `${this._host}/exec?${Client.encodeParams(payload)}`,
@@ -379,7 +381,7 @@ export class Client {
 
       if (error instanceof DOMException) {
         // eslint-disable-next-line prefer-promise-reject-errors
-        return await Promise.reject({
+        return Promise.reject({
           ...err,
           error:
             error.code === 20
@@ -391,7 +393,7 @@ export class Client {
       eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
       // eslint-disable-next-line prefer-promise-reject-errors
-      return await Promise.reject(genericErrorPayload)
+      return Promise.reject(genericErrorPayload)
     } finally {
       const index = this._controllers.indexOf(controller)
 
@@ -425,7 +427,7 @@ export class Client {
 
       if (data.error) {
         // eslint-disable-next-line prefer-promise-reject-errors
-        return await Promise.reject({
+        return Promise.reject({
           ...data,
           type: Type.ERROR,
         })
@@ -471,7 +473,7 @@ export class Client {
     }
 
     // eslint-disable-next-line prefer-promise-reject-errors
-    return await Promise.reject(errorPayload)
+    return Promise.reject(errorPayload)
   }
 
   async showTables(): Promise<QueryResult<Table>> {
