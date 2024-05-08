@@ -11,6 +11,8 @@ export type Settings = Partial<{
   "acl.oidc.authorization.endpoint": string
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean
+  "posthog.enabled": boolean
+  "posthog.api.key": string
 }>
 
 export type Query = {

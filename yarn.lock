@@ -3294,6 +3294,7 @@ __metadata:
     js-sha256: "npm:^0.11.0"
     mini-css-extract-plugin: "npm:^2.6.0"
     monaco-editor: "npm:^0.44.0"
+    posthog-js: "npm:^1.131.2"
     prettier: "npm:^2.5.1"
     prop-types: "npm:^15.8.1"
     ramda: "npm:0.27.1"
@@ -11187,6 +11188,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fflate@npm:^0.4.8":
+  version: 0.4.8
+  resolution: "fflate@npm:0.4.8"
+  checksum: 10/c0c75029bcbefd0b47cede4ad2a3698f571e38d3d93dfbb96d744c655ec3bf5e31111044c2c01fa3965109874f5be8b5a6b3686b958392693689665cbabf3ece
+  languageName: node
+  linkType: hard
+
 "figures@npm:^3.2.0":
   version: 3.2.0
   resolution: "figures@npm:3.2.0"
@@ -17237,6 +17245,23 @@ __metadata:
   languageName: node
   linkType: hard
 
+"posthog-js@npm:^1.131.2":
+  version: 1.131.2
+  resolution: "posthog-js@npm:1.131.2"
+  dependencies:
+    fflate: "npm:^0.4.8"
+    preact: "npm:^10.19.3"
+  checksum: 10/541a4be6de55f582ca3c5b12c5e9b14d75d79b7f6985e200984285c4dadc87e5e700da800a368d1b231780cddd9898d76fcbb31d8db6ca126f11dee713c57d11
+  languageName: node
+  linkType: hard
+
+"preact@npm:^10.19.3":
+  version: 10.21.0
+  resolution: "preact@npm:10.21.0"
+  checksum: 10/2c5fd23460f0de4a18e6707bf0d7aa0e0a4447b94708098a549fb243fa8ba00c978da1d5914ff50b32cc27c8b69dcdd6234f28f6462f912d89b963efb8e1a410
+  languageName: node
+  linkType: hard
+
 "prelude-ls@npm:^1.2.1":
   version: 1.2.1
   resolution: "prelude-ls@npm:1.2.1"
@@ -20888,6 +20913,8 @@ __metadata:
     eslint-config-prettier: "npm:^8.5.0"
     eslint-plugin-prettier: "npm:^4.0.0"
     prettier: "npm:^2.6.2"
+    react: "npm:17.0.2"
+    react-dom: "npm:17.0.2"
     ts-node: "npm:^10.8.1"
     typescript: "npm:^4.7.3"
   languageName: unknown
