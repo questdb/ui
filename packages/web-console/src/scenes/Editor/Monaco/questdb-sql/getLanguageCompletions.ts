@@ -33,7 +33,7 @@ export const getLanguageCompletions = (range: IRange) => [
     const operator = item.toUpperCase()
     return {
       label: operator,
-      kind: CompletionItemKind.Keyword,
+      kind: CompletionItemKind.Operator,
       insertText: operator.toUpperCase(),
       range,
     }
