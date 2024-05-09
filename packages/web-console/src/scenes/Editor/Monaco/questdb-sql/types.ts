@@ -12,3 +12,9 @@ export enum CompletionItemPriority {
   MediumLow = "4",
   Low = "5",
 }
+
+export enum CompletionItemKind {
+  Class = "5",
+  Enum = "15",
+  Keyword = "17",
+}

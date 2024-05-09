@@ -1,8 +1,6 @@
 import { Table, uniq } from "../../../../utils"
 import * as monaco from "monaco-editor"
 import { CompletionItemPriority, InformationSchemaColumn } from "./types"
-import { editor } from "monaco-editor"
-import IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 import { findMatches, getQueryFromCursor } from "../utils"
 import { getTableCompletions } from "./getTableCompletions"
 import { getColumnCompletions } from "./getColumnCompletions"
@@ -13,7 +11,7 @@ const trimQuotesFromTableName = (tableName: string) => {
 }
 
 export const createSchemaCompletionProvider = (
-  editor: IStandaloneCodeEditor,
+  editor: monaco.editor.IStandaloneCodeEditor,
   tables: Table[] = [],
   informationSchemaColumns: InformationSchemaColumn[] = [],
 ) => {
