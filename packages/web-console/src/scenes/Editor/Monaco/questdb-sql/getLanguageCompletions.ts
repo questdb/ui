@@ -7,7 +7,7 @@ export const getLanguageCompletions = (range: IRange) => [
   ...functions.map((qdbFunction) => {
     return {
       label: qdbFunction,
-      kind: CompletionItemKind.Keyword,
+      kind: CompletionItemKind.Function,
       insertText: qdbFunction,
       range,
     }
