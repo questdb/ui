@@ -21,11 +21,10 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
-import { editor } from "monaco-editor"
 import { appendQuery, AppendQueryOptions } from "./utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import type { editor } from "monaco-editor"
 
 export const registerLegacyEventBusEvents = ({
   editor,

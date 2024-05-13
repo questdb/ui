@@ -1,7 +1,10 @@
 import { uniq } from "../../../../utils"
-import { CompletionItemPriority, InformationSchemaColumn } from "./types"
-import { IRange } from "monaco-editor"
-import { languages } from "monaco-editor"
+import {
+  CompletionItemKind,
+  CompletionItemPriority,
+  InformationSchemaColumn,
+} from "./types"
+import type { IRange } from "monaco-editor"
 
 export const getColumnCompletions = ({
   columns,
@@ -22,7 +25,7 @@ export const getColumnCompletions = ({
         detail: "",
         description: item.data_type,
       },
-      kind: languages.CompletionItemKind.Enum,
+      kind: CompletionItemKind.Enum,
       insertText: `${item.table_name}.${item.column_name}`,
       sortText: priority,
       range,
@@ -44,7 +47,7 @@ export const getColumnCompletions = ({
               : columns.find((item) => item.column_name === columnName)
                   ?.data_type,
         },
-        kind: languages.CompletionItemKind.Enum,
+        kind: CompletionItemKind.Enum,
         insertText: columnName,
         sortText: priority,
         range,

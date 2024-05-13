@@ -1,13 +1,13 @@
-import { IRange } from "monaco-editor"
-import { languages } from "monaco-editor"
 import { operators } from "./operators"
 import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
+import { CompletionItemKind } from "./types"
+import type { IRange } from "monaco-editor"
 
 export const getLanguageCompletions = (range: IRange) => [
   ...functions.map((qdbFunction) => {
     return {
       label: qdbFunction,
-      kind: languages.CompletionItemKind.Function,
+      kind: CompletionItemKind.Function,
       insertText: qdbFunction,
       range,
     }
@@ -15,7 +15,7 @@ export const getLanguageCompletions = (range: IRange) => [
   ...dataTypes.map((item) => {
     return {
       label: item,
-      kind: languages.CompletionItemKind.Keyword,
+      kind: CompletionItemKind.Keyword,
       insertText: item,
       range,
     }
@@ -24,7 +24,7 @@ export const getLanguageCompletions = (range: IRange) => [
     const keyword = item.toUpperCase()
     return {
       label: keyword,
-      kind: languages.CompletionItemKind.Keyword,
+      kind: CompletionItemKind.Keyword,
       insertText: keyword,
       range,
     }
@@ -33,7 +33,7 @@ export const getLanguageCompletions = (range: IRange) => [
     const operator = item.toUpperCase()
     return {
       label: operator,
-      kind: languages.CompletionItemKind.Operator,
+      kind: CompletionItemKind.Operator,
       insertText: operator.toUpperCase(),
       range,
     }

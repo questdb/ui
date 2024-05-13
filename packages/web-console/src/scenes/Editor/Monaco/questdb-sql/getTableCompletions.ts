@@ -1,7 +1,6 @@
 import { Table } from "../../../../utils"
-import { CompletionItemPriority } from "./types"
-import { IRange } from "monaco-editor"
-import { languages } from "monaco-editor"
+import { CompletionItemKind, CompletionItemPriority } from "./types"
+import type { IRange } from "monaco-editor"
 
 export const getTableCompletions = ({
   tables,
@@ -19,7 +18,7 @@ export const getTableCompletions = ({
   return tables.map((item) => {
     return {
       label: item.table_name,
-      kind: languages.CompletionItemKind.Class,
+      kind: CompletionItemKind.Class,
       insertText: openQuote
         ? item.table_name + (nextCharQuote ? "" : '"')
         : /^[a-z0-9_]+$/i.test(item.table_name)
