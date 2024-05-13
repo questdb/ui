@@ -33,6 +33,8 @@ jobs:
 
       - name: Run bundle watcher on @questdb/web-console
         run: yarn workspace @questdb/web-console bundlewatch
+        env:
+          BUNDLEWATCH_GITHUB_TOKEN: ${{ secrets.BUNDLEWATCH_GITHUB_TOKEN }}
 
       - name: Run @questdb/web-console unit tests
         run: yarn workspace @questdb/web-console run test:prod
