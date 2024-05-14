@@ -54,6 +54,7 @@ const Wrapper = styled.div`
   align-items: stretch;
   flex-direction: column;
   overflow: hidden;
+  font-family: ${({ theme }) => theme.fontMonospace};
 
   ${collapseTransition};
 `

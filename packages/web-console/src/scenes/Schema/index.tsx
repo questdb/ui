@@ -56,6 +56,8 @@ import { QuestContext, useSettings } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
+import { Toolbar } from "./Toolbar/toolbar"
+import { levenshteinDistance } from "../../utils"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -76,7 +78,6 @@ const Content = styled(PaneContent)<{
   _loading: boolean
 }>`
   display: block;
-  font-family: ${({ theme }) => theme.fontMonospace};
   overflow: auto;
   ${({ _loading }) => _loading && loadingStyles};
 `
@@ -115,6 +116,7 @@ const Schema = ({
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
+  const [filter, setFilter] = useState("")
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -267,24 +269,34 @@ const Schema = ({
         ref={scrollerRef}
         onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
       >
+        <Toolbar setFilter={setFilter} />
         {loading ? (
           <Loader size="48px" />
         ) : loadingError ? (
           <LoadingError error={loadingError} />
         ) : (
-          tables?.map((table) => (
-            <Table
-              designatedTimestamp={table.designatedTimestamp}
-              expanded={table.table_name === opened}
-              isScrolling={isScrolling}
-              key={table.table_name}
-              table_name={table.table_name}
-              onChange={handleChange}
-              partitionBy={table.partitionBy}
-              walEnabled={table.walEnabled}
-              dedup={table.dedup}
-            />
-          ))
+          tables
+            ?.filter((table: QuestDB.Table) => {
+              const normalizedTableName = table.table_name.toLowerCase()
+              const normalizedFilter = filter.toLowerCase()
+              return (
+                normalizedTableName.includes(normalizedFilter) ||
+                levenshteinDistance(normalizedTableName, normalizedFilter) < 3
+              )
+            })
+            .map((table: QuestDB.Table) => (
+              <Table
+                designatedTimestamp={table.designatedTimestamp}
+                expanded={table.table_name === opened}
+                isScrolling={isScrolling}
+                key={table.table_name}
+                table_name={table.table_name}
+                onChange={handleChange}
+                partitionBy={table.partitionBy}
+                walEnabled={table.walEnabled}
+                dedup={table.dedup}
+              />
+            ))
         )}
         {!loading && <FlexSpacer />}
       </Content>
