@@ -66,6 +66,19 @@ yarn workspace @questdb/web-console run build
 
 3. Build process emits static HTML, CSS and JS files in `packages/web-console/dist`
 
+## Bundle size watcher
+Web Console uses [BundleWatcher](https://github.com/bundlewatch/bundlewatch) to make sure there is no unintentional blowup of assets size. The current limits, defined in the `package.json`, are as following:
+
+
+| File | Max allowed size |
+|--------|--------|
+| dist/vendor.*.js | 3MB |
+| dist/qdb.*.js | 500KB |
+| dist/qdb.*.css | 100KB |
+| dist/vendor.*.css | 100KB | 
+
+If you need to introduce a heavy library or anything that by design is expected to go over the defined limits, make sure to change the watcher configuration.
+
 ## Run tests
 
 ### Unit tests
