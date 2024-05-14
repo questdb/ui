@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { Button, Box, Input } from "@questdb/react-components"
 import { Filter3 } from "@styled-icons/remix-line"
 import { ErrorWarning } from "@styled-icons/remix-fill"
-import { IconWithTooltip } from "../../../components"
+import { PopperHover, Tooltip } from "../../../components"
 
 const Root = styled(Box).attrs({
   justifyContent: "space-between",
@@ -70,24 +70,25 @@ export const Toolbar = ({
         />
       </Filter>
       <Error suspendedTablesCount={suspendedTablesCount}>
-        <Button
-          disabled={suspendedTablesCount === 0}
-          skin="transparent"
-          onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
-          prefixIcon={
-            <IconWithTooltip
-              icon={<ErrorWarning size="18px" />}
-              tooltip={
-                suspendedTablesCount > 0
-                  ? `${filterSuspendedOnly ? "Hide" : "Show"} suspended tables`
-                  : "No suspended tables"
-              }
-              placement="bottom"
-            />
+        <PopperHover
+          placement="bottom"
+          trigger={
+            <Button
+              disabled={suspendedTablesCount === 0}
+              skin="transparent"
+              onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
+              prefixIcon={<ErrorWarning size="18px" />}
+            >
+              {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
+            </Button>
           }
         >
-          {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
-        </Button>
+          <Tooltip>
+            {suspendedTablesCount > 0
+              ? `${filterSuspendedOnly ? "Hide" : "Show"} suspended tables`
+              : "No suspended tables"}
+          </Tooltip>
+        </PopperHover>
       </Error>
     </Root>
   )
