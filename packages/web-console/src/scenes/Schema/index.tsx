@@ -120,6 +120,7 @@ const Schema = ({
   const [copied, setCopied] = useState(false)
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
+  const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -175,6 +176,16 @@ const Schema = ({
     )
   }
 
+  const fetchColumns = async () => {
+    const response = await quest.query<QuestDB.InformationSchemaColumn>(
+      "information_schema.columns()",
+    )
+    if (response && response && response.type === QuestDB.Type.DQL) {
+      setColumns(response.data)
+      dispatch(actions.query.setColumns(response.data))
+    }
+  }
+
   const copySchemasToClipboard = async () => {
     if (!tables) return
     const ddls = await Promise.all(
@@ -201,9 +212,11 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
+    void fetchColumns()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
+      void fetchColumns()
     })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
@@ -217,12 +230,19 @@ const Schema = ({
       // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
+        void fetchColumns()
       }
     })
 
-    window.addEventListener("focus", fetchTables)
+    window.addEventListener("focus", () => {
+      void fetchTables()
+      void fetchColumns()
+    })
 
-    window.removeEventListener("focus", fetchTables)
+    window.removeEventListener("focus", () => {
+      void fetchTables()
+      void fetchColumns()
+    })
   }, [])
 
   return (
@@ -297,10 +317,14 @@ const Schema = ({
             ?.filter((table: QuestDB.Table) => {
               const normalizedTableName = table.table_name.toLowerCase()
               const normalizedQuery = query.toLowerCase()
+              const tableColumns = columns
+                ?.filter((c) => c.table_name === table.table_name)
+                .map((c) => c.column_name)
               return (
                 (normalizedTableName.includes(normalizedQuery) ||
                   levenshteinDistance(normalizedTableName, normalizedQuery) <
-                    3) &&
+                    3 ||
+                  tableColumns?.find((c) => c.startsWith(query))) &&
                 (filterSuspendedOnly
                   ? table.walEnabled &&
                     walTables?.find((t) => t.name === table.table_name)

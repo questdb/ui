@@ -36,6 +36,12 @@ const StyledInput = styled(Input)`
   }
 `
 
+const StyledButton = styled(Button)`
+  &:disabled {
+    border: none;
+  }
+`
+
 const Error = styled(Box).attrs({ gap: "0.5rem" })<{
   suspendedTablesCount: number
 }>`
@@ -73,14 +79,14 @@ export const Toolbar = ({
         <PopperHover
           placement="bottom"
           trigger={
-            <Button
+            <StyledButton
               disabled={suspendedTablesCount === 0}
               skin="transparent"
               onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
               prefixIcon={<ErrorWarning size="18px" />}
             >
               {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
-            </Button>
+            </StyledButton>
           }
         >
           <Tooltip>

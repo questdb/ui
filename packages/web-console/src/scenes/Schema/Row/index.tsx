@@ -87,20 +87,9 @@ const Wrapper = styled.div<Pick<Props, "expanded">>`
   padding-left: 1rem;
   transition: background ${TransitionDuration.REG}ms;
 
-  &:hover
-    ${/* sc-selector */ PlusButton},
-    &:active
-    ${/* sc-selector */ PlusButton} {
-    opacity: 1;
-  }
-
   &:hover,
   &:active {
     background: ${color("selection")};
-  }
-
-  &:hover ${/* sc-selector */ Type} {
-    opacity: 0;
   }
 `
 

@@ -1,9 +1,5 @@
-import { uniq } from "../../../../utils"
-import {
-  CompletionItemKind,
-  CompletionItemPriority,
-  InformationSchemaColumn,
-} from "./types"
+import { uniq, InformationSchemaColumn } from "../../../../utils"
+import { CompletionItemKind, CompletionItemPriority } from "./types"
 import type { IRange } from "monaco-editor"
 
 export const getColumnCompletions = ({
