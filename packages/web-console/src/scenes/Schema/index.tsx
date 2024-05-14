@@ -119,6 +119,7 @@ const Schema = ({
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
   const [query, setQuery] = useState("")
+  const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -283,6 +284,8 @@ const Schema = ({
               walTables?.filter((t) => t.suspended).length ?? 0
             }
             setQuery={setQuery}
+            filterSuspendedOnly={filterSuspendedOnly}
+            setFilterSuspendedOnly={setFilterSuspendedOnly}
           />
         )}
         {loading ? (
@@ -295,8 +298,14 @@ const Schema = ({
               const normalizedTableName = table.table_name.toLowerCase()
               const normalizedQuery = query.toLowerCase()
               return (
-                normalizedTableName.includes(normalizedQuery) ||
-                levenshteinDistance(normalizedTableName, normalizedQuery) < 3
+                (normalizedTableName.includes(normalizedQuery) ||
+                  levenshteinDistance(normalizedTableName, normalizedQuery) <
+                    3) &&
+                (filterSuspendedOnly
+                  ? table.walEnabled &&
+                    walTables?.find((t) => t.name === table.table_name)
+                      ?.suspended
+                  : true)
               )
             })
             .map((table: QuestDB.Table) => (

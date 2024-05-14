@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { Box, Input } from "@questdb/react-components"
+import { Button, Box, Input } from "@questdb/react-components"
 import { Filter3 } from "@styled-icons/remix-line"
 import { ErrorWarning } from "@styled-icons/remix-fill"
 import { IconWithTooltip } from "../../../components"
@@ -39,16 +39,25 @@ const StyledInput = styled(Input)`
 const Error = styled(Box).attrs({ gap: "0.5rem" })<{
   suspendedTablesCount: number
 }>`
-  color: ${({ theme, suspendedTablesCount }) =>
-    theme.color[`${suspendedTablesCount > 0 ? "red" : "gray1"}`]};
+  &,
+  button {
+    color: ${({ theme, suspendedTablesCount }) =>
+      theme.color[`${suspendedTablesCount > 0 ? "red" : "gray1"}`]};
+    cursor: ${({ suspendedTablesCount }) =>
+      suspendedTablesCount > 0 ? "pointer" : "default"};
+  }
 `
 
 export const Toolbar = ({
   suspendedTablesCount,
   setQuery: setFilter,
+  filterSuspendedOnly,
+  setFilterSuspendedOnly,
 }: {
   suspendedTablesCount: number
   setQuery: (filter: string) => void
+  filterSuspendedOnly: boolean
+  setFilterSuspendedOnly: (filter: boolean) => void
 }) => {
   return (
     <Root>
@@ -61,16 +70,24 @@ export const Toolbar = ({
         />
       </Filter>
       <Error suspendedTablesCount={suspendedTablesCount}>
-        <IconWithTooltip
-          icon={<ErrorWarning size="18px" />}
-          tooltip={
-            suspendedTablesCount > 0
-              ? "Show suspended tables"
-              : "No suspended tables"
+        <Button
+          disabled={suspendedTablesCount === 0}
+          skin="transparent"
+          onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
+          prefixIcon={
+            <IconWithTooltip
+              icon={<ErrorWarning size="18px" />}
+              tooltip={
+                suspendedTablesCount > 0
+                  ? `${filterSuspendedOnly ? "Hide" : "Show"} suspended tables`
+                  : "No suspended tables"
+              }
+              placement="bottom"
+            />
           }
-          placement="bottom"
-        />
-        {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
+        >
+          {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
+        </Button>
       </Error>
     </Root>
   )
