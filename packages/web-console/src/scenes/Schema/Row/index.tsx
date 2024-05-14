@@ -33,6 +33,7 @@ import { Information } from "@styled-icons/remix-line"
 import { Table as TableIcon } from "@styled-icons/remix-line"
 import { FileList, PieChart } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
+import * as QuestDB from "../../../utils/questdb"
 
 import {
   SecondaryButton,
@@ -55,6 +56,7 @@ type Props = Readonly<{
   onClick?: (event: MouseEvent) => void
   partitionBy?: string
   walEnabled?: boolean
+  walTableData?: QuestDB.WalTable
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
@@ -141,11 +143,11 @@ const DotIcon = styled(CheckboxBlankCircle)`
   margin-right: 1rem;
 `
 
-const TitleIcon = styled(TableIcon)`
+const TitleIcon = styled(TableIcon)<{ suspended?: boolean }>`
   min-height: 18px;
   min-width: 18px;
   margin-right: 1rem;
-  color: ${color("cyan")};
+  color: ${({ theme, suspended }) => theme.color[suspended ? "red" : "cyan"]};
 `
 
 const InfoIconWrapper = styled.div`
@@ -181,6 +183,7 @@ const Row = ({
   name,
   partitionBy,
   walEnabled,
+  walTableData,
   onClick,
   suffix,
   tooltip,
@@ -201,7 +204,9 @@ const Row = ({
   return (
     <Wrapper className={className} expanded={expanded} onClick={onClick}>
       <FlexRow>
-        {kind === "table" && <TitleIcon size="18px" />}
+        {kind === "table" && (
+          <TitleIcon size="18px" suspended={walTableData?.suspended} />
+        )}
 
         {kind === "column" && indexed && (
           <IconWithTooltip
@@ -240,29 +245,20 @@ const Row = ({
           </Type>
         )}
 
-        {kind === "table" && partitionBy !== "NONE" && (
-          <PartitionByWrapper>
-            <PieChartIcon size="14px" />
-            <Text color="gray2">{partitionBy}</Text>
-          </PartitionByWrapper>
-        )}
+        {!walTableData?.suspended &&
+          kind === "table" &&
+          partitionBy !== "NONE" && (
+            <PartitionByWrapper>
+              <PieChartIcon size="14px" />
+              <Text color="gray2">{partitionBy}</Text>
+            </PartitionByWrapper>
+          )}
 
-        {kind === "table" && walEnabled && (
+        {!walTableData?.suspended && kind === "table" && walEnabled && (
           <PartitionByWrapper>
             <FileListIcon size="14px" />
             <Text color="yellow">WAL</Text>
           </PartitionByWrapper>
-        )}
-
-        {["column", "table"].includes(kind) && (
-          <PlusButton
-            onClick={handlePlusButtonClick}
-            size="sm"
-            tooltip={tooltip}
-          >
-            <CodeSSlash size="16px" />
-            <span>Add</span>
-          </PlusButton>
         )}
 
         {tooltip && description && (

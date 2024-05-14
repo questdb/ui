@@ -307,6 +307,9 @@ const Schema = ({
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
                 walEnabled={table.walEnabled}
+                walTableData={walTables?.find(
+                  (wt) => wt.name === table.table_name,
+                )}
                 dedup={table.dedup}
               />
             ))

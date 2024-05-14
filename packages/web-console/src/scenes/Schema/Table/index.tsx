@@ -45,6 +45,7 @@ type Props = QuestDB.Table &
     partitionBy: string
     expanded?: boolean
     onChange: (name: string) => void
+    walTableData?: QuestDB.WalTable
   }>
 
 const Wrapper = styled.div`
@@ -119,6 +120,7 @@ const Table = ({
   partitionBy,
   expanded = false,
   walEnabled,
+  walTableData,
   onChange,
   dedup,
 }: Props) => {
