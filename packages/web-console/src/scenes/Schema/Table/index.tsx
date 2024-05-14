@@ -195,6 +195,7 @@ const Table = ({
               }}
               partitionBy={partitionBy}
               walEnabled={walEnabled}
+              walTableData={walTableData}
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
             />

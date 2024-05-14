@@ -309,9 +309,9 @@ export class Client {
     this._controllers = []
   }
 
-  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
-    const result = await this.queryRaw(query, options)
-
+  static transformQueryRawResult = <T>(
+    result: QueryRawResult,
+  ): QueryResult<T> => {
     if (result.type === Type.DQL) {
       const { columns, count, dataset, timings } = result
 
@@ -337,6 +337,17 @@ export class Client {
     }
 
     return result
+  }
+
+  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
+    const result = await this.queryRaw(query, options)
+
+    return Client.transformQueryRawResult<T>(result)
+  }
+
+  // TODO: Remove mocked method
+  async mockQueryResult<T>(result: QueryRawResult): Promise<QueryResult<T>> {
+    return Client.transformQueryRawResult<T>(result)
   }
 
   async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {

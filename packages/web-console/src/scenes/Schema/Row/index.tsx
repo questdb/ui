@@ -143,11 +143,11 @@ const DotIcon = styled(CheckboxBlankCircle)`
   margin-right: 1rem;
 `
 
-const TitleIcon = styled(TableIcon)<{ suspended?: boolean }>`
+const TitleIcon = styled(TableIcon)<{ $suspended?: boolean }>`
   min-height: 18px;
   min-width: 18px;
   margin-right: 1rem;
-  color: ${({ theme, suspended }) => theme.color[suspended ? "red" : "cyan"]};
+  color: ${({ theme, $suspended }) => theme.color[$suspended ? "red" : "cyan"]};
 `
 
 const InfoIconWrapper = styled.div`
@@ -205,7 +205,7 @@ const Row = ({
     <Wrapper className={className} expanded={expanded} onClick={onClick}>
       <FlexRow>
         {kind === "table" && (
-          <TitleIcon size="18px" suspended={walTableData?.suspended} />
+          <TitleIcon size="18px" $suspended={walTableData?.suspended} />
         )}
 
         {kind === "column" && indexed && (
