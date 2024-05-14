@@ -110,6 +110,14 @@ export type Table = {
   dedup: boolean
 }
 
+export type WalTable = {
+  name: string
+  suspended: boolean
+  writerTxn: number
+  writerLagTxtCount: number
+  sequencerTxn: number
+}
+
 export type Column = {
   column: string
   indexed: boolean

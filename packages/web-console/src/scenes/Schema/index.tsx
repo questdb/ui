@@ -107,9 +107,9 @@ const Schema = ({
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
+  const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
   const [opened, setOpened] = useState<string>()
   const [isScrolling, setIsScrolling] = useState(false)
-  const [searchVisible, setSearchVisible] = useState(false)
   const { consoleConfig } = useSettings()
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
@@ -148,6 +148,13 @@ const Schema = ({
     )
   }
 
+  const fetchWalTables = async () => {
+    const response = await quest.query<QuestDB.WalTable>("wal_tables()")
+    if (response && response.type === QuestDB.Type.DQL) {
+      setWalTables(response.data)
+    }
+  }
+
   const copySchemasToClipboard = async () => {
     if (!tables) return
     const ddls = await Promise.all(
@@ -174,9 +181,11 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
+    void fetchWalTables()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
+      void fetchWalTables()
     })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
@@ -190,11 +199,19 @@ const Schema = ({
       // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
+        void fetchWalTables()
       }
     })
 
-    window.addEventListener("focus", fetchTables)
-    return () => window.removeEventListener("focus", fetchTables)
+    window.addEventListener("focus", () => {
+      void fetchTables()
+      void fetchWalTables()
+    })
+
+    window.removeEventListener("focus", () => {
+      void fetchTables()
+      void fetchWalTables()
+    })
   }, [])
 
   return (
