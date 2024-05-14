@@ -116,7 +116,7 @@ const Schema = ({
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
-  const [filter, setFilter] = useState("")
+  const [query, setQuery] = useState("")
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -129,12 +129,27 @@ const Schema = ({
       from(quest.showTables()).pipe(startWith(null)),
       of(true).pipe(delay(1000), startWith(false)),
     ).subscribe(
-      ([response]) => {
+      async ([response]) => {
         if (response && response.type === QuestDB.Type.DQL) {
           setLoadingError(null)
           errorRef.current = null
           setTables(response.data)
           dispatch(actions.query.setTables(response.data))
+          // Fetch WAL info about the tables
+          const walTablesResponse = await quest.query<QuestDB.WalTable>(
+            "wal_tables()",
+          )
+          if (
+            walTablesResponse &&
+            walTablesResponse.type === QuestDB.Type.DQL
+          ) {
+            // Filter out the system tables
+            setWalTables(
+              walTablesResponse.data.filter((wt) =>
+                response.data.map((t) => t.table_name).includes(wt.name),
+              ),
+            )
+          }
         } else {
           setLoading(false)
         }
@@ -183,11 +198,9 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
-    void fetchWalTables()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
-      void fetchWalTables()
     })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
@@ -201,19 +214,12 @@ const Schema = ({
       // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
-        void fetchWalTables()
       }
     })
 
-    window.addEventListener("focus", () => {
-      void fetchTables()
-      void fetchWalTables()
-    })
+    window.addEventListener("focus", fetchTables)
 
-    window.removeEventListener("focus", () => {
-      void fetchTables()
-      void fetchWalTables()
-    })
+    window.removeEventListener("focus", fetchTables)
   }, [])
 
   return (
@@ -269,7 +275,14 @@ const Schema = ({
         ref={scrollerRef}
         onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
       >
-        <Toolbar setFilter={setFilter} />
+        {tables && tables.length > 0 && (
+          <Toolbar
+            suspendedTablesCount={
+              walTables?.filter((t) => t.suspended).length ?? 0
+            }
+            setQuery={setQuery}
+          />
+        )}
         {loading ? (
           <Loader size="48px" />
         ) : loadingError ? (
@@ -278,10 +291,10 @@ const Schema = ({
           tables
             ?.filter((table: QuestDB.Table) => {
               const normalizedTableName = table.table_name.toLowerCase()
-              const normalizedFilter = filter.toLowerCase()
+              const normalizedQuery = query.toLowerCase()
               return (
-                normalizedTableName.includes(normalizedFilter) ||
-                levenshteinDistance(normalizedTableName, normalizedFilter) < 3
+                normalizedTableName.includes(normalizedQuery) ||
+                levenshteinDistance(normalizedTableName, normalizedQuery) < 3
               )
             })
             .map((table: QuestDB.Table) => (
