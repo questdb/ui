@@ -44,6 +44,7 @@ import {
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { useEditor } from "../../../providers"
+import { SuspensionPopover } from "../SuspensionPopover"
 
 type Props = Readonly<{
   className?: string
@@ -268,6 +269,10 @@ const Row = ({
             <CodeSSlash size="16px" />
             <span>Add</span>
           </PlusButton>
+        )}
+
+        {walTableData?.suspended && kind === "table" && (
+          <SuspensionPopover walTableData={walTableData} />
         )}
 
         {tooltip && description && (

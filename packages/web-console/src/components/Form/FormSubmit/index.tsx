@@ -5,7 +5,7 @@ import { Button } from "@questdb/react-components"
 type Props = {
   children: React.ReactNode
   disabled?: boolean
-  variant?: "error" | "success" | "warning" | "primary"
+  variant?: "error" | "success" | "warning" | "primary" | "secondary"
   prefixIcon?: ButtonProps["prefixIcon"]
 }
 
