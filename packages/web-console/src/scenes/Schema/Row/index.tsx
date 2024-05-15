@@ -28,6 +28,7 @@ import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
+import { CodeSSlash } from "@styled-icons/remix-line"
 import { Information } from "@styled-icons/remix-line"
 import { Table as TableIcon } from "@styled-icons/remix-line"
 import { FileList, PieChart } from "@styled-icons/remix-line"
@@ -87,9 +88,18 @@ const Wrapper = styled.div<Pick<Props, "expanded">>`
   padding-left: 1rem;
   transition: background ${TransitionDuration.REG}ms;
 
+  &:hover
+    ${/* sc-selector */ PlusButton},
+    &:active
+    ${/* sc-selector */ PlusButton} {
+    opacity: 1;
+  }
   &:hover,
   &:active {
     background: ${color("selection")};
+  }
+  &:hover ${/* sc-selector */ Type} {
+    opacity: 0;
   }
 `
 
@@ -177,6 +187,18 @@ const Row = ({
   tooltip,
   type,
 }: Props) => {
+  const { insertTextAtCursor } = useEditor()
+
+  const handlePlusButtonClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation()
+      insertTextAtCursor(
+        kind === "table" && !/^[a-z0-9_]+$/i.test(name) ? `"${name}"` : name,
+      )
+    },
+    [name, kind],
+  )
+
   return (
     <Wrapper className={className} expanded={expanded} onClick={onClick}>
       <FlexRow>
@@ -235,6 +257,17 @@ const Row = ({
             <FileListIcon size="14px" />
             <Text color="yellow">WAL</Text>
           </PartitionByWrapper>
+        )}
+
+        {["column", "table"].includes(kind) && !walTableData?.suspended && (
+          <PlusButton
+            onClick={handlePlusButtonClick}
+            size="sm"
+            tooltip={tooltip}
+          >
+            <CodeSSlash size="16px" />
+            <span>Add</span>
+          </PlusButton>
         )}
 
         {tooltip && description && (
