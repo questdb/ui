@@ -3,7 +3,7 @@ import { PopperToggle, Text } from "../../../components"
 import { Form } from "../../../components/Form"
 import { Box, Button } from "@questdb/react-components"
 import styled from "styled-components"
-import { ExternalLink, Restart } from "@styled-icons/remix-line"
+import { ArrowDownS, ExternalLink, Restart } from "@styled-icons/remix-line"
 import * as QuestDB from "../../../utils/questdb"
 
 const Root = styled.div`
@@ -14,6 +14,20 @@ const Root = styled.div`
   border: 1px #723131 solid;
   border-radius: 4px;
   box-shadow: 0 0 25px 5px rgba(0, 0, 0, 0.2);
+`
+
+const Trigger = styled.button<{ active: boolean }>`
+  display: flex;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+  border: 1px #723131 solid;
+  color: #f47474;
+  border-radius: 4px;
+  padding: 5px 10px;
+  gap: 1rem;
+
+  svg {
+    transform: rotate(${(props) => (props.active ? "180deg" : "0deg")});
+  }
 `
 
 const ContentBlockBox = styled(Box).attrs({
@@ -61,7 +75,12 @@ export const SuspensionPopover = ({
   return (
     <PopperToggle
       placement="bottom-start"
-      trigger={<span>Suspended</span>}
+      trigger={
+        <Trigger active={active}>
+          <span>Suspended</span>
+          <ArrowDownS size="18px" />
+        </Trigger>
+      }
       active={active}
       onToggle={setActive}
     >
