@@ -19,8 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'yarn'
+          node-version: "20"
+          cache: "yarn"
 
       - name: Install dependencies
         run: yarn install --immutable --immutable-cache
@@ -30,6 +30,9 @@ jobs:
 
       - name: Build @questdb/web-console
         run: yarn workspace @questdb/web-console run build
+
+      - name: Run bundle watcher on @questdb/web-console
+        run: yarn workspace @questdb/web-console bundlewatch
 
       - name: Run @questdb/web-console unit tests
         run: yarn workspace @questdb/web-console run test:prod
