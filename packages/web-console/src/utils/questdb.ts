@@ -113,9 +113,9 @@ export type Table = {
 export type WalTable = {
   name: string
   suspended: boolean
-  writerTxn: number
-  writerLagTxtCount: number
-  sequencerTxn: number
+  writerTxn: string
+  writerLagTxtCount: string
+  sequencerTxn: string
 }
 
 export type Column = {

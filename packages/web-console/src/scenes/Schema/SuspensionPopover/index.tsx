@@ -13,6 +13,7 @@ const Root = styled.div`
   background: ${({ theme }) => theme.color.backgroundDarker};
   border: 1px #723131 solid;
   border-radius: 4px;
+  box-shadow: 0 0 25px 5px rgba(0, 0, 0, 0.2);
 `
 
 const ContentBlockBox = styled(Box).attrs({
@@ -89,13 +90,15 @@ export const SuspensionPopover = ({
             </StyledTable>
           </ContentBlockBox>
           <ContentBlockBox gap="0.5rem">
-            <Text color="gray2">Start at:</Text>
+            <Text color="gray2">Start txn #:</Text>
             <Form name="resume_transaction_form" onSubmit={() => {}}>
               <FormWrapper>
                 <Form.Item name="resume_transaction_id">
                   <TransactionInput
                     name="resume_transaction_id"
-                    placeholder={`#${walTableData.writerTxn + 1}`}
+                    placeholder={(
+                      parseInt(walTableData.writerTxn) + 1
+                    ).toString()}
                   />
                 </Form.Item>
                 <Form.Submit
