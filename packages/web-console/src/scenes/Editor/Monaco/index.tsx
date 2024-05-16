@@ -2,8 +2,7 @@ import type { BaseSyntheticEvent } from "react"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import Editor, { loader, Monaco } from "@monaco-editor/react"
 import dracula from "./dracula"
-import type { IDisposable, IRange } from "monaco-editor"
-import { editor } from "monaco-editor"
+import type { editor, IDisposable, IRange } from "monaco-editor"
 import { theme } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
 import type { Request } from "./utils"
@@ -34,15 +33,12 @@ import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { InformationSchemaColumn } from "./questdb-sql/types"
-import IEditorDecorationsCollection = editor.IEditorDecorationsCollection
 
 loader.config({
   paths: {
     vs: "assets/vs",
   },
 })
-
-type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 const Content = styled(PaneContent)`
   position: relative;
@@ -110,15 +106,15 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
-  const decorationsRef = useRef<IEditorDecorationsCollection>()
+  const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
     DEFAULT_LINE_CHARS +
-    activeBuffer.value.split("\n").length.toString().length -
-    1,
+      activeBuffer.value.split("\n").length.toString().length -
+      1,
   )
 
   const toggleRunning = (isRefresh: boolean = false) => {
@@ -151,7 +147,7 @@ const MonacoEditor = () => {
 
   const renderLineMarkings = (
     monaco: Monaco,
-    editor: IStandaloneCodeEditor,
+    editor: editor.IStandaloneCodeEditor,
   ) => {
     const queryAtCursor = getQueryFromCursor(editor)
     const model = editor.getModel()
@@ -194,21 +190,21 @@ const MonacoEditor = () => {
             },
             ...(errorRangeRef.current &&
             cursorMatch.range.startLineNumber !==
-            errorRangeRef.current.startLineNumber
+              errorRangeRef.current.startLineNumber
               ? [
-                {
-                  range: new monaco.Range(
-                    errorRangeRef.current.startLineNumber,
-                    0,
-                    errorRangeRef.current.startLineNumber,
-                    0,
-                  ),
-                  options: {
-                    isWholeLine: false,
-                    glyphMarginClassName: "errorGlyph",
+                  {
+                    range: new monaco.Range(
+                      errorRangeRef.current.startLineNumber,
+                      0,
+                      errorRangeRef.current.startLineNumber,
+                      0,
+                    ),
+                    options: {
+                      isWholeLine: false,
+                      glyphMarginClassName: "errorGlyph",
+                    },
                   },
-                },
-              ]
+                ]
               : []),
           ])
         }
@@ -216,7 +212,7 @@ const MonacoEditor = () => {
     }
   }
 
-  const onMount = (editor: IStandaloneCodeEditor, monaco: Monaco) => {
+  const onMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
@@ -302,7 +298,7 @@ const MonacoEditor = () => {
               renderLineMarkings(monacoRef.current, editorRef?.current)
             }
 
-            if (result.type === QuestDB.Type.DDL) {
+            if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
               dispatch(
                 actions.query.addNotification({
                   content: (

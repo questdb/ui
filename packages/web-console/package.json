@@ -1,6 +1,6 @@
 {
   "name": "@questdb/web-console",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "Apache-2.0",
   "description": "QuestDB Console",
   "files": [
@@ -60,6 +60,7 @@
     "js-base64": "^3.7.7",
     "js-sha256": "^0.11.0",
     "monaco-editor": "^0.44.0",
+    "posthog-js": "^1.131.2",
     "prop-types": "^15.8.1",
     "ramda": "0.27.1",
     "react": "17.0.2",
@@ -107,6 +108,7 @@
     "babel-plugin-import": "^1.13.8",
     "babel-plugin-styled-components": "^2.0.7",
     "bundle-stats-webpack-plugin": "^4.7.6",
+    "bundlewatch": "^0.3.3",
     "clean-webpack-plugin": "3.0.0",
     "copy-webpack-plugin": "^11.0.0",
     "cross-env": "7.0.2",
@@ -149,5 +151,29 @@
   },
   "author": {
     "name": "QuestDB"
+  },
+  "bundlewatch": {
+    "files": [
+      {
+        "path": "dist/vendor.*.js",
+        "maxSize": "3MB",
+        "compression": "none"
+      },
+      {
+        "path": "dist/qdb.*.js",
+        "maxSize": "500KB",
+        "compression": "none"
+      },
+      {
+        "path": "dist/qdb.*.css",
+        "maxSize": "100KB",
+        "compression": "none"
+      },
+      {
+        "path": "dist/vendor.*.css",
+        "maxSize": "100KB",
+        "compression": "none"
+      }
+    ]
   }
 }

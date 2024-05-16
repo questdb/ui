@@ -1,4 +1,4 @@
-import { editor } from "monaco-editor"
+import type { editor } from "monaco-editor"
 
 const mainBackground = "#2c2e3d"
 

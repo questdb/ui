@@ -35,6 +35,7 @@ type RawData = Record<string, Value>
 
 export enum Type {
   DDL = "ddl",
+  DML = "dml",
   DQL = "dql",
   ERROR = "error",
 }
@@ -56,6 +57,7 @@ type RawDqlResult = {
   count: number
   dataset: DatasetType[]
   ddl: undefined
+  dml: undefined
   error: undefined
   query: string
   timings: Timings
@@ -64,10 +66,17 @@ type RawDqlResult = {
 
 type RawDdlResult = {
   ddl: "OK"
+  dml: undefined
+}
+
+type RawDmlResult = {
+  ddl: undefined
+  dml: "OK"
 }
 
 type RawErrorResult = {
   ddl: undefined
+  dml: undefined
   error: "<error message>"
   position: number
   query: string
@@ -78,7 +87,12 @@ type DdlResult = {
   type: Type.DDL
 }
 
-type RawResult = RawDqlResult | RawDdlResult | RawErrorResult
+type DmlResult = {
+  query: string
+  type: Type.DML
+}
+
+type RawResult = RawDqlResult | RawDmlResult | RawDdlResult | RawErrorResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
@@ -86,7 +100,8 @@ export type ErrorResult = RawErrorResult & {
 }
 
 export type QueryRawResult =
-  | (Omit<RawDqlResult, "ddl"> & { type: Type.DQL })
+  | (Omit<RawDqlResult, "ddl" | "dml"> & { type: Type.DQL })
+  | DmlResult
   | DdlResult
   | ErrorResult
 
@@ -100,6 +115,7 @@ export type QueryResult<T extends Record<string, any>> =
       explain?: Explain
     }
   | ErrorResult
+  | DmlResult
   | DdlResult
 
 export type Table = {
@@ -277,7 +293,7 @@ export class Client {
           Client.refreshTokenPending = false
           return resolve(true)
         }
-      }, 100)
+      }, 50)
     })
   }
 
@@ -343,23 +359,25 @@ export class Client {
 
     this._controllers.push(controller)
     let response: Response
-    const start = new Date()
 
     if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
       await this.refreshAuthToken()
     }
 
-    await new Promise((resolve) => {
-      const interval = setInterval(() => {
-        if (!Client.refreshTokenPending) {
-          clearInterval(interval)
-          return resolve(true)
-        }
-      }, 100)
-    })
+    if (Client.refreshTokenPending) {
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (!Client.refreshTokenPending) {
+            clearInterval(interval)
+            return resolve(true)
+          }
+        }, 50)
+      })
+    }
 
     Client.numOfPendingQueries++
 
+    const start = new Date()
     try {
       response = await fetch(
         `${this._host}/exec?${Client.encodeParams(payload)}`,
@@ -379,7 +397,7 @@ export class Client {
 
       if (error instanceof DOMException) {
         // eslint-disable-next-line prefer-promise-reject-errors
-        return await Promise.reject({
+        return Promise.reject({
           ...err,
           error:
             error.code === 20
@@ -391,7 +409,7 @@ export class Client {
       eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
       // eslint-disable-next-line prefer-promise-reject-errors
-      return await Promise.reject(genericErrorPayload)
+      return Promise.reject(genericErrorPayload)
     } finally {
       const index = this._controllers.indexOf(controller)
 
@@ -423,9 +441,16 @@ export class Client {
         }
       }
 
+      if (data.dml) {
+        return {
+          query,
+          type: Type.DML,
+        }
+      }
+
       if (data.error) {
         // eslint-disable-next-line prefer-promise-reject-errors
-        return await Promise.reject({
+        return Promise.reject({
           ...data,
           type: Type.ERROR,
         })
@@ -471,7 +496,7 @@ export class Client {
     }
 
     // eslint-disable-next-line prefer-promise-reject-errors
-    return await Promise.reject(errorPayload)
+    return Promise.reject(errorPayload)
   }
 
   async showTables(): Promise<QueryResult<Table>> {
