@@ -35,6 +35,7 @@ type RawData = Record<string, Value>
 
 export enum Type {
   DDL = "ddl",
+  DML = "dml",
   DQL = "dql",
   ERROR = "error",
 }
@@ -56,6 +57,7 @@ type RawDqlResult = {
   count: number
   dataset: DatasetType[]
   ddl: undefined
+  dml: undefined
   error: undefined
   query: string
   timings: Timings
@@ -64,10 +66,17 @@ type RawDqlResult = {
 
 type RawDdlResult = {
   ddl: "OK"
+  dml: undefined
+}
+
+type RawDmlResult = {
+  ddl: undefined
+  dml: "OK"
 }
 
 type RawErrorResult = {
   ddl: undefined
+  dml: undefined
   error: "<error message>"
   position: number
   query: string
@@ -78,7 +87,12 @@ type DdlResult = {
   type: Type.DDL
 }
 
-type RawResult = RawDqlResult | RawDdlResult | RawErrorResult
+type DmlResult = {
+  query: string
+  type: Type.DML
+}
+
+type RawResult = RawDqlResult | RawDmlResult | RawDdlResult | RawErrorResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
@@ -86,7 +100,8 @@ export type ErrorResult = RawErrorResult & {
 }
 
 export type QueryRawResult =
-  | (Omit<RawDqlResult, "ddl"> & { type: Type.DQL })
+  | (Omit<RawDqlResult, "ddl" | "dml"> & { type: Type.DQL })
+  | DmlResult
   | DdlResult
   | ErrorResult
 
@@ -100,6 +115,7 @@ export type QueryResult<T extends Record<string, any>> =
       explain?: Explain
     }
   | ErrorResult
+  | DmlResult
   | DdlResult
 
 export type Table = {
@@ -448,6 +464,13 @@ export class Client {
         return {
           query,
           type: Type.DDL,
+        }
+      }
+
+      if (data.dml) {
+        return {
+          query,
+          type: Type.DML,
         }
       }
 
