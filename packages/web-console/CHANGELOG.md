@@ -16,6 +16,26 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.4.2 - 2024.05.16
+
+### Added
+
+- Add bundle size watcher task [#288](https://github.com/questdb/ui/pull/288)
+- Add PostHog support [#284](https://github.com/questdb/ui/pull/284)
+- Support varchar column type [#281](https://github.com/questdb/ui/pull/281)
+
+### Fixed
+
+- Handling DML response for INSERT and UPDATE
+  [#290](https://github.com/questdb/ui/pull/290)
+
+## 0.4.1 - 2024.05.08
+
+### Fixed
+
+- Align displayed timings with real fetch time
+  [#282](https://github.com/questdb/ui/pull/282)
+
 ## 0.4.0 - 2024.04.29
 
 ### Added
