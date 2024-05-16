@@ -24,7 +24,7 @@ export const Actions = ({
 }) => {
   const newEntry = {
     name: "",
-    type: action === "import" ? "" : "STRING",
+    type: action === "import" ? "" : "VARCHAR",
     pattern: "",
     precision: "",
   }
