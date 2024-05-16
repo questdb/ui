@@ -26,6 +26,7 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "LONG256", value: "LONG256" },
   { label: "SHORT", value: "SHORT" },
   { label: "STRING", value: "STRING" },
+  { label: "VARCHAR", value: "VARCHAR" },
   { label: "SYMBOL", value: "SYMBOL" },
   { label: "TIMESTAMP", value: "TIMESTAMP" },
   { label: "UUID", value: "UUID" },
@@ -107,7 +108,7 @@ export const Column = ({
 
           <Form.Item name={`schemaColumns.${index}.type`}>
             <Form.Select
-              defaultValue={action === "import" ? column.type : "STRING"}
+              defaultValue={action === "import" ? column.type : "VARCHAR"}
               name={`schemaColumns.${index}.type`}
               options={supportedColumnTypes.filter((type) =>
                 type.value === "" && action === "add" ? false : true,
