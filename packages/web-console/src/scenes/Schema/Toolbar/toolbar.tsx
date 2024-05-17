@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import { Button, Box, Input } from "@questdb/react-components"
-import { Filter3 } from "@styled-icons/remix-line"
+import { Close, Filter3 } from "@styled-icons/remix-line"
 import { ErrorWarning } from "@styled-icons/remix-fill"
 import { PopperHover, Tooltip } from "../../../components"
 
@@ -28,8 +28,16 @@ const FilterIcon = styled(Filter3)`
   left: 1rem;
 `
 
+const CloseIcon = styled(Close)`
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 0.5rem;
+`
+
 const StyledInput = styled(Input)`
   padding-left: 3.5rem;
+  padding-right: 3.5rem;
 
   &::placeholder {
     color: ${({ theme }) => theme.color.foreground};
@@ -56,7 +64,7 @@ const Error = styled(Box).attrs({ gap: "0.5rem" })<{
 
 export const Toolbar = ({
   suspendedTablesCount,
-  setQuery: setFilter,
+  setQuery,
   filterSuspendedOnly,
   setFilterSuspendedOnly,
 }: {
@@ -65,14 +73,26 @@ export const Toolbar = ({
   filterSuspendedOnly: boolean
   setFilterSuspendedOnly: (filter: boolean) => void
 }) => {
+  const queryRef = React.useRef<HTMLInputElement>(null)
+
   return (
     <Root>
       <Filter>
         <FilterIcon size="20px" />
+        {queryRef.current?.value && (
+          <CloseIcon
+            size="20px"
+            onClick={() => {
+              setQuery("")
+              queryRef.current?.value && (queryRef.current.value = "")
+            }}
+          />
+        )}
         <StyledInput
+          ref={queryRef}
           name="table_filter"
           placeholder="Filter..."
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
         />
       </Filter>
       <Error suspendedTablesCount={suspendedTablesCount}>
