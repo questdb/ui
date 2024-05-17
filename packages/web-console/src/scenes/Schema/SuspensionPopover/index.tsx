@@ -119,8 +119,10 @@ export const SuspensionPopover = ({
             <Text color="gray2">Transaction stats:</Text>
             <StyledTable>
               <thead>
-                <th>TableWriter</th>
-                <th>Sequencer</th>
+                <tr>
+                  <th>TableWriter</th>
+                  <th>Sequencer</th>
+                </tr>
               </thead>
               <tbody>
                 <tr>
