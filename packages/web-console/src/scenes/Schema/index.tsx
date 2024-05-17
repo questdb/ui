@@ -30,12 +30,11 @@ import React, {
   useEffect,
   useState,
   useContext,
+  useReducer,
 } from "react"
 import { useDispatch } from "react-redux"
-import { from, combineLatest, of } from "rxjs"
-import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import { FileCopy, Loader3, Refresh, Search } from "@styled-icons/remix-line"
+import { FileCopy, Loader3, Refresh } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import {
   PaneContent,
@@ -101,10 +100,25 @@ const StyledCheckboxCircle = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};
 `
 
+enum View {
+  loading,
+  error,
+  ready,
+}
+
+type State = { view: View; loadingError?: ErrorResult }
+
+const initialState: State = {
+  view: View.loading,
+}
+
+const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
+
 const Schema = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
+  const [state, dispatchState] = useReducer(reducer, initialState)
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
@@ -126,63 +140,49 @@ const Schema = ({
     setOpened(name === opened ? undefined : name)
   }
 
-  const fetchTables = () => {
-    setLoading(true)
-    setOpened(undefined)
-    combineLatest(
-      from(quest.showTables()).pipe(startWith(null)),
-      of(true).pipe(delay(1000), startWith(false)),
-    ).subscribe(
-      async ([response]) => {
-        if (response && response.type === QuestDB.Type.DQL) {
-          setLoadingError(null)
-          errorRef.current = null
-          setTables(response.data)
-          dispatch(actions.query.setTables(response.data))
-          // Fetch WAL info about the tables
-          // const walTablesResponse = await quest.query<QuestDB.WalTable>(
-          //   "wal_tables()",
-          // )
-
-          // TODO: Remove mocked query result
-          const walTablesResponse =
-            await quest.mockQueryResult<QuestDB.WalTable>(
-              mockSuspendedResponse as QuestDB.QueryRawResult,
-            )
-
-          if (
-            walTablesResponse &&
-            walTablesResponse.type === QuestDB.Type.DQL
-          ) {
-            // Filter out the system tables
-            setWalTables(
-              walTablesResponse.data.filter((wt) =>
-                response.data.map((t) => t.table_name).includes(wt.name),
-              ),
-            )
-          }
-        } else {
-          setLoading(false)
+  const fetchTables = async () => {
+    try {
+      const response = await quest.showTables()
+      if (response && response.type === QuestDB.Type.DQL) {
+        errorRef.current = null
+        setTables(response.data)
+        dispatch(actions.query.setTables(response.data))
+        // Fetch WAL info about the tables
+        const walTablesResponse = await quest.query<QuestDB.WalTable>(
+          "wal_tables()",
+        )
+        if (walTablesResponse && walTablesResponse.type === QuestDB.Type.DQL) {
+          // Filter out the system tables
+          setWalTables(
+            walTablesResponse.data.filter((wt) =>
+              response.data.map((t) => t.table_name).includes(wt.name),
+            ),
+          )
         }
-      },
-      (error) => {
-        if (isServerError(error)) {
-          setLoadingError(error)
-        }
-      },
-      () => {
-        setLoading(false)
-      },
-    )
+        dispatchState({ view: View.ready })
+      } else {
+        dispatchState({ view: View.error })
+      }
+    } catch (error) {
+      dispatchState({
+        view: View.error,
+      })
+    }
   }
 
   const fetchColumns = async () => {
-    const response = await quest.query<QuestDB.InformationSchemaColumn>(
-      "information_schema.columns()",
-    )
-    if (response && response && response.type === QuestDB.Type.DQL) {
-      setColumns(response.data)
-      dispatch(actions.query.setColumns(response.data))
+    try {
+      const response = await quest.query<QuestDB.InformationSchemaColumn>(
+        "information_schema.columns()",
+      )
+      if (response && response && response.type === QuestDB.Type.DQL) {
+        setColumns(response.data)
+        dispatch(actions.query.setColumns(response.data))
+      }
+    } catch (error) {
+      dispatchState({
+        view: View.error,
+      })
     }
   }
 
@@ -239,11 +239,78 @@ const Schema = ({
       void fetchColumns()
     })
 
-    window.removeEventListener("focus", () => {
-      void fetchTables()
-      void fetchColumns()
-    })
+    return () =>
+      window.removeEventListener("focus", () => {
+        void fetchTables()
+        void fetchColumns()
+      })
   }, [])
+
+  const views: { [key in View]: () => React.ReactNode } = {
+    [View.loading]: () => () => {
+      const [loaderShown, setLoaderShown] = useState(false)
+
+      useEffect(() => {
+        const timeout = setTimeout(() => setLoaderShown(true), 1000)
+        return () => clearTimeout(timeout)
+      }, [])
+
+      return loaderShown ? <Loader size="22px" /> : null
+    },
+    [View.error]: () =>
+      loadingError ? <LoadingError error={loadingError} /> : <FlexSpacer />,
+    [View.ready]: () => (
+      <>
+        {tables && tables.length > 0 && (
+          <Toolbar
+            suspendedTablesCount={
+              walTables?.filter((t) => t.suspended).length ?? 0
+            }
+            setQuery={setQuery}
+            filterSuspendedOnly={filterSuspendedOnly}
+            setFilterSuspendedOnly={setFilterSuspendedOnly}
+          />
+        )}
+        {tables &&
+          tables
+            .filter((table: QuestDB.Table) => {
+              const normalizedTableName = table.table_name.toLowerCase()
+              const normalizedQuery = query.toLowerCase()
+              const tableColumns = columns
+                ?.filter((c) => c.table_name === table.table_name)
+                .map((c) => c.column_name)
+              return (
+                (normalizedTableName.includes(normalizedQuery) ||
+                  levenshteinDistance(normalizedTableName, normalizedQuery) <
+                    3 ||
+                  tableColumns?.find((c) => c.startsWith(query))) &&
+                (filterSuspendedOnly
+                  ? table.walEnabled &&
+                    walTables?.find((t) => t.name === table.table_name)
+                      ?.suspended
+                  : true)
+              )
+            })
+            .map((table: QuestDB.Table) => (
+              <Table
+                designatedTimestamp={table.designatedTimestamp}
+                expanded={table.table_name === opened}
+                isScrolling={isScrolling}
+                key={table.table_name}
+                table_name={table.table_name}
+                onChange={handleChange}
+                partitionBy={table.partitionBy}
+                walEnabled={table.walEnabled}
+                walTableData={walTables?.find(
+                  (wt) => wt.name === table.table_name,
+                )}
+                dedup={table.dedup}
+              />
+            ))}
+        {!loading && <FlexSpacer />}
+      </>
+    ),
+  }
 
   return (
     <Wrapper ref={innerRef} {...rest}>
@@ -298,58 +365,7 @@ const Schema = ({
         ref={scrollerRef}
         onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
       >
-        {tables && tables.length > 0 && (
-          <Toolbar
-            suspendedTablesCount={
-              walTables?.filter((t) => t.suspended).length ?? 0
-            }
-            setQuery={setQuery}
-            filterSuspendedOnly={filterSuspendedOnly}
-            setFilterSuspendedOnly={setFilterSuspendedOnly}
-          />
-        )}
-        {loading ? (
-          <Loader size="48px" />
-        ) : loadingError ? (
-          <LoadingError error={loadingError} />
-        ) : (
-          tables
-            ?.filter((table: QuestDB.Table) => {
-              const normalizedTableName = table.table_name.toLowerCase()
-              const normalizedQuery = query.toLowerCase()
-              const tableColumns = columns
-                ?.filter((c) => c.table_name === table.table_name)
-                .map((c) => c.column_name)
-              return (
-                (normalizedTableName.includes(normalizedQuery) ||
-                  levenshteinDistance(normalizedTableName, normalizedQuery) <
-                    3 ||
-                  tableColumns?.find((c) => c.startsWith(query))) &&
-                (filterSuspendedOnly
-                  ? table.walEnabled &&
-                    walTables?.find((t) => t.name === table.table_name)
-                      ?.suspended
-                  : true)
-              )
-            })
-            .map((table: QuestDB.Table) => (
-              <Table
-                designatedTimestamp={table.designatedTimestamp}
-                expanded={table.table_name === opened}
-                isScrolling={isScrolling}
-                key={table.table_name}
-                table_name={table.table_name}
-                onChange={handleChange}
-                partitionBy={table.partitionBy}
-                walEnabled={table.walEnabled}
-                walTableData={walTables?.find(
-                  (wt) => wt.name === table.table_name,
-                )}
-                dedup={table.dedup}
-              />
-            ))
-        )}
-        {!loading && <FlexSpacer />}
+        {views[state.view]()}
       </Content>
     </Wrapper>
   )
