@@ -104,6 +104,19 @@ const Wrapper = styled.div<Pick<Props, "expanded">>`
   }
 `
 
+const HitBox = styled.div`
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+`
+
+const ElevatedIndex = styled.span`
+  z-index: 1;
+  position: relative;
+`
+
 const FlexRow = styled.div`
   display: flex;
   align-items: center;
@@ -201,7 +214,8 @@ const Row = ({
   )
 
   return (
-    <Wrapper className={className} expanded={expanded} onClick={onClick}>
+    <Wrapper className={className} expanded={expanded}>
+      <HitBox onClick={onClick} />
       <FlexRow>
         {kind === "table" && (
           <TitleIcon size="18px" $suspended={walTableData?.suspended} />
@@ -272,7 +286,9 @@ const Row = ({
         )}
 
         {walTableData?.suspended && kind === "table" && (
-          <SuspensionPopover walTableData={walTableData} />
+          <ElevatedIndex>
+            <SuspensionPopover walTableData={walTableData} />
+          </ElevatedIndex>
         )}
 
         {tooltip && description && (

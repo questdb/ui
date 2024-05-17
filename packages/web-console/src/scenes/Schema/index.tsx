@@ -148,8 +148,12 @@ const Schema = ({
         setTables(response.data)
         dispatch(actions.query.setTables(response.data))
         // Fetch WAL info about the tables
-        const walTablesResponse = await quest.query<QuestDB.WalTable>(
-          "wal_tables()",
+        // const walTablesResponse = await quest.query<QuestDB.WalTable>(
+        //   "wal_tables()",
+        // )
+        // TODO: Remove mocked query result
+        const walTablesResponse = await quest.mockQueryResult<QuestDB.WalTable>(
+          mockSuspendedResponse as QuestDB.QueryRawResult,
         )
         if (walTablesResponse && walTablesResponse.type === QuestDB.Type.DQL) {
           // Filter out the system tables
@@ -249,7 +253,7 @@ const Schema = ({
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => () => {
       const [loaderShown, setLoaderShown] = useState(false)
-
+      // Show the loader only for delayed fetching process
       useEffect(() => {
         const timeout = setTimeout(() => setLoaderShown(true), 1000)
         return () => clearTimeout(timeout)
@@ -282,7 +286,7 @@ const Schema = ({
               return (
                 (normalizedTableName.includes(normalizedQuery) ||
                   levenshteinDistance(normalizedTableName, normalizedQuery) <
-                    3 ||
+                    2 ||
                   tableColumns?.find((c) => c.startsWith(query))) &&
                 (filterSuspendedOnly
                   ? table.walEnabled &&

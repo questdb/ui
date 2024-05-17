@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react"
+import React, { useState, useContext, useEffect } from "react"
 import { PopperToggle, Text } from "../../../components"
 import { Form } from "../../../components/Form"
 import { Box, Button } from "@questdb/react-components"
@@ -18,6 +18,7 @@ const Root = styled.div`
   border: 1px #723131 solid;
   border-radius: 4px;
   box-shadow: 0 0 25px 5px rgba(0, 0, 0, 0.2);
+  margin-top: 0.5rem;
 `
 
 const Trigger = styled.button<{ active: boolean }>`
@@ -80,17 +81,24 @@ export const SuspensionPopover = ({
 }) => {
   const [active, setActive] = useState(false)
   const { quest } = useContext(QuestContext)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (values: FormValues) => {
-    const response = await quest.query(
-      `ALTER TABLE ${walTableData.name} RESUME WAL${
-        values.resume_transaction_id
-          ? ` FROM TRANSACTION ${values.resume_transaction_id}`
-          : ""
-      }`,
-    )
-    if (response && response.type === QuestDB.Type.DDL) {
-      eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+    setIsSubmitting(true)
+    try {
+      const response = await quest.query(
+        `ALTER TABLE ${walTableData.name} RESUME WAL${
+          values.resume_transaction_id
+            ? ` FROM TRANSACTION ${values.resume_transaction_id}`
+            : ""
+        }`,
+      )
+      if (response && response.type === QuestDB.Type.DDL) {
+        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+      }
+      setIsSubmitting(false)
+    } catch (e) {
+      setIsSubmitting(false)
     }
   }
 
@@ -108,13 +116,20 @@ export const SuspensionPopover = ({
     >
       <Root>
         <Box gap="1.5rem" flexDirection="column" align="flex-start">
-          <Text color="red">Max open files limit reached in the OS</Text>
-          <ContentBlockBox gap="0.5rem">
-            <Text color="foreground">Workarounds and documentation:</Text>
-            <Button skin="secondary" prefixIcon={<ExternalLink size="18px" />}>
-              OS configuration
-            </Button>
-          </ContentBlockBox>
+          {walTableData.errorCode && (
+            <>
+              <Text color="red">Max open files limit reached in the OS</Text>
+              <ContentBlockBox gap="0.5rem">
+                <Text color="foreground">Workarounds and documentation:</Text>
+                <Button
+                  skin="secondary"
+                  prefixIcon={<ExternalLink size="18px" />}
+                >
+                  OS configuration
+                </Button>
+              </ContentBlockBox>
+            </>
+          )}
           <ContentBlockBox gap="0">
             <Text color="gray2">Transaction stats:</Text>
             <StyledTable>
@@ -152,10 +167,11 @@ export const SuspensionPopover = ({
                   />
                 </Form.Item>
                 <Form.Submit
+                  disabled={isSubmitting}
                   prefixIcon={<Restart size="18px" />}
                   variant="secondary"
                 >
-                  Restart transaction
+                  {isSubmitting ? "Restarting..." : "Restart transaction"}
                 </Form.Submit>
               </FormWrapper>
             </Form>

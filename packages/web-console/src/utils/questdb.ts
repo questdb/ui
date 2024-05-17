@@ -132,6 +132,7 @@ export type WalTable = {
   writerTxn: string
   writerLagTxtCount: string
   sequencerTxn: string
+  errorCode?: string
 }
 
 export type Column = {
