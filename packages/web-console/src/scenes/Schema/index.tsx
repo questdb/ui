@@ -98,6 +98,17 @@ const StyledCheckboxCircle = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};
 `
 
+const Loading = () => {
+  const [loaderShown, setLoaderShown] = useState(false)
+  // Show the loader only for delayed fetching process
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoaderShown(true), 1000)
+    return () => clearTimeout(timeout)
+  }, [])
+
+  return loaderShown ? <Loader size="22px" /> : null
+}
+
 enum View {
   loading,
   error,
@@ -244,16 +255,7 @@ const Schema = ({
   }, [])
 
   const views: { [key in View]: () => React.ReactNode } = {
-    [View.loading]: () => () => {
-      const [loaderShown, setLoaderShown] = useState(false)
-      // Show the loader only for delayed fetching process
-      useEffect(() => {
-        const timeout = setTimeout(() => setLoaderShown(true), 1000)
-        return () => clearTimeout(timeout)
-      }, [])
-
-      return loaderShown ? <Loader size="22px" /> : null
-    },
+    [View.loading]: () => <Loading />,
     [View.error]: () =>
       loadingError ? <LoadingError error={loadingError} /> : <FlexSpacer />,
     [View.ready]: () => (
