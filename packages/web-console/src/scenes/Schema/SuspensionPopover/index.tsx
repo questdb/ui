@@ -9,6 +9,7 @@ import Joi from "joi"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { ErrorResult } from "../../../utils"
 
 const Root = styled.div`
   display: flex;
@@ -74,6 +75,8 @@ type FormValues = {
   resume_transaction_id?: number
 }
 
+const GENERIC_ERROR_TEXT = "Error restarting transaction"
+
 export const SuspensionPopover = ({
   walTableData,
 }: {
@@ -82,9 +85,12 @@ export const SuspensionPopover = ({
   const [active, setActive] = useState(false)
   const { quest } = useContext(QuestContext)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [error, setError] = useState<string | undefined>()
 
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
+    setError(undefined)
     try {
       const response = await quest.query(
         `ALTER TABLE ${walTableData.name} RESUME WAL${
@@ -95,12 +101,24 @@ export const SuspensionPopover = ({
       )
       if (response && response.type === QuestDB.Type.DDL) {
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+        setIsSubmitted(true)
+      } else {
+        setError(GENERIC_ERROR_TEXT)
       }
       setIsSubmitting(false)
     } catch (e) {
+      const error = e as ErrorResult
       setIsSubmitting(false)
+      setError(`${GENERIC_ERROR_TEXT}${error.error ? `: ${error.error}` : ""}`)
     }
   }
+
+  useEffect(() => {
+    if (active) {
+      setError(undefined)
+      setIsSubmitted(false)
+    }
+  }, [active])
 
   return (
     <PopperToggle
@@ -116,6 +134,10 @@ export const SuspensionPopover = ({
     >
       <Root>
         <Box gap="1.5rem" flexDirection="column" align="flex-start">
+          {error && <Text color="red">{error}</Text>}
+          {isSubmitted && (
+            <Text color="green">Transaction restarted successfully</Text>
+          )}
           {walTableData.errorCode && (
             <>
               <Text color="red">Max open files limit reached in the OS</Text>
