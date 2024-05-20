@@ -56,7 +56,7 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
 import { Toolbar } from "./Toolbar/toolbar"
-import { levenshteinDistance } from "../../utils"
+import { SchemaContext } from "./SchemaContext"
 
 import mockSuspendedResponse from "./mockSuspendedResponse"
 
@@ -120,7 +120,6 @@ const Schema = ({
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const [state, dispatchState] = useReducer(reducer, initialState)
   const { quest } = useContext(QuestContext)
-  const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
@@ -270,7 +269,6 @@ const Schema = ({
             suspendedTablesCount={
               walTables?.filter((t) => t.suspended).length ?? 0
             }
-            setQuery={setQuery}
             filterSuspendedOnly={filterSuspendedOnly}
             setFilterSuspendedOnly={setFilterSuspendedOnly}
           />
@@ -285,8 +283,6 @@ const Schema = ({
                 .map((c) => c.column_name)
               return (
                 (normalizedTableName.includes(normalizedQuery) ||
-                  levenshteinDistance(normalizedTableName, normalizedQuery) <
-                    2 ||
                   tableColumns?.find((c) => c.startsWith(query))) &&
                 (filterSuspendedOnly
                   ? table.walEnabled &&
@@ -311,67 +307,69 @@ const Schema = ({
                 dedup={table.dedup}
               />
             ))}
-        {!loading && <FlexSpacer />}
+        <FlexSpacer />
       </>
     ),
   }
 
   return (
-    <Wrapper ref={innerRef} {...rest}>
-      <Panel.Header
-        title="Tables"
-        afterTitle={
-          <div style={{ display: "flex" }}>
-            {consoleConfig.readOnly === false && tables && (
-              <Box align="center" gap="0.5rem">
-                {tables.length > 0 && (
+    <SchemaContext.Provider value={{ query, setQuery }}>
+      <Wrapper ref={innerRef} {...rest}>
+        <Panel.Header
+          title="Tables"
+          afterTitle={
+            <div style={{ display: "flex" }}>
+              {consoleConfig.readOnly === false && tables && (
+                <Box align="center" gap="0.5rem">
+                  {tables.length > 0 && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          onClick={copySchemasToClipboard}
+                          skin="transparent"
+                        >
+                          {copied && <StyledCheckboxCircle size="14px" />}
+                          <FileCopy size="18px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>
+                        {copied
+                          ? `Copied ${tables.length} schema${
+                              tables.length > 1 ? "s" : ""
+                            } to clipboard`
+                          : "Copy schemas to clipboard"}
+                      </Tooltip>
+                    </PopperHover>
+                  )}
                   <PopperHover
                     delay={350}
                     placement="bottom"
                     trigger={
-                      <Button
-                        onClick={copySchemasToClipboard}
-                        skin="transparent"
-                      >
-                        {copied && <StyledCheckboxCircle size="14px" />}
-                        <FileCopy size="18px" />
+                      <Button onClick={fetchTables} skin="transparent">
+                        <Refresh size="18px" />
                       </Button>
                     }
                   >
-                    <Tooltip>
-                      {copied
-                        ? `Copied ${tables.length} schema${
-                            tables.length > 1 ? "s" : ""
-                          } to clipboard`
-                        : "Copy schemas to clipboard"}
-                    </Tooltip>
+                    <Tooltip>Refresh</Tooltip>
                   </PopperHover>
-                )}
-                <PopperHover
-                  delay={350}
-                  placement="bottom"
-                  trigger={
-                    <Button onClick={fetchTables} skin="transparent">
-                      <Refresh size="18px" />
-                    </Button>
-                  }
-                >
-                  <Tooltip>Refresh</Tooltip>
-                </PopperHover>
-              </Box>
-            )}
-          </div>
-        }
-        shadow={!scrollAtTop}
-      />
-      <Content
-        _loading={loading}
-        ref={scrollerRef}
-        onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
-      >
-        {views[state.view]()}
-      </Content>
-    </Wrapper>
+                </Box>
+              )}
+            </div>
+          }
+          shadow={!scrollAtTop}
+        />
+        <Content
+          _loading={state.view === View.loading}
+          ref={scrollerRef}
+          onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
+        >
+          {views[state.view]()}
+        </Content>
+      </Wrapper>
+    </SchemaContext.Provider>
   )
 }
 

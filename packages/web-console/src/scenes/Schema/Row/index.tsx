@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, ReactNode, useCallback } from "react"
+import React, { MouseEvent, ReactNode, useCallback, useContext } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
@@ -34,6 +34,7 @@ import { Table as TableIcon } from "@styled-icons/remix-line"
 import { FileList, PieChart } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
+import Highlighter from "react-highlight-words"
 
 import {
   SecondaryButton,
@@ -45,6 +46,7 @@ import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { useEditor } from "../../../providers"
 import { SuspensionPopover } from "../SuspensionPopover"
+import { SchemaContext } from "../SchemaContext"
 
 type Props = Readonly<{
   className?: string
@@ -72,6 +74,11 @@ const Type = styled(Text)`
 const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   cursor: ${({ kind }) =>
     ["folder", "table"].includes(kind) ? "pointer" : "initial"};
+
+  .highlight {
+    background-color: #7c804f;
+    color: ${({ theme }) => theme.color.foreground};
+  }
 `
 
 const PlusButton = styled(SecondaryButton)<Pick<Props, "tooltip">>`
@@ -112,9 +119,10 @@ const HitBox = styled.div`
   top: 0;
 `
 
-const ElevatedIndex = styled.span`
+const TableActions = styled.span`
   z-index: 1;
   position: relative;
+  margin-right: 1rem;
 `
 
 const FlexRow = styled.div`
@@ -202,6 +210,7 @@ const Row = ({
   type,
 }: Props) => {
   const { insertTextAtCursor } = useEditor()
+  const { query } = useContext(SchemaContext)
 
   const handlePlusButtonClick = useCallback(
     (event: MouseEvent) => {
@@ -246,7 +255,11 @@ const Row = ({
         )}
 
         <Title color="foreground" ellipsis kind={kind}>
-          {name}
+          <Highlighter
+            highlightClassName="highlight"
+            searchWords={[query ?? ""]}
+            textToHighlight={name}
+          />
         </Title>
         {suffix}
 
@@ -286,9 +299,9 @@ const Row = ({
         )}
 
         {walTableData?.suspended && kind === "table" && (
-          <ElevatedIndex>
+          <TableActions>
             <SuspensionPopover walTableData={walTableData} />
-          </ElevatedIndex>
+          </TableActions>
         )}
 
         {tooltip && description && (

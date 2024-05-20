@@ -1,9 +1,10 @@
-import React from "react"
+import React, { useContext } from "react"
 import styled from "styled-components"
 import { Button, Box, Input } from "@questdb/react-components"
 import { Close, Filter3 } from "@styled-icons/remix-line"
 import { ErrorWarning } from "@styled-icons/remix-fill"
 import { PopperHover, Tooltip } from "../../../components"
+import { SchemaContext } from "../SchemaContext"
 
 const Root = styled(Box).attrs({
   justifyContent: "space-between",
@@ -65,15 +66,14 @@ const Error = styled(Box).attrs({ gap: "0.5rem" })<{
 
 export const Toolbar = ({
   suspendedTablesCount,
-  setQuery,
   filterSuspendedOnly,
   setFilterSuspendedOnly,
 }: {
   suspendedTablesCount: number
-  setQuery: (filter: string) => void
   filterSuspendedOnly: boolean
   setFilterSuspendedOnly: (filter: boolean) => void
 }) => {
+  const { setQuery } = useContext(SchemaContext)
   const queryRef = React.useRef<HTMLInputElement>(null)
 
   return (
