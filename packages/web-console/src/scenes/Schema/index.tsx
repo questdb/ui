@@ -58,8 +58,6 @@ import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
 
-import mockSuspendedResponse from "./mockSuspendedResponse"
-
 type Props = Readonly<{
   hideMenu?: boolean
   style?: CSSProperties
@@ -147,12 +145,8 @@ const Schema = ({
         setTables(response.data)
         dispatch(actions.query.setTables(response.data))
         // Fetch WAL info about the tables
-        // const walTablesResponse = await quest.query<QuestDB.WalTable>(
-        //   "wal_tables()",
-        // )
-        // TODO: Remove mocked query result
-        const walTablesResponse = await quest.mockQueryResult<QuestDB.WalTable>(
-          mockSuspendedResponse as QuestDB.QueryRawResult,
+        const walTablesResponse = await quest.query<QuestDB.WalTable>(
+          "wal_tables()",
         )
         if (walTablesResponse && walTablesResponse.type === QuestDB.Type.DQL) {
           // Filter out the system tables

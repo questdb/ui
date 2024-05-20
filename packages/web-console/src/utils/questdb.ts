@@ -369,7 +369,6 @@ export class Client {
     return Client.transformQueryRawResult<T>(result)
   }
 
-  // TODO: Remove mocked method
   async mockQueryResult<T>(result: QueryRawResult): Promise<QueryResult<T>> {
     return Client.transformQueryRawResult<T>(result)
   }
