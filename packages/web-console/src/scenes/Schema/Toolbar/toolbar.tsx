@@ -26,6 +26,7 @@ const FilterIcon = styled(Filter3)`
   top: 50%;
   transform: translateY(-50%);
   left: 1rem;
+  color: ${({ theme }) => theme.color.gray2};
 `
 
 const CloseIcon = styled(Close)`
