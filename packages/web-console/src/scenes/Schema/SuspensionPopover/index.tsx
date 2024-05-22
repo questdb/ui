@@ -138,9 +138,9 @@ export const SuspensionPopover = ({
           {isSubmitted && (
             <Text color="green">Transaction restarted successfully</Text>
           )}
-          {walTableData.errorCode && (
+          {walTableData.errorMessage && (
             <>
-              <Text color="red">Max open files limit reached in the OS</Text>
+              <Text color="red">{walTableData.errorMessage}</Text>
               <ContentBlockBox gap="0.5rem">
                 <Text color="foreground">Workarounds and documentation:</Text>
                 <Button
