@@ -7,7 +7,20 @@ addMatchImageSnapshotCommand({
   blackout: [".notifications", 'button[class*="BuildVersion"'],
 });
 
+const baseUrl = "http://localhost:9999";
+
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
+
+const tableSchemas = {
+  btc_trades:
+    "CREATE TABLE IF NOT EXISTS 'btc_trades' (symbol SYMBOL capacity 256 CACHE, side SYMBOL capacity 256 CACHE, price DOUBLE, amount DOUBLE, timestamp TIMESTAMP) timestamp (timestamp) PARTITION BY DAY WAL DEDUP UPSERT KEYS(symbol, price, amount, timestamp);",
+  chicago_weather_stations:
+    "CREATE TABLE IF NOT EXISTS 'chicago_weather_stations' (MeasurementTimestamp TIMESTAMP, StationName SYMBOL capacity 256 CACHE, AirTemperature DOUBLE, WetBulbTemperature DOUBLE, Humidity INT, RainIntensity DOUBLE, IntervalRain DOUBLE, TotalRain DOUBLE, PrecipitationType INT, WindDirection INT, WindSpeed DOUBLE, MaximumWindSpeed DOUBLE, BarometricPressure DOUBLE, SolarRadiation INT, Heading INT, BatteryLife DOUBLE, MeasurementTimestampLabel STRING, MeasurementID STRING) timestamp (MeasurementTimestamp) PARTITION BY MONTH WAL DEDUP UPSERT KEYS(MeasurementTimestamp, StationName);",
+  ecommerce_stats:
+    "CREATE TABLE IF NOT EXISTS 'ecommerce_stats' (ts TIMESTAMP, country SYMBOL capacity 256 CACHE, category SYMBOL capacity 256 CACHE, visits LONG, unique_visitors LONG, sales DOUBLE,  number_of_products INT) timestamp (ts) PARTITION BY DAY WAL DEDUP UPSERT KEYS(ts, country, category);",
+  gitlog:
+    "CREATE TABLE IF NOT EXISTS 'gitlog' (committed_datetime TIMESTAMP, repo SYMBOL capacity 256 CACHE, author_name SYMBOL capacity 256 CACHE, summary STRING, size INT, insertions INT, deletions INT, lines INT, files INT) timestamp (committed_datetime) PARTITION BY MONTH WAL DEDUP UPSERT KEYS(committed_datetime, repo, author_name);",
+};
 
 before(() => {
   Cypress.on("uncaught:exception", (err) => {
@@ -32,6 +45,10 @@ beforeEach(() => {
     }
   );
 });
+
+Cypress.Commands.add("getByDataHook", (name) =>
+  cy.get(`[data-hook="${name}"]`)
+);
 
 Cypress.Commands.add("getGrid", () =>
   cy.get(".qg-viewport .qg-canvas").should("be.visible")
@@ -132,3 +149,17 @@ Cypress.Commands.add("getCollapsedNotifications", () =>
 Cypress.Commands.add("getExpandedNotifications", () =>
   cy.get('[data-hook="notifications-expanded"]')
 );
+
+Cypress.Commands.add("createTable", (name) => {
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec?query=${encodeURIComponent(tableSchemas[name])};`,
+  });
+});
+
+Cypress.Commands.add("dropTable", (name) => {
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec?query=${encodeURIComponent(`DROP TABLE ${name};`)}`,
+  });
+});

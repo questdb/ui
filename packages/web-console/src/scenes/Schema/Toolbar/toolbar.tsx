@@ -87,6 +87,7 @@ export const Toolbar = ({
               setQuery("")
               queryRef.current?.value && (queryRef.current.value = "")
             }}
+            data-hook="schema-search-clear-button"
           />
         )}
         <StyledInput
@@ -105,6 +106,7 @@ export const Toolbar = ({
               skin="transparent"
               onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
               prefixIcon={<ErrorWarning size="18px" />}
+              data-hook="schema-filter-suspended-button"
             >
               {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
             </StyledButton>

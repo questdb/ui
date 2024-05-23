@@ -254,7 +254,12 @@ const Row = ({
           <DotIcon size="12px" />
         )}
 
-        <Title color="foreground" ellipsis kind={kind}>
+        <Title
+          color="foreground"
+          ellipsis
+          kind={kind}
+          data-hook={`schema-${kind}-title`}
+        >
           <Highlighter
             highlightClassName="highlight"
             searchWords={[query ?? ""]}
