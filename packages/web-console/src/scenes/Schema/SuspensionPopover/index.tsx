@@ -124,7 +124,7 @@ export const SuspensionPopover = ({
     <PopperToggle
       placement="bottom-start"
       trigger={
-        <Trigger active={active} data-hook="schema-suspended-popover-trigger">
+        <Trigger active={active} data-hook="schema-suspension-popover-trigger">
           <span>Suspended</span>
           <ArrowDownS size="18px" />
         </Trigger>
@@ -132,7 +132,10 @@ export const SuspensionPopover = ({
       active={active}
       onToggle={setActive}
     >
-      <Root>
+      <Root
+        data-hook="schema-suspension-popover"
+        data-table-name={walTableData.name}
+      >
         <Box gap="1.5rem" flexDirection="column" align="flex-start">
           {error && <Text color="red">{error}</Text>}
           {isSubmitted && (

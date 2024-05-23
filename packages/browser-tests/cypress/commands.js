@@ -11,6 +11,10 @@ const baseUrl = "http://localhost:9999";
 
 const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
 
+const escapeRegExp = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 const tableSchemas = {
   btc_trades:
     "CREATE TABLE IF NOT EXISTS 'btc_trades' (symbol SYMBOL capacity 256 CACHE, side SYMBOL capacity 256 CACHE, price DOUBLE, amount DOUBLE, timestamp TIMESTAMP) timestamp (timestamp) PARTITION BY DAY WAL DEDUP UPSERT KEYS(symbol, price, amount, timestamp);",
@@ -162,4 +166,17 @@ Cypress.Commands.add("dropTable", (name) => {
     method: "GET",
     url: `${baseUrl}/exec?query=${encodeURIComponent(`DROP TABLE ${name};`)}`,
   });
+});
+
+Cypress.Commands.add("interceptQuery", (query, response) => {
+  cy.intercept(
+    {
+      method: "GET",
+      url: new RegExp(
+        `^${escapeRegExp(baseUrl)}\/exec.*query=${escapeRegExp(query)}`,
+        "gmi"
+      ),
+    },
+    response
+  );
 });
