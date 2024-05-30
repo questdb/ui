@@ -37,6 +37,8 @@ import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
 import { hasUIAuth } from "../../modules/OAuth2/utils"
 import { useSettings } from "../SettingsProvider"
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
 
 const questClient = new QuestDB.Client()
 
@@ -60,6 +62,7 @@ const defaultValues: ContextProps = {
 export const QuestContext = createContext<ContextProps>(defaultValues)
 
 export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
+  const dispatch = useDispatch()
   const { settings } = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
   const [authCheckFinished, setAuthCheckFinished] = useState(
@@ -118,6 +121,14 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
     })
   }, [])
 
+  // Telemetry queries use SQL, and therefore need to have auth header set if needed.
+  // Defer starting until the authorization is properly set for all HTTP requests.
+  useEffect(() => {
+    if (settings["release.type"] === "OSS" && authCheckFinished) {
+      dispatch(actions.telemetry.start())
+    }
+  }, [authCheckFinished])
+  
   if (!authCheckFinished) return null
 
   return (
