@@ -64,12 +64,12 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
           Authorization: `Bearer ${token.access_token}`,
         })
       } else {
-          const restToken = getValue(StoreKey.REST_TOKEN)
-          if (restToken) {
-              quest.setCommonHeaders({
-                  Authorization: `Bearer ${restToken}`
-              })
-          }
+        const restToken = getValue(StoreKey.REST_TOKEN)
+        if (restToken) {
+          quest.setCommonHeaders({
+            Authorization: `Bearer ${restToken}`
+          })
+        }
       }
       return from(
         quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`),
