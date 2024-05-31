@@ -126,12 +126,21 @@ export type Table = {
   dedup: boolean
 }
 
+export enum WalErrorTag {
+  DISK_FULL = "DISK FULL",
+  TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
+  OUT_OF_MEMORY = "OUT OF MEMORY",
+  FAILED_MEMORY_ALLOCATION = "FAILED MEMORY ALLOCATION",
+  OTHER = "OTHER",
+}
+
 export type WalTable = {
   name: string
   suspended: boolean
   writerTxn: string
   writerLagTxtCount: string
   sequencerTxn: string
+  errorTag?: WalErrorTag
   errorMessage?: string
 }
 
