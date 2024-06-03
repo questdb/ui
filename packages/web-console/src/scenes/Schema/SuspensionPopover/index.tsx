@@ -172,7 +172,12 @@ export const SuspensionPopover = ({
           )}
           {walTableData.errorTag && walTableData.errorMessage && (
             <>
-              <Text color="red">{walTableData.errorMessage}</Text>
+              <Text
+                color="red"
+                data-hook="schema-suspension-popover-error-message"
+              >
+                {walTableData.errorMessage}
+              </Text>
               {walErrorWorkarounds[walTableData.errorTag] && (
                 <ContentBlockBox gap="0.5rem">
                   <Text color="foreground">Workarounds and documentation:</Text>
@@ -182,6 +187,7 @@ export const SuspensionPopover = ({
                     href={walErrorWorkarounds[walTableData.errorTag].link}
                     rel="noreferrer"
                     target="_blank"
+                    data-hook="schema-suspension-popover-error-link"
                   >
                     <Box align="center" gap="0.25rem">
                       <ExternalLink size="16px" />
@@ -232,6 +238,7 @@ export const SuspensionPopover = ({
                   disabled={isSubmitting}
                   prefixIcon={<Restart size="18px" />}
                   variant="secondary"
+                  data-hook="schema-suspension-popover-restart-transaction"
                 >
                   {isSubmitting ? "Restarting..." : "Restart transaction"}
                 </Form.Submit>

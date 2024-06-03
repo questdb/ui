@@ -14,6 +14,7 @@ export const FormSubmit = ({
   disabled,
   variant,
   prefixIcon,
+  ...rest
 }: Props) => (
   <Button
     type="submit"
@@ -21,6 +22,7 @@ export const FormSubmit = ({
     skin={variant ?? "primary"}
     prefixIcon={prefixIcon}
     dataHook="form-submit-button"
+    {...rest}
   >
     {children}
   </Button>
