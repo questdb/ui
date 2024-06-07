@@ -34,7 +34,13 @@ import React, {
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
-import { FileCopy, Loader3, Refresh } from "@styled-icons/remix-line"
+import {
+  Add,
+  FileCopy,
+  Loader3,
+  Refresh,
+  Settings4,
+} from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import {
   PaneContent,
@@ -42,6 +48,7 @@ import {
   PopperHover,
   spinAnimation,
   Tooltip,
+  Text,
 } from "../../components"
 import { actions } from "../../store"
 import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
@@ -49,7 +56,7 @@ import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
-import { Button } from "@questdb/react-components"
+import { Button, DropdownMenu, ForwardRef } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext, useSettings } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
@@ -98,6 +105,11 @@ const StyledCheckboxCircle = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};
 `
 
+const DropdownMenuContent = styled(DropdownMenu.Content)`
+  z-index: 100;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
 const Loading = () => {
   const [loaderShown, setLoaderShown] = useState(false)
   // Show the loader only for delayed fetching process
@@ -143,6 +155,7 @@ const Schema = ({
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
+  const [dropdownOpen, setDropdownOpen] = useState(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -317,40 +330,61 @@ const Schema = ({
             <div style={{ display: "flex" }}>
               {consoleConfig.readOnly === false && tables && (
                 <Box align="center" gap="0.5rem">
-                  {tables.length > 0 && (
-                    <PopperHover
-                      delay={350}
-                      placement="bottom"
-                      trigger={
-                        <Button
-                          onClick={copySchemasToClipboard}
-                          skin="transparent"
-                        >
-                          {copied && <StyledCheckboxCircle size="14px" />}
-                          <FileCopy size="18px" />
-                        </Button>
-                      }
-                    >
-                      <Tooltip>
-                        {copied
-                          ? `Copied ${tables.length} schema${
-                              tables.length > 1 ? "s" : ""
-                            } to clipboard`
-                          : "Copy schemas to clipboard"}
-                      </Tooltip>
-                    </PopperHover>
-                  )}
                   <PopperHover
                     delay={350}
                     placement="bottom"
                     trigger={
-                      <Button onClick={fetchTables} skin="transparent">
-                        <Refresh size="18px" />
+                      <Button
+                        onClick={() =>
+                          dispatch(actions.console.setActiveSidebar("create"))
+                        }
+                        skin="transparent"
+                      >
+                        <Add size="22px" />
                       </Button>
                     }
                   >
-                    <Tooltip>Refresh</Tooltip>
+                    <Tooltip>Create table</Tooltip>
                   </PopperHover>
+
+                  <DropdownMenu.Root
+                    modal={false}
+                    onOpenChange={setDropdownOpen}
+                  >
+                    <DropdownMenu.Trigger asChild>
+                      <ForwardRef>
+                        <PopperHover
+                          delay={350}
+                          placement="right"
+                          trigger={
+                            <Button skin="transparent">
+                              {copied && <StyledCheckboxCircle size="14px" />}
+                              <Settings4 size="18px" />
+                            </Button>
+                          }
+                        >
+                          <Tooltip>Settings</Tooltip>
+                        </PopperHover>
+                      </ForwardRef>
+                    </DropdownMenu.Trigger>
+
+                    <DropdownMenu.Portal>
+                      <DropdownMenuContent>
+                        {tables.length > 0 && (
+                          <DropdownMenu.Item onClick={copySchemasToClipboard}>
+                            <FileCopy size="18px" />
+                            <Text color="foreground">
+                              Copy schemas to clipboard
+                            </Text>
+                          </DropdownMenu.Item>
+                        )}
+                        <DropdownMenu.Item onClick={fetchTables}>
+                          <Refresh size="18px" />
+                          <Text color="foreground">Refresh tables</Text>
+                        </DropdownMenu.Item>
+                      </DropdownMenuContent>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
                 </Box>
               )}
             </div>
