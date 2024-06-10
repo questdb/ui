@@ -1,9 +1,9 @@
 /// <reference types="cypress" />
 
 const baseUrl = "http://localhost:9999";
+
 describe("telemetry", () => {
   beforeEach(() => {
-    cy.visit(baseUrl);
     // expected dataset format of the first row:
     // [id, enabled, version, os, package]
     cy.interceptQuery("telemetry_config", "telemetryConfig", (req) => {
@@ -13,12 +13,11 @@ describe("telemetry", () => {
         return res;
       });
     });
+    cy.visit(baseUrl);
   });
 
   it("should get telemetry config", () => {
-    cy.wait("@telemetryConfig", {
-      timeout: 10000,
-    }).then(({ response }) => {
+    cy.wait("@telemetryConfig").then(({ response }) => {
       const columnNames = response.body.columns.map((c) => c.name);
       expect(response.statusCode).to.equal(200);
       ["id", "enabled", "version", "os", "package"].forEach((name) => {
@@ -37,9 +36,7 @@ describe("telemetry", () => {
   });
 
   it("should start telemetry", () => {
-    cy.wait("@telemetryConfig", {
-      timeout: 10000,
-    }).then(({ response }) => {
+    cy.wait("@telemetryConfig").then(({ response }) => {
       cy.intercept("POST", "https://*.questdb.io/add", (req) => {
         // Prevent the request from successfully pinging the telemetry lambda
         req.destroy();
