@@ -8,6 +8,7 @@ describe("telemetry", () => {
     // [id, enabled, version, os, package]
     cy.interceptQuery("telemetry_config", "telemetryConfig", (req) => {
       return req.continue((res) => {
+        // enable telemetry to kick start the process on the client side
         res.body.dataset[0][1] = true;
         return res;
       });
