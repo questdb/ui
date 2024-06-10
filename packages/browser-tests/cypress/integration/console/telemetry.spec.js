@@ -42,7 +42,7 @@ describe("telemetry", () => {
       });
       cy.intercept("POST", "https://*.questdb.io/add", (req) => {
         // Prevent the request from successfully pinging the telemetry lambda
-        req.destroy();
+        req.reply({ statusCode: 200 });
       }).as("addTelemetry");
       cy.wait("@addTelemetry").then(({ request }) => {
         const payload = JSON.parse(request.body);
