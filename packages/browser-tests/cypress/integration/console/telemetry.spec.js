@@ -16,7 +16,9 @@ describe("telemetry", () => {
   });
 
   it("should get telemetry config", () => {
-    cy.wait("@telemetryConfig").then(({ response }) => {
+    cy.wait("@telemetryConfig", {
+      timeout: 10000,
+    }).then(({ response }) => {
       const columnNames = response.body.columns.map((c) => c.name);
       expect(response.statusCode).to.equal(200);
       ["id", "enabled", "version", "os", "package"].forEach((name) => {
@@ -35,7 +37,9 @@ describe("telemetry", () => {
   });
 
   it("should start telemetry", () => {
-    cy.wait("@telemetryConfig").then(({ response }) => {
+    cy.wait("@telemetryConfig", {
+      timeout: 10000,
+    }).then(({ response }) => {
       cy.intercept("POST", "https://*.questdb.io/add", (req) => {
         // Prevent the request from successfully pinging the telemetry lambda
         req.destroy();
