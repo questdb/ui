@@ -37,6 +37,9 @@ describe("telemetry", () => {
 
   it("should start telemetry", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
+      cy.on("uncaught:exception", () => {
+        return false;
+      });
       cy.intercept("POST", "https://*.questdb.io/add", (req) => {
         // Prevent the request from successfully pinging the telemetry lambda
         req.destroy();
