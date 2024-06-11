@@ -2,18 +2,22 @@
 
 const baseUrl = "http://localhost:9999";
 
-describe("telemetry", () => {
-  beforeEach(() => {
-    // expected dataset format of the first row:
-    // [id, enabled, version, os, package]
-    cy.interceptQuery("telemetry_config", "telemetryConfig", (req) => {
-      return req.continue((res) => {
-        // enable telemetry to kick start the process on the client side
-        res.body.dataset[0][1] = true;
-        return res;
-      });
+const toggleTelemetry = (enabled) => {
+  // expected dataset format of the first row:
+  // [id, enabled, version, os, package]
+  cy.interceptQuery("telemetry_config", "telemetryConfig", (req) => {
+    return req.continue((res) => {
+      // enable telemetry to kick start the process on the client side
+      res.body.dataset[0][1] = enabled;
+      return res;
     });
+  });
+};
+
+describe("telemetry config", () => {
+  beforeEach(() => {
     cy.visit(baseUrl);
+    toggleTelemetry(true);
   });
 
   it("should get telemetry config", () => {
@@ -34,12 +38,31 @@ describe("telemetry", () => {
       );
     });
   });
+});
 
-  it("should start telemetry", () => {
+describe("telemetry disabled", () => {
+  beforeEach(() => {
+    cy.visit(baseUrl);
+    toggleTelemetry(false);
+  });
+
+  it("should not start telemetry when disabled", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
-      cy.on("uncaught:exception", () => {
-        return false;
-      });
+      cy.intercept("POST", "https://*.questdb.io/add").as("addTelemetry");
+      cy.wait(5000);
+      cy.get("@addTelemetry.all").should("have.length", 0);
+    });
+  });
+});
+
+describe("telemetry enabled", () => {
+  beforeEach(() => {
+    cy.visit(baseUrl);
+    toggleTelemetry(true);
+  });
+
+  it("should start telemetry when enabled", () => {
+    cy.wait("@telemetryConfig").then(({ response }) => {
       cy.intercept("POST", "https://*.questdb.io/add", (req) => {
         // Prevent the request from successfully pinging the telemetry lambda
         req.reply({ statusCode: 200 });
