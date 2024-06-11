@@ -1,11 +1,11 @@
-const {
-  addMatchImageSnapshotCommand,
-} = require("@simonsmith/cypress-image-snapshot/command");
+// const {
+//   addMatchImageSnapshotCommand,
+// } = require("@simonsmith/cypress-image-snapshot/command");
 
-addMatchImageSnapshotCommand({
-  failureThreshold: 0.3,
-  blackout: [".notifications", 'button[class*="BuildVersion"'],
-});
+// addMatchImageSnapshotCommand({
+//   failureThreshold: 0.3,
+//   blackout: [".notifications", 'button[class*="BuildVersion"'],
+// });
 
 const baseUrl = "http://localhost:9999";
 

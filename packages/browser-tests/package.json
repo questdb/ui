@@ -3,11 +3,11 @@
   "packageManager": "yarn@3.1.1",
   "private": true,
   "scripts": {
-    "test": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false",
+    "test": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --browser firefox",
     "test:update": "yarn run test --env updateSnapshots=true"
   },
   "devDependencies": {
-    "@simonsmith/cypress-image-snapshot": "^8.0.1",
-    "cypress": "^10.11.0"
+    "@simonsmith/cypress-image-snapshot": "^9.0.3",
+    "cypress": "^13.11.0"
   }
 }

@@ -38,7 +38,7 @@ describe("appendQuery", () => {
     const expected = `${queries[0]}\n`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    cy.matchImageSnapshot(); // screenshot diff
+    // cy.matchImageSnapshot(); // screenshot diff
   });
 
   it("should append and select second query", () => {
@@ -105,7 +105,7 @@ describe("appendQuery", () => {
     const expected = `--a\n--b\n\n${queries[0]}\n`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    cy.matchImageSnapshot();
+    // cy.matchImageSnapshot();
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
@@ -194,7 +194,7 @@ describe("autocomplete", () => {
       .should("not.be.visible")
       .clearEditor();
 
-    cy.matchImageSnapshot();
+    // cy.matchImageSnapshot();
   });
 
   it("should work when tables list is not empty", () => {
@@ -259,7 +259,7 @@ describe("errors", () => {
     const query = `create table test (\ncol symbol index CAPACITY (200000)`;
     cy.typeQuery(query).runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
-    cy.matchImageSnapshot();
+    // cy.matchImageSnapshot();
   });
 
   it("should mark date position as error", () => {

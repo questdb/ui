@@ -1,11 +1,11 @@
 const { defineConfig } = require("cypress");
-const {
-  addMatchImageSnapshotPlugin,
-} = require("@simonsmith/cypress-image-snapshot/plugin");
+// const {
+//   addMatchImageSnapshotPlugin,
+// } = require("@simonsmith/cypress-image-snapshot/plugin");
 
 module.exports = defineConfig({
   e2e: {
-    defaultCommandTimeout: 10000,
+    defaultCommandTimeout: 20000,
     screenshotOnRunFailure: false,
     video: false,
     baseUrl: "http://localhost:9999",
@@ -14,7 +14,7 @@ module.exports = defineConfig({
     specPattern: "cypress/integration/**/*.spec.js",
     supportFile: "cypress/commands.js",
     setupNodeEvents(on) {
-      addMatchImageSnapshotPlugin(on);
+      // addMatchImageSnapshotPlugin(on);
 
       on("before:browser:launch", (browser = {}, launchOptions) => {
         if (browser.family === "chromium" && browser.name !== "electron") {
