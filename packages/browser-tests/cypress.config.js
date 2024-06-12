@@ -5,6 +5,7 @@ const {
 
 module.exports = defineConfig({
   e2e: {
+    defaultCommandTimeout: 20000,
     screenshotOnRunFailure: false,
     video: false,
     baseUrl: "http://localhost:9999",
@@ -24,6 +25,13 @@ module.exports = defineConfig({
         }
 
         return launchOptions;
+      });
+
+      on("task", {
+        log(message) {
+          console.log(message);
+          return null;
+        },
       });
     },
   },

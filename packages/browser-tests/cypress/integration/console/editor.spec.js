@@ -5,11 +5,11 @@ const baseUrl = "http://localhost:9999";
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
-      { name: "query 1", value: "first query" },
-      { name: "query 1", value: "second query" },
+      { name: "query 1", value: "first query;" },
+      { name: "query 1", value: "second query;" },
       {
         name: "query 1",
-        value: "multi\nline\nquery",
+        value: "multi\nline\nquery;",
       },
     ],
   };
@@ -183,6 +183,12 @@ describe("autocomplete", () => {
     cy.visit(baseUrl);
   });
 
+  afterEach(() => {
+    cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
+    cy.typeQuery('drop table "my_secrets2"').runLine().clearEditor();
+    cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
+  });
+
   beforeEach(() => {
     cy.getEditor().should("be.visible");
     cy.clearEditor();
@@ -239,10 +245,6 @@ describe("autocomplete", () => {
       .should("contain", "my_publics.public")
       .should("contain", "my_secrets.secret")
       .clearEditor();
-
-    cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_secrets2"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
   });
 });
 
