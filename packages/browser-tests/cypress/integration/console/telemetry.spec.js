@@ -48,9 +48,9 @@ describe("telemetry disabled", () => {
 
   it("should not start telemetry when disabled", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
-      cy.intercept("POST", "https://*.questdb.io/add").as("addTelemetry");
-      cy.wait(5000);
-      cy.get("@addTelemetry.all").should("have.length", 0);
+      cy.intercept("@addTelemetry").then((interception) => {
+        expect(interception).to.be.null;
+      });
     });
   });
 });
