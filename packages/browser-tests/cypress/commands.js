@@ -162,7 +162,9 @@ Cypress.Commands.add("interceptQuery", (query, alias, response) => {
     {
       method: "GET",
       url: new RegExp(
-        `^${escapeRegExp(baseUrl)}\/exec.*query=${escapeRegExp(query)}`,
+        `^${escapeRegExp(baseUrl)}\/exec.*query=${encodeURIComponent(
+          escapeRegExp(query)
+        )}`,
         "gmi"
       ),
     },

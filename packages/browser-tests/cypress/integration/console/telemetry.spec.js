@@ -5,7 +5,7 @@ const baseUrl = "http://localhost:9999";
 const toggleTelemetry = (enabled) => {
   // expected dataset format of the first row:
   // [id, enabled, version, os, package]
-  cy.interceptQuery("telemetry_config", "telemetryConfig", (req) => {
+  cy.interceptQuery("telemetry_config LIMIT -1", "telemetryConfig", (req) => {
     return req.continue((res) => {
       // enable telemetry to kick start the process on the client side
       res.body.dataset[0][1] = enabled;
