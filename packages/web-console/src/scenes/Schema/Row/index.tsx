@@ -96,18 +96,9 @@ const Wrapper = styled.div<Pick<Props, "expanded">>`
   padding-left: 1rem;
   transition: background ${TransitionDuration.REG}ms;
 
-  &:hover
-    ${/* sc-selector */ PlusButton},
-    &:active
-    ${/* sc-selector */ PlusButton} {
-    opacity: 1;
-  }
   &:hover,
   &:active {
     background: ${color("selection")};
-  }
-  &:hover ${/* sc-selector */ Type} {
-    opacity: 0;
   }
 `
 
@@ -212,16 +203,6 @@ const Row = ({
   const { insertTextAtCursor } = useEditor()
   const { query } = useContext(SchemaContext)
 
-  const handlePlusButtonClick = useCallback(
-    (event: MouseEvent) => {
-      event.stopPropagation()
-      insertTextAtCursor(
-        kind === "table" && !/^[a-z0-9_]+$/i.test(name) ? `"${name}"` : name,
-      )
-    },
-    [name, kind],
-  )
-
   return (
     <Wrapper className={className} expanded={expanded}>
       <HitBox onClick={onClick} />
@@ -290,17 +271,6 @@ const Row = ({
             <FileListIcon size="14px" />
             <Text color="yellow">WAL</Text>
           </PartitionByWrapper>
-        )}
-
-        {["column", "table"].includes(kind) && !walTableData?.suspended && (
-          <PlusButton
-            onClick={handlePlusButtonClick}
-            size="sm"
-            tooltip={tooltip}
-          >
-            <CodeSSlash size="16px" />
-            <span>Add</span>
-          </PlusButton>
         )}
 
         {walTableData?.suspended && kind === "table" && (
