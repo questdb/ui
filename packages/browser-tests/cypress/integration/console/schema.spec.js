@@ -21,7 +21,7 @@ describe("questdb schema with working tables", () => {
     tables.forEach((table) => {
       cy.getByDataHook("schema-table-title").should("contain", table);
     });
-    cy.getByDataHook("schema-filter-suspended-button").should("be.disabled");
+    cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
     cy.getByDataHook("schema-suspension-popover-trigger").should("not.exist");
   });
 

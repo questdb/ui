@@ -97,28 +97,25 @@ export const Toolbar = ({
           onChange={(e) => setQuery(e.target.value)}
         />
       </Filter>
-      <Error suspendedTablesCount={suspendedTablesCount}>
-        <PopperHover
-          placement="bottom"
-          trigger={
-            <StyledButton
-              disabled={suspendedTablesCount === 0}
-              skin="transparent"
-              onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
-              prefixIcon={<ErrorWarning size="18px" />}
-              data-hook="schema-filter-suspended-button"
-            >
-              {suspendedTablesCount > 0 && <span>{suspendedTablesCount}</span>}
-            </StyledButton>
-          }
-        >
-          <Tooltip>
-            {suspendedTablesCount > 0
-              ? `${filterSuspendedOnly ? "Hide" : "Show"} suspended tables`
-              : "No suspended tables"}
-          </Tooltip>
-        </PopperHover>
-      </Error>
+      {suspendedTablesCount > 0 && (
+        <Error suspendedTablesCount={suspendedTablesCount}>
+          <PopperHover
+            placement="bottom"
+            trigger={
+              <StyledButton
+                skin="transparent"
+                onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
+                prefixIcon={<ErrorWarning size="18px" />}
+                data-hook="schema-filter-suspended-button"
+              >
+                <span>{suspendedTablesCount}</span>
+              </StyledButton>
+            }
+          >
+            <Tooltip>Show suspended tables</Tooltip>
+          </PopperHover>
+        </Error>
+      )}
     </Root>
   )
 }
