@@ -51,7 +51,7 @@ module.exports = {
 
   output: {
     filename: "[name].[chunkhash:5].js",
-    publicPath: config.assetPath,
+    publicPath: "auto",
     path: path.resolve(__dirname, "dist"),
   },
 
