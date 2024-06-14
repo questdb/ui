@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import { Form } from "../../components/Form"
-import { IconWithTooltip, Text } from "../../components"
+import {IconWithTooltip, Link, Text} from "../../components"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
@@ -168,7 +168,15 @@ export const Column = ({
               />
             </TimestampControls>
             {action === "import" && (
-              <Text color="gray2">Example: {DEFAULT_TIMESTAMP_FORMAT}</Text>
+              <Text color="gray2">
+                  Example: {DEFAULT_TIMESTAMP_FORMAT}
+                  <br/>
+                  <DocsLink
+                      url="https://questdb.io/docs/reference/function/date-time/#timestamp-format"
+                      text="Timestamp format docs"
+                      tooltipText="Timestamp format documentation"
+                  />
+              </Text>
             )}
           </Box>
         )}
