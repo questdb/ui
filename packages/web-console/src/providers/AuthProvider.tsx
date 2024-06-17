@@ -240,7 +240,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const uiAuthLogin = () => {
     // Check if user is authenticated already with basic auth
     const token = getValue(StoreKey.REST_TOKEN)
-    if (token) {
+    const basicAuthHeader = getValue(StoreKey.BASIC_AUTH_HEADER)
+    if (token || basicAuthHeader) {
       dispatch({ view: View.ready })
     } else {
       // Stop loading and display the login state
@@ -262,6 +263,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = (noRedirect?: boolean) => {
     removeValue(StoreKey.AUTH_PAYLOAD)
     removeValue(StoreKey.REST_TOKEN)
+    removeValue(StoreKey.BASIC_AUTH_HEADER)
     if (noRedirect) {
       dispatch({ view: View.loggedOut })
     } else {

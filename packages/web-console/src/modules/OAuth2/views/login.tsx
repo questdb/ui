@@ -203,8 +203,9 @@ export const Login = ({
   onBasicAuthSuccess: () => void
 }) => {
   const { settings } = useSettings()
+  const isEE = settings["release.type"] === "EE"
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
-  const handleSubmit = async (values: FormValues) => {
+  const handleSubmitEE = async (values: FormValues) => {
     const { username, password } = values
     try {
       const response = await fetch(
@@ -230,6 +231,34 @@ export const Login = ({
       setErrorMessage("Error occurred while trying to login")
     }
   }
+
+    const handleSubmitOSS = async (values: FormValues) => {
+        const { username, password } = values
+        try {
+            const response = await fetch(
+                `${window.location.origin}/exec?query=select * from long_sequence(1)`,
+                {
+                    headers: {
+                        Authorization: `Basic ${btoa(`${username}:${password}`)}`,
+                    },
+                },
+            )
+            if (response.status === 200) {
+                setValue(StoreKey.BASIC_AUTH_HEADER, `Basic ${btoa(`${username}:${password}`)}`)
+                return onBasicAuthSuccess()
+            } else if (response.status === 401) {
+                setErrorMessage("Invalid user name or password")
+            } else if (response.status === 403) {
+                setErrorMessage("Unauthorized to use the Web Console")
+            } else {
+                setErrorMessage("Login failed, status code: " + response.status)
+            }
+        } catch (e) {
+            setErrorMessage("Error occurred while trying to login")
+        }
+    }
+
+    const handleSubmit = isEE ? handleSubmitEE : handleSubmitOSS
 
   useEffect(() => {
     setTimeout(() => {
