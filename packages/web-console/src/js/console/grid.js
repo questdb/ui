@@ -462,7 +462,7 @@ export function grid(rootElement, _paginationFn, id) {
   function computeRowBounds() {
     let t = Math.max(0, Math.floor(y / rh))
     let b = Math.min(yMax / rh, Math.ceil((y + viewportHeight) / rh))
-    return {t: t, b: b}
+    return { t: t, b: b }
   }
 
   function renderRows(direction) {
@@ -626,7 +626,7 @@ export function grid(rootElement, _paginationFn, id) {
     const columnSet = []
     for (let i = 0; i < columnCount; i++) {
       const col = getColumn(i)
-      columnSet.push({name: col.name, type: col.type})
+      columnSet.push({ name: col.name, type: col.type })
     }
     layoutStoreColumnSetKey = JSON.stringify(columnSet)
     layoutStoreColumnSetSha256 = hashString(layoutStoreColumnSetKey)
@@ -651,7 +651,7 @@ export function grid(rootElement, _paginationFn, id) {
     let entry = layoutStoreCache[layoutStoreColumnSetSha256]
     if (entry === undefined) {
       const deviants = {}
-      entry = {key: layoutStoreColumnSetKey, deviants: deviants}
+      entry = { key: layoutStoreColumnSetKey, deviants: deviants }
       layoutStoreCache[layoutStoreColumnSetSha256] = entry
     }
     return entry
@@ -819,8 +819,8 @@ export function grid(rootElement, _paginationFn, id) {
       panelLeftGhostHandle.style.top =
         Math.min(
           viewportHeight -
-          panelLeftGhostHandle.getBoundingClientRect().height -
-          (isHorizontalScroller() ? scrollerGirth : 0),
+            panelLeftGhostHandle.getBoundingClientRect().height -
+            (isHorizontalScroller() ? scrollerGirth : 0),
           Math.max(0, panelLeftGhostHandleTop + d),
         ) + "px"
     }
@@ -1590,7 +1590,7 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function isCtrlOrCmd() {
-    return downKey[17] || downKey[91]
+    return downKey[17] || downKey[91] || downKey[224]
   }
 
   function onKeyDown(e) {
@@ -1882,7 +1882,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function setFreezeLeft0(_freezeLeft) {
     freezeLeft = _freezeLeft !== undefined ? _freezeLeft : 0
-    triggerEvent("freeze.state", {freezeLeft: freezeLeft})
+    triggerEvent("freeze.state", { freezeLeft: freezeLeft })
   }
 
   function setFreezeLeft(nextFreezeLeft) {
@@ -1976,7 +1976,7 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function triggerEvent(eventName, data) {
-    grid.dispatchEvent(new CustomEvent(eventName, {detail: data}))
+    grid.dispatchEvent(new CustomEvent(eventName, { detail: data }))
   }
 
   function bind() {
@@ -2070,8 +2070,11 @@ export function grid(rootElement, _paginationFn, id) {
 
     const resizeObserver = new ResizeObserver(function () {
       // ignore resize calls when grid is not visible
-      if (grid.getBoundingClientRect().height > 0 && grid.getBoundingClientRect().width > 0) {
-        render();
+      if (
+        grid.getBoundingClientRect().height > 0 &&
+        grid.getBoundingClientRect().width > 0
+      ) {
+        render()
       }
     })
     resizeObserver.observe(grid)
