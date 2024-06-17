@@ -43,6 +43,10 @@ Cypress.Commands.add("getGridRow", (n) =>
   cy.get(".qg-r").filter(":visible").eq(n)
 );
 
+Cypress.Commands.add("getGridCol", (n) =>
+  cy.get(".qg-c").filter(":visible").eq(n)
+);
+
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
