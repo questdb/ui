@@ -206,23 +206,24 @@ export const Login = ({
   const isEE = settings["release.type"] === "EE"
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
 
-  const setUsernamePassword = async (response: Response, username: string, password: string) => {
-    setValue(StoreKey.BASIC_AUTH_HEADER, `Basic ${btoa(`${username}:${password}`)}`)
-  }
-
-  const storeTransientRestToken = async (response: Response, username: string, password: string) => {
-    const token = (await response.json()).dataset[0][1]
-    setValue(StoreKey.REST_TOKEN, token)
-  }
-
-  const queryCredentials = isEE ? "alter user 'admin' create token type rest with ttl '1d' refresh transient" : "select * from long_sequence(1)"
-  const storeCredentials = isEE ? storeTransientRestToken : setUsernamePassword
+  const httpBasicAuthStrategy = isEE ? {
+    query: "alter user 'admin' create token type rest with ttl '1d' refresh transient",
+    store: async (response: Response, username: string, password: string) => {
+      const token = (await response.json()).dataset[0][1]
+      setValue(StoreKey.REST_TOKEN, token)
+    }
+  } : {
+    query: "select * from long_sequence(1)",
+    store: async (response: Response, username: string, password: string) => {
+      setValue(StoreKey.BASIC_AUTH_HEADER, `Basic ${btoa(`${username}:${password}`)}`)
+    }
+  };
 
   const handleSubmit = async (values: FormValues) => {
     const {username, password} = values
     try {
       const response = await fetch(
-        `${window.location.origin}/exec?query=${queryCredentials}`,
+        `${window.location.origin}/exec?query=${httpBasicAuthStrategy.query}`,
         {
           headers: {
             Authorization: `Basic ${btoa(`${username}:${password}`)}`,
@@ -230,7 +231,7 @@ export const Login = ({
         },
       )
       if (response.status === 200) {
-        await storeCredentials(response, username, password)
+        await httpBasicAuthStrategy.store(response, username, password)
         return onBasicAuthSuccess()
       } else if (response.status === 401) {
         setErrorMessage("Invalid user name or password")
