@@ -47,4 +47,9 @@ describe("questdb grid", () => {
 
     cy.getGridViewport().scrollTo("bottom");
   });
+
+  it.only("copy cell into the clipboard", () => {
+    cy.typeQuery("select x from long_sequence(10)").runLine();
+    cy.getGridCol(0).type("{ctrl}c").should("have.class", "qg-c-active-pulse");
+  });
 });

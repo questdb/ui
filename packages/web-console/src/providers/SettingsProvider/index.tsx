@@ -61,7 +61,7 @@ export const SettingsProvider = ({
               alt="QuestDB logotype"
               width="95"
               height="23"
-              src="/assets/questdb-logotype.svg"
+              src="assets/questdb-logotype.svg"
             />
           </a>
           <Text align="center" size="lg">
@@ -83,7 +83,7 @@ export const SettingsProvider = ({
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch(`${window.location.origin}/settings`)
+      const response = await fetch(`settings`)
       if (response.status === 200) {
         const settings = await response.json()
         setSettings(settings)
@@ -98,7 +98,7 @@ export const SettingsProvider = ({
   const fetchConsoleConfig = async () => {
     try {
       const response = await fetch(
-        `${window.location.origin}/assets/console-configuration.json`,
+        `assets/console-configuration.json`
       )
       if (response.status === 200) {
         const consoleConfig = await response.json()
