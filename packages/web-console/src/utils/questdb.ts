@@ -243,7 +243,6 @@ export type Parameter = {
 }
 
 export class Client {
-  private readonly _host: string
   private _controllers: AbortController[] = []
   private commonHeaders: Record<string, string> = {}
   private static refreshTokenPending = false
@@ -262,14 +261,6 @@ export class Client {
         new Date(parsed.expires_at).getTime() - new Date().getTime() < 30000 &&
         refreshToken !== ""
       )
-    }
-  }
-
-  constructor(host?: string) {
-    if (!host) {
-      this._host = window.location.origin
-    } else {
-      this._host = host
     }
   }
 
@@ -380,7 +371,7 @@ export class Client {
     const start = new Date()
     try {
       response = await fetch(
-        `${this._host}/exec?${Client.encodeParams(payload)}`,
+        `exec?${Client.encodeParams(payload)}`,
         { signal: controller.signal, headers: this.commonHeaders },
       )
     } catch (error) {
@@ -544,7 +535,7 @@ export class Client {
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
     try {
       const response: Response = await fetch(
-        `${this._host}/chk?${Client.encodeParams({
+        `chk?${Client.encodeParams({
           f: "json",
           j: name,
         })}`,
@@ -589,7 +580,7 @@ export class Client {
 
     return new Promise((resolve, reject) => {
       let request = new XMLHttpRequest()
-      request.open("POST", `${this._host}/imp?${new URLSearchParams(params)}`)
+      request.open("POST", `imp?${new URLSearchParams(params)}`)
       Object.keys(this.commonHeaders).forEach((key) => {
         request.setRequestHeader(key, this.commonHeaders[key])
       })
@@ -620,7 +611,7 @@ export class Client {
   async exportQueryToCsv(query: string) {
     try {
       const response: Response = await fetch(
-        `${this._host}/exp?${Client.encodeParams({ query })}`,
+        `exp?${Client.encodeParams({ query })}`,
         { headers: this.commonHeaders },
       )
       const blob = await response.blob()

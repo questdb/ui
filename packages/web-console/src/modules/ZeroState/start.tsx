@@ -74,7 +74,7 @@ export const Start = () => {
             alt="File upload icon"
             width="60"
             height="80"
-            src="/assets/upload.svg"
+            src="assets/upload.svg"
           />
           <Heading level={5}>Import CSV</Heading>
         </Action>
@@ -85,7 +85,7 @@ export const Start = () => {
             alt="Create table icon"
             width="60"
             height="80"
-            src="/assets/create-table.svg"
+            src="assets/create-table.svg"
           />
           <Heading level={5}>Create table</Heading>
         </Action>

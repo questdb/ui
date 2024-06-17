@@ -81,7 +81,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
               alt="File upload icon"
               width="60"
               height="80"
-              src="/assets/upload.svg"
+              src="assets/upload.svg"
             />
             <Heading level={3}>
               Drag CSV files here or paste from clipboard
