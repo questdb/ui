@@ -77,35 +77,6 @@ type FormValues = {
 
 const GENERIC_ERROR_TEXT = "Error restarting transaction"
 
-const walErrorWorkarounds: Record<
-  QuestDB.WalErrorTag,
-  {
-    title: string
-    link: string
-  }
-> = {
-  [QuestDB.WalErrorTag.TOO_MANY_OPEN_FILES]: {
-    title: "System limit for open files",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files",
-  },
-  [QuestDB.WalErrorTag.DISK_FULL]: {
-    title: "OS configuration",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
-  },
-  [QuestDB.WalErrorTag.OUT_OF_MEMORY]: {
-    title: "Max virtual memory limit",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
-  },
-  [QuestDB.WalErrorTag.FAILED_MEMORY_ALLOCATION]: {
-    title: "Max virtual memory limit",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
-  },
-  [QuestDB.WalErrorTag.OTHER]: {
-    title: "OS configuration",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
-  },
-}
-
 export const SuspensionPopover = ({
   walTableData,
 }: {
@@ -178,20 +149,20 @@ export const SuspensionPopover = ({
               >
                 {walTableData.errorMessage}
               </Text>
-              {walErrorWorkarounds[walTableData.errorTag] && (
+              {QuestDB.errorWorkarounds[walTableData.errorTag] && (
                 <ContentBlockBox gap="0.5rem">
                   <Text color="foreground">Workarounds and documentation:</Text>
                   <Link
                     color="cyan"
                     hoverColor="cyan"
-                    href={walErrorWorkarounds[walTableData.errorTag].link}
+                    href={QuestDB.errorWorkarounds[walTableData.errorTag].link}
                     rel="noreferrer"
                     target="_blank"
                     data-hook="schema-suspension-popover-error-link"
                   >
                     <Box align="center" gap="0.25rem">
                       <ExternalLink size="16px" />
-                      {walErrorWorkarounds[walTableData.errorTag].title}
+                      {QuestDB.errorWorkarounds[walTableData.errorTag].title}
                     </Box>
                   </Link>
                 </ContentBlockBox>

@@ -27,6 +27,7 @@ import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { AuthPayload } from "../modules/OAuth2/types"
 import { StoreKey } from "./localStorage/types"
+import * as QuestDB from "./questdb"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -126,7 +127,7 @@ export type Table = {
   dedup: boolean
 }
 
-export enum WalErrorTag {
+export enum ErrorTag {
   DISK_FULL = "DISK FULL",
   TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
   OUT_OF_MEMORY = "OUT OF MEMORY",
@@ -140,7 +141,7 @@ export type WalTable = {
   writerTxn: string
   writerLagTxtCount: string
   sequencerTxn: string
-  errorTag?: WalErrorTag
+  errorTag?: ErrorTag
   errorMessage?: string
 }
 
@@ -265,6 +266,35 @@ export type Parameter = {
   value_source: string
   sensitive: boolean
   dynamic: boolean
+}
+
+export const errorWorkarounds: Record<
+  ErrorTag,
+  {
+    title: string
+    link: string
+  }
+> = {
+  [QuestDB.ErrorTag.TOO_MANY_OPEN_FILES]: {
+    title: "System limit for open files",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files",
+  },
+  [QuestDB.ErrorTag.DISK_FULL]: {
+    title: "OS configuration",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
+  },
+  [QuestDB.ErrorTag.OUT_OF_MEMORY]: {
+    title: "Max virtual memory limit",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
+  },
+  [QuestDB.ErrorTag.FAILED_MEMORY_ALLOCATION]: {
+    title: "Max virtual memory limit",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
+  },
+  [QuestDB.ErrorTag.OTHER]: {
+    title: "OS configuration",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
+  },
 }
 
 export class Client {
@@ -405,10 +435,10 @@ export class Client {
 
     const start = new Date()
     try {
-      response = await fetch(
-        `exec?${Client.encodeParams(payload)}`,
-        { signal: controller.signal, headers: this.commonHeaders },
-      )
+      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal: controller.signal,
+        headers: this.commonHeaders,
+      })
     } catch (error) {
       const err = {
         position: -1,
