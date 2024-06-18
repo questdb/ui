@@ -63,14 +63,13 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
         quest.setCommonHeaders({
           Authorization: `Bearer ${token.access_token}`,
         })
-        // When OIDC is enabled telemetry cannot be enabled.
-        // The below line can be removed only if the server grants SELECT permission on
-        // the telemetry tables to all authenticated users automatically.
-        return from(
-          // How to construct Promise<QuestDB.QueryResult<TelemetryConfigShape>>
-          // with empty strings without going to the server?
-          quest.query<TelemetryConfigShape>(`select '', '', '', '', ''`),
-        )
+      } else {
+        const restToken = getValue(StoreKey.REST_TOKEN)
+        if (restToken) {
+          quest.setCommonHeaders({
+            Authorization: `Bearer ${restToken}`
+          })
+        }
       }
       return from(
         quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`),
