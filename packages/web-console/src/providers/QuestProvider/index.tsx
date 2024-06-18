@@ -124,7 +124,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   // Telemetry queries use SQL, and therefore need to have auth header set if needed.
   // Defer starting until the authorization is properly set for all HTTP requests.
   useEffect(() => {
-    if (settings["release.type"] === "OSS" && authCheckFinished) {
+    if (authCheckFinished) {
       dispatch(actions.telemetry.start())
     }
   }, [authCheckFinished])
