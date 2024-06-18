@@ -55,7 +55,7 @@ type ContextProps = {
   buildVersion: Versions
   commitHash: string
   warning?: BuildDetails["warning"]
-  tag?: BuildDetails["tag"]
+  warningTag?: BuildDetails["tag"]
 }
 
 const defaultValues: ContextProps = {
@@ -66,7 +66,7 @@ const defaultValues: ContextProps = {
   },
   commitHash: "",
   warning: null,
-  tag: null,
+  warningTag: null,
 }
 
 export const QuestContext = createContext<ContextProps>(defaultValues)
@@ -83,7 +83,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   )
   const [commitHash, setCommitHash] = useState<string>("")
   const [warning, setWarning] = useState<string | null>()
-  const [tag, setTag] = useState<QuestDB.ErrorTag | null>()
+  const [warningTag, setWarningTag] = useState<QuestDB.ErrorTag | null>()
 
   const finishAuthCheck = async () => {
     // The initial check tells us if the user has permission to use the HTTP protocol.
@@ -131,7 +131,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
           setBuildVersion(formatVersion(result.data[0].build))
           setCommitHash(formatCommitHash(result.data[0].build))
           setWarning(result.data[0].warning)
-          setTag(result.data[0].tag)
+          setWarningTag(result.data[0].tag)
         }
       })
   }, [])
@@ -153,7 +153,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
         buildVersion,
         commitHash,
         warning,
-        tag,
+        warningTag,
       }}
     >
       {children}
