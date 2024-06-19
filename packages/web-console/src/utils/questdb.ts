@@ -119,12 +119,30 @@ export type QueryResult<T extends Record<string, any>> =
   | DmlResult
   | DdlResult
 
+type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
+
 export type Table = {
   table_name: string
-  partitionBy: string
+  partitionBy: PartitionBy
   designatedTimestamp: string
   walEnabled: boolean
   dedup: boolean
+}
+
+export type Partition = {
+  index: number
+  partitionBy: PartitionBy
+  name: string
+  minTimestamp: string | null
+  maxTimestamp: string | null
+  numRows: string
+  diskSize: string
+  diskSizeHuman: string
+  readOnly: boolean
+  active: boolean
+  attached: boolean
+  detached: boolean
+  attachable: boolean
 }
 
 export enum ErrorTag {
