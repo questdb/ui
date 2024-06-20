@@ -69,6 +69,13 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
           quest.setCommonHeaders({
             Authorization: `Bearer ${restToken}`
           })
+        } else {
+            const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
+            if (basicAuth) {
+                quest.setCommonHeaders({
+                    Authorization: basicAuth,
+                })
+            }
         }
       }
       return from(
