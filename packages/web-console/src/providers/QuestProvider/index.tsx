@@ -107,7 +107,6 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       questClient.setCommonHeaders({
         Authorization: `Bearer ${token}`,
       })
-
       void finishAuthCheck()
     } else {
         const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)

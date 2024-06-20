@@ -207,13 +207,13 @@ export const Login = ({
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
 
   const httpBasicAuthStrategy = isEE ? {
-    query: "alter user 'admin' create token type rest with ttl '1d' refresh transient",
+    query: (username: string) => `alter user '${username}' create token type rest with ttl '1d' refresh transient`,
     store: async (response: Response, username: string, password: string) => {
       const token = (await response.json()).dataset[0][1]
       setValue(StoreKey.REST_TOKEN, token)
     }
   } : {
-    query: "select * from long_sequence(1)",
+    query: () => "select * from long_sequence(1)",
     store: async (response: Response, username: string, password: string) => {
       setValue(StoreKey.BASIC_AUTH_HEADER, `Basic ${btoa(`${username}:${password}`)}`)
     }
@@ -223,7 +223,7 @@ export const Login = ({
     const {username, password} = values
     try {
       const response = await fetch(
-        `exec?query=${httpBasicAuthStrategy.query}`,
+        `exec?query=${httpBasicAuthStrategy.query(username)}`,
         {
           headers: {
             Authorization: `Basic ${btoa(`${username}:${password}`)}`,
