@@ -34,4 +34,5 @@ export enum StoreKey {
   EDITOR_SPLITTER_BASIS = "splitter.editor.basis",
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
   REST_TOKEN = "rest.token",
+  BASIC_AUTH_HEADER = "basic.auth.header",
 }
