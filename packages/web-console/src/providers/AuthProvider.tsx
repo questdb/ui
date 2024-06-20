@@ -228,7 +228,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const basicAuthLogin = async () => {
     // run a simple query to force basic auth by browser
     const response = await fetch(
-      `${window.location.origin}/exec?query=select 42`,
+      `exec?query=select 42`,
     )
     if (response.status === 200) {
       dispatch({ view: View.ready })
@@ -256,7 +256,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       config: settings,
       code_challenge,
       login,
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.href,
     })
   }
 
@@ -267,7 +267,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (noRedirect) {
       dispatch({ view: View.loggedOut })
     } else {
-      window.location.href = window.location.origin
+      window.location.reload()
     }
   }
 

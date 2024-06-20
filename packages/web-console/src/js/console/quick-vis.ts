@@ -265,7 +265,7 @@ export function quickVis(
       requestParams.src = "vis"
       // time the query because control that displays query success expected time delta
       queryExecutionTimestamp = new Date().getTime()
-      hActiveRequest = $.get("/exec", requestParams)
+      hActiveRequest = $.get("exec", requestParams)
       eventBus.publish(EventType.MSG_QUERY_RUNNING)
       hActiveRequest.done(handleServerResponse).fail(handleServerError)
     }

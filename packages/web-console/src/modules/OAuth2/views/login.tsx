@@ -7,7 +7,7 @@ import Joi from "joi"
 import { Text } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
-import { useSettings } from "../../../providers/SettingsProvider"
+import { useSettings } from "../../../providers"
 
 const Header = styled.div`
   position: absolute;
@@ -223,7 +223,7 @@ export const Login = ({
     const {username, password} = values
     try {
       const response = await fetch(
-        `${window.location.origin}/exec?query=${httpBasicAuthStrategy.query}`,
+        `exec?query=${httpBasicAuthStrategy.query}`,
         {
           headers: {
             Authorization: `Basic ${btoa(`${username}:${password}`)}`,
@@ -258,7 +258,7 @@ export const Login = ({
           <img
             alt="QuestDB logotype"
             height="20"
-            src="/assets/questdb-logotype.svg"
+            src="assets/questdb-logotype.svg"
           />
         </a>
       </Header>

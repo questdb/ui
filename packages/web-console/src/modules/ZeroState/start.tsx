@@ -74,7 +74,7 @@ export const Start = () => {
             alt="File upload icon"
             width="60"
             height="80"
-            src="/assets/upload.svg"
+            src="assets/upload.svg"
           />
           <Heading level={5}>Import CSV</Heading>
         </Action>
@@ -85,23 +85,11 @@ export const Start = () => {
             alt="Create table icon"
             width="60"
             height="80"
-            src="/assets/create-table.svg"
+            src="assets/create-table.svg"
           />
           <Heading level={5}>Create table</Heading>
         </Action>
       </Actions>
-      <StyledText color="gray2">
-        Get $200 in free credits when you sign up for{" "}
-        <a
-          href="https://questdb.io/cloud"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          QuestDB Cloud
-        </a>
-        .<br />
-        No credit card required.
-      </StyledText>
     </Items>
   )
 }
