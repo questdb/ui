@@ -90,18 +90,6 @@ export const Start = () => {
           <Heading level={5}>Create table</Heading>
         </Action>
       </Actions>
-      <StyledText color="gray2">
-        Get $200 in free credits when you sign up for{" "}
-        <a
-          href="https://questdb.io/cloud"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          QuestDB Cloud
-        </a>
-        .<br />
-        No credit card required.
-      </StyledText>
     </Items>
   )
 }
