@@ -195,7 +195,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               code,
               code_verifier,
               client_id: settings["acl.oidc.client.id"],
-              redirect_uri: window.location.origin,
+              redirect_uri: window.location.origin + window.location.pathname,
             })
             const tokenResponse = await response.json()
             setAuthToken(tokenResponse)
