@@ -16,6 +16,17 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.4.5 - 2024.06.25
+
+### Added
+
+- show login dialog for QuestDB OSS when authentication is enabled [#300](https://github.com/questdb/ui/pull/300)
+
+### Fixed
+
+- fix OAuth2 redirect URI
+  [#303](https://github.com/questdb/ui/pull/303)
+
 ## 0.4.4 - 2024.06.19
 
 ### Added
