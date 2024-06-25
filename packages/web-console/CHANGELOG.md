@@ -18,6 +18,10 @@ and this project adheres to
 
 ## 0.4.5 - 2024.06.25
 
+### Added
+
+- show login dialog for QuestDB OSS when authentication is enabled [#300](https://github.com/questdb/ui/pull/300)
+
 ### Fixed
 
 - fix OAuth2 redirect URI
