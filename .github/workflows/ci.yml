@@ -28,7 +28,7 @@ jobs:
           cache: maven
 
       - name: Build QuestDB
-        run: cd questdb; mvn clean
+        run: cd packages/browser-tests/questdb; mvn clean
   
       - uses: actions/setup-node@v4
         with:
