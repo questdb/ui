@@ -55,7 +55,7 @@ jobs:
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
       - name: Stop QuestDB
-        run: ./tmp/questdb-*-rt-linux-amd64.tar.gz/bin/questdb.sh stop
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
