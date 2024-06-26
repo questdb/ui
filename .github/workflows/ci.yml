@@ -54,6 +54,13 @@ jobs:
       - name: Run browser-tests test
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
+      - name: Save QuestDB log on test failure
+        if: failure()
+        uses: actions/upload-artifact@v1
+        with:
+          name: server log
+          path: tmp/dbroot/log/*
+
       - name: Stop QuestDB
         run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
 
