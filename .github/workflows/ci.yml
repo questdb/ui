@@ -30,6 +30,8 @@ jobs:
 
       - name: Start QuestDB
         run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+        with:
+          post: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
 
       - uses: actions/setup-node@v4
         with:
@@ -54,8 +56,8 @@ jobs:
       - name: Run browser-tests test
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
-      - name: Stop QuestDB
-        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
+#      - name: Stop QuestDB
+#        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
