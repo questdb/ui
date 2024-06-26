@@ -30,11 +30,11 @@ jobs:
       - name: Build QuestDB
         run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
 
+      - name: Extract QuestDB
+        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-no-jre-bin.tar.gz
+
       - name: List QuestDB
-        run: |
-          ls -la packages/browser-tests/questdb
-          ls -la packages/browser-tests/questdb/core
-          ls -la packages/browser-tests/questdb/core/target
+        run: ls -la packages/browser-tests/questdb/core/target
 
       - uses: actions/setup-node@v4
         with:
