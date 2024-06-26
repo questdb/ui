@@ -21,17 +21,6 @@ jobs:
         with:
           submodules: "recursive"
 
-#      - name: Init Submodule
-#        run: git submodule init
-#      - name: Update Submodule
-#        run: git submodule update
-
-      - name: List a
-        run: ls -la packages/browser-tests
-
-      - name: List b
-        run: ls -la packages/browser-tests/questdb
-
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -39,7 +28,7 @@ jobs:
           cache: maven
 
       - name: Build QuestDB
-        run: mvn clean --file packages/browser-tests/questdb/pom.xml
+        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-ent-binaries
 
       - uses: actions/setup-node@v4
         with:
