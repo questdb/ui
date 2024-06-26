@@ -24,14 +24,17 @@ jobs:
       - name: Init Submodule
         run: git submodule update --init --recursive
 
+      - name: List a
+        run: ls -la packages/browser-tests
+
+      - name: List b
+        run: ls -la packages/browser-tests/questdb
+
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: maven
-
-      - name: List QuestDB
-        run: ls -la packages/browser-tests/questdb
 
       - name: Build QuestDB
         run: mvn clean --file packages/browser-tests/questdb/pom.xml
