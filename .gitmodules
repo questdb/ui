@@ -1,0 +1,3 @@
+[submodule "packages/browser-tests/questdb"]
+	path = packages/browser-tests/questdb
+	url = https://github.com/questdb/questdb.git

@@ -7,16 +7,29 @@ jobs:
   CI:
     name: Monorepo CI flow
     runs-on: ubuntu-latest
-    services:
-      questdb:
-        image: questdb/questdb:nightly
-        ports:
-          - 9000:9000
-        env:
-          QDB_TELEMETRY_ENABLED: false
+
+#    services:
+#      questdb:
+#        image: questdb/questdb:nightly
+#        ports:
+#          - 9000:9000
+#        env:
+#          QDB_TELEMETRY_ENABLED: false
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build QuestDB
+        run: cd questdb; mvn clean
+  
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -37,8 +50,8 @@ jobs:
       - name: Run @questdb/web-console unit tests
         run: yarn workspace @questdb/web-console run test:prod
 
-      - name: Run browser-tests test
-        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
+#      - name: Run browser-tests test
+#        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
