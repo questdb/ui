@@ -28,7 +28,10 @@ jobs:
           cache: maven
 
       - name: Build QuestDB
-        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-ent-binaries
+        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
+
+      - name: List QuestDB
+        run: ls -la packages/browser-tests/questdb/core/target
 
       - uses: actions/setup-node@v4
         with:
