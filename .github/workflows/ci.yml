@@ -21,10 +21,10 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Init Submodule
-        run: git submodule init
-      - name: Update Submodule
-        run: git submodule update
+#      - name: Init Submodule
+#        run: git submodule init
+#      - name: Update Submodule
+#        run: git submodule update
 
       - name: List a
         run: ls -la packages/browser-tests
