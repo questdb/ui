@@ -29,7 +29,7 @@ jobs:
         run: mkdir tmp/dbroot
 
       - name: Start QuestDB
-        run: ./tmp/questdb-*-rt-linux-amd64.tar.gz/bin/questdb.sh start -d ./tmp/dbroot
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
 
       - uses: actions/setup-node@v4
         with:
