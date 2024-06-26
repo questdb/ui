@@ -55,22 +55,22 @@ jobs:
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
       - name: List Log Files
-        if: true
+        if: success() || failure()
         run: ls -la tmp/dbroot/log
 
       - name: Print Log Files
-        if: true
+        if: success() || failure()
         run: cat tmp/dbroot/log/*
 
       - name: Save QuestDB log on test failure
         if: failure()
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
-          name: server log
+          name: server-log
           path: tmp/dbroot/log/*
 
       - name: Stop QuestDB
-        if: true
+        if: success() || failure()
         run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
 
       - name: Publish @questdb/web-console to npm
