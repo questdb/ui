@@ -31,7 +31,10 @@ jobs:
         run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
 
       - name: List QuestDB
-        run: ls -la packages/browser-tests/questdb/core/target
+        run: |
+          ls -la packages/browser-tests/questdb
+          ls -la packages/browser-tests/questdb/core
+          ls -la packages/browser-tests/questdb/core/target
 
       - uses: actions/setup-node@v4
         with:
