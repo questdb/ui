@@ -8,14 +8,6 @@ jobs:
     name: Monorepo CI flow
     runs-on: ubuntu-latest
 
-#    services:
-#      questdb:
-#        image: questdb/questdb:nightly
-#        ports:
-#          - 9000:9000
-#        env:
-#          QDB_TELEMETRY_ENABLED: false
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,13 +23,13 @@ jobs:
         run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
 
       - name: Extract QuestDB
-        run: tar xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-amd64.tar.gz
+        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-amd64.tar.gz -C tmp/
 
-      - name: List QuestDB
-        run: |
-          ls -la packages/browser-tests/questdb/core/target
-          ls -la .
-          ls -la questdb-*
+      - name: Create DB Root
+        run: mkdir tmp/dbroot
+
+      - name: Start QuestDB
+        run: ./tmp/questdb-*-rt-linux-amd64.tar.gz/bin/questdb.sh start -d ./tmp/dbroot
 
       - uses: actions/setup-node@v4
         with:
@@ -59,8 +51,11 @@ jobs:
       - name: Run @questdb/web-console unit tests
         run: yarn workspace @questdb/web-console run test:prod
 
-#      - name: Run browser-tests test
-#        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
+      - name: Run browser-tests test
+        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
+
+      - name: Stop QuestDB
+        run: ./tmp/questdb-*-rt-linux-amd64.tar.gz/bin/questdb.sh stop
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
