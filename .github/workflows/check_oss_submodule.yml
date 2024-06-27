@@ -14,6 +14,11 @@ jobs:
           submodules: "recursive"
 
       - name: Print name of OSS branch
+        run: |
+          TEST_STUFF=$(ls -la)
+          echo $TEST_STUFF
+
+      - name: Print name of OSS branch
         run: echo ${{ github.ref_name }}
 
       - name: Check OSS branch
