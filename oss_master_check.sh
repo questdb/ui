@@ -2,6 +2,7 @@
 
 cd packages/browser-tests/questdb || exit 2
 BRANCH=`git rev-parse --abbrev-ref HEAD`
+echo Branch name: $BRANCH
 
 if [[ $BRANCH = "master" ]]
 then
