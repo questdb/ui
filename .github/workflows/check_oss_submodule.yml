@@ -13,10 +13,11 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Print name of OSS branch
-        run: |
-          TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
-          echo $TEST_STUFF
+      - name: Get stuff
+        run: TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
+
+      - name: Print stuff
+        run: echo $TEST_STUFF
 
       - name: Print name of OSS branch
         run: echo ${{ github.ref_name }}
