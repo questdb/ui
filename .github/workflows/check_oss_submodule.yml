@@ -15,7 +15,7 @@ jobs:
 
       - name: Print name of OSS branch
         run: |
-          TEST_STUFF=$(ls -la)
+          TEST_STUFF=$(git submodule foreach 'git branch')
           echo $TEST_STUFF
 
       - name: Print name of OSS branch
