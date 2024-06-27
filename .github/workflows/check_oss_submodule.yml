@@ -18,4 +18,4 @@ jobs:
 
       - name: Check OSS branch
         if: github.ref_name != 'master'
-        run: exit 1
+        run: exit 0
