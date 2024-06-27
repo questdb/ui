@@ -16,7 +16,7 @@ jobs:
       - name: Get current prefix
         id: branch-prefix
         run: |
-          prefix=$(echo $GITHUB_REF)
+          prefix=$(echo `git branch`)
           echo "::set-output name=prefix::$prefix"
 
 #      - name: Stuff
