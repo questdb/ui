@@ -13,5 +13,9 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Check OSS branch
+      - name: Print name of OSS branch
         run: echo ${{ github.ref_name }}
+
+      - name: Check OSS branch
+        if: github.ref_name != 'master'
+        run: exit 1
