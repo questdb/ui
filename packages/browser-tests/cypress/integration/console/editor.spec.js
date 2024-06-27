@@ -26,7 +26,7 @@ describe("appendQuery", () => {
     ).as("getConsoleConfiguration");
 
     cy.visit(baseUrl);
-    cy.getEditor().should("be.visible");
+    cy.getEditorContent().should("be.visible");
   });
 
   beforeEach(() => {
@@ -165,14 +165,11 @@ describe("&query URL param", () => {
   it("should append query and scroll to it", () => {
     cy.visit(baseUrl);
 
-    cy.typeQuery("--\n".repeat(20)); // take space so that query is not visible later
-    const query = "select x from long_sequence(1);";
-    cy.typeQuery(query).clickRun(); // save by running
+    cy.typeQuery("select x from long_sequence(1);");
+    cy.typeQuery("\n".repeat(20)).clickRun(); // take space so that query is not visible later, save by running
 
     const appendedQuery = "-- hello world";
-    cy.visit(
-      `${baseUrl}?query=${encodeURIComponent(appendedQuery)}&executeQuery=true`
-    );
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`);
     cy.getVisibleLines()
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
@@ -185,7 +182,7 @@ describe("autocomplete", () => {
   });
 
   beforeEach(() => {
-    cy.getEditor().should("be.visible");
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
