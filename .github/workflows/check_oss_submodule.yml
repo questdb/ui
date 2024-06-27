@@ -23,9 +23,9 @@ jobs:
 #        run: |
 #          TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
 #          if: ${{ ! startsWith($TEST_STUFF, 'refs/tags/') }}
-#
-#      - name: Print name of OSS branch
-#        run: echo ${{ github.ref_name }}
+
+      - name: Print name of OSS branch
+        run: echo ${{ steps.branch-prefix.output.prefix }}
 
       - name: Check OSS branch
         if: ${{ steps.branch-prefix.output.prefix != 'master' }}
