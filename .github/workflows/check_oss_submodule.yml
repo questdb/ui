@@ -13,20 +13,23 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Get current prefix
-        id: branch-prefix
-        run: |
-          prefix=$(echo `git branch`)
-          echo "::set-output name=prefix::$prefix"
+#      - name: Get current prefix
+#        id: branch-prefix
+#        run: |
+#          prefix=$(echo `git branch`)
+#          echo "::set-output name=prefix::$prefix"
 
 #      - name: Stuff
 #        run: |
 #          TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
 #          if: ${{ ! startsWith($TEST_STUFF, 'refs/tags/') }}
 
-      - name: Print name of OSS branch
-        run: echo ${{ steps.branch-prefix.output.prefix }}
+#      - name: Print name of OSS branch
+#        run: echo ${{ steps.branch-prefix.output.prefix }}
+
+#      - name: Check OSS branch
+#        if: ${{ steps.branch-prefix.output.prefix != 'master' }}
+#        run: exit 1
 
       - name: Check OSS branch
-        if: ${{ steps.branch-prefix.output.prefix != 'master' }}
-        run: exit 1
+        run: ./oss_master_check.sh
