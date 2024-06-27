@@ -15,7 +15,7 @@ jobs:
 
       - name: Print name of OSS branch
         run: |
-          TEST_STUFF=$(git submodule foreach 'git branch')
+          TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
           echo $TEST_STUFF
 
       - name: Print name of OSS branch
