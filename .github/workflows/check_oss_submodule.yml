@@ -13,14 +13,20 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Stuff
+      - name: Get current prefix
+        id: branch-prefix
         run: |
-          TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
-          echo $TEST_STUFF
+          prefix=$(echo $GITHUB_REF)
+          echo "::set-output name=prefix::$prefix"
 
-      - name: Print name of OSS branch
-        run: echo ${{ github.ref_name }}
+#      - name: Stuff
+#        run: |
+#          TEST_STUFF=$(cd packages/browser-tests/questdb; git branch)
+#          if: ${{ ! startsWith($TEST_STUFF, 'refs/tags/') }}
+#
+#      - name: Print name of OSS branch
+#        run: echo ${{ github.ref_name }}
 
       - name: Check OSS branch
-        if: github.ref_name != 'master'
+        if: ${{ steps.branch-prefix.output.prefix != 'master' }}
         run: exit 1
