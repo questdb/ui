@@ -5,11 +5,11 @@ const baseUrl = "http://localhost:9999";
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
-      { name: "query 1", value: "first query" },
-      { name: "query 1", value: "second query" },
+      { name: "query 1", value: "first query;" },
+      { name: "query 2", value: "second query;" },
       {
-        name: "query 1",
-        value: "multi\nline\nquery",
+        name: "query 3",
+        value: "multi\nline\nquery;",
       },
     ],
   };
@@ -29,13 +29,14 @@ describe("appendQuery", () => {
     cy.getEditor().should("be.visible");
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    cy.getMountedEditor();
     cy.clearEditor();
   });
 
   it("should append and select first query", () => {
     cy.selectQuery(0);
-    const expected = `${queries[0]}\n`;
+    const expected = `\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
     cy.matchImageSnapshot(); // screenshot diff
@@ -43,14 +44,14 @@ describe("appendQuery", () => {
 
   it("should append and select second query", () => {
     cy.selectQuery(1);
-    const expected = `${queries[1]}\n`;
+    const expected = `\n${queries[1]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
     cy.selectQuery(2);
-    const expected = `${queries[2]}\n`;
+    const expected = `\n${queries[2]}`;
     cy.getEditorContent().should("have.value", expected);
     // monaco editor visually selects all 3 lines, but creates 4 elements to visualise selection
     cy.getSelectedLines().should("have.length", 4);
@@ -58,19 +59,19 @@ describe("appendQuery", () => {
 
   it("should correctly append and select query after multiple inserts", () => {
     cy.selectQuery(1);
-    cy.selectQuery(2);
-    cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
     cy.selectQuery(1);
-    const expected = `${queries[1]}\n\n${queries[1]}\n\n${queries[2]}\n`;
+    cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
+    cy.selectQuery(2);
+    const expected = `\n${queries[1]}\n\n${queries[1]}\n\n${queries[2]}`;
     cy.getEditorContent().should("have.value", expected);
-    cy.getSelectedLines().should("have.length", 1);
+    cy.getSelectedLines().should("have.length", 4);
   });
 
   it("should correctly append and select query when position is first line which is empty", () => {
     cy.typeQuery(`{enter}--b{upArrow}`);
     cy.selectQuery(0);
     cy.selectQuery(1);
-    const expected = `${queries[0]}\n\n${queries[1]}\n\n--b`;
+    const expected = `\n--b\n${queries[0]}\n\n${queries[1]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -78,7 +79,7 @@ describe("appendQuery", () => {
   it("should correctly append and select query when position is first line which is not empty", () => {
     cy.typeQuery(`--a`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n`;
+    const expected = `--a\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -86,7 +87,7 @@ describe("appendQuery", () => {
   it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n\n--b`;
+    const expected = `--a\n\n--b\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -94,7 +95,7 @@ describe("appendQuery", () => {
   it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n\n--b`;
+    const expected = `--a\n\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -102,7 +103,7 @@ describe("appendQuery", () => {
   it("should correctly append and add surrounding new lines when position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}--b`);
     cy.selectQuery(0);
-    const expected = `--a\n--b\n\n${queries[0]}\n`;
+    const expected = `--a\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
     cy.matchImageSnapshot();
@@ -111,7 +112,7 @@ describe("appendQuery", () => {
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n`;
+    const expected = `--a\n\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -120,7 +121,7 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a{enter}--b{enter}{enter}--c`);
     cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`); // go to line 2
     cy.selectQuery(0);
-    const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
+    const expected = `--a\n--b\n\n--c\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -153,7 +154,7 @@ describe("&query URL param", () => {
     cy.getSelectedLines().should("have.length", 4);
   });
 
-  it.skip("should not append query if it already exists in editor", () => {
+  it("should not append query if it already exists in editor", () => {
     cy.visit(baseUrl);
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query).clickRun();

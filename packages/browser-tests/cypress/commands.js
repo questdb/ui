@@ -77,6 +77,10 @@ Cypress.Commands.add("selectQuery", (n) =>
     .click()
 );
 
+Cypress.Commands.add("getMountedEditor", () =>
+  cy.get(".monaco-scrollable-element")
+);
+
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));
 
 Cypress.Commands.add("getEditorContent", () =>
