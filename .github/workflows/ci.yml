@@ -54,10 +54,6 @@ jobs:
       - name: Run browser-tests test
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
 
-      - name: List Log Files
-        if: success() || failure()
-        run: ls -la tmp/dbroot/log
-
       - name: Print Log Files
         if: success() || failure()
         run: cat tmp/dbroot/log/*

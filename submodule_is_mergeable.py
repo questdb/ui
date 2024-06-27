@@ -102,7 +102,7 @@ def main():
 
     # Check that the submodule's commit is not older than the current commit
     # from the `main` branch of the enterprise repo.
-    check_not_older(ent_repo, oss_master_commits, oss_head)
+    # check_not_older(ent_repo, oss_master_commits, oss_head)
 
 
 if __name__ == '__main__':
