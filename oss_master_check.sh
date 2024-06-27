@@ -1,7 +1,7 @@
 #!/bin/bash
 
 cd packages/browser-tests/questdb || exit 2
-BRANCH=`git symbolic-ref --short HEAD`
+BRANCH=`git rev-parse --abbrev-ref HEAD`
 
 if [[ $BRANCH = "master" ]]
 then
