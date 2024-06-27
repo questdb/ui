@@ -31,5 +31,11 @@ jobs:
 #        if: ${{ steps.branch-prefix.output.prefix != 'master' }}
 #        run: exit 1
 
+#      - name: Check OSS branch
+#        run: ./oss_master_check.sh
+
       - name: Check OSS branch
-        run: ./oss_master_check.sh
+        run: |
+          python3 -m pip install -U pip
+          python3 -m pip install --upgrade pygit2==1.14.1
+          python3 submodule_is_mergeable.py
