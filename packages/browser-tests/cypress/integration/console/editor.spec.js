@@ -127,7 +127,7 @@ describe("appendQuery", () => {
   });
 });
 
-describe.only("&query URL param", () => {
+describe("&query URL param", () => {
   beforeEach(() => {
     cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
