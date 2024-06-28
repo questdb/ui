@@ -269,7 +269,7 @@ describe("errors", () => {
   });
 });
 
-describe.skip("running query with F9", () => {
+describe("running query with F9", () => {
   before(() => {
     cy.visit(baseUrl);
   });

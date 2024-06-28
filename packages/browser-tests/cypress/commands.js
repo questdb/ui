@@ -2,6 +2,8 @@ const {
   addMatchImageSnapshotCommand,
 } = require("@simonsmith/cypress-image-snapshot/command");
 
+require("cypress-real-events");
+
 addMatchImageSnapshotCommand({
   failureThreshold: 0.3,
   blackout: [".notifications", 'button[class*="BuildVersion"'],
@@ -120,13 +122,7 @@ Cypress.Commands.add("matchErrorMarkerPosition", ({ left, width }) =>
 
 Cypress.Commands.add("F9", () => {
   cy.intercept("/exec*").as("exec");
-  return cy
-    .getEditor()
-    .trigger("keydown", {
-      keyCode: 120,
-    })
-    .wait("@exec")
-    .wait(501);
+  return cy.getEditor().realPress("F9").wait("@exec").wait(501);
 });
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
