@@ -177,7 +177,7 @@ describe("&query URL param", () => {
   });
 });
 
-describe.only("autocomplete", () => {
+describe("autocomplete", () => {
   before(() => {
     cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
