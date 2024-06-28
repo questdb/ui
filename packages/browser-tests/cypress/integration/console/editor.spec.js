@@ -30,7 +30,7 @@ describe("appendQuery", () => {
   });
 
   beforeEach(() => {
-    cy.getMountedEditor();
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
@@ -127,22 +127,23 @@ describe("appendQuery", () => {
   });
 });
 
-describe("&query URL param", () => {
-  afterEach(() => {
+describe.only("&query URL param", () => {
+  beforeEach(() => {
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
   it("should append and select single line query", () => {
-    cy.visit(baseUrl);
     cy.typeQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
+    cy.getEditorContent().should("be.visible");
     cy.getGridRow(0).should("contain", "2");
     cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
-    cy.visit(baseUrl);
     cy.typeQuery(
       `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
         5
@@ -150,26 +151,26 @@ describe("&query URL param", () => {
     );
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
+    cy.getEditorContent().should("be.visible");
     cy.getGridRow(0).should("contain", "2");
     cy.getSelectedLines().should("have.length", 4);
   });
 
   it("should not append query if it already exists in editor", () => {
-    cy.visit(baseUrl);
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query).clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
+    cy.getEditorContent().should("be.visible");
     cy.getEditorContent().should("have.value", query);
   });
 
   it("should append query and scroll to it", () => {
-    cy.visit(baseUrl);
-
     cy.typeQuery("select x from long_sequence(1);");
     cy.typeQuery("\n".repeat(20)).clickRun(); // take space so that query is not visible later, save by running
 
     const appendedQuery = "-- hello world";
     cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`);
+    cy.getEditorContent().should("be.visible");
     cy.getVisibleLines()
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
@@ -249,7 +250,8 @@ describe("errors", () => {
     cy.visit(baseUrl);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
