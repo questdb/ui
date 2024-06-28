@@ -177,12 +177,22 @@ describe("&query URL param", () => {
   });
 });
 
-describe("autocomplete", () => {
+describe.only("autocomplete", () => {
   before(() => {
     cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
     ["my_secrets", "my_secrets2", "my_publics"].forEach((table) => {
       cy.typeQuery(`drop table if exists "${table}"`).runLine().clearEditor();
+    });
+    [
+      'create table "my_publics" ("public" string);',
+      // We're creating another table with the same column name.
+      // The autocomplete should merge the column completions into one
+      // and respond with something like `secret (my_secrets, my_secrets2)`
+      'create table "my_secrets" ("secret" string);',
+      'create table "my_secrets2" ("secret" string);',
+    ].forEach((query) => {
+      cy.typeQuery(query).runLine().clearEditor();
     });
   });
 
@@ -201,21 +211,6 @@ describe("autocomplete", () => {
   });
 
   it("should work when tables list is not empty", () => {
-    cy.typeQuery('create table "my_secrets" ("secret" string);')
-      .clickRun()
-      .clearEditor();
-
-    // We're creating another table with the same column name.
-    // The autocomplete should merge the column completions into one
-    // and respond with something like `secret (my_secrets, my_secrets2)`
-    cy.typeQuery('create table "my_secrets2" ("secret" string);')
-      .clickRun()
-      .clearEditor();
-
-    cy.typeQuery('create table "my_publics" ("public" string);')
-      .clickRun()
-      .clearEditor();
-
     cy.visit(baseUrl);
     cy.typeQuery("select * from ");
     cy.getAutocomplete()
