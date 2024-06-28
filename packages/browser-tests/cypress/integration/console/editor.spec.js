@@ -274,7 +274,8 @@ describe("running query with F9", () => {
     cy.visit(baseUrl);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
