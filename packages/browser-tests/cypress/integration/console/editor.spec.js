@@ -180,6 +180,10 @@ describe("&query URL param", () => {
 describe("autocomplete", () => {
   before(() => {
     cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
+    ["my_secrets", "my_secrets2", "my_publics"].forEach((table) => {
+      cy.typeQuery(`drop table if exists "${table}"`).runLine().clearEditor();
+    });
   });
 
   beforeEach(() => {
@@ -213,12 +217,16 @@ describe("autocomplete", () => {
       .clearEditor();
 
     cy.visit(baseUrl);
-    cy.typeQuery("\nselect ");
+    cy.typeQuery("select * from ");
     cy.getAutocomplete()
       // Tables
       .should("not.contain", "telemetry")
       .should("contain", "my_secrets")
       .should("contain", "my_publics")
+      .clearEditor();
+
+    cy.typeQuery("select * ");
+    cy.getAutocomplete()
       // Columns
       .should("contain", "secret")
       .should("contain", "public")
@@ -238,10 +246,6 @@ describe("autocomplete", () => {
       .should("contain", "my_publics.public")
       .should("contain", "my_secrets.secret")
       .clearEditor();
-
-    cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_secrets2"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
   });
 });
 
