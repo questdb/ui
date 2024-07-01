@@ -180,9 +180,6 @@ describe("&query URL param", () => {
 describe("autocomplete", () => {
   before(() => {
     cy.getEditorContent().should("be.visible");
-    ["my_secrets", "my_secrets2", "my_publics"].forEach((table) => {
-      cy.typeQuery(`drop table if exists "${table}"`).runLine().clearEditor();
-    });
     [
       'create table "my_publics" ("public" string);',
       // We're creating another table with the same column name.
@@ -193,12 +190,6 @@ describe("autocomplete", () => {
     ].forEach((query) => {
       cy.typeQuery(query).runLine().clearEditor();
     });
-  });
-
-  afterEach(() => {
-    cy.typeQuery('drop table "my_secrets"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_secrets2"').runLine().clearEditor();
-    cy.typeQuery('drop table "my_publics"').runLine().clearEditor();
   });
 
   beforeEach(() => {
