@@ -13609,7 +13609,8 @@ const RAW_RUNTIME_STATE =
         "packageDependencies": [\
           ["browser-tests", "workspace:packages/browser-tests"],\
           ["@simonsmith/cypress-image-snapshot", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:8.1.2"],\
-          ["cypress", "npm:10.11.0"]\
+          ["cypress", "npm:10.11.0"],\
+          ["cypress-real-events", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:1.13.0"]\
         ],\
         "linkType": "SOFT"\
       }]\
@@ -15089,6 +15090,28 @@ const RAW_RUNTIME_STATE =
           ["tmp", "npm:0.2.1"],\
           ["untildify", "npm:4.0.0"],\
           ["yauzl", "npm:2.10.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["cypress-real-events", [\
+      ["npm:1.13.0", {\
+        "packageLocation": "./.yarn/cache/cypress-real-events-npm-1.13.0-d74f2d882d-085e2e4f45.zip/node_modules/cypress-real-events/",\
+        "packageDependencies": [\
+          ["cypress-real-events", "npm:1.13.0"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:1.13.0", {\
+        "packageLocation": "./.yarn/__virtual__/cypress-real-events-virtual-07869643c0/0/cache/cypress-real-events-npm-1.13.0-d74f2d882d-085e2e4f45.zip/node_modules/cypress-real-events/",\
+        "packageDependencies": [\
+          ["cypress-real-events", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:1.13.0"],\
+          ["@types/cypress", null],\
+          ["cypress", "npm:10.11.0"]\
+        ],\
+        "packagePeers": [\
+          "@types/cypress",\
+          "cypress"\
         ],\
         "linkType": "HARD"\
       }]\

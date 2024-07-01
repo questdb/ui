@@ -23,7 +23,22 @@ export const createSchemaCompletionProvider = (
 
       const queryAtCursor = getQueryFromCursor(editor)
 
+      // get text value in the current line
+      const textInLine = model.getValueInRange({
+        startLineNumber: position.lineNumber,
+        startColumn: 1,
+        endLineNumber: position.lineNumber,
+        endColumn: position.column,
+      })
+
       let tableContext: string[] = []
+
+      const isWhitespaceOnly = /^\s*$/.test(textInLine)
+      const isLineComment = /(-- |--|\/\/ |\/\/)$/gim.test(textInLine)
+
+      if (isWhitespaceOnly || isLineComment) {
+        return null
+      }
 
       if (queryAtCursor) {
         const matches = findMatches(model, queryAtCursor.query)
@@ -79,16 +94,13 @@ export const createSchemaCompletionProvider = (
             endLineNumber: position.lineNumber,
             endColumn: position.column,
           })
-          // check if `textInLine` contains whitespaces only
-          const isWhitespaceOnly = /^\s*$/.test(textInLine)
 
           if (
-            (/(FROM|INTO|(ALTER|BACKUP|DROP|REINDEX|RENAME|TRUNCATE|VACUUM) TABLE|JOIN|UPDATE)\s$/gim.test(
+            /(FROM|INTO|(ALTER|BACKUP|DROP|REINDEX|RENAME|TRUNCATE|VACUUM) TABLE|JOIN|UPDATE)\s$/gim.test(
               textUntilPosition,
             ) ||
-              (/'$/gim.test(textUntilPosition) &&
-                !textUntilPosition.endsWith("= '"))) &&
-            !isWhitespaceOnly
+            (/'$/gim.test(textUntilPosition) &&
+              !textUntilPosition.endsWith("= '"))
           ) {
             return {
               suggestions: getTableCompletions({

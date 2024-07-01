@@ -1,0 +1,20 @@
+name: Check OSS Submodule
+
+on:
+  push:
+
+jobs:
+  check_oss_submodule:
+    name: Check if OSS is on master
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Check OSS branch
+        run: |
+          python3 -m pip install -U pip
+          python3 -m pip install --upgrade pygit2==1.14.1
+          python3 submodule_is_mergeable.py
