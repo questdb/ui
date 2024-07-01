@@ -7,16 +7,30 @@ jobs:
   CI:
     name: Monorepo CI flow
     runs-on: ubuntu-latest
-    services:
-      questdb:
-        image: questdb/questdb:nightly
-        ports:
-          - 9000:9000
-        env:
-          QDB_TELEMETRY_ENABLED: false
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build QuestDB
+        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
+
+      - name: Extract QuestDB
+        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-amd64.tar.gz -C tmp/
+
+      - name: Create DB Root
+        run: mkdir tmp/dbroot
+
+      - name: Start QuestDB
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -39,6 +53,21 @@ jobs:
 
       - name: Run browser-tests test
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
+
+      - name: Print Log Files
+        if: success() || failure()
+        run: cat tmp/dbroot/log/*
+
+      - name: Save QuestDB log on test failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: questdb-log
+          path: tmp/dbroot/log/*
+
+      - name: Stop QuestDB
+        if: success() || failure()
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'

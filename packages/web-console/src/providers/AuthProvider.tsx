@@ -195,7 +195,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               code,
               code_verifier,
               client_id: settings["acl.oidc.client.id"],
-              redirect_uri: window.location.origin,
+              redirect_uri: window.location.origin + window.location.pathname,
             })
             const tokenResponse = await response.json()
             setAuthToken(tokenResponse)
@@ -228,7 +228,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const basicAuthLogin = async () => {
     // run a simple query to force basic auth by browser
     const response = await fetch(
-      `${window.location.origin}/exec?query=select 42`,
+      `exec?query=select 42`,
     )
     if (response.status === 200) {
       dispatch({ view: View.ready })
@@ -240,7 +240,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const uiAuthLogin = () => {
     // Check if user is authenticated already with basic auth
     const token = getValue(StoreKey.REST_TOKEN)
-    if (token) {
+    const basicAuthHeader = getValue(StoreKey.BASIC_AUTH_HEADER)
+    if (token || basicAuthHeader) {
       dispatch({ view: View.ready })
     } else {
       // Stop loading and display the login state
@@ -255,17 +256,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       config: settings,
       code_challenge,
       login,
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.href,
     })
   }
 
   const logout = (noRedirect?: boolean) => {
     removeValue(StoreKey.AUTH_PAYLOAD)
     removeValue(StoreKey.REST_TOKEN)
+    removeValue(StoreKey.BASIC_AUTH_HEADER)
     if (noRedirect) {
       dispatch({ view: View.loggedOut })
     } else {
-      window.location.href = window.location.origin
+      window.location.reload()
     }
   }
 

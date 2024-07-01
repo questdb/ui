@@ -6,9 +6,9 @@ describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
       { name: "query 1", value: "first query;" },
-      { name: "query 1", value: "second query;" },
+      { name: "query 2", value: "second query;" },
       {
-        name: "query 1",
+        name: "query 3",
         value: "multi\nline\nquery;",
       },
     ],
@@ -26,16 +26,17 @@ describe("appendQuery", () => {
     ).as("getConsoleConfiguration");
 
     cy.visit(baseUrl);
-    cy.getEditor().should("be.visible");
+    cy.getEditorContent().should("be.visible");
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
   it("should append and select first query", () => {
     cy.selectQuery(0);
-    const expected = `${queries[0]}\n`;
+    const expected = `\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
     cy.matchImageSnapshot(); // screenshot diff
@@ -43,14 +44,14 @@ describe("appendQuery", () => {
 
   it("should append and select second query", () => {
     cy.selectQuery(1);
-    const expected = `${queries[1]}\n`;
+    const expected = `\n${queries[1]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
     cy.selectQuery(2);
-    const expected = `${queries[2]}\n`;
+    const expected = `\n${queries[2]}`;
     cy.getEditorContent().should("have.value", expected);
     // monaco editor visually selects all 3 lines, but creates 4 elements to visualise selection
     cy.getSelectedLines().should("have.length", 4);
@@ -58,19 +59,19 @@ describe("appendQuery", () => {
 
   it("should correctly append and select query after multiple inserts", () => {
     cy.selectQuery(1);
-    cy.selectQuery(2);
-    cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
     cy.selectQuery(1);
-    const expected = `${queries[1]}\n\n${queries[1]}\n\n${queries[2]}\n`;
+    cy.typeQuery(`{ctrl}g2{enter}`); // go to line 2
+    cy.selectQuery(2);
+    const expected = `\n${queries[1]}\n\n${queries[1]}\n\n${queries[2]}`;
     cy.getEditorContent().should("have.value", expected);
-    cy.getSelectedLines().should("have.length", 1);
+    cy.getSelectedLines().should("have.length", 4);
   });
 
   it("should correctly append and select query when position is first line which is empty", () => {
     cy.typeQuery(`{enter}--b{upArrow}`);
     cy.selectQuery(0);
     cy.selectQuery(1);
-    const expected = `${queries[0]}\n\n${queries[1]}\n\n--b`;
+    const expected = `\n--b\n${queries[0]}\n\n${queries[1]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -78,7 +79,7 @@ describe("appendQuery", () => {
   it("should correctly append and select query when position is first line which is not empty", () => {
     cy.typeQuery(`--a`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n`;
+    const expected = `--a\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -86,7 +87,7 @@ describe("appendQuery", () => {
   it("should correctly append and select query when position is first line which is not empty and there's more content after", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}{upArrow}`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n\n--b`;
+    const expected = `--a\n\n--b\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -94,7 +95,7 @@ describe("appendQuery", () => {
   it("should correctly append and add surrounding new lines when position is middle line which is empty", () => {
     cy.typeQuery(`--a{enter}{enter}--b{upArrow}`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n\n--b`;
+    const expected = `--a\n\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -102,7 +103,7 @@ describe("appendQuery", () => {
   it("should correctly append and add surrounding new lines when position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}--b`);
     cy.selectQuery(0);
-    const expected = `--a\n--b\n\n${queries[0]}\n`;
+    const expected = `--a\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
     cy.matchImageSnapshot();
@@ -111,7 +112,7 @@ describe("appendQuery", () => {
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
     cy.typeQuery(`--a{enter}`);
     cy.selectQuery(0);
-    const expected = `--a\n\n${queries[0]}\n`;
+    const expected = `--a\n\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -120,28 +121,29 @@ describe("appendQuery", () => {
     cy.typeQuery(`--a{enter}--b{enter}{enter}--c`);
     cy.typeQuery(`{ctrl}g2{enter}{rightArrow}`); // go to line 2
     cy.selectQuery(0);
-    const expected = `--a\n--b\n\n${queries[0]}\n\n--c`;
+    const expected = `--a\n--b\n\n--c\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
   });
 });
 
 describe("&query URL param", () => {
-  afterEach(() => {
+  beforeEach(() => {
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
   it("should append and select single line query", () => {
-    cy.visit(baseUrl);
     cy.typeQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
+    cy.getEditorContent().should("be.visible");
     cy.getGridRow(0).should("contain", "2");
     cy.getSelectedLines().should("have.length", 1);
   });
 
   it("should append and select multiline query", () => {
-    cy.visit(baseUrl);
     cy.typeQuery(
       `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
         5
@@ -149,29 +151,26 @@ describe("&query URL param", () => {
     );
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
+    cy.getEditorContent().should("be.visible");
     cy.getGridRow(0).should("contain", "2");
     cy.getSelectedLines().should("have.length", 4);
   });
 
-  it.skip("should not append query if it already exists in editor", () => {
-    cy.visit(baseUrl);
+  it("should not append query if it already exists in editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query).clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
+    cy.getEditorContent().should("be.visible");
     cy.getEditorContent().should("have.value", query);
   });
 
   it("should append query and scroll to it", () => {
-    cy.visit(baseUrl);
-
-    cy.typeQuery("--\n".repeat(20)); // take space so that query is not visible later
-    const query = "select x from long_sequence(1);";
-    cy.typeQuery(query).clickRun(); // save by running
+    cy.typeQuery("select x from long_sequence(1);");
+    cy.typeQuery("\n".repeat(20)).clickRun(); // take space so that query is not visible later, save by running
 
     const appendedQuery = "-- hello world";
-    cy.visit(
-      `${baseUrl}?query=${encodeURIComponent(appendedQuery)}&executeQuery=true`
-    );
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`);
+    cy.getEditorContent().should("be.visible");
     cy.getVisibleLines()
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
@@ -180,7 +179,20 @@ describe("&query URL param", () => {
 
 describe("autocomplete", () => {
   before(() => {
-    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
+    ["my_secrets", "my_secrets2", "my_publics"].forEach((table) => {
+      cy.typeQuery(`drop table if exists "${table}"`).runLine().clearEditor();
+    });
+    [
+      'create table "my_publics" ("public" string);',
+      // We're creating another table with the same column name.
+      // The autocomplete should merge the column completions into one
+      // and respond with something like `secret (my_secrets, my_secrets2)`
+      'create table "my_secrets" ("secret" string);',
+      'create table "my_secrets2" ("secret" string);',
+    ].forEach((query) => {
+      cy.typeQuery(query).runLine().clearEditor();
+    });
   });
 
   afterEach(() => {
@@ -190,11 +202,12 @@ describe("autocomplete", () => {
   });
 
   beforeEach(() => {
-    cy.getEditor().should("be.visible");
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
-  it("should work when tables list is empty", () => {
+  it("should work when provided table name doesn't exist", () => {
     cy.typeQuery("select * from teletubies")
       .getAutocomplete()
       .should("not.be.visible")
@@ -203,29 +216,19 @@ describe("autocomplete", () => {
     cy.matchImageSnapshot();
   });
 
-  it("should work when tables list is not empty", () => {
-    cy.typeQuery('create table "my_secrets" ("secret" string);')
-      .clickRun()
-      .clearEditor();
-
-    // We're creating another table with the same column name.
-    // The autocomplete should merge the column completions into one
-    // and respond with something like `secret (my_secrets, my_secrets2)`
-    cy.typeQuery('create table "my_secrets2" ("secret" string);')
-      .clickRun()
-      .clearEditor();
-
-    cy.typeQuery('create table "my_publics" ("public" string);')
-      .clickRun()
-      .clearEditor();
-
-    cy.visit(baseUrl);
-    cy.typeQuery("\nselect ");
+  it("should suggest the existing tables on 'from' clause", () => {
+    cy.typeQuery("select * from ");
     cy.getAutocomplete()
-      // Tables
+      // tables
       .should("not.contain", "telemetry")
       .should("contain", "my_secrets")
       .should("contain", "my_publics")
+      .clearEditor();
+  });
+
+  it("should suggest columns and tables on 'select' clause", () => {
+    cy.typeQuery("select ");
+    cy.getAutocomplete()
       // Columns
       .should("contain", "secret")
       .should("contain", "public")
@@ -233,13 +236,17 @@ describe("autocomplete", () => {
       // list the tables containing `secret` column
       .should("contain", "my_secrets, my_secrets2")
       .clearEditor();
+  });
 
+  it("should suggest correct columns on 'where' filter", () => {
     cy.typeQuery("select * from my_secrets where ");
     cy.getAutocomplete()
       .should("contain", "secret")
       .should("not.contain", "public")
       .clearEditor();
+  });
 
+  it("should suggest correct columns on 'on' clause", () => {
     cy.typeQuery("select * from my_secrets join my_publics on ");
     cy.getAutocomplete()
       .should("contain", "my_publics.public")
@@ -253,7 +260,8 @@ describe("errors", () => {
     cy.visit(baseUrl);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
@@ -273,12 +281,13 @@ describe("errors", () => {
   });
 });
 
-describe.skip("running query with F9", () => {
+describe("running query with F9", () => {
   before(() => {
     cy.visit(baseUrl);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 

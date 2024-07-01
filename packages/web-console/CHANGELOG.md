@@ -16,6 +16,38 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.4.5 - 2024.06.25
+
+### Added
+
+- show login dialog for QuestDB OSS when authentication is enabled [#300](https://github.com/questdb/ui/pull/300)
+
+### Fixed
+
+- fix OAuth2 redirect URI
+  [#303](https://github.com/questdb/ui/pull/303)
+
+## 0.4.4 - 2024.06.19
+
+### Added
+
+- Start EE telemetry [#294](https://github.com/questdb/ui/pull/294)
+- Use relative URLs [#299](https://github.com/questdb/ui/pull/299)
+
+### Fixed
+
+- Include link to timestamp formats docs in CSV import schema editor
+  [#295](https://github.com/questdb/ui/pull/295)
+- Copy grid cell content to clipboard on MacOS
+  [#297](https://github.com/questdb/ui/pull/297)
+
+## 0.4.3 - 2024.05.30
+
+### Fixed
+
+- Start OSS telemetry
+  [#292](https://github.com/questdb/ui/pull/292)
+
 ## 0.4.2 - 2024.05.16
 
 ### Added

@@ -9,5 +9,8 @@
   "devDependencies": {
     "@simonsmith/cypress-image-snapshot": "^8.0.1",
     "cypress": "^10.11.0"
+  },
+  "dependencies": {
+    "cypress-real-events": "^1.13.0"
   }
 }
