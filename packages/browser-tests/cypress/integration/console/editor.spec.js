@@ -179,7 +179,6 @@ describe("&query URL param", () => {
 
 describe("autocomplete", () => {
   before(() => {
-    cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
     ["my_secrets", "my_secrets2", "my_publics"].forEach((table) => {
       cy.typeQuery(`drop table if exists "${table}"`).runLine().clearEditor();
@@ -197,11 +196,12 @@ describe("autocomplete", () => {
   });
 
   beforeEach(() => {
+    cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
-  it("should work when tables list is empty", () => {
+  it("should work when provided table name doesn't exist", () => {
     cy.typeQuery("select * from teletubies")
       .getAutocomplete()
       .should("not.be.visible")
@@ -210,17 +210,18 @@ describe("autocomplete", () => {
     cy.matchImageSnapshot();
   });
 
-  it("should work when tables list is not empty", () => {
-    cy.visit(baseUrl);
+  it("should suggest the existing tables on 'from' clause", () => {
     cy.typeQuery("select * from ");
     cy.getAutocomplete()
-      // Tables
+      // tables
       .should("not.contain", "telemetry")
       .should("contain", "my_secrets")
       .should("contain", "my_publics")
       .clearEditor();
+  });
 
-    cy.typeQuery("select * ");
+  it("should suggest columns and tables on 'select' clause", () => {
+    cy.typeQuery("select ");
     cy.getAutocomplete()
       // Columns
       .should("contain", "secret")
@@ -229,13 +230,17 @@ describe("autocomplete", () => {
       // list the tables containing `secret` column
       .should("contain", "my_secrets, my_secrets2")
       .clearEditor();
+  });
 
+  it("should suggest correct columns on 'where' filter", () => {
     cy.typeQuery("select * from my_secrets where ");
     cy.getAutocomplete()
       .should("contain", "secret")
       .should("not.contain", "public")
       .clearEditor();
+  });
 
+  it("should suggest correct columns on 'on' clause", () => {
     cy.typeQuery("select * from my_secrets join my_publics on ");
     cy.getAutocomplete()
       .should("contain", "my_publics.public")
