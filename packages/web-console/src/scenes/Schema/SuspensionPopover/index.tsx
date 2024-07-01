@@ -124,7 +124,7 @@ export const SuspensionPopover = ({
     <PopperToggle
       placement="bottom-start"
       trigger={
-        <Trigger active={active} data-hook="schema-suspension-popover-trigger">
+        <Trigger active={active}>
           <span>Suspended</span>
           <ArrowDownS size="18px" />
         </Trigger>

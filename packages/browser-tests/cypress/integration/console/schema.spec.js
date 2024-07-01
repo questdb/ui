@@ -106,7 +106,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
 
   it("should show the suspension popover on click with details for btc_trades", () => {
     cy.get('input[name="table_filter"]').click().type("btc_trades");
-    cy.getByDataHook("schema-suspension-popover-trigger").click();
+    cy.contains('Suspended').click();
     cy.getByDataHook("schema-suspension-popover").should(
       "have.attr",
       "data-table-name",
