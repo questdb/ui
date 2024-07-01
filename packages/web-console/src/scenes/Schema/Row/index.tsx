@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, ReactNode, useCallback } from "react"
+import React, { MouseEvent, ReactNode, useCallback, useContext } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
@@ -33,6 +33,8 @@ import { Information } from "@styled-icons/remix-line"
 import { Table as TableIcon } from "@styled-icons/remix-line"
 import { FileList, PieChart } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
+import * as QuestDB from "../../../utils/questdb"
+import Highlighter from "react-highlight-words"
 
 import {
   SecondaryButton,
@@ -43,6 +45,8 @@ import {
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { useEditor } from "../../../providers"
+import { SuspensionPopover } from "../SuspensionPopover"
+import { SchemaContext } from "../SchemaContext"
 
 type Props = Readonly<{
   className?: string
@@ -55,6 +59,7 @@ type Props = Readonly<{
   onClick?: (event: MouseEvent) => void
   partitionBy?: string
   walEnabled?: boolean
+  walTableData?: QuestDB.WalTable
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
@@ -69,6 +74,11 @@ const Type = styled(Text)`
 const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   cursor: ${({ kind }) =>
     ["folder", "table"].includes(kind) ? "pointer" : "initial"};
+
+  .highlight {
+    background-color: #7c804f;
+    color: ${({ theme }) => theme.color.foreground};
+  }
 `
 
 const PlusButton = styled(SecondaryButton)<Pick<Props, "tooltip">>`
@@ -86,21 +96,24 @@ const Wrapper = styled.div<Pick<Props, "expanded">>`
   padding-left: 1rem;
   transition: background ${TransitionDuration.REG}ms;
 
-  &:hover
-    ${/* sc-selector */ PlusButton},
-    &:active
-    ${/* sc-selector */ PlusButton} {
-    opacity: 1;
-  }
-
   &:hover,
   &:active {
     background: ${color("selection")};
   }
+`
 
-  &:hover ${/* sc-selector */ Type} {
-    opacity: 0;
-  }
+const HitBox = styled.div`
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+`
+
+const TableActions = styled.span`
+  z-index: 1;
+  position: relative;
+  margin-right: 1rem;
 `
 
 const FlexRow = styled.div`
@@ -141,11 +154,11 @@ const DotIcon = styled(CheckboxBlankCircle)`
   margin-right: 1rem;
 `
 
-const TitleIcon = styled(TableIcon)`
+const TitleIcon = styled(TableIcon)<{ $suspended?: boolean }>`
   min-height: 18px;
   min-width: 18px;
   margin-right: 1rem;
-  color: ${color("cyan")};
+  color: ${({ theme, $suspended }) => theme.color[$suspended ? "red" : "cyan"]};
 `
 
 const InfoIconWrapper = styled.div`
@@ -181,27 +194,22 @@ const Row = ({
   name,
   partitionBy,
   walEnabled,
+  walTableData,
   onClick,
   suffix,
   tooltip,
   type,
 }: Props) => {
   const { insertTextAtCursor } = useEditor()
-
-  const handlePlusButtonClick = useCallback(
-    (event: MouseEvent) => {
-      event.stopPropagation()
-      insertTextAtCursor(
-        kind === "table" && !/^[a-z0-9_]+$/i.test(name) ? `"${name}"` : name,
-      )
-    },
-    [name, kind],
-  )
+  const { query } = useContext(SchemaContext)
 
   return (
-    <Wrapper className={className} expanded={expanded} onClick={onClick}>
+    <Wrapper className={className} expanded={expanded}>
+      <HitBox onClick={onClick} />
       <FlexRow>
-        {kind === "table" && <TitleIcon size="18px" />}
+        {kind === "table" && (
+          <TitleIcon size="18px" $suspended={walTableData?.suspended} />
+        )}
 
         {kind === "column" && indexed && (
           <IconWithTooltip
@@ -227,8 +235,17 @@ const Row = ({
           <DotIcon size="12px" />
         )}
 
-        <Title color="foreground" ellipsis kind={kind}>
-          {name}
+        <Title
+          color="foreground"
+          ellipsis
+          kind={kind}
+          data-hook={`schema-${kind}-title`}
+        >
+          <Highlighter
+            highlightClassName="highlight"
+            searchWords={[query ?? ""]}
+            textToHighlight={name}
+          />
         </Title>
         {suffix}
 
@@ -240,29 +257,26 @@ const Row = ({
           </Type>
         )}
 
-        {kind === "table" && partitionBy !== "NONE" && (
-          <PartitionByWrapper>
-            <PieChartIcon size="14px" />
-            <Text color="gray2">{partitionBy}</Text>
-          </PartitionByWrapper>
-        )}
+        {!walTableData?.suspended &&
+          kind === "table" &&
+          partitionBy !== "NONE" && (
+            <PartitionByWrapper>
+              <PieChartIcon size="14px" />
+              <Text color="gray2">{partitionBy}</Text>
+            </PartitionByWrapper>
+          )}
 
-        {kind === "table" && walEnabled && (
+        {!walTableData?.suspended && kind === "table" && walEnabled && (
           <PartitionByWrapper>
             <FileListIcon size="14px" />
             <Text color="yellow">WAL</Text>
           </PartitionByWrapper>
         )}
 
-        {["column", "table"].includes(kind) && (
-          <PlusButton
-            onClick={handlePlusButtonClick}
-            size="sm"
-            tooltip={tooltip}
-          >
-            <CodeSSlash size="16px" />
-            <span>Add</span>
-          </PlusButton>
+        {walTableData?.suspended && kind === "table" && (
+          <TableActions>
+            <SuspensionPopover walTableData={walTableData} />
+          </TableActions>
         )}
 
         {tooltip && description && (

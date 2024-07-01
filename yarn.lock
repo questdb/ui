@@ -3245,6 +3245,7 @@ __metadata:
     "@types/ramda": "npm:0.27.40"
     "@types/react": "npm:16.9.35"
     "@types/react-dom": "npm:16.9.8"
+    "@types/react-highlight-words": "npm:^0.16.7"
     "@types/react-redux": "npm:7.1.9"
     "@types/react-transition-group": "npm:4.4.0"
     "@types/styled-components": "npm:5.1.7"
@@ -3302,6 +3303,7 @@ __metadata:
     react: "npm:17.0.2"
     react-contextmenu: "npm:2.14.0"
     react-dom: "npm:17.0.2"
+    react-highlight-words: "npm:^0.20.0"
     react-hook-form: "npm:7.22.3"
     react-is: "npm:^18.1.0"
     react-markdown: "npm:^8.0.7"
@@ -6109,6 +6111,15 @@ __metadata:
   dependencies:
     "@types/react": "npm:^17"
   checksum: 10/21212aa2f99a8b2fdd7784baf343a626d61966dd73908e35a0cfdd1bb87be4952f424e9a0c18023605957797cfb959e853006c69728443a477feb2549d02be2a
+  languageName: node
+  linkType: hard
+
+"@types/react-highlight-words@npm:^0.16.7":
+  version: 0.16.7
+  resolution: "@types/react-highlight-words@npm:0.16.7"
+  dependencies:
+    "@types/react": "npm:*"
+  checksum: 10/503e49f396cd9b9d08e5f3ca4817095427d51bfdb094e2458752908e1803d379750aa7b421397fe6e6fe8c842fbe91f5b30f87a56586ae7f2b2f0e6816b69113
   languageName: node
   linkType: hard
 
@@ -12482,6 +12493,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"highlight-words-core@npm:^1.2.0":
+  version: 1.2.2
+  resolution: "highlight-words-core@npm:1.2.2"
+  checksum: 10/6a5364ad8cce0107a387d3f43374f5814fb586cc155b282196bc2b9ce1c25aa9a8b76e8ab04d0c29428403a48225cad8280e00b8adbb6b02e05e3a6ab7ee2ef3
+  languageName: node
+  linkType: hard
+
 "hoist-non-react-statics@npm:^3.0.0, hoist-non-react-statics@npm:^3.3.0":
   version: 3.3.2
   resolution: "hoist-non-react-statics@npm:3.3.2"
@@ -15361,6 +15379,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"memoize-one@npm:^4.0.0":
+  version: 4.0.3
+  resolution: "memoize-one@npm:4.0.3"
+  checksum: 10/6aee6da4d5305b0876c47166522f417440ad0a11483b5199bfae5896c72f4f5b13a5993b8842178a9f0501e0ab501775b54b6eff09af54cc992fc8f607e72338
+  languageName: node
+  linkType: hard
+
 "memoizerific@npm:^1.11.3":
   version: 1.11.3
   resolution: "memoizerific@npm:1.11.3"
@@ -17484,7 +17509,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prop-types@npm:^15.0.0, prop-types@npm:^15.6.2, prop-types@npm:^15.7.2, prop-types@npm:^15.8.1":
+"prop-types@npm:^15.0.0, prop-types@npm:^15.5.8, prop-types@npm:^15.6.2, prop-types@npm:^15.7.2, prop-types@npm:^15.8.1":
   version: 15.8.1
   resolution: "prop-types@npm:15.8.1"
   dependencies:
@@ -17768,6 +17793,19 @@ __metadata:
   version: 3.2.2
   resolution: "react-fast-compare@npm:3.2.2"
   checksum: 10/a6826180ba75cefba1c8d3ac539735f9b627ca05d3d307fe155487f5d0228d376dac6c9708d04a283a7b9f9aee599b637446635b79c8c8753d0b4eece56c125c
+  languageName: node
+  linkType: hard
+
+"react-highlight-words@npm:^0.20.0":
+  version: 0.20.0
+  resolution: "react-highlight-words@npm:0.20.0"
+  dependencies:
+    highlight-words-core: "npm:^1.2.0"
+    memoize-one: "npm:^4.0.0"
+    prop-types: "npm:^15.5.8"
+  peerDependencies:
+    react: ^0.14.0 || ^15.0.0 || ^16.0.0-0 || ^17.0.0-0 || ^18.0.0-0
+  checksum: 10/5adf2cfb1f325ae51ea4dd2cb7522eb433b25534355868d1a3f4556b2b9f7a774c2a1aaa143abebb63a1b3a5590e70ba3d765942a47ff754a1a513cdc5b2f58b
   languageName: node
   linkType: hard
 

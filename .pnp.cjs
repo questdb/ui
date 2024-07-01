@@ -6578,6 +6578,7 @@ const RAW_RUNTIME_STATE =
           ["@types/ramda", "npm:0.27.40"],\
           ["@types/react", "npm:17.0.2"],\
           ["@types/react-dom", "npm:16.9.8"],\
+          ["@types/react-highlight-words", "npm:0.16.7"],\
           ["@types/react-redux", "npm:7.1.9"],\
           ["@types/react-transition-group", "npm:4.4.0"],\
           ["@types/styled-components", "npm:5.1.7"],\
@@ -6635,6 +6636,7 @@ const RAW_RUNTIME_STATE =
           ["react", "npm:17.0.2"],\
           ["react-contextmenu", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.14.0"],\
           ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
+          ["react-highlight-words", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.20.0"],\
           ["react-hook-form", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.22.3"],\
           ["react-is", "npm:18.2.0"],\
           ["react-markdown", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:8.0.7"],\
@@ -11036,6 +11038,16 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/@types-react-dom-npm-17.0.17-edb158f2b2-21212aa2f9.zip/node_modules/@types/react-dom/",\
         "packageDependencies": [\
           ["@types/react-dom", "npm:17.0.17"],\
+          ["@types/react", "npm:17.0.2"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["@types/react-highlight-words", [\
+      ["npm:0.16.7", {\
+        "packageLocation": "./.yarn/cache/@types-react-highlight-words-npm-0.16.7-e9c0694a2e-503e49f396.zip/node_modules/@types/react-highlight-words/",\
+        "packageDependencies": [\
+          ["@types/react-highlight-words", "npm:0.16.7"],\
           ["@types/react", "npm:17.0.2"]\
         ],\
         "linkType": "HARD"\
@@ -19003,6 +19015,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["highlight-words-core", [\
+      ["npm:1.2.2", {\
+        "packageLocation": "./.yarn/cache/highlight-words-core-npm-1.2.2-b168c62a9a-6a5364ad8c.zip/node_modules/highlight-words-core/",\
+        "packageDependencies": [\
+          ["highlight-words-core", "npm:1.2.2"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["hoist-non-react-statics", [\
       ["npm:3.3.2", {\
         "packageLocation": "./.yarn/cache/hoist-non-react-statics-npm-3.3.2-e7b709e6c1-1acbe85f33.zip/node_modules/hoist-non-react-statics/",\
@@ -22273,6 +22294,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["memoize-one", [\
+      ["npm:4.0.3", {\
+        "packageLocation": "./.yarn/cache/memoize-one-npm-4.0.3-6aef1020af-6aee6da4d5.zip/node_modules/memoize-one/",\
+        "packageDependencies": [\
+          ["memoize-one", "npm:4.0.3"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["memoizerific", [\
       ["npm:1.11.3", {\
         "packageLocation": "./.yarn/cache/memoizerific-npm-1.11.3-3cd7adb7ec-72b6b80699.zip/node_modules/memoizerific/",\
@@ -25138,6 +25168,31 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/react-fast-compare-npm-3.2.2-45b585a872-a6826180ba.zip/node_modules/react-fast-compare/",\
         "packageDependencies": [\
           ["react-fast-compare", "npm:3.2.2"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["react-highlight-words", [\
+      ["npm:0.20.0", {\
+        "packageLocation": "./.yarn/cache/react-highlight-words-npm-0.20.0-02e799bf4d-5adf2cfb1f.zip/node_modules/react-highlight-words/",\
+        "packageDependencies": [\
+          ["react-highlight-words", "npm:0.20.0"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.20.0", {\
+        "packageLocation": "./.yarn/__virtual__/react-highlight-words-virtual-982d56fbbb/0/cache/react-highlight-words-npm-0.20.0-02e799bf4d-5adf2cfb1f.zip/node_modules/react-highlight-words/",\
+        "packageDependencies": [\
+          ["react-highlight-words", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.20.0"],\
+          ["@types/react", "npm:17.0.2"],\
+          ["highlight-words-core", "npm:1.2.2"],\
+          ["memoize-one", "npm:4.0.3"],\
+          ["prop-types", "npm:15.8.1"],\
+          ["react", "npm:17.0.2"]\
+        ],\
+        "packagePeers": [\
+          "@types/react",\
+          "react"\
         ],\
         "linkType": "HARD"\
       }]\

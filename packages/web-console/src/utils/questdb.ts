@@ -27,6 +27,7 @@ import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { AuthPayload } from "../modules/OAuth2/types"
 import { StoreKey } from "./localStorage/types"
+import * as QuestDB from "./questdb"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -118,12 +119,48 @@ export type QueryResult<T extends Record<string, any>> =
   | DmlResult
   | DdlResult
 
+type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
+
 export type Table = {
   table_name: string
-  partitionBy: string
+  partitionBy: PartitionBy
   designatedTimestamp: string
   walEnabled: boolean
   dedup: boolean
+}
+
+export type Partition = {
+  index: number
+  partitionBy: PartitionBy
+  name: string
+  minTimestamp: string | null
+  maxTimestamp: string | null
+  numRows: string
+  diskSize: string
+  diskSizeHuman: string
+  readOnly: boolean
+  active: boolean
+  attached: boolean
+  detached: boolean
+  attachable: boolean
+}
+
+export enum ErrorTag {
+  DISK_FULL = "DISK FULL",
+  TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
+  OUT_OF_MEMORY = "OUT OF MEMORY",
+  FAILED_MEMORY_ALLOCATION = "FAILED MEMORY ALLOCATION",
+  OTHER = "OTHER",
+}
+
+export type WalTable = {
+  name: string
+  suspended: boolean
+  writerTxn: string
+  writerLagTxtCount: string
+  sequencerTxn: string
+  errorTag?: ErrorTag
+  errorMessage?: string
 }
 
 export type Column = {
@@ -207,6 +244,13 @@ export type SchemaColumn = {
   upsertKey?: boolean
 }
 
+export type InformationSchemaColumn = {
+  table_name: string
+  ordinal_position: number
+  column_name: string
+  data_type: string
+}
+
 type UploadOptions = {
   file: File
   name: string
@@ -240,6 +284,35 @@ export type Parameter = {
   value_source: string
   sensitive: boolean
   dynamic: boolean
+}
+
+export const errorWorkarounds: Record<
+  ErrorTag,
+  {
+    title: string
+    link: string
+  }
+> = {
+  [QuestDB.ErrorTag.TOO_MANY_OPEN_FILES]: {
+    title: "System limit for open files",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files",
+  },
+  [QuestDB.ErrorTag.DISK_FULL]: {
+    title: "OS configuration",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
+  },
+  [QuestDB.ErrorTag.OUT_OF_MEMORY]: {
+    title: "Max virtual memory limit",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
+  },
+  [QuestDB.ErrorTag.FAILED_MEMORY_ALLOCATION]: {
+    title: "Max virtual memory limit",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
+  },
+  [QuestDB.ErrorTag.OTHER]: {
+    title: "OS configuration",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
+  },
 }
 
 export class Client {
@@ -308,9 +381,9 @@ export class Client {
     this._controllers = []
   }
 
-  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
-    const result = await this.queryRaw(query, options)
-
+  static transformQueryRawResult = <T>(
+    result: QueryRawResult,
+  ): QueryResult<T> => {
     if (result.type === Type.DQL) {
       const { columns, count, dataset, timings } = result
 
@@ -336,6 +409,16 @@ export class Client {
     }
 
     return result
+  }
+
+  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
+    const result = await this.queryRaw(query, options)
+
+    return Client.transformQueryRawResult<T>(result)
+  }
+
+  async mockQueryResult<T>(result: QueryRawResult): Promise<QueryResult<T>> {
+    return Client.transformQueryRawResult<T>(result)
   }
 
   async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
@@ -370,10 +453,10 @@ export class Client {
 
     const start = new Date()
     try {
-      response = await fetch(
-        `exec?${Client.encodeParams(payload)}`,
-        { signal: controller.signal, headers: this.commonHeaders },
-      )
+      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal: controller.signal,
+        headers: this.commonHeaders,
+      })
     } catch (error) {
       const err = {
         position: -1,

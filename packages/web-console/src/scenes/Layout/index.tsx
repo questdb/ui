@@ -35,6 +35,7 @@ import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
 import { EditorProvider } from "../../providers"
 import { Help } from "./help"
+import { Warning } from "./warning"
 
 import "allotment/dist/style.css"
 
@@ -77,6 +78,7 @@ const Layout = () => {
   return (
     <EditorProvider>
       <TopBar />
+      <Warning />
       <Root>
         <Main sideOpened={activeSidebar !== undefined}>
           <Page>
@@ -94,9 +96,7 @@ const Layout = () => {
           <CreateTableDialog />
         </Sidebar>
       </Root>
-
       <SideMenu />
-
       <Footer />
     </EditorProvider>
   )

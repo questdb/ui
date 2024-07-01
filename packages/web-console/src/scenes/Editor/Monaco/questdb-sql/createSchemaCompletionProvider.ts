@@ -1,6 +1,6 @@
-import { Table, uniq } from "../../../../utils"
+import { Table, uniq, InformationSchemaColumn } from "../../../../utils"
 import * as monaco from "monaco-editor"
-import { CompletionItemPriority, InformationSchemaColumn } from "./types"
+import { CompletionItemPriority } from "./types"
 import { findMatches, getQueryFromCursor } from "../utils"
 import { getTableCompletions } from "./getTableCompletions"
 import { getColumnCompletions } from "./getColumnCompletions"

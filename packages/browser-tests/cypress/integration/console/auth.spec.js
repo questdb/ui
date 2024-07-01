@@ -44,7 +44,7 @@ describe("Auth - UI", () => {
 
   it("should display UI auth", () => {
     cy.wait("@settings");
-    cy.get('[data-hook="auth-login"]').should("be.visible");
+    cy.getByDataHook("auth-login").should("be.visible");
     cy.getEditor().should("not.exist");
   });
 });
@@ -71,8 +71,8 @@ describe("Auth - OIDC", () => {
 
   it("should display UI auth with OIDC support", () => {
     cy.wait("@settings");
-    cy.get('[data-hook="auth-login"]').should("be.visible");
-    cy.get('[data-hook="button-sso-login"]').should("be.visible");
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
     cy.getEditor().should("not.exist");
   });
 });
