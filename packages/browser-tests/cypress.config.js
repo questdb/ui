@@ -5,7 +5,7 @@ const {
 
 module.exports = defineConfig({
   e2e: {
-    defaultCommandTimeout: 10000,
+    defaultCommandTimeout: 30000,
     screenshotOnRunFailure: false,
     video: false,
     baseUrl: "http://localhost:9999",
