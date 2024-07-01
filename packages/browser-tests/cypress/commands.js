@@ -26,11 +26,21 @@ beforeEach(() => {
   cy.intercept(
     {
       method: "GET",
-      url: "/**",
-      hostname: "api.github.com",
+      url: "/github/latest",
+      hostname: "github-api.questdb.io",
     },
     (req) => {
       req.reply("{}");
+    }
+  );
+  cy.intercept(
+    {
+      method: "GET",
+      url: "/news",
+      hostname: "cloud.questdb.com",
+    },
+    (req) => {
+      req.reply("[]");
     }
   );
 });
