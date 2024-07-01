@@ -2,6 +2,8 @@ const {
   addMatchImageSnapshotCommand,
 } = require("@simonsmith/cypress-image-snapshot/command");
 
+require("cypress-real-events");
+
 addMatchImageSnapshotCommand({
   failureThreshold: 0.3,
   blackout: [".notifications", 'button[class*="BuildVersion"'],
@@ -24,11 +26,21 @@ beforeEach(() => {
   cy.intercept(
     {
       method: "GET",
-      url: "/**",
-      hostname: "api.github.com",
+      url: "/github/latest",
+      hostname: "github-api.questdb.io",
     },
     (req) => {
       req.reply("{}");
+    }
+  );
+  cy.intercept(
+    {
+      method: "GET",
+      url: "/news",
+      hostname: "cloud.questdb.com",
+    },
+    (req) => {
+      req.reply("[]");
     }
   );
 });
@@ -50,7 +62,7 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().click({ force: true }).type(query)
+  cy.getEditor().realClick().type(query)
 );
 
 Cypress.Commands.add("runLine", () => {
@@ -75,6 +87,10 @@ Cypress.Commands.add("selectQuery", (n) =>
     .get('[class^="QueryPicker__Wrapper"] [class^="Row__Wrapper"]')
     .eq(n)
     .click()
+);
+
+Cypress.Commands.add("getMountedEditor", () =>
+  cy.get(".monaco-scrollable-element")
 );
 
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));
@@ -116,13 +132,7 @@ Cypress.Commands.add("matchErrorMarkerPosition", ({ left, width }) =>
 
 Cypress.Commands.add("F9", () => {
   cy.intercept("/exec*").as("exec");
-  return cy
-    .getEditor()
-    .trigger("keydown", {
-      keyCode: 120,
-    })
-    .wait("@exec")
-    .wait(501);
+  return cy.getEditor().realPress("F9").wait("@exec").wait(501);
 });
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
