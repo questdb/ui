@@ -1,11 +1,11 @@
 /// <reference types="cypress" />
 
-describe("questdb grid", () => {
-  before(() => {
-    cy.visit("http://localhost:9999");
-  });
+const baseUrl = "http://localhost:9999";
 
+describe("questdb grid", () => {
   beforeEach(() => {
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
