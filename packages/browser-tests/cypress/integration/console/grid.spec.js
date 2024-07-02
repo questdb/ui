@@ -16,7 +16,8 @@ describe("questdb grid", () => {
   });
 
   it("when results have vertical scroll", () => {
-    cy.typeQuery(`select x from long_sequence(100)`).runLine();
+    cy.typeQuery(`select x from long_sequence(100)`);
+    cy.runLine();
     cy.wait(100);
 
     cy.getGridRows()
@@ -34,7 +35,8 @@ describe("questdb grid", () => {
     const rows = 1000;
     const rowsPerPage = 128;
     const rowHeight = 30;
-    cy.typeQuery(`select x from long_sequence(${rows})`).runLine();
+    cy.typeQuery(`select x from long_sequence(${rows})`);
+    cy.runLine();
 
     for (let i = 0; i < rows; i += rowsPerPage) {
       cy.getGridViewport().scrollTo(0, i * rowHeight);
