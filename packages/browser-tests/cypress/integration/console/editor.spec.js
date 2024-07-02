@@ -179,6 +179,7 @@ describe("&query URL param", () => {
 
 describe("autocomplete", () => {
   before(() => {
+    cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
     [
       'create table "my_publics" ("public" string);',
