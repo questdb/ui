@@ -10,10 +10,9 @@ describe("questdb grid", () => {
   });
 
   it("when results empty", () => {
-    cy.typeQuery("select x from long_sequence(0)")
-      .runLine()
-      .getGridRows()
-      .should("have.length", 0);
+    cy.typeQuery("select x from long_sequence(0)");
+    cy.runLine();
+    cy.getGridRows().should("have.length", 0);
   });
 
   it("when results have vertical scroll", () => {
