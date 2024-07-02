@@ -60,7 +60,7 @@ beforeEach(() => {
   cy.intercept(
     {
       method: "GET",
-      url: "/news",
+      url: "/api/news*",
       hostname: "cloud.questdb.com",
     },
     (req) => {
@@ -91,7 +91,8 @@ Cypress.Commands.add("typeQuery", (query) =>
 
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(`${ctrlOrCmd}{enter}`).wait("@exec");
+  cy.typeQuery(`${ctrlOrCmd}{enter}`);
+  cy.wait("@exec");
 });
 
 Cypress.Commands.add("clickRun", () => {
