@@ -26,6 +26,13 @@ module.exports = defineConfig({
 
         return launchOptions;
       });
+
+      on("task", {
+        log(message) {
+          console.log(message);
+          return null;
+        },
+      });
     },
   },
 });

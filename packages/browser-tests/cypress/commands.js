@@ -9,7 +9,9 @@ addMatchImageSnapshotCommand({
   blackout: [".notifications", 'button[class*="BuildVersion"'],
 });
 
-const ctrlOrCmd = Cypress.platform === "darwin" ? "{cmd}" : "{ctrl}";
+const { ctrlOrCmd, escapeRegExp } = require("./utils");
+
+const baseUrl = "http://localhost:9999";
 
 before(() => {
   Cypress.on("uncaught:exception", (err) => {
@@ -33,10 +35,32 @@ beforeEach(() => {
       req.reply("{}");
     }
   );
+
+  cy.intercept(
+    {
+      method: "POST",
+      url: "/**",
+      hostname: "fara.questdb.io",
+    },
+    (req) => {
+      req.reply("{}");
+    }
+  ).as("addTelemetry");
+
+  cy.intercept(
+    {
+      method: "POST",
+      url: "/**",
+      hostname: "alurin.questdb.io",
+    },
+    (req) => {
+      req.reply("{}");
+    }
+  ).as("addTelemetry");
   cy.intercept(
     {
       method: "GET",
-      url: "/news",
+      url: "/api/news*",
       hostname: "cloud.questdb.com",
     },
     (req) => {
@@ -67,7 +91,8 @@ Cypress.Commands.add("typeQuery", (query) =>
 
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
-  return cy.typeQuery(`${ctrlOrCmd}{enter}`).wait("@exec");
+  cy.typeQuery(`${ctrlOrCmd}{enter}`);
+  cy.wait("@exec");
 });
 
 Cypress.Commands.add("clickRun", () => {
@@ -146,3 +171,18 @@ Cypress.Commands.add("getCollapsedNotifications", () =>
 Cypress.Commands.add("getExpandedNotifications", () =>
   cy.get('[data-hook="notifications-expanded"]')
 );
+
+Cypress.Commands.add("interceptQuery", (query, alias, response) => {
+  cy.intercept(
+    {
+      method: "GET",
+      url: new RegExp(
+        `^${escapeRegExp(baseUrl)}\/exec.*query=${encodeURIComponent(
+          escapeRegExp(query)
+        )}`,
+        "gmi"
+      ),
+    },
+    response
+  ).as(alias);
+});
