@@ -7,8 +7,8 @@
 # ./run_browser_tests.sh -skipQuestDBBuild
 
 rm -rf packages/browser-tests/cypress/snapshots/*
-rm -rf tmp/questdb-*
 rm -rf tmp/dbroot
+rm -rf tmp/questdb-*
 
 if [[ $1 = "-skipQuestDBBuild" ]]
 then
