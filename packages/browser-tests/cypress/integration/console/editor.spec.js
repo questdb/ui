@@ -158,7 +158,8 @@ describe("&query URL param", () => {
 
   it("should not append query if it already exists in editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
-    cy.typeQuery(query).clickRun();
+    cy.typeQuery(query);
+    cy.clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditorContent().should("be.visible");
     cy.getEditorContent().should("have.value", query);
@@ -166,7 +167,8 @@ describe("&query URL param", () => {
 
   it("should append query and scroll to it", () => {
     cy.typeQuery("select x from long_sequence(1);");
-    cy.typeQuery("\n".repeat(20)).clickRun(); // take space so that query is not visible later, save by running
+    cy.typeQuery("\n".repeat(20));
+    cy.clickRun(); // take space so that query is not visible later, save by running
 
     const appendedQuery = "-- hello world";
     cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`);
@@ -179,10 +181,8 @@ describe("&query URL param", () => {
 
 describe("autocomplete", () => {
   before(() => {
+    cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
-    ["my_secrets", "my_secrets2", "my_publics"].forEach((table) => {
-      cy.typeQuery(`drop table if exists "${table}"`).runLine().clearEditor();
-    });
     [
       'create table "my_publics" ("public" string);',
       // We're creating another table with the same column name.
@@ -202,10 +202,8 @@ describe("autocomplete", () => {
   });
 
   it("should work when provided table name doesn't exist", () => {
-    cy.typeQuery("select * from teletubies")
-      .getAutocomplete()
-      .should("not.be.visible")
-      .clearEditor();
+    cy.typeQuery("select * from teletubies");
+    cy.getAutocomplete().should("not.be.visible").clearEditor();
 
     cy.matchImageSnapshot();
   });
@@ -261,14 +259,16 @@ describe("errors", () => {
 
   it("should mark '(200000)' as error", () => {
     const query = `create table test (\ncol symbol index CAPACITY (200000)`;
-    cy.typeQuery(query).runLine();
+    cy.typeQuery(query);
+    cy.runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
     cy.matchImageSnapshot();
   });
 
   it("should mark date position as error", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`;
-    cy.typeQuery(query).runLine();
+    cy.typeQuery(query);
+    cy.runLine();
     cy.matchErrorMarkerPosition({ left: 506, width: 42 });
 
     cy.getCollapsedNotifications().should("contain", "Invalid date");
@@ -290,7 +290,8 @@ describe("running query with F9", () => {
     cy.F9();
     cy.getGridRow(0).should("contain", "1");
     cy.clearEditor();
-    cy.typeQuery(`select * from long_sequence(2);{leftArrow}`).F9();
+    cy.typeQuery(`select * from long_sequence(2);{leftArrow}`);
+    cy.F9();
     cy.getGridRow(1).should("contain", "2");
   });
 

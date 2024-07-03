@@ -1,23 +1,23 @@
 /// <reference types="cypress" />
 
-describe("questdb grid", () => {
-  before(() => {
-    cy.visit("http://localhost:9999");
-  });
+const baseUrl = "http://localhost:9999";
 
+describe("questdb grid", () => {
   beforeEach(() => {
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
     cy.clearEditor();
   });
 
   it("when results empty", () => {
-    cy.typeQuery("select x from long_sequence(0)")
-      .runLine()
-      .getGridRows()
-      .should("have.length", 0);
+    cy.typeQuery("select x from long_sequence(0)");
+    cy.runLine();
+    cy.getGridRows().should("have.length", 0);
   });
 
   it("when results have vertical scroll", () => {
-    cy.typeQuery(`select x from long_sequence(100)`).runLine();
+    cy.typeQuery(`select x from long_sequence(100)`);
+    cy.runLine();
     cy.wait(100);
 
     cy.getGridRows()
@@ -35,7 +35,8 @@ describe("questdb grid", () => {
     const rows = 1000;
     const rowsPerPage = 128;
     const rowHeight = 30;
-    cy.typeQuery(`select x from long_sequence(${rows})`).runLine();
+    cy.typeQuery(`select x from long_sequence(${rows})`);
+    cy.runLine();
 
     for (let i = 0; i < rows; i += rowsPerPage) {
       cy.getGridViewport().scrollTo(0, i * rowHeight);
@@ -48,8 +49,10 @@ describe("questdb grid", () => {
     cy.getGridViewport().scrollTo("bottom");
   });
 
-  it.only("copy cell into the clipboard", () => {
-    cy.typeQuery("select x from long_sequence(10)").runLine();
-    cy.getGridCol(0).type("{ctrl}c").should("have.class", "qg-c-active-pulse");
+  it("copy cell into the clipboard", () => {
+    cy.typeQuery("select x from long_sequence(10)");
+    cy.runLine();
+    cy.getGridCol(0).type("{ctrl}c");
+    cy.getGridCol(0).should("have.class", "qg-c-active-pulse");
   });
 });
