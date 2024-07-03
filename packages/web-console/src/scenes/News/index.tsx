@@ -7,7 +7,7 @@ import {
 import styled from "styled-components"
 import React, { useEffect, useState, useContext } from "react"
 import { QuestContext } from "../../providers"
-import { NewsItem } from "../../utils/questdb"
+import { NewsItem } from "../../utils"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
 import ReactMarkdown from "react-markdown"
@@ -16,7 +16,7 @@ import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
-import { BUTTON_ICON_SIZE } from "../../consts/index"
+import { BUTTON_ICON_SIZE } from "../../consts"
 
 const Loading = styled.div`
   display: grid;
