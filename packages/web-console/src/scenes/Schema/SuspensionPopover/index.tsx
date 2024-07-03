@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from "react"
 import { PopperToggle, Text, Link } from "../../../components"
 import { Form } from "../../../components/Form"
-import { Box, Button } from "@questdb/react-components"
+import { Box } from "@questdb/react-components"
 import styled from "styled-components"
 import { ArrowDownS, ExternalLink, Restart } from "@styled-icons/remix-line"
 import * as QuestDB from "../../../utils/questdb"
