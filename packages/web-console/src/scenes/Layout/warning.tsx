@@ -4,7 +4,6 @@ import { Box } from "@questdb/react-components"
 import { useContext } from "react"
 import { QuestContext } from "../../providers"
 import { Close, ErrorWarning, ExternalLink } from "@styled-icons/remix-line"
-import * as QuestDB from "../../utils/questdb"
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -52,33 +51,29 @@ const CloseIcon = styled(Close)`
 `
 
 export const Warning = () => {
-  const { warning, warningTag } = useContext(QuestContext)
+  const { warning, tag } = useContext(QuestContext)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (warning && warningTag) {
+    if (warning && tag) {
       setOpen(true)
     }
-  }, [warning, warningTag])
+  }, [warning, tag])
 
-  if (!open || !warning || !warningTag) return null
+  if (!open) return null
 
   return (
     <Root>
       <Content>
         <ErrorWarning size="20px" />
         Warning: Detected a configuration issue.{" "}
-        <WarningText>{warning}</WarningText>
-        {QuestDB.errorWorkarounds[warningTag] && (
-          <WorkaroundLink
-            href={QuestDB.errorWorkarounds[warningTag].link}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <ExternalLink size="16px" />
-            {QuestDB.errorWorkarounds[warningTag].title}
-          </WorkaroundLink>
-        )}
+        <WarningText>
+          Please, increase max open file handlers OS limit!
+        </WarningText>
+        <WorkaroundLink>
+          <ExternalLink size="16px" />
+          System limit for open files
+        </WorkaroundLink>
       </Content>
       <CloseButton onClick={() => setOpen(false)}>
         <CloseIcon size="20px" />
