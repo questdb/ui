@@ -13,10 +13,6 @@ const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
 const baseUrl = "http://localhost:9999";
 
-const escapeRegExp = (string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
-
 const tableSchemas = {
   btc_trades:
     "CREATE TABLE IF NOT EXISTS 'btc_trades' (symbol SYMBOL capacity 256 CACHE, side SYMBOL capacity 256 CACHE, price DOUBLE, amount DOUBLE, timestamp TIMESTAMP) timestamp (timestamp) PARTITION BY DAY WAL DEDUP UPSERT KEYS(symbol, price, amount, timestamp);",
