@@ -9,8 +9,8 @@ import {
   PopperToggle,
 } from "../../components"
 import { DropdownMenu, FeedbackDialog, Box } from "@questdb/react-components"
-import { BUTTON_ICON_SIZE } from "../../consts/index"
-import { IconWithTooltip } from "../../components/IconWithTooltip"
+import { BUTTON_ICON_SIZE } from "../../consts"
+import { IconWithTooltip } from "../../components"
 import { useState, useCallback, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { useSelector } from "react-redux"
