@@ -44,18 +44,10 @@ const questClient = new QuestDB.Client()
 
 type Props = {}
 
-type BuildDetails = {
-  build: string
-  warning: string | null
-  tag: QuestDB.ErrorTag | null
-}
-
 type ContextProps = {
   quest: QuestDB.Client
   buildVersion: Versions
   commitHash: string
-  warning?: BuildDetails["warning"]
-  tag?: BuildDetails["tag"]
 }
 
 const defaultValues: ContextProps = {
@@ -65,8 +57,6 @@ const defaultValues: ContextProps = {
     version: "",
   },
   commitHash: "",
-  warning: null,
-  tag: null,
 }
 
 export const QuestContext = createContext<ContextProps>(defaultValues)
@@ -82,8 +72,6 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
     defaultValues.buildVersion,
   )
   const [commitHash, setCommitHash] = useState<string>("")
-  const [warning, setWarning] = useState<string | null>()
-  const [tag, setTag] = useState<QuestDB.ErrorTag | null>()
 
   const finishAuthCheck = async () => {
     // The initial check tells us if the user has permission to use the HTTP protocol.
@@ -130,17 +118,14 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
         }
     }
 
+    // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
-    questClient
-      .query<BuildDetails>("select build", { limit: "0,1000" })
-      .then((result) => {
-        if (result.type === QuestDB.Type.DQL && result.count === 1) {
-          setBuildVersion(formatVersion(result.data[0].build))
-          setCommitHash(formatCommitHash(result.data[0].build))
-          setWarning(result.data[0].warning)
-          setTag(result.data[0].tag)
-        }
-      })
+    questClient.queryRaw("select build", { limit: "0,1000" }).then((result) => {
+      if (result.type === QuestDB.Type.DQL && result.count === 1) {
+        setBuildVersion(formatVersion(result.dataset[0][0] as string))
+        setCommitHash(formatCommitHash(result.dataset[0][0]))
+      }
+    })
   }, [])
 
   // Telemetry queries use SQL, and therefore need to have auth header set if needed.
@@ -150,7 +135,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       dispatch(actions.telemetry.start())
     }
   }, [authCheckFinished])
-
+  
   if (!authCheckFinished) return null
 
   return (
@@ -159,8 +144,6 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
         quest: questClient,
         buildVersion,
         commitHash,
-        warning,
-        tag,
       }}
     >
       {children}

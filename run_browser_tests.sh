@@ -24,7 +24,7 @@ yarn install --immutable --immutable-cache
 yarn workspace @questdb/react-components run build
 yarn workspace @questdb/web-console run build
 
-./tmp/questdb-*/bin/questdb.sh start -d ./tmp/dbroot
+./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 node packages/web-console/serve-dist.js &
 PID="$!"
 echo "Proxy started, PID=$PID"
