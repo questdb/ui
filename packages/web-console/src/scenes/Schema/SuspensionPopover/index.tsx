@@ -240,7 +240,7 @@ export const SuspensionPopover = ({
                   variant="secondary"
                   data-hook="schema-suspension-popover-restart-transaction"
                 >
-                  {isSubmitting ? "Restarting..." : "Restart transaction"}
+                  {isSubmitting ? "Restarting..." : "Resume WAL"}
                 </Form.Submit>
               </FormWrapper>
             </Form>
