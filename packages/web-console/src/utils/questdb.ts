@@ -147,9 +147,9 @@ export type Partition = {
 export enum WalErrorTag {
   DISK_FULL = "DISK FULL",
   TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
+  OUT_OF_MMAP_AREAS = "OUT OF MMAP AREAS",
   OUT_OF_MEMORY = "OUT OF MEMORY",
-  FAILED_MEMORY_ALLOCATION = "FAILED MEMORY ALLOCATION",
-  OTHER = "OTHER",
+  NONE = "",
 }
 
 export type WalTable = {
