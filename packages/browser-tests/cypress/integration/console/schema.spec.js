@@ -106,7 +106,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
 
   it("should show the suspension popover on click with details for btc_trades", () => {
     cy.get('input[name="table_filter"]').click().type("btc_trades");
-    cy.contains('Suspended').click();
+    cy.contains("Suspended").click();
     cy.getByDataHook("schema-suspension-popover").should(
       "have.attr",
       "data-table-name",
@@ -121,6 +121,11 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
       "href",
       "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files"
     );
+  });
+
+  it("should resume WAL for btc_trades from the suspension popover", () => {
+    cy.get('input[name="table_filter"]').click().type("btc_trades");
+    cy.contains("Suspended").click();
     cy.getByDataHook("schema-suspension-popover-restart-transaction").click();
     cy.getByDataHook("schema-suspension-popover").should("not.exist");
     cy.getByDataHook("schema-suspension-popover-trigger").should("not.exist");
