@@ -298,7 +298,10 @@ const MonacoEditor = () => {
               renderLineMarkings(monacoRef.current, editorRef?.current)
             }
 
-            if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
+            if (
+              result.type === QuestDB.Type.DDL ||
+              result.type === QuestDB.Type.DML
+            ) {
               dispatch(
                 actions.query.addNotification({
                   content: (
