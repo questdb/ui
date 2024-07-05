@@ -87,15 +87,15 @@ const walErrorWorkarounds: Record<
     title: "OS configuration",
     link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
   },
+  [QuestDB.WalErrorTag.OUT_OF_MMAP_AREAS]: {
+    title: "Max virtual memory areas limit",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
+  },
   [QuestDB.WalErrorTag.OUT_OF_MEMORY]: {
-    title: "Max virtual memory limit",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
+    title: "Out of memory",
+    link: "https://questdb.io/docs/deployment/capacity-planning/#cpu-and-ram-configuration",
   },
-  [QuestDB.WalErrorTag.FAILED_MEMORY_ALLOCATION]: {
-    title: "Max virtual memory limit",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
-  },
-  [QuestDB.WalErrorTag.OTHER]: {
+  [QuestDB.WalErrorTag.NONE]: {
     title: "OS configuration",
     link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
   },
