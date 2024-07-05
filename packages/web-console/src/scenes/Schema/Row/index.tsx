@@ -88,11 +88,11 @@ const PlusButton = styled(SecondaryButton)<Pick<Props, "tooltip">>`
   opacity: 0;
 `
 
-const Wrapper = styled.div<Pick<Props, "expanded">>`
+const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 0.5rem 0;
+  padding: ${({ suspended }) => (suspended ? "0" : "0.5rem 0")};
   padding-left: 1rem;
   transition: background ${TransitionDuration.REG}ms;
 
@@ -204,7 +204,11 @@ const Row = ({
   const { query } = useContext(SchemaContext)
 
   return (
-    <Wrapper className={className} expanded={expanded}>
+    <Wrapper
+      className={className}
+      expanded={expanded}
+      suspended={walTableData?.suspended && kind === "table"}
+    >
       <HitBox onClick={onClick} />
       <FlexRow>
         {kind === "table" && (
@@ -255,22 +259,6 @@ const Row = ({
           <Type _style="italic" color="pinkLighter" transform="lowercase">
             {type}
           </Type>
-        )}
-
-        {!walTableData?.suspended &&
-          kind === "table" &&
-          partitionBy !== "NONE" && (
-            <PartitionByWrapper>
-              <PieChartIcon size="14px" />
-              <Text color="gray2">{partitionBy}</Text>
-            </PartitionByWrapper>
-          )}
-
-        {!walTableData?.suspended && kind === "table" && walEnabled && (
-          <PartitionByWrapper>
-            <FileListIcon size="14px" />
-            <Text color="yellow">WAL</Text>
-          </PartitionByWrapper>
         )}
 
         {walTableData?.suspended && kind === "table" && (

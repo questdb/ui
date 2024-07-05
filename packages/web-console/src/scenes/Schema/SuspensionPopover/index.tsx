@@ -1,9 +1,10 @@
 import React, { useState, useContext, useEffect } from "react"
 import { PopperToggle, Text, Link } from "../../../components"
 import { Form } from "../../../components/Form"
-import { Box } from "@questdb/react-components"
+import { Box, Button } from "@questdb/react-components"
 import styled from "styled-components"
 import { ArrowDownS, ExternalLink, Restart } from "@styled-icons/remix-line"
+import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import * as QuestDB from "../../../utils/questdb"
 import Joi from "joi"
 import { QuestContext } from "../../../providers"
@@ -22,18 +23,12 @@ const Root = styled.div`
   margin-top: 0.5rem;
 `
 
-const Trigger = styled.button<{ active: boolean }>`
-  display: flex;
+const ErrorButton = styled(Button)`
   background: ${({ theme }) => theme.color.backgroundDarker};
   border: 1px #723131 solid;
   color: #f47474;
-  border-radius: 4px;
-  padding: 5px 10px;
-  gap: 1rem;
-
-  svg {
-    transform: rotate(${(props) => (props.active ? "180deg" : "0deg")});
-  }
+  padding: 3px 10px;
+  font-size: 1.3rem;
 `
 
 const ContentBlockBox = styled(Box).attrs({
@@ -153,10 +148,9 @@ export const SuspensionPopover = ({
     <PopperToggle
       placement="bottom-start"
       trigger={
-        <Trigger active={active}>
-          <span>Suspended</span>
-          <ArrowDownS size="18px" />
-        </Trigger>
+        <ErrorButton prefixIcon={<ErrorIcon size="18px" />}>
+          Suspended
+        </ErrorButton>
       }
       active={active}
       onToggle={setActive}

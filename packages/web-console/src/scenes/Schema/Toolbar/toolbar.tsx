@@ -2,7 +2,7 @@ import React, { useContext } from "react"
 import styled from "styled-components"
 import { Button, Box, Input } from "@questdb/react-components"
 import { Close, Filter3 } from "@styled-icons/remix-line"
-import { ErrorWarning } from "@styled-icons/remix-fill"
+import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { PopperHover, Tooltip } from "../../../components"
 import { SchemaContext } from "../SchemaContext"
 
@@ -105,7 +105,7 @@ export const Toolbar = ({
               <StyledButton
                 skin="transparent"
                 onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
-                prefixIcon={<ErrorWarning size="18px" />}
+                prefixIcon={<ErrorIcon size="18px" />}
                 data-hook="schema-filter-suspended-button"
               >
                 <span>{suspendedTablesCount}</span>
