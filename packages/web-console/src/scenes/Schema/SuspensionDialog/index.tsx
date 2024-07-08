@@ -3,7 +3,7 @@ import { Dialog, ForwardRef, Button, Overlay } from "@questdb/react-components"
 import { Error as ErrorIcon, Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
-import { Edit, ExternalLink, Restart } from "@styled-icons/remix-line"
+import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
 import { Box } from "../../../components/Box"
 import { Form } from "../../../components/Form"
 import { useState, useContext, useEffect } from "react"
@@ -20,6 +20,10 @@ const ErrorButton = styled(Button)`
   color: #f47474;
   padding: 3px 10px;
   font-size: 1.3rem;
+`
+
+const StyledDialogContent = styled(Dialog.Content)`
+  border-color: #723131;
 `
 
 const StyledDescription = styled(Dialog.Description)`
@@ -142,10 +146,10 @@ export const SuspensionDialog = ({
           <Overlay primitive={Dialog.Overlay} />
         </ForwardRef>
 
-        <Dialog.Content>
+        <StyledDialogContent>
           <Dialog.Title>
             <Box>
-              <Edit size={20} />
+              <Table size={20} color="#FF5555" />
               {walTableData.name} is suspended
             </Box>
           </Dialog.Title>
@@ -274,7 +278,7 @@ export const SuspensionDialog = ({
               </Button>
             </Dialog.Close>
           </Dialog.ActionButtons>
-        </Dialog.Content>
+        </StyledDialogContent>
       </Dialog.Portal>
     </Dialog.Root>
   )
