@@ -28,7 +28,6 @@ import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { CodeSSlash } from "@styled-icons/remix-line"
 import { Information } from "@styled-icons/remix-line"
 import { FileList, PieChart } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
@@ -44,7 +43,6 @@ import {
 } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
-import { useEditor } from "../../../providers"
 import { SuspensionPopover } from "../SuspensionPopover"
 import { SchemaContext } from "../SchemaContext"
 
@@ -193,7 +191,6 @@ const Row = ({
   tooltip,
   type,
 }: Props) => {
-  const { insertTextAtCursor } = useEditor()
   const { query } = useContext(SchemaContext)
 
   return (
@@ -205,10 +202,18 @@ const Row = ({
       <HitBox onClick={onClick} />
       <FlexRow>
         {kind === "table" && (
-          <TableIcon
-            partitionBy={partitionBy}
-            walEnabled={walEnabled}
-            suspended={walTableData?.suspended}
+          <IconWithTooltip
+            icon={
+              <TableIcon
+                partitionBy={partitionBy}
+                walEnabled={walEnabled}
+                suspended={walTableData?.suspended}
+              />
+            }
+            placement="top"
+            tooltip={`${
+              partitionBy ? `Partitioned by ${partitionBy}` : "Not partitioned"
+            }${!walEnabled ? ", WAL is not enabled" : ""}`}
           />
         )}
 
