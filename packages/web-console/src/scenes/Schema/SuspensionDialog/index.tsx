@@ -45,6 +45,10 @@ const TransactionInput = styled(Form.Input)`
   width: 10rem;
 `
 
+const Icon = styled(Box)`
+  height: 4.8rem;
+`
+
 type FormValues = {
   resume_transaction_id?: number
 }
@@ -147,44 +151,91 @@ export const SuspensionDialog = ({
           </Dialog.Title>
 
           <StyledDescription>
-            <Box gap="1.5rem" flexDirection="column" align="center">
+            <Box gap="3rem" flexDirection="column" align="center">
               {error && <Text color="red">{error}</Text>}
+
               {isSubmitted && (
                 <Text color="green">Transaction restarted successfully</Text>
               )}
+
               {walTableData.errorTag && walTableData.errorMessage && (
-                <>
-                  <Text
-                    color="red"
-                    data-hook="schema-suspension-popover-error-message"
-                    size="lg"
-                  >
-                    {walTableData.errorTag}: {walTableData.errorMessage}
-                  </Text>
-                  {walErrorWorkarounds[walTableData.errorTag] && (
-                    <ContentBlockBox gap="0.5rem">
-                      <Text color="foreground">
-                        Workarounds and documentation:
-                      </Text>
-                      <Link
-                        color="cyan"
-                        hoverColor="cyan"
-                        href={walErrorWorkarounds[walTableData.errorTag].link}
-                        rel="noreferrer"
-                        target="_blank"
-                        data-hook="schema-suspension-popover-error-link"
-                      >
-                        <Box align="center" gap="0.25rem">
-                          <ExternalLink size="16px" />
-                          {walErrorWorkarounds[walTableData.errorTag].title}
-                        </Box>
-                      </Link>
-                    </ContentBlockBox>
-                  )}
-                </>
+                <Text
+                  color="red"
+                  data-hook="schema-suspension-popover-error-message"
+                  size="lg"
+                >
+                  {walTableData.errorTag}: {walTableData.errorMessage}
+                </Text>
               )}
-              <ContentBlockBox gap="0.5rem">
-                <Text color="gray2">Start at (optional):</Text>
+
+              <Box gap="2rem" align="flex-start">
+                <Box gap="1rem" flexDirection="column" align="center">
+                  <Icon>
+                    <img
+                      src="assets/icon-copy.svg"
+                      alt="Copy icon"
+                      width="48"
+                      height="48"
+                    />
+                  </Icon>
+                  <Text color="foreground" size="lg">
+                    {walTableData.sequencerTxn}
+                  </Text>
+                </Box>
+                <Icon>
+                  <img
+                    src="assets/line.svg"
+                    alt="Broken transation illustration"
+                    width="108"
+                    height="18"
+                  />
+                </Icon>
+                <Box gap="1rem" flexDirection="column" align="center">
+                  <Icon>
+                    <img
+                      src="assets/icon-database.svg"
+                      alt="Database icon"
+                      width="36"
+                      height="38"
+                    />
+                  </Icon>
+                  <Text color="foreground" size="lg">
+                    {walTableData.writerTxn}
+                  </Text>
+                </Box>
+              </Box>
+
+              <Text color="foreground" size="lg">
+                {walTableData.writerLagTxnCount} transaction
+                {walTableData.writerLagTxnCount === "1" ? "" : "s"} behind
+              </Text>
+
+              {walTableData.errorTag &&
+                walErrorWorkarounds[walTableData.errorTag] && (
+                  <ContentBlockBox gap="0.5rem">
+                    <Text color="foreground">
+                      Workarounds and documentation:
+                    </Text>
+                    <Link
+                      color="cyan"
+                      hoverColor="cyan"
+                      href={walErrorWorkarounds[walTableData.errorTag].link}
+                      rel="noreferrer"
+                      target="_blank"
+                      data-hook="schema-suspension-popover-error-link"
+                    >
+                      <Box align="center" gap="0.25rem">
+                        <ExternalLink size="16px" />
+                        {walErrorWorkarounds[walTableData.errorTag].title}
+                      </Box>
+                    </Link>
+                  </ContentBlockBox>
+                )}
+
+              <ContentBlockBox gap="2rem">
+                <Text color="gray2">
+                  If you have addressed the issue, restart the process:
+                </Text>
                 <Form<FormValues>
                   name="resume_transaction_form"
                   onSubmit={handleSubmit}

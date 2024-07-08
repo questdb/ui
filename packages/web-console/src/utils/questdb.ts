@@ -156,7 +156,7 @@ export type WalTable = {
   name: string
   suspended: boolean
   writerTxn: string
-  writerLagTxtCount: string
+  writerLagTxnCount: string
   sequencerTxn: string
   errorTag?: WalErrorTag
   errorMessage?: string
