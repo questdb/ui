@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, ReactNode, useCallback, useContext } from "react"
+import React, { MouseEvent, ReactNode, useContext } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
@@ -34,16 +34,12 @@ import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 
-import {
-  SecondaryButton,
-  Text,
-  TransitionDuration,
-  IconWithTooltip,
-} from "../../../components"
+import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { SuspensionPopover } from "../SuspensionPopover"
 import { SchemaContext } from "../SchemaContext"
+import { SuspensionDialog } from "../SuspensionDialog"
 
 type Props = Readonly<{
   className?: string
@@ -76,13 +72,6 @@ const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
     background-color: #7c804f;
     color: ${({ theme }) => theme.color.foreground};
   }
-`
-
-const PlusButton = styled(SecondaryButton)<Pick<Props, "tooltip">>`
-  position: absolute;
-  right: ${({ tooltip }) => (tooltip ? "3rem" : "1rem")};
-  margin-left: 1rem;
-  opacity: 0;
 `
 
 const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
@@ -248,7 +237,7 @@ const Row = ({
 
         {walTableData?.suspended && kind === "table" && (
           <TableActions>
-            <SuspensionPopover walTableData={walTableData} />
+            <SuspensionDialog walTableData={walTableData} />
           </TableActions>
         )}
 
