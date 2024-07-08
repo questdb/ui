@@ -29,7 +29,6 @@ import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
 import { Information } from "@styled-icons/remix-line"
-import { FileList, PieChart } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
@@ -157,22 +156,6 @@ const InfoIconWrapper = styled.div`
   padding: 0 1rem;
   align-items: center;
   justify-content: center;
-`
-
-const PartitionByWrapper = styled.div`
-  margin-right: 1rem;
-  display: flex;
-  align-items: center;
-`
-
-const PieChartIcon = styled(PieChart)`
-  color: ${color("gray2")};
-  margin-right: 0.5rem;
-`
-
-const FileListIcon = styled(FileList)`
-  color: ${color("yellow")};
-  margin-right: 0.5rem;
 `
 
 const Row = ({
