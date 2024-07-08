@@ -24,7 +24,7 @@ const Root = styled.div`
 `
 
 const ErrorButton = styled(Button)`
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: #3e1b1b;
   border: 1px #723131 solid;
   color: #f47474;
   padding: 3px 10px;

@@ -118,7 +118,7 @@ export type QueryResult<T extends Record<string, any>> =
   | DmlResult
   | DdlResult
 
-type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
+export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
 export type Table = {
   table_name: string
@@ -423,10 +423,10 @@ export class Client {
 
     const start = new Date()
     try {
-      response = await fetch(
-        `exec?${Client.encodeParams(payload)}`,
-        { signal: controller.signal, headers: this.commonHeaders },
-      )
+      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal: controller.signal,
+        headers: this.commonHeaders,
+      })
     } catch (error) {
       const err = {
         position: -1,

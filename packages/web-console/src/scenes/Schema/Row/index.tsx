@@ -30,11 +30,11 @@ import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
 import { CodeSSlash } from "@styled-icons/remix-line"
 import { Information } from "@styled-icons/remix-line"
-import { Table as TableIcon } from "@styled-icons/remix-line"
 import { FileList, PieChart } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
+import { TableIcon } from "../table-icon"
 
 import {
   SecondaryButton,
@@ -57,7 +57,7 @@ type Props = Readonly<{
   kind: TreeNodeKind
   name: string
   onClick?: (event: MouseEvent) => void
-  partitionBy?: string
+  partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
   walTableData?: QuestDB.WalTable
   suffix?: ReactNode
@@ -154,13 +154,6 @@ const DotIcon = styled(CheckboxBlankCircle)`
   margin-right: 1rem;
 `
 
-const TitleIcon = styled(TableIcon)<{ $suspended?: boolean }>`
-  min-height: 18px;
-  min-width: 18px;
-  margin-right: 1rem;
-  color: ${({ theme, $suspended }) => theme.color[$suspended ? "red" : "cyan"]};
-`
-
 const InfoIconWrapper = styled.div`
   display: flex;
   padding: 0 1rem;
@@ -212,7 +205,11 @@ const Row = ({
       <HitBox onClick={onClick} />
       <FlexRow>
         {kind === "table" && (
-          <TitleIcon size="18px" $suspended={walTableData?.suspended} />
+          <TableIcon
+            partitionBy={partitionBy}
+            walEnabled={walEnabled}
+            suspended={walTableData?.suspended}
+          />
         )}
 
         {kind === "column" && indexed && (
