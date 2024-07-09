@@ -63,28 +63,39 @@ const walErrorWorkarounds: Record<
   QuestDB.WalErrorTag,
   {
     title: string
+    message: string
     link: string
   }
 > = {
   [QuestDB.WalErrorTag.TOO_MANY_OPEN_FILES]: {
     title: "System limit for open files",
+    message:
+      "Too many open files, please, increase the maximum number of open file handlers OS limit",
     link: "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files",
   },
   [QuestDB.WalErrorTag.DISK_FULL]: {
     title: "OS configuration",
+    message:
+      "No space left on device, please, extend the volume or free existing disk space up",
     link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
   },
   [QuestDB.WalErrorTag.OUT_OF_MMAP_AREAS]: {
     title: "Max virtual memory areas limit",
+    message:
+      "Out of virtual memory mapping areas, please, increase the maximum number of memory-mapped areas OS limit",
     link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
   },
   [QuestDB.WalErrorTag.OUT_OF_MEMORY]: {
     title: "Out of memory",
+    message:
+      "Out of memory, please, analyze system metrics, and upgrade memory, if necessary",
     link: "https://questdb.io/docs/deployment/capacity-planning/#cpu-and-ram-configuration",
   },
-  [QuestDB.WalErrorTag.NONE]: {
-    title: "OS configuration",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
+  [QuestDB.WalErrorTag.UNSUPPORTED_FILE_SYSTEM]: {
+    title: "Unsupported file system",
+    message:
+      "DB root is located on an unsupported file system, please, move the DB root to a volume with supported file system",
+    link: "https://questdb.io/docs/operations/backup/#supported-filesystems",
   },
 }
 
@@ -162,15 +173,17 @@ export const SuspensionDialog = ({
                 <Text color="green">Transaction restarted successfully</Text>
               )}
 
-              {walTableData.errorTag && walTableData.errorMessage && (
-                <Text
-                  color="red"
-                  data-hook="schema-suspension-popover-error-message"
-                  size="lg"
-                >
-                  {walTableData.errorTag}: {walTableData.errorMessage}
-                </Text>
-              )}
+              {walTableData.errorTag &&
+                walErrorWorkarounds[walTableData.errorTag] && (
+                  <Text
+                    color="red"
+                    data-hook="schema-suspension-popover-error-message"
+                    size="lg"
+                    align="center"
+                  >
+                    {walErrorWorkarounds[walTableData.errorTag].message}
+                  </Text>
+                )}
 
               <Box gap="2rem" align="flex-start">
                 <Box gap="1rem" flexDirection="column" align="center">

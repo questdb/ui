@@ -37,7 +37,6 @@ import { TableIcon } from "../table-icon"
 import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
-import { SuspensionPopover } from "../SuspensionPopover"
 import { SchemaContext } from "../SchemaContext"
 import { SuspensionDialog } from "../SuspensionDialog"
 
