@@ -146,7 +146,10 @@ export const SuspensionDialog = ({
     <Dialog.Root>
       <Dialog.Trigger asChild>
         <ForwardRef>
-          <ErrorButton prefixIcon={<ErrorIcon size="18px" />}>
+          <ErrorButton
+            prefixIcon={<ErrorIcon size="18px" />}
+            data-hook="schema-suspension-dialog-trigger"
+          >
             Suspended
           </ErrorButton>
         </ForwardRef>
@@ -157,11 +160,14 @@ export const SuspensionDialog = ({
           <Overlay primitive={Dialog.Overlay} />
         </ForwardRef>
 
-        <StyledDialogContent>
+        <StyledDialogContent
+          data-hook="schema-suspension-dialog"
+          data-table-name={walTableData.name}
+        >
           <Dialog.Title>
             <Box>
               <Table size={20} color="#FF5555" />
-              {walTableData.name} is suspended
+              <span>{walTableData.name}</span> is suspended
             </Box>
           </Dialog.Title>
 
@@ -177,7 +183,7 @@ export const SuspensionDialog = ({
                 walErrorWorkarounds[walTableData.errorTag] && (
                   <Text
                     color="red"
-                    data-hook="schema-suspension-popover-error-message"
+                    data-hook="schema-suspension-dialog-error-message"
                     size="lg"
                     align="center"
                   >
@@ -239,7 +245,7 @@ export const SuspensionDialog = ({
                       href={walErrorWorkarounds[walTableData.errorTag].link}
                       rel="noreferrer"
                       target="_blank"
-                      data-hook="schema-suspension-popover-error-link"
+                      data-hook="schema-suspension-dialog-error-link"
                     >
                       <Box align="center" gap="0.25rem">
                         <ExternalLink size="16px" />
@@ -274,7 +280,7 @@ export const SuspensionDialog = ({
                       disabled={isSubmitting}
                       prefixIcon={<Restart size="18px" />}
                       variant="secondary"
-                      data-hook="schema-suspension-popover-restart-transaction"
+                      data-hook="schema-suspension-dialog-restart-transaction"
                     >
                       {isSubmitting ? "Restarting..." : "Resume WAL"}
                     </Form.Submit>

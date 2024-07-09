@@ -104,19 +104,19 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.getByDataHook("schema-filter-suspended-button").click();
   });
 
-  it("should show the suspension popover on click with details for btc_trades", () => {
+  it("should show the suspension dialog on click with details for btc_trades", () => {
     cy.get('input[name="table_filter"]').click().type("btc_trades");
-    cy.contains("Suspended").click();
-    cy.getByDataHook("schema-suspension-popover").should(
+    cy.getByDataHook("schema-suspension-dialog-trigger").click();
+    cy.getByDataHook("schema-suspension-dialog").should(
       "have.attr",
       "data-table-name",
       "btc_trades"
     );
-    cy.getByDataHook("schema-suspension-popover-error-message").should(
+    cy.getByDataHook("schema-suspension-dialog-error-message").should(
       "contain",
-      "Too many open files"
+      "Too many open files, please, increase the maximum number of open file handlers OS limit"
     );
-    cy.getByDataHook("schema-suspension-popover-error-link").should(
+    cy.getByDataHook("schema-suspension-dialog-error-link").should(
       "have.attr",
       "href",
       "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files"
@@ -126,9 +126,9 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   it("should resume WAL for btc_trades from the suspension popover", () => {
     cy.get('input[name="table_filter"]').click().type("btc_trades");
     cy.contains("Suspended").click();
-    cy.getByDataHook("schema-suspension-popover-restart-transaction").click();
-    cy.getByDataHook("schema-suspension-popover").should("not.exist");
-    cy.getByDataHook("schema-suspension-popover-trigger").should("not.exist");
+    cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist");
+    cy.getByDataHook("schema-suspension-dialog-trigger").should("not.exist");
   });
 
   after(() => {
