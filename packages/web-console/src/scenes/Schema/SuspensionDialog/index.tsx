@@ -1,16 +1,27 @@
 import React from "react"
-import { Dialog, ForwardRef, Button, Overlay } from "@questdb/react-components"
+import {
+  Dialog,
+  ForwardRef,
+  Button,
+  Overlay,
+  Input,
+} from "@questdb/react-components"
 import { Error as ErrorIcon, Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
-import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
+import {
+  FileCopy,
+  ExternalLink,
+  Restart,
+  Table,
+} from "@styled-icons/remix-line"
 import { Box } from "../../../components/Box"
 import { Form } from "../../../components/Form"
 import { useState, useContext, useEffect } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
-import { ErrorResult } from "../../../utils"
+import { copyToClipboard, ErrorResult } from "../../../utils"
 import { Text, Link } from "../../../components"
 import Joi from "joi"
 
@@ -51,6 +62,13 @@ const TransactionInput = styled(Form.Input)`
 
 const Icon = styled(Box)`
   height: 4.8rem;
+`
+
+const StyledInput = styled(Input)`
+  width: 100%;
+  font-family: ${({ theme }) => theme.fontMonospace};
+  background: #313340;
+  border-color: ${({ theme }) => theme.color.selection};
 `
 
 type FormValues = {
@@ -167,7 +185,7 @@ export const SuspensionDialog = ({
           <Dialog.Title>
             <Box>
               <Table size={20} color="#FF5555" />
-              <span>{walTableData.name}</span> is suspended
+              {walTableData.name} is suspended
             </Box>
           </Dialog.Title>
 
@@ -232,6 +250,33 @@ export const SuspensionDialog = ({
                 {walTableData.writerLagTxnCount} transaction
                 {walTableData.writerLagTxnCount === "1" ? "" : "s"} behind
               </Text>
+
+              {walTableData.errorMessage && (
+                <Box
+                  flexDirection="column"
+                  gap="1rem"
+                  style={{ width: "100%" }}
+                >
+                  <Text color="foreground">Server message:</Text>
+                  <Box gap="0.5rem" style={{ width: "100%" }}>
+                    <StyledInput
+                      name="server_message"
+                      disabled
+                      value={walTableData.errorMessage}
+                    />
+                    <Button
+                      skin="secondary"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          walTableData.errorMessage ?? "",
+                        )
+                      }}
+                    >
+                      <FileCopy size="18px" />
+                    </Button>
+                  </Box>
+                </Box>
+              )}
 
               {walTableData.errorTag &&
                 walErrorWorkarounds[walTableData.errorTag] && (

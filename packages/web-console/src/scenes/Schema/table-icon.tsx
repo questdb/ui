@@ -19,7 +19,7 @@ const Root = styled.div<{ $suspended?: boolean }>`
   margin-right: 1rem;
 `
 
-const PartitionLetter = styled.text`
+const PartitionLetter = styled.span`
   width: 100%;
   text-align: center;
   font-size: 1rem;

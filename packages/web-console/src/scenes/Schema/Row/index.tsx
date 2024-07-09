@@ -173,18 +173,10 @@ const Row = ({
       <HitBox onClick={onClick} />
       <FlexRow>
         {kind === "table" && (
-          <IconWithTooltip
-            icon={
-              <TableIcon
-                partitionBy={partitionBy}
-                walEnabled={walEnabled}
-                suspended={walTableData?.suspended}
-              />
-            }
-            placement="top"
-            tooltip={`${
-              partitionBy ? `Partitioned by ${partitionBy}` : "Not partitioned"
-            }${!walEnabled ? ", WAL is not enabled" : ""}`}
+          <TableIcon
+            partitionBy={partitionBy}
+            walEnabled={walEnabled}
+            suspended={walTableData?.suspended}
           />
         )}
 
