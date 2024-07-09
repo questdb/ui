@@ -21,7 +21,7 @@ import { useState, useContext, useEffect } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
-import { copyToClipboard, ErrorResult } from "../../../utils"
+import { ErrorResult } from "../../../utils"
 import { Text, Link } from "../../../components"
 import Joi from "joi"
 
@@ -140,7 +140,6 @@ export const SuspensionDialog = ({
         }`,
       )
       if (response && response.type === QuestDB.Type.DDL) {
-        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
         setIsSubmitted(true)
       } else {
         setError(GENERIC_ERROR_TEXT)
@@ -161,7 +160,13 @@ export const SuspensionDialog = ({
   }, [active])
 
   return (
-    <Dialog.Root>
+    <Dialog.Root
+      onOpenChange={(open) => {
+        if (!open) {
+          eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+        }
+      }}
+    >
       <Dialog.Trigger asChild>
         <ForwardRef>
           <ErrorButton
@@ -194,7 +199,7 @@ export const SuspensionDialog = ({
               {error && <Text color="red">{error}</Text>}
 
               {isSubmitted && (
-                <Text color="green">Transaction restarted successfully</Text>
+                <Text color="green">WAL resumed successfully!</Text>
               )}
 
               {walTableData.errorTag &&
@@ -337,7 +342,11 @@ export const SuspensionDialog = ({
 
           <Dialog.ActionButtons>
             <Dialog.Close asChild>
-              <Button prefixIcon={<Undo size={18} />} skin="secondary">
+              <Button
+                prefixIcon={<Undo size={18} />}
+                skin="secondary"
+                data-hook="schema-suspension-dialog-dismiss"
+              >
                 Dismiss
               </Button>
             </Dialog.Close>

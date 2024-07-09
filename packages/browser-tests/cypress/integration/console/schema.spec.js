@@ -127,6 +127,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.get('input[name="table_filter"]').click().type("btc_trades");
     cy.contains("Suspended").click();
     cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
+    cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
     cy.getByDataHook("schema-suspension-dialog-trigger").should("not.exist");
   });
