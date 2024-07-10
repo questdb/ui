@@ -31,3 +31,8 @@ export type ConsoleConfig = Partial<{
   readOnly?: boolean
   savedQueries: Array<Query | QueryGroup>
 }>
+
+export type Warning = {
+  tag: string
+  warning: string
+}

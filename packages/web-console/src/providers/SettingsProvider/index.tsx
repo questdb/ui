@@ -5,7 +5,7 @@ import React, {
   useReducer,
   useState,
 } from "react"
-import { ConsoleConfig, Settings } from "./types"
+import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout } from "../../components"
 import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
@@ -25,9 +25,10 @@ const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 const SettingContext = createContext<{
   settings: Settings
   consoleConfig: ConsoleConfig
-}>({ settings: {}, consoleConfig: {} })
+  warnings: Warning[]
+}>({ settings: {}, consoleConfig: {}, warnings: [] })
 
-const settingsError = (
+const connectionError = (
   <>
     Error connecting to the database.
     <br />
@@ -44,12 +45,13 @@ export const SettingsProvider = ({
 }) => {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [settings, setSettings] = useState<Settings>({})
+  const [warnings, setWarnings] = useState<Warning[]>([])
   const [consoleConfig, setConsoleConfig] = useState<ConsoleConfig>({})
 
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => null,
     [View.ready]: () => (
-      <SettingContext.Provider value={{ settings, consoleConfig }}>
+      <SettingContext.Provider value={{ settings, consoleConfig, warnings }}>
         {children}
       </SettingContext.Provider>
     ),
@@ -81,40 +83,40 @@ export const SettingsProvider = ({
     ),
   }
 
-  const fetchSettings = async () => {
+  const fetchEndpoint = async (
+    endpoint: string,
+    errorMessage: React.ReactNode,
+  ) => {
     try {
-      const response = await fetch(`settings`)
+      const response = await fetch(endpoint)
       if (response.status === 200) {
-        const settings = await response.json()
-        setSettings(settings)
+        const data = await response.json()
+        return data
       } else {
-        dispatch({ view: View.error, errorMessage: settingsError })
+        dispatch({ view: View.error, errorMessage })
       }
     } catch (e) {
-      dispatch({ view: View.error, errorMessage: settingsError })
-    }
-  }
-
-  const fetchConsoleConfig = async () => {
-    try {
-      const response = await fetch(
-        `assets/console-configuration.json`
-      )
-      if (response.status === 200) {
-        const consoleConfig = await response.json()
-        setConsoleConfig(consoleConfig)
-      } else {
-        dispatch({ view: View.error, errorMessage: consoleConfigError })
-      }
-    } catch (e) {
-      dispatch({ view: View.error, errorMessage: consoleConfigError })
+      dispatch({ view: View.error, errorMessage })
     }
   }
 
   useEffect(() => {
     const fetchAll = async () => {
-      await fetchSettings()
-      await fetchConsoleConfig()
+      const settings = await fetchEndpoint("settings", connectionError)
+      const warnings = await fetchEndpoint("warnings", connectionError)
+      const consoleConfig = await fetchEndpoint(
+        "assets/console-configuration.json",
+        consoleConfigError,
+      )
+      if (settings) {
+        setSettings(settings)
+      }
+      if (warnings) {
+        setWarnings(warnings)
+      }
+      if (consoleConfig) {
+        setConsoleConfig(consoleConfig)
+      }
     }
 
     fetchAll().then(() => dispatch({ view: View.ready }))
