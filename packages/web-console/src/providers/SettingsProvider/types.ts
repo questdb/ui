@@ -1,3 +1,4 @@
+import { ErrorTag } from "./../../utils/questdb"
 export type Settings = Partial<{
   "release.type": "OSS" | "EE"
   "release.version": string
@@ -33,6 +34,6 @@ export type ConsoleConfig = Partial<{
 }>
 
 export type Warning = {
-  tag: string
+  tag: ErrorTag
   warning: string
 }
