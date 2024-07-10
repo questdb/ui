@@ -52,7 +52,7 @@ const CloseIcon = styled(Close)`
 
 export const Warnings = () => {
   const { warnings } = useSettings()
-  const [open, setOpen] = useState<ErrorTag[] | undefined>(undefined)
+  const [open, setOpen] = useState<ErrorTag[]>([])
 
   useEffect(() => {
     if (warnings && warnings.length > 0) {
@@ -60,22 +60,31 @@ export const Warnings = () => {
     }
   }, [warnings])
 
-  if (!open) return null
+  if (open.length === 0) return null
 
   return (
-    <Box flexDirection="column" gap="0.1rem" style={{ width: "100%" }}>
+    <Box
+      flexDirection="column"
+      gap="0.1rem"
+      style={{ width: "100%" }}
+      data-hook="warnings"
+    >
       {warnings
         .filter((warning) => open.includes(warning.tag))
         .map((warning, index) => (
-          <WarningRoot key={index}>
+          <WarningRoot key={index} data-hook="warning">
             <Content>
               <ErrorWarning size="20px" />
-              Warning: <WarningText>{warning.warning}</WarningText>
+              Warning:{" "}
+              <WarningText data-hook="warning-text">
+                {warning.warning}
+              </WarningText>
               {errorWorkarounds[warning.tag] && (
                 <WorkaroundLink
                   href={errorWorkarounds[warning.tag].link}
                   rel="noreferrer noopener"
                   target="_blank"
+                  data-hook="warning-workaround-link"
                 >
                   <ExternalLink size="16px" />
                   {errorWorkarounds[warning.tag].title}
@@ -83,6 +92,7 @@ export const Warnings = () => {
               )}
             </Content>
             <CloseButton
+              data-hook="warning-close-button"
               onClick={() =>
                 setOpen(open.filter((errorTag) => errorTag !== warning.tag))
               }
