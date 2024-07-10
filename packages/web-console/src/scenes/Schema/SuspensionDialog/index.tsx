@@ -23,6 +23,7 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { ErrorResult } from "../../../utils"
 import { Text, Link } from "../../../components"
+import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
 
 const ErrorButton = styled(Button)`
@@ -76,46 +77,6 @@ type FormValues = {
 }
 
 const GENERIC_ERROR_TEXT = "Error restarting transaction"
-
-const walErrorWorkarounds: Record<
-  QuestDB.WalErrorTag,
-  {
-    title: string
-    message: string
-    link: string
-  }
-> = {
-  [QuestDB.WalErrorTag.TOO_MANY_OPEN_FILES]: {
-    title: "System limit for open files",
-    message:
-      "Too many open files, please, increase the maximum number of open file handlers OS limit",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#maximum-open-files",
-  },
-  [QuestDB.WalErrorTag.DISK_FULL]: {
-    title: "OS configuration",
-    message:
-      "No space left on device, please, extend the volume or free existing disk space up",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#os-configuration",
-  },
-  [QuestDB.WalErrorTag.OUT_OF_MMAP_AREAS]: {
-    title: "Max virtual memory areas limit",
-    message:
-      "Out of virtual memory mapping areas, please, increase the maximum number of memory-mapped areas OS limit",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#max-virtual-memory-areas-limit",
-  },
-  [QuestDB.WalErrorTag.OUT_OF_MEMORY]: {
-    title: "Out of memory",
-    message:
-      "Out of memory, please, analyze system metrics, and upgrade memory, if necessary",
-    link: "https://questdb.io/docs/deployment/capacity-planning/#cpu-and-ram-configuration",
-  },
-  [QuestDB.WalErrorTag.UNSUPPORTED_FILE_SYSTEM]: {
-    title: "Unsupported file system",
-    message:
-      "DB root is located on an unsupported file system, please, move the DB root to a volume with supported file system",
-    link: "https://questdb.io/docs/operations/backup/#supported-filesystems",
-  },
-}
 
 export const SuspensionDialog = ({
   walTableData,
@@ -203,14 +164,14 @@ export const SuspensionDialog = ({
               )}
 
               {walTableData.errorTag &&
-                walErrorWorkarounds[walTableData.errorTag] && (
+                errorWorkarounds[walTableData.errorTag] && (
                   <Text
                     color="red"
                     data-hook="schema-suspension-dialog-error-message"
                     size="lg"
                     align="center"
                   >
-                    {walErrorWorkarounds[walTableData.errorTag].message}
+                    {errorWorkarounds[walTableData.errorTag].message}
                   </Text>
                 )}
 
@@ -284,7 +245,7 @@ export const SuspensionDialog = ({
               )}
 
               {walTableData.errorTag &&
-                walErrorWorkarounds[walTableData.errorTag] && (
+                errorWorkarounds[walTableData.errorTag] && (
                   <ContentBlockBox gap="0.5rem">
                     <Text color="foreground">
                       Workarounds and documentation:
@@ -292,14 +253,14 @@ export const SuspensionDialog = ({
                     <Link
                       color="cyan"
                       hoverColor="cyan"
-                      href={walErrorWorkarounds[walTableData.errorTag].link}
+                      href={errorWorkarounds[walTableData.errorTag].link}
                       rel="noreferrer"
                       target="_blank"
                       data-hook="schema-suspension-dialog-error-link"
                     >
                       <Box align="center" gap="0.25rem">
                         <ExternalLink size="16px" />
-                        {walErrorWorkarounds[walTableData.errorTag].title}
+                        {errorWorkarounds[walTableData.errorTag].title}
                       </Box>
                     </Link>
                   </ContentBlockBox>

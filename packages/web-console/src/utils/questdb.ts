@@ -144,7 +144,7 @@ export type Partition = {
   attachable: boolean
 }
 
-export enum WalErrorTag {
+export enum ErrorTag {
   DISK_FULL = "DISK FULL",
   TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
   OUT_OF_MMAP_AREAS = "OUT OF MMAP AREAS",
@@ -158,7 +158,7 @@ export type WalTable = {
   writerTxn: string
   writerLagTxnCount: string
   sequencerTxn: string
-  errorTag?: WalErrorTag
+  errorTag?: ErrorTag
   errorMessage?: string
 }
 
