@@ -65,6 +65,9 @@ describe("questdb schema with working tables", () => {
 
 describe("questdb schema with suspended tables with Linux OS error codes", () => {
   before(() => {
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
     tables.forEach((table) => {
       cy.createTable(table);
     });
@@ -82,6 +85,8 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
   beforeEach(() => {
     cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
   });
 
   it("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
