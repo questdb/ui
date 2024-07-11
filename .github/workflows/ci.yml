@@ -30,6 +30,8 @@ jobs:
 
       - name: Start QuestDB
         run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_CAIRO_ENABLE_WARNINGS_SIMULATION: "true"
 
       - uses: actions/setup-node@v4
         with:
