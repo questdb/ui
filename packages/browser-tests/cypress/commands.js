@@ -68,6 +68,7 @@ beforeEach(() => {
       req.reply("{}");
     }
   ).as("addTelemetry");
+
   cy.intercept(
     {
       method: "GET",
@@ -78,6 +79,11 @@ beforeEach(() => {
       req.reply("[]");
     }
   );
+
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec?query=${encodeURIComponent(`select simulate_warnings('', '');`)}`,
+  });
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -110,10 +116,11 @@ Cypress.Commands.add("runLine", () => {
   cy.wait("@exec");
 });
 
-Cypress.Commands.add("clickRun", () => {
-  cy.intercept("/exec*").as("exec");
-  return cy.get("button").contains("Run").click().wait("@exec");
-});
+Cypress.Commands.add("clickRun",
+  () => {
+    cy.intercept("/exec*").as("exec");
+    return cy.get("button").contains("Run").click().wait("@exec");
+  });
 
 Cypress.Commands.add("clearEditor", () =>
   cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
