@@ -8,14 +8,16 @@ type Props = {
   suspended?: boolean
 }
 
+const RED = "#ff5555"
+const WHITE = "#f8f8f2"
+
 const Root = styled.div<{ $suspended?: boolean }>`
   display: flex;
   align-items: center;
   width: 1.8rem;
   height: 1.5rem;
   position: relative;
-  color: ${({ theme, $suspended }) =>
-    theme.color[$suspended ? "red" : "gray2"]};
+  color: ${({ $suspended }) => ($suspended ? RED : WHITE)};
   margin-right: 1rem;
 `
 
@@ -29,33 +31,20 @@ const IconSVG = styled.svg`
   position: absolute;
 `
 
-const AsteriskSVG = styled.svg`
+const Asterisk = styled.span`
   position: absolute;
-  top: -4px;
+  top: -8px;
   right: -8px;
+  font-size: 1.4rem;
+  line-height: 1.4rem;
+  color: #f1fa8c;
 `
-
-const RED = "#ff5555"
-const GRAY2 = "#bbbbbb"
 
 export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
   return (
     <Root $suspended={suspended}>
-      {!walEnabled && (
-        <AsteriskSVG
-          width="8"
-          height="7"
-          viewBox="0 0 8 7"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M4.74512 0.363281L4.47168 2.97461L7.09668 2.22949L7.30176 3.68555L4.84766 3.9043L6.44043 6.03027L5.11426 6.74805L3.95898 4.45801L2.92676 6.74121L1.5459 6.03027L3.125 3.9043L0.68457 3.67871L0.916992 2.22949L3.49414 2.97461L3.2207 0.363281H4.74512Z"
-            fill="#F1FA8C"
-          />
-        </AsteriskSVG>
-      )}
+      {!walEnabled && <Asterisk>*</Asterisk>}
       <IconSVG
         width="18"
         height="15"
@@ -69,15 +58,15 @@ export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
           width="17"
           height="14"
           rx="1.5"
-          stroke={suspended ? RED : GRAY2}
+          stroke={suspended ? RED : WHITE}
         />
         {!isPartitioned && (
           <>
-            <path d="M1 5H17" stroke={GRAY2} />
-            <path d="M6 5L6 15" stroke={GRAY2} />
-            <path d="M6 5L6 15" stroke={GRAY2} />
-            <path d="M12 5V15" stroke={GRAY2} />
-            <path d="M12 5V15" stroke={GRAY2} />
+            <path d="M1 5H17" stroke={WHITE} />
+            <path d="M6 5L6 15" stroke={WHITE} />
+            <path d="M6 5L6 15" stroke={WHITE} />
+            <path d="M12 5V15" stroke={WHITE} />
+            <path d="M12 5V15" stroke={WHITE} />
           </>
         )}
       </IconSVG>
