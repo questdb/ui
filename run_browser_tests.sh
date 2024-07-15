@@ -24,7 +24,7 @@ yarn install --immutable --immutable-cache
 yarn workspace @questdb/react-components run build
 yarn workspace @questdb/web-console run build
 
-export QDB_CAIRO_ENABLE_WARNINGS_SIMULATION=true
+export QDB_DEV_MODE_ENABLED=true
 
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 node packages/web-console/serve-dist.js &
