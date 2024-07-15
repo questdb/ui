@@ -22,6 +22,7 @@ const Root = styled.div<{ $suspended?: boolean }>`
   position: relative;
   color: ${({ $suspended }) => ($suspended ? RED : WHITE)};
   margin-right: 1rem;
+  flex-shrink: 0;
 `
 
 const PartitionLetter = styled.span`

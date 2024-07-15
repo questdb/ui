@@ -40,6 +40,7 @@ const CloseIcon = styled(Close)`
 const StyledInput = styled(Input)`
   padding-left: 3.5rem;
   padding-right: 3.5rem;
+  width: 100%;
 
   &::placeholder {
     color: ${({ theme }) => theme.color.foreground};
