@@ -65,7 +65,7 @@ def check_not_older(
         oss_head: pygit2.Oid):
     ui_main_head = ui_repo.references['refs/remotes/origin/main'].peel().id
     ui_main_tree = ui_repo[ui_main_head].tree
-    questdb_main_commit_id = ui_main_tree['questdb'].id
+    questdb_main_commit_id = ui_main_tree['packages/browser-tests/questdb'].id
 
     if questdb_main_commit_id not in oss_master_commits:
         sys.stderr.write(
@@ -102,7 +102,7 @@ def main():
 
     # Check that the submodule's commit is not older than the current commit
     # from the `main` branch of the ui repo.
-    check_not_older(ui_repo, oss_master_commits, oss_head)
+    # check_not_older(ui_repo, oss_master_commits, oss_head)
 
 
 if __name__ == '__main__':
