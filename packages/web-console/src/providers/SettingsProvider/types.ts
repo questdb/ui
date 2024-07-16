@@ -1,3 +1,4 @@
+import { ErrorTag } from "../../utils"
 export type Settings = Partial<{
   "release.type": "OSS" | "EE"
   "release.version": string
@@ -31,3 +32,8 @@ export type ConsoleConfig = Partial<{
   readOnly?: boolean
   savedQueries: Array<Query | QueryGroup>
 }>
+
+export type Warning = {
+  tag: ErrorTag
+  warning: string
+}

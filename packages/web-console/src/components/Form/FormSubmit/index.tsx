@@ -5,7 +5,7 @@ import { Button } from "@questdb/react-components"
 type Props = {
   children: React.ReactNode
   disabled?: boolean
-  variant?: "error" | "success" | "warning" | "primary"
+  variant?: "error" | "success" | "warning" | "primary" | "secondary"
   prefixIcon?: ButtonProps["prefixIcon"]
 }
 
@@ -14,6 +14,7 @@ export const FormSubmit = ({
   disabled,
   variant,
   prefixIcon,
+  ...rest
 }: Props) => (
   <Button
     type="submit"
@@ -21,6 +22,7 @@ export const FormSubmit = ({
     skin={variant ?? "primary"}
     prefixIcon={prefixIcon}
     dataHook="form-submit-button"
+    {...rest}
   >
     {children}
   </Button>

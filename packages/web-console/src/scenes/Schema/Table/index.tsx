@@ -45,6 +45,7 @@ type Props = QuestDB.Table &
     partitionBy: string
     expanded?: boolean
     onChange: (name: string) => void
+    walTableData?: QuestDB.WalTable
   }>
 
 const Wrapper = styled.div`
@@ -54,6 +55,7 @@ const Wrapper = styled.div`
   align-items: stretch;
   flex-direction: column;
   overflow: hidden;
+  font-family: ${({ theme }) => theme.fontMonospace};
 
   ${collapseTransition};
 `
@@ -118,6 +120,7 @@ const Table = ({
   partitionBy,
   expanded = false,
   walEnabled,
+  walTableData,
   onChange,
   dedup,
 }: Props) => {
@@ -192,6 +195,7 @@ const Table = ({
               }}
               partitionBy={partitionBy}
               walEnabled={walEnabled}
+              walTableData={walTableData}
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
             />

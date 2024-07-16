@@ -30,6 +30,8 @@ jobs:
 
       - name: Start QuestDB
         run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
 
       - uses: actions/setup-node@v4
         with:

@@ -228,7 +228,7 @@ export const Dialog = ({
                 <Controls action={action}>
                   {action === "add" && (
                     <Form.Item name="name" label="Table name">
-                      <Form.Input name="name" autoComplete="off" />
+                      <Form.Input name="name" autoComplete="off" autoFocus />
                     </Form.Item>
                   )}
 

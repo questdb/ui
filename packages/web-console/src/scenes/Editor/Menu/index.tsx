@@ -28,6 +28,7 @@ import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { Add, Close as _CloseIcon, Play, Stop } from "@styled-icons/remix-line"
 import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
+import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 
 import {
   ErrorButton,
@@ -40,8 +41,9 @@ import {
   useKeyPress,
   useScreenSize,
 } from "../../../components"
+import { Box } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
-import { color } from "../../../utils"
+import { color, platform } from "../../../utils"
 import QueryPicker from "../QueryPicker"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
@@ -117,11 +119,29 @@ const SideMenuMenuButton = styled(TransparentButton)`
   }
 `
 
+const Key = styled(Box).attrs({ alignItems: "center" })`
+  padding: 0 4px;
+  background: #61647a;
+  border-radius: 2px;
+  font-size: 1.2rem;
+  height: 1.8rem;
+
+  &:not(:last-child) {
+    margin-right: 0.25rem;
+  }
+`
+
+const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
+  margin-left: 1.5rem;
+`
+
 const MenuItems = styled.div`
   display: grid;
   grid-auto-flow: column;
   align-items: center;
 `
+
+const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 
 const Menu = () => {
   const dispatch = useDispatch()
@@ -193,6 +213,12 @@ const Menu = () => {
         <SuccessButton title="Ctrl+Enter" onClick={handleClick}>
           <Play size="18px" />
           <span>Run</span>
+          <RunShortcut>
+            <Key>{ctrlCmd}</Key>
+            <Key>
+              <CornerDownLeft size="16px" />
+            </Key>
+          </RunShortcut>
         </SuccessButton>
       )}
 

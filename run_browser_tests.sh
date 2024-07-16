@@ -7,8 +7,8 @@
 # ./run_browser_tests.sh -skipQuestDBBuild
 
 rm -rf packages/browser-tests/cypress/snapshots/*
-rm -rf tmp/questdb-*
 rm -rf tmp/dbroot
+rm -rf tmp/questdb-*
 
 if [[ $1 = "-skipQuestDBBuild" ]]
 then
@@ -24,7 +24,9 @@ yarn install --immutable --immutable-cache
 yarn workspace @questdb/react-components run build
 yarn workspace @questdb/web-console run build
 
-./tmp/questdb-*/bin/questdb.sh start -d ./tmp/dbroot
+export QDB_DEV_MODE_ENABLED=true
+
+./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 node packages/web-console/serve-dist.js &
 PID="$!"
 echo "Proxy started, PID=$PID"

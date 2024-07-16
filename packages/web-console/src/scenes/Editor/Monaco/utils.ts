@@ -443,7 +443,6 @@ export const appendQuery = (
 
   if (model) {
     const position = editor.getPosition()
-    const lineCount = model.getLineCount()
 
     if (position) {
       const newQueryLines = query.split("\n")
@@ -491,7 +490,7 @@ export const appendQuery = (
     editor.focus()
 
     if (options.appendAt === "end") {
-      editor.revealLine(lineCount)
+      editor.revealLine(model.getLineCount())
     }
   }
 }

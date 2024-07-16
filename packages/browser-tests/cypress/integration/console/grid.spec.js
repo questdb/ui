@@ -20,10 +20,8 @@ describe("questdb grid", () => {
     cy.runLine();
     cy.wait(100);
 
-    cy.getGridRows()
-      .should("have.length", 7)
-      .getGridRow(0)
-      .should("contain", "1");
+    cy.getGridRows().should("have.length", 7);
+    cy.getGridRow(0).should("contain", "1");
 
     cy.getGridViewport().scrollTo("bottom");
     cy.getGridRows().should("have.length", 7);

@@ -118,12 +118,48 @@ export type QueryResult<T extends Record<string, any>> =
   | DmlResult
   | DdlResult
 
+export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
+
 export type Table = {
   table_name: string
-  partitionBy: string
+  partitionBy: PartitionBy
   designatedTimestamp: string
   walEnabled: boolean
   dedup: boolean
+}
+
+export type Partition = {
+  index: number
+  partitionBy: PartitionBy
+  name: string
+  minTimestamp: string | null
+  maxTimestamp: string | null
+  numRows: string
+  diskSize: string
+  diskSizeHuman: string
+  readOnly: boolean
+  active: boolean
+  attached: boolean
+  detached: boolean
+  attachable: boolean
+}
+
+export enum ErrorTag {
+  DISK_FULL = "DISK FULL",
+  TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
+  OUT_OF_MMAP_AREAS = "OUT OF MMAP AREAS",
+  OUT_OF_MEMORY = "OUT OF MEMORY",
+  UNSUPPORTED_FILE_SYSTEM = "UNSUPPORTED FILE SYSTEM",
+}
+
+export type WalTable = {
+  name: string
+  suspended: boolean
+  writerTxn: string
+  writerLagTxnCount: string
+  sequencerTxn: string
+  errorTag?: ErrorTag
+  errorMessage?: string
 }
 
 export type Column = {
@@ -205,6 +241,13 @@ export type SchemaColumn = {
   type: string
   pattern?: string
   upsertKey?: boolean
+}
+
+export type InformationSchemaColumn = {
+  table_name: string
+  ordinal_position: number
+  column_name: string
+  data_type: string
 }
 
 type UploadOptions = {
@@ -308,9 +351,9 @@ export class Client {
     this._controllers = []
   }
 
-  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
-    const result = await this.queryRaw(query, options)
-
+  static transformQueryRawResult = <T>(
+    result: QueryRawResult,
+  ): QueryResult<T> => {
     if (result.type === Type.DQL) {
       const { columns, count, dataset, timings } = result
 
@@ -336,6 +379,16 @@ export class Client {
     }
 
     return result
+  }
+
+  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
+    const result = await this.queryRaw(query, options)
+
+    return Client.transformQueryRawResult<T>(result)
+  }
+
+  async mockQueryResult<T>(result: QueryRawResult): Promise<QueryResult<T>> {
+    return Client.transformQueryRawResult<T>(result)
   }
 
   async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
@@ -370,10 +423,10 @@ export class Client {
 
     const start = new Date()
     try {
-      response = await fetch(
-        `exec?${Client.encodeParams(payload)}`,
-        { signal: controller.signal, headers: this.commonHeaders },
-      )
+      response = await fetch(`exec?${Client.encodeParams(payload)}`, {
+        signal: controller.signal,
+        headers: this.commonHeaders,
+      })
     } catch (error) {
       const err = {
         position: -1,
