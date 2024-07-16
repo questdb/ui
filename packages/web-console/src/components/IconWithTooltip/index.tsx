@@ -3,7 +3,7 @@ import { PopperHover, Tooltip, Placement } from "../"
 
 type Props = {
   icon: ReactNode
-  tooltip: string
+  tooltip: ReactNode
   placement: Placement
 }
 

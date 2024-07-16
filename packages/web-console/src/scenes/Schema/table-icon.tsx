@@ -2,6 +2,8 @@ import { IconWithTooltip } from "../../components"
 import React from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
+import { Table } from "@styled-icons/remix-line"
+import { Box } from "@questdb/react-components"
 
 type Props = {
   partitionBy?: QuestDB.PartitionBy
@@ -100,13 +102,22 @@ const IconComponent = ({
 
 export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
   const isPartitioned = (partitionBy && partitionBy !== "NONE") || false
-  let tooltip = ""
+  let tooltipLines = []
   if (isPartitioned && partitionBy) {
-    tooltip += `${partitionBy.substr(0, 1)}: Partitioned by ${partitionBy}`
+    tooltipLines.push(
+      `${partitionBy.substr(0, 1)}: Partitioned by ${partitionBy}`,
+    )
+  } else {
+    tooltipLines.push(
+      <Box align="center" gap="0">
+        <Table size="14px" />
+        <span>: Not partitioned</span>
+      </Box>,
+    )
   }
 
   if (!walEnabled) {
-    tooltip += "*: non-WAL (Legacy)"
+    tooltipLines.push("*: non-WAL (Legacy)")
   }
 
   return isPartitioned || !walEnabled ? (
@@ -121,7 +132,9 @@ export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
           />
         </span>
       }
-      tooltip={tooltip}
+      tooltip={tooltipLines.map((line, i) => (
+        <div key={i}>{line}</div>
+      ))}
       placement="bottom"
     />
   ) : (
