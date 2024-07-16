@@ -1,3 +1,5 @@
+import { editor } from "monaco-editor"
+import $ from "jquery"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -77,4 +79,11 @@ declare class ResizeObserver {
   disconnect: () => void
   observe: (target: Element, options?: ResizeObserverObserveOptions) => void
   unobserve: (target: Element) => void
+}
+
+declare global {
+  interface Window {
+    editor_loaded: boolean
+    bus: ReturnType<typeof $>
+  }
 }

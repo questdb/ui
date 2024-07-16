@@ -113,7 +113,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       },
     )
     gridRef.current = _grid
-    quickVis($("#quick-vis"), window.bus as unknown as ReturnType<typeof $>)
+    quickVis($("#quick-vis"), window.bus)
 
     _grid.addEventListener("header.click", function (event: CustomEvent) {
       eventBus.publish(

@@ -82,7 +82,9 @@ beforeEach(() => {
 
   cy.request({
     method: "GET",
-    url: `${baseUrl}/exec?query=${encodeURIComponent(`select simulate_warnings('', '');`)}`,
+    url: `${baseUrl}/exec?query=${encodeURIComponent(
+      `select simulate_warnings('', '');`
+    )}`,
   });
 });
 
@@ -107,7 +109,9 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().realClick().type(query)
+  cy.getEditor().realClick().type(query, {
+    delay: 25,
+  })
 );
 
 Cypress.Commands.add("runLine", () => {
@@ -116,11 +120,10 @@ Cypress.Commands.add("runLine", () => {
   cy.wait("@exec");
 });
 
-Cypress.Commands.add("clickRun",
-  () => {
-    cy.intercept("/exec*").as("exec");
-    return cy.get("button").contains("Run").click().wait("@exec");
-  });
+Cypress.Commands.add("clickRun", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.get("button").contains("Run").click().wait("@exec");
+});
 
 Cypress.Commands.add("clearEditor", () =>
   cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
@@ -136,8 +139,8 @@ Cypress.Commands.add("selectQuery", (n) =>
     .click()
 );
 
-Cypress.Commands.add("getMountedEditor", () =>
-  cy.get(".monaco-scrollable-element")
+Cypress.Commands.add("waitForEditorLoad", () =>
+  cy.window().should("have.property", "editor_loaded", true)
 );
 
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));

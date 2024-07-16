@@ -26,11 +26,11 @@ describe("appendQuery", () => {
     ).as("getConsoleConfiguration");
 
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
   });
 
   beforeEach(() => {
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
   });
 
@@ -130,7 +130,7 @@ describe("appendQuery", () => {
 describe("&query URL param", () => {
   beforeEach(() => {
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
   });
 
@@ -138,7 +138,7 @@ describe("&query URL param", () => {
     cy.typeQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.getGridRow(0).should("contain", "2");
     cy.getSelectedLines().should("have.length", 1);
   });
@@ -151,7 +151,7 @@ describe("&query URL param", () => {
     );
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.getGridRow(0).should("contain", "2");
     cy.getSelectedLines().should("have.length", 4);
   });
@@ -161,7 +161,7 @@ describe("&query URL param", () => {
     cy.typeQuery(query);
     cy.clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.getEditorContent().should("have.value", query);
   });
 
@@ -172,7 +172,7 @@ describe("&query URL param", () => {
 
     const appendedQuery = "-- hello world";
     cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.getVisibleLines()
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
@@ -182,7 +182,7 @@ describe("&query URL param", () => {
 describe("autocomplete", () => {
   before(() => {
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     [
       'create table "my_publics" ("public" string);',
       // We're creating another table with the same column name.
@@ -197,7 +197,7 @@ describe("autocomplete", () => {
 
   beforeEach(() => {
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
   });
 
@@ -253,7 +253,7 @@ describe("errors", () => {
   });
 
   beforeEach(() => {
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
   });
 
@@ -281,7 +281,7 @@ describe("running query with F9", () => {
   });
 
   beforeEach(() => {
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
   });
 
