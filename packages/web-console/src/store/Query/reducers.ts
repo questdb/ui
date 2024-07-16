@@ -27,6 +27,7 @@ import { QueryAction, QueryAT, QueryStateShape } from "../../types"
 export const initialState: QueryStateShape = {
   notifications: [],
   tables: [],
+  columns: [],
   running: {
     value: false,
     isRefresh: false,
@@ -96,6 +97,13 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         tables: action.payload.tables,
+      }
+    }
+
+    case QueryAT.SET_COLUMNS: {
+      return {
+        ...state,
+        columns: action.payload.columns,
       }
     }
 

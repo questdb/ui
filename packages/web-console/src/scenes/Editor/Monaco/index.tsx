@@ -32,7 +32,6 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
-import { InformationSchemaColumn } from "./questdb-sql/types"
 
 loader.config({
   paths: {
@@ -104,6 +103,7 @@ const MonacoEditor = () => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
+  const columns = useSelector(selectors.query.getColumns)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
@@ -377,32 +377,13 @@ const MonacoEditor = () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
       schemaCompletionHandle?.dispose()
       setRefreshingTables(true)
-      try {
-        const response = await quest.query<InformationSchemaColumn>(
-          "information_schema.columns()",
-        )
-        if (response.type === QuestDB.Type.DQL) {
-          setSchemaCompletionHandle(
-            monacoRef.current.languages.registerCompletionItemProvider(
-              QuestDBLanguageName,
-              createSchemaCompletionProvider(
-                editorRef.current,
-                tables,
-                response.data,
-              ),
-            ),
-          )
-        }
-      } catch (e) {
-        setSchemaCompletionHandle(
-          monacoRef.current.languages.registerCompletionItemProvider(
-            QuestDBLanguageName,
-            createSchemaCompletionProvider(editorRef.current, tables),
-          ),
-        )
-      } finally {
-        setRefreshingTables(false)
-      }
+      setSchemaCompletionHandle(
+        monacoRef.current.languages.registerCompletionItemProvider(
+          QuestDBLanguageName,
+          createSchemaCompletionProvider(editorRef.current, tables, columns),
+        ),
+      )
+      setRefreshingTables(false)
     }
   }
 
@@ -410,7 +391,7 @@ const MonacoEditor = () => {
     if (!refreshingTables) {
       setCompletionProvider()
     }
-  }, [tables, monacoRef, editorReady])
+  }, [tables, columns, monacoRef, editorReady])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)

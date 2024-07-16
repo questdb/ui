@@ -30,12 +30,17 @@ import React, {
   useEffect,
   useState,
   useContext,
+  useReducer,
 } from "react"
 import { useDispatch } from "react-redux"
-import { from, combineLatest, of } from "rxjs"
-import { delay, startWith } from "rxjs/operators"
 import styled, { css } from "styled-components"
-import { FileCopy, Loader3, Refresh, Search } from "@styled-icons/remix-line"
+import {
+  Add,
+  FileCopy,
+  Loader3,
+  Refresh,
+  Settings4,
+} from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import {
   PaneContent,
@@ -43,6 +48,7 @@ import {
   PopperHover,
   spinAnimation,
   Tooltip,
+  Text,
 } from "../../components"
 import { actions } from "../../store"
 import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
@@ -50,12 +56,14 @@ import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
-import { Button } from "@questdb/react-components"
+import { Button, DropdownMenu, ForwardRef } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext, useSettings } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
+import { Toolbar } from "./Toolbar/toolbar"
+import { SchemaContext } from "./SchemaContext"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -76,7 +84,6 @@ const Content = styled(PaneContent)<{
   _loading: boolean
 }>`
   display: block;
-  font-family: ${({ theme }) => theme.fontMonospace};
   overflow: auto;
   ${({ _loading }) => _loading && loadingStyles};
 `
@@ -98,54 +105,106 @@ const StyledCheckboxCircle = styled(CheckboxCircle)`
   color: ${({ theme }) => theme.color.green};
 `
 
+const DropdownMenuContent = styled(DropdownMenu.Content)`
+  z-index: 100;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
+const Loading = () => {
+  const [loaderShown, setLoaderShown] = useState(false)
+  // Show the loader only for delayed fetching process
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoaderShown(true), 1000)
+    return () => clearTimeout(timeout)
+  }, [])
+
+  return loaderShown ? <Loader size="22px" /> : null
+}
+
+enum View {
+  loading,
+  error,
+  ready,
+}
+
+type State = { view: View; loadingError?: ErrorResult }
+
+const initialState: State = {
+  view: View.loading,
+}
+
+const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
+
 const Schema = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
+  const [state, dispatchState] = useReducer(reducer, initialState)
   const { quest } = useContext(QuestContext)
-  const [loading, setLoading] = useState(false)
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
+  const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
   const [opened, setOpened] = useState<string>()
   const [isScrolling, setIsScrolling] = useState(false)
-  const [searchVisible, setSearchVisible] = useState(false)
   const { consoleConfig } = useSettings()
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
+  const [query, setQuery] = useState("")
+  const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
+  const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
+  const [dropdownOpen, setDropdownOpen] = useState(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
   }
 
-  const fetchTables = () => {
-    setLoading(true)
-    setOpened(undefined)
-    combineLatest(
-      from(quest.showTables()).pipe(startWith(null)),
-      of(true).pipe(delay(1000), startWith(false)),
-    ).subscribe(
-      ([response]) => {
-        if (response && response.type === QuestDB.Type.DQL) {
-          setLoadingError(null)
-          errorRef.current = null
-          setTables(response.data)
-          dispatch(actions.query.setTables(response.data))
-        } else {
-          setLoading(false)
+  const fetchTables = async () => {
+    try {
+      const response = await quest.showTables()
+      if (response && response.type === QuestDB.Type.DQL) {
+        errorRef.current = null
+        setTables(response.data)
+        dispatch(actions.query.setTables(response.data))
+        // Fetch WAL info about the tables
+        const walTablesResponse = await quest.query<QuestDB.WalTable>(
+          "wal_tables()",
+        )
+        if (walTablesResponse && walTablesResponse.type === QuestDB.Type.DQL) {
+          // Filter out the system tables
+          setWalTables(
+            walTablesResponse.data.filter((wt) =>
+              response.data.map((t) => t.table_name).includes(wt.name),
+            ),
+          )
         }
-      },
-      (error) => {
-        if (isServerError(error)) {
-          setLoadingError(error)
-        }
-      },
-      () => {
-        setLoading(false)
-      },
-    )
+        dispatchState({ view: View.ready })
+      } else {
+        dispatchState({ view: View.error })
+      }
+    } catch (error) {
+      dispatchState({
+        view: View.error,
+      })
+    }
+  }
+
+  const fetchColumns = async () => {
+    try {
+      const response = await quest.query<QuestDB.InformationSchemaColumn>(
+        "information_schema.columns()",
+      )
+      if (response && response && response.type === QuestDB.Type.DQL) {
+        setColumns(response.data)
+        dispatch(actions.query.setColumns(response.data))
+      }
+    } catch (error) {
+      dispatchState({
+        view: View.error,
+      })
+    }
   }
 
   const copySchemasToClipboard = async () => {
@@ -174,9 +233,11 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
+    void fetchColumns()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
+      void fetchColumns()
     })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
@@ -190,88 +251,155 @@ const Schema = ({
       // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
+        void fetchColumns()
       }
     })
 
-    window.addEventListener("focus", fetchTables)
-    return () => window.removeEventListener("focus", fetchTables)
+    window.addEventListener("focus", () => {
+      void fetchTables()
+      void fetchColumns()
+    })
+
+    return () =>
+      window.removeEventListener("focus", () => {
+        void fetchTables()
+        void fetchColumns()
+      })
   }, [])
 
+  const views: { [key in View]: () => React.ReactNode } = {
+    [View.loading]: () => <Loading />,
+    [View.error]: () =>
+      loadingError ? <LoadingError error={loadingError} /> : <FlexSpacer />,
+    [View.ready]: () => (
+      <>
+        {tables && tables.length > 0 && (
+          <Toolbar
+            suspendedTablesCount={
+              walTables?.filter((t) => t.suspended).length ?? 0
+            }
+            filterSuspendedOnly={filterSuspendedOnly}
+            setFilterSuspendedOnly={setFilterSuspendedOnly}
+          />
+        )}
+        {tables &&
+          tables
+            .filter((table: QuestDB.Table) => {
+              const normalizedTableName = table.table_name.toLowerCase()
+              const normalizedQuery = query.toLowerCase()
+              const tableColumns = columns
+                ?.filter((c) => c.table_name === table.table_name)
+                .map((c) => c.column_name)
+              return (
+                (normalizedTableName.includes(normalizedQuery) ||
+                  tableColumns?.find((c) => c.startsWith(query))) &&
+                (filterSuspendedOnly
+                  ? table.walEnabled &&
+                    walTables?.find((t) => t.name === table.table_name)
+                      ?.suspended
+                  : true)
+              )
+            })
+            .map((table: QuestDB.Table) => (
+              <Table
+                designatedTimestamp={table.designatedTimestamp}
+                expanded={table.table_name === opened}
+                isScrolling={isScrolling}
+                key={table.table_name}
+                table_name={table.table_name}
+                onChange={handleChange}
+                partitionBy={table.partitionBy}
+                walEnabled={table.walEnabled}
+                walTableData={walTables?.find(
+                  (wt) => wt.name === table.table_name,
+                )}
+                dedup={table.dedup}
+              />
+            ))}
+        <FlexSpacer />
+      </>
+    ),
+  }
+
   return (
-    <Wrapper ref={innerRef} {...rest}>
-      <Panel.Header
-        title="Tables"
-        afterTitle={
-          <div style={{ display: "flex" }}>
-            {consoleConfig.readOnly === false && tables && (
-              <Box align="center" gap="0.5rem">
-                {tables.length > 0 && (
+    <SchemaContext.Provider value={{ query, setQuery }}>
+      <Wrapper ref={innerRef} {...rest}>
+        <Panel.Header
+          title="Tables"
+          afterTitle={
+            <div style={{ display: "flex" }}>
+              {consoleConfig.readOnly === false && tables && (
+                <Box align="center" gap="0.5rem">
                   <PopperHover
                     delay={350}
                     placement="bottom"
                     trigger={
                       <Button
-                        onClick={copySchemasToClipboard}
+                        onClick={() =>
+                          dispatch(actions.console.setActiveSidebar("create"))
+                        }
                         skin="transparent"
                       >
-                        {copied && <StyledCheckboxCircle size="14px" />}
-                        <FileCopy size="18px" />
+                        <Add size="22px" />
                       </Button>
                     }
                   >
-                    <Tooltip>
-                      {copied
-                        ? `Copied ${tables.length} schema${
-                            tables.length > 1 ? "s" : ""
-                          } to clipboard`
-                        : "Copy schemas to clipboard"}
-                    </Tooltip>
+                    <Tooltip>Create table</Tooltip>
                   </PopperHover>
-                )}
-                <PopperHover
-                  delay={350}
-                  placement="bottom"
-                  trigger={
-                    <Button onClick={fetchTables} skin="transparent">
-                      <Refresh size="18px" />
-                    </Button>
-                  }
-                >
-                  <Tooltip>Refresh</Tooltip>
-                </PopperHover>
-              </Box>
-            )}
-          </div>
-        }
-        shadow={!scrollAtTop}
-      />
-      <Content
-        _loading={loading}
-        ref={scrollerRef}
-        onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
-      >
-        {loading ? (
-          <Loader size="48px" />
-        ) : loadingError ? (
-          <LoadingError error={loadingError} />
-        ) : (
-          tables?.map((table) => (
-            <Table
-              designatedTimestamp={table.designatedTimestamp}
-              expanded={table.table_name === opened}
-              isScrolling={isScrolling}
-              key={table.table_name}
-              table_name={table.table_name}
-              onChange={handleChange}
-              partitionBy={table.partitionBy}
-              walEnabled={table.walEnabled}
-              dedup={table.dedup}
-            />
-          ))
-        )}
-        {!loading && <FlexSpacer />}
-      </Content>
-    </Wrapper>
+
+                  <DropdownMenu.Root
+                    modal={false}
+                    onOpenChange={setDropdownOpen}
+                  >
+                    <DropdownMenu.Trigger asChild>
+                      <ForwardRef>
+                        <PopperHover
+                          delay={350}
+                          placement="right"
+                          trigger={
+                            <Button skin="transparent">
+                              {copied && <StyledCheckboxCircle size="14px" />}
+                              <Settings4 size="18px" />
+                            </Button>
+                          }
+                        >
+                          <Tooltip>Settings</Tooltip>
+                        </PopperHover>
+                      </ForwardRef>
+                    </DropdownMenu.Trigger>
+
+                    <DropdownMenu.Portal>
+                      <DropdownMenuContent>
+                        {tables.length > 0 && (
+                          <DropdownMenu.Item onClick={copySchemasToClipboard}>
+                            <FileCopy size="18px" />
+                            <Text color="foreground">
+                              Copy schemas to clipboard
+                            </Text>
+                          </DropdownMenu.Item>
+                        )}
+                        <DropdownMenu.Item onClick={fetchTables}>
+                          <Refresh size="18px" />
+                          <Text color="foreground">Refresh tables</Text>
+                        </DropdownMenu.Item>
+                      </DropdownMenuContent>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                </Box>
+              )}
+            </div>
+          }
+          shadow={!scrollAtTop}
+        />
+        <Content
+          _loading={state.view === View.loading}
+          ref={scrollerRef}
+          onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
+        >
+          {views[state.view]()}
+        </Content>
+      </Wrapper>
+    </SchemaContext.Provider>
   )
 }
 

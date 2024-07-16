@@ -60,12 +60,12 @@ def check_commit_is_from_recent_master(oss_master_commits: [pygit2.Oid], oss_hea
 
 
 def check_not_older(
-        ent_repo: pygit2.Repository,
+        ui_repo: pygit2.Repository,
         oss_master_commits: [pygit2.Oid],
         oss_head: pygit2.Oid):
-    ent_main_head = ent_repo.references['refs/remotes/origin/main'].peel().id
-    ent_main_tree = ent_repo[ent_main_head].tree
-    questdb_main_commit_id = ent_main_tree['questdb'].id
+    ui_main_head = ui_repo.references['refs/remotes/origin/main'].peel().id
+    ui_main_tree = ui_repo[ui_main_head].tree
+    questdb_main_commit_id = ui_main_tree['packages/browser-tests/questdb'].id
 
     if questdb_main_commit_id not in oss_master_commits:
         sys.stderr.write(
@@ -87,9 +87,9 @@ def check_not_older(
 
 
 def main():
-    # Open up the enterprise and submodule repos.
-    ent_repo = pygit2.Repository('.git')
-    questdb_repo: pygit2.Repository = ent_repo.lookup_submodule('questdb').open()
+    # Open the ui and questdb submodule repositories.
+    ui_repo = pygit2.Repository('.git')
+    questdb_repo: pygit2.Repository = ui_repo.lookup_submodule('questdb').open()
 
     # The current commit id pointed to by the submodule in this branch.
     oss_head: pygit2.Oid = questdb_repo.head.target
@@ -101,8 +101,8 @@ def main():
     check_commit_is_from_recent_master(oss_master_commits, oss_head)
 
     # Check that the submodule's commit is not older than the current commit
-    # from the `main` branch of the enterprise repo.
-    # check_not_older(ent_repo, oss_master_commits, oss_head)
+    # from the `main` branch of the ui repo.
+    # check_not_older(ui_repo, oss_master_commits, oss_head)
 
 
 if __name__ == '__main__':
