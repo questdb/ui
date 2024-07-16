@@ -1,3 +1,4 @@
+import { IconWithTooltip } from "../../components"
 import React from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
@@ -74,23 +75,61 @@ const VLine2 = styled(VLine)`
   left: 1.3rem;
 `
 
-export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
-  const isPartitioned = partitionBy && partitionBy !== "NONE"
-  return (
-    <Root $suspended={suspended}>
-      {!walEnabled && <Asterisk>*</Asterisk>}
-      <Icon $suspended={suspended}>
-        {!isPartitioned && (
-          <>
-            <HLine />
-            <VLine1 />
-            <VLine2 />
-          </>
-        )}
-      </Icon>
-      {isPartitioned && (
-        <PartitionLetter>{partitionBy.substr(0, 1)}</PartitionLetter>
+const IconComponent = ({
+  isPartitioned,
+  partitionBy,
+  walEnabled,
+  suspended,
+}: Props & { isPartitioned: boolean }) => (
+  <Root $suspended={suspended}>
+    {!walEnabled && <Asterisk>*</Asterisk>}
+    <Icon $suspended={suspended}>
+      {!isPartitioned && (
+        <>
+          <HLine />
+          <VLine1 />
+          <VLine2 />
+        </>
       )}
-    </Root>
+    </Icon>
+    {isPartitioned && partitionBy && (
+      <PartitionLetter>{partitionBy.substr(0, 1)}</PartitionLetter>
+    )}
+  </Root>
+)
+
+export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
+  const isPartitioned = (partitionBy && partitionBy !== "NONE") || false
+  let tooltip = ""
+  if (isPartitioned && partitionBy) {
+    tooltip += `${partitionBy.substr(0, 1)}: Partitioned by ${partitionBy}`
+  }
+
+  if (!walEnabled) {
+    tooltip += "*: non-WAL (Legacy)"
+  }
+
+  return isPartitioned || !walEnabled ? (
+    <IconWithTooltip
+      icon={
+        <span>
+          <IconComponent
+            isPartitioned={isPartitioned}
+            partitionBy={partitionBy}
+            walEnabled={walEnabled}
+            suspended={suspended}
+          />
+        </span>
+      }
+      tooltip={tooltip}
+      placement="bottom"
+    />
+  ) : (
+    <IconComponent
+      isPartitioned={isPartitioned}
+      partitionBy={partitionBy}
+      walEnabled={walEnabled}
+      suspended={suspended}
+    />
   )
 }
