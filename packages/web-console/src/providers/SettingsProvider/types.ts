@@ -1,4 +1,4 @@
-import { ErrorTag } from "./../../utils/questdb"
+import { ErrorTag } from "../../utils"
 export type Settings = Partial<{
   "release.type": "OSS" | "EE"
   "release.version": string

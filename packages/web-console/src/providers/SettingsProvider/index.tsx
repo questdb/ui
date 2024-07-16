@@ -9,7 +9,6 @@ import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout } from "../../components"
 import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
-import { ErrorTag } from "../../utils"
 
 enum View {
   loading = 0,
@@ -38,23 +37,6 @@ const connectionError = (
 )
 
 const consoleConfigError = <>Error loading the console configuration file</>
-
-const warningMock = [
-  {
-    tag: ErrorTag.UNSUPPORTED_FILE_SYSTEM,
-    warning:
-      "Unsupported file system [dir=/var/folders/ds/mflhl4j12vvccsw9n4y2m_vw0000gn/T/junit595608896859548676/dbRoot, magic=0x6400]",
-  },
-  {
-    tag: ErrorTag.TOO_MANY_OPEN_FILES,
-    warning: "fs.file-max limit is too low [current=1024, recommended=1048576]",
-  },
-  {
-    tag: ErrorTag.OUT_OF_MMAP_AREAS,
-    warning:
-      "vm.max_map_count limit is too low [current=1024, recommended=1048576]",
-  },
-]
 
 export const SettingsProvider = ({
   children,
@@ -108,8 +90,7 @@ export const SettingsProvider = ({
     try {
       const response = await fetch(endpoint)
       if (response.status === 200) {
-        const data = await response.json()
-        return data
+        return await response.json()
       } else {
         dispatch({ view: View.error, errorMessage })
       }
