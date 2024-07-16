@@ -16,16 +16,28 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.5.0 - 2024.07.16
+
+### Added
+
+- Add Telemetry tests [#298](https://github.com/questdb/ui/pull/298)
+- Add WAL suspension info and resolution logic, add OS configuration warnings
+  and resolution info [#291](https://github.com/questdb/ui/pull/291)
+
+### Changed
+
+- Improve integration testing [#305](https://github.com/questdb/ui/pull/305)
+
 ## 0.4.5 - 2024.06.25
 
 ### Added
 
-- show login dialog for QuestDB OSS when authentication is enabled [#300](https://github.com/questdb/ui/pull/300)
+- show login dialog for QuestDB OSS when authentication is enabled
+  [#300](https://github.com/questdb/ui/pull/300)
 
 ### Fixed
 
-- fix OAuth2 redirect URI
-  [#303](https://github.com/questdb/ui/pull/303)
+- fix OAuth2 redirect URI [#303](https://github.com/questdb/ui/pull/303)
 
 ## 0.4.4 - 2024.06.19
 
@@ -45,8 +57,7 @@ and this project adheres to
 
 ### Fixed
 
-- Start OSS telemetry
-  [#292](https://github.com/questdb/ui/pull/292)
+- Start OSS telemetry [#292](https://github.com/questdb/ui/pull/292)
 
 ## 0.4.2 - 2024.05.16
 
