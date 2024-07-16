@@ -384,6 +384,7 @@ const MonacoEditor = () => {
         ),
       )
       setRefreshingTables(false)
+      window.editor_loaded = true
     }
   }
 

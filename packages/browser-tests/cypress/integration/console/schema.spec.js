@@ -66,7 +66,7 @@ describe("questdb schema with working tables", () => {
 describe("questdb schema with suspended tables with Linux OS error codes", () => {
   before(() => {
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
     tables.forEach((table) => {
       cy.createTable(table);

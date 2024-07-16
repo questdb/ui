@@ -5,7 +5,7 @@ const baseUrl = "http://localhost:9999";
 describe("questdb grid", () => {
   beforeEach(() => {
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.waitForEditorLoad();
     cy.clearEditor();
   });
 
