@@ -191,7 +191,10 @@ describe("autocomplete", () => {
       'create table "my_secrets" ("secret" string);',
       'create table "my_secrets2" ("secret" string);',
     ].forEach((query) => {
-      cy.typeQuery(query).runLine().clearEditor();
+      cy.request({
+        method: "GET",
+        url: `${baseUrl}/exec?query=${encodeURIComponent(query)};`,
+      });
     });
   });
 
