@@ -130,3 +130,24 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     });
   });
 });
+
+describe.only("questdb schema in read-only mode", () => {
+  before(() => {
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/assets/console-configuration.json`,
+      },
+      {
+        savedQueries: [],
+        readOnly: true,
+      }
+    ).as("getConsoleConfiguration");
+    cy.visit(baseUrl);
+  });
+
+  it("should disable Create Table action in read-only mode", () => {
+    cy.getByDataHook("create-table-panel-button").click();
+    cy.getByDataHook("create-table-panel").should("not.exist");
+  });
+});

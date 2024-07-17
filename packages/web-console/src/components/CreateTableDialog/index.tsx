@@ -55,7 +55,12 @@ export const CreateTableDialog = () => {
   if (consoleConfig.readOnly) {
     return (
       <IconWithTooltip
-        icon={<DisabledTableIcon size={BUTTON_ICON_SIZE} />}
+        icon={
+          <DisabledTableIcon
+            size={BUTTON_ICON_SIZE}
+            data-hook="create-table-panel-button"
+          />
+        }
         tooltip="To use this feature, turn off read-only mode in the configuration file"
         placement="left"
       />
