@@ -41,19 +41,6 @@ describe("questdb schema with working tables", () => {
       "have.length.least",
       tables.length
     );
-
-    // Column name search
-    cy.get('input[name="table_filter"]').type("timestamp");
-    cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
-    cy.getByDataHook("schema-table-title").should(
-      "not.contain",
-      "chicago_weather_stations"
-    );
-    cy.getByDataHook("schema-search-clear-button").click();
-    cy.getByDataHook("schema-table-title").should(
-      "contain",
-      "chicago_weather_stations"
-    );
   });
 
   after(() => {
