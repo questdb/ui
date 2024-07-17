@@ -87,12 +87,8 @@ const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
   }
 `
 
-const HitBox = styled.div`
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  left: 0;
-  top: 0;
+const StyledTitle = styled(Title)`
+  z-index: 1;
 `
 
 const TableActions = styled.span`
@@ -169,8 +165,8 @@ const Row = ({
       className={className}
       expanded={expanded}
       suspended={walTableData?.suspended && kind === "table"}
+      onClick={onClick}
     >
-      <HitBox onClick={onClick} />
       <FlexRow>
         {kind === "table" && (
           <TableIcon
@@ -204,7 +200,7 @@ const Row = ({
           <DotIcon size="12px" />
         )}
 
-        <Title
+        <StyledTitle
           color="foreground"
           ellipsis
           kind={kind}
@@ -215,7 +211,7 @@ const Row = ({
             searchWords={[query ?? ""]}
             textToHighlight={name}
           />
-        </Title>
+        </StyledTitle>
         {suffix}
 
         <Spacer />

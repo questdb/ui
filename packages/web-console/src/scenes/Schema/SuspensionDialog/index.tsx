@@ -122,6 +122,7 @@ export const SuspensionDialog = ({
 
   return (
     <Dialog.Root
+      open={active}
       onOpenChange={(open) => {
         if (!open) {
           eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -133,6 +134,10 @@ export const SuspensionDialog = ({
           <ErrorButton
             prefixIcon={<ErrorIcon size="18px" />}
             data-hook="schema-suspension-dialog-trigger"
+            onClick={(e: any) => {
+              setActive(true)
+              e.stopPropagation()
+            }}
           >
             Suspended
           </ErrorButton>
@@ -147,6 +152,11 @@ export const SuspensionDialog = ({
         <StyledDialogContent
           data-hook="schema-suspension-dialog"
           data-table-name={walTableData.name}
+          onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            e.stopPropagation()
+          }}
+          onEscapeKeyDown={() => setActive(false)}
+          onPointerDownOutside={() => setActive(false)}
         >
           <Dialog.Title>
             <Box>
@@ -302,15 +312,14 @@ export const SuspensionDialog = ({
           </StyledDescription>
 
           <Dialog.ActionButtons>
-            <Dialog.Close asChild>
-              <Button
-                prefixIcon={<Undo size={18} />}
-                skin="secondary"
-                data-hook="schema-suspension-dialog-dismiss"
-              >
-                Dismiss
-              </Button>
-            </Dialog.Close>
+            <Button
+              prefixIcon={<Undo size={18} />}
+              skin="secondary"
+              data-hook="schema-suspension-dialog-dismiss"
+              onClick={() => setActive(false)}
+            >
+              Dismiss
+            </Button>
           </Dialog.ActionButtons>
         </StyledDialogContent>
       </Dialog.Portal>
