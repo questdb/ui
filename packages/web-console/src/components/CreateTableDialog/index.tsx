@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react"
+import styled from "styled-components"
 import { Dialog as TableSchemaDialog } from "../../components/TableSchemaDialog/dialog"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
@@ -9,6 +10,10 @@ import { useEditor, useSettings } from "../../providers"
 import { PrimaryToggleButton } from "../../components"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { IconWithTooltip } from "../../components/IconWithTooltip"
+
+const DisabledTableIcon = styled(TableIcon)`
+  opacity: 0.3;
+`
 
 export const CreateTableDialog = () => {
   const [addTableDialogOpen, setAddTableDialogOpen] = useState<
@@ -47,6 +52,16 @@ export const CreateTableDialog = () => {
     }
   }, [addTableDialogOpen])
 
+  if (consoleConfig.readOnly) {
+    return (
+      <IconWithTooltip
+        icon={<DisabledTableIcon size={BUTTON_ICON_SIZE} />}
+        tooltip="To use this feature, turn off read-only mode in the configuration file"
+        placement="left"
+      />
+    )
+  }
+
   return (
     <TableSchemaDialog
       action="add"
@@ -66,27 +81,20 @@ export const CreateTableDialog = () => {
           icon={
             <PrimaryToggleButton
               data-hook="create-table-panel-button"
-              readOnly={consoleConfig.readOnly}
               selected={addTableDialogOpen !== undefined}
-              {...(!consoleConfig.readOnly && {
-                onClick: () => {
-                  dispatch(
-                    actions.console.setActiveSidebar(
-                      addTableDialogOpen ? undefined : "create",
-                    ),
-                  )
-                },
-              })}
+              onClick={() => {
+                dispatch(
+                  actions.console.setActiveSidebar(
+                    addTableDialogOpen ? undefined : "create",
+                  ),
+                )
+              }}
             >
               <TableIcon size={BUTTON_ICON_SIZE} />
             </PrimaryToggleButton>
           }
           placement="left"
-          tooltip={
-            consoleConfig.readOnly
-              ? "To use this feature, turn off read-only mode in the configuration file"
-              : "Create table"
-          }
+          tooltip="Create table"
         />
       }
       ctaText="Create"
