@@ -286,12 +286,8 @@ const Schema = ({
             .filter((table: QuestDB.Table) => {
               const normalizedTableName = table.table_name.toLowerCase()
               const normalizedQuery = query.toLowerCase()
-              const tableColumns = columns
-                ?.filter((c) => c.table_name === table.table_name)
-                .map((c) => c.column_name)
               return (
-                (normalizedTableName.includes(normalizedQuery) ||
-                  tableColumns?.find((c) => c.startsWith(query))) &&
+                normalizedTableName.includes(normalizedQuery) &&
                 (filterSuspendedOnly
                   ? table.walEnabled &&
                     walTables?.find((t) => t.name === table.table_name)
