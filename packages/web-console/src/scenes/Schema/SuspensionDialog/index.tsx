@@ -312,14 +312,16 @@ export const SuspensionDialog = ({
           </StyledDescription>
 
           <Dialog.ActionButtons>
-            <Button
-              prefixIcon={<Undo size={18} />}
-              skin="secondary"
-              data-hook="schema-suspension-dialog-dismiss"
-              onClick={() => setActive(false)}
-            >
-              Dismiss
-            </Button>
+            <Dialog.Close asChild>
+              <Button
+                prefixIcon={<Undo size={18} />}
+                skin="secondary"
+                data-hook="schema-suspension-dialog-dismiss"
+                onClick={() => setActive(false)}
+              >
+                Dismiss
+              </Button>
+            </Dialog.Close>
           </Dialog.ActionButtons>
         </StyledDialogContent>
       </Dialog.Portal>
