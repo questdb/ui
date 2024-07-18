@@ -28,11 +28,12 @@ import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { Information } from "@styled-icons/remix-line"
+import { FileCopy, Information } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
+import { Button, Box } from "@questdb/react-components"
 
 import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
 import type { TextProps } from "../../../components"
@@ -73,6 +74,24 @@ const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   }
 `
 
+const CopyButton = styled(Button)<Pick<Props, "tooltip">>`
+  && {
+    position: absolute;
+    z-index: 1;
+    right: 1rem;
+    opacity: 0;
+    background: ${({ theme }) => theme.color.backgroundLighter};
+    padding-top: 1.2rem;
+    padding-bottom: 1.2rem;
+    font-size: 1.3rem;
+
+    .highlight {
+      background-color: #7c804f;
+      color: ${({ theme }) => theme.color.foreground};
+    }
+  }
+`
+
 const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
   position: relative;
   display: flex;
@@ -84,6 +103,17 @@ const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
   &:hover,
   &:active {
     background: ${color("selection")};
+  }
+
+  &:hover
+    ${/* sc-selector */ CopyButton},
+    &:active
+    ${/* sc-selector */ CopyButton} {
+    opacity: 1;
+  }
+
+  &:hover ${/* sc-selector */ Type} {
+    opacity: 0;
   }
 `
 
@@ -200,6 +230,21 @@ const Row = ({
           <DotIcon size="12px" />
         )}
 
+        {["column", "table"].includes(kind) && !walTableData?.suspended && (
+          <CopyButton
+            skin="secondary"
+            size="sm"
+            tooltip={tooltip}
+            prefixIcon={<FileCopy size="16px" />}
+            onClick={(e) => {
+              navigator.clipboard.writeText(name)
+              e.stopPropagation()
+            }}
+          >
+            Copy
+          </CopyButton>
+        )}
+
         <StyledTitle
           color="foreground"
           ellipsis
@@ -212,6 +257,7 @@ const Row = ({
             textToHighlight={name}
           />
         </StyledTitle>
+
         {suffix}
 
         <Spacer />
