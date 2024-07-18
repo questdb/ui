@@ -58,7 +58,7 @@ import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
 import { Button, DropdownMenu, ForwardRef } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
-import { QuestContext, useSettings } from "../../providers"
+import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
@@ -147,7 +147,6 @@ const Schema = ({
   const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
   const [opened, setOpened] = useState<string>()
   const [isScrolling, setIsScrolling] = useState(false)
-  const { consoleConfig } = useSettings()
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -287,12 +286,8 @@ const Schema = ({
             .filter((table: QuestDB.Table) => {
               const normalizedTableName = table.table_name.toLowerCase()
               const normalizedQuery = query.toLowerCase()
-              const tableColumns = columns
-                ?.filter((c) => c.table_name === table.table_name)
-                .map((c) => c.column_name)
               return (
-                (normalizedTableName.includes(normalizedQuery) ||
-                  tableColumns?.find((c) => c.startsWith(query))) &&
+                normalizedTableName.includes(normalizedQuery) &&
                 (filterSuspendedOnly
                   ? table.walEnabled &&
                     walTables?.find((t) => t.name === table.table_name)
@@ -328,25 +323,8 @@ const Schema = ({
           title="Tables"
           afterTitle={
             <div style={{ display: "flex" }}>
-              {consoleConfig.readOnly === false && tables && (
+              {tables && (
                 <Box align="center" gap="0.5rem">
-                  <PopperHover
-                    delay={350}
-                    placement="bottom"
-                    trigger={
-                      <Button
-                        onClick={() =>
-                          dispatch(actions.console.setActiveSidebar("create"))
-                        }
-                        skin="transparent"
-                      >
-                        <Add size="22px" />
-                      </Button>
-                    }
-                  >
-                    <Tooltip>Create table</Tooltip>
-                  </PopperHover>
-
                   <DropdownMenu.Root
                     modal={false}
                     onOpenChange={setDropdownOpen}

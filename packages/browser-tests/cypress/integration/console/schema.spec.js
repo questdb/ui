@@ -41,19 +41,6 @@ describe("questdb schema with working tables", () => {
       "have.length.least",
       tables.length
     );
-
-    // Column name search
-    cy.get('input[name="table_filter"]').type("timestamp");
-    cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
-    cy.getByDataHook("schema-table-title").should(
-      "not.contain",
-      "chicago_weather_stations"
-    );
-    cy.getByDataHook("schema-search-clear-button").click();
-    cy.getByDataHook("schema-table-title").should(
-      "contain",
-      "chicago_weather_stations"
-    );
   });
 
   after(() => {
@@ -141,5 +128,32 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     tables.forEach((table) => {
       cy.dropTable(table);
     });
+  });
+});
+
+describe("questdb schema in read-only mode", () => {
+  before(() => {
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/assets/console-configuration.json`,
+      },
+      {
+        savedQueries: [],
+        readOnly: true,
+      }
+    ).as("getConsoleConfiguration");
+    cy.visit(baseUrl);
+  });
+
+  it("should disable Create Table action in read-only mode", () => {
+    cy.getByDataHook("create-table-panel-button").trigger("mouseover");
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "To use this feature, turn off read-only mode in the configuration file"
+    );
+
+    cy.getByDataHook("create-table-panel-button").click();
+    cy.getByDataHook("create-table-panel").should("not.exist");
   });
 });
