@@ -199,7 +199,10 @@ export const Dialog = ({
         }
       }}
     >
-      <StyledContentWrapper mode={action === "add" ? "side" : "modal"}>
+      <StyledContentWrapper
+        mode={action === "add" ? "side" : "modal"}
+        data-hook="create-table-panel"
+      >
         <Form<SchemaFormValues>
           name="table-schema"
           defaultValues={defaults}

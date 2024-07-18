@@ -103,7 +103,7 @@ export const Wrapper = styled.div`
 `
 
 export const Tooltip = ({ arrow, children, ...rest }: Props) => (
-  <Wrapper {...rest}>
+  <Wrapper {...rest} data-hook="tooltip">
     <Text color="foreground">{children}</Text>
     {arrow && <TooltipArrow ref={arrow.setArrowElement} style={arrow.styles} />}
   </Wrapper>
