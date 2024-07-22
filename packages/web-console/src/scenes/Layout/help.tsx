@@ -1,6 +1,11 @@
 import React from "react"
 import { Chat3, Command, Question } from "@styled-icons/remix-line"
-import { Github, Slack, StackOverflow } from "@styled-icons/boxicons-logos"
+import {
+  Discourse,
+  Github,
+  Slack,
+  StackOverflow,
+} from "@styled-icons/boxicons-logos"
 import {
   Text,
   toast,
@@ -119,6 +124,13 @@ export const Help = () => {
               <MenuLink
                 href="https://slack.questdb.io/"
                 text="Slack community"
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Discourse size="18px" />
+              <MenuLink
+                href="https://community.questdb.io/"
+                text="Public forum"
               />
             </DropdownMenuItem>
             <DropdownMenuItem>
