@@ -279,15 +279,23 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 </div>
                 <div className="form-group">
                   <label>Labels</label>
-                  <select id="_qvis_frm_axis_x" />
+                  <select
+                    id="_qvis_frm_axis_x"
+                    data-hook="chart-panel-labels-select"
+                  />
                 </div>
                 <div className="form-group">
                   <label>Series</label>
-                  <select id="_qvis_frm_axis_y" multiple />
+                  <select
+                    id="_qvis_frm_axis_y"
+                    data-hook="chart-panel-series-select"
+                    multiple
+                  />
                 </div>
                 <button
                   className="button-primary js-chart-draw"
                   id="_qvis_frm_draw"
+                  data-hook="chart-panel-draw-button"
                 >
                   <i className="icon icon-play" />
                   <span>Draw</span>
