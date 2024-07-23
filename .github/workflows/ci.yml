@@ -56,12 +56,15 @@ jobs:
       - name: Run browser-tests test - auth
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test:auth
 
-      - name: Stop QuestDB, set auth credentials
+      - name: Stop QuestDB
         run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
+
+      - name: Start QuestDB, set auth credentials
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
           QDB_HTTP_USER: "admin"
-          QDB_HTTP_PASSWORD: "admin"
+          QDB_HTTP_PASSWORD: "quest"
 
       - name: Run browser-tests test
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
