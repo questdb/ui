@@ -25,13 +25,26 @@ yarn workspace @questdb/react-components run build
 yarn workspace @questdb/web-console run build
 
 export QDB_DEV_MODE_ENABLED=true
+unset QDB_HTTP_USER
+unset QDB_HTTP_PASSWORD
 
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 node packages/web-console/serve-dist.js &
 PID="$!"
 echo "Proxy started, PID=$PID"
 
+yarn workspace browser-tests test:auth
+
+./tmp/questdb-*/bin/questdb.sh stop
+
+export QDB_HTTP_USER=admin
+export QDB_HTTP_PASSWORD=quest
+
+./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
+
 yarn workspace browser-tests test
 
-kill -SIGTERM $PID
 ./tmp/questdb-*/bin/questdb.sh stop
+
+kill -SIGTERM $PID
+ 
