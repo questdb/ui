@@ -67,7 +67,7 @@ jobs:
           QDB_HTTP_PASSWORD: "quest"
 
       - name: Run browser-tests test
-        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
+        run: yarn workspace browser-tests test
 
       - name: Print Log Files
         if: success() || failure()
