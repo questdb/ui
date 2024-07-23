@@ -37,12 +37,16 @@ import eChartsMacarons from "./utils/macarons"
 import { arrayEquals } from "./array-equals"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import * as QuestDB from "../../utils/questdb"
+import { AnyIfEmpty } from "react-redux"
+import { request } from "http"
 
 echarts.use([LegendComponent, GridComponent])
 
 export function quickVis(
   root: ReturnType<typeof jQuery>,
   msgBus: ReturnType<typeof jQuery>,
+  quest: QuestDB.Client,
 ) {
   let bus = msgBus
   let div = root
@@ -75,8 +79,8 @@ export function quickVis(
   }
 
   let cachedResponse: any
-  let cachedQuery: any
-  let hActiveRequest: JQuery.jqXHR<any> | null
+  let cachedQuery: AnyIfEmpty
+  let requestActive: boolean = false
 
   const chartTypePicker = new SlimSelect({
     select: "#_qvis_frm_chart_type",
@@ -198,7 +202,7 @@ export function quickVis(
   }
 
   function handleServerResponse(r) {
-    hActiveRequest = null
+    requestActive = false
     eventBus.publish(EventType.MSG_QUERY_OK, {
       delta: new Date().getTime() - queryExecutionTimestamp,
       count: r.count,
@@ -209,7 +213,7 @@ export function quickVis(
   }
 
   function handleServerError(r) {
-    hActiveRequest = null
+    requestActive = false
     setDrawBtnToDraw()
     eventBus.publish(EventType.MSG_QUERY_ERROR, {
       query: cachedQuery,
@@ -220,8 +224,9 @@ export function quickVis(
     })
   }
 
-  function executeQueryAndDraw() {
+  async function executeQueryAndDraw() {
     setDrawBtnToCancel()
+    requestActive = true
     chartType = chartTypePicker.selected()
 
     // check if the only change is chart type
@@ -258,16 +263,20 @@ export function quickVis(
         urlColumns += value
       })
 
-      const requestParams = {}
-      requestParams.query = query
-      requestParams.count = false
-      requestParams.cols = urlColumns
-      requestParams.src = "vis"
       // time the query because control that displays query success expected time delta
       queryExecutionTimestamp = new Date().getTime()
-      hActiveRequest = $.get("exec", requestParams)
+      const response = await quest.queryRaw(query, {
+        count: false,
+        timings: false,
+        cols: urlColumns,
+        src: "vis",
+      })
+      if (response.type === QuestDB.Type.DQL) {
+        handleServerResponse(response)
+      } else {
+        handleServerError(response)
+      }
       eventBus.publish(EventType.MSG_QUERY_RUNNING)
-      hActiveRequest.done(handleServerResponse).fail(handleServerError)
     }
   }
 
@@ -292,18 +301,16 @@ export function quickVis(
   }
 
   function cancelDraw() {
-    if (hActiveRequest) {
-      hActiveRequest.abort()
-      hActiveRequest = null
-    }
+    quest.abort()
   }
 
   function btnDrawClick() {
-    if (hActiveRequest) {
+    if (requestActive) {
       cancelDraw()
     } else {
       executeQueryAndDraw()
     }
+    executeQueryAndDraw()
     return false
   }
 
