@@ -28,7 +28,7 @@ describe("System configuration - 3 warnings", () => {
     ].forEach((query) => {
       cy.typeQuery(query).runLine().clearEditor();
     });
-    cy.loadConsoleWithAuth();
+    cy.loadConsoleWithAuth(false);
   });
 
   it("should show all three warnings in the UI", () => {

@@ -240,15 +240,17 @@ Cypress.Commands.add("loginWithUserAndPassword", () => {
   cy.get("button[type='submit']").click();
 });
 
-Cypress.Commands.add("loadConsoleWithAuth", () => {
+Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings = true) => {
   cy.clearLocalStorage();
   cy.visit(baseUrl);
   cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
-  cy.clearSimulatedWarnings();
-  cy.visit(baseUrl);
-  cy.getEditorContent().should("be.visible");
-  cy.clearEditor();
+  if (clearWarnings) {
+    cy.clearSimulatedWarnings();
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
+  }
 });
 
 Cypress.Commands.add("refreshSchema", () => {
