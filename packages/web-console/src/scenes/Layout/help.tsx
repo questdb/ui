@@ -1,6 +1,11 @@
 import React from "react"
 import { Chat3, Command, Question } from "@styled-icons/remix-line"
-import { Github, Slack, StackOverflow } from "@styled-icons/boxicons-logos"
+import {
+  Discourse,
+  Github,
+  Slack,
+  StackOverflow,
+} from "@styled-icons/boxicons-logos"
 import {
   Text,
   toast,
@@ -38,13 +43,14 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
 const MenuLink: React.FunctionComponent<{
   href: string
   text: string
-}> = ({ href, text }) => (
+}> = ({ href, text, ...rest }) => (
   <Link
     color="foreground"
     hoverColor="foreground"
     href={href}
     rel="noreferrer"
     target="_blank"
+    {...rest}
   >
     {text}
   </Link>
@@ -117,13 +123,23 @@ export const Help = () => {
             <DropdownMenuItem>
               <Slack size="18px" />
               <MenuLink
+                data-hook="help-link-slack"
                 href="https://slack.questdb.io/"
                 text="Slack community"
               />
             </DropdownMenuItem>
             <DropdownMenuItem>
+              <Discourse size="18px" />
+              <MenuLink
+                data-hook="help-link-community"
+                href="https://community.questdb.io/"
+                text="Public forum"
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem>
               <StackOverflow size="18px" />
               <MenuLink
+                data-hook="help-link-stackoverflow"
                 href="https://stackoverflow.com/tags/questdb"
                 text="Stack Overflow"
               />
@@ -131,6 +147,7 @@ export const Help = () => {
             <DropdownMenuItem>
               <Question size="18px" />
               <MenuLink
+                data-hook="help-link-web-console-docs"
                 href="https://questdb.io/docs/develop/web-console/"
                 text="Web Console Docs"
               />
