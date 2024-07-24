@@ -86,6 +86,7 @@ beforeEach(() => {
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
   cy.typeQuery("select simulate_warnings('', '');");
+  cy.clickRun();
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
