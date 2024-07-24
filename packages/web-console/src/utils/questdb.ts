@@ -177,6 +177,9 @@ export type Options = {
   limit?: string
   explain?: boolean
   nm?: boolean
+  count?: boolean
+  cols?: string
+  src?: string
 }
 
 export type Release = {
@@ -394,11 +397,11 @@ export class Client {
   async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
     const controller = new AbortController()
     const payload = {
-      ...options,
       count: true,
       src: "con",
       query,
       timings: true,
+      ...options,
     }
 
     this._controllers.push(controller)
