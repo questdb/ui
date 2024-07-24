@@ -43,13 +43,14 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
 const MenuLink: React.FunctionComponent<{
   href: string
   text: string
-}> = ({ href, text }) => (
+}> = ({ href, text, ...rest }) => (
   <Link
     color="foreground"
     hoverColor="foreground"
     href={href}
     rel="noreferrer"
     target="_blank"
+    {...rest}
   >
     {text}
   </Link>
@@ -122,6 +123,7 @@ export const Help = () => {
             <DropdownMenuItem>
               <Slack size="18px" />
               <MenuLink
+                data-hook="help-link-slack"
                 href="https://slack.questdb.io/"
                 text="Slack community"
               />
@@ -129,6 +131,7 @@ export const Help = () => {
             <DropdownMenuItem>
               <Discourse size="18px" />
               <MenuLink
+                data-hook="help-link-community"
                 href="https://community.questdb.io/"
                 text="Public forum"
               />
@@ -136,6 +139,7 @@ export const Help = () => {
             <DropdownMenuItem>
               <StackOverflow size="18px" />
               <MenuLink
+                data-hook="help-link-stackoverflow"
                 href="https://stackoverflow.com/tags/questdb"
                 text="Stack Overflow"
               />
@@ -143,6 +147,7 @@ export const Help = () => {
             <DropdownMenuItem>
               <Question size="18px" />
               <MenuLink
+                data-hook="help-link-web-console-docs"
                 href="https://questdb.io/docs/develop/web-console/"
                 text="Web Console Docs"
               />
