@@ -14,7 +14,7 @@ if [[ $1 = "-skipQuestDBBuild" ]]
 then
   echo "Skipping QuestDB build"
 else
-  mvn clean package -e -X -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries 2>&1
+  mvn clean package -e -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries 2>&1
 fi
 
 tar xzf packages/browser-tests/questdb/core/target/questdb-*-rt-*.tar.gz -C tmp/
