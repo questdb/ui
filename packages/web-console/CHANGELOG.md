@@ -16,6 +16,17 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.5.1 - 2024.07.24
+
+### Added
+
+- Community forum in Help menu [#312](https://github.com/questdb/ui/pull/312)
+
+### Fixed
+
+- Charts not working when using Auth
+  [#310](https://github.com/questdb/ui/pull/310)
+
 ## 0.5.0 - 2024.07.16
 
 ### Added
