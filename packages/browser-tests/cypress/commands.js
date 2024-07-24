@@ -244,6 +244,7 @@ Cypress.Commands.add("loadConsoleWithAuth", () => {
   cy.clearLocalStorage();
   cy.visit(baseUrl);
   cy.loginWithUserAndPassword();
+  cy.getEditorContent().should("be.visible");
   cy.clearSimulatedWarnings();
   cy.visit(baseUrl);
   cy.getEditorContent().should("be.visible");
