@@ -243,6 +243,7 @@ Cypress.Commands.add("loginWithUserAndPassword", () => {
 Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
   cy.visit(baseUrl);
+  cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
   cy.clearEditor();
   if (clearWarnings) {
