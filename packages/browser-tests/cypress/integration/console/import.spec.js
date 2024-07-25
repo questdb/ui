@@ -2,7 +2,7 @@
 
 describe("questdb import", () => {
   before(() => {
-    cy.visit("http://localhost:9999");
+    cy.loadConsoleWithAuth();
   });
 
   it("display import panel", () => {

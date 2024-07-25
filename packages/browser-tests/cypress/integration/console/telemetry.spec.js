@@ -17,7 +17,7 @@ const toggleTelemetry = (enabled) => {
 describe("telemetry config", () => {
   beforeEach(() => {
     toggleTelemetry(true);
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
   });
 
   it("should get telemetry config", () => {
@@ -43,7 +43,7 @@ describe("telemetry config", () => {
 describe("telemetry disabled", () => {
   beforeEach(() => {
     toggleTelemetry(false);
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
   });
 
   it("should not start telemetry when disabled", () => {
@@ -58,7 +58,7 @@ describe("telemetry disabled", () => {
 describe("telemetry enabled", () => {
   beforeEach(() => {
     toggleTelemetry(true);
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
   });
 
   it("should start telemetry when enabled", () => {

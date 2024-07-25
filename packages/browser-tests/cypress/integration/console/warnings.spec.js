@@ -4,7 +4,7 @@ const baseUrl = "http://localhost:9999";
 
 describe("System configuration - no warnings", () => {
   before(() => {
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth(true);
   });
 
   it("should not display warnings if there aren't any in /warnings", () => {
@@ -18,7 +18,7 @@ describe("System configuration - 3 warnings", () => {
   });
 
   before(() => {
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth(true);
     cy.getEditorContent().should("be.visible");
     cy.clearEditor();
     [
@@ -28,7 +28,7 @@ describe("System configuration - 3 warnings", () => {
     ].forEach((query) => {
       cy.typeQuery(query).runLine().clearEditor();
     });
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
   });
 
   it("should show all three warnings in the UI", () => {
