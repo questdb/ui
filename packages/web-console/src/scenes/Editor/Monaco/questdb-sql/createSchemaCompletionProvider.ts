@@ -5,20 +5,46 @@ import { findMatches, getQueryFromCursor } from "../utils"
 import { getTableCompletions } from "./getTableCompletions"
 import { getColumnCompletions } from "./getColumnCompletions"
 import { getLanguageCompletions } from "./getLanguageCompletions"
+import * as QuestDB from "../../../../utils/questdb"
 
 const trimQuotesFromTableName = (tableName: string) => {
   return tableName.replace(/(^")|("$)/g, "")
 }
 
+const fetchColumns = async (
+  quest: QuestDB.Client,
+  tableName?: string | string[],
+) => {
+  let columns: InformationSchemaColumn[] = []
+  let whereClause = ""
+
+  if (Array.isArray(tableName)) {
+    whereClause = ` WHERE table_name IN (${tableName
+      .map((name) => `'${name}'`)
+      .join(", ")})`
+  } else {
+    whereClause = tableName
+      ? ` WHERE table_name = '${tableName}'`
+      : " LIMIT 100"
+  }
+  const response = await quest.query<QuestDB.InformationSchemaColumn>(
+    `SELECT * FROM information_schema.columns()${whereClause}`,
+  )
+  if (response && response && response.type === QuestDB.Type.DQL) {
+    columns = response.data
+  }
+  return Promise.resolve(columns)
+}
+
 export const createSchemaCompletionProvider = (
   editor: monaco.editor.IStandaloneCodeEditor,
   tables: Table[] = [],
-  informationSchemaColumns: InformationSchemaColumn[] = [],
+  quest: QuestDB.Client,
 ) => {
   const completionProvider: monaco.languages.CompletionItemProvider = {
     triggerCharacters:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n ."'.split(""),
-    provideCompletionItems(model, position) {
+    provideCompletionItems: async (model, position) => {
       const word = model.getWordUntilPosition(position)
 
       const queryAtCursor = getQueryFromCursor(editor)
@@ -125,9 +151,7 @@ export const createSchemaCompletionProvider = (
               return {
                 suggestions: [
                   ...getColumnCompletions({
-                    columns: informationSchemaColumns.filter((item) =>
-                      tableContext.includes(item.table_name),
-                    ),
+                    columns: await fetchColumns(quest, tableContext),
                     range,
                     withTableName,
                     priority: CompletionItemPriority.High,
@@ -139,7 +163,7 @@ export const createSchemaCompletionProvider = (
               return {
                 suggestions: [
                   ...getColumnCompletions({
-                    columns: informationSchemaColumns,
+                    columns: await fetchColumns(quest),
                     range,
                     withTableName: false,
                     priority: CompletionItemPriority.High,

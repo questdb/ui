@@ -23,11 +23,7 @@
  ******************************************************************************/
 
 import { NotificationShape, RunningShape, StoreShape } from "types"
-import type {
-  QueryRawResult,
-  Table,
-  InformationSchemaColumn,
-} from "utils/questdb"
+import type { QueryRawResult, Table } from "utils/questdb"
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
   store.query.notifications
@@ -40,13 +36,9 @@ const getRunning: (store: StoreShape) => RunningShape = (store) =>
 
 const getTables: (store: StoreShape) => Table[] = (store) => store.query.tables
 
-const getColumns: (store: StoreShape) => InformationSchemaColumn[] = (store) =>
-  store.query.columns
-
 export default {
   getNotifications,
   getResult,
   getRunning,
   getTables,
-  getColumns,
 }

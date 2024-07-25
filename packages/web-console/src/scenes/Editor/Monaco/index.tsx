@@ -103,7 +103,6 @@ const MonacoEditor = () => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
-  const columns = useSelector(selectors.query.getColumns)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
@@ -380,7 +379,7 @@ const MonacoEditor = () => {
       setSchemaCompletionHandle(
         monacoRef.current.languages.registerCompletionItemProvider(
           QuestDBLanguageName,
-          createSchemaCompletionProvider(editorRef.current, tables, columns),
+          createSchemaCompletionProvider(editorRef.current, tables, quest),
         ),
       )
       setRefreshingTables(false)
@@ -391,7 +390,7 @@ const MonacoEditor = () => {
     if (!refreshingTables) {
       setCompletionProvider()
     }
-  }, [tables, columns, monacoRef, editorReady])
+  }, [tables, monacoRef, editorReady])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)
