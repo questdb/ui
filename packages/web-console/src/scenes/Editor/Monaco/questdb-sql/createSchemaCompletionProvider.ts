@@ -27,11 +27,15 @@ const fetchColumns = async (
       ? ` WHERE table_name = '${tableName}'`
       : " LIMIT 100"
   }
-  const response = await quest.query<QuestDB.InformationSchemaColumn>(
-    `SELECT * FROM information_schema.columns()${whereClause}`,
-  )
-  if (response && response && response.type === QuestDB.Type.DQL) {
-    columns = response.data
+  try {
+    const response = await quest.query<QuestDB.InformationSchemaColumn>(
+      `SELECT * FROM information_schema.columns()${whereClause}`,
+    )
+    if (response && response && response.type === QuestDB.Type.DQL) {
+      columns = response.data
+    }
+  } catch (e) {
+    console.error(e)
   }
   return Promise.resolve(columns)
 }
