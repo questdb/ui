@@ -24,11 +24,7 @@
 
 import type { ReactNode } from "react"
 
-import type {
-  QueryRawResult,
-  Table,
-  InformationSchemaColumn,
-} from "utils/questdb"
+import type { QueryRawResult, Table } from "utils/questdb"
 
 import {
   NotificationShape,
@@ -42,13 +38,6 @@ const setTables = (payload: Table[]): QueryAction => ({
     tables: payload,
   },
   type: QueryAT.SET_TABLES,
-})
-
-const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
-  payload: {
-    columns: payload,
-  },
-  type: QueryAT.SET_COLUMNS,
 })
 
 const addNotification = (
@@ -95,5 +84,4 @@ export default {
   stopRunning,
   toggleRunning,
   setTables,
-  setColumns,
 }
