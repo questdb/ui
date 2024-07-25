@@ -4,7 +4,7 @@ const baseUrl = "http://localhost:9999";
 
 describe("System configuration - no warnings", () => {
   before(() => {
-    cy.loadConsoleWithAuth();
+    cy.loadConsoleWithAuth(true);
   });
 
   it("should not display warnings if there aren't any in /warnings", () => {
