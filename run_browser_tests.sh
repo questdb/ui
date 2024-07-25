@@ -36,7 +36,7 @@ echo "Proxy started, PID=$PID"
 # Switch dev mode on
 export QDB_DEV_MODE_ENABLED=true
 
-# Running tests which assume authentication is switched off
+# Running tests which assume no authentication
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 yarn workspace browser-tests test:auth
 ./tmp/questdb-*/bin/questdb.sh stop
