@@ -31,7 +31,7 @@ const fetchColumns = async (
     const response = await quest.query<QuestDB.InformationSchemaColumn>(
       `SELECT * FROM information_schema.columns()${whereClause}`,
     )
-    if (response && response && response.type === QuestDB.Type.DQL) {
+    if (response && response.type === QuestDB.Type.DQL) {
       columns = response.data
     }
   } catch (e) {
