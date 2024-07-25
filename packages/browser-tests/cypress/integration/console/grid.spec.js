@@ -25,12 +25,20 @@ describe("questdb grid", () => {
     cy.typeQuery(`select x from long_sequence(100)`);
     cy.runLine();
     cy.wait(100);
-    assertRowCount();
-    cy.getGridRow(0).should("contain", "1");
+    cy.getGridViewport().then(($el) => {
+      cy.getGridRows().should(
+        "have.length",
+        Math.ceil($el.height() / rowHeight)
+      );
+      cy.getGridRow(0).should("contain", "1");
+    });
 
     cy.getGridViewport().scrollTo("bottom");
-    assertRowCount();
-    cy.getGridRow(0).should("contain", "94");
+    cy.getGridViewport().then(($el) => {
+      const totalRows = Math.ceil($el.height() / rowHeight);
+      cy.getGridRows().should("have.length", totalRows);
+      cy.getGridRow(totalRows - 1).should("contain", "100");
+    });
     cy.matchImageSnapshot();
   });
 
