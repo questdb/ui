@@ -2,6 +2,14 @@
 
 const baseUrl = "http://localhost:9999";
 
+const rowHeight = 30;
+
+const assertRowCount = () => {
+  cy.get(".qg-viewport").then(($el) => {
+    cy.getGridRows().should("have.length", Math.ceil($el.height() / rowHeight));
+  });
+};
+
 describe("questdb grid", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth();
@@ -13,16 +21,15 @@ describe("questdb grid", () => {
     cy.getGridRows().should("have.length", 0);
   });
 
-  it("when results have vertical scroll", () => {
+  it.only("when results have vertical scroll", () => {
     cy.typeQuery(`select x from long_sequence(100)`);
     cy.runLine();
     cy.wait(100);
-
-    cy.getGridRows().should("have.length", 7);
+    assertRowCount();
     cy.getGridRow(0).should("contain", "1");
 
     cy.getGridViewport().scrollTo("bottom");
-    cy.getGridRows().should("have.length", 7);
+    assertRowCount();
     cy.getGridRow(0).should("contain", "94");
     cy.matchImageSnapshot();
   });
@@ -30,7 +37,6 @@ describe("questdb grid", () => {
   it("multiple scrolls till the bottom", () => {
     const rows = 1000;
     const rowsPerPage = 128;
-    const rowHeight = 30;
     cy.typeQuery(`select x from long_sequence(${rows})`);
     cy.runLine();
 
