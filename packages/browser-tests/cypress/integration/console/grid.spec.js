@@ -2,11 +2,17 @@
 
 const baseUrl = "http://localhost:9999";
 
+const rowHeight = 30;
+
+const assertRowCount = () => {
+  cy.get(".qg-viewport").then(($el) => {
+    cy.getGridRows().should("have.length", Math.ceil($el.height() / rowHeight));
+  });
+};
+
 describe("questdb grid", () => {
   beforeEach(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
   });
 
   it("when results empty", () => {
@@ -19,20 +25,26 @@ describe("questdb grid", () => {
     cy.typeQuery(`select x from long_sequence(100)`);
     cy.runLine();
     cy.wait(100);
-
-    cy.getGridRows().should("have.length", 7);
-    cy.getGridRow(0).should("contain", "1");
+    cy.getGridViewport().then(($el) => {
+      cy.getGridRows().should(
+        "have.length",
+        Math.ceil($el.height() / rowHeight)
+      );
+      cy.getGridRow(0).should("contain", "1");
+    });
 
     cy.getGridViewport().scrollTo("bottom");
-    cy.getGridRows().should("have.length", 7);
-    cy.getGridRow(0).should("contain", "94");
+    cy.getGridViewport().then(($el) => {
+      const totalRows = Math.ceil($el.height() / rowHeight);
+      cy.getGridRows().should("have.length", totalRows);
+      cy.getGridRow(totalRows - 1).should("contain", "100");
+    });
     cy.matchImageSnapshot();
   });
 
   it("multiple scrolls till the bottom", () => {
     const rows = 1000;
     const rowsPerPage = 128;
-    const rowHeight = 30;
     cy.typeQuery(`select x from long_sequence(${rows})`);
     cy.runLine();
 

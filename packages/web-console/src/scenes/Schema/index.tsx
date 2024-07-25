@@ -313,7 +313,10 @@ const Schema = ({
                           delay={350}
                           placement="right"
                           trigger={
-                            <Button skin="transparent">
+                            <Button
+                              skin="transparent"
+                              data-hook="schema-settings-button"
+                            >
                               {copied && <StyledCheckboxCircle size="14px" />}
                               <Settings4 size="18px" />
                             </Button>
@@ -327,14 +330,20 @@ const Schema = ({
                     <DropdownMenu.Portal>
                       <DropdownMenuContent>
                         {tables.length > 0 && (
-                          <DropdownMenu.Item onClick={copySchemasToClipboard}>
+                          <DropdownMenu.Item
+                            onClick={copySchemasToClipboard}
+                            data-hook="schema-copy-all"
+                          >
                             <FileCopy size="18px" />
                             <Text color="foreground">
                               Copy schemas to clipboard
                             </Text>
                           </DropdownMenu.Item>
                         )}
-                        <DropdownMenu.Item onClick={fetchTables}>
+                        <DropdownMenu.Item
+                          onClick={fetchTables}
+                          data-hook="schema-refresh"
+                        >
                           <Refresh size="18px" />
                           <Text color="foreground">Refresh tables</Text>
                         </DropdownMenu.Item>

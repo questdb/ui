@@ -4,8 +4,7 @@ const baseUrl = "http://localhost:9999";
 
 describe("Sidebar tests", () => {
   beforeEach(() => {
-    cy.visit(baseUrl);
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
   });
 
   it("should have the correct Help links", () => {

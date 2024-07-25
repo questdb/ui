@@ -22,6 +22,9 @@ const tableSchemas = {
     "CREATE TABLE IF NOT EXISTS 'ecommerce_stats' (ts TIMESTAMP, country SYMBOL capacity 256 CACHE, category SYMBOL capacity 256 CACHE, visits LONG, unique_visitors LONG, sales DOUBLE,  number_of_products INT) timestamp (ts) PARTITION BY DAY WAL DEDUP UPSERT KEYS(ts, country, category);",
   gitlog:
     "CREATE TABLE IF NOT EXISTS 'gitlog' (committed_datetime TIMESTAMP, repo SYMBOL capacity 256 CACHE, author_name SYMBOL capacity 256 CACHE, summary STRING, size INT, insertions INT, deletions INT, lines INT, files INT) timestamp (committed_datetime) PARTITION BY MONTH WAL DEDUP UPSERT KEYS(committed_datetime, repo, author_name);",
+  my_publics: "CREATE TABLE IF NOT EXISTS 'my_publics' (public STRING);",
+  my_secrets: "CREATE TABLE IF NOT EXISTS 'my_secrets' (secret STRING);",
+  my_secrets2: "CREATE TABLE IF NOT EXISTS 'my_secrets2' (secret STRING);",
 };
 
 before(() => {
@@ -79,11 +82,11 @@ beforeEach(() => {
       req.reply("[]");
     }
   );
+});
 
-  cy.request({
-    method: "GET",
-    url: `${baseUrl}/exec?query=${encodeURIComponent(`select simulate_warnings('', '');`)}`,
-  });
+Cypress.Commands.add("clearSimulatedWarnings", () => {
+  cy.typeQuery("select simulate_warnings('', '');");
+  cy.clickRun();
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -116,11 +119,10 @@ Cypress.Commands.add("runLine", () => {
   cy.wait("@exec");
 });
 
-Cypress.Commands.add("clickRun",
-  () => {
-    cy.intercept("/exec*").as("exec");
-    return cy.get("button").contains("Run").click().wait("@exec");
-  });
+Cypress.Commands.add("clickRun", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.get("button").contains("Run").click().wait("@exec");
+});
 
 Cypress.Commands.add("clearEditor", () =>
   cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
@@ -195,16 +197,24 @@ Cypress.Commands.add("getExpandedNotifications", () =>
 );
 
 Cypress.Commands.add("createTable", (name) => {
+  const authHeader = localStorage.getItem("basic.auth.header");
   cy.request({
     method: "GET",
     url: `${baseUrl}/exec?query=${encodeURIComponent(tableSchemas[name])};`,
+    headers: {
+      Authorization: authHeader,
+    },
   });
 });
 
 Cypress.Commands.add("dropTable", (name) => {
+  const authHeader = localStorage.getItem("basic.auth.header");
   cy.request({
     method: "GET",
     url: `${baseUrl}/exec?query=${encodeURIComponent(`DROP TABLE ${name};`)}`,
+    headers: {
+      Authorization: authHeader,
+    },
   });
 });
 
@@ -221,4 +231,30 @@ Cypress.Commands.add("interceptQuery", (query, alias, response) => {
     },
     response
   ).as(alias);
+});
+
+Cypress.Commands.add("loginWithUserAndPassword", () => {
+  cy.getByDataHook("auth-login").should("be.visible");
+  cy.get("input[name='username']").type("admin");
+  cy.get("input[type='password']").type("quest");
+  cy.get("button[type='submit']").click();
+});
+
+Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
+  cy.clearLocalStorage();
+  indexedDB.deleteDatabase("web-console");
+  cy.visit(baseUrl);
+  cy.loginWithUserAndPassword();
+  cy.getEditorContent().should("be.visible");
+  if (clearWarnings) {
+    cy.clearSimulatedWarnings();
+    indexedDB.deleteDatabase("web-console");
+    cy.visit(baseUrl);
+    cy.getEditorContent().should("be.visible");
+  }
+});
+
+Cypress.Commands.add("refreshSchema", () => {
+  cy.getByDataHook("schema-settings-button").click();
+  cy.getByDataHook("schema-refresh").click();
 });

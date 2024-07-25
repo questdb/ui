@@ -11,10 +11,12 @@ const tables = [
 
 describe("questdb schema with working tables", () => {
   before(() => {
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
+
     tables.forEach((table) => {
       cy.createTable(table);
     });
+    cy.refreshSchema();
   });
 
   it("should show all the tables when there are no suspended", () => {
@@ -44,6 +46,7 @@ describe("questdb schema with working tables", () => {
   });
 
   after(() => {
+    cy.loadConsoleWithAuth();
     tables.forEach((table) => {
       cy.dropTable(table);
     });
@@ -52,12 +55,12 @@ describe("questdb schema with working tables", () => {
 
 describe("questdb schema with suspended tables with Linux OS error codes", () => {
   before(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
+
     tables.forEach((table) => {
       cy.createTable(table);
     });
+    cy.refreshSchema();
     cy.typeQuery(
       "ALTER TABLE btc_trades SUSPEND WAL WITH 24, 'Too many open files';"
     )
@@ -71,9 +74,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
       .clearEditor();
   });
   beforeEach(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
   });
 
   it("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
@@ -125,6 +126,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
 
   after(() => {
+    cy.loadConsoleWithAuth();
     tables.forEach((table) => {
       cy.dropTable(table);
     });
@@ -143,7 +145,8 @@ describe("questdb schema in read-only mode", () => {
         readOnly: true,
       }
     ).as("getConsoleConfiguration");
-    cy.visit(baseUrl);
+
+    cy.loadConsoleWithAuth();
   });
 
   it("should disable Create Table action in read-only mode", () => {

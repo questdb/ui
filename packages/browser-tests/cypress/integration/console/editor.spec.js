@@ -25,8 +25,7 @@ describe("appendQuery", () => {
       consoleConfiguration
     ).as("getConsoleConfiguration");
 
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.loadConsoleWithAuth();
   });
 
   beforeEach(() => {
@@ -129,9 +128,7 @@ describe("appendQuery", () => {
 
 describe("&query URL param", () => {
   beforeEach(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
   });
 
   it("should append and select single line query", () => {
@@ -181,24 +178,18 @@ describe("&query URL param", () => {
 
 describe("autocomplete", () => {
   before(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    [
-      'create table "my_publics" ("public" string);',
-      // We're creating another table with the same column name.
-      // The autocomplete should merge the column completions into one
-      // and respond with something like `secret (my_secrets, my_secrets2)`
-      'create table "my_secrets" ("secret" string);',
-      'create table "my_secrets2" ("secret" string);',
-    ].forEach((query) => {
-      cy.typeQuery(query).runLine().clearEditor();
+    cy.loadConsoleWithAuth();
+    // We're creating two tables (my_secrets and my_secrets2) with the same column name.
+    // The autocomplete should merge the column completions into one
+    // and respond with something like `secret (my_secrets, my_secrets2)
+    ["my_publics", "my_secrets", "my_secrets2"].forEach((table) => {
+      cy.createTable(table);
     });
+    cy.refreshSchema();
   });
 
   beforeEach(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
   });
 
   it("should work when provided table name doesn't exist", () => {
@@ -245,11 +236,18 @@ describe("autocomplete", () => {
       .should("contain", "my_secrets.secret")
       .clearEditor();
   });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+    ["my_publics", "my_secrets", "my_secrets2"].forEach((table) => {
+      cy.dropTable(table);
+    });
+  });
 });
 
 describe("errors", () => {
   before(() => {
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
   });
 
   beforeEach(() => {
@@ -277,7 +275,7 @@ describe("errors", () => {
 
 describe("running query with F9", () => {
   before(() => {
-    cy.visit(baseUrl);
+    cy.loadConsoleWithAuth();
   });
 
   beforeEach(() => {
