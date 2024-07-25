@@ -18,7 +18,7 @@ describe("System configuration - 3 warnings", () => {
   });
 
   before(() => {
-    cy.loadConsoleWithAuth();
+    cy.loadConsoleWithAuth(true);
     cy.getEditorContent().should("be.visible");
     cy.clearEditor();
     [
@@ -28,7 +28,7 @@ describe("System configuration - 3 warnings", () => {
     ].forEach((query) => {
       cy.typeQuery(query).runLine().clearEditor();
     });
-    cy.loadConsoleWithAuth(false);
+    cy.loadConsoleWithAuth();
   });
 
   it("should show all three warnings in the UI", () => {

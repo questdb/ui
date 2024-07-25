@@ -240,11 +240,11 @@ Cypress.Commands.add("loginWithUserAndPassword", () => {
   cy.get("button[type='submit']").click();
 });
 
-Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings = true) => {
+Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
   cy.visit(baseUrl);
-  cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
+  cy.clearEditor();
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
     cy.visit(baseUrl);
