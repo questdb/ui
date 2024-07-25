@@ -242,15 +242,16 @@ Cypress.Commands.add("loginWithUserAndPassword", () => {
 
 Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
+  indexedDB.deleteDatabase("web-console");
   cy.visit(baseUrl);
   cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
-  indexedDB.deleteDatabase("web-console");
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
+    cy.clearLocalStorage();
+    indexedDB.deleteDatabase("web-console");
     cy.visit(baseUrl);
     cy.getEditorContent().should("be.visible");
-    indexedDB.deleteDatabase("web-console");
   }
 });
 
