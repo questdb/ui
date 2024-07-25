@@ -15,8 +15,8 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: "temurin"
           cache: maven
 
       - name: Build QuestDB
@@ -53,8 +53,21 @@ jobs:
       - name: Run @questdb/web-console unit tests
         run: yarn workspace @questdb/web-console run test:prod
 
+      - name: Run browser-tests test - auth
+        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test:auth
+
+      - name: Stop QuestDB
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
+
+      - name: Start QuestDB, set auth credentials
+        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
+          QDB_HTTP_USER: "admin"
+          QDB_HTTP_PASSWORD: "quest"
+
       - name: Run browser-tests test
-        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test
+        run: yarn workspace browser-tests test
 
       - name: Print Log Files
         if: success() || failure()

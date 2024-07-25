@@ -4,9 +4,7 @@ const baseUrl = "http://localhost:9999";
 
 describe("questdb charts", () => {
   beforeEach(() => {
-    cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
-    cy.clearEditor();
+    cy.loadConsoleWithAuth();
   });
 
   it("should render the chart after a successful query invocation", () => {
