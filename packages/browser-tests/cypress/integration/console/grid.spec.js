@@ -21,7 +21,7 @@ describe("questdb grid", () => {
     cy.getGridRows().should("have.length", 0);
   });
 
-  it.only("when results have vertical scroll", () => {
+  it("when results have vertical scroll", () => {
     cy.typeQuery(`select x from long_sequence(100)`);
     cy.runLine();
     cy.wait(100);
