@@ -194,7 +194,7 @@ const Row = ({
     <Wrapper
       className={className}
       expanded={expanded}
-      suspended={walTableData?.suspended && kind === "table"}
+      // suspended={walTableData?.suspended && kind === "table"}
       onClick={onClick}
     >
       <FlexRow>
@@ -268,11 +268,11 @@ const Row = ({
           </Type>
         )}
 
-        {walTableData?.suspended && kind === "table" && (
+        {/* {walTableData?.suspended && kind === "table" && (
           <TableActions>
             <SuspensionDialog walTableData={walTableData} />
           </TableActions>
-        )}
+        )} */}
 
         {tooltip && description && (
           <IconWithTooltip

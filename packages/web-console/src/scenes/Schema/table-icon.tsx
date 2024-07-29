@@ -3,6 +3,7 @@ import React from "react"
 import styled from "styled-components"
 import * as QuestDB from "../../utils/questdb"
 import { Table } from "@styled-icons/remix-line"
+import { Error } from "@styled-icons/boxicons-regular"
 import { Box } from "@questdb/react-components"
 
 type Props = {
@@ -10,9 +11,6 @@ type Props = {
   walEnabled?: boolean
   suspended?: boolean
 }
-
-const RED = "#ff5555"
-const WHITE = "#f8f8f2"
 
 const WIDTH = "2.2rem"
 const HEIGHT = "1.8rem"
@@ -23,7 +21,8 @@ const Root = styled.div<{ $suspended?: boolean }>`
   width: ${WIDTH};
   height: ${HEIGHT};
   position: relative;
-  color: ${({ $suspended }) => ($suspended ? RED : WHITE)};
+  color: ${({ $suspended, theme }) =>
+    theme.color[$suspended ? "orange" : "white"]};
   margin-right: 1rem;
   flex-shrink: 0;
 `
@@ -40,7 +39,9 @@ const Icon = styled.div<{ $suspended?: boolean }>`
   position: absolute;
   width: ${WIDTH};
   height: ${HEIGHT};
-  border: 1px ${({ $suspended }) => ($suspended ? RED : WHITE)} solid;
+  border: 1px
+    ${({ $suspended, theme }) => theme.color[$suspended ? "orange" : "white"]}
+    solid;
   border-radius: 2px;
 `
 
@@ -77,28 +78,41 @@ const VLine2 = styled(VLine)`
   left: 1.3rem;
 `
 
+const ErrorIcon = styled(Error)`
+  position: absolute;
+  top: 0;
+  left: 2px;
+`
+
 const IconComponent = ({
   isPartitioned,
   partitionBy,
   walEnabled,
   suspended,
-}: Props & { isPartitioned: boolean }) => (
-  <Root $suspended={suspended}>
-    {!walEnabled && <Asterisk>*</Asterisk>}
-    <Icon $suspended={suspended}>
-      {!isPartitioned && (
-        <>
-          <HLine />
-          <VLine1 />
-          <VLine2 />
-        </>
+}: Props & { isPartitioned: boolean }) =>
+  suspended ? (
+    <Root $suspended={true}>
+      <Icon $suspended={true}>
+        <ErrorIcon size="16px" />
+      </Icon>
+    </Root>
+  ) : (
+    <Root>
+      {!walEnabled && <Asterisk>*</Asterisk>}
+      <Icon>
+        {!isPartitioned && (
+          <>
+            <HLine />
+            <VLine1 />
+            <VLine2 />
+          </>
+        )}
+      </Icon>
+      {isPartitioned && partitionBy && (
+        <PartitionLetter>{partitionBy.substr(0, 1)}</PartitionLetter>
       )}
-    </Icon>
-    {isPartitioned && partitionBy && (
-      <PartitionLetter>{partitionBy.substr(0, 1)}</PartitionLetter>
-    )}
-  </Root>
-)
+    </Root>
+  )
 
 export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
   const isPartitioned = (partitionBy && partitionBy !== "NONE") || false
