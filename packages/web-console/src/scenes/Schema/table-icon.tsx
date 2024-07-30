@@ -117,7 +117,15 @@ const IconComponent = ({
 export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
   const isPartitioned = (partitionBy && partitionBy !== "NONE") || false
   let tooltipLines = []
-  if (isPartitioned && partitionBy) {
+
+  if (suspended) {
+    tooltipLines.push(
+      <Box align="center" gap="0">
+        <Error size="14px" />
+        <span>: 1 issue</span>
+      </Box>,
+    )
+  } else if (isPartitioned && partitionBy) {
     tooltipLines.push(
       `${partitionBy.substr(0, 1)}: Partitioned by ${partitionBy}`,
     )
