@@ -26,19 +26,7 @@ import { ErrorResult } from "../../../utils"
 import { Text, Link } from "../../../components"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
-
-const ErrorButton = styled(Button)`
-  background: #352615;
-  border: 1px #654a2c solid;
-  color: ${({ theme }) => theme.color.orange};
-  padding: 3px 10px;
-  font-size: 1.3rem;
-
-  &:hover {
-    background-color: #654a2c !important;
-    border-color: #654a2c !important;
-  }
-`
+import { WarningButton } from "../warning-button"
 
 const StyledDialogContent = styled(Dialog.Content)`
   border-color: #654a2c;
@@ -137,8 +125,8 @@ export const SuspensionDialog = ({
     >
       <Dialog.Trigger asChild>
         <ForwardRef>
-          <ErrorButton
-            prefixIcon={<HealthBook size="18px" />}
+          <WarningButton
+            prefixIcon={<HealthBook size="16px" />}
             data-hook="schema-suspension-dialog-trigger"
             onClick={(e: any) => {
               setActive(true)
@@ -146,7 +134,7 @@ export const SuspensionDialog = ({
             }}
           >
             Diagnose
-          </ErrorButton>
+          </WarningButton>
         </ForwardRef>
       </Dialog.Trigger>
 

@@ -42,6 +42,8 @@ import { selectors } from "../../../store"
 import { QuestContext } from "../../../providers"
 import { Box } from "@questdb/react-components"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { WarningButton } from "../warning-button"
+import { MetricsDialog } from "../MetricsDialog"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -177,10 +179,20 @@ const Table = ({
                     {
                       name: "Suspended",
                       render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                        <Issue>
-                          <IssueText>Table is suspended</IssueText>
-                          <SuspensionDialog walTableData={walTableData} />
-                        </Issue>
+                        <Box
+                          flexDirection="column"
+                          justifyContent="space-between"
+                          gap="0.5rem"
+                        >
+                          <Issue>
+                            <IssueText>Table is suspended</IssueText>
+                            <SuspensionDialog walTableData={walTableData} />
+                          </Issue>
+                          <Issue>
+                            <IssueText>Increased latency</IssueText>
+                            <MetricsDialog walTableData={walTableData} />
+                          </Issue>
+                        </Box>
                       ),
                     },
                   ])
@@ -191,7 +203,7 @@ const Table = ({
                     <Row
                       expanded={isOpen && !isLoading}
                       kind="folder"
-                      name="Issues (1)"
+                      name="Issues (2)"
                       onClick={() => toggleOpen()}
                       suffix={isLoading && <Loader size="18px" />}
                     />
