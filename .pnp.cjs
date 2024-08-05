@@ -6666,6 +6666,8 @@ const RAW_RUNTIME_STATE =
           ["svg-react-loader", "npm:0.4.6"],\
           ["throttle-debounce", "npm:2.2.1"],\
           ["typescript", "patch:typescript@npm%3A4.4.4#optional!builtin<compat/typescript>::version=4.4.4&hash=bbeadb"],\
+          ["uplot", "npm:1.6.30"],\
+          ["uplot-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.2.2"],\
           ["webpack", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.88.2"],\
           ["webpack-bundle-analyzer", "npm:4.9.1"],\
           ["webpack-cli", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.10.0"],\
@@ -29355,6 +29357,41 @@ const RAW_RUNTIME_STATE =
         "packagePeers": [\
           "@types/browserslist",\
           "browserslist"\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["uplot", [\
+      ["npm:1.6.30", {\
+        "packageLocation": "./.yarn/cache/uplot-npm-1.6.30-6662aca9b9-08ad2f9441.zip/node_modules/uplot/",\
+        "packageDependencies": [\
+          ["uplot", "npm:1.6.30"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["uplot-react", [\
+      ["npm:1.2.2", {\
+        "packageLocation": "./.yarn/cache/uplot-react-npm-1.2.2-b6d306aab3-74767541b6.zip/node_modules/uplot-react/",\
+        "packageDependencies": [\
+          ["uplot-react", "npm:1.2.2"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.2.2", {\
+        "packageLocation": "./.yarn/__virtual__/uplot-react-virtual-f9cdea8d80/0/cache/uplot-react-npm-1.2.2-b6d306aab3-74767541b6.zip/node_modules/uplot-react/",\
+        "packageDependencies": [\
+          ["uplot-react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.2.2"],\
+          ["@types/react", "npm:17.0.2"],\
+          ["@types/uplot", null],\
+          ["react", "npm:17.0.2"],\
+          ["uplot", "npm:1.6.30"]\
+        ],\
+        "packagePeers": [\
+          "@types/react",\
+          "@types/uplot",\
+          "react",\
+          "uplot"\
         ],\
         "linkType": "HARD"\
       }]\

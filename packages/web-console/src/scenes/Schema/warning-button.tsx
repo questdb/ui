@@ -8,7 +8,7 @@ export const WarningButton = styled(Button)`
   padding: 2px 8px;
   font-size: 1.2rem;
   width: 9.5rem;
-  justify-content: space-between;
+  justify-content: flex-start;
 
   &:hover {
     background-color: #654a2c !important;
