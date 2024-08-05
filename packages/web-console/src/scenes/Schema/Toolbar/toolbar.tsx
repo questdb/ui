@@ -59,7 +59,7 @@ const Error = styled(Box).attrs({ gap: "0.5rem" })<{
   &,
   button {
     color: ${({ theme, suspendedTablesCount }) =>
-      theme.color[`${suspendedTablesCount > 0 ? "red" : "gray1"}`]};
+      theme.color[`${suspendedTablesCount > 0 ? "orange" : "gray1"}`]};
     cursor: ${({ suspendedTablesCount }) =>
       suspendedTablesCount > 0 ? "pointer" : "default"};
   }
@@ -113,7 +113,7 @@ export const Toolbar = ({
               </StyledButton>
             }
           >
-            <Tooltip>Show suspended tables</Tooltip>
+            <Tooltip>Show tables with issues</Tooltip>
           </PopperHover>
         </Error>
       )}

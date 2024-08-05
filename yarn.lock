@@ -3333,6 +3333,8 @@ __metadata:
     svg-react-loader: "npm:0.4.6"
     throttle-debounce: "npm:2.2.1"
     typescript: "npm:^4.6.2"
+    uplot: "npm:^1.6.30"
+    uplot-react: "npm:^1.2.2"
     webpack: "npm:^5"
     webpack-bundle-analyzer: "npm:^4.9.1"
     webpack-cli: "npm:^4.9.2"
@@ -21378,6 +21380,23 @@ __metadata:
   bin:
     update-browserslist-db: cli.js
   checksum: 10/9074b4ef34d2ed931f27d390aafdd391ee7c45ad83c508e8fed6aaae1eb68f81999a768ed8525c6f88d4001a4fbf1b8c0268f099d0e8e72088ec5945ac796acf
+  languageName: node
+  linkType: hard
+
+"uplot-react@npm:^1.2.2":
+  version: 1.2.2
+  resolution: "uplot-react@npm:1.2.2"
+  peerDependencies:
+    react: ">=16.8.6"
+    uplot: ^1.6.20
+  checksum: 10/74767541b66589c56dd3467c23f309a3b967f9ee1916b307e41bcc7f758b96b401a9d6218c9a13008dff874610f6189d73166b3ef637585ed1e6b8a854290962
+  languageName: node
+  linkType: hard
+
+"uplot@npm:^1.6.30":
+  version: 1.6.30
+  resolution: "uplot@npm:1.6.30"
+  checksum: 10/08ad2f9441b8cfa26d9219362cdbb6f2dc6e5ec9403382df71798ed3e9d3666e7712c8a245e652ebb4a25c5d911cbdc614b52dfd891c0f7ce8705320d2eff81f
   languageName: node
   linkType: hard
 

@@ -25,7 +25,12 @@
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import { Loader4 } from "@styled-icons/remix-line"
-import { Tree, collapseTransition, spinAnimation } from "../../../components"
+import {
+  Tree,
+  collapseTransition,
+  spinAnimation,
+  Text,
+} from "../../../components"
 import type { TreeNode, TreeNodeRenderParams } from "../../../components"
 import { ContextMenuTrigger } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
@@ -35,6 +40,10 @@ import ContextualMenu from "./ContextualMenu"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { QuestContext } from "../../../providers"
+import { Box } from "@questdb/react-components"
+import { SuspensionDialog } from "../SuspensionDialog"
+import { WarningButton } from "../warning-button"
+import { MetricsDialog } from "../MetricsDialog"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -93,6 +102,17 @@ const Loader = styled(Loader4)`
   ${spinAnimation};
 `
 
+const Issue = styled(Box).attrs({
+  align: "center",
+  justifyContent: "space-between",
+})`
+  width: 100%;
+`
+
+const IssueText = styled(Text)`
+  color: ${({ theme }) => theme.color.orange};
+`
+
 const columnRender =
   ({
     column,
@@ -147,9 +167,54 @@ const Table = ({
       kind: "table",
       initiallyOpen: expanded,
       children: [
+        ...(walTableData?.suspended
+          ? ([
+              {
+                name: "Issues (1)",
+                initiallyOpen: true,
+                wrapper: Columns,
+                async onOpen({ setChildren }) {
+                  onChange(table_name)
+                  setChildren([
+                    {
+                      name: "Suspended",
+                      render: ({ toggleOpen }: TreeNodeRenderParams) => (
+                        <Box
+                          flexDirection="column"
+                          justifyContent="space-between"
+                          gap="0.5rem"
+                        >
+                          <Issue>
+                            <IssueText>Table is suspended</IssueText>
+                            <SuspensionDialog walTableData={walTableData} />
+                          </Issue>
+                          <Issue>
+                            <IssueText>Increased latency</IssueText>
+                            <MetricsDialog walTableData={walTableData} />
+                          </Issue>
+                        </Box>
+                      ),
+                    },
+                  ])
+                },
+
+                render({ toggleOpen, isOpen, isLoading }) {
+                  return (
+                    <Row
+                      expanded={isOpen && !isLoading}
+                      kind="folder"
+                      name="Issues (2)"
+                      onClick={() => toggleOpen()}
+                      suffix={isLoading && <Loader size="18px" />}
+                    />
+                  )
+                },
+              },
+            ] as TreeNode[])
+          : []),
         {
           name: "Columns",
-          initiallyOpen: true,
+          initiallyOpen: !walTableData?.suspended,
           wrapper: Columns,
           async onOpen({ setChildren }) {
             onChange(table_name)

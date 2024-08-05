@@ -82,7 +82,9 @@
     "slim-select": "1.26.0",
     "sql-formatter": "^4.0.2",
     "styled-components": "5.3.5",
-    "throttle-debounce": "2.2.1"
+    "throttle-debounce": "2.2.1",
+    "uplot": "^1.6.30",
+    "uplot-react": "^1.2.2"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",
