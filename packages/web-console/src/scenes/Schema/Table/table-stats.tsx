@@ -5,6 +5,9 @@ import * as QuestDB from "../../../utils/questdb"
 import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { QuestContext } from "../../../providers"
 import { Box } from "@questdb/react-components"
+import { IconWithTooltip } from "../../../components/IconWithTooltip"
+import { Text } from "../../../components/Text"
+import { Information } from "@styled-icons/remix-line"
 
 const StyledTable = styled.table`
   width: 100%;
@@ -26,6 +29,25 @@ const Value = styled.td`
   text-align: center;
   padding: 0.5rem 0;
 `
+
+const ValueText = ({
+  text,
+  tooltipText,
+}: {
+  text: React.ReactNode
+  tooltipText: string
+}) => (
+  <IconWithTooltip
+    icon={
+      <Box gap="0.5rem" align="center" justifyContent="center">
+        <Information size="14px" />
+        <Text color="foreground">{text}</Text>
+      </Box>
+    }
+    tooltip={tooltipText}
+    placement="bottom"
+  />
+)
 
 export const TableStats = ({ id }: { id: string }) => {
   const { quest } = useContext(QuestContext)
@@ -75,11 +97,15 @@ export const TableStats = ({ id }: { id: string }) => {
             <tr>
               <Name>Latency</Name>
               <Value>
-                {latency.length > 0 &&
-                  parseFloat(latency[latency.length - 1].avg_latency).toFixed(
-                    3,
-                  )}
-                μs
+                <ValueText
+                  text={
+                    latency.length > 0 &&
+                    parseFloat(latency[latency.length - 1].avg_latency).toFixed(
+                      3,
+                    ) + "μs"
+                  }
+                  tooltipText={latency[latency.length - 1].time}
+                />
               </Value>
             </tr>
           )}
@@ -87,8 +113,10 @@ export const TableStats = ({ id }: { id: string }) => {
             <tr>
               <Name>Rows written/min</Name>
               <Value>
-                {rowsApplied.length > 0 &&
-                  rowsApplied[rowsApplied.length - 1].numOfRowsWritten}
+                <ValueText
+                  text={rowsApplied[rowsApplied.length - 1].numOfRowsWritten}
+                  tooltipText={rowsApplied[rowsApplied.length - 1].time}
+                />
               </Value>
             </tr>
           )}
@@ -96,9 +124,13 @@ export const TableStats = ({ id }: { id: string }) => {
             <tr>
               <Name>Write amplification</Name>
               <Value>
-                {rowsApplied.length > 0 &&
-                  rowsApplied[rowsApplied.length - 1].avgWalAmplification}
-                x
+                <ValueText
+                  text={
+                    rowsApplied[rowsApplied.length - 1].avgWalAmplification +
+                    "x"
+                  }
+                  tooltipText={rowsApplied[rowsApplied.length - 1].time}
+                />
               </Value>
             </tr>
           )}
