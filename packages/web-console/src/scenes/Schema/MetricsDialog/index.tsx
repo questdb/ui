@@ -160,7 +160,7 @@ export const MetricsDialog = ({
             </Box>
           </Dialog.Title>
 
-          <StyledDescription>graph and details here</StyledDescription>
+          <StyledDescription></StyledDescription>
 
           <Dialog.ActionButtons>
             <Dialog.Close asChild>

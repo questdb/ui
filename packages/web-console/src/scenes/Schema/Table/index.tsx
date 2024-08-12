@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Loader4 } from "@styled-icons/remix-line"
 import {
@@ -44,6 +44,8 @@ import { Box } from "@questdb/react-components"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { WarningButton } from "../warning-button"
 import { MetricsDialog } from "../MetricsDialog"
+import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
+import { Latency, RowsApplied } from "./types"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -136,6 +138,7 @@ const Table = ({
   description,
   isScrolling,
   designatedTimestamp,
+  id,
   table_name,
   partitionBy,
   expanded = false,
@@ -147,6 +150,12 @@ const Table = ({
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
   const tables = useSelector(selectors.query.getTables)
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
+  const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
+  const [latency, setLatency] = useState<Latency[]>([])
+
+  const rowsAppliedInterval = useRef<ReturnType<typeof setInterval>>()
+  const latencyInterval = useRef<ReturnType<typeof setInterval>>()
 
   const showColumns = async (name: string) => {
     const response = await quest.showColumns(table_name)
@@ -155,11 +164,39 @@ const Table = ({
     }
   }
 
+  const fetchRowsApplied = async () => {
+    const response = await quest.query<RowsApplied>(rowsAppliedSQL(id))
+    if (response && response.type === QuestDB.Type.DQL) {
+      console.log("rowsApplied", response.data)
+      setRowsApplied(response.data)
+    }
+  }
+
+  const fetchLatency = async () => {
+    const response = await quest.query<Latency>(latencySQL(id))
+    if (response && response.type === QuestDB.Type.DQL) {
+      console.log("latency", response.data)
+      setLatency(response.data)
+    }
+  }
+
   useEffect(() => {
     if (tables && expanded && table_name) {
       void showColumns(table_name)
     }
   }, [tables, table_name])
+
+  useEffect(() => {
+    if (expanded && telemetryConfig?.enabled) {
+      fetchRowsApplied()
+      fetchLatency()
+      rowsAppliedInterval.current = setInterval(fetchRowsApplied, 10000)
+      latencyInterval.current = setInterval(fetchLatency, 10000)
+    } else {
+      clearInterval(rowsAppliedInterval.current)
+      clearInterval(latencyInterval.current)
+    }
+  }, [expanded])
 
   const tree: TreeNode[] = [
     {
@@ -280,7 +317,6 @@ const Table = ({
           dedup={dedup}
         />
       )}
-
       <Tree root={tree} />
     </Wrapper>
   )

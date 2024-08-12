@@ -54,6 +54,8 @@ $spacing-s: 4px !default;
 @import "splitter";
 @import "quick-vis";
 
+// @import "uplot/dist/uPlot.min.css";
+
 .btn:disabled {
   cursor: default;
 }
