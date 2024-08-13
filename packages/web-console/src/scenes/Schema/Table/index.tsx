@@ -44,6 +44,7 @@ import { Box } from "@questdb/react-components"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { WarningButton } from "../warning-button"
 import { MetricsDialog } from "../MetricsDialog"
+import { Latency, RowsApplied } from "./types"
 import { TableStats } from "./table-stats"
 
 type Props = QuestDB.Table &

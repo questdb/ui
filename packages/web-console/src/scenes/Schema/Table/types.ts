@@ -11,3 +11,9 @@ export type Latency = {
   numOfWalApplies: string
   avg_latency: string
 }
+
+export enum GraphType {
+  RowsApplied = "Rows Applied",
+  Latency = "Latency",
+  WriteAmplification = "Write Amplification",
+}

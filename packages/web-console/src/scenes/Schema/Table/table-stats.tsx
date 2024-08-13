@@ -1,13 +1,16 @@
 import React, { useRef, useState, useContext, useEffect } from "react"
 import styled from "styled-components"
-import { Latency, RowsApplied } from "./types"
+import { GraphType, Latency, RowsApplied } from "./types"
 import * as QuestDB from "../../../utils/questdb"
 import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { QuestContext } from "../../../providers"
-import { Box } from "@questdb/react-components"
+import { Box, Select } from "@questdb/react-components"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { Text } from "../../../components/Text"
 import { Information } from "@styled-icons/remix-line"
+import { useGraphOptions } from "./useGraphOptions"
+import { MetricDuration } from "../../../modules/Graph/types"
+import UplotReact from "uplot-react"
 
 const StyledTable = styled.table`
   width: 100%;
@@ -28,6 +31,28 @@ const Value = styled.td`
   background: #21212a;
   text-align: center;
   padding: 0.5rem 0;
+`
+
+const GraphRoot = styled.div`
+  width: 100%;
+`
+
+const Label = styled.div`
+  position: absolute;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  font-family: ${({ theme }) => theme.font};
+`
+
+const LabelValue = styled.span`
+  color: ${({ theme }) => theme.color.cyan};
+`
+
+const GraphLabel = styled.span`
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-align: center;
 `
 
 const ValueText = ({
@@ -54,8 +79,66 @@ export const TableStats = ({ id }: { id: string }) => {
   const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
   const [latency, setLatency] = useState<Latency[]>([])
 
+  const chartTypeConfigs: Record<
+    GraphType,
+    {
+      key: GraphType
+      label: string
+      isVisible: () => boolean
+      data: uPlot.AlignedData
+      yValue: (rawValue: number) => string
+    }
+  > = {
+    [GraphType.Latency]: {
+      key: GraphType.Latency,
+      isVisible: () => latency.length > 0,
+      label: "Latency in μs",
+      data: [
+        latency.map((l) => new Date(l.time).getTime()),
+        latency.map((l) => parseFloat(l.avg_latency)),
+      ],
+      yValue: (rawValue: number) => (+rawValue).toFixed(0) + "μs",
+    },
+    [GraphType.RowsApplied]: {
+      key: GraphType.RowsApplied,
+      isVisible: () => rowsApplied.length > 0,
+      label: "Rows written/min",
+      data: [
+        rowsApplied.map((l) => new Date(l.time).getTime()),
+        rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
+      ],
+      yValue: (rawValue: number) => (+rawValue).toFixed(0),
+    },
+    [GraphType.WriteAmplification]: {
+      key: GraphType.WriteAmplification,
+      isVisible: () => rowsApplied.length > 0,
+      label: "Write amplification",
+      data: [
+        rowsApplied.map((l) => new Date(l.time).getTime()),
+        rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
+      ],
+      yValue: (rawValue: number) => (+rawValue).toFixed(0) + "x",
+    },
+  }
+
   const rowsAppliedInterval = useRef<ReturnType<typeof setInterval>>()
   const latencyInterval = useRef<ReturnType<typeof setInterval>>()
+  const timeRef = useRef(null)
+  const valueRef = useRef(null)
+  const [chartType, setChartType] = useState<GraphType>(GraphType.Latency)
+
+  const graphOptions = useGraphOptions({
+    duration: MetricDuration.TWENTY_FOUR_HOURS,
+    timeRef,
+    valueRef,
+    yValue: chartTypeConfigs[chartType].yValue,
+    startTime: latency.length > 0 ? new Date(latency[0].time).getTime() : null,
+    endTime:
+      latency.length > 0
+        ? new Date(latency[latency.length - 1].time).getTime()
+        : null,
+  })
+  const graphRootRef = useRef<HTMLDivElement>(null)
 
   const fetchRowsApplied = async () => {
     const response = await quest.query<RowsApplied>(rowsAppliedSQL(id))
@@ -136,6 +219,34 @@ export const TableStats = ({ id }: { id: string }) => {
           )}
         </tbody>
       </StyledTable>
+      <GraphLabel>
+        <Select
+          name="graphType"
+          options={Object.values(chartTypeConfigs)
+            .filter((config) => config.isVisible())
+            .map((type) => {
+              return {
+                label: type.label,
+                value: type.key,
+              }
+            })}
+          onChange={(e) => setChartType(e.target.value as GraphType)}
+        />
+      </GraphLabel>
+      {chartTypeConfigs[chartType].isVisible() && (
+        <UplotReact
+          options={{
+            ...graphOptions,
+            width: graphRootRef.current?.offsetWidth ?? 0,
+          }}
+          data={chartTypeConfigs[chartType].data}
+        />
+      )}
+      <GraphRoot ref={graphRootRef} />
+      <Label>
+        <span ref={timeRef} />
+        <LabelValue ref={valueRef} />
+      </Label>
     </Box>
   )
 }
