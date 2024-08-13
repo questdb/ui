@@ -171,7 +171,7 @@ const Table = ({
       kind: "table",
       initiallyOpen: expanded,
       children: [
-        ...(telemetryConfig?.enabled
+        ...(telemetryConfig?.enabled && walEnabled
           ? ([
               {
                 name: "Table stats",
