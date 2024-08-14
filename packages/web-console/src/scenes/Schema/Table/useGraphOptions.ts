@@ -25,8 +25,8 @@ const valuePlugin = (
         return
       }
       const { idx } = u.cursor
-      const x = idx ? u.data[0][idx] : null
-      const y = idx ? u.data[1][idx] : null
+      const x = idx !== null && idx !== undefined ? u.data[0][idx] : null
+      const y = idx !== null && idx !== undefined ? u.data[1][idx] : null
       if ([y, x].every(Boolean)) {
         const date = new Date(x as number)
         timeRef.current!.textContent = `${date.toLocaleDateString(
