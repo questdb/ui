@@ -12,6 +12,11 @@ import { useGraphOptions } from "./useGraphOptions"
 import { MetricDuration } from "../../../modules/Graph/types"
 import UplotReact from "uplot-react"
 
+const InfoText = styled(Text)`
+  font-family: ${({ theme }) => theme.font};
+  padding: 0.5rem 0;
+`
+
 const StyledTable = styled.table`
   width: 100%;
   border-spacing: 0.5rem;
@@ -27,10 +32,17 @@ const Name = styled.td`
   padding: 0.5rem 1rem;
 `
 
-const Value = styled.td`
-  background: #21212a;
+const Value = styled.td<{ alert?: boolean }>`
+  background: ${({ alert }) => (alert ? "#352615" : "#21212a")};
   text-align: center;
   padding: 0.5rem;
+
+  ${({ alert, theme }) =>
+    alert &&
+    `
+  border: 1px #654a2c solid;
+  color: ${theme.color.orange};
+  `};
 `
 
 const GraphRoot = styled.div`
@@ -78,6 +90,7 @@ export const TableStats = ({ id }: { id: string }) => {
   const { quest } = useContext(QuestContext)
   const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
   const [latency, setLatency] = useState<Latency[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const chartTypeConfigs: Record<
     GraphType,
@@ -154,9 +167,14 @@ export const TableStats = ({ id }: { id: string }) => {
     }
   }
 
+  const fetchAll = async () => {
+    await fetchRowsApplied()
+    await fetchLatency()
+    setIsLoading(false)
+  }
+
   useEffect(() => {
-    fetchRowsApplied()
-    fetchLatency()
+    fetchAll()
 
     rowsAppliedInterval.current = setInterval(() => {
       fetchRowsApplied()
@@ -172,6 +190,14 @@ export const TableStats = ({ id }: { id: string }) => {
     }
   }, [])
 
+  if (!isLoading && rowsApplied.length === 0 && latency.length === 0) {
+    return (
+      <Box align="center" justifyContent="center">
+        <InfoText color="gray2">No data available</InfoText>
+      </Box>
+    )
+  }
+
   return (
     <Box flexDirection="column" gap="1rem">
       <StyledTable>
@@ -184,7 +210,7 @@ export const TableStats = ({ id }: { id: string }) => {
                   text={
                     latency.length > 0 &&
                     parseFloat(latency[latency.length - 1].avg_latency).toFixed(
-                      3,
+                      0,
                     ) + "μs"
                   }
                   tooltipText={latency[latency.length - 1].time}
