@@ -30,7 +30,7 @@ const Name = styled.td`
 const Value = styled.td`
   background: #21212a;
   text-align: center;
-  padding: 0.5rem 0;
+  padding: 0.5rem;
 `
 
 const GraphRoot = styled.div`
