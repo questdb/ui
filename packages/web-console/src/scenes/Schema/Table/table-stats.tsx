@@ -141,13 +141,14 @@ export const TableStats = ({ id }: { id: string }) => {
   const [chartType, setChartType] = useState<GraphType>(GraphType.Latency)
 
   const graphOptions = useGraphOptions({
+    data: chartTypeConfigs[chartType].data,
     duration: MetricDuration.TWENTY_FOUR_HOURS,
     timeRef,
     valueRef,
     yValue: chartTypeConfigs[chartType].yValue,
-    startTime: latency.length > 0 ? new Date(latency[0].time).getTime() : null,
+    startTime: latency.length > 1 ? new Date(latency[0].time).getTime() : null,
     endTime:
-      latency.length > 0
+      latency.length > 1
         ? new Date(latency[latency.length - 1].time).getTime()
         : null,
   })

@@ -5,6 +5,7 @@ import uPlot from "uplot"
 import { MetricDuration, durationInMinutes } from "../../../modules/Graph/types"
 
 type Params = {
+  data: uPlot.AlignedData
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
   yValue?: (rawValue: number) => string
@@ -42,6 +43,7 @@ const valuePlugin = (
 })
 
 export const useGraphOptions = ({
+  data,
   duration,
   tickValue = (rawValue) => (+rawValue).toString(),
   yValue = (rawValue) => (+rawValue).toFixed(4),
@@ -99,7 +101,7 @@ export const useGraphOptions = ({
     y: {
       label: "",
       points: {
-        show: false,
+        show: data[0].length === 1,
       },
       stroke: theme.color.cyan,
       width: 2,
@@ -113,7 +115,9 @@ export const useGraphOptions = ({
       range: [start, end],
     },
     y: {
-      range: (_u, min, max) => [min, max],
+      range: (u, min, max) => {
+        return [u.data[0].length > 1 ? min : 0, max]
+      },
     },
   }
 
