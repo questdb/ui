@@ -105,7 +105,7 @@ export const TableStats = ({ id }: { id: string }) => {
     [GraphType.Latency]: {
       key: GraphType.Latency,
       isVisible: () => latency.length > 0,
-      label: "Latency in μs",
+      label: "Txn latency in μs",
       data: [
         latency.map((l) => new Date(l.time).getTime()),
         latency.map((l) => parseFloat(l.avg_latency)),
@@ -204,7 +204,7 @@ export const TableStats = ({ id }: { id: string }) => {
         <tbody>
           {latency.length > 0 && (
             <tr>
-              <Name>Latency</Name>
+              <Name>Txn latency</Name>
               <Value>
                 <ValueText
                   text={
@@ -247,15 +247,14 @@ export const TableStats = ({ id }: { id: string }) => {
       </StyledTable>
       <GraphLabel>
         <Select
-          name="graphType"
-          options={Object.values(chartTypeConfigs)
-            .filter((config) => config.isVisible())
-            .map((type) => {
-              return {
-                label: type.label,
-                value: type.key,
-              }
-            })}
+          name="chartType"
+          defaultValue={chartType}
+          options={Object.values(chartTypeConfigs).map((type) => {
+            return {
+              label: type.label,
+              value: type.key,
+            }
+          })}
           onChange={(e) => setChartType(e.target.value as GraphType)}
         />
       </GraphLabel>
