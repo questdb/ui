@@ -171,38 +171,6 @@ const Table = ({
       kind: "table",
       initiallyOpen: expanded,
       children: [
-        ...(telemetryConfig?.enabled && walEnabled
-          ? ([
-              {
-                name: "Table stats",
-                initiallyOpen: false,
-                wrapper: Columns,
-                async onOpen({ setChildren }) {
-                  onChange(table_name)
-                  setChildren([
-                    {
-                      name: "Table stats",
-                      render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                        <TableStats id={id} />
-                      ),
-                    },
-                  ])
-                },
-
-                render({ toggleOpen, isOpen, isLoading }) {
-                  return (
-                    <Row
-                      expanded={isOpen && !isLoading}
-                      kind="folder"
-                      name="Table stats"
-                      onClick={() => toggleOpen()}
-                      suffix={isLoading && <Loader size="18px" />}
-                    />
-                  )
-                },
-              },
-            ] as TreeNode[])
-          : []),
         ...(walTableData?.suspended
           ? ([
               {
@@ -235,7 +203,39 @@ const Table = ({
                     <Row
                       expanded={isOpen && !isLoading}
                       kind="folder"
-                      name="Issues (2)"
+                      name="Issues (1)"
+                      onClick={() => toggleOpen()}
+                      suffix={isLoading && <Loader size="18px" />}
+                    />
+                  )
+                },
+              },
+            ] as TreeNode[])
+          : []),
+        ...(telemetryConfig?.enabled && walEnabled
+          ? ([
+              {
+                name: "Statistics",
+                initiallyOpen: false,
+                wrapper: Columns,
+                async onOpen({ setChildren }) {
+                  onChange(table_name)
+                  setChildren([
+                    {
+                      name: "Statistics",
+                      render: ({ toggleOpen }: TreeNodeRenderParams) => (
+                        <TableStats id={id} />
+                      ),
+                    },
+                  ])
+                },
+
+                render({ toggleOpen, isOpen, isLoading }) {
+                  return (
+                    <Row
+                      expanded={isOpen && !isLoading}
+                      kind="folder"
+                      name="Statistics"
                       onClick={() => toggleOpen()}
                       suffix={isLoading && <Loader size="18px" />}
                     />
