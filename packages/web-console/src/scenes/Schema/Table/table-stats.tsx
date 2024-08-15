@@ -61,10 +61,18 @@ const LabelValue = styled.span`
   color: ${({ theme }) => theme.color.cyan};
 `
 
-const GraphLabel = styled.span`
+const GraphLabel = styled(Box).attrs({
+  gap: "1rem",
+  justifyContent: "flex-end",
+})`
   font-size: 1.2rem;
   font-weight: 600;
   text-align: center;
+  white-space: nowrap;
+
+  select {
+    width: min-content;
+  }
 `
 
 const ValueText = ({
@@ -91,6 +99,9 @@ export const TableStats = ({ id }: { id: string }) => {
   const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
   const [latency, setLatency] = useState<Latency[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [metricDuration, setMetricDuration] = useState<MetricDuration>(
+    MetricDuration.TWENTY_FOUR_HOURS,
+  )
 
   const chartTypeConfigs: Record<
     GraphType,
@@ -142,27 +153,24 @@ export const TableStats = ({ id }: { id: string }) => {
 
   const graphOptions = useGraphOptions({
     data: chartTypeConfigs[chartType].data,
-    duration: MetricDuration.TWENTY_FOUR_HOURS,
+    duration: metricDuration,
     timeRef,
     valueRef,
     yValue: chartTypeConfigs[chartType].yValue,
-    startTime: latency.length > 1 ? new Date(latency[0].time).getTime() : null,
-    endTime:
-      latency.length > 1
-        ? new Date(latency[latency.length - 1].time).getTime()
-        : null,
   })
   const graphRootRef = useRef<HTMLDivElement>(null)
 
   const fetchRowsApplied = async () => {
-    const response = await quest.query<RowsApplied>(rowsAppliedSQL(id))
+    const response = await quest.query<RowsApplied>(
+      rowsAppliedSQL(id, metricDuration),
+    )
     if (response && response.type === QuestDB.Type.DQL) {
       setRowsApplied(response.data)
     }
   }
 
   const fetchLatency = async () => {
-    const response = await quest.query<Latency>(latencySQL(id))
+    const response = await quest.query<Latency>(latencySQL(id, metricDuration))
     if (response && response.type === QuestDB.Type.DQL) {
       setLatency(response.data)
     }
@@ -190,6 +198,12 @@ export const TableStats = ({ id }: { id: string }) => {
       clearInterval(latencyInterval.current)
     }
   }, [])
+
+  useEffect(() => {
+    clearInterval(rowsAppliedInterval.current)
+    clearInterval(latencyInterval.current)
+    fetchAll()
+  }, [metricDuration])
 
   if (!isLoading && rowsApplied.length === 0 && latency.length === 0) {
     return (
@@ -257,6 +271,25 @@ export const TableStats = ({ id }: { id: string }) => {
             }
           })}
           onChange={(e) => setChartType(e.target.value as GraphType)}
+        />
+        <Select
+          name="duration"
+          defaultValue={metricDuration}
+          options={[
+            {
+              label: "24h",
+              value: MetricDuration.TWENTY_FOUR_HOURS,
+            },
+            {
+              label: "3 days",
+              value: MetricDuration.THREE_DAYS,
+            },
+            {
+              label: "7 days",
+              value: MetricDuration.SEVEN_DAYS,
+            },
+          ]}
+          onChange={(e) => setMetricDuration(e.target.value as MetricDuration)}
         />
       </GraphLabel>
       {chartTypeConfigs[chartType].isVisible() && (

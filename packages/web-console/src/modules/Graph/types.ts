@@ -6,6 +6,8 @@ export enum MetricDuration {
   SIX_HOURS = "6h",
   TWELVE_HOURS = "12h",
   TWENTY_FOUR_HOURS = "24h",
+  THREE_DAYS = "3d",
+  SEVEN_DAYS = "7d",
 }
 
 export const durationInMinutes: Record<MetricDuration, number> = {
@@ -16,4 +18,6 @@ export const durationInMinutes: Record<MetricDuration, number> = {
   [MetricDuration.SIX_HOURS]: 60 * 6,
   [MetricDuration.TWELVE_HOURS]: 60 * 12,
   [MetricDuration.TWENTY_FOUR_HOURS]: 60 * 24,
+  [MetricDuration.THREE_DAYS]: 60 * 72,
+  [MetricDuration.SEVEN_DAYS]: 60 * 168,
 }

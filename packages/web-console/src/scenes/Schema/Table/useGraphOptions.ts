@@ -11,8 +11,6 @@ type Params = {
   yValue?: (rawValue: number) => string
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
-  startTime: number | null
-  endTime: number | null
 }
 
 const valuePlugin = (
@@ -49,16 +47,13 @@ export const useGraphOptions = ({
   yValue = (rawValue) => (+rawValue).toFixed(4),
   timeRef,
   valueRef,
-  startTime,
-  endTime,
 }: Params): Omit<uPlot.Options, "width"> => {
   const theme = useContext(ThemeContext)
   const now = new Date()
 
-  const start =
-    startTime ?? subMinutes(now, durationInMinutes[duration]).getTime()
+  const start = subMinutes(now, durationInMinutes[duration]).getTime()
 
-  const end = endTime ?? now.getTime()
+  const end = now.getTime()
 
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.graphLegend,
