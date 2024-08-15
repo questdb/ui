@@ -110,8 +110,6 @@ export const TableStats = ({
     MetricDuration.TWENTY_FOUR_HOURS,
   )
 
-  console.log(table_name)
-
   const chartTypeConfigs: Record<
     GraphType,
     {
