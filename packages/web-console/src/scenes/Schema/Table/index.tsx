@@ -224,7 +224,7 @@ const Table = ({
                     {
                       name: "Statistics",
                       render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                        <TableStats id={id} />
+                        <TableStats id={id} table_name={table_name} />
                       ),
                     },
                   ])

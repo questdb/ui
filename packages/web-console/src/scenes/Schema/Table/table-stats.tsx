@@ -4,13 +4,14 @@ import { GraphType, Latency, RowsApplied } from "./types"
 import * as QuestDB from "../../../utils/questdb"
 import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { QuestContext } from "../../../providers"
-import { Box, Select } from "@questdb/react-components"
+import { Box, Button, Select } from "@questdb/react-components"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { Text } from "../../../components/Text"
-import { Information } from "@styled-icons/remix-line"
+import { FileDownload, Information } from "@styled-icons/remix-line"
 import { useGraphOptions } from "./useGraphOptions"
 import { MetricDuration } from "../../../modules/Graph/types"
 import UplotReact from "uplot-react"
+import { PopperHover, Tooltip } from "../../../components"
 
 const InfoText = styled(Text)`
   font-family: ${({ theme }) => theme.font};
@@ -94,7 +95,13 @@ const ValueText = ({
   />
 )
 
-export const TableStats = ({ id }: { id: string }) => {
+export const TableStats = ({
+  table_name,
+  id,
+}: {
+  table_name: string
+  id: string
+}) => {
   const { quest } = useContext(QuestContext)
   const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
   const [latency, setLatency] = useState<Latency[]>([])
@@ -102,6 +109,8 @@ export const TableStats = ({ id }: { id: string }) => {
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     MetricDuration.TWENTY_FOUR_HOURS,
   )
+
+  console.log(table_name)
 
   const chartTypeConfigs: Record<
     GraphType,
@@ -180,6 +189,21 @@ export const TableStats = ({ id }: { id: string }) => {
     await fetchRowsApplied()
     await fetchLatency()
     setIsLoading(false)
+  }
+
+  const downloadChartData = () => {
+    const dataStr = JSON.stringify(
+      chartType === GraphType.Latency ? latency : rowsApplied,
+    )
+    const dataUri =
+      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr)
+
+    const exportFileDefaultName = `${table_name}-${chartType}.json`
+
+    const linkElement = document.createElement("a")
+    linkElement.setAttribute("href", dataUri)
+    linkElement.setAttribute("download", exportFileDefaultName)
+    linkElement.click()
   }
 
   useEffect(() => {
@@ -291,6 +315,16 @@ export const TableStats = ({ id }: { id: string }) => {
           ]}
           onChange={(e) => setMetricDuration(e.target.value as MetricDuration)}
         />
+        <PopperHover
+          trigger={
+            <Button onClick={downloadChartData} skin="secondary">
+              <FileDownload size="18px" />
+            </Button>
+          }
+          placement="bottom"
+        >
+          <Tooltip>Download metrics data</Tooltip>
+        </PopperHover>
       </GraphLabel>
       {chartTypeConfigs[chartType].isVisible() && (
         <UplotReact
