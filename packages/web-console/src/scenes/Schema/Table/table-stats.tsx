@@ -113,7 +113,7 @@ export const TableStats = ({
   const [latency, setLatency] = useState<Latency[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
-    MetricDuration.TWENTY_FOUR_HOURS,
+    MetricDuration.SEVEN_DAYS,
   )
 
   const chartTypeConfigs: Record<
