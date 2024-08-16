@@ -190,18 +190,11 @@ export const TableStats = ({
   }
 
   const downloadChartData = () => {
-    const dataStr = JSON.stringify(
-      chartType === GraphType.Latency ? latency : rowsApplied,
+    quest.exportQueryToCsv(
+      chartType === GraphType.Latency
+        ? latencySQL(id, metricDuration)
+        : rowsAppliedSQL(id, metricDuration),
     )
-    const dataUri =
-      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr)
-
-    const exportFileDefaultName = `${table_name}-${chartType}.json`
-
-    const linkElement = document.createElement("a")
-    linkElement.setAttribute("href", dataUri)
-    linkElement.setAttribute("download", exportFileDefaultName)
-    linkElement.click()
   }
 
   useEffect(() => {
