@@ -12,6 +12,7 @@ import { useGraphOptions } from "./useGraphOptions"
 import { MetricDuration } from "../../../modules/Graph/types"
 import UplotReact from "uplot-react"
 import { PopperHover, Tooltip } from "../../../components"
+import { Loader } from "./loader"
 
 const InfoText = styled(Text)`
   font-family: ${({ theme }) => theme.font};
@@ -44,6 +45,11 @@ const Value = styled.td<{ alert?: boolean }>`
   border: 1px #654a2c solid;
   color: ${theme.color.orange};
   `};
+`
+
+const GraphWrapper = styled.div`
+  width: 100%;
+  position: relative;
 `
 
 const GraphRoot = styled.div`
@@ -122,7 +128,7 @@ export const TableStats = ({
   > = {
     [GraphType.Latency]: {
       key: GraphType.Latency,
-      isVisible: () => latency.length > 0,
+      isVisible: () => !isLoading && latency.length > 0,
       label: "Txn latency in μs",
       data: [
         latency.map((l) => new Date(l.time).getTime()),
@@ -326,7 +332,9 @@ export const TableStats = ({
           data={chartTypeConfigs[chartType].data}
         />
       )}
-      <GraphRoot ref={graphRootRef} />
+      <GraphWrapper>
+        <GraphRoot ref={graphRootRef} />
+      </GraphWrapper>
       <Label>
         <span ref={timeRef} />
         <LabelValue ref={valueRef} />

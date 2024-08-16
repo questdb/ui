@@ -24,7 +24,6 @@
 
 import React, { useContext, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Loader4 } from "@styled-icons/remix-line"
 import {
   Tree,
   collapseTransition,
@@ -46,6 +45,7 @@ import { WarningButton } from "../warning-button"
 import { MetricsDialog } from "../MetricsDialog"
 import { Latency, RowsApplied } from "./types"
 import { TableStats } from "./table-stats"
+import { Loader } from "./loader"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -96,12 +96,6 @@ const Columns = styled.div`
     content: "";
     background: ${color("gray1")};
   }
-`
-
-const Loader = styled(Loader4)`
-  margin-left: 1rem;
-  color: ${color("orange")};
-  ${spinAnimation};
 `
 
 const Issue = styled(Box).attrs({
