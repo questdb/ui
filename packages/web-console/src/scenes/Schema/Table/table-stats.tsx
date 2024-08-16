@@ -1,18 +1,17 @@
 import React, { useRef, useState, useContext, useEffect } from "react"
 import styled from "styled-components"
-import { GraphType, Latency, RowsApplied } from "./types"
+import { ChartTypeConfig, GraphType, Latency, RowsApplied } from "./types"
 import * as QuestDB from "../../../utils/questdb"
 import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { QuestContext } from "../../../providers"
 import { Box, Button, Select } from "@questdb/react-components"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { Text } from "../../../components/Text"
-import { FileDownload, Information } from "@styled-icons/remix-line"
+import { FileDownload, Information, ZoomIn } from "@styled-icons/remix-line"
 import { useGraphOptions } from "./useGraphOptions"
 import { MetricDuration } from "../../../modules/Graph/types"
 import UplotReact from "uplot-react"
-import { PopperHover, Tooltip } from "../../../components"
-import { Loader } from "./loader"
+import { MetricsDialog } from "../MetricsDialog"
 
 const InfoText = styled(Text)`
   font-family: ${({ theme }) => theme.font};
@@ -45,11 +44,6 @@ const Value = styled.td<{ alert?: boolean }>`
   border: 1px #654a2c solid;
   color: ${theme.color.orange};
   `};
-`
-
-const GraphWrapper = styled.div`
-  width: 100%;
-  position: relative;
 `
 
 const GraphRoot = styled.div`
@@ -116,16 +110,7 @@ export const TableStats = ({
     MetricDuration.SEVEN_DAYS,
   )
 
-  const chartTypeConfigs: Record<
-    GraphType,
-    {
-      key: GraphType
-      label: string
-      isVisible: () => boolean
-      data: uPlot.AlignedData
-      yValue: (rawValue: number) => string
-    }
-  > = {
+  const chartTypeConfigs: Record<GraphType, ChartTypeConfig> = {
     [GraphType.Latency]: {
       key: GraphType.Latency,
       isVisible: () => !isLoading && latency.length > 0,
@@ -169,6 +154,13 @@ export const TableStats = ({
     duration: metricDuration,
     timeRef,
     valueRef,
+    xValue: (rawValue, index, ticks) =>
+      index === 0 || index === ticks.length - 1
+        ? new Date(rawValue).toLocaleTimeString(navigator.language, {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null,
     yValue: chartTypeConfigs[chartType].yValue,
   })
   const graphRootRef = useRef<HTMLDivElement>(null)
@@ -312,29 +304,48 @@ export const TableStats = ({
           ]}
           onChange={(e) => setMetricDuration(e.target.value as MetricDuration)}
         />
-        <PopperHover
-          trigger={
-            <Button onClick={downloadChartData} skin="secondary">
-              <FileDownload size="18px" />
-            </Button>
-          }
-          placement="bottom"
-        >
-          <Tooltip>Download metrics data</Tooltip>
-        </PopperHover>
       </GraphLabel>
       {chartTypeConfigs[chartType].isVisible() && (
-        <UplotReact
-          options={{
-            ...graphOptions,
-            width: graphRootRef.current?.offsetWidth ?? 0,
-          }}
-          data={chartTypeConfigs[chartType].data}
-        />
+        <>
+          <Box gap="0" align="center" justifyContent="center">
+            <IconWithTooltip
+              icon={
+                <MetricsDialog
+                  trigger={
+                    <Button skin="transparent">
+                      <ZoomIn size="18px" />
+                    </Button>
+                  }
+                  id={id}
+                  table_name={table_name}
+                  chartTypeConfig={chartTypeConfigs[chartType]}
+                  metricDuration={metricDuration}
+                />
+              }
+              tooltip="Display full size chart"
+              placement="bottom"
+            />
+            <IconWithTooltip
+              icon={
+                <Button skin="transparent" onClick={downloadChartData}>
+                  <FileDownload size="18px" />
+                </Button>
+              }
+              tooltip="Download metrics data"
+              placement="bottom"
+            />
+          </Box>
+          <UplotReact
+            options={{
+              ...graphOptions,
+              height: 180,
+              width: graphRootRef.current?.offsetWidth ?? 0,
+            }}
+            data={chartTypeConfigs[chartType].data}
+          />
+        </>
       )}
-      <GraphWrapper>
-        <GraphRoot ref={graphRootRef} />
-      </GraphWrapper>
+      <GraphRoot ref={graphRootRef} />
       <Label>
         <span ref={timeRef} />
         <LabelValue ref={valueRef} />

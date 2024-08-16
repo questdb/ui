@@ -17,3 +17,11 @@ export enum GraphType {
   Latency = "Latency",
   WriteAmplification = "Write Amplification",
 }
+
+export type ChartTypeConfig = {
+  key: GraphType
+  label: string
+  isVisible: () => boolean
+  data: uPlot.AlignedData
+  yValue: (rawValue: number) => string
+}

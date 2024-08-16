@@ -8,6 +8,7 @@ type Params = {
   data: uPlot.AlignedData
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
+  xValue?: (rawValue: number, index: number, ticks: number[]) => string | null
   yValue?: (rawValue: number) => string
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
@@ -44,10 +45,11 @@ export const useGraphOptions = ({
   data,
   duration,
   tickValue = (rawValue) => (+rawValue).toString(),
+  xValue,
   yValue = (rawValue) => (+rawValue).toFixed(4),
   timeRef,
   valueRef,
-}: Params): Omit<uPlot.Options, "width"> => {
+}: Params): Omit<uPlot.Options, "width" | "height"> => {
   const theme = useContext(ThemeContext)
   const now = new Date()
 
@@ -76,12 +78,12 @@ export const useGraphOptions = ({
       ...baseAxisConfig,
       values: (_self, ticks) => {
         return ticks.map((rawValue, index) =>
-          index === 0 || index === ticks.length - 1
-            ? new Date(rawValue).toLocaleTimeString(navigator.language, {
+          xValue
+            ? xValue(rawValue, index, ticks)
+            : new Date(rawValue).toLocaleTimeString(navigator.language, {
                 hour: "2-digit",
                 minute: "2-digit",
-              })
-            : null,
+              }),
         )
       },
     },
@@ -117,7 +119,6 @@ export const useGraphOptions = ({
   }
 
   return {
-    height: 180,
     ms: 1,
     padding: [10, 30, 0, 10],
 

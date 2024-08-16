@@ -1,142 +1,84 @@
 import React from "react"
-import {
-  Dialog,
-  ForwardRef,
-  Button,
-  Overlay,
-  Input,
-} from "@questdb/react-components"
-import { Error as ErrorIcon, Undo } from "@styled-icons/boxicons-regular"
+import { Dialog, ForwardRef, Button, Overlay } from "@questdb/react-components"
+import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
-import {
-  FileCopy,
-  ExternalLink,
-  HealthBook,
-  Restart,
-  Table,
-} from "@styled-icons/remix-line"
 import { Chart } from "@styled-icons/boxicons-regular"
 import { Box } from "../../../components/Box"
-import { Form } from "../../../components/Form"
-import { useState, useContext, useEffect } from "react"
+import { useContext, useRef } from "react"
 import { QuestContext } from "../../../providers"
-import { eventBus } from "../../../modules/EventBus"
-import { EventType } from "../../../modules/EventBus/types"
-import { ErrorResult } from "../../../utils"
-import { Text, Link } from "../../../components"
-import { errorWorkarounds } from "../../../utils/errorWorkarounds"
-import Joi from "joi"
-import { WarningButton } from "../warning-button"
-
-const StyledDialogContent = styled(Dialog.Content)`
-  border-color: #654a2c;
-`
+import { ChartTypeConfig } from "../Table/types"
+import { MetricDuration } from "../../../modules/Graph/types"
+import { useGraphOptions } from "../Table/useGraphOptions"
+import UplotReact from "uplot-react"
 
 const StyledDescription = styled(Dialog.Description)`
+  position: relative;
   display: grid;
   gap: 2rem;
 `
 
-const ContentBlockBox = styled(Box).attrs({
-  align: "center",
-  flexDirection: "column",
-})`
+const GraphRoot = styled.div`
   width: 100%;
 `
 
-const FormWrapper = styled.div`
+const Label = styled.div`
+  position: absolute;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  display: grid;
-  grid-template-columns: 100px auto;
-  gap: 1rem;
+  font-family: ${({ theme }) => theme.font};
 `
 
-const TransactionInput = styled(Form.Input)`
-  width: 10rem;
+const LabelValue = styled.span`
+  color: ${({ theme }) => theme.color.cyan};
 `
 
-const Icon = styled(Box)`
-  height: 4.8rem;
-`
-
-const StyledInput = styled(Input)`
-  width: 100%;
-  font-family: ${({ theme }) => theme.fontMonospace};
-  background: #313340;
-  border-color: ${({ theme }) => theme.color.selection};
-`
-
-type FormValues = {
-  resume_transaction_id?: number
-}
-
-const GENERIC_ERROR_TEXT = "Error restarting transaction"
+const GRAPH_WIDTH = 760
 
 export const MetricsDialog = ({
-  walTableData,
+  table_name,
+  id,
+  trigger,
+  chartTypeConfig,
+  metricDuration,
 }: {
-  walTableData: QuestDB.WalTable
+  table_name: string
+  id: string
+  trigger: React.ReactNode
+  chartTypeConfig: ChartTypeConfig
+  metricDuration: MetricDuration
 }) => {
-  const [active, setActive] = useState(false)
   const { quest } = useContext(QuestContext)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSubmitted, setIsSubmitted] = useState(false)
-  const [error, setError] = useState<string | undefined>()
+  const timeRef = useRef(null)
+  const valueRef = useRef(null)
+  const graphRootRef = useRef<HTMLDivElement>(null)
 
-  const handleSubmit = async (values: FormValues) => {
-    setIsSubmitting(true)
-    setError(undefined)
-    try {
-      const response = await quest.query(
-        `ALTER TABLE ${walTableData.name} RESUME WAL${
-          values.resume_transaction_id
-            ? ` FROM TRANSACTION ${values.resume_transaction_id}`
-            : ""
-        }`,
-      )
-      if (response && response.type === QuestDB.Type.DDL) {
-        setIsSubmitted(true)
-      } else {
-        setError(GENERIC_ERROR_TEXT)
-      }
-      setIsSubmitting(false)
-    } catch (e) {
-      const error = e as ErrorResult
-      setIsSubmitting(false)
-      setError(`${GENERIC_ERROR_TEXT}${error.error ? `: ${error.error}` : ""}`)
-    }
-  }
-
-  useEffect(() => {
-    if (active) {
-      setError(undefined)
-      setIsSubmitted(false)
-    }
-  }, [active])
+  const graphOptions = useGraphOptions({
+    data: chartTypeConfig.data,
+    duration: metricDuration,
+    timeRef,
+    valueRef,
+    xValue: (rawValue, index, ticks) =>
+      index === 0 || index === ticks.length - 1
+        ? new Date(rawValue).toLocaleTimeString(navigator.language, {
+            ...(metricDuration !== MetricDuration.TWENTY_FOUR_HOURS
+              ? { day: "2-digit", month: "2-digit", year: "2-digit" }
+              : {}),
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null,
+    yValue: chartTypeConfig.yValue,
+  })
 
   return (
-    <Dialog.Root
-      open={active}
-      onOpenChange={(open) => {
-        if (!open) {
-          eventBus.publish(EventType.MSG_QUERY_SCHEMA)
-        }
-      }}
-    >
+    <Dialog.Root>
       <Dialog.Trigger asChild>
-        <ForwardRef>
-          <WarningButton
-            prefixIcon={<Chart size="16px" />}
-            data-hook="metrics-dialog-trigger"
-            onClick={(e: any) => {
-              setActive(true)
-              e.stopPropagation()
-            }}
-          >
-            Metrics
-          </WarningButton>
-        </ForwardRef>
+        <ForwardRef>{trigger}</ForwardRef>
       </Dialog.Trigger>
 
       <Dialog.Portal>
@@ -144,23 +86,36 @@ export const MetricsDialog = ({
           <Overlay primitive={Dialog.Overlay} />
         </ForwardRef>
 
-        <StyledDialogContent
+        <Dialog.Content
           data-hook="metrics-dialog"
-          data-table-name={walTableData.name}
+          data-table-name={table_name}
           onClick={(e: React.MouseEvent<HTMLDivElement>) => {
             e.stopPropagation()
           }}
-          onEscapeKeyDown={() => setActive(false)}
-          onPointerDownOutside={() => setActive(false)}
+          maxwidth={`${(GRAPH_WIDTH + 2 * 20) / 10}rem`}
         >
           <Dialog.Title>
             <Box>
-              <Table size={20} color="#ffb86c" />
-              WAL metrics for {walTableData.name}
+              <Chart size={20} />
+              {chartTypeConfig.label} for {table_name}
             </Box>
           </Dialog.Title>
 
-          <StyledDescription></StyledDescription>
+          <StyledDescription>
+            <UplotReact
+              options={{
+                ...graphOptions,
+                width: GRAPH_WIDTH,
+                height: 300,
+              }}
+              data={chartTypeConfig.data}
+            />
+            <GraphRoot ref={graphRootRef} />
+            <Label>
+              <span ref={timeRef} />
+              <LabelValue ref={valueRef} />
+            </Label>
+          </StyledDescription>
 
           <Dialog.ActionButtons>
             <Dialog.Close asChild>
@@ -168,13 +123,12 @@ export const MetricsDialog = ({
                 prefixIcon={<Undo size={18} />}
                 skin="secondary"
                 data-hook="metrics-dialog-dismiss"
-                onClick={() => setActive(false)}
               >
                 Dismiss
               </Button>
             </Dialog.Close>
           </Dialog.ActionButtons>
-        </StyledDialogContent>
+        </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   )
