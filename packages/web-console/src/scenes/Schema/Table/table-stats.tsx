@@ -159,6 +159,7 @@ export const TableStats = ({
         ? new Date(rawValue).toLocaleTimeString(navigator.language, {
             hour: "2-digit",
             minute: "2-digit",
+            hourCycle: "h23",
           })
         : null,
     yValue: chartTypeConfigs[chartType].yValue,
@@ -290,15 +291,15 @@ export const TableStats = ({
           defaultValue={metricDuration}
           options={[
             {
-              label: "24h",
+              label: MetricDuration.TWENTY_FOUR_HOURS,
               value: MetricDuration.TWENTY_FOUR_HOURS,
             },
             {
-              label: "3 days",
+              label: MetricDuration.THREE_DAYS,
               value: MetricDuration.THREE_DAYS,
             },
             {
-              label: "7 days",
+              label: MetricDuration.SEVEN_DAYS,
               value: MetricDuration.SEVEN_DAYS,
             },
           ]}
@@ -310,17 +311,20 @@ export const TableStats = ({
           <Box gap="0" align="center" justifyContent="center">
             <IconWithTooltip
               icon={
-                <MetricsDialog
-                  trigger={
-                    <Button skin="transparent">
-                      <ZoomIn size="18px" />
-                    </Button>
-                  }
-                  id={id}
-                  table_name={table_name}
-                  chartTypeConfig={chartTypeConfigs[chartType]}
-                  metricDuration={metricDuration}
-                />
+                <span>
+                  <MetricsDialog
+                    trigger={
+                      <Button skin="transparent">
+                        <ZoomIn size="18px" />
+                      </Button>
+                    }
+                    id={id}
+                    table_name={table_name}
+                    chartType={chartType}
+                    chartTypeConfig={chartTypeConfigs[chartType]}
+                    metricDuration={metricDuration}
+                  />
+                </span>
               }
               tooltip="Display full size chart"
               placement="bottom"

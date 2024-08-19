@@ -7,10 +7,15 @@ import { Chart } from "@styled-icons/boxicons-regular"
 import { Box } from "../../../components/Box"
 import { useContext, useRef } from "react"
 import { QuestContext } from "../../../providers"
-import { ChartTypeConfig } from "../Table/types"
+import { ChartTypeConfig, GraphType, Latency } from "../Table/types"
 import { MetricDuration } from "../../../modules/Graph/types"
 import { useGraphOptions } from "../Table/useGraphOptions"
 import UplotReact from "uplot-react"
+import { FileDownload } from "@styled-icons/remix-line"
+import {
+  rowsApplied as rowsAppliedSQL,
+  latency as latencySQL,
+} from "../Table/queries"
 
 const StyledDescription = styled(Dialog.Description)`
   position: relative;
@@ -43,12 +48,14 @@ export const MetricsDialog = ({
   table_name,
   id,
   trigger,
+  chartType,
   chartTypeConfig,
   metricDuration,
 }: {
   table_name: string
   id: string
   trigger: React.ReactNode
+  chartType: GraphType
   chartTypeConfig: ChartTypeConfig
   metricDuration: MetricDuration
 }) => {
@@ -70,10 +77,19 @@ export const MetricsDialog = ({
               : {}),
             hour: "2-digit",
             minute: "2-digit",
+            hourCycle: "h23",
           })
         : null,
     yValue: chartTypeConfig.yValue,
   })
+
+  const downloadChartData = () => {
+    quest.exportQueryToCsv(
+      chartType === GraphType.Latency
+        ? latencySQL(id, metricDuration)
+        : rowsAppliedSQL(id, metricDuration),
+    )
+  }
 
   return (
     <Dialog.Root>
@@ -97,7 +113,7 @@ export const MetricsDialog = ({
           <Dialog.Title>
             <Box>
               <Chart size={20} />
-              {chartTypeConfig.label} for {table_name}
+              {chartTypeConfig.label} for {table_name}, {metricDuration}
             </Box>
           </Dialog.Title>
 
@@ -118,6 +134,13 @@ export const MetricsDialog = ({
           </StyledDescription>
 
           <Dialog.ActionButtons>
+            <Button
+              skin="secondary"
+              onClick={downloadChartData}
+              prefixIcon={<FileDownload size="18px" />}
+            >
+              Download metrics data
+            </Button>
             <Dialog.Close asChild>
               <Button
                 prefixIcon={<Undo size={18} />}

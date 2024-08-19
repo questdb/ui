@@ -1,13 +1,13 @@
 export enum MetricDuration {
-  TEN_MINUTES = "10m",
-  THIRTY_MINUTES = "30m",
+  TEN_MINUTES = "10min",
+  THIRTY_MINUTES = "30min",
   ONE_HOUR = "1h",
   THREE_HOURS = "3h",
   SIX_HOURS = "6h",
   TWELVE_HOURS = "12h",
   TWENTY_FOUR_HOURS = "24h",
-  THREE_DAYS = "3d",
-  SEVEN_DAYS = "7d",
+  THREE_DAYS = "3 days",
+  SEVEN_DAYS = "7 days",
 }
 
 export const durationInMinutes: Record<MetricDuration, number> = {
