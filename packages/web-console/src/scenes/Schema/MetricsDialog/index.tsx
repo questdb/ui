@@ -5,6 +5,7 @@ import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { Chart } from "@styled-icons/boxicons-regular"
 import { Box } from "../../../components/Box"
+import { Text } from "../../../components/Text"
 import { useContext, useRef } from "react"
 import { QuestContext } from "../../../providers"
 import { ChartTypeConfig, GraphType, Latency } from "../Table/types"
@@ -15,6 +16,7 @@ import { FileDownload } from "@styled-icons/remix-line"
 import {
   rowsApplied as rowsAppliedSQL,
   latency as latencySQL,
+  mappedSampleBy,
 } from "../Table/queries"
 
 const StyledDescription = styled(Dialog.Description)`
@@ -118,6 +120,18 @@ export const MetricsDialog = ({
           </Dialog.Title>
 
           <StyledDescription>
+            <Box align="center" justifyContent="flex-start" gap="2rem">
+              <Text color="gray2">
+                Data sampled by {mappedSampleBy[metricDuration]}
+              </Text>
+              <Button
+                skin="secondary"
+                onClick={downloadChartData}
+                prefixIcon={<FileDownload size="18px" />}
+              >
+                Download
+              </Button>
+            </Box>
             <UplotReact
               options={{
                 ...graphOptions,
@@ -134,13 +148,6 @@ export const MetricsDialog = ({
           </StyledDescription>
 
           <Dialog.ActionButtons>
-            <Button
-              skin="secondary"
-              onClick={downloadChartData}
-              prefixIcon={<FileDownload size="18px" />}
-            >
-              Download metrics data
-            </Button>
             <Dialog.Close asChild>
               <Button
                 prefixIcon={<Undo size={18} />}

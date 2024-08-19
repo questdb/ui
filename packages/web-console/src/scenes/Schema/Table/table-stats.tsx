@@ -104,7 +104,10 @@ export const TableStats = ({
 }) => {
   const { quest } = useContext(QuestContext)
   const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
+  const [lastNotNullRowsApplied, setLastNotNullRowsApplied] =
+    useState<RowsApplied>()
   const [latency, setLatency] = useState<Latency[]>([])
+  const [lastNotNullLatency, setLastNotNullLatency] = useState<Latency>()
   const [isLoading, setIsLoading] = useState(true)
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     MetricDuration.SEVEN_DAYS,
@@ -172,6 +175,13 @@ export const TableStats = ({
     )
     if (response && response.type === QuestDB.Type.DQL) {
       setRowsApplied(response.data)
+      const lastNotNullRowsApplied = response.data
+        .slice()
+        .reverse()
+        .find(
+          (l) => l.avgWalAmplification !== null && l.numOfRowsWritten !== null,
+        )
+      setLastNotNullRowsApplied(lastNotNullRowsApplied)
     }
   }
 
@@ -179,6 +189,11 @@ export const TableStats = ({
     const response = await quest.query<Latency>(latencySQL(id, metricDuration))
     if (response && response.type === QuestDB.Type.DQL) {
       setLatency(response.data)
+      const lastNotNullLatency = response.data
+        .slice()
+        .reverse()
+        .find((l) => l.numOfWalApplies !== null && l.avg_latency !== null)
+      setLastNotNullLatency(lastNotNullLatency)
     }
   }
 
@@ -231,43 +246,41 @@ export const TableStats = ({
     <Box flexDirection="column" gap="1rem">
       <StyledTable>
         <tbody>
-          {latency.length > 0 && (
+          {lastNotNullLatency && (
             <tr>
               <Name>Txn latency</Name>
               <Value>
                 <ValueText
                   text={
-                    latency.length > 0 &&
-                    parseFloat(latency[latency.length - 1].avg_latency).toFixed(
-                      0,
-                    ) + "μs"
+                    parseFloat(lastNotNullLatency.avg_latency).toFixed(0) + "ms"
                   }
-                  tooltipText={latency[latency.length - 1].time}
+                  tooltipText={lastNotNullLatency.time}
                 />
               </Value>
             </tr>
           )}
-          {rowsApplied.length > 0 && (
+          {lastNotNullRowsApplied && (
             <tr>
               <Name>Rows written/min</Name>
               <Value>
                 <ValueText
-                  text={rowsApplied[rowsApplied.length - 1].numOfRowsWritten}
-                  tooltipText={rowsApplied[rowsApplied.length - 1].time}
+                  text={lastNotNullRowsApplied.numOfRowsWritten}
+                  tooltipText={lastNotNullRowsApplied.time}
                 />
               </Value>
             </tr>
           )}
-          {rowsApplied.length > 0 && (
+          {lastNotNullRowsApplied && (
             <tr>
               <Name>Write amplification</Name>
               <Value>
                 <ValueText
                   text={
-                    rowsApplied[rowsApplied.length - 1].avgWalAmplification +
-                    "x"
+                    parseFloat(
+                      lastNotNullRowsApplied.avgWalAmplification,
+                    ).toFixed(0) + "x"
                   }
-                  tooltipText={rowsApplied[rowsApplied.length - 1].time}
+                  tooltipText={lastNotNullRowsApplied.time}
                 />
               </Value>
             </tr>
