@@ -114,12 +114,12 @@ export const TableStats = ({
     [GraphType.Latency]: {
       key: GraphType.Latency,
       isVisible: () => !isLoading && latency.length > 0,
-      label: "Txn latency in μs",
+      label: "Txn latency in ms",
       data: [
         latency.map((l) => new Date(l.time).getTime()),
         latency.map((l) => parseFloat(l.avg_latency)),
       ],
-      yValue: (rawValue: number) => (+rawValue).toFixed(0) + "μs",
+      yValue: (rawValue: number) => (+rawValue).toFixed(0) + "ms",
     },
     [GraphType.RowsApplied]: {
       key: GraphType.RowsApplied,
