@@ -15,7 +15,6 @@ import { MetricsDialog } from "../MetricsDialog"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ThemeContext } from "styled-components"
-import { is } from "ramda"
 
 const InfoText = styled(Text)`
   font-family: ${({ theme }) => theme.font};
@@ -92,7 +91,7 @@ const ValueText = ({
 }) => (
   <IconWithTooltip
     icon={
-      <Box gap="0.5rem" align="center" justifyContent="center">
+      <Box gap="0.5rem" align="center" justifyContent="flex-end">
         <Information size="14px" />
         <Text color="foreground">{text}</Text>
       </Box>
@@ -130,7 +129,7 @@ export const TableStats = ({
         latency.map((l) => new Date(l.time).getTime()),
         latency.map((l) => parseFloat(l.avg_latency)),
       ],
-      yValue: (rawValue: number) => (+rawValue).toFixed(0) + "ms",
+      yValue: (rawValue: number) => (+rawValue).toFixed(2) + "ms",
     },
     [GraphType.RowsApplied]: {
       key: GraphType.RowsApplied,
@@ -217,9 +216,8 @@ export const TableStats = ({
     )
   }
 
-  useEffect(() => {
-    fetchAll()
-
+  const bootstrap = async () => {
+    await fetchAll()
     rowsAppliedInterval.current = setInterval(() => {
       fetchRowsApplied()
     }, 10000)
@@ -227,6 +225,10 @@ export const TableStats = ({
     latencyInterval.current = setInterval(() => {
       fetchLatency()
     }, 10000)
+  }
+
+  useEffect(() => {
+    bootstrap()
 
     return () => {
       clearInterval(rowsAppliedInterval.current)
@@ -254,13 +256,14 @@ export const TableStats = ({
               <ValueText
                 text={
                   lastNotNullLatency
-                    ? parseFloat(lastNotNullLatency.avg_latency).toFixed(0) +
-                      "ms"
+                    ? chartTypeConfigs[GraphType.Latency].yValue(
+                        parseFloat(lastNotNullLatency.avg_latency),
+                      )
                     : "N/A"
                 }
                 tooltipText={
                   lastNotNullLatency
-                    ? lastNotNullLatency.time
+                    ? "The delay between the initiation of a database transaction and its successful completion"
                     : telemetryConfig?.enabled
                     ? NO_DATA_TOOLTIP
                     : TELEMETRY_DISABLED_TOOLTIP
@@ -274,12 +277,14 @@ export const TableStats = ({
               <ValueText
                 text={
                   lastNotNullRowsApplied
-                    ? lastNotNullRowsApplied.numOfRowsWritten
+                    ? chartTypeConfigs[GraphType.RowsApplied].yValue(
+                        parseFloat(lastNotNullRowsApplied.numOfRowsWritten),
+                      )
                     : "N/A"
                 }
                 tooltipText={
                   lastNotNullRowsApplied
-                    ? lastNotNullRowsApplied.time
+                    ? "The number of physical rows written to the database"
                     : telemetryConfig?.enabled
                     ? NO_DATA_TOOLTIP
                     : TELEMETRY_DISABLED_TOOLTIP
@@ -293,14 +298,14 @@ export const TableStats = ({
               <ValueText
                 text={
                   lastNotNullRowsApplied
-                    ? parseFloat(
-                        lastNotNullRowsApplied.avgWalAmplification,
-                      ).toFixed(0) + "x"
+                    ? chartTypeConfigs[GraphType.WriteAmplification].yValue(
+                        parseFloat(lastNotNullRowsApplied.avgWalAmplification),
+                      )
                     : "N/A"
                 }
                 tooltipText={
                   lastNotNullRowsApplied
-                    ? lastNotNullRowsApplied.time
+                    ? "The ratio of the amount of data written to the storage device versus the amount of data written to the database"
                     : telemetryConfig?.enabled
                     ? NO_DATA_TOOLTIP
                     : TELEMETRY_DISABLED_TOOLTIP

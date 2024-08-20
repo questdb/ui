@@ -10,11 +10,11 @@ export const mappedSampleBy: Record<MetricDuration, string> = {
   [MetricDuration.THIRTY_MINUTES]: "1m",
   [MetricDuration.ONE_HOUR]: "1m",
   [MetricDuration.THREE_HOURS]: "1m",
-  [MetricDuration.SIX_HOURS]: "1m",
-  [MetricDuration.TWELVE_HOURS]: "1m",
-  [MetricDuration.TWENTY_FOUR_HOURS]: "1m",
-  [MetricDuration.THREE_DAYS]: "15m",
-  [MetricDuration.SEVEN_DAYS]: "15m",
+  [MetricDuration.SIX_HOURS]: "15m",
+  [MetricDuration.TWELVE_HOURS]: "15m",
+  [MetricDuration.TWENTY_FOUR_HOURS]: "15m",
+  [MetricDuration.THREE_DAYS]: "1h",
+  [MetricDuration.SEVEN_DAYS]: "1h",
 }
 
 export const rowsApplied = (id: string, metricDuration: MetricDuration) => `
