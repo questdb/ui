@@ -81,6 +81,7 @@ const GraphLabel = styled(Box).attrs({
 `
 
 const NO_DATA_TOOLTIP = "No data available for this period"
+const TELEMETRY_DISABLED_TOOLTIP = "Enable Telemetry to see metrics"
 
 const ValueText = ({
   text,
@@ -243,16 +244,6 @@ export const TableStats = ({
     return null
   }
 
-  if (!isLoading && !telemetryConfig?.enabled) {
-    return (
-      <Box align="center" justifyContent="center">
-        <InfoText color="gray2">
-          To see metrics, please enable Telemetry.
-        </InfoText>
-      </Box>
-    )
-  }
-
   return (
     <Box flexDirection="column" gap="1rem">
       <StyledTable>
@@ -268,7 +259,11 @@ export const TableStats = ({
                     : "N/A"
                 }
                 tooltipText={
-                  lastNotNullLatency ? lastNotNullLatency.time : NO_DATA_TOOLTIP
+                  lastNotNullLatency
+                    ? lastNotNullLatency.time
+                    : telemetryConfig?.enabled
+                    ? NO_DATA_TOOLTIP
+                    : TELEMETRY_DISABLED_TOOLTIP
                 }
               />
             </Value>
@@ -285,7 +280,9 @@ export const TableStats = ({
                 tooltipText={
                   lastNotNullRowsApplied
                     ? lastNotNullRowsApplied.time
-                    : NO_DATA_TOOLTIP
+                    : telemetryConfig?.enabled
+                    ? NO_DATA_TOOLTIP
+                    : TELEMETRY_DISABLED_TOOLTIP
                 }
               />
             </Value>
@@ -304,7 +301,9 @@ export const TableStats = ({
                 tooltipText={
                   lastNotNullRowsApplied
                     ? lastNotNullRowsApplied.time
-                    : NO_DATA_TOOLTIP
+                    : telemetryConfig?.enabled
+                    ? NO_DATA_TOOLTIP
+                    : TELEMETRY_DISABLED_TOOLTIP
                 }
               />
             </Value>
@@ -389,9 +388,11 @@ export const TableStats = ({
         }}
         data={chartTypeConfigs[chartType].data}
         onCreate={(uplot) => {
-          if (uplot.data[0].length === 0) {
+          if (uplot.data[0].length === 0 || !telemetryConfig?.enabled) {
             const noData = document.createElement("div")
-            noData.innerText = NO_DATA_TOOLTIP
+            noData.innerText = telemetryConfig?.enabled
+              ? NO_DATA_TOOLTIP
+              : TELEMETRY_DISABLED_TOOLTIP
             noData.style.position = "absolute"
             noData.style.left = "50%"
             noData.style.top = "50%"
