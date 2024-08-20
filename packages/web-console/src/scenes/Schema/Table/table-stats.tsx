@@ -12,6 +12,10 @@ import { useGraphOptions } from "./useGraphOptions"
 import { MetricDuration } from "../../../modules/Graph/types"
 import UplotReact from "uplot-react"
 import { MetricsDialog } from "../MetricsDialog"
+import { useSelector } from "react-redux"
+import { selectors } from "../../../store"
+import { ThemeContext } from "styled-components"
+import { is } from "ramda"
 
 const InfoText = styled(Text)`
   font-family: ${({ theme }) => theme.font};
@@ -76,6 +80,8 @@ const GraphLabel = styled(Box).attrs({
   }
 `
 
+const NO_DATA_TOOLTIP = "No data available for this period"
+
 const ValueText = ({
   text,
   tooltipText,
@@ -103,6 +109,8 @@ export const TableStats = ({
   id: string
 }) => {
   const { quest } = useContext(QuestContext)
+  const theme = useContext(ThemeContext)
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
   const [lastNotNullRowsApplied, setLastNotNullRowsApplied] =
     useState<RowsApplied>()
@@ -116,7 +124,6 @@ export const TableStats = ({
   const chartTypeConfigs: Record<GraphType, ChartTypeConfig> = {
     [GraphType.Latency]: {
       key: GraphType.Latency,
-      isVisible: () => !isLoading && latency.length > 0,
       label: "Txn latency in ms",
       data: [
         latency.map((l) => new Date(l.time).getTime()),
@@ -126,7 +133,6 @@ export const TableStats = ({
     },
     [GraphType.RowsApplied]: {
       key: GraphType.RowsApplied,
-      isVisible: () => rowsApplied.length > 0,
       label: "Rows written/min",
       data: [
         rowsApplied.map((l) => new Date(l.time).getTime()),
@@ -136,7 +142,6 @@ export const TableStats = ({
     },
     [GraphType.WriteAmplification]: {
       key: GraphType.WriteAmplification,
-      isVisible: () => rowsApplied.length > 0,
       label: "Write amplification",
       data: [
         rowsApplied.map((l) => new Date(l.time).getTime()),
@@ -234,10 +239,16 @@ export const TableStats = ({
     fetchAll()
   }, [metricDuration])
 
-  if (!isLoading && rowsApplied.length === 0 && latency.length === 0) {
+  if (isLoading) {
+    return null
+  }
+
+  if (!isLoading && !telemetryConfig?.enabled) {
     return (
       <Box align="center" justifyContent="center">
-        <InfoText color="gray2">No data available</InfoText>
+        <InfoText color="gray2">
+          To see metrics, please enable Telemetry.
+        </InfoText>
       </Box>
     )
   }
@@ -246,45 +257,58 @@ export const TableStats = ({
     <Box flexDirection="column" gap="1rem">
       <StyledTable>
         <tbody>
-          {lastNotNullLatency && (
-            <tr>
-              <Name>Txn latency</Name>
-              <Value>
-                <ValueText
-                  text={
-                    parseFloat(lastNotNullLatency.avg_latency).toFixed(0) + "ms"
-                  }
-                  tooltipText={lastNotNullLatency.time}
-                />
-              </Value>
-            </tr>
-          )}
-          {lastNotNullRowsApplied && (
-            <tr>
-              <Name>Rows written/min</Name>
-              <Value>
-                <ValueText
-                  text={lastNotNullRowsApplied.numOfRowsWritten}
-                  tooltipText={lastNotNullRowsApplied.time}
-                />
-              </Value>
-            </tr>
-          )}
-          {lastNotNullRowsApplied && (
-            <tr>
-              <Name>Write amplification</Name>
-              <Value>
-                <ValueText
-                  text={
-                    parseFloat(
-                      lastNotNullRowsApplied.avgWalAmplification,
-                    ).toFixed(0) + "x"
-                  }
-                  tooltipText={lastNotNullRowsApplied.time}
-                />
-              </Value>
-            </tr>
-          )}
+          <tr>
+            <Name>Txn latency</Name>
+            <Value>
+              <ValueText
+                text={
+                  lastNotNullLatency
+                    ? parseFloat(lastNotNullLatency.avg_latency).toFixed(0) +
+                      "ms"
+                    : "N/A"
+                }
+                tooltipText={
+                  lastNotNullLatency ? lastNotNullLatency.time : NO_DATA_TOOLTIP
+                }
+              />
+            </Value>
+          </tr>
+          <tr>
+            <Name>Rows written/min</Name>
+            <Value>
+              <ValueText
+                text={
+                  lastNotNullRowsApplied
+                    ? lastNotNullRowsApplied.numOfRowsWritten
+                    : "N/A"
+                }
+                tooltipText={
+                  lastNotNullRowsApplied
+                    ? lastNotNullRowsApplied.time
+                    : NO_DATA_TOOLTIP
+                }
+              />
+            </Value>
+          </tr>
+          <tr>
+            <Name>Write amplification</Name>
+            <Value>
+              <ValueText
+                text={
+                  lastNotNullRowsApplied
+                    ? parseFloat(
+                        lastNotNullRowsApplied.avgWalAmplification,
+                      ).toFixed(0) + "x"
+                    : "N/A"
+                }
+                tooltipText={
+                  lastNotNullRowsApplied
+                    ? lastNotNullRowsApplied.time
+                    : NO_DATA_TOOLTIP
+                }
+              />
+            </Value>
+          </tr>
         </tbody>
       </StyledTable>
       <GraphLabel>
@@ -319,49 +343,67 @@ export const TableStats = ({
           onChange={(e) => setMetricDuration(e.target.value as MetricDuration)}
         />
       </GraphLabel>
-      {chartTypeConfigs[chartType].isVisible() && (
-        <>
-          <Box gap="0" align="center" justifyContent="center">
-            <IconWithTooltip
-              icon={
-                <span>
-                  <MetricsDialog
-                    trigger={
-                      <Button skin="transparent">
-                        <ZoomIn size="18px" />
-                      </Button>
-                    }
-                    id={id}
-                    table_name={table_name}
-                    chartType={chartType}
-                    chartTypeConfig={chartTypeConfigs[chartType]}
-                    metricDuration={metricDuration}
-                  />
-                </span>
-              }
-              tooltip="Display full size chart"
-              placement="bottom"
-            />
-            <IconWithTooltip
-              icon={
-                <Button skin="transparent" onClick={downloadChartData}>
-                  <FileDownload size="18px" />
-                </Button>
-              }
-              tooltip="Download metrics data"
-              placement="bottom"
-            />
-          </Box>
-          <UplotReact
-            options={{
-              ...graphOptions,
-              height: 180,
-              width: graphRootRef.current?.offsetWidth ?? 0,
-            }}
-            data={chartTypeConfigs[chartType].data}
-          />
-        </>
-      )}
+      <Box gap="1rem" align="center" justifyContent="center">
+        <IconWithTooltip
+          icon={
+            <span>
+              <MetricsDialog
+                trigger={
+                  <Button
+                    skin="transparent"
+                    disabled={chartTypeConfigs[chartType].data[0].length === 0}
+                  >
+                    <ZoomIn size="18px" />
+                  </Button>
+                }
+                id={id}
+                table_name={table_name}
+                chartType={chartType}
+                chartTypeConfig={chartTypeConfigs[chartType]}
+                metricDuration={metricDuration}
+              />
+            </span>
+          }
+          tooltip="Display full size chart"
+          placement="bottom"
+        />
+        <IconWithTooltip
+          icon={
+            <Button
+              skin="transparent"
+              onClick={downloadChartData}
+              disabled={chartTypeConfigs[chartType].data[0].length === 0}
+            >
+              <FileDownload size="18px" />
+            </Button>
+          }
+          tooltip="Download metrics data"
+          placement="bottom"
+        />
+      </Box>
+      <UplotReact
+        options={{
+          ...graphOptions,
+          height: 180,
+          width: graphRootRef.current?.offsetWidth ?? 0,
+        }}
+        data={chartTypeConfigs[chartType].data}
+        onCreate={(uplot) => {
+          if (uplot.data[0].length === 0) {
+            const noData = document.createElement("div")
+            noData.innerText = NO_DATA_TOOLTIP
+            noData.style.position = "absolute"
+            noData.style.left = "50%"
+            noData.style.top = "50%"
+            noData.style.transform = "translate(-50%, -50%)"
+            noData.style.color = theme.color.gray2
+            noData.style.fontSize = "1.2rem"
+            noData.style.width = "100%"
+            noData.style.textAlign = "center"
+            uplot.over.appendChild(noData)
+          }
+        }}
+      />
       <GraphRoot ref={graphRootRef} />
       <Label>
         <span ref={timeRef} />

@@ -41,9 +41,6 @@ import { selectors } from "../../../store"
 import { QuestContext } from "../../../providers"
 import { Box } from "@questdb/react-components"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { WarningButton } from "../warning-button"
-import { MetricsDialog } from "../MetricsDialog"
-import { Latency, RowsApplied } from "./types"
 import { TableStats } from "./table-stats"
 import { Loader } from "./loader"
 
@@ -144,7 +141,6 @@ const Table = ({
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
   const tables = useSelector(selectors.query.getTables)
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
 
   const showColumns = async (name: string) => {
     const response = await quest.showColumns(table_name)
@@ -206,7 +202,7 @@ const Table = ({
               },
             ] as TreeNode[])
           : []),
-        ...(telemetryConfig?.enabled && walEnabled
+        ...(walEnabled
           ? ([
               {
                 name: "Statistics",

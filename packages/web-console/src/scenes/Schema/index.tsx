@@ -382,7 +382,7 @@ const Schema = ({
         <Content
           _loading={state.view === View.loading}
           ref={scrollerRef}
-          onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
+          // onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
         >
           {views[state.view]()}
         </Content>

@@ -21,7 +21,6 @@ export enum GraphType {
 export type ChartTypeConfig = {
   key: GraphType
   label: string
-  isVisible: () => boolean
   data: uPlot.AlignedData
   yValue: (rawValue: number) => string
 }
