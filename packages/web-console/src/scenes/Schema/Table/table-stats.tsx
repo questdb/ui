@@ -44,7 +44,7 @@ const Value = styled.td<{ alert?: boolean }>`
   ${({ alert, theme }) =>
     alert &&
     `
-  border: 1px #654a2c solid;
+  border: 1px #8b673c solid;
   color: ${theme.color.orange};
   `};
 `
