@@ -74,8 +74,8 @@ const GraphLabel = styled(Box).attrs({
   }
 `
 
-const NO_DATA_TOOLTIP = "No data available for this period"
-const TELEMETRY_DISABLED_TOOLTIP = "Enable Telemetry to see metrics"
+const NO_DATA_TEXT = "No data available for this period"
+const TELEMETRY_DISABLED_TEXT = "Enable Telemetry to see metrics"
 
 const ValueText = ({
   text,
@@ -120,11 +120,11 @@ export const TableStats = ({
 
   let featureUnavailableText: string
   if (!telemetryConfig?.enabled) {
-    featureUnavailableText = TELEMETRY_DISABLED_TOOLTIP
+    featureUnavailableText = TELEMETRY_DISABLED_TEXT
   } else if (!walEnabled) {
     featureUnavailableText = "Table must have WAL enabled to view metrics"
   } else {
-    featureUnavailableText = NO_DATA_TOOLTIP
+    featureUnavailableText = NO_DATA_TEXT
   }
 
   const chartTypeConfigs: Record<GraphType, ChartTypeConfig> = {

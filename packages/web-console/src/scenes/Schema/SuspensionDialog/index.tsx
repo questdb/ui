@@ -114,6 +114,9 @@ export const SuspensionDialog = ({
     }
   }, [active])
 
+  const txnLag =
+    parseFloat(walTableData.sequencerTxn) - parseFloat(walTableData.writerTxn)
+
   return (
     <Dialog.Root
       open={active}
@@ -217,8 +220,8 @@ export const SuspensionDialog = ({
               </Box>
 
               <Text color="foreground" size="lg">
-                {walTableData.writerLagTxnCount} transaction
-                {walTableData.writerLagTxnCount === "1" ? "" : "s"} behind
+                {txnLag} transaction
+                {txnLag === 1 ? "" : "s"} behind
               </Text>
 
               {walTableData.errorMessage && (
