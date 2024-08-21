@@ -104,9 +104,11 @@ const ValueText = ({
 export const TableStats = ({
   table_name,
   id,
+  walEnabled,
 }: {
   table_name: string
   id: string
+  walEnabled: boolean
 }) => {
   const { quest } = useContext(QuestContext)
   const theme = useContext(ThemeContext)
@@ -120,6 +122,15 @@ export const TableStats = ({
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     MetricDuration.SEVEN_DAYS,
   )
+
+  let featureUnavailableText: string
+  if (!telemetryConfig?.enabled) {
+    featureUnavailableText = TELEMETRY_DISABLED_TOOLTIP
+  } else if (!walEnabled) {
+    featureUnavailableText = "Table must have WAL enabled to view metrics"
+  } else {
+    featureUnavailableText = NO_DATA_TOOLTIP
+  }
 
   const chartTypeConfigs: Record<GraphType, ChartTypeConfig> = {
     [GraphType.Latency]: {
@@ -264,9 +275,7 @@ export const TableStats = ({
                 tooltipText={
                   lastNotNullLatency
                     ? "The delay between the initiation of a database transaction and its successful completion"
-                    : telemetryConfig?.enabled
-                    ? NO_DATA_TOOLTIP
-                    : TELEMETRY_DISABLED_TOOLTIP
+                    : featureUnavailableText
                 }
               />
             </Value>
@@ -285,9 +294,7 @@ export const TableStats = ({
                 tooltipText={
                   lastNotNullRowsApplied
                     ? "The number of physical rows written to the database"
-                    : telemetryConfig?.enabled
-                    ? NO_DATA_TOOLTIP
-                    : TELEMETRY_DISABLED_TOOLTIP
+                    : featureUnavailableText
                 }
               />
             </Value>
@@ -306,9 +313,7 @@ export const TableStats = ({
                 tooltipText={
                   lastNotNullRowsApplied
                     ? "The ratio of the amount of data written to the storage device versus the amount of data written to the database"
-                    : telemetryConfig?.enabled
-                    ? NO_DATA_TOOLTIP
-                    : TELEMETRY_DISABLED_TOOLTIP
+                    : featureUnavailableText
                 }
               />
             </Value>
@@ -395,9 +400,7 @@ export const TableStats = ({
         onCreate={(uplot) => {
           if (uplot.data[0].length === 0 || !telemetryConfig?.enabled) {
             const noData = document.createElement("div")
-            noData.innerText = telemetryConfig?.enabled
-              ? NO_DATA_TOOLTIP
-              : TELEMETRY_DISABLED_TOOLTIP
+            noData.innerText = featureUnavailableText
             noData.style.position = "absolute"
             noData.style.left = "50%"
             noData.style.top = "50%"

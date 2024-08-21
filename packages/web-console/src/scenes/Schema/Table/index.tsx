@@ -202,38 +202,38 @@ const Table = ({
               },
             ] as TreeNode[])
           : []),
-        ...(walEnabled
-          ? ([
+        {
+          name: "Statistics",
+          initiallyOpen: false,
+          wrapper: Columns,
+          async onOpen({ setChildren }) {
+            onChange(table_name)
+            setChildren([
               {
                 name: "Statistics",
-                initiallyOpen: false,
-                wrapper: Columns,
-                async onOpen({ setChildren }) {
-                  onChange(table_name)
-                  setChildren([
-                    {
-                      name: "Statistics",
-                      render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                        <TableStats id={id} table_name={table_name} />
-                      ),
-                    },
-                  ])
-                },
-
-                render({ toggleOpen, isOpen, isLoading }) {
-                  return (
-                    <Row
-                      expanded={isOpen && !isLoading}
-                      kind="folder"
-                      name="Statistics"
-                      onClick={() => toggleOpen()}
-                      suffix={isLoading && <Loader size="18px" />}
-                    />
-                  )
-                },
+                render: ({ toggleOpen }: TreeNodeRenderParams) => (
+                  <TableStats
+                    id={id}
+                    table_name={table_name}
+                    walEnabled={walEnabled}
+                  />
+                ),
               },
-            ] as TreeNode[])
-          : []),
+            ])
+          },
+
+          render({ toggleOpen, isOpen, isLoading }) {
+            return (
+              <Row
+                expanded={isOpen && !isLoading}
+                kind="folder"
+                name="Statistics"
+                onClick={() => toggleOpen()}
+                suffix={isLoading && <Loader size="18px" />}
+              />
+            )
+          },
+        },
         {
           name: "Columns",
           initiallyOpen: !walTableData?.suspended,
