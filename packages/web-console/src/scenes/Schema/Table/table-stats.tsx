@@ -16,11 +16,6 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ThemeContext } from "styled-components"
 
-const InfoText = styled(Text)`
-  font-family: ${({ theme }) => theme.font};
-  padding: 0.5rem 0;
-`
-
 const StyledTable = styled.table`
   width: 100%;
   border-spacing: 0.5rem;
@@ -39,7 +34,7 @@ const Name = styled.td`
 const Value = styled.td<{ alert?: boolean }>`
   background: ${({ alert }) => (alert ? "#352615" : "#21212a")};
   text-align: center;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
 
   ${({ alert, theme }) =>
     alert &&
