@@ -18,7 +18,7 @@ export const mappedSampleBy: Record<MetricDuration, SampleBy> = {
   [MetricDuration.THREE_HOURS]: SampleBy.FIFTEEN_MINUTES,
   [MetricDuration.SIX_HOURS]: SampleBy.FIFTEEN_MINUTES,
   [MetricDuration.TWELVE_HOURS]: SampleBy.FIFTEEN_MINUTES,
-  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.ONE_HOUR,
+  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.FIFTEEN_MINUTES,
   [MetricDuration.THREE_DAYS]: SampleBy.ONE_HOUR,
   [MetricDuration.SEVEN_DAYS]: SampleBy.ONE_HOUR,
 }
