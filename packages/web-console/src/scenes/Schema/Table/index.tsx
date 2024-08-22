@@ -52,6 +52,7 @@ type Props = QuestDB.Table &
     table_name: string
     partitionBy: string
     expanded?: boolean
+    onClose: () => void
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
   }>
@@ -135,6 +136,7 @@ const Table = ({
   expanded = false,
   walEnabled,
   walTableData,
+  onClose,
   onChange,
   dedup,
 }: Props) => {
@@ -160,113 +162,115 @@ const Table = ({
       name: table_name,
       kind: "table",
       initiallyOpen: expanded,
-      children: [
-        ...(walTableData?.suspended
-          ? ([
-              {
-                name: "Issues (1)",
-                initiallyOpen: true,
-                wrapper: Columns,
-                async onOpen({ setChildren }) {
-                  onChange(table_name)
-                  setChildren([
-                    {
-                      name: "Suspended",
-                      render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                        <Box
-                          flexDirection="column"
-                          justifyContent="space-between"
-                          gap="0.5rem"
-                        >
-                          <Issue>
-                            <IssueText>Table is suspended</IssueText>
-                            <SuspensionDialog walTableData={walTableData} />
-                          </Issue>
-                        </Box>
-                      ),
-                    },
-                  ])
-                },
+      async onOpen({ setChildren }) {
+        setChildren([
+          ...(walTableData?.suspended
+            ? ([
+                {
+                  name: "Issues (1)",
+                  initiallyOpen: true,
+                  wrapper: Columns,
+                  async onOpen({ setChildren }) {
+                    onChange(table_name)
+                    setChildren([
+                      {
+                        name: "Suspended",
+                        render: ({ toggleOpen }: TreeNodeRenderParams) => (
+                          <Box
+                            flexDirection="column"
+                            justifyContent="space-between"
+                            gap="0.5rem"
+                          >
+                            <Issue>
+                              <IssueText>Table is suspended</IssueText>
+                              <SuspensionDialog walTableData={walTableData} />
+                            </Issue>
+                          </Box>
+                        ),
+                      },
+                    ])
+                  },
 
-                render({ toggleOpen, isOpen, isLoading }) {
-                  return (
-                    <Row
-                      expanded={isOpen && !isLoading}
-                      kind="folder"
-                      name="Issues (1)"
-                      onClick={() => toggleOpen()}
-                      suffix={isLoading && <Loader size="18px" />}
+                  render({ toggleOpen, isOpen, isLoading }) {
+                    return (
+                      <Row
+                        expanded={isOpen && !isLoading}
+                        kind="folder"
+                        name="Issues (1)"
+                        onClick={() => toggleOpen()}
+                        suffix={isLoading && <Loader size="18px" />}
+                      />
+                    )
+                  },
+                },
+              ] as TreeNode[])
+            : []),
+          {
+            name: "Statistics",
+            initiallyOpen: false,
+            wrapper: Columns,
+            async onOpen({ setChildren }) {
+              onChange(table_name)
+              setChildren([
+                {
+                  name: "Statistics",
+                  render: ({ toggleOpen }: TreeNodeRenderParams) => (
+                    <TableStats
+                      id={id}
+                      table_name={table_name}
+                      walEnabled={walEnabled}
                     />
-                  )
+                  ),
                 },
-              },
-            ] as TreeNode[])
-          : []),
-        {
-          name: "Statistics",
-          initiallyOpen: false,
-          wrapper: Columns,
-          async onOpen({ setChildren }) {
-            onChange(table_name)
-            setChildren([
-              {
-                name: "Statistics",
-                render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                  <TableStats
-                    id={id}
-                    table_name={table_name}
-                    walEnabled={walEnabled}
-                  />
-                ),
-              },
-            ])
-          },
+              ])
+            },
 
-          render({ toggleOpen, isOpen, isLoading }) {
-            return (
-              <Row
-                expanded={isOpen && !isLoading}
-                kind="folder"
-                name="Statistics"
-                onClick={() => toggleOpen()}
-                suffix={isLoading && <Loader size="18px" />}
-              />
-            )
-          },
-        },
-        {
-          name: "Columns",
-          initiallyOpen: !walTableData?.suspended,
-          wrapper: Columns,
-          async onOpen({ setChildren }) {
-            onChange(table_name)
-            const response = (await quest.showColumns(table_name)) ?? []
-
-            if (response && response.type === QuestDB.Type.DQL) {
-              setColumns(response.data)
-
-              setChildren(
-                response.data.map((column) => ({
-                  name: column.column,
-                  render: columnRender({ column, designatedTimestamp }),
-                })),
+            render({ toggleOpen, isOpen, isLoading }) {
+              return (
+                <Row
+                  expanded={isOpen && !isLoading}
+                  kind="folder"
+                  name="Statistics"
+                  onClick={() => toggleOpen()}
+                  suffix={isLoading && <Loader size="18px" />}
+                />
               )
-            }
+            },
           },
+          {
+            name: "Columns",
+            initiallyOpen: !walTableData?.suspended,
+            wrapper: Columns,
+            async onOpen({ setChildren }) {
+              onChange(table_name)
+              const response = (await quest.showColumns(table_name)) ?? []
 
-          render({ toggleOpen, isOpen, isLoading }) {
-            return (
-              <Row
-                expanded={isOpen && !isLoading}
-                kind="folder"
-                name="Columns"
-                onClick={() => toggleOpen()}
-                suffix={isLoading && <Loader size="18px" />}
-              />
-            )
+              if (response && response.type === QuestDB.Type.DQL) {
+                setColumns(response.data)
+
+                setChildren(
+                  response.data.map((column) => ({
+                    name: column.column,
+                    render: columnRender({ column, designatedTimestamp }),
+                  })),
+                )
+              }
+            },
+
+            render({ toggleOpen, isOpen, isLoading }) {
+              return (
+                <Row
+                  expanded={isOpen && !isLoading}
+                  kind="folder"
+                  name="Columns"
+                  onClick={() => toggleOpen()}
+                  suffix={isLoading && <Loader size="18px" />}
+                />
+              )
+            },
           },
-        },
-      ],
+        ])
+      },
 
       render({ toggleOpen, isLoading }) {
         return (

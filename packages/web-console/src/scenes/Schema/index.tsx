@@ -235,6 +235,7 @@ const Schema = ({
     void fetchColumns()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
+      setOpened(undefined)
       void fetchTables()
       void fetchColumns()
     })
@@ -304,6 +305,7 @@ const Schema = ({
                 id={table.id}
                 table_name={table.table_name}
                 onChange={handleChange}
+                onClose={() => setOpened(undefined)}
                 partitionBy={table.partitionBy}
                 walEnabled={table.walEnabled}
                 walTableData={walTables?.find(
