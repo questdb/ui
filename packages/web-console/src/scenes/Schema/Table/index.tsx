@@ -52,7 +52,6 @@ type Props = QuestDB.Table &
     table_name: string
     partitionBy: string
     expanded?: boolean
-    onClose: () => void
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
   }>
@@ -136,7 +135,6 @@ const Table = ({
   expanded = false,
   walEnabled,
   walTableData,
-  onClose,
   onChange,
   dedup,
 }: Props) => {

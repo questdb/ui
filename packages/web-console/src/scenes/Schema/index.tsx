@@ -305,7 +305,6 @@ const Schema = ({
                 id={table.id}
                 table_name={table.table_name}
                 onChange={handleChange}
-                onClose={() => setOpened(undefined)}
                 partitionBy={table.partitionBy}
                 walEnabled={table.walEnabled}
                 walTableData={walTables?.find(
