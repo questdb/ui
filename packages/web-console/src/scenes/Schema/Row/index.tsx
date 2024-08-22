@@ -194,8 +194,8 @@ const Row = ({
     <Wrapper
       className={className}
       expanded={expanded}
-      // suspended={walTableData?.suspended && kind === "table"}
       onClick={onClick}
+      data-hook={`schema-${kind}-row`}
     >
       <FlexRow>
         {kind === "table" && (
