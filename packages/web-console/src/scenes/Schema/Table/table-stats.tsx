@@ -15,6 +15,7 @@ import { MetricsDialog } from "../MetricsDialog"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ThemeContext } from "styled-components"
+import uPlot from "uplot"
 
 const StyledTable = styled.table`
   width: 100%;
@@ -127,6 +128,13 @@ export const TableStats = ({
     featureUnavailableText = NO_DATA_TEXT
   }
 
+  const resizeObserver = new ResizeObserver((entries) => {
+    uPlotRef.current?.setSize({
+      width: entries[0].contentRect.width,
+      height: 180,
+    })
+  })
+
   const chartTypeConfigs: Record<GraphType, ChartTypeConfig> = {
     [GraphType.Latency]: {
       key: GraphType.Latency,
@@ -161,6 +169,7 @@ export const TableStats = ({
   const latencyInterval = useRef<ReturnType<typeof setInterval>>()
   const timeRef = useRef(null)
   const valueRef = useRef(null)
+  const uPlotRef = useRef<uPlot>()
   const [chartType, setChartType] = useState<GraphType>(GraphType.Latency)
 
   const graphOptions = useGraphOptions({
@@ -241,6 +250,16 @@ export const TableStats = ({
       clearInterval(latencyInterval.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (graphRootRef.current) {
+      resizeObserver.observe(graphRootRef.current)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [graphRootRef.current])
 
   useEffect(() => {
     clearInterval(rowsAppliedInterval.current)
@@ -393,6 +412,7 @@ export const TableStats = ({
         }}
         data={chartTypeConfigs[chartType].data}
         onCreate={(uplot) => {
+          uPlotRef.current = uplot
           if (uplot.data[0].length === 0 || !telemetryConfig?.enabled) {
             const noData = document.createElement("div")
             noData.innerText = featureUnavailableText
