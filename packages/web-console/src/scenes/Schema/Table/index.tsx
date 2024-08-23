@@ -162,47 +162,47 @@ const Table = ({
       initiallyOpen: expanded,
       async onOpen({ setChildren }) {
         setChildren([
-          ...(walTableData?.suspended
-            ? ([
+          {
+            name: "Issues",
+            initiallyOpen: walTableData?.suspended,
+            wrapper: Columns,
+            async onOpen({ setChildren }) {
+              onChange(table_name)
+              setChildren([
                 {
-                  name: "Issues (1)",
-                  initiallyOpen: true,
-                  wrapper: Columns,
-                  async onOpen({ setChildren }) {
-                    onChange(table_name)
-                    setChildren([
-                      {
-                        name: "Suspended",
-                        render: ({ toggleOpen }: TreeNodeRenderParams) => (
-                          <Box
-                            flexDirection="column"
-                            justifyContent="space-between"
-                            gap="0.5rem"
-                          >
-                            <Issue>
-                              <IssueText>Table is suspended</IssueText>
-                              <SuspensionDialog walTableData={walTableData} />
-                            </Issue>
-                          </Box>
-                        ),
-                      },
-                    ])
-                  },
-
-                  render({ toggleOpen, isOpen, isLoading }) {
-                    return (
-                      <Row
-                        expanded={isOpen && !isLoading}
-                        kind="folder"
-                        name="Issues (1)"
-                        onClick={() => toggleOpen()}
-                        suffix={isLoading && <Loader size="18px" />}
-                      />
-                    )
-                  },
+                  name: "Suspended",
+                  render: ({ toggleOpen }: TreeNodeRenderParams) => (
+                    <Box
+                      flexDirection="column"
+                      justifyContent="space-between"
+                      gap="0.5rem"
+                    >
+                      {walTableData?.suspended ? (
+                        <Issue>
+                          <IssueText>Table is suspended</IssueText>
+                          <SuspensionDialog walTableData={walTableData} />
+                        </Issue>
+                      ) : (
+                        <Text color="gray2">No issues</Text>
+                      )}
+                    </Box>
+                  ),
                 },
-              ] as TreeNode[])
-            : []),
+              ])
+            },
+
+            render({ toggleOpen, isOpen, isLoading }) {
+              return (
+                <Row
+                  expanded={isOpen && !isLoading}
+                  kind="folder"
+                  name={`Issues (${walTableData?.suspended ? 1 : 0})`}
+                  onClick={() => toggleOpen()}
+                  suffix={isLoading && <Loader size="18px" />}
+                />
+              )
+            },
+          },
           {
             name: "Statistics",
             initiallyOpen: false,
