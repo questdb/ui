@@ -75,6 +75,10 @@ const GraphLabel = styled(Box).attrs({
   }
 `
 
+const DownloadButton = styled(Button)`
+  font-family: ${({ theme }) => theme.font};
+`
+
 const NO_DATA_TEXT = "No data available for this period"
 const TELEMETRY_DISABLED_TEXT = "Enable Telemetry to see metrics"
 
@@ -396,14 +400,14 @@ export const TableStats = ({
         <LabelValue ref={valueRef} />
       </Label>
       <Box gap="1rem" align="center" justifyContent="center">
-        <Button
+        <DownloadButton
           prefixIcon={<FileDownload size="18px" />}
           skin="transparent"
           onClick={downloadChartData}
           disabled={chartTypeConfigs[chartType].data[0].length === 0}
         >
           Download data
-        </Button>
+        </DownloadButton>
       </Box>
     </Box>
   )
