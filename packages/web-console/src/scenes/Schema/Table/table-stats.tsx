@@ -138,7 +138,7 @@ export const TableStats = ({
   const chartTypeConfigs: Record<GraphType, ChartTypeConfig> = {
     [GraphType.Latency]: {
       key: GraphType.Latency,
-      label: "Txn latency in ms",
+      label: "Read latency in ms",
       data: [
         latency.map((l) => new Date(l.time).getTime()),
         latency.map((l) => parseFloat(l.avg_latency)),
@@ -147,7 +147,7 @@ export const TableStats = ({
     },
     [GraphType.RowsApplied]: {
       key: GraphType.RowsApplied,
-      label: "Rows written/min",
+      label: "Write throughput",
       data: [
         rowsApplied.map((l) => new Date(l.time).getTime()),
         rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
@@ -276,7 +276,7 @@ export const TableStats = ({
       <StyledTable>
         <tbody>
           <tr>
-            <Name>Txn latency</Name>
+            <Name>Read latency in ms</Name>
             <Value>
               <ValueText
                 text={
@@ -295,7 +295,7 @@ export const TableStats = ({
             </Value>
           </tr>
           <tr>
-            <Name>Rows written/min</Name>
+            <Name>Write throughput</Name>
             <Value>
               <ValueText
                 text={
@@ -366,44 +366,6 @@ export const TableStats = ({
           onChange={(e) => setMetricDuration(e.target.value as MetricDuration)}
         />
       </GraphLabel>
-      <Box gap="1rem" align="center" justifyContent="center">
-        <IconWithTooltip
-          icon={
-            <span>
-              <MetricsDialog
-                trigger={
-                  <Button
-                    skin="transparent"
-                    disabled={chartTypeConfigs[chartType].data[0].length === 0}
-                  >
-                    <ZoomIn size="18px" />
-                  </Button>
-                }
-                id={id}
-                table_name={table_name}
-                chartType={chartType}
-                chartTypeConfig={chartTypeConfigs[chartType]}
-                metricDuration={metricDuration}
-              />
-            </span>
-          }
-          tooltip="Display full size chart"
-          placement="bottom"
-        />
-        <IconWithTooltip
-          icon={
-            <Button
-              skin="transparent"
-              onClick={downloadChartData}
-              disabled={chartTypeConfigs[chartType].data[0].length === 0}
-            >
-              <FileDownload size="18px" />
-            </Button>
-          }
-          tooltip="Download metrics data"
-          placement="bottom"
-        />
-      </Box>
       <UplotReact
         options={{
           ...graphOptions,
@@ -433,6 +395,16 @@ export const TableStats = ({
         <span ref={timeRef} />
         <LabelValue ref={valueRef} />
       </Label>
+      <Box gap="1rem" align="center" justifyContent="center">
+        <Button
+          prefixIcon={<FileDownload size="18px" />}
+          skin="transparent"
+          onClick={downloadChartData}
+          disabled={chartTypeConfigs[chartType].data[0].length === 0}
+        >
+          Download data
+        </Button>
+      </Box>
     </Box>
   )
 }

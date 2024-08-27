@@ -56,6 +56,7 @@ type Props = Readonly<{
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
+  warning?: boolean
 }>
 
 const Type = styled(Text)`
@@ -187,6 +188,7 @@ const Row = ({
   suffix,
   tooltip,
   type,
+  warning,
 }: Props) => {
   const { query } = useContext(SchemaContext)
 
@@ -246,7 +248,7 @@ const Row = ({
         )}
 
         <StyledTitle
-          color="foreground"
+          color={warning ? "orange" : "foreground"}
           ellipsis
           kind={kind}
           data-hook={`schema-${kind}-title`}

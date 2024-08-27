@@ -197,6 +197,7 @@ const Table = ({
                   expanded={isOpen && !isLoading}
                   kind="folder"
                   name={`Issues (${walTableData?.suspended ? 1 : 0})`}
+                  warning={walTableData?.suspended}
                   onClick={() => toggleOpen()}
                   suffix={isLoading && <Loader size="18px" />}
                 />
