@@ -195,7 +195,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               code,
               code_verifier,
               client_id: settings["acl.oidc.client.id"],
-              redirect_uri: window.location.origin + window.location.pathname,
+              redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.origin + window.location.pathname,
             })
             const tokenResponse = await response.json()
             setAuthToken(tokenResponse)
@@ -256,7 +256,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       config: settings,
       code_challenge,
       login,
-      redirect_uri: window.location.href,
+      redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })
   }
 
