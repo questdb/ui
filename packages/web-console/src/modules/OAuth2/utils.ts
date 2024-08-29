@@ -29,7 +29,7 @@ export const getAuthorisationURL = ({
   const params = {
     client_id: config["acl.oidc.client.id"] || "",
     response_type: "code",
-    scope: "openid profile",
+    scope: config["acl.oidc.scope"] || "openid",
     redirect_uri,
   }
 

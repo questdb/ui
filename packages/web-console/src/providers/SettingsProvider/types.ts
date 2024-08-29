@@ -6,6 +6,8 @@ export type Settings = Partial<{
   "acl.basic.auth.realm.enabled": boolean
   "acl.oidc.enabled": boolean
   "acl.oidc.client.id": string
+  "acl.oidc.redirect.uri": string
+  "acl.oidc.scope": string
   "acl.oidc.host": string
   "acl.oidc.port": number
   "acl.oidc.tls.enabled": boolean
