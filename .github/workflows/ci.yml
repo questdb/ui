@@ -29,7 +29,7 @@ jobs:
         run: mkdir tmp/dbroot
 
       - name: Start QuestDB
-        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
 
@@ -57,10 +57,10 @@ jobs:
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test:auth
 
       - name: Stop QuestDB
-        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
 
       - name: Start QuestDB, set auth credentials
-        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh start -d ./tmp/dbroot
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
           QDB_HTTP_USER: "admin"
@@ -82,7 +82,7 @@ jobs:
 
       - name: Stop QuestDB
         if: success() || failure()
-        run: ./tmp/questdb-*-rt-linux-amd64/bin/questdb.sh stop
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
