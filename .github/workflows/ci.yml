@@ -22,11 +22,8 @@ jobs:
       - name: Build QuestDB
         run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
 
-      - name: List Files
-        run: ls -la packages/browser-tests/questdb/core/target/
-
       - name: Extract QuestDB
-        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-amd64.tar.gz -C tmp/
+        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
 
       - name: Create DB Root
         run: mkdir tmp/dbroot
