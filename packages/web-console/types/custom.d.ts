@@ -78,3 +78,7 @@ declare class ResizeObserver {
   observe: (target: Element, options?: ResizeObserverObserveOptions) => void
   unobserve: (target: Element) => void
 }
+
+declare module "lodash.isequal" {
+  export default function isEqual(value: any, other: any): boolean
+}

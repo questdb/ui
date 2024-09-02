@@ -5,8 +5,8 @@
  *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
  *    \__\_\\__,_|\___||___/\__|____/|____/
  *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
+ *  Original work Copyright (c) 2013 Adam Schwartz
+ *  Derived work Copyright (c) 2024 QuestDB
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -22,38 +22,5 @@
  *
  ******************************************************************************/
 
-import React, { CSSProperties, forwardRef, Ref } from "react"
-import styled from "styled-components"
-
-import { PaneWrapper } from "../../components"
-
-import Monaco from "./Monaco"
-import Menu from "./Menu"
-import Notifications from "../Notifications"
-import { Tabs } from "./Monaco/tabs"
-
-type Props = Readonly<{
-  style?: CSSProperties
-}>
-
-const EditorPaneWrapper = styled(PaneWrapper)`
-  height: 100%;
-  overflow: hidden;
-`
-
-const Editor = ({
-  innerRef,
-  ...rest
-}: Props & { innerRef: Ref<HTMLDivElement> }) => (
-  <EditorPaneWrapper ref={innerRef} {...rest}>
-    <Tabs />
-    <Monaco />
-    <Notifications />
-  </EditorPaneWrapper>
-)
-
-const EditorWithRef = (props: Props, ref: Ref<HTMLDivElement>) => (
-  <Editor {...props} innerRef={ref} />
-)
-
-export default forwardRef(EditorWithRef)
+export { useChromeTabs } from "./hooks"
+export * from "./component"

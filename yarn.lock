@@ -3225,6 +3225,7 @@ __metadata:
     "@questdb/react-components": "workspace:^"
     "@questdb/sql-grammar": "npm:1.0.15"
     "@radix-ui/react-dialog": "npm:^1.0.3"
+    "@sinm/react-chrome-tabs": "npm:^2.3.3"
     "@styled-icons/bootstrap": "npm:10.47.0"
     "@styled-icons/boxicons-logos": "npm:10.47.0"
     "@styled-icons/boxicons-regular": "npm:10.47.0"
@@ -3239,6 +3240,7 @@ __metadata:
     "@styled-icons/remix-fill": "npm:10.46.0"
     "@styled-icons/remix-line": "npm:10.46.0"
     "@styled-icons/styled-icon": "npm:^10.7.0"
+    "@types/draggabilly": "npm:^2.1.6"
     "@types/echarts": "npm:^4.9.22"
     "@types/jquery": "npm:3.5.1"
     "@types/node": "npm:^17.0.41"
@@ -3271,6 +3273,7 @@ __metadata:
     dexie: "npm:^3.2.4"
     dexie-react-hooks: "npm:^1.1.6"
     dotenv: "npm:^10.0.0"
+    draggabilly: "npm:^3.0.0"
     echarts: "npm:^5.2.2"
     eslint: "npm:^8.56.0"
     eslint-config-love: "npm:47.0.0"
@@ -3294,6 +3297,7 @@ __metadata:
     jquery: "npm:3.5.1"
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
+    lodash.isequal: "npm:^4.5.0"
     mini-css-extract-plugin: "npm:^2.6.0"
     monaco-editor: "npm:^0.44.0"
     posthog-js: "npm:^1.131.2"
@@ -3954,6 +3958,22 @@ __metadata:
   version: 0.27.8
   resolution: "@sinclair/typebox@npm:0.27.8"
   checksum: 10/297f95ff77c82c54de8c9907f186076e715ff2621c5222ba50b8d40a170661c0c5242c763cba2a4791f0f91cb1d8ffa53ea1d7294570cf8cd4694c0e383e484d
+  languageName: node
+  linkType: hard
+
+"@sinm/react-chrome-tabs@npm:^2.3.3":
+  version: 2.3.3
+  resolution: "@sinm/react-chrome-tabs@npm:2.3.3"
+  dependencies:
+    draggabilly: "npm:2.2.0"
+    lodash.isequal: "npm:^4.5.0"
+    typescript: "npm:^4.8.4"
+    webpack: "npm:^5.74.0"
+    webpack-cli: "npm:^4.10.0"
+  peerDependencies:
+    react: ">=16.8.0"
+    react-dom: ">=16.8.0"
+  checksum: 10/384c2b7000929201cf14886a33bf06e8831bdbacd1fe635bd2caf09f6fc9a4fc1119b1d03352a04cd503154c4274aa041fa782fa24efd9435ec99dba6bf47431
   languageName: node
   linkType: hard
 
@@ -5700,6 +5720,13 @@ __metadata:
   dependencies:
     "@types/ms": "npm:*"
   checksum: 10/e88ee8b19d106f33eb0d3bc58bacff9702e98d821fd1ebd1de8942e6b97419e19a1ccf39370f1764a1dc66f79fd4619f3412e1be6eeb9f0b76412f5ffe4ead93
+  languageName: node
+  linkType: hard
+
+"@types/draggabilly@npm:^2.1.6":
+  version: 2.1.6
+  resolution: "@types/draggabilly@npm:2.1.6"
+  checksum: 10/eef9933b80d6c90c86649d1a437a608a66b889bc87e7f65c076625168458fa7fba5d15f475f1c841522bf7b48d793025b3e74fd82948e40060d759e0c80b7561
   languageName: node
   linkType: hard
 
@@ -9919,6 +9946,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"draggabilly@npm:2.2.0":
+  version: 2.2.0
+  resolution: "draggabilly@npm:2.2.0"
+  dependencies:
+    get-size: "npm:^2.0.2"
+    unidragger: "npm:^2.3.0"
+  checksum: 10/692be04a8fbfaa1c1f45f334444d04f3faa0da8592f7fa28a56611b1132fd505d0a42deee6bc56334f263a2c53e7c66369362138acf396d7eb0e062f6ab5fa0e
+  languageName: node
+  linkType: hard
+
+"draggabilly@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "draggabilly@npm:3.0.0"
+  dependencies:
+    get-size: "npm:^3.0.0"
+    unidragger: "npm:^3.0.0"
+  checksum: 10/2c81089b44eec5fbe675ad5b7040f6005fe41e83a7cbb8b3c1f799755a59f31c074394d5315ccc370b21f60c3df7096501a2761a976daa89a5f6b2e29335986a
+  languageName: node
+  linkType: hard
+
 "duplexer@npm:^0.1.2":
   version: 0.1.2
   resolution: "duplexer@npm:0.1.2"
@@ -10878,6 +10925,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ev-emitter@npm:^1.0.1":
+  version: 1.1.1
+  resolution: "ev-emitter@npm:1.1.1"
+  checksum: 10/a6c9767f8a70512a4e211b6d78406bcbae7950d778ce8dd90bb64e9d7fb16878dd598a042e9a2b53dc769175db7d9da0b8e4b8d570482d67936975dcc5419ca0
+  languageName: node
+  linkType: hard
+
+"ev-emitter@npm:^2.0.0":
+  version: 2.1.2
+  resolution: "ev-emitter@npm:2.1.2"
+  checksum: 10/1102823ef040684869256100e19a6c6aeeecd422d09a267d7c74e77023136eede2ee86ee475ad1019d30d1f7917557d74542d5665e9f91c398bd5814260af6b3
+  languageName: node
+  linkType: hard
+
 "eventemitter2@npm:6.4.7":
   version: 6.4.7
   resolution: "eventemitter2@npm:6.4.7"
@@ -11828,6 +11889,20 @@ __metadata:
   version: 0.1.0
   resolution: "get-package-type@npm:0.1.0"
   checksum: 10/bba0811116d11e56d702682ddef7c73ba3481f114590e705fc549f4d868972263896af313c57a25c076e3c0d567e11d919a64ba1b30c879be985fc9d44f96148
+  languageName: node
+  linkType: hard
+
+"get-size@npm:^2.0.2":
+  version: 2.0.3
+  resolution: "get-size@npm:2.0.3"
+  checksum: 10/268530ea41a2217c5aa7bc750259a5db8c8cbf50036cc6e33bb3bca82f9333f2facc8788d1bd943f1ca69f51109226919209592a0b8c9206eebe89ca12d69285
+  languageName: node
+  linkType: hard
+
+"get-size@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "get-size@npm:3.0.0"
+  checksum: 10/9a475bce9a718322b80c20a9651a7b09c8ddb85d094131fda7d32ffe272442c3d0621df6a61b543a23ca741c261f96841078927e17acfc88957c2a6029ba5b34
   languageName: node
   linkType: hard
 
@@ -21089,6 +21164,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"unidragger@npm:^2.3.0":
+  version: 2.4.0
+  resolution: "unidragger@npm:2.4.0"
+  dependencies:
+    unipointer: "npm:^2.4.0"
+  checksum: 10/a09c95f1a9e93b668d41ea5d28fed9847cea93d03b54ec63fc009bfd20fa0cb6d65ac6ff8298cec514ba319cecd0006f5898c3638579cd2d1ef3162838547bf1
+  languageName: node
+  linkType: hard
+
+"unidragger@npm:^3.0.0":
+  version: 3.0.1
+  resolution: "unidragger@npm:3.0.1"
+  dependencies:
+    ev-emitter: "npm:^2.0.0"
+  checksum: 10/0e1ca1da000dd31266dc3b138db147b9cce7f81b87423875dee8e89fb19d1d1db1cb19951dcdc4cfce0375d4c3bc317b496a41501c7663beb30188a4d0442bb1
+  languageName: node
+  linkType: hard
+
 "unified@npm:9.2.0":
   version: 9.2.0
   resolution: "unified@npm:9.2.0"
@@ -21141,6 +21234,15 @@ __metadata:
     is-extendable: "npm:^0.1.1"
     set-value: "npm:^2.0.1"
   checksum: 10/a3464097d3f27f6aa90cf103ed9387541bccfc006517559381a10e0dffa62f465a9d9a09c9b9c3d26d0f4cbe61d4d010e2fbd710fd4bf1267a768ba8a774b0ba
+  languageName: node
+  linkType: hard
+
+"unipointer@npm:^2.4.0":
+  version: 2.4.0
+  resolution: "unipointer@npm:2.4.0"
+  dependencies:
+    ev-emitter: "npm:^1.0.1"
+  checksum: 10/2b1f7c7d25c1792580bb3a1f9b23bd30003b51e35c8b713bd667e2642203a03920f4d90aa242dbf9151be23e79098aa801c288c42e26de54d7d09483612aeef9
   languageName: node
   linkType: hard
 
@@ -21726,7 +21828,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"webpack-cli@npm:^4.9.2":
+"webpack-cli@npm:^4.10.0, webpack-cli@npm:^4.9.2":
   version: 4.10.0
   resolution: "webpack-cli@npm:4.10.0"
   dependencies:
