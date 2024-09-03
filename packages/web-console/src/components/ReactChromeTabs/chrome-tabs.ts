@@ -237,6 +237,9 @@ class ChromeTabs {
       if (contentWidth < TAB_SIZE_SMALL) tabEl.setAttribute("is-small", "")
       if (contentWidth < TAB_SIZE_SMALLER) tabEl.setAttribute("is-smaller", "")
       if (contentWidth < TAB_SIZE_MINI) tabEl.setAttribute("is-mini", "")
+
+      tabEl.querySelector(".chrome-tab-close")!.style.display =
+        this.tabEls.length > 1 ? "block" : "none"
     })
 
     let styleHTML = ""
