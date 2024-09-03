@@ -18,6 +18,19 @@ describe("questdb schema with working tables", () => {
     });
     cy.refreshSchema();
   });
+  
+  it("should throw a warning when table is present with different case",()=>{
+    tables.forEach((table) => {
+      cy.createTable(table);
+    });
+    const tables = [
+      "Btc_Trades",
+      "Chicago_weather_stations",
+      "ecoMmerce_stats",
+      "gitLog",
+    ];
+    cy.createTable().should("Table name must be unique")
+  })
 
   it("should show all the tables when there are no suspended", () => {
     tables.forEach((table) => {
