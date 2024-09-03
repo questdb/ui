@@ -83,6 +83,7 @@ export const Tabs = () => {
           (buffer) =>
             ({
               id: buffer.id?.toString(),
+              favicon: "/assets/icon-file.svg",
               title: buffer.label,
               active: activeBuffer.id === buffer.id,
             } as Tab),
