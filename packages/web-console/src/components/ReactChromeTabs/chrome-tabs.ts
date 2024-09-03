@@ -136,10 +136,10 @@ class ChromeTabs {
       this.layoutTabs()
     })
 
-    // this.el.addEventListener("dblclick", (event) => {
-    //   if ([this.el, this.tabContentEl].includes(event.target as HTMLElement))
-    //     this.addTab();
-    // });
+    this.el.addEventListener("dblclick", (event) => {
+      if ([this.el, this.tabContentEl].includes(event.target as HTMLElement))
+        this.emit("newTab", {})
+    })
 
     this.el.addEventListener("click", ({ target }) => {
       if (target instanceof Element) {
