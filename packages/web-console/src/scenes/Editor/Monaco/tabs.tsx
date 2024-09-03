@@ -1,11 +1,14 @@
-import React, { useLayoutEffect, useState } from "react"
+import React, { useEffect, useLayoutEffect, useState } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
+import { useEditor } from "../../../providers"
 
-const fb =
-  "https://raw.githubusercontent.com/pansinm/react-chrome-tabs/master/demo/images/facebook-favicon.ico"
-const google =
-  "https://raw.githubusercontent.com/pansinm/react-chrome-tabs/master/demo/images/google-favicon.ico"
+type Tab = {
+  id: string
+  title: string
+  favicon: string
+  active: boolean
+}
 
 let _id = 1
 function uniqId() {
@@ -17,7 +20,6 @@ function createNewTab() {
   return {
     id: `tab-id-${id}`,
     title: `New Tabs ${id}`,
-    favicon: id % 2 ? fb : google,
     active: true,
   }
 }
@@ -28,21 +30,27 @@ const Root = styled.div`
 `
 
 export const Tabs = () => {
-  const [tabs, setTabs] = useState([
-    { id: "abc", favicon: fb, title: "Tab Title", active: true },
-  ])
+  const {
+    activeBuffer,
+    buffers,
+    setActiveBuffer,
+    addBuffer,
+    deleteBuffer,
+    updateBuffer,
+  } = useEditor()
+
+  const [tabs, setTabs] = useState<Tab[]>([])
   const [tabsVisible, setTabsVisible] = useState(false)
 
-  const addTab = () => {
-    setTabs([...tabs, createNewTab()])
-  }
-
   const active = (id: string) => {
-    setTabs(tabs.map((tab) => ({ ...tab, active: id === tab.id })))
+    const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
+    if (activeBuffer) {
+      setActiveBuffer(activeBuffer)
+    }
   }
 
   const close = (id: string) => {
-    setTabs(tabs.filter((tab) => tab.id !== id))
+    deleteBuffer(parseInt(id))
   }
 
   const reorder = (tabId: string, fromIndex: number, toIndex: number) => {
@@ -70,8 +78,15 @@ export const Tabs = () => {
         onTabClose={close}
         onTabReorder={reorder}
         onTabActive={active}
-        onNewTab={addTab}
-        tabs={tabs}
+        onNewTab={addBuffer}
+        tabs={buffers.map(
+          (buffer) =>
+            ({
+              id: buffer.id?.toString(),
+              title: buffer.label,
+              active: activeBuffer.id === buffer.id,
+            } as Tab),
+        )}
       />
     </Root>
   )

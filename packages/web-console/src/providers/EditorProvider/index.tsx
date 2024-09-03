@@ -7,13 +7,13 @@ import React, {
   useRef,
   useState,
 } from "react"
-import type { editor } from "monaco-editor"
+import { editor } from "monaco-editor"
 import { Monaco } from "@monaco-editor/react"
 import {
+  AppendQueryOptions,
   insertTextAtCursor,
   appendQuery,
   QuestDBLanguageName,
-  AppendQueryOptions,
 } from "../../scenes/Editor/Monaco/utils"
 import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
 import { db } from "../../store/db"
@@ -28,6 +28,7 @@ export type EditorContext = {
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string, options?: AppendQueryOptions) => void
+  buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => Promise<void>
   addBuffer: (
@@ -44,7 +45,8 @@ const defaultValues = {
   editorRef: { current: null },
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
-  appendQuery: (query: string, options?: AppendQueryOptions) => undefined,
+  appendQuery: () => undefined,
+  buffers: [],
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
@@ -59,27 +61,27 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
+  const buffers = useLiveQuery(bufferStore.getAll, [])
+  const activeBufferId = useLiveQuery(
+    () => bufferStore.getActiveId(),
+    [],
+  )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const [inFocus, setInFocus] = useState(false)
-  const [buffersInitialised, setBuffersInitialised] = useState(false)
 
+  const ranOnce = useRef(false)
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
-    async function initBuffers() {
-      const buffers = await bufferStore.getAll()
-      const activeBufferId = (await bufferStore.getActiveId())?.value
-      if (buffers && activeBufferId) {
-        const buffer =
-          buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
-        setActiveBufferState(buffer)
-        setBuffersInitialised(true)
-      }
+    if (!ranOnce.current && buffers && activeBufferId) {
+      const buffer =
+        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
+      setActiveBufferState(buffer)
+      ranOnce.current = true
     }
-    initBuffers()
-  }, [])
+  }, [buffers, activeBufferId])
 
-  if (!buffersInitialised) {
+  if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
   }
 
@@ -199,6 +201,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             appendQuery(editorRef.current, text, options)
           }
         },
+        inFocus,
+        buffers,
         activeBuffer,
         setActiveBuffer,
         addBuffer,
@@ -213,7 +217,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             editor.restoreViewState(activeBuffer.editorViewState)
           }
         },
-        inFocus,
       }}
     >
       {children}
