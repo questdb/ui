@@ -36,6 +36,7 @@ export type EditorContext = {
     options?: { shouldSelectAll?: boolean },
   ) => Promise<Buffer>
   deleteBuffer: (id: number) => Promise<void>
+  deleteAllBuffers: () => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   inFocus: boolean
@@ -51,6 +52,7 @@ const defaultValues = {
   setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
+  deleteAllBuffers: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
   inFocus: false,
@@ -165,6 +167,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return { id, ...buffer }
   }
 
+  const deleteAllBuffers = async () => {
+    await bufferStore.deleteAll()
+  }
+
   const updateBuffer: EditorContext["updateBuffer"] = async (id, payload) => {
     const editorViewState = editorRef.current?.saveViewState()
     await bufferStore.update(id, {
@@ -207,6 +213,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         setActiveBuffer,
         addBuffer,
         deleteBuffer,
+        deleteAllBuffers,
         updateBuffer,
         editorReadyTrigger: (editor) => {
           editor.focus()

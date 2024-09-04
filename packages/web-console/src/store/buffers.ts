@@ -101,4 +101,6 @@ export const bufferStore = {
     db.buffers.update(id, buffer),
 
   delete: (id: number) => db.buffers.delete(id),
+
+  deleteAll: () => db.buffers.clear(),
 }
