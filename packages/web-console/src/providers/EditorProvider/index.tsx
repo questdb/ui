@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react"
-import { editor } from "monaco-editor"
+import type { editor } from "monaco-editor"
 import { Monaco } from "@monaco-editor/react"
 import {
   AppendQueryOptions,
