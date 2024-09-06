@@ -20,16 +20,9 @@ describe("questdb schema with working tables", () => {
   });
   
   it("should throw a warning when table is present with different case",()=>{
-    tables.forEach((table) => {
-      cy.createTable(table);
-    });
-    const tables = [
-      "Btc_Trades",
-      "Chicago_weather_stations",
-      "ecoMmerce_stats",
-      "gitLog",
-    ];
-    cy.createTable().should("Table name must be unique")
+    cy.get('input[name="table_filter"]').type("Btc_trades").should("contains","Table name must be unique")
+    cy.get('input[name="table_filter"]').type("gitLog").should("contains","Table name must be unique")
+    cy.get('input[name="table_filter"]').type("GITLOG").should("contains","Table name must be unique")
   })
 
   it("should show all the tables when there are no suspended", () => {
