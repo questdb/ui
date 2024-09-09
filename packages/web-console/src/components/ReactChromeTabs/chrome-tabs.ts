@@ -325,6 +325,7 @@ class ChromeTabs {
     const input = tabEl.querySelector(".chrome-tab-rename") as HTMLInputElement
     input.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && input.value !== "") {
+        tabEl.setAttribute("data-original-value", input.value)
         this.emit("tabRename", { tabEl, title: input.value })
         this.toggleRenameTab(tabEl)
       } else if (e.key === "Escape") {
@@ -394,6 +395,7 @@ class ChromeTabs {
 
   showRenameTab(tabEl: HTMLElement) {
     tabEl.setAttribute("is-renaming", "")
+    tabEl.setAttribute("data-original-value", tabEl.textContent?.trim() || "")
     const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
     const inputEl = tabEl.querySelector(
       ".chrome-tab-rename",
@@ -403,7 +405,7 @@ class ChromeTabs {
     inputEl.style.display = "block"
     closeEl.style.display = "none"
     inputEl.focus()
-    inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length)
+    inputEl.select()
   }
 
   hideRenameTab(tabEl: HTMLElement) {
@@ -412,6 +414,9 @@ class ChromeTabs {
     const inputEl = tabEl.querySelector(
       ".chrome-tab-rename",
     ) as HTMLInputElement
+    if (tabEl.getAttribute("data-original-value")) {
+      inputEl.value = tabEl.getAttribute("data-original-value") || ""
+    }
     const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
     titleEl.style.display = "block"
     inputEl.style.display = "none"
