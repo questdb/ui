@@ -463,14 +463,18 @@ class ChromeTabs {
 
       let lastClickX: number
       let lastClickY: number
+      let lastTimeStamp: number = 0
 
       this.draggabillies.push(draggabilly)
 
       draggabilly.on("pointerDown", (_, pointer) => {
+        // @ts-ignore
+        const timeStamp = pointer.timeStamp
         if (_.target === tabEl.querySelector(".chrome-tab-drag-handle")) {
           if (
             lastClickX === pointer.clientX &&
-            lastClickY === pointer.clientY
+            lastClickY === pointer.clientY &&
+            timeStamp - lastTimeStamp < 500
           ) {
             tabEls.forEach((el) => this.hideRenameTab(el))
             this.showRenameTab(tabEl)
@@ -480,6 +484,7 @@ class ChromeTabs {
           }
           lastClickX = pointer.clientX
           lastClickY = pointer.clientY
+          lastTimeStamp = timeStamp
         }
         this.emit("tabClick", { tabEl })
         // this.setCurrentTab(tabEl);

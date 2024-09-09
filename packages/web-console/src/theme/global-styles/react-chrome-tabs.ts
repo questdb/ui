@@ -83,7 +83,7 @@ export const ReactChromeTabs = css`
     background: #676a79;
     color: #f8f8f2;
     font-size: 1.2rem;
-    margin-left: 0.55rem;
+    margin-left: 0.6rem;
     margin-top: -0.1rem;
     width: 100%;
   }
