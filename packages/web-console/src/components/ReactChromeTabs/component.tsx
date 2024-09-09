@@ -39,6 +39,7 @@ export function Tabs({
   darkMode,
   onTabActive,
   onTabClose,
+  onTabRename,
   onTabReorder,
   onContextMenu,
   onNewTab,
@@ -75,6 +76,7 @@ export function Tabs({
     {
       onTabClose,
       onTabActive,
+      onTabRename,
       onContextMenu,
       onNewTab,
       onDragEnd: handleDragEnd,

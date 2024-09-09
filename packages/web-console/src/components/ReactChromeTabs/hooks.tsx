@@ -36,6 +36,7 @@ export type Listeners = {
   onTabActive?: (tabId: string) => void
   onTabClose?: (tabId: string) => void
   onTabReorder?: (tabId: string, fromIdex: number, toIndex: number) => void
+  onTabRename?: (tabId: string, title: string) => void
   onDragBegin?: () => void
   onDragEnd?: () => void
   onContextMenu?: (tabId: string, event: MouseEvent) => void
@@ -81,10 +82,17 @@ export function useChromeTabs(listeners: Listeners) {
       const tabId = tabEle.getAttribute("data-tab-id") as string
       listeners.onTabActive?.(tabId)
     }
+    const renameListener = ({ detail }: any) => {
+      const { tabEl, title } = detail
+      const tabId = tabEl.getAttribute("data-tab-id") as string
+      listeners.onTabRename?.(tabId, title)
+    }
     const ele = chromeTabsRef.current?.el
     ele?.addEventListener("tabClick", listener)
+    ele?.addEventListener("tabRename", renameListener)
     return () => {
       ele?.removeEventListener("tabClick", listener)
+      ele?.removeEventListener("tabRename", renameListener)
     }
   }, [listeners.onTabActive])
 

@@ -72,6 +72,18 @@ export const ReactChromeTabs = css`
     z-index: 1;
     pointer-events: none;
   }
+  .chrome-tabs .chrome-tab-rename {
+    display: none;
+    position: relative;
+    z-index: 1;
+    border: none;
+    line-height: 1.5;
+    outline: none;
+    border-radius: 4px;
+    background: #676a79;
+    color: #f8f8f2;
+    font-size: 1.2rem;
+  }
   .chrome-tabs .chrome-tab,
   .chrome-tabs .chrome-tab * {
     user-select: none;

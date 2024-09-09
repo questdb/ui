@@ -69,6 +69,7 @@ const tabTemplate = `
         <div class="chrome-tab-content">
           <div class="chrome-tab-favicon"></div>
           <div class="chrome-tab-title"></div>
+          <input class="chrome-tab-rename" type="text" />
           <div class="chrome-tab-drag-handle"></div>
           <div class="chrome-tab-close"></div>
         </div>
@@ -136,11 +137,6 @@ class ChromeTabs {
       this.layoutTabs()
     })
 
-    this.el.addEventListener("dblclick", (event) => {
-      if ([this.el, this.tabContentEl].includes(event.target as HTMLElement))
-        this.emit("newTab", {})
-    })
-
     this.el.addEventListener("click", ({ target }) => {
       if (target instanceof Element) {
         if (target.classList.contains("new-tab-button")) {
@@ -150,6 +146,19 @@ class ChromeTabs {
     })
 
     this.tabEls.forEach((tabEl) => this.setTabCloseEventListener(tabEl))
+
+    this.tabEls.forEach((tabEl) => this.setTabRenameConfirmEventListener(tabEl))
+
+    document.addEventListener("click", ({ target }) => {
+      if (
+        target instanceof Element &&
+        !target.classList.contains("chrome-tab-rename") &&
+        !target.classList.contains("chrome-tab-drag-handle") &&
+        !target.classList.contains("chrome-tab-content")
+      ) {
+        this.tabEls.forEach((tabEl) => this.hideRenameTab(tabEl))
+      }
+    })
   }
 
   get tabEls() {
@@ -295,6 +304,7 @@ class ChromeTabs {
     tabProperties = Object.assign({}, defaultTapProperties, tabProperties)
     this.tabContentEl.appendChild(tabEl)
     this.setTabCloseEventListener(tabEl)
+    this.setTabRenameConfirmEventListener(tabEl)
     this.updateTab(tabEl, tabProperties)
     this.emit("tabAdd", { tabEl })
     if (!background) this.setCurrentTab(tabEl)
@@ -307,8 +317,22 @@ class ChromeTabs {
   setTabCloseEventListener(tabEl: HTMLElement) {
     tabEl.querySelector(".chrome-tab-close")!.addEventListener("click", (_) => {
       _.stopImmediatePropagation()
-      // this.removeTab(tabEl);
       this.emit("tabClose", { tabEl })
+    })
+  }
+
+  setTabRenameConfirmEventListener(tabEl: HTMLElement) {
+    const input = tabEl.querySelector(".chrome-tab-rename") as HTMLInputElement
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        this.emit("tabRename", { tabEl, title: input.value })
+        this.toggleRenameTab(tabEl)
+      } else if (e.key === "Escape") {
+        this.toggleRenameTab(tabEl)
+      }
+    })
+    input.addEventListener("blur", (_) => {
+      //
     })
   }
 
@@ -345,6 +369,9 @@ class ChromeTabs {
 
   updateTab(tabEl: HTMLElement, tabProperties: TabProperties) {
     tabEl.querySelector(".chrome-tab-title")!.textContent = tabProperties.title
+    const input = tabEl.querySelector(".chrome-tab-rename")!
+    input.setAttribute("value", tabProperties.title)
+    input.setAttribute("placeholder", tabProperties.title)
 
     const faviconEl = tabEl.querySelector(".chrome-tab-favicon") as HTMLElement
     const { favicon, faviconClass } = tabProperties
@@ -365,6 +392,38 @@ class ChromeTabs {
 
     if (tabProperties.id) {
       tabEl.setAttribute("data-tab-id", tabProperties.id)
+    }
+  }
+
+  showRenameTab(tabEl: HTMLElement) {
+    const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
+    const inputEl = tabEl.querySelector(
+      ".chrome-tab-rename",
+    ) as HTMLInputElement
+    const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
+    titleEl.style.display = "none"
+    inputEl.style.display = "block"
+    closeEl.style.display = "none"
+    inputEl.focus()
+  }
+
+  hideRenameTab(tabEl: HTMLElement) {
+    const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
+    const inputEl = tabEl.querySelector(
+      ".chrome-tab-rename",
+    ) as HTMLInputElement
+    const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
+    titleEl.style.display = "block"
+    inputEl.style.display = "none"
+    closeEl.style.display = "block"
+  }
+
+  toggleRenameTab(tabEl: HTMLElement) {
+    const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
+    if (titleEl.style.display === "none") {
+      this.hideRenameTab(tabEl)
+    } else {
+      this.showRenameTab(tabEl)
     }
   }
 
@@ -402,9 +461,24 @@ class ChromeTabs {
         containment: this.tabContentEl,
       })
 
+      let lastClickX: number
+      let lastClickY: number
+
       this.draggabillies.push(draggabilly)
 
-      draggabilly.on("pointerDown", (_) => {
+      draggabilly.on("pointerDown", (_, pointer) => {
+        if (_.target === tabEl.querySelector(".chrome-tab-drag-handle")) {
+          if (
+            lastClickX === pointer.clientX &&
+            lastClickY === pointer.clientY
+          ) {
+            tabEls.forEach((el) => this.hideRenameTab(el))
+            this.showRenameTab(tabEl)
+            _.stopImmediatePropagation()
+          }
+          lastClickX = pointer.clientX
+          lastClickY = pointer.clientY
+        }
         this.emit("tabClick", { tabEl })
         // this.setCurrentTab(tabEl);
       })

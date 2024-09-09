@@ -1,3 +1,4 @@
+import { update } from "ramda"
 import React, { useLayoutEffect, useState } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
@@ -23,6 +24,7 @@ export const Tabs = () => {
     addBuffer,
     deleteBuffer,
     deleteAllBuffers,
+    updateBuffer,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
 
@@ -50,6 +52,10 @@ export const Tabs = () => {
     })
   }
 
+  const rename = (id: string, title: string) => {
+    updateBuffer(parseInt(id), { label: title })
+  }
+
   useLayoutEffect(() => {
     setTabsVisible(true)
   }, [])
@@ -65,6 +71,7 @@ export const Tabs = () => {
         onTabClose={close}
         onTabReorder={reorder}
         onTabActive={active}
+        onTabRename={rename}
         onNewTab={addBuffer}
         tabs={buffers.map(
           (buffer) =>
