@@ -331,9 +331,6 @@ class ChromeTabs {
         this.toggleRenameTab(tabEl)
       }
     })
-    input.addEventListener("blur", (_) => {
-      //
-    })
   }
 
   get activeTabEl() {
