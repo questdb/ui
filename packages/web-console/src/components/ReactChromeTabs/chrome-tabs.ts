@@ -420,7 +420,7 @@ class ChromeTabs {
     const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
     titleEl.style.display = "block"
     inputEl.style.display = "none"
-    closeEl.style.display = "block"
+    closeEl.style.display = this.tabEls.length > 1 ? "block" : "none"
   }
 
   toggleRenameTab(tabEl: HTMLElement) {
