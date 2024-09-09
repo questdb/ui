@@ -396,6 +396,7 @@ class ChromeTabs {
   }
 
   showRenameTab(tabEl: HTMLElement) {
+    tabEl.setAttribute("is-renaming", "")
     const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
     const inputEl = tabEl.querySelector(
       ".chrome-tab-rename",
@@ -405,9 +406,11 @@ class ChromeTabs {
     inputEl.style.display = "block"
     closeEl.style.display = "none"
     inputEl.focus()
+    inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length)
   }
 
   hideRenameTab(tabEl: HTMLElement) {
+    tabEl.removeAttribute("is-renaming")
     const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
     const inputEl = tabEl.querySelector(
       ".chrome-tab-rename",

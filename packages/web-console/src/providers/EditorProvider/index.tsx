@@ -93,7 +93,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       if (buffer.id === currentActiveBufferId) {
         // early return if trying to set active an already active buffer
         // but keep focus on editor
-        editorRef.current?.focus()
+        // editorRef.current?.focus()
         return
       }
 
