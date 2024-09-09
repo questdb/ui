@@ -478,6 +478,8 @@ class ChromeTabs {
             tabEls.forEach((el) => this.hideRenameTab(el))
             this.showRenameTab(tabEl)
             _.stopImmediatePropagation()
+          } else {
+            this.tabEls.forEach((tabEl) => this.hideRenameTab(tabEl))
           }
           lastClickX = pointer.clientX
           lastClickY = pointer.clientY
