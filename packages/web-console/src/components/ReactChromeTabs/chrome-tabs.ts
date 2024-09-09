@@ -324,7 +324,7 @@ class ChromeTabs {
   setTabRenameConfirmEventListener(tabEl: HTMLElement) {
     const input = tabEl.querySelector(".chrome-tab-rename") as HTMLInputElement
     input.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && input.value !== "") {
         this.emit("tabRename", { tabEl, title: input.value })
         this.toggleRenameTab(tabEl)
       } else if (e.key === "Escape") {
