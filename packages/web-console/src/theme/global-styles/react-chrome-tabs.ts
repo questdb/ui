@@ -4,10 +4,6 @@ export const ReactChromeTabs = css`
   .chrome-tabs {
     box-sizing: border-box;
     position: relative;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-      "Segoe UI Symbol";
-    font-size: 12px;
     height: 46px;
     padding: 8px 3px 4px 3px;
     background: #dee1e6;
@@ -73,6 +69,7 @@ export const ReactChromeTabs = css`
     pointer-events: none;
   }
   .chrome-tabs .chrome-tab-rename {
+    font-family: ${({ theme }) => theme.font};
     display: none;
     position: relative;
     z-index: 1;
@@ -82,9 +79,7 @@ export const ReactChromeTabs = css`
     border-radius: 4px;
     background: transparent;
     color: #f8f8f2;
-    font-size: 1.2rem;
     margin-left: 0.6rem;
-    margin-top: -0.1rem;
     width: 100%;
   }
   .chrome-tabs .chrome-tab,
@@ -189,6 +184,7 @@ export const ReactChromeTabs = css`
     position: relative;
     display: flex;
     align-items: center;
+    align-self: center;
     justify-content: center;
     flex-shrink: 0;
     flex-grow: 0;
@@ -210,6 +206,7 @@ export const ReactChromeTabs = css`
   .chrome-tabs .chrome-tab .chrome-tab-title {
     flex: 1;
     vertical-align: top;
+    align-self: center;
     overflow: hidden;
     white-space: nowrap;
     margin-left: 4px;
@@ -251,6 +248,7 @@ export const ReactChromeTabs = css`
     border-top-right-radius: 8px;
   }
   .chrome-tabs .chrome-tab .chrome-tab-close {
+    align-self: center;
     flex-grow: 0;
     flex-shrink: 0;
     position: relative;
