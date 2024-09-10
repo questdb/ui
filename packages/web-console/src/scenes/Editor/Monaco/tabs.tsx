@@ -9,7 +9,7 @@ import {
   DropdownMenu,
   ForwardRef,
 } from "@questdb/react-components"
-import { Text } from "../../../components"
+import { Text, PopperHover, Tooltip } from "../../../components"
 
 type Tab = {
   id: string
@@ -98,9 +98,17 @@ export const Tabs = () => {
       <DropdownMenu.Root modal={false}>
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
-            <Button skin="transparent" prefixIcon={<History size="20px" />}>
-              History
-            </Button>
+            <PopperHover
+              delay={350}
+              placement="right"
+              trigger={
+                <Button skin="transparent">
+                  <History size="20px" />
+                </Button>
+              }
+            >
+              <Tooltip>History</Tooltip>
+            </PopperHover>
           </ForwardRef>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
