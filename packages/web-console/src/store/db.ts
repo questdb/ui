@@ -25,7 +25,8 @@
 import Dexie from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
-import { makeBuffer, fallbackBuffer } from "./buffers"
+import type { Tab, TabContent } from "./tabs"
+import { makeTab, makeTabContent, defaultEditorViewState, fallbackTab } from "./tabs";
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
 
@@ -38,6 +39,8 @@ export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
   read_notifications!: Table<{ newsId: string }, number>
+  tabs!: Table<Tab, number>
+  tab_contents!: Table<TabContent, number>
 
   constructor() {
     super("web-console")
@@ -48,27 +51,42 @@ export class Storage extends Dexie {
     this.version(2).stores({
       read_notifications: "++id, newsId",
     })
+    this.version(3).stores({
+      tabs: "++id, name",
+      tab_contents: "id",
+    }).upgrade(tx => tx.table("buffers").toCollection().each((buffer, cursor) => {
+        tx.table("tabs").add({id: buffer.id, name: buffer.label, archived: false})
+        tx.table("tab_contents").add({id: buffer.id, sql: buffer.value, editorViewState: buffer.editorViewState})
+    }))
 
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", () => {
-      // populate intial buffer with value from localStorage, then clear it.
+      // populate initial buffer with value from localStorage, then clear it.
       // this is to migrate from localStorage to indexedDB
       const valueFromDeprecatedStorage = getValue(StoreKey.QUERY_TEXT)
       if (typeof valueFromDeprecatedStorage !== "undefined") {
         localStorage.removeItem(StoreKey.QUERY_TEXT)
       }
 
-      this.buffers.add(
-        makeBuffer({
-          label: "SQL",
-          value: valueFromDeprecatedStorage ?? "",
+      this.tabs.add(
+        makeTab({
+          name: "SQL 1",
+          archived: false,
+        }),
+      )
+
+      this.tab_contents.add(
+          makeTabContent({
+          id: 1,
+          sql: valueFromDeprecatedStorage ?? "",
+          editorViewState: defaultEditorViewState,
         }),
       )
 
       this.editor_settings.add({
-        key: "activeBufferId",
-        value: fallbackBuffer.id,
+        key: "activeTabId",
+        value: fallbackTab.id,
       })
 
       this.editor_settings.add({
@@ -82,16 +100,24 @@ export class Storage extends Dexie {
       })
     })
 
-    // ensure `buffers` table is not empty when DB is ready
-    // user should always have at least one buffer.
+    // ensure `tabs` table is not empty when DB is ready
+    // user should always have at least one tab.
     this.on("ready", async () => {
-      if ((await this.buffers.count()) === 0) {
-        this.buffers.add(
-          makeBuffer({
-            label: "SQL",
-            value: "",
-          }),
-        )
+      if ((await this.tabs.count()) === 0) {
+          this.tabs.add(
+              makeTab({
+                  name: "SQL 1",
+                  archived: false,
+              }),
+          )
+
+          this.tab_contents.add(
+              makeTabContent({
+                  id: 1,
+                  sql: "",
+                  editorViewState: defaultEditorViewState,
+              }),
+          )
       }
 
       const url = new URL(window.location.href)
