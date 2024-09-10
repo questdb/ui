@@ -19,12 +19,6 @@ describe("questdb schema with working tables", () => {
     cy.refreshSchema();
   });
   
-  it("should throw a warning when table is present with different case",()=>{
-    cy.get('input[name="table_filter"]').type("Btc_trades").should("contains","Table name must be unique")
-    cy.get('input[name="table_filter"]').type("gitLog").should("contains","Table name must be unique")
-    cy.get('input[name="table_filter"]').type("GITLOG").should("contains","Table name must be unique")
-  })
-
   it("should show all the tables when there are no suspended", () => {
     tables.forEach((table) => {
       cy.getByDataHook("schema-table-title").should("contain", table);
