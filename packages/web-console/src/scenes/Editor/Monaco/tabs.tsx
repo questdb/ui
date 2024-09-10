@@ -1,8 +1,15 @@
-import { update } from "ramda"
 import React, { useLayoutEffect, useState } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
+import { File, History } from "@styled-icons/boxicons-regular"
+import {
+  Box,
+  Button,
+  DropdownMenu,
+  ForwardRef,
+} from "@questdb/react-components"
+import { Text } from "../../../components"
 
 type Tab = {
   id: string
@@ -11,9 +18,14 @@ type Tab = {
   active: boolean
 }
 
-const Root = styled.div`
+const Root = styled(Box).attrs({
+  align: "center",
+  justifyContent: "space-between",
+})`
   width: 100%;
   display: flex;
+  background: ${({ theme }) => theme.color.backgroundLighter};
+  padding-right: 1rem;
 `
 
 export const Tabs = () => {
@@ -83,6 +95,37 @@ export const Tabs = () => {
             } as Tab),
         )}
       />
+      <DropdownMenu.Root modal={false}>
+        <DropdownMenu.Trigger asChild>
+          <ForwardRef>
+            <Button skin="transparent" prefixIcon={<History size="20px" />}>
+              History
+            </Button>
+          </ForwardRef>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item>
+              <Box align="flex-start" justifyContent="flex-start" gap="0.5rem">
+                <File size="18px" />
+                <Box flexDirection="column" align="flex-start" gap="0">
+                  <Text color="foreground">Closed tab 2</Text>
+                  <Text color="gray2">09.09.2024, 15:50</Text>
+                </Box>
+              </Box>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item>
+              <Box align="flex-start" justifyContent="flex-start" gap="0.5rem">
+                <File size="18px" />
+                <Box flexDirection="column" align="flex-start" gap="0">
+                  <Text color="foreground">Closed tab 1</Text>
+                  <Text color="gray2">09.09.2024, 13:22</Text>
+                </Box>
+              </Box>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
     </Root>
   )
 }
