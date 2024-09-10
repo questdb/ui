@@ -469,6 +469,7 @@ class ChromeTabs {
       let lastClickX: number
       let lastClickY: number
       let lastTimeStamp: number = 0
+      let wasActiveBefore: boolean
 
       this.draggabillies.push(draggabilly)
 
@@ -479,14 +480,17 @@ class ChromeTabs {
           if (
             lastClickX === pointer.clientX &&
             lastClickY === pointer.clientY &&
-            timeStamp - lastTimeStamp < 500
+            timeStamp - lastTimeStamp < 500 &&
+            wasActiveBefore
           ) {
             tabEls.forEach((el) => this.hideRenameTab(el))
             this.showRenameTab(tabEl)
             _.stopImmediatePropagation()
+            wasActiveBefore = false
           } else {
             this.tabEls.forEach((tabEl) => this.hideRenameTab(tabEl))
           }
+          wasActiveBefore = tabEl.hasAttribute("active")
           lastClickX = pointer.clientX
           lastClickY = pointer.clientY
           lastTimeStamp = timeStamp
