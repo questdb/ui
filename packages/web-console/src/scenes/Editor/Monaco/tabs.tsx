@@ -11,7 +11,7 @@ import {
 } from "@questdb/react-components"
 import { Text, PopperHover, Tooltip } from "../../../components"
 
-type Tab = {
+type TabProperties = {
   id: string
   title: string
   favicon: string
@@ -30,42 +30,42 @@ const Root = styled(Box).attrs({
 
 export const Tabs = () => {
   const {
-    activeBuffer,
-    buffers,
-    setActiveBuffer,
-    addBuffer,
-    deleteBuffer,
-    deleteAllBuffers,
-    updateBuffer,
+    activeTab,
+    tabs,
+    setActiveTab,
+    addTab,
+    deleteTab,
+    deleteAllTabs,
+    updateTab,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
 
   const active = (id: string) => {
-    const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (activeBuffer) {
-      setActiveBuffer(activeBuffer)
+    const activeTab = tabs.find((tab) => tab.id === parseInt(id))
+    if (activeTab) {
+      setActiveTab(activeTab)
     }
   }
 
   const close = (id: string) => {
-    deleteBuffer(parseInt(id))
+    deleteTab(parseInt(id))
   }
 
   const reorder = (tabId: string, _fromIndex: number, toIndex: number) => {
-    const beforeTab = buffers.find((tab) => tab.id === parseInt(tabId))
+    const beforeTab = tabs.find((tab) => tab.id === parseInt(tabId))
     if (!beforeTab) {
       return
     }
-    deleteAllBuffers()
-    let newTabs = buffers.filter((tab) => tab.id !== parseInt(tabId))
+    deleteAllTabs()
+    let newTabs = tabs.filter((tab) => tab.id !== parseInt(tabId))
     newTabs.splice(toIndex, 0, beforeTab)
     newTabs.forEach((tab) => {
-      addBuffer(tab)
+      addTab(tab)
     })
   }
 
   const rename = (id: string, title: string) => {
-    updateBuffer(parseInt(id), { label: title })
+    updateTab(parseInt(id), { name: title })
   }
 
   useLayoutEffect(() => {
@@ -84,15 +84,15 @@ export const Tabs = () => {
         onTabReorder={reorder}
         onTabActive={active}
         onTabRename={rename}
-        onNewTab={addBuffer}
-        tabs={buffers.map(
-          (buffer) =>
+        onNewTab={addTab}
+        tabs={tabs.map(
+          (tab) =>
             ({
-              id: buffer.id?.toString(),
+              id: tab.id?.toString(),
               favicon: "/assets/icon-file.svg",
-              title: buffer.label,
-              active: activeBuffer.id === buffer.id,
-            } as Tab),
+              title: tab.name,
+              active: activeTab.id === tab.id,
+            } as TabProperties),
         )}
       />
       <DropdownMenu.Root modal={false}>
