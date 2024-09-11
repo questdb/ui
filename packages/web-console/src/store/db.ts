@@ -54,10 +54,16 @@ export class Storage extends Dexie {
     this.version(3).stores({
       tabs: "++id, name",
       tab_contents: "id",
-    }).upgrade(tx => tx.table("buffers").toCollection().each((buffer, cursor) => {
-        tx.table("tabs").add({id: buffer.id, name: buffer.label, archived: false})
-        tx.table("tab_contents").add({id: buffer.id, sql: buffer.value, editorViewState: buffer.editorViewState})
-    }))
+    }).upgrade(tx => {
+        tx.table("buffers").toCollection().each((buffer, cursor) => {
+            tx.table("tabs").add({id: buffer.id, name: buffer.label, archived: false})
+            tx.table("tab_contents").add({id: buffer.id, sql: buffer.value, editorViewState: buffer.editorViewState})
+
+            tx.table("editor_settings").add({key: "activeTabId", value: 1})
+            tx.table("editor_settings").add({key: "returnTo", value: ""})
+            tx.table("editor_settings").add({key: "returnToLabel", value: ""})
+        })
+    })
 
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
@@ -86,7 +92,7 @@ export class Storage extends Dexie {
 
       this.editor_settings.add({
         key: "activeTabId",
-        value: fallbackTab.id,
+        value: 1,
       })
 
       this.editor_settings.add({
@@ -125,7 +131,7 @@ export class Storage extends Dexie {
 
       await Promise.all(
         keys.map(async (key) => {
-          if (url.searchParams.has(key)) {
+            if (url.searchParams.has(key)) {
             const value = url.searchParams.get(key) ?? ""
 
             const hasValue =

@@ -77,7 +77,7 @@ export const makeTab = ({
   archived = false
 }: {
   name: string,
-  archived: boolean
+  archived?: boolean
 }): Omit<Tab, "id"> => ({
   name,
   archived
@@ -97,7 +97,8 @@ export const makeTabContent = ({
   editorViewState,
 })
 
-export const fallbackTab = { id: 1, ...makeTab({ name: "SQL 1", archived: false }) }
+export const fallbackTab = { id: 1, ...makeTab({ name: "SQL", archived: false }) }
+export const fallbackTabContent = makeTabContent({ id: 1, sql: "", editorViewState: defaultEditorViewState })
 
 export const tabStore = {
   getAll: () => db.tabs.toArray(),
@@ -117,6 +118,8 @@ export const tabStore = {
     db.tabs.update(id, tab),
 
   delete: (id: number) => db.tabs.delete(id),
+
+  deleteAll: () => db.tabs.clear(),
 }
 
 export const tabContentStore = {
