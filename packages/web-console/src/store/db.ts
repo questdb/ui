@@ -58,10 +58,7 @@ export class Storage extends Dexie {
         tx.table("buffers").toCollection().each((buffer, cursor) => {
             tx.table("tabs").add({id: buffer.id, name: buffer.label, archived: false})
             tx.table("tab_contents").add({id: buffer.id, sql: buffer.value, editorViewState: buffer.editorViewState})
-
             tx.table("editor_settings").add({key: "activeTabId", value: 1})
-            tx.table("editor_settings").add({key: "returnTo", value: ""})
-            tx.table("editor_settings").add({key: "returnToLabel", value: ""})
         })
     })
 
