@@ -26,7 +26,12 @@ import Dexie from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
 import type { Tab, TabContent } from "./tabs"
-import { makeTab, makeTabContent, defaultEditorViewState, fallbackTab } from "./tabs";
+import {
+  makeTab,
+  makeTabContent,
+  defaultEditorViewState,
+  fallbackTab,
+} from "./tabs"
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
 
@@ -51,16 +56,28 @@ export class Storage extends Dexie {
     this.version(2).stores({
       read_notifications: "++id, newsId",
     })
-    this.version(3).stores({
-      tabs: "++id, name",
-      tab_contents: "id",
-    }).upgrade(tx => {
-        tx.table("buffers").toCollection().each((buffer, cursor) => {
-            tx.table("tabs").add({id: buffer.id, name: buffer.label, archived: false})
-            tx.table("tab_contents").add({id: buffer.id, sql: buffer.value, editorViewState: buffer.editorViewState})
-            tx.table("editor_settings").add({key: "activeTabId", value: 1})
-        })
-    })
+    this.version(3)
+      .stores({
+        tabs: "++id, name",
+        tab_contents: "id",
+      })
+      .upgrade((tx) => {
+        tx.table("buffers")
+          .toCollection()
+          .each((buffer, cursor) => {
+            tx.table("tabs").add({
+              id: buffer.id,
+              name: buffer.label,
+              archived: false,
+            })
+            tx.table("tab_contents").add({
+              id: buffer.id,
+              sql: buffer.value,
+              editorViewState: buffer.editorViewState,
+            })
+            tx.table("editor_settings").add({ key: "activeTabId", value: 1 })
+          })
+      })
 
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
@@ -80,7 +97,7 @@ export class Storage extends Dexie {
       )
 
       this.tab_contents.add(
-          makeTabContent({
+        makeTabContent({
           id: 1,
           sql: valueFromDeprecatedStorage ?? "",
           editorViewState: defaultEditorViewState,
@@ -107,20 +124,20 @@ export class Storage extends Dexie {
     // user should always have at least one tab.
     this.on("ready", async () => {
       if ((await this.tabs.count()) === 0) {
-          this.tabs.add(
-              makeTab({
-                  name: "SQL 1",
-                  archived: false,
-              }),
-          )
+        this.tabs.add(
+          makeTab({
+            name: "SQL 1",
+            archived: false,
+          }),
+        )
 
-          this.tab_contents.add(
-              makeTabContent({
-                  id: 1,
-                  sql: "",
-                  editorViewState: defaultEditorViewState,
-              }),
-          )
+        this.tab_contents.add(
+          makeTabContent({
+            id: 1,
+            sql: "",
+            editorViewState: defaultEditorViewState,
+          }),
+        )
       }
 
       const url = new URL(window.location.href)
@@ -128,7 +145,7 @@ export class Storage extends Dexie {
 
       await Promise.all(
         keys.map(async (key) => {
-            if (url.searchParams.has(key)) {
+          if (url.searchParams.has(key)) {
             const value = url.searchParams.get(key) ?? ""
 
             const hasValue =
