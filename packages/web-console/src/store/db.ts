@@ -48,7 +48,6 @@ export class Storage extends Dexie {
     this.version(2).stores({
       read_notifications: "++id, newsId",
     })
-
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", () => {
