@@ -45,12 +45,7 @@ import Layout from "./scenes/Layout"
 import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
 import { PosthogProviderWrapper } from "./providers/PosthogProviderWrapper"
-import {
-  AuthProvider,
-  DBProvider,
-  QuestProvider,
-  SettingsProvider,
-} from "./providers"
+import { AuthProvider, QuestProvider, SettingsProvider } from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,
@@ -70,28 +65,26 @@ const FadeSlow = createGlobalFadeTransition(
 )
 
 ReactDOM.render(
-  <DBProvider>
-    <ThemeProvider theme={theme}>
-      <ScreenSizeProvider>
-        <Provider store={store}>
-          <SettingsProvider>
-            <PosthogProviderWrapper>
-              <AuthProvider>
-                <QuestProvider>
-                  <GlobalStyle />
-                  {ReactDOM.createPortal(<ToastContainer />, document.body)}
-                  <LocalStorageProvider>
-                    <FadeSlow />
-                    <FadeReg />
-                    <Layout />
-                  </LocalStorageProvider>
-                </QuestProvider>
-              </AuthProvider>
-            </PosthogProviderWrapper>
-          </SettingsProvider>
-        </Provider>
-      </ScreenSizeProvider>
-    </ThemeProvider>
-  </DBProvider>,
+  <ThemeProvider theme={theme}>
+    <ScreenSizeProvider>
+      <Provider store={store}>
+        <SettingsProvider>
+          <PosthogProviderWrapper>
+            <AuthProvider>
+              <QuestProvider>
+                <GlobalStyle />
+                {ReactDOM.createPortal(<ToastContainer />, document.body)}
+                <LocalStorageProvider>
+                  <FadeSlow />
+                  <FadeReg />
+                  <Layout />
+                </LocalStorageProvider>
+              </QuestProvider>
+            </AuthProvider>
+          </PosthogProviderWrapper>
+        </SettingsProvider>
+      </Provider>
+    </ScreenSizeProvider>
+  </ThemeProvider>,
   document.getElementById("root"),
 )
