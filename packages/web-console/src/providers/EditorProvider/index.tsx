@@ -15,9 +15,9 @@ import {
   appendQuery,
   QuestDBLanguageName,
 } from "../../scenes/Editor/Monaco/utils"
-import {tabStore, tabContentStore, fallbackTab, fallbackTabContent, makeTab} from "../../store/tabs";
+import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
 import { db } from "../../store/db"
-import type { Tab, TabContent } from "../../store/tabs"
+import type { Buffer } from "../../store/buffers"
 
 import { useLiveQuery } from "dexie-react-hooks"
 
@@ -28,18 +28,16 @@ export type EditorContext = {
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string, options?: AppendQueryOptions) => void
-  tabs: Tab[]
-  activeTab: Tab
-  activeTabContent: TabContent
-  setActiveTab: (tab: Tab) => Promise<void>
-  addTab: (
-    tab?: Partial<Tab>,
+  buffers: Buffer[]
+  activeBuffer: Buffer
+  setActiveBuffer: (buffer: Buffer) => Promise<void>
+  addBuffer: (
+    buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
-  ) => Promise<Tab>
-  deleteTab: (id: number) => Promise<void>
-  deleteAllTabs: () => Promise<void>
-  updateTab: (id: number, tab?: Partial<Tab>) => Promise<void>
-  updateTabContent: (id: number, tabContent?: Partial<TabContent>) => Promise<void>
+  ) => Promise<Buffer>
+  deleteBuffer: (id: number) => Promise<void>
+  deleteAllBuffers: () => Promise<void>
+  updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   inFocus: boolean
 }
@@ -49,15 +47,13 @@ const defaultValues = {
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
   appendQuery: () => undefined,
-  tabs: [],
-  activeTab: fallbackTab,
-  activeTabContent: fallbackTabContent,
-  setActiveTab: () => Promise.resolve(),
-  addTab: () => Promise.resolve(fallbackTab),
-  deleteTab: () => Promise.resolve(),
-  deleteAllTabs: () => Promise.resolve(),
-  updateTab: () => Promise.resolve(),
-  updateTabContent: () => Promise.resolve(),
+  buffers: [],
+  activeBuffer: fallbackBuffer,
+  setActiveBuffer: () => Promise.resolve(),
+  addBuffer: () => Promise.resolve(fallbackBuffer),
+  deleteBuffer: () => Promise.resolve(),
+  deleteAllBuffers: () => Promise.resolve(),
+  updateBuffer: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
   inFocus: false,
 }
@@ -67,83 +63,71 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
-  const tabs = useLiveQuery(tabStore.getAll, [])
-  const activeTabId = useLiveQuery(
-    () => tabStore.getActiveId(),
+  const buffers = useLiveQuery(bufferStore.getAll, [])
+  const activeBufferId = useLiveQuery(
+    () => bufferStore.getActiveId(),
     [],
   )?.value
-  debugger;
-  const tabContent = useLiveQuery(() => tabContentStore.getById(activeTabId as number), [])
-  if (!tabContent) {
-    throw Error("Missing tab content for the active tab: " + activeTabId)
-  }
 
-  const [activeTab, setActiveTabState] = useState<Tab>(fallbackTab)
-  const [activeTabContent, setActiveTabContentState] = useState<TabContent>(fallbackTabContent)
+  const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const [inFocus, setInFocus] = useState(false)
 
   const ranOnce = useRef(false)
-  // this effect should run only once, after mount and after `tabs` and `activeTabId` are ready from the db
+  // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
-    debugger;
-    if (!ranOnce.current && tabs && activeTabId) {
-      const tab = tabs?.find((tab) => tab.id === activeTabId) ?? tabs[0]
-      setActiveTabState(tab)
-      setActiveTabContentState(tabContent)
+    if (!ranOnce.current && buffers && activeBufferId) {
+      const buffer =
+        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
+      setActiveBufferState(buffer)
       ranOnce.current = true
     }
-  }, [tabs, activeTabId])
+  }, [buffers, activeBufferId])
 
-  if (!tabs || !activeTabId || activeTab === fallbackTab) {
+  if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
   }
 
-  const setActiveTab = async (tab: Tab) => {
-    const currentActiveTabId = (await tabStore.getActiveId())?.value
-    if (currentActiveTabId) {
-      if (tab.id === currentActiveTabId) {
-        // early return if trying to set active an already active tab
+  const setActiveBuffer = async (buffer: Buffer) => {
+    const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+    if (currentActiveBufferId) {
+      if (buffer.id === currentActiveBufferId) {
+        // early return if trying to set active an already active buffer
         // but keep focus on editor
         // editorRef.current?.focus()
         return
       }
 
-      // check if tab with activeTab.id exists, otherwise we might save editor state of a
-      // tab which is being deleted
-      await updateTab(activeTab.id as number)
+      // check if buffer with activeBuffer.id exists, otherwise we might save editor state of a
+      // buffer which is being deleted
+      await updateBuffer(activeBuffer.id as number)
     }
-    await 
-      tabStore.setActiveId(tab.id as number)
-    setActiveTabState(tab)
-    const tabContent = await tabContentStore.getById(tab.id as number)
-    if (!tabContent) {
-      throw Error("Missing tab content for tab: " + JSON.stringify(tab))
-    }
-    if (editorRef.current && monacoRef.current && tab) {
+    await bufferStore.setActiveId(buffer.id as number)
+    setActiveBufferState(buffer)
+    if (editorRef.current && monacoRef.current) {
       const model = monacoRef.current.editor.createModel(
-        tabContent.sql,
+        buffer.value,
         QuestDBLanguageName,
       )
 
       editorRef.current.setModel(model)
       editorRef.current.focus()
     }
-    if (tabContent.editorViewState) {
-      editorRef.current?.restoreViewState(tabContent.editorViewState)
+    if (buffer.editorViewState) {
+      editorRef.current?.restoreViewState(buffer.editorViewState)
     }
   }
 
-  const addTab: EditorContext["addTab"] = async (
-    newTab,
+  const addBuffer: EditorContext["addBuffer"] = async (
+    newBuffer,
     { shouldSelectAll = false } = {},
   ) => {
     const currentDefaultTabNumbers = (
-      await db.tabs
-        .filter((tab) => tab.name.startsWith(fallbackTab.name))
+      await db.buffers
+        .filter((buffer) => buffer.label.startsWith(fallbackBuffer.label))
         .toArray()
     )
-      .map((tab) =>
-        tab.name.slice(fallbackTab.name.length + /* whitespace */ 1),
+      .map((buffer) =>
+        buffer.label.slice(fallbackBuffer.label.length + /* whitespace */ 1),
       )
       .filter(Boolean)
       .map((n) => parseInt(n, 10))
@@ -158,15 +142,19 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       }
     }
 
-    const tab = makeTab({
-      ...newTab,
-      name: newTab?.name ?? `${fallbackTab.name} ${nextNumber()}`,
+    const buffer = makeBuffer({
+      ...newBuffer,
+      label: newBuffer?.label ?? `${fallbackBuffer.label} ${nextNumber()}`,
     })
-    const id = await db.tabs.add(tab)
-    await setActiveTab(tab)
-    if (editorRef.current && monacoRef.current) {
+    const id = await db.buffers.add(buffer)
+    await setActiveBuffer(buffer)
+    if (
+      editorRef.current &&
+      monacoRef.current &&
+      typeof buffer.value === "string"
+    ) {
       const model = monacoRef.current?.editor.createModel(
-        "", //tabContent.sql,
+        buffer.value,
         QuestDBLanguageName,
       )
       editorRef.current.setModel(model)
@@ -176,36 +164,29 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       }
     }
 
-    return { id, ...tab }
+    return { id, ...buffer }
   }
 
-  const deleteAllTabs = async () => {
-    await tabStore.deleteAll()
+  const deleteAllBuffers = async () => {
+    await bufferStore.deleteAll()
   }
 
-  const updateTab: EditorContext["updateTab"] = async (id, payload) => {
-    await tabStore.update(id, {
-      ...payload,
-    })
-  }
-
-  const updateTabContent: EditorContext["updateTabContent"] = async (id, payload) => {
+  const updateBuffer: EditorContext["updateBuffer"] = async (id, payload) => {
     const editorViewState = editorRef.current?.saveViewState()
-    await tabContentStore.update(id, {
+    await bufferStore.update(id, {
       ...payload,
       ...(editorViewState ? { editorViewState } : {}),
     })
   }
 
-  const deleteTab: EditorContext["deleteTab"] = async (id) => {
-    await tabStore.delete(id)
-    await tabContentStore.delete(id)
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
+    await bufferStore.delete(id)
 
-    // set new active tab only when removing currently active tab
-    const activeTabId = (await tabStore.getActiveId())?.value
-    if (typeof activeTabId !== "undefined" && activeTabId === id) {
-      const nextActive = await db.tabs.toCollection().last()
-      await setActiveTab(nextActive ?? fallbackTab)
+    // set new active buffer only when removing currently active buffer
+    const activeBufferId = (await bufferStore.getActiveId())?.value
+    if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
+      const nextActive = await db.buffers.toCollection().last()
+      await setActiveBuffer(nextActive ?? fallbackBuffer)
     } else {
       editorRef.current?.focus()
     }
@@ -227,22 +208,20 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
           }
         },
         inFocus,
-        tabs,
-        activeTab,
-        activeTabContent,
-        setActiveTab,
-        addTab,
-        deleteTab,
-        deleteAllTabs,
-        updateTab,
-        updateTabContent,
-        editorReadyTrigger: async (editor) => {
+        buffers,
+        activeBuffer,
+        setActiveBuffer,
+        addBuffer,
+        deleteBuffer,
+        deleteAllBuffers,
+        updateBuffer,
+        editorReadyTrigger: (editor) => {
           editor.focus()
           setInFocus(true)
           editor.onDidFocusEditorWidget(() => setInFocus(true))
           editor.onDidBlurEditorWidget(() => setInFocus(false))
-          if (activeTabContent.editorViewState) {
-            editor.restoreViewState(activeTabContent.editorViewState)
+          if (activeBuffer.editorViewState) {
+            editor.restoreViewState(activeBuffer.editorViewState)
           }
         },
       }}

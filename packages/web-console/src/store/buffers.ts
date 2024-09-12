@@ -22,6 +22,7 @@
  *
  ******************************************************************************/
 
+import { db } from "./db"
 import type { editor } from "monaco-editor"
 
 export type Buffer = {
@@ -30,4 +31,76 @@ export type Buffer = {
   label: string
   value: string
   editorViewState?: editor.ICodeEditorViewState
+}
+
+const defaultEditorViewState: editor.ICodeEditorViewState = {
+  cursorState: [
+    {
+      inSelectionMode: false,
+      selectionStart: {
+        lineNumber: 1,
+        column: 1,
+      },
+      position: {
+        lineNumber: 1,
+        column: 1,
+      },
+    },
+  ],
+  contributionsState: [
+    {
+      "editor.contrib.wordHighlighter": false,
+      "editor.contrib.folding": {
+        lineCount: 1,
+        provider: "indent",
+        foldedImports: false,
+      },
+    },
+  ],
+  viewState: {
+    scrollLeft: 0,
+    firstPosition: {
+      lineNumber: 1,
+      column: 1,
+    },
+    firstPositionDeltaTop: 0,
+  },
+}
+
+export const makeBuffer = ({
+  label,
+  value,
+  editorViewState = defaultEditorViewState,
+}: {
+  label: string
+  value?: string
+  editorViewState?: editor.ICodeEditorViewState
+}): Omit<Buffer, "id"> => ({
+  label,
+  value: value ?? "",
+  editorViewState,
+})
+
+export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }
+
+export const bufferStore = {
+  getAll: () => db.buffers.toArray(),
+
+  getById: (id: number) => db.buffers.get(id),
+
+  getActiveId: () =>
+    db.editor_settings.where("key").equals("activeBufferId").first(),
+
+  setActiveId: (id: number) =>
+    db.editor_settings
+      .where("key")
+      .equals("activeBufferId")
+      .modify({ value: id }),
+
+  update: (id: number, buffer: Partial<Buffer>) =>
+    db.buffers.update(id, buffer),
+
+  delete: (id: number) => db.buffers.delete(id),
+
+  deleteAll: () => db.buffers.clear(),
 }

@@ -33,7 +33,7 @@ import {
 
 import { QuestDBLanguageName } from "./utils"
 import type { EditorContext } from "../../../providers"
-import { tabStore } from "../../../store/tabs"
+import { bufferStore } from "../../../store/buffers"
 import type { editor } from "monaco-editor"
 
 enum Command {
@@ -74,7 +74,7 @@ export const registerEditorActions = ({
     label: "Add new tab",
     keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
     run: () => {
-      editorContext.addTab()
+      editorContext.addBuffer()
     },
   })
 
@@ -83,14 +83,14 @@ export const registerEditorActions = ({
     label: "Close current tab",
     keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyW],
     run: async () => {
-      const tabs = await tabStore.getAll()
-      const activeId = await tabStore.getActiveId()
+      const buffers = await bufferStore.getAll()
+      const activeId = await bufferStore.getActiveId()
       if (
-        tabs.length > 1 &&
+        buffers.length > 1 &&
         activeId?.value &&
         typeof activeId?.value === "number"
       ) {
-        editorContext.deleteTab(activeId.value)
+        editorContext.deleteBuffer(activeId.value)
       }
     },
   })

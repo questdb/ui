@@ -90,14 +90,12 @@ const MonacoEditor = () => {
     editorRef,
     monacoRef,
     insertTextAtCursor,
-    activeTab,
-    activeTabContent,
-    updateTab,
-    updateTabContent,
+    activeBuffer,
+    updateBuffer,
     editorReadyTrigger,
-    addTab,
+    addBuffer,
   } = editorContext
-  const {quest} = useContext(QuestContext)
+  const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
@@ -112,11 +110,11 @@ const MonacoEditor = () => {
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
 
-  // Set the initial line number width in chars based on the number of lines in the active tab
+  // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
     DEFAULT_LINE_CHARS +
-    activeTabContent.sql.split("\n").length.toString().length -
-    1,
+      activeBuffer.value.split("\n").length.toString().length -
+      1,
   )
 
   const toggleRunning = (isRefresh: boolean = false) => {
@@ -219,13 +217,13 @@ const MonacoEditor = () => {
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
     editor.setModel(
-      monaco.editor.createModel(activeTabContent.sql, QuestDBLanguageName),
+      monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
     setEditorReady(true)
     editorReadyTrigger(editor)
 
     // Support legacy bus events for non-react codebase
-    registerLegacyEventBusEvents({editor, insertTextAtCursor, toggleRunning})
+    registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
     registerEditorActions({
       editor,
       monaco,
@@ -258,7 +256,7 @@ const MonacoEditor = () => {
         editor.setSelection(matches[0].range)
         // otherwise, append the query
       } else {
-        appendQuery(editor, query, {appendAt: "end"})
+        appendQuery(editor, query, { appendAt: "end" })
       }
     }
 
@@ -288,7 +286,7 @@ const MonacoEditor = () => {
 
       if (request?.query) {
         void quest
-          .queryRaw(request.query, {limit: "0,1000", explain: true})
+          .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
             setRequest(undefined)
             errorRef.current = undefined
@@ -322,7 +320,7 @@ const MonacoEditor = () => {
                 actions.query.addNotification({
                   jitCompiled: result.explain?.jitCompiled ?? false,
                   content: (
-                    <QueryResult {...result.timings} rowCount={result.count}/>
+                    <QueryResult {...result.timings} rowCount={result.count} />
                   ),
                   sideContent: (
                     <Text color="foreground" ellipsis title={result.query}>
@@ -408,7 +406,7 @@ const MonacoEditor = () => {
         onMount={onMount}
         saveViewState={false}
         onChange={(value) => {
-          updateTabContent(activeTab.id as number, {sql: value})
+          updateBuffer(activeBuffer.id as number, { value })
         }}
         options={{
           // initially null, but will be set during onMount with editor.setModel
@@ -428,7 +426,7 @@ const MonacoEditor = () => {
         }}
         theme="vs-dark"
       />
-      <Loader show={!!request || !tables}/>
+      <Loader show={!!request || !tables} />
     </Content>
   )
 }
