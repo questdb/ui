@@ -32,7 +32,6 @@ export const ReactChromeTabs = css`
     transition: padding 0.35s;
   }
   .chrome-tabs .new-tab-button-wrapper.overflow-shadow {
-    box-shadow: -5px 1px 5px #ccc, 20px 0 0 #dee1e6;
     padding-left: 4px;
   }
   .chrome-tabs .new-tab-button-wrapper .new-tab-button {
@@ -343,7 +342,6 @@ export const ReactChromeTabs = css`
     background: #282a36;
   }
   .chrome-tabs.chrome-tabs-dark-theme .new-tab-button-wrapper.overflow-shadow {
-    box-shadow: -5px 1px 5px rgba(22, 23, 26, 0.5), 20px 0 0 #202124;
     padding-left: 4px;
   }
   .chrome-tabs.chrome-tabs-dark-theme .new-tab-button-wrapper .new-tab-button {
