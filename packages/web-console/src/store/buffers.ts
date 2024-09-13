@@ -30,6 +30,9 @@ export type Buffer = {
   id?: number
   label: string
   value: string
+  position: number
+  archived?: boolean
+  archivedAt?: number
   editorViewState?: editor.ICodeEditorViewState
 }
 
@@ -71,17 +74,29 @@ export const makeBuffer = ({
   label,
   value,
   editorViewState = defaultEditorViewState,
+  position,
+  archived,
+  archivedAt,
 }: {
   label: string
   value?: string
   editorViewState?: editor.ICodeEditorViewState
+  position: number
+  archived?: boolean
+  archivedAt?: number
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
   editorViewState,
+  position,
+  archived,
+  archivedAt,
 })
 
-export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }
+export const fallbackBuffer = {
+  id: 1,
+  ...makeBuffer({ label: "SQL", position: 0 }),
+}
 
 export const bufferStore = {
   getAll: () => db.buffers.toArray(),

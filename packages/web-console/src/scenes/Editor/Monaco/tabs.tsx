@@ -28,17 +28,27 @@ const Root = styled(Box).attrs({
   padding-right: 1rem;
 `
 
+const DropdownMenuContent = styled(DropdownMenu.Content)`
+  z-index: 100;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
 export const Tabs = () => {
   const {
     activeBuffer,
     buffers,
     setActiveBuffer,
     addBuffer,
-    deleteBuffer,
-    deleteAllBuffers,
     updateBuffer,
+    deleteBuffer,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
+
+  const archivedBuffers = buffers
+    .filter((buffer) => buffer.archived && buffer.archivedAt)
+    .sort((a, b) =>
+      a.archivedAt && b.archivedAt ? b.archivedAt - a.archivedAt : 0,
+    )
 
   const active = (id: string) => {
     const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
@@ -48,7 +58,13 @@ export const Tabs = () => {
   }
 
   const close = (id: string) => {
-    deleteBuffer(parseInt(id))
+    updateBuffer(parseInt(id), {
+      archived: true,
+      archivedAt: new Date().getTime(),
+    })
+    if (archivedBuffers.length >= 10) {
+      deleteBuffer(archivedBuffers[archivedBuffers.length - 1].id as number)
+    }
   }
 
   const reorder = (tabId: string, _fromIndex: number, toIndex: number) => {
@@ -56,12 +72,14 @@ export const Tabs = () => {
     if (!beforeTab) {
       return
     }
-    deleteAllBuffers()
     let newTabs = buffers.filter((tab) => tab.id !== parseInt(tabId))
     newTabs.splice(toIndex, 0, beforeTab)
-    newTabs.forEach((tab) => {
-      addBuffer(tab)
+    newTabs.forEach((tab, index) => {
+      if (tab.id) {
+        updateBuffer(tab.id, { position: index })
+      }
     })
+    setActiveBuffer(newTabs[toIndex])
   }
 
   const rename = (id: string, title: string) => {
@@ -85,15 +103,18 @@ export const Tabs = () => {
         onTabActive={active}
         onTabRename={rename}
         onNewTab={addBuffer}
-        tabs={buffers.map(
-          (buffer) =>
-            ({
-              id: buffer.id?.toString(),
-              favicon: "/assets/icon-file.svg",
-              title: buffer.label,
-              active: activeBuffer.id === buffer.id,
-            } as Tab),
-        )}
+        tabs={buffers
+          .filter((buffer) => !buffer.archived)
+          .sort((a, b) => a.position - b.position)
+          .map(
+            (buffer) =>
+              ({
+                id: buffer.id?.toString(),
+                favicon: "/assets/icon-file.svg",
+                title: buffer.label,
+                active: activeBuffer.id === buffer.id,
+              } as Tab),
+          )}
       />
       <DropdownMenu.Root modal={false}>
         <DropdownMenu.Trigger asChild>
@@ -107,31 +128,46 @@ export const Tabs = () => {
                 </Button>
               }
             >
-              <Tooltip>History</Tooltip>
+              <Tooltip>Recently closed tabs</Tooltip>
             </PopperHover>
           </ForwardRef>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content>
-            <DropdownMenu.Item>
-              <Box align="flex-start" justifyContent="flex-start" gap="0.5rem">
-                <File size="18px" />
-                <Box flexDirection="column" align="flex-start" gap="0">
-                  <Text color="foreground">Closed tab 2</Text>
-                  <Text color="gray2">09.09.2024, 15:50</Text>
+          <DropdownMenuContent>
+            {archivedBuffers.length === 0 && (
+              <div style={{ padding: "0 1rem" }}>
+                <Text color="gray2">History is empty</Text>
+              </div>
+            )}
+            {archivedBuffers.map((buffer) => (
+              <DropdownMenu.Item
+                key={buffer.id}
+                onClick={() => {
+                  updateBuffer(buffer.id as number, {
+                    archived: false,
+                    archivedAt: undefined,
+                  })
+                  setActiveBuffer(buffer)
+                }}
+              >
+                <Box
+                  align="flex-start"
+                  justifyContent="flex-start"
+                  gap="0.5rem"
+                >
+                  <File size="18px" />
+                  <Box flexDirection="column" align="flex-start" gap="0">
+                    <Text color="foreground">{buffer.label}</Text>
+                    {buffer.archivedAt && (
+                      <Text color="gray2">
+                        {new Date(buffer.archivedAt).toLocaleString()}
+                      </Text>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item>
-              <Box align="flex-start" justifyContent="flex-start" gap="0.5rem">
-                <File size="18px" />
-                <Box flexDirection="column" align="flex-start" gap="0">
-                  <Text color="foreground">Closed tab 1</Text>
-                  <Text color="gray2">09.09.2024, 13:22</Text>
-                </Box>
-              </Box>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
     </Root>
