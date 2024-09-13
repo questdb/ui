@@ -1,5 +1,7 @@
 import { css } from "styled-components"
 
+const TTILE_HEIGHT = "18px"
+
 export const ReactChromeTabs = css`
   .chrome-tabs {
     box-sizing: border-box;
@@ -74,7 +76,8 @@ export const ReactChromeTabs = css`
     position: relative;
     z-index: 1;
     border: none;
-    line-height: 1.5;
+    line-height: ${TTILE_HEIGHT};
+    height: ${TTILE_HEIGHT};
     outline: none;
     border-radius: 4px;
     background: transparent;
@@ -210,6 +213,8 @@ export const ReactChromeTabs = css`
     overflow: hidden;
     white-space: nowrap;
     margin-left: 4px;
+    height: ${TTILE_HEIGHT};
+    line-height: ${TTILE_HEIGHT};
     color: #5f6368;
     -webkit-mask-image: linear-gradient(
       90deg,
