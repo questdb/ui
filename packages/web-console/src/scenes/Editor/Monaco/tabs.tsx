@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useState } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
-import { File, History } from "@styled-icons/boxicons-regular"
+import { File, History, Trash } from "@styled-icons/boxicons-regular"
 import {
   Box,
   Button,
@@ -106,6 +106,12 @@ export const Tabs = () => {
     updateBuffer(parseInt(id), { label: title })
   }
 
+  const removeAllArchived = () => {
+    archivedBuffers.forEach((buffer) => {
+      deleteBuffer(buffer.id as number)
+    })
+  }
+
   useLayoutEffect(() => {
     setTabsVisible(true)
   }, [])
@@ -188,6 +194,15 @@ export const Tabs = () => {
                 </Box>
               </DropdownMenu.Item>
             ))}
+            {archivedBuffers.length > 0 && (
+              <>
+                <DropdownMenu.Divider />
+                <DropdownMenu.Item onClick={removeAllArchived}>
+                  <Trash size="18px" />
+                  <Text color="foreground">Clear history</Text>
+                </DropdownMenu.Item>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
