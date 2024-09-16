@@ -105,12 +105,9 @@ export const Tabs = () => {
       (tab) => tab.id !== parseInt(tabId) && !tab.archived,
     )
     newTabs.splice(toIndex, 0, beforeTab)
-    for (const tab of newTabs) {
-      const index = newTabs.indexOf(tab)
-      if (tab.id) {
-        await updateBuffer(tab.id, { position: index })
-      }
-    }
+    newTabs.forEach(async (tab, index) => {
+      await updateBuffer(tab.id as number, { position: index })
+    })
     await setActiveBuffer(newTabs[toIndex])
   }
 
