@@ -43,6 +43,7 @@ export const Tabs = () => {
     addBuffer,
     updateBuffer,
     deleteBuffer,
+    archiveBuffer,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
@@ -79,11 +80,7 @@ export const Tabs = () => {
   }
 
   const close = async (id: string) => {
-    await updateBuffer(parseInt(id), {
-      archived: true,
-      archivedAt: new Date().getTime(),
-      position: -1,
-    })
+    await archiveBuffer(parseInt(id))
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
       await deleteBuffer(

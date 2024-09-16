@@ -36,6 +36,7 @@ export type EditorContext = {
     options?: { shouldSelectAll?: boolean },
   ) => Promise<Buffer>
   deleteBuffer: (id: number) => Promise<void>
+  archiveBuffer: (id: number) => Promise<void>
   deleteAllBuffers: () => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
@@ -52,6 +53,7 @@ const defaultValues = {
   setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
+  archiveBuffer: () => Promise.resolve(),
   deleteAllBuffers: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
@@ -180,17 +182,34 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     })
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
-    await bufferStore.delete(id)
-
+  const setActiveBufferOnRemoved = async (id: number) => {
     // set new active buffer only when removing currently active buffer
     const activeBufferId = (await bufferStore.getActiveId())?.value
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
-      const nextActive = await db.buffers.toCollection().last()
+      const nextActive = await db.buffers
+        .toCollection()
+        .filter((buffer) => {
+          return !buffer.archived
+        })
+        .last()
       await setActiveBuffer(nextActive ?? fallbackBuffer)
     } else {
       editorRef.current?.focus()
     }
+  }
+
+  const archiveBuffer: EditorContext["archiveBuffer"] = async (id) => {
+    await updateBuffer(id, {
+      archived: true,
+      archivedAt: new Date().getTime(),
+      position: -1,
+    })
+    await setActiveBufferOnRemoved(id)
+  }
+
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
+    await bufferStore.delete(id)
+    await setActiveBufferOnRemoved(id)
   }
 
   return (
@@ -214,6 +233,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         setActiveBuffer,
         addBuffer,
         deleteBuffer,
+        archiveBuffer,
         deleteAllBuffers,
         updateBuffer,
         editorReadyTrigger: (editor) => {
