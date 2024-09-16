@@ -45,7 +45,10 @@ export const Tabs = () => {
   const [tabsVisible, setTabsVisible] = useState(false)
 
   const archivedBuffers = buffers
-    .filter((buffer) => buffer.archived && buffer.archivedAt)
+    .filter(
+      (buffer) =>
+        buffer.archived && buffer.archivedAt && buffer.position === -1,
+    )
     .sort((a, b) =>
       a.archivedAt && b.archivedAt ? b.archivedAt - a.archivedAt : 0,
     )
@@ -57,11 +60,26 @@ export const Tabs = () => {
     }
   }
 
-  const close = (id: string) => {
-    updateBuffer(parseInt(id), {
+  const repositionActiveBuffers = async (excludedId: string) => {
+    buffers
+      .filter(
+        (buffer) => !buffer.archived && buffer.id !== parseInt(excludedId),
+      )
+      .sort((a, b) => a.position - b.position)
+      .forEach(async (buffer, index) => {
+        if (buffer.id) {
+          await updateBuffer(buffer.id, { position: index })
+        }
+      })
+  }
+
+  const close = async (id: string) => {
+    await updateBuffer(parseInt(id), {
       archived: true,
       archivedAt: new Date().getTime(),
+      position: -1,
     })
+    await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
       deleteBuffer(archivedBuffers[archivedBuffers.length - 1].id as number)
     }
@@ -72,7 +90,9 @@ export const Tabs = () => {
     if (!beforeTab) {
       return
     }
-    let newTabs = buffers.filter((tab) => tab.id !== parseInt(tabId))
+    let newTabs = buffers.filter(
+      (tab) => tab.id !== parseInt(tabId) && !tab.archived,
+    )
     newTabs.splice(toIndex, 0, beforeTab)
     newTabs.forEach((tab, index) => {
       if (tab.id) {
@@ -146,6 +166,7 @@ export const Tabs = () => {
                   updateBuffer(buffer.id as number, {
                     archived: false,
                     archivedAt: undefined,
+                    position: buffers.length - 1,
                   })
                   setActiveBuffer(buffer)
                 }}
