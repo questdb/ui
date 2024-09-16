@@ -53,24 +53,26 @@ export const Tabs = () => {
       a.archivedAt && b.archivedAt ? b.archivedAt - a.archivedAt : 0,
     )
 
-  const active = (id: string) => {
+  const active = async (id: string) => {
     const activeBuffer = buffers.find((buffer) => buffer.id === parseInt(id))
     if (activeBuffer) {
-      setActiveBuffer(activeBuffer)
+      await setActiveBuffer(activeBuffer)
     }
   }
 
   const repositionActiveBuffers = async (excludedId: string) => {
-    buffers
+    const sortedActiveBuffers = buffers
       .filter(
         (buffer) => !buffer.archived && buffer.id !== parseInt(excludedId),
       )
       .sort((a, b) => a.position - b.position)
-      .forEach(async (buffer, index) => {
+      
+    for (const buffer of sortedActiveBuffers) {
+      const index = sortedActiveBuffers.indexOf(buffer);
         if (buffer.id) {
           await updateBuffer(buffer.id, { position: index })
         }
-      })
+      }
   }
 
   const close = async (id: string) => {
@@ -81,15 +83,11 @@ export const Tabs = () => {
     })
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
-      deleteBuffer(archivedBuffers[archivedBuffers.length - 1].id as number)
+      await deleteBuffer(archivedBuffers[archivedBuffers.length - 1].id as number)
     }
   }
 
-  const reorder = async (
-    tabId: string,
-    _fromIndex: number,
-    toIndex: number,
-  ) => {
+  const reorder = async (tabId: string, _fromIndex: number, toIndex: number) => {
     const beforeTab = buffers.find((tab) => tab.id === parseInt(tabId))
     if (!beforeTab) {
       return
@@ -98,22 +96,23 @@ export const Tabs = () => {
       (tab) => tab.id !== parseInt(tabId) && !tab.archived,
     )
     newTabs.splice(toIndex, 0, beforeTab)
-    newTabs.forEach(async (tab, index) => {
+    for (const tab of newTabs) {
+      const index = newTabs.indexOf(tab);
       if (tab.id) {
-        await updateBuffer(tab.id, { position: index })
+        await updateBuffer(tab.id, {position: index})
       }
-    })
-    setActiveBuffer(newTabs[toIndex])
+    }
+    await setActiveBuffer(newTabs[toIndex])
   }
 
-  const rename = (id: string, title: string) => {
-    updateBuffer(parseInt(id), { label: title })
+  const rename = async (id: string, title: string) => {
+    await updateBuffer(parseInt(id), {label: title})
   }
 
-  const removeAllArchived = () => {
-    archivedBuffers.forEach((buffer) => {
-      deleteBuffer(buffer.id as number)
-    })
+  const removeAllArchived = async () => {
+    for (const buffer of archivedBuffers) {
+      await deleteBuffer(buffer.id as number)
+    }
   }
 
   useLayoutEffect(() => {
@@ -172,13 +171,13 @@ export const Tabs = () => {
             {archivedBuffers.map((buffer) => (
               <DropdownMenu.Item
                 key={buffer.id}
-                onClick={() => {
-                  updateBuffer(buffer.id as number, {
+                onClick={async () => {
+                  await updateBuffer(buffer.id as number, {
                     archived: false,
                     archivedAt: undefined,
                     position: buffers.length - 1,
                   })
-                  setActiveBuffer(buffer)
+                  await setActiveBuffer(buffer)
                 }}
               >
                 <Box
