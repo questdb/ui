@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState } from "react"
+import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
@@ -10,6 +10,8 @@ import {
   ForwardRef,
 } from "@questdb/react-components"
 import { Text, PopperHover, Tooltip } from "../../../components"
+import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
+import { format } from "date-fns"
 
 type Tab = {
   id: string
@@ -43,6 +45,7 @@ export const Tabs = () => {
     deleteBuffer,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
+  const userLocale = useMemo(fetchUserLocale, [])
 
   const archivedBuffers = buffers
     .filter(
@@ -66,13 +69,13 @@ export const Tabs = () => {
         (buffer) => !buffer.archived && buffer.id !== parseInt(excludedId),
       )
       .sort((a, b) => a.position - b.position)
-      
+
     for (const buffer of sortedActiveBuffers) {
-      const index = sortedActiveBuffers.indexOf(buffer);
-        if (buffer.id) {
-          await updateBuffer(buffer.id, { position: index })
-        }
+      const index = sortedActiveBuffers.indexOf(buffer)
+      if (buffer.id) {
+        await updateBuffer(buffer.id, { position: index })
       }
+    }
   }
 
   const close = async (id: string) => {
@@ -83,11 +86,17 @@ export const Tabs = () => {
     })
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
-      await deleteBuffer(archivedBuffers[archivedBuffers.length - 1].id as number)
+      await deleteBuffer(
+        archivedBuffers[archivedBuffers.length - 1].id as number,
+      )
     }
   }
 
-  const reorder = async (tabId: string, _fromIndex: number, toIndex: number) => {
+  const reorder = async (
+    tabId: string,
+    _fromIndex: number,
+    toIndex: number,
+  ) => {
     const beforeTab = buffers.find((tab) => tab.id === parseInt(tabId))
     if (!beforeTab) {
       return
@@ -97,16 +106,16 @@ export const Tabs = () => {
     )
     newTabs.splice(toIndex, 0, beforeTab)
     for (const tab of newTabs) {
-      const index = newTabs.indexOf(tab);
+      const index = newTabs.indexOf(tab)
       if (tab.id) {
-        await updateBuffer(tab.id, {position: index})
+        await updateBuffer(tab.id, { position: index })
       }
     }
     await setActiveBuffer(newTabs[toIndex])
   }
 
   const rename = async (id: string, title: string) => {
-    await updateBuffer(parseInt(id), {label: title})
+    await updateBuffer(parseInt(id), { label: title })
   }
 
   const removeAllArchived = async () => {
@@ -190,7 +199,9 @@ export const Tabs = () => {
                     <Text color="foreground">{buffer.label}</Text>
                     {buffer.archivedAt && (
                       <Text color="gray2">
-                        {new Date(buffer.archivedAt).toLocaleString()}
+                        {format(new Date(buffer.archivedAt), "pppp", {
+                          locale: getLocaleFromLanguage(userLocale),
+                        })}
                       </Text>
                     )}
                   </Box>
