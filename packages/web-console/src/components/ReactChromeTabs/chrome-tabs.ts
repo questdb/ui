@@ -366,6 +366,7 @@ class ChromeTabs {
   }
 
   updateTab(tabEl: HTMLElement, tabProperties: TabProperties) {
+    tabEl.setAttribute("data-tab-title", tabProperties.title)
     tabEl.querySelector(".chrome-tab-title")!.textContent = tabProperties.title
     const input = tabEl.querySelector(".chrome-tab-rename")!
     input.setAttribute("value", tabProperties.title)

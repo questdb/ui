@@ -317,3 +317,53 @@ describe("running query with F9", () => {
     cy.getCursorQueryDecoration().should("have.length", 1);
   });
 });
+
+describe.only("editor tabs", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should open the new single tab with empty editor", () => {
+    cy.getEditorContent().should("have.value", "");
+    cy.getEditorTabs().should("have.length", 1);
+    cy.getEditorTabByTitle("SQL").should("be.visible");
+    cy.getEditorTabByTitle("SQL").should("not.contain", ".chrome-tab-close");
+  });
+
+  it("should open the second empty tab on plus icon click", () => {
+    cy.get(".new-tab-button").click();
+    cy.getEditorTabs().should("have.length", 2);
+    ["SQL", "SQL 1"].forEach((title) => {
+      cy.getEditorTabByTitle(title).should("be.visible");
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").should("be.visible");
+      });
+    });
+  });
+
+  it("should rename a tab", () => {
+    cy.getEditorTabByTitle("SQL").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").should("be.visible").type("New name{enter}");
+    });
+    cy.getEditorTabByTitle("New name")
+      .should("be.visible")
+      .within(() => {
+        cy.get(".chrome-tab-drag-handle").dblclick();
+        cy.get(".chrome-tab-rename").type("Cancelled new name{esc}");
+        cy.get(".chrome-tab-rename").should("not.be.visible");
+      });
+    cy.getEditorTabByTitle("Cancelled new name").should("not.exist");
+    cy.getEditorTabByTitle("New name").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").type("{selectall}{esc}{enter}");
+      // empty tab name is not allowed, should not proceed
+      cy.get(".chrome-tab-rename").should("be.visible");
+    });
+  });
+});

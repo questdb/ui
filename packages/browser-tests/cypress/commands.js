@@ -244,7 +244,7 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
   indexedDB.deleteDatabase("web-console");
   cy.visit(baseUrl);
-  cy.loginWithUserAndPassword();
+  // cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
@@ -257,4 +257,12 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
 Cypress.Commands.add("refreshSchema", () => {
   cy.getByDataHook("schema-settings-button").click();
   cy.getByDataHook("schema-refresh").click();
+});
+
+Cypress.Commands.add("getEditorTabs", () => {
+  return cy.get(".chrome-tab");
+});
+
+Cypress.Commands.add("getEditorTabByTitle", (title) => {
+  return cy.get(`.chrome-tab[data-tab-title="${title}"]`);
 });
