@@ -318,7 +318,7 @@ describe("running query with F9", () => {
   });
 });
 
-describe.only("editor tabs", () => {
+describe("editor tabs", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth();
   });
