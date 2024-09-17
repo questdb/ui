@@ -244,7 +244,7 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
   indexedDB.deleteDatabase("web-console");
   cy.visit(baseUrl);
-  // cy.loginWithUserAndPassword();
+  cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
