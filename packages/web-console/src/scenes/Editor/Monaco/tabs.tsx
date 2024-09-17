@@ -193,7 +193,7 @@ export const Tabs = () => {
                     <Text color="foreground">{buffer.label}</Text>
                     {buffer.archivedAt && (
                       <Text color="gray2">
-                        {format(new Date(buffer.archivedAt), "pppp", {
+                        {format(new Date(buffer.archivedAt), "P pppp", {
                           locale: getLocaleFromLanguage(userLocale),
                         })}
                       </Text>
