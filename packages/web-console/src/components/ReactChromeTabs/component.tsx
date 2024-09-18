@@ -31,10 +31,12 @@ export type TabsProps = Listeners & {
   tabs: TabProperties[]
   className?: string
   darkMode?: boolean
+  limit?: number
 }
 
 export function Tabs({
   tabs,
+  limit,
   className,
   darkMode,
   onTabActive,
@@ -82,6 +84,7 @@ export function Tabs({
       onDragEnd: handleDragEnd,
       onTabReorder: handleTabReorder,
     },
+    limit,
   )
 
   useEffect(() => {

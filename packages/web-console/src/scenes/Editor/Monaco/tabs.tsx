@@ -83,9 +83,9 @@ export const Tabs = () => {
     await archiveBuffer(parseInt(id))
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
-      await deleteBuffer(
-        archivedBuffers[archivedBuffers.length - 1].id as number,
-      )
+      for (let i = 0; i <= archivedBuffers.length - 10; i++) {
+        await deleteBuffer(archivedBuffers[i].id as number)
+      }
     }
   }
 
@@ -129,6 +129,7 @@ export const Tabs = () => {
   return (
     <Root>
       <ReactChromeTabs
+        limit={40}
         darkMode={true}
         onTabClose={close}
         onTabReorder={reorder}

@@ -65,14 +65,14 @@ const ChromeTabsWrapper = forwardRef<
   )
 })
 
-export function useChromeTabs(listeners: Listeners) {
+export function useChromeTabs(listeners: Listeners, limit?: number) {
   const ref = useRef<HTMLDivElement>(null)
   const chromeTabsRef = useRef<ChromeTabsClz | null>(null)
 
   useEffect(() => {
     const chromeTabs = new ChromeTabsClz()
     chromeTabsRef.current = chromeTabs
-    chromeTabs.init(ref.current as HTMLDivElement)
+    chromeTabs.init(ref.current as HTMLDivElement, limit)
   }, [])
 
   // activated

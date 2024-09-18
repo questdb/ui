@@ -94,6 +94,7 @@ let instanceId = 0
 class ChromeTabs {
   el!: HTMLElement
   styleEl!: HTMLStyleElement
+  limit?: number
   instanceId?: number
   draggabillies: Draggabilly[]
   isDragging: any
@@ -103,8 +104,9 @@ class ChromeTabs {
     this.draggabillies = []
   }
 
-  init(el: HTMLElement) {
+  init(el: HTMLElement, limit?: number) {
     this.el = el
+    this.limit = limit
 
     this.instanceId = instanceId
     this.el.setAttribute("data-chrome-tabs-instance-id", this.instanceId + "")
@@ -141,6 +143,7 @@ class ChromeTabs {
       if (target instanceof Element) {
         if (target.classList.contains("new-tab-button")) {
           this.emit("newTab", {})
+          this.setupNewTabButton()
         }
       }
     })
@@ -318,6 +321,7 @@ class ChromeTabs {
     tabEl.querySelector(".chrome-tab-close")!.addEventListener("click", (_) => {
       _.stopImmediatePropagation()
       this.emit("tabClose", { tabEl })
+      this.setupNewTabButton()
     })
   }
 
@@ -367,6 +371,7 @@ class ChromeTabs {
 
   updateTab(tabEl: HTMLElement, tabProperties: TabProperties) {
     tabEl.setAttribute("data-tab-title", tabProperties.title)
+    tabEl.setAttribute("title", tabProperties.title)
     tabEl.querySelector(".chrome-tab-title")!.textContent = tabProperties.title
     const input = tabEl.querySelector(".chrome-tab-rename")!
     input.setAttribute("value", tabProperties.title)
@@ -575,7 +580,11 @@ class ChromeTabs {
     const newButtonEl = this.tabContentEl.parentNode?.querySelector(
       ".new-tab-button-wrapper",
     )
-    if (!newButtonEl) {
+    const overLimit = this.limit && this.tabEls.length >= this.limit
+    if (newButtonEl && overLimit) {
+      newButtonEl.parentNode?.removeChild(newButtonEl)
+      this.layoutTabs()
+    } else {
       this.tabContentEl.insertAdjacentHTML("afterend", newTabButtonTemplate)
       this.layoutTabs()
     }
