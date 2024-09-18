@@ -584,7 +584,7 @@ class ChromeTabs {
     if (newButtonEl && overLimit) {
       newButtonEl.parentNode?.removeChild(newButtonEl)
       this.layoutTabs()
-    } else {
+    } else if (!newButtonEl) {
       this.tabContentEl.insertAdjacentHTML("afterend", newTabButtonTemplate)
       this.layoutTabs()
     }
