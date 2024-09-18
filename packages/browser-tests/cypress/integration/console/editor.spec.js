@@ -366,4 +366,30 @@ describe("editor tabs", () => {
       cy.get(".chrome-tab-rename").should("be.visible");
     });
   });
+
+  it("should close and archive tabs", () => {
+    cy.get(".new-tab-button").click();
+    cy.get(".new-tab-button").click();
+    ["SQL", "SQL 1"].forEach((title) => {
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").click();
+      });
+      cy.getEditorTabByTitle(title).should("not.exist");
+    });
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item")
+      .should("have.length", 2)
+      .should("contain", "SQL")
+      .should("contain", "SQL 1");
+    // Restore closed tabs. "SQL1" should be first, as it was closed last
+    cy.getByDataHook("editor-tabs-history-item").first().click();
+    cy.getEditorTabByTitle("SQL 1").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1);
+    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 1");
+    // Clear history
+    cy.getByDataHook("editor-tabs-history-clear").click();
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("not.exist");
+  });
 });

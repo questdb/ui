@@ -155,7 +155,10 @@ export const Tabs = () => {
               delay={350}
               placement="right"
               trigger={
-                <Button skin="transparent">
+                <Button
+                  skin="transparent"
+                  data-hook="editor-tabs-history-button"
+                >
                   <History size="20px" />
                 </Button>
               }
@@ -173,6 +176,7 @@ export const Tabs = () => {
             )}
             {archivedBuffers.map((buffer) => (
               <DropdownMenu.Item
+                data-hook="editor-tabs-history-item"
                 key={buffer.id}
                 onClick={async () => {
                   await updateBuffer(buffer.id as number, {
@@ -205,7 +209,10 @@ export const Tabs = () => {
             {archivedBuffers.length > 0 && (
               <>
                 <DropdownMenu.Divider />
-                <DropdownMenu.Item onClick={removeAllArchived}>
+                <DropdownMenu.Item
+                  onClick={removeAllArchived}
+                  data-hook="editor-tabs-history-clear"
+                >
                   <Trash size="18px" />
                   <Text color="foreground">Clear history</Text>
                 </DropdownMenu.Item>
