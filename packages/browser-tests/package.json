@@ -8,6 +8,7 @@
     "test:update": "yarn run test --env updateSnapshots=true"
   },
   "devDependencies": {
+    "@4tw/cypress-drag-drop": "^2.2.5",
     "@simonsmith/cypress-image-snapshot": "^8.0.1",
     "cypress": "^10.11.0"
   },

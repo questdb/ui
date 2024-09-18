@@ -16,6 +16,9 @@ describe("appendQuery", () => {
 
   const queries = consoleConfiguration.savedQueries.map((query) => query.value);
 
+  const getTabDragHandleByTitle = (title) =>
+    `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
+
   before(() => {
     cy.intercept(
       {
@@ -391,5 +394,22 @@ describe("editor tabs", () => {
     cy.getByDataHook("editor-tabs-history-clear").click();
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history-item").should("not.exist");
+  });
+
+  it("should drag tabs", () => {
+    const getTabDragHandleByTitle = (title) =>
+      `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
+
+    cy.get(".new-tab-button").click();
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL 1");
+    cy.getEditorTabs().last().should("contain", "SQL");
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL");
+    cy.getEditorTabs().last().should("contain", "SQL 1");
   });
 });

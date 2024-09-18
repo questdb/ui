@@ -56,6 +56,28 @@ const RAW_RUNTIME_STATE =
         "linkType": "SOFT"\
       }]\
     ]],\
+    ["@4tw/cypress-drag-drop", [\
+      ["npm:2.2.5", {\
+        "packageLocation": "./.yarn/cache/@4tw-cypress-drag-drop-npm-2.2.5-b5696c76ec-d9d4b5455e.zip/node_modules/@4tw/cypress-drag-drop/",\
+        "packageDependencies": [\
+          ["@4tw/cypress-drag-drop", "npm:2.2.5"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:2.2.5", {\
+        "packageLocation": "./.yarn/__virtual__/@4tw-cypress-drag-drop-virtual-52a382b82a/0/cache/@4tw-cypress-drag-drop-npm-2.2.5-b5696c76ec-d9d4b5455e.zip/node_modules/@4tw/cypress-drag-drop/",\
+        "packageDependencies": [\
+          ["@4tw/cypress-drag-drop", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:2.2.5"],\
+          ["@types/cypress", null],\
+          ["cypress", "npm:10.11.0"]\
+        ],\
+        "packagePeers": [\
+          "@types/cypress",\
+          "cypress"\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["@aashutoshrathi/word-wrap", [\
       ["npm:1.2.6", {\
         "packageLocation": "./.yarn/cache/@aashutoshrathi-word-wrap-npm-1.2.6-5b1d95e487-6eebd12a5c.zip/node_modules/@aashutoshrathi/word-wrap/",\
@@ -13620,6 +13642,7 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./packages/browser-tests/",\
         "packageDependencies": [\
           ["browser-tests", "workspace:packages/browser-tests"],\
+          ["@4tw/cypress-drag-drop", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:2.2.5"],\
           ["@simonsmith/cypress-image-snapshot", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:8.1.2"],\
           ["cypress", "npm:10.11.0"],\
           ["cypress-real-events", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:1.13.0"]\

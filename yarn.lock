@@ -5,6 +5,15 @@ __metadata:
   version: 8
   cacheKey: 10
 
+"@4tw/cypress-drag-drop@npm:^2.2.5":
+  version: 2.2.5
+  resolution: "@4tw/cypress-drag-drop@npm:2.2.5"
+  peerDependencies:
+    cypress: 2 - 13
+  checksum: 10/d9d4b5455ebc2f0cdd068c1c5c353ff77fe7bfc408cc985492c26a502c592f5e60358abb735d65050f6dc5b896ed1c270a7a90e1feff8d6ae6eb57b433b3d981
+  languageName: node
+  linkType: hard
+
 "@aashutoshrathi/word-wrap@npm:^1.2.3":
   version: 1.2.6
   resolution: "@aashutoshrathi/word-wrap@npm:1.2.6"
@@ -8008,6 +8017,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "browser-tests@workspace:packages/browser-tests"
   dependencies:
+    "@4tw/cypress-drag-drop": "npm:^2.2.5"
     "@simonsmith/cypress-image-snapshot": "npm:^8.0.1"
     cypress: "npm:^10.11.0"
     cypress-real-events: "npm:^1.13.0"
