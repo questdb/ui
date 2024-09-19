@@ -192,10 +192,14 @@ export const Tabs = () => {
                   align="flex-start"
                   justifyContent="flex-start"
                   gap="0.5rem"
+                  title={buffer.label}
                 >
                   <File size="18px" />
                   <Box flexDirection="column" align="flex-start" gap="0">
-                    <Text color="foreground">{buffer.label}</Text>
+                    <Text color="foreground" ellipsis>
+                      {buffer.label.substring(0, 30)}
+                      {buffer.label.length > 30 ? "..." : ""}
+                    </Text>
                     {buffer.archivedAt && (
                       <Text color="gray2">
                         {format(new Date(buffer.archivedAt), "P pppp", {
