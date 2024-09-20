@@ -199,9 +199,13 @@ export const Tabs = () => {
                     flexDirection="column"
                     align="flex-start"
                     gap="0"
-                    title={format(new Date(buffer.archivedAt), "P pppp", {
-                      locale: getLocaleFromLanguage(userLocale),
-                    })}
+                    {...(buffer.archivedAt
+                      ? {
+                          title: format(new Date(buffer.archivedAt), "P pppp", {
+                            locale: getLocaleFromLanguage(userLocale),
+                          }),
+                        }
+                      : {})}
                   >
                     <Text color="foreground" ellipsis>
                       {buffer.label.substring(0, 30)}
