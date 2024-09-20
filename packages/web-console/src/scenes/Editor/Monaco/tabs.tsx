@@ -11,7 +11,7 @@ import {
 } from "@questdb/react-components"
 import { Text, PopperHover, Tooltip } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
-import { format } from "date-fns"
+import { format, formatDistance } from "date-fns"
 
 type Tab = {
   id: string
@@ -195,16 +195,28 @@ export const Tabs = () => {
                   title={buffer.label}
                 >
                   <File size="18px" />
-                  <Box flexDirection="column" align="flex-start" gap="0">
+                  <Box
+                    flexDirection="column"
+                    align="flex-start"
+                    gap="0"
+                    title={format(new Date(buffer.archivedAt), "P pppp", {
+                      locale: getLocaleFromLanguage(userLocale),
+                    })}
+                  >
                     <Text color="foreground" ellipsis>
                       {buffer.label.substring(0, 30)}
                       {buffer.label.length > 30 ? "..." : ""}
                     </Text>
                     {buffer.archivedAt && (
                       <Text color="gray2">
-                        {format(new Date(buffer.archivedAt), "P pppp", {
-                          locale: getLocaleFromLanguage(userLocale),
-                        })}
+                        {formatDistance(
+                          buffer.archivedAt,
+                          new Date().getTime(),
+                          {
+                            locale: getLocaleFromLanguage(userLocale),
+                          },
+                        )}
+                        {" ago"}
                       </Text>
                     )}
                   </Box>
