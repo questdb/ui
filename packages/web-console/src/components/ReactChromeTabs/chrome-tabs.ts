@@ -159,7 +159,14 @@ class ChromeTabs {
         !target.classList.contains("chrome-tab-drag-handle") &&
         !target.classList.contains("chrome-tab-content")
       ) {
-        this.tabEls.forEach((tabEl) => this.hideRenameTab(tabEl))
+        this.tabEls.forEach((tabEl) => {
+          const val = tabEl.querySelector(".chrome-tab-rename").value
+          if (val.trim() !== "") {
+            tabEl.setAttribute("data-tab-title", val)
+            this.emit("tabRename", { tabEl, title: val })
+          }
+          this.hideRenameTab(tabEl)
+        })
       }
     })
   }
@@ -333,7 +340,7 @@ class ChromeTabs {
     const input = tabEl.querySelector(".chrome-tab-rename") as HTMLInputElement
     input.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && input.value !== "") {
-        tabEl.setAttribute("data-original-value", input.value)
+        tabEl.setAttribute("data-tab-title", input.value)
         this.emit("tabRename", { tabEl, title: input.value })
         this.toggleRenameTab(tabEl)
       } else if (e.key === "Escape") {
@@ -405,7 +412,7 @@ class ChromeTabs {
 
   showRenameTab(tabEl: HTMLElement) {
     tabEl.setAttribute("is-renaming", "")
-    tabEl.setAttribute("data-original-value", tabEl.textContent?.trim() || "")
+    tabEl.setAttribute("data-tab-title", tabEl.textContent?.trim() || "")
     const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
     const inputEl = tabEl.querySelector(
       ".chrome-tab-rename",
@@ -424,8 +431,9 @@ class ChromeTabs {
     const inputEl = tabEl.querySelector(
       ".chrome-tab-rename",
     ) as HTMLInputElement
-    if (tabEl.getAttribute("data-original-value")) {
-      inputEl.value = tabEl.getAttribute("data-original-value") || ""
+    if (tabEl.getAttribute("data-tab-title")) {
+      inputEl.value = tabEl.getAttribute("data-tab-title") || ""
+      titleEl.textContent = tabEl.getAttribute("data-tab-title") || ""
     }
     const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
     titleEl.style.display = "block"

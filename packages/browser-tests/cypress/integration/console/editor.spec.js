@@ -368,6 +368,14 @@ describe("editor tabs", () => {
       // empty tab name is not allowed, should not proceed
       cy.get(".chrome-tab-rename").should("be.visible");
     });
+    // Changing the name and clicking away from the input should save the state
+    cy.getEditorHitbox().click();
+    cy.getEditorTabByTitle("New name").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").type("New updated name");
+    });
+    cy.getEditorHitbox().click();
+    cy.getEditorTabByTitle("New updated name").should("be.visible");
   });
 
   it("should close and archive tabs", () => {

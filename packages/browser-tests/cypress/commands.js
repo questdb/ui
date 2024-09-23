@@ -150,6 +150,10 @@ Cypress.Commands.add("getEditorContent", () =>
   cy.get(".monaco-editor textarea")
 );
 
+Cypress.Commands.add("getEditorHitbox", () =>
+  cy.get(".monaco-editor .view-lines")
+);
+
 Cypress.Commands.add("getAutocomplete", () =>
   cy.get('[widgetid="editor.widget.suggestWidget"]')
 );
