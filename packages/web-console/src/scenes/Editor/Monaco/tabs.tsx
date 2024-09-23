@@ -83,9 +83,11 @@ export const Tabs = () => {
     await archiveBuffer(parseInt(id))
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
-      for (let i = 0; i <= archivedBuffers.length - 10; i++) {
-        await deleteBuffer(archivedBuffers[i].id as number)
-      }
+      await Promise.all(
+        archivedBuffers
+          .slice(9)
+          .map((buffer) => deleteBuffer(buffer.id as number)),
+      )
     }
   }
 
