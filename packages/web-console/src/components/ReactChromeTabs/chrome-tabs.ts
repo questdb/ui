@@ -161,7 +161,11 @@ class ChromeTabs {
       ) {
         this.tabEls.forEach((tabEl) => {
           const val = tabEl.querySelector(".chrome-tab-rename").value
-          if (val.trim() !== "") {
+          if (
+            tabEl.getAttribute("is-renaming") !== null &&
+            val.trim() !== "" &&
+            val.trim() !== tabEl.getAttribute("data-tab-title")
+          ) {
             tabEl.setAttribute("data-tab-title", val)
             this.emit("tabRename", { tabEl, title: val })
           }
