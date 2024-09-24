@@ -139,6 +139,13 @@ class ChromeTabs {
       this.layoutTabs()
     })
 
+    const resizeObserver = new ResizeObserver((_) => {
+      this.cleanUpPreviouslyDraggedTabs()
+      this.layoutTabs()
+    })
+
+    resizeObserver.observe(this.el)
+
     this.el.addEventListener("click", ({ target }) => {
       if (target instanceof Element) {
         if (target.classList.contains("new-tab-button")) {
