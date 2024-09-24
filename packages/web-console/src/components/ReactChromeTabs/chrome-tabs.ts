@@ -163,7 +163,6 @@ class ChromeTabs {
       if (
         target instanceof Element &&
         !target.classList.contains("chrome-tab-rename") &&
-        !target.classList.contains("chrome-tab-drag-handle") &&
         !target.classList.contains("chrome-tab-content")
       ) {
         this.tabEls.forEach((tabEl) => {
@@ -516,8 +515,6 @@ class ChromeTabs {
             this.showRenameTab(tabEl)
             _.stopImmediatePropagation()
             wasActiveBefore = false
-          } else {
-            this.tabEls.forEach((tabEl) => this.hideRenameTab(tabEl))
           }
           wasActiveBefore = tabEl.hasAttribute("active")
           lastClickX = pointer.clientX
