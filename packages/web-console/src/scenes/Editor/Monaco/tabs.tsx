@@ -104,9 +104,10 @@ export const Tabs = () => {
       .filter((tab) => tab.id !== parseInt(tabId) && !tab.archived)
       .sort((a, b) => a.position - b.position)
     newTabs.splice(toIndex, 0, beforeTab)
-    newTabs.forEach(async (tab, index) => {
+    for (const tab of newTabs) {
+      const index = newTabs.indexOf(tab);
       await updateBuffer(tab.id as number, { position: index })
-    })
+    }
     await setActiveBuffer(newTabs[toIndex])
   }
 
