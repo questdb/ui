@@ -80,7 +80,13 @@ export const Tabs = () => {
   }
 
   const close = async (id: string) => {
-    await archiveBuffer(parseInt(id))
+    const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
+    if (!buffer) {
+      return
+    }
+    buffer?.value !== ""
+      ? await archiveBuffer(parseInt(id))
+      : await deleteBuffer(parseInt(id))
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
       await Promise.all(
