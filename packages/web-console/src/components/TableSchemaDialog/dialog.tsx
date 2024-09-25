@@ -113,7 +113,7 @@ export const Dialog = ({
         }
         if (
           action === "add" &&
-          tables?.find((table) => table.table_name === value)
+          tables?.find((table) => table.table_name.toLowerCase() === value.toLowerCase())
         ) {
           return helpers.error("string.uniqueTableName")
         }

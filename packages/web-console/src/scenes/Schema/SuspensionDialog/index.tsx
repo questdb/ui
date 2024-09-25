@@ -83,6 +83,9 @@ export const SuspensionDialog = ({
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [error, setError] = useState<string | undefined>()
 
+  const txnLag =
+    parseFloat(walTableData.sequencerTxn) - parseFloat(walTableData.writerTxn)
+
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     setError(undefined)

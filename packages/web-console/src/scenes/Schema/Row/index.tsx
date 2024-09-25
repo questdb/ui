@@ -75,11 +75,13 @@ const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   }
 `
 
-const CopyButton = styled(Button)<Pick<Props, "tooltip">>`
+const CopyButton = styled(Button)<
+  Pick<Props, "tooltip"> & { suspended?: boolean }
+>`
   && {
     position: absolute;
-    z-index: 1;
-    right: 1rem;
+    z-index: 2;
+    right: ${({ suspended }) => (suspended ? "13rem" : "1rem")};
     opacity: 0;
     background: ${({ theme }) => theme.color.backgroundLighter};
     padding-top: 1.2rem;
@@ -232,7 +234,7 @@ const Row = ({
           <DotIcon size="12px" />
         )}
 
-        {["column", "table"].includes(kind) && !walTableData?.suspended && (
+        {["column", "table"].includes(kind) && (
           <CopyButton
             skin="secondary"
             size="sm"
@@ -242,6 +244,7 @@ const Row = ({
               navigator.clipboard.writeText(name)
               e.stopPropagation()
             }}
+            suspended={walTableData?.suspended}
           >
             Copy
           </CopyButton>

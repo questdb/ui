@@ -16,6 +16,21 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.5.2 - 2024.09.05
+
+### Added
+
+- Configurable Redirect URI and scope for OIDC integration
+  [#323](https://github.com/questdb/ui/pull/323)
+
+### Changed
+
+- Run Console tests with Auth [#310](https://github.com/questdb/ui/pull/310)
+
+### Fixed
+
+- Fix suspension lag count [#327](https://github.com/questdb/ui/pull/327)
+
 ## 0.5.1 - 2024.07.24
 
 ### Added

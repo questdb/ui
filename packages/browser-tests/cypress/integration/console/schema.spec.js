@@ -18,7 +18,6 @@ describe("questdb schema with working tables", () => {
     });
     cy.refreshSchema();
   });
-
   it("should show all the tables when there are no suspended", () => {
     tables.forEach((table) => {
       cy.getByDataHook("schema-table-title").should("contain", table);
