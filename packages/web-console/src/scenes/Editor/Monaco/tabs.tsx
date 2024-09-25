@@ -81,7 +81,7 @@ export const Tabs = () => {
 
   const close = async (id: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (!buffer) {
+    if (!buffer || buffers.filter((buffer) => !buffer.archived).length === 1) {
       return
     }
     buffer?.value !== ""
