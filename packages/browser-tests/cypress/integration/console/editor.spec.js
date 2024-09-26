@@ -2,6 +2,9 @@
 
 const baseUrl = "http://localhost:9999";
 
+const getTabDragHandleByTitle = (title) =>
+  `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
+
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
@@ -379,25 +382,30 @@ describe("editor tabs", () => {
   });
 
   it("should close and archive tabs", () => {
+    cy.getEditorContent().should("be.visible");
+    cy.typeQuery("--1");
     cy.get(".new-tab-button").click();
     cy.get(".new-tab-button").click();
-    ["SQL", "SQL 1"].forEach((title) => {
+    ["SQL 1", "SQL 2"].forEach((title, index) => {
+      cy.get(getTabDragHandleByTitle(title)).click();
+      cy.getEditorContent().should("be.visible");
+      cy.typeQuery(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });
       cy.getEditorTabByTitle(title).should("not.exist");
     });
     cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history").should("be.visible");
     cy.getByDataHook("editor-tabs-history-item")
       .should("have.length", 2)
-      .should("contain", "SQL")
       .should("contain", "SQL 1");
-    // Restore closed tabs. "SQL1" should be first, as it was closed last
+    // Restore closed tabs. "SQL 2" should be first, as it was closed last
     cy.getByDataHook("editor-tabs-history-item").first().click();
-    cy.getEditorTabByTitle("SQL 1").should("be.visible");
+    cy.getEditorTabByTitle("SQL 2").should("be.visible");
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history-item").should("have.length", 1);
-    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 1");
+    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2");
     // Clear history
     cy.getByDataHook("editor-tabs-history-clear").click();
     cy.getByDataHook("editor-tabs-history-button").click();
@@ -405,9 +413,6 @@ describe("editor tabs", () => {
   });
 
   it("should drag tabs", () => {
-    const getTabDragHandleByTitle = (title) =>
-      `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
-
     cy.get(".new-tab-button").click();
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")

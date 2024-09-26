@@ -177,7 +177,7 @@ export const Tabs = () => {
           </ForwardRef>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenuContent>
+          <DropdownMenuContent data-hook="editor-tabs-history">
             {archivedBuffers.length === 0 && (
               <div style={{ padding: "0 1rem" }}>
                 <Text color="gray2">History is empty</Text>
