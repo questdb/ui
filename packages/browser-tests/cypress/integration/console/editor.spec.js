@@ -2,6 +2,9 @@
 
 const baseUrl = "http://localhost:9999";
 
+const getTabDragHandleByTitle = (title) =>
+  `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
+
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
@@ -15,6 +18,9 @@ describe("appendQuery", () => {
   };
 
   const queries = consoleConfiguration.savedQueries.map((query) => query.value);
+
+  const getTabDragHandleByTitle = (title) =>
+    `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
 
   before(() => {
     cy.intercept(
@@ -315,5 +321,108 @@ describe("running query with F9", () => {
     cy.F9();
     cy.getGridRows().should("have.length", 2);
     cy.getCursorQueryDecoration().should("have.length", 1);
+  });
+});
+
+describe("editor tabs", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should open the new single tab with empty editor", () => {
+    cy.getEditorContent().should("have.value", "");
+    cy.getEditorTabs().should("have.length", 1);
+    cy.getEditorTabByTitle("SQL").should("be.visible");
+    cy.getEditorTabByTitle("SQL").should("not.contain", ".chrome-tab-close");
+  });
+
+  it("should open the second empty tab on plus icon click", () => {
+    cy.get(".new-tab-button").click();
+    cy.getEditorTabs().should("have.length", 2);
+    ["SQL", "SQL 1"].forEach((title) => {
+      cy.getEditorTabByTitle(title).should("be.visible");
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").should("be.visible");
+      });
+    });
+  });
+
+  it("should rename a tab", () => {
+    cy.getEditorTabByTitle("SQL").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").should("be.visible").type("New name{enter}");
+    });
+    cy.getEditorTabByTitle("New name")
+      .should("be.visible")
+      .within(() => {
+        cy.get(".chrome-tab-drag-handle").dblclick();
+        cy.get(".chrome-tab-rename").type("Cancelled new name{esc}");
+        cy.get(".chrome-tab-rename").should("not.be.visible");
+      });
+    cy.getEditorTabByTitle("Cancelled new name").should("not.exist");
+    cy.getEditorTabByTitle("New name").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").type("{selectall}{esc}{enter}");
+      // empty tab name is not allowed, should not proceed
+      cy.get(".chrome-tab-rename").should("be.visible");
+    });
+    // Changing the name and clicking away from the input should save the state
+    cy.getEditorHitbox().click();
+    cy.getEditorTabByTitle("New name").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").type("New updated name");
+    });
+    cy.getEditorHitbox().click();
+    cy.getEditorTabByTitle("New updated name").should("be.visible");
+  });
+
+  it("should close and archive tabs", () => {
+    cy.getEditorContent().should("be.visible");
+    cy.typeQuery("--1");
+    cy.get(".new-tab-button").click();
+    cy.get(".new-tab-button").click();
+    ["SQL 1", "SQL 2"].forEach((title, index) => {
+      cy.get(getTabDragHandleByTitle(title)).click();
+      cy.getEditorContent().should("be.visible");
+      cy.typeQuery(`-- ${index + 1}`);
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").click();
+      });
+      cy.getEditorTabByTitle(title).should("not.exist");
+    });
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-item")
+      .should("have.length", 2)
+      .should("contain", "SQL 1");
+    // Restore closed tabs. "SQL 2" should be first, as it was closed last
+    cy.getByDataHook("editor-tabs-history-item").first().click();
+    cy.getEditorTabByTitle("SQL 2").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1);
+    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2");
+    // Clear history
+    cy.getByDataHook("editor-tabs-history-clear").click();
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("not.exist");
+  });
+
+  it("should drag tabs", () => {
+    cy.get(".new-tab-button").click();
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL 1");
+    cy.getEditorTabs().last().should("contain", "SQL");
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL");
+    cy.getEditorTabs().last().should("contain", "SQL 1");
   });
 });

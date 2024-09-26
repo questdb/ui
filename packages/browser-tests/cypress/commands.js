@@ -4,6 +4,8 @@ const {
 
 require("cypress-real-events");
 
+require("@4tw/cypress-drag-drop");
+
 addMatchImageSnapshotCommand({
   failureThreshold: 0.3,
   blackout: [".notifications", 'button[class*="BuildVersion"'],
@@ -148,6 +150,10 @@ Cypress.Commands.add("getEditorContent", () =>
   cy.get(".monaco-editor textarea")
 );
 
+Cypress.Commands.add("getEditorHitbox", () =>
+  cy.get(".monaco-editor .view-lines")
+);
+
 Cypress.Commands.add("getAutocomplete", () =>
   cy.get('[widgetid="editor.widget.suggestWidget"]')
 );
@@ -257,4 +263,12 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
 Cypress.Commands.add("refreshSchema", () => {
   cy.getByDataHook("schema-settings-button").click();
   cy.getByDataHook("schema-refresh").click();
+});
+
+Cypress.Commands.add("getEditorTabs", () => {
+  return cy.get(".chrome-tab");
+});
+
+Cypress.Commands.add("getEditorTabByTitle", (title) => {
+  return cy.get(`.chrome-tab[data-tab-title="${title}"]`);
 });
