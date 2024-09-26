@@ -5,6 +5,15 @@ __metadata:
   version: 8
   cacheKey: 10
 
+"@4tw/cypress-drag-drop@npm:^2.2.5":
+  version: 2.2.5
+  resolution: "@4tw/cypress-drag-drop@npm:2.2.5"
+  peerDependencies:
+    cypress: 2 - 13
+  checksum: 10/d9d4b5455ebc2f0cdd068c1c5c353ff77fe7bfc408cc985492c26a502c592f5e60358abb735d65050f6dc5b896ed1c270a7a90e1feff8d6ae6eb57b433b3d981
+  languageName: node
+  linkType: hard
+
 "@aashutoshrathi/word-wrap@npm:^1.2.3":
   version: 1.2.6
   resolution: "@aashutoshrathi/word-wrap@npm:1.2.6"
@@ -3239,6 +3248,7 @@ __metadata:
     "@styled-icons/remix-fill": "npm:10.46.0"
     "@styled-icons/remix-line": "npm:10.46.0"
     "@styled-icons/styled-icon": "npm:^10.7.0"
+    "@types/draggabilly": "npm:^2.1.6"
     "@types/echarts": "npm:^4.9.22"
     "@types/jquery": "npm:3.5.1"
     "@types/node": "npm:^17.0.41"
@@ -3271,6 +3281,7 @@ __metadata:
     dexie: "npm:^3.2.4"
     dexie-react-hooks: "npm:^1.1.6"
     dotenv: "npm:^10.0.0"
+    draggabilly: "npm:^3.0.0"
     echarts: "npm:^5.2.2"
     eslint: "npm:^8.56.0"
     eslint-config-love: "npm:47.0.0"
@@ -3294,6 +3305,7 @@ __metadata:
     jquery: "npm:3.5.1"
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
+    lodash.isequal: "npm:^4.5.0"
     mini-css-extract-plugin: "npm:^2.6.0"
     monaco-editor: "npm:^0.44.0"
     posthog-js: "npm:^1.131.2"
@@ -5703,6 +5715,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/draggabilly@npm:^2.1.6":
+  version: 2.1.6
+  resolution: "@types/draggabilly@npm:2.1.6"
+  checksum: 10/eef9933b80d6c90c86649d1a437a608a66b889bc87e7f65c076625168458fa7fba5d15f475f1c841522bf7b48d793025b3e74fd82948e40060d759e0c80b7561
+  languageName: node
+  linkType: hard
+
 "@types/echarts@npm:^4.9.22":
   version: 4.9.22
   resolution: "@types/echarts@npm:4.9.22"
@@ -7998,6 +8017,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "browser-tests@workspace:packages/browser-tests"
   dependencies:
+    "@4tw/cypress-drag-drop": "npm:^2.2.5"
     "@simonsmith/cypress-image-snapshot": "npm:^8.0.1"
     cypress: "npm:^10.11.0"
     cypress-real-events: "npm:^1.13.0"
@@ -9919,6 +9939,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"draggabilly@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "draggabilly@npm:3.0.0"
+  dependencies:
+    get-size: "npm:^3.0.0"
+    unidragger: "npm:^3.0.0"
+  checksum: 10/2c81089b44eec5fbe675ad5b7040f6005fe41e83a7cbb8b3c1f799755a59f31c074394d5315ccc370b21f60c3df7096501a2761a976daa89a5f6b2e29335986a
+  languageName: node
+  linkType: hard
+
 "duplexer@npm:^0.1.2":
   version: 0.1.2
   resolution: "duplexer@npm:0.1.2"
@@ -10878,6 +10908,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ev-emitter@npm:^2.0.0":
+  version: 2.1.2
+  resolution: "ev-emitter@npm:2.1.2"
+  checksum: 10/1102823ef040684869256100e19a6c6aeeecd422d09a267d7c74e77023136eede2ee86ee475ad1019d30d1f7917557d74542d5665e9f91c398bd5814260af6b3
+  languageName: node
+  linkType: hard
+
 "eventemitter2@npm:6.4.7":
   version: 6.4.7
   resolution: "eventemitter2@npm:6.4.7"
@@ -11828,6 +11865,13 @@ __metadata:
   version: 0.1.0
   resolution: "get-package-type@npm:0.1.0"
   checksum: 10/bba0811116d11e56d702682ddef7c73ba3481f114590e705fc549f4d868972263896af313c57a25c076e3c0d567e11d919a64ba1b30c879be985fc9d44f96148
+  languageName: node
+  linkType: hard
+
+"get-size@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "get-size@npm:3.0.0"
+  checksum: 10/9a475bce9a718322b80c20a9651a7b09c8ddb85d094131fda7d32ffe272442c3d0621df6a61b543a23ca741c261f96841078927e17acfc88957c2a6029ba5b34
   languageName: node
   linkType: hard
 
@@ -21086,6 +21130,15 @@ __metadata:
   version: 2.1.0
   resolution: "unicode-property-aliases-ecmascript@npm:2.1.0"
   checksum: 10/243524431893649b62cc674d877bd64ef292d6071dd2fd01ab4d5ad26efbc104ffcd064f93f8a06b7e4ec54c172bf03f6417921a0d8c3a9994161fe1f88f815b
+  languageName: node
+  linkType: hard
+
+"unidragger@npm:^3.0.0":
+  version: 3.0.1
+  resolution: "unidragger@npm:3.0.1"
+  dependencies:
+    ev-emitter: "npm:^2.0.0"
+  checksum: 10/0e1ca1da000dd31266dc3b138db147b9cce7f81b87423875dee8e89fb19d1d1db1cb19951dcdc4cfce0375d4c3bc317b496a41501c7663beb30188a4d0442bb1
   languageName: node
   linkType: hard
 

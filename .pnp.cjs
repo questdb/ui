@@ -56,6 +56,28 @@ const RAW_RUNTIME_STATE =
         "linkType": "SOFT"\
       }]\
     ]],\
+    ["@4tw/cypress-drag-drop", [\
+      ["npm:2.2.5", {\
+        "packageLocation": "./.yarn/cache/@4tw-cypress-drag-drop-npm-2.2.5-b5696c76ec-d9d4b5455e.zip/node_modules/@4tw/cypress-drag-drop/",\
+        "packageDependencies": [\
+          ["@4tw/cypress-drag-drop", "npm:2.2.5"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:2.2.5", {\
+        "packageLocation": "./.yarn/__virtual__/@4tw-cypress-drag-drop-virtual-52a382b82a/0/cache/@4tw-cypress-drag-drop-npm-2.2.5-b5696c76ec-d9d4b5455e.zip/node_modules/@4tw/cypress-drag-drop/",\
+        "packageDependencies": [\
+          ["@4tw/cypress-drag-drop", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:2.2.5"],\
+          ["@types/cypress", null],\
+          ["cypress", "npm:10.11.0"]\
+        ],\
+        "packagePeers": [\
+          "@types/cypress",\
+          "cypress"\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["@aashutoshrathi/word-wrap", [\
       ["npm:1.2.6", {\
         "packageLocation": "./.yarn/cache/@aashutoshrathi-word-wrap-npm-1.2.6-5b1d95e487-6eebd12a5c.zip/node_modules/@aashutoshrathi/word-wrap/",\
@@ -6572,6 +6594,7 @@ const RAW_RUNTIME_STATE =
           ["@styled-icons/remix-fill", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
           ["@styled-icons/remix-line", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.46.0"],\
           ["@styled-icons/styled-icon", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.7.0"],\
+          ["@types/draggabilly", "npm:2.1.6"],\
           ["@types/echarts", "npm:4.9.22"],\
           ["@types/jquery", "npm:3.5.1"],\
           ["@types/node", "npm:17.0.45"],\
@@ -6604,6 +6627,7 @@ const RAW_RUNTIME_STATE =
           ["dexie", "npm:3.2.4"],\
           ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
           ["dotenv", "npm:10.0.0"],\
+          ["draggabilly", "npm:3.0.0"],\
           ["echarts", "npm:5.4.3"],\
           ["eslint", "npm:8.57.0"],\
           ["eslint-config-love", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:47.0.0"],\
@@ -6627,6 +6651,7 @@ const RAW_RUNTIME_STATE =
           ["jquery", "npm:3.5.1"],\
           ["js-base64", "npm:3.7.7"],\
           ["js-sha256", "npm:0.11.0"],\
+          ["lodash.isequal", "npm:4.5.0"],\
           ["mini-css-extract-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.6"],\
           ["monaco-editor", "npm:0.44.0"],\
           ["posthog-js", "npm:1.131.2"],\
@@ -10562,6 +10587,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["@types/draggabilly", [\
+      ["npm:2.1.6", {\
+        "packageLocation": "./.yarn/cache/@types-draggabilly-npm-2.1.6-01cb95ee76-eef9933b80.zip/node_modules/@types/draggabilly/",\
+        "packageDependencies": [\
+          ["@types/draggabilly", "npm:2.1.6"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["@types/echarts", [\
       ["npm:4.9.22", {\
         "packageLocation": "./.yarn/cache/@types-echarts-npm-4.9.22-1c39453613-abc05f45b2.zip/node_modules/@types/echarts/",\
@@ -13608,6 +13642,7 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./packages/browser-tests/",\
         "packageDependencies": [\
           ["browser-tests", "workspace:packages/browser-tests"],\
+          ["@4tw/cypress-drag-drop", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:2.2.5"],\
           ["@simonsmith/cypress-image-snapshot", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:8.1.2"],\
           ["cypress", "npm:10.11.0"],\
           ["cypress-real-events", "virtual:eeb440888f0c831c010bf83e71c16458314f99874c6109e2303fb2248287f56d6750dd5ddd598c74aba008850cb93bae79351d816a9905f40e024f392c8ad6b5#npm:1.13.0"]\
@@ -15865,6 +15900,17 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["draggabilly", [\
+      ["npm:3.0.0", {\
+        "packageLocation": "./.yarn/cache/draggabilly-npm-3.0.0-7399824170-2c81089b44.zip/node_modules/draggabilly/",\
+        "packageDependencies": [\
+          ["draggabilly", "npm:3.0.0"],\
+          ["get-size", "npm:3.0.0"],\
+          ["unidragger", "npm:3.0.1"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["duplexer", [\
       ["npm:0.1.2", {\
         "packageLocation": "./.yarn/cache/duplexer-npm-0.1.2-952c810235-62ba61a830.zip/node_modules/duplexer/",\
@@ -17136,6 +17182,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["ev-emitter", [\
+      ["npm:2.1.2", {\
+        "packageLocation": "./.yarn/cache/ev-emitter-npm-2.1.2-4322f4551a-1102823ef0.zip/node_modules/ev-emitter/",\
+        "packageDependencies": [\
+          ["ev-emitter", "npm:2.1.2"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["eventemitter2", [\
       ["npm:6.4.7", {\
         "packageLocation": "./.yarn/cache/eventemitter2-npm-6.4.7-ad2467adaa-df2a733ee3.zip/node_modules/eventemitter2/",\
@@ -18294,6 +18349,15 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/get-package-type-npm-0.1.0-6c70cdc8ab-bba0811116.zip/node_modules/get-package-type/",\
         "packageDependencies": [\
           ["get-package-type", "npm:0.1.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["get-size", [\
+      ["npm:3.0.0", {\
+        "packageLocation": "./.yarn/cache/get-size-npm-3.0.0-93ef340463-9a475bce9a.zip/node_modules/get-size/",\
+        "packageDependencies": [\
+          ["get-size", "npm:3.0.0"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -29021,6 +29085,16 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/unicode-property-aliases-ecmascript-npm-2.1.0-46779595f4-2435244318.zip/node_modules/unicode-property-aliases-ecmascript/",\
         "packageDependencies": [\
           ["unicode-property-aliases-ecmascript", "npm:2.1.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["unidragger", [\
+      ["npm:3.0.1", {\
+        "packageLocation": "./.yarn/cache/unidragger-npm-3.0.1-001f6edd85-0e1ca1da00.zip/node_modules/unidragger/",\
+        "packageDependencies": [\
+          ["unidragger", "npm:3.0.1"],\
+          ["ev-emitter", "npm:2.1.2"]\
         ],\
         "linkType": "HARD"\
       }]\
