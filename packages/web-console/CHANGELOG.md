@@ -16,6 +16,19 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.6.0 - 2024.09.26
+
+### Added
+
+- Tabs in SQL Editor [#329](https://github.com/questdb/ui/pull/329)
+
+### Fixed
+
+- Display Copy action for suspended tables
+  [#332](https://github.com/questdb/ui/pull/332)
+- Fix the response to handle all case table names
+  [#328](https://github.com/questdb/ui/pull/328)
+
 ## 0.5.2 - 2024.09.05
 
 ### Added
