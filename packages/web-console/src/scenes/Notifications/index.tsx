@@ -43,10 +43,12 @@ import { actions, selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
+import Loader from "./Loader"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
   overflow: auto;
+  min-height: 4.5rem;
   max-height: 35rem;
   ${({ theme }) => `border-top: 2px ${theme.color.backgroundDarker} solid;`}
   background: ${({ theme }) => theme.color.backgroundLighter};
@@ -86,6 +88,7 @@ const ClearAllNotifications = styled.div`
 
 const Notifications = () => {
   const notifications = useSelector(selectors.query.getNotifications)
+  const running = useSelector(selectors.query.getRunning)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -122,6 +125,14 @@ const Notifications = () => {
   }, [sm])
 
   const lastNotification = notifications[notifications.length - 1]
+
+  if (running.value) {
+    return (
+      <Wrapper minimized={true}>
+        <Loader show={true} />
+      </Wrapper>
+    )
+  }
 
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">

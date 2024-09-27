@@ -44,16 +44,11 @@ const move = keyframes`
 `
 
 const Wrapper = styled.div`
-  position: fixed;
   height: 0.4rem;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 15;
   background: linear-gradient(
       to left,
       ${color("selection")} 30%,
-      ${color("foreground")} 80%,
+      ${color("pink")} 80%,
       ${color("selection")} 100%
     )
     repeat;
