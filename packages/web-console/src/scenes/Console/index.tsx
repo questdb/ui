@@ -22,6 +22,7 @@ import { BottomPanel } from "../../store/Console/types"
 import { Allotment, AllotmentHandle } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
 import { useSettings } from "../../providers"
+import { Box, Loader } from "@questdb/react-components"
 
 const Root = styled.div`
   display: flex;
@@ -52,6 +53,15 @@ const Tab = styled.div`
   overflow: auto;
 `
 
+const Loading = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  width: 100%;
+  height: 100%;
+  background: ${({ theme }) => theme.color.backgroundLighter};
+`
+
 const viewModes: {
   icon: React.ReactNode
   mode: ResultViewMode
@@ -78,6 +88,7 @@ const Console = () => {
     editorSplitterBasis !== 0 ? editorSplitterBasis : 300,
   )
   const result = useSelector(selectors.query.getResult)
+  const running = useSelector(selectors.query.getRunning)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { consoleConfig } = useSettings()
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
@@ -232,7 +243,12 @@ const Console = () => {
               </PopperHover>
             </Sidebar>
             <Tab ref={resultRef}>
-              {result && <Result viewMode={resultViewMode} />}
+              {result && !running.value && <Result viewMode={resultViewMode} />}
+              {running.value && (
+                <Loading>
+                  Loading results <Loader />
+                </Loading>
+              )}
             </Tab>
             <Tab ref={zeroStateRef}>
               <ZeroState />
