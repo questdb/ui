@@ -164,6 +164,8 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
   cy.get(".cursorQueryDecoration")
 );
 
+Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
+
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
   const numbers = Array.from(

@@ -16,6 +16,7 @@ import {
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
   setErrorMarker,
+  stripLineComments,
 } from "./utils"
 import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
@@ -152,7 +153,14 @@ const MonacoEditor = () => {
     const queryAtCursor = getQueryFromCursor(editor)
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
-      const matches = findMatches(model, queryAtCursor.query)
+      const cleanedModel = monaco.editor.createModel(
+        stripLineComments(model.getValue()),
+        QuestDBLanguageName,
+      )
+
+      const matches = findMatches(cleanedModel, queryAtCursor.query)
+
+      cleanedModel.dispose()
 
       if (matches.length > 0) {
         const hasError = errorRef.current?.query === queryAtCursor.query

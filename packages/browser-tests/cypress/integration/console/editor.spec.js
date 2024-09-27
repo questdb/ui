@@ -426,3 +426,38 @@ describe("editor tabs", () => {
     cy.getEditorTabs().last().should("contain", "SQL 1");
   });
 });
+
+describe("handling comments", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should highlight and execute sql with line comments in front", () => {
+    cy.typeQuery("-- comment\n-- comment\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 3);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with line comments inside", () => {
+    cy.typeQuery("select\n\nx\n-- y\n-- z\n from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 5);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with line comment at the end", () => {
+    cy.typeQuery("select x from long_sequence(1); -- comment");
+    cy.getCursorQueryDecoration().should("have.length", 1);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+});
