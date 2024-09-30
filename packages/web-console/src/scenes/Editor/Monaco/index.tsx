@@ -327,7 +327,8 @@ const MonacoEditor = () => {
                 actions.query.addNotification({
                   content: (
                     <Text color="foreground" ellipsis title={result.query}>
-                      {result.notice}: {result.query}
+                      {result.notice}
+                      {result.query !== undefined && result.query !== '' && `: ${result.query}`}
                     </Text>
                   ),
                   type: NotificationType.NOTICE,
