@@ -39,7 +39,7 @@ export const stripSQLComments = (text: string): string =>
     if (group) {
       const groupLines = group.split("\n")
       if (group.startsWith("--") && groupLines.length > 1) {
-        return "\n" + groupLines[1].replace(/--\s?.*$/g, "")
+        return "\n" + stripSQLComments(groupLines[1])
       }
       return ""
     }
