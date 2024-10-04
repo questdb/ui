@@ -193,16 +193,16 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
   }, [])
 
   const updateTab = useCallback((tabId: string, tab: TabProperties) => {
-    if (tabId !== tab.id) {
-      // tabs component is liable to call this to "update" already initialized
-      // tab to use different ID. This messes things up quite badly, so it is
-      // aborted here.
-      return
-    }
     const ele = ref.current?.querySelector(
       `[data-tab-id="${tabId}"]`,
     ) as HTMLDivElement
     if (ele) {
+      if (tabId !== tab.id) {
+        // tabs component is liable to call this to "update" already initialized
+        // tab to use different ID. This messes things up quite badly, so it is
+        // aborted here.
+        return
+      }
       chromeTabsRef.current?.updateTab(ele, { ...tab })
     } else {
       chromeTabsRef.current?.addTab(tab)
