@@ -72,6 +72,24 @@ export const Tabs = () => {
     }
   }
 
+  const reorder = async (
+    tabId: string,
+    _fromIndex: number,
+    toIndex: number,
+  ) => {
+    const beforeTab = buffers.find((tab) => tab.id === parseInt(tabId))
+    if (!beforeTab) {
+      return
+    }
+    let newTabs = buffers
+      .filter((tab) => tab.id !== parseInt(tabId) && !tab.archived)
+      .sort((a, b) => a.position - b.position)
+    newTabs.splice(toIndex, 0, beforeTab)
+    newTabs.forEach(async (tab, index) => {
+      await updateBuffer(tab.id as number, { position: index })
+    })
+  }
+
   const repositionActiveBuffers = async (excludedId: string) => {
     const sortedActiveBuffers = buffers
       .filter(
@@ -129,6 +147,7 @@ export const Tabs = () => {
         limit={40}
         darkMode={true}
         onTabClose={close}
+        onTabReorder={reorder}
         onTabActive={active}
         onTabRename={rename}
         onNewTab={addBuffer}
