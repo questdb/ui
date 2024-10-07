@@ -370,6 +370,10 @@ const MonacoEditor = () => {
                   errorRange,
                   error.error,
                 )
+                editorRef?.current.revealPositionInCenter({
+                  lineNumber: errorRange.startLineNumber,
+                  column: errorRange.startColumn,
+                })
                 renderLineMarkings(monacoRef?.current, editorRef?.current)
               }
             }
