@@ -16,6 +16,20 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.6.1 - 2024.10.07
+
+### Fixed
+
+- Handle line comments in SQLs [#333](https://github.com/questdb/ui/pull/333)
+- Handle comments in SQL editor highlights
+  [#335](https://github.com/questdb/ui/pull/336)
+- Tab state update issues that lead to visual side effects
+  [#337](https://github.com/questdb/ui/pull/337)
+
+### Changed
+
+- Tab History UI updates [#335](https://github.com/questdb/ui/pull/335)
+
 ## 0.6.0 - 2024.09.26
 
 ### Added
