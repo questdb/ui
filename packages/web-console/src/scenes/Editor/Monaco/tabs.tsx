@@ -121,7 +121,6 @@ export const Tabs = () => {
     newTabs.forEach(async (tab, index) => {
       await updateBuffer(tab.id as number, { position: index })
     })
-    await setActiveBuffer(newTabs[toIndex])
   }
 
   const rename = async (id: string, title: string) => {
