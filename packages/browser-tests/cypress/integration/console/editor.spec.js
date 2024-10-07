@@ -445,6 +445,29 @@ describe("handling comments", () => {
     cy.getGridRow(0).should("contain", "1");
   });
 
+  it("should highlight and execute sql with empty line comment in front", () => {
+    cy.typeQuery("--\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with block comments", () => {
+    cy.typeQuery("/* comment */\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+
+    cy.clearEditor();
+    cy.typeQuery("/*\ncomment\n*/\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 4);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
   it("should highlight and execute sql with line comments inside", () => {
     cy.typeQuery("select\n\nx\n-- y\n-- z\n from long_sequence(1);");
     cy.getCursorQueryDecoration().should("have.length", 5);
