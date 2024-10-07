@@ -33,6 +33,7 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { QueryInNotification } from "./query-in-notification"
 
 loader.config({
   paths: {
@@ -312,11 +313,7 @@ const MonacoEditor = () => {
             ) {
               dispatch(
                 actions.query.addNotification({
-                  content: (
-                    <Text color="foreground" ellipsis title={result.query}>
-                      {result.query}
-                    </Text>
-                  ),
+                  content: <QueryInNotification query={result.query} />,
                 }),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -330,11 +327,7 @@ const MonacoEditor = () => {
                   content: (
                     <QueryResult {...result.timings} rowCount={result.count} />
                   ),
-                  sideContent: (
-                    <Text color="foreground" ellipsis title={result.query}>
-                      {result.query}
-                    </Text>
-                  ),
+                  sideContent: <QueryInNotification query={result.query} />,
                 }),
               )
               eventBus.publish(EventType.MSG_QUERY_DATASET, result)
@@ -347,11 +340,7 @@ const MonacoEditor = () => {
             dispatch(
               actions.query.addNotification({
                 content: <Text color="red">{error.error}</Text>,
-                sideContent: (
-                  <Text color="foreground" ellipsis title={request.query}>
-                    {request.query}
-                  </Text>
-                ),
+                sideContent: <QueryInNotification query={request.query} />,
                 type: NotificationType.ERROR,
               }),
             )
