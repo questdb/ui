@@ -12,6 +12,7 @@ import * as QuestDB from "../../../utils/questdb"
 import {
   FileCopy,
   ExternalLink,
+  HealthBook,
   Restart,
   Table,
 } from "@styled-icons/remix-line"
@@ -25,17 +26,10 @@ import { ErrorResult } from "../../../utils"
 import { Text, Link } from "../../../components"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
-
-const ErrorButton = styled(Button)`
-  background: #3e1b1b;
-  border: 1px #723131 solid;
-  color: #f47474;
-  padding: 3px 10px;
-  font-size: 1.3rem;
-`
+import { WarningButton } from "../warning-button"
 
 const StyledDialogContent = styled(Dialog.Content)`
-  border-color: #723131;
+  border-color: #654a2c;
 `
 
 const StyledDescription = styled(Dialog.Description)`
@@ -123,6 +117,9 @@ export const SuspensionDialog = ({
     }
   }, [active])
 
+  const txnLag =
+    parseFloat(walTableData.sequencerTxn) - parseFloat(walTableData.writerTxn)
+
   return (
     <Dialog.Root
       open={active}
@@ -134,16 +131,16 @@ export const SuspensionDialog = ({
     >
       <Dialog.Trigger asChild>
         <ForwardRef>
-          <ErrorButton
-            prefixIcon={<ErrorIcon size="18px" />}
+          <WarningButton
+            prefixIcon={<HealthBook size="16px" />}
             data-hook="schema-suspension-dialog-trigger"
             onClick={(e: any) => {
               setActive(true)
               e.stopPropagation()
             }}
           >
-            Suspended
-          </ErrorButton>
+            Diagnose
+          </WarningButton>
         </ForwardRef>
       </Dialog.Trigger>
 
@@ -163,7 +160,7 @@ export const SuspensionDialog = ({
         >
           <Dialog.Title>
             <Box>
-              <Table size={20} color="#FF5555" />
+              <Table size={20} color="#ffb86c" />
               Table is suspended: {walTableData.name}
             </Box>
           </Dialog.Title>
@@ -179,7 +176,7 @@ export const SuspensionDialog = ({
               {walTableData.errorTag &&
                 errorWorkarounds[walTableData.errorTag] && (
                   <Text
-                    color="red"
+                    color="orange"
                     data-hook="schema-suspension-dialog-error-message"
                     size="lg"
                     align="center"

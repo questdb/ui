@@ -121,6 +121,7 @@ export type QueryResult<T extends Record<string, any>> =
 export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
 export type Table = {
+  id: string
   table_name: string
   partitionBy: PartitionBy
   designatedTimestamp: string

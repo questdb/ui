@@ -56,6 +56,7 @@ type Props = Readonly<{
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
+  warning?: boolean
 }>
 
 const Type = styled(Text)`
@@ -189,6 +190,7 @@ const Row = ({
   suffix,
   tooltip,
   type,
+  warning,
 }: Props) => {
   const { query } = useContext(SchemaContext)
 
@@ -196,8 +198,8 @@ const Row = ({
     <Wrapper
       className={className}
       expanded={expanded}
-      suspended={walTableData?.suspended && kind === "table"}
       onClick={onClick}
+      data-hook={`schema-${kind}-row`}
     >
       <FlexRow>
         {kind === "table" && (
@@ -249,7 +251,7 @@ const Row = ({
         )}
 
         <StyledTitle
-          color="foreground"
+          color={warning ? "orange" : "foreground"}
           ellipsis
           kind={kind}
           data-hook={`schema-${kind}-title`}
@@ -271,11 +273,11 @@ const Row = ({
           </Type>
         )}
 
-        {walTableData?.suspended && kind === "table" && (
+        {/* {walTableData?.suspended && kind === "table" && (
           <TableActions>
             <SuspensionDialog walTableData={walTableData} />
           </TableActions>
-        )}
+        )} */}
 
         {tooltip && description && (
           <IconWithTooltip
