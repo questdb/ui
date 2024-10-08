@@ -27,7 +27,6 @@ import React, {
   forwardRef,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
 } from "react"
 import ChromeTabsClz, { TabProperties } from "./chrome-tabs"

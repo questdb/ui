@@ -16,7 +16,7 @@ import {
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
   setErrorMarker,
-  stripLineComments,
+  stripSQLComments,
 } from "./utils"
 import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
@@ -155,7 +155,7 @@ const MonacoEditor = () => {
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
       const cleanedModel = monaco.editor.createModel(
-        stripLineComments(model.getValue()),
+        stripSQLComments(model.getValue()),
         QuestDBLanguageName,
       )
 
