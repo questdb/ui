@@ -123,6 +123,7 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+  const runningValueRef = useRef(running.value)
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -209,7 +210,7 @@ const MonacoEditor = () => {
               ),
               options: {
                 isWholeLine: false,
-                glyphMarginClassName: running.value
+                glyphMarginClassName: runningValueRef.current
                   ? "cancelQueryGlyph"
                   : "cursorQueryGlyph",
               },
@@ -301,6 +302,7 @@ const MonacoEditor = () => {
   }, [request, quest, dispatch, running])
 
   useEffect(() => {
+    runningValueRef.current = running.value
     if (running.value && editorRef?.current) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
