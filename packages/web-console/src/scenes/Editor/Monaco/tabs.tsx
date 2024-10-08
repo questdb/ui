@@ -9,7 +9,7 @@ import {
   DropdownMenu,
   ForwardRef,
 } from "@questdb/react-components"
-import { Text, PopperHover, Tooltip } from "../../../components"
+import { Text } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 
@@ -30,7 +30,14 @@ const Root = styled(Box).attrs({
   padding-right: 1rem;
 `
 
+const HistoryButton = styled(Button)`
+  &.active {
+    background: ${({ theme }) => theme.color.comment};
+  }
+`
+
 const DropdownMenuContent = styled(DropdownMenu.Content)`
+  margin-top: 0.5rem;
   z-index: 100;
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
@@ -47,6 +54,7 @@ export const Tabs = () => {
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const archivedBuffers = buffers
     .filter(
@@ -113,7 +121,6 @@ export const Tabs = () => {
     newTabs.forEach(async (tab, index) => {
       await updateBuffer(tab.id as number, { position: index })
     })
-    await setActiveBuffer(newTabs[toIndex])
   }
 
   const rename = async (id: string, title: string) => {
@@ -157,23 +164,17 @@ export const Tabs = () => {
               } as Tab),
           )}
       />
-      <DropdownMenu.Root modal={false}>
+      <DropdownMenu.Root modal={false} onOpenChange={setHistoryOpen}>
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
-            <PopperHover
-              delay={350}
-              placement="right"
-              trigger={
-                <Button
-                  skin="transparent"
-                  data-hook="editor-tabs-history-button"
-                >
-                  <History size="20px" />
-                </Button>
-              }
+            <HistoryButton
+              skin="transparent"
+              data-hook="editor-tabs-history-button"
+              prefixIcon={<History size="20px" />}
+              {...(historyOpen ? { className: "active" } : {})}
             >
-              <Tooltip>Recently closed tabs</Tooltip>
-            </PopperHover>
+              History
+            </HistoryButton>
           </ForwardRef>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
