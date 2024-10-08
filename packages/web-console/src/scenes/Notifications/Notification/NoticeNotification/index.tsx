@@ -23,23 +23,26 @@
  ******************************************************************************/
 
 import React from "react"
-import { NotificationShape, NotificationType } from "../../../types"
-import { SuccessNotification } from "./SuccessNotification"
-import { ErrorNotification } from "./ErrorNotification"
-import { InfoNotification } from "./InfoNotification"
-import {NoticeNotification} from "./NoticeNotification";
+import styled from "styled-components"
+import { Wrapper, Content, SideContent } from "../styles"
+import { Timestamp } from "../Timestamp"
+import { NotificationShape } from "../../../../types"
+import { InfoOutline } from "@styled-icons/evaicons-outline"
+import { color } from "../../../../utils"
 
-const Notification = (props: NotificationShape) => {
-  const { type } = props
-  return type === NotificationType.SUCCESS ? (
-    <SuccessNotification {...props} />
-  ) : type === NotificationType.ERROR ? (
-    <ErrorNotification {...props} />
-  ) : type == NotificationType.NOTICE ? (
-    <NoticeNotification {...props} />
-  ) : (
-    <InfoNotification {...props} />
+const InfoOutlineIcon = styled(InfoOutline)`
+  color: ${color("yellow")};
+  flex-shrink: 0;
+`
+
+export const NoticeNotification = (props: NotificationShape) => {
+  const { createdAt, content, sideContent, isMinimized } = props
+  return (
+    <Wrapper isMinimized={isMinimized}>
+      <Timestamp createdAt={createdAt} />
+      <InfoOutlineIcon size="18px" />
+      <Content>{content}</Content>
+      <SideContent>{sideContent}</SideContent>
+    </Wrapper>
   )
 }
-
-export default Notification

@@ -322,6 +322,21 @@ const MonacoEditor = () => {
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
             }
 
+            if (result.type === QuestDB.Type.NOTICE) {
+              dispatch(
+                actions.query.addNotification({
+                  content: (
+                    <Text color="foreground" ellipsis title={result.query}>
+                      {result.notice}
+                      {result.query !== undefined && result.query !== '' && `: ${result.query}`}
+                    </Text>
+                  ),
+                  type: NotificationType.NOTICE,
+                }),
+              )
+              eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+            }
+
             if (result.type === QuestDB.Type.DQL) {
               setLastExecutedQuery(request.query)
               dispatch(

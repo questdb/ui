@@ -38,6 +38,7 @@ export enum Type {
   DML = "dml",
   DQL = "dql",
   ERROR = "error",
+  NOTICE = "notice",
 }
 
 export type Timings = {
@@ -58,6 +59,7 @@ type RawDqlResult = {
   dataset: DatasetType[]
   ddl: undefined
   dml: undefined
+  notice: undefined
   error: undefined
   query: string
   timings: Timings
@@ -82,6 +84,15 @@ type RawErrorResult = {
   query: string
 }
 
+type RawNoticeResult = {
+    ddl: undefined
+    dml: undefined
+    error: undefined
+    notice: "<notice message>"
+    position: undefined
+    query: string
+}
+
 type DdlResult = {
   query: string
   type: Type.DDL
@@ -92,11 +103,15 @@ type DmlResult = {
   type: Type.DML
 }
 
-type RawResult = RawDqlResult | RawDmlResult | RawDdlResult | RawErrorResult
+type RawResult = RawDqlResult | RawDmlResult | RawDdlResult | RawErrorResult | RawNoticeResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
   status: number
+}
+
+export type NoticeResult = RawNoticeResult & {
+    type: Type.NOTICE
 }
 
 export type QueryRawResult =
@@ -104,6 +119,7 @@ export type QueryRawResult =
   | DmlResult
   | DdlResult
   | ErrorResult
+  | NoticeResult
 
 export type QueryResult<T extends Record<string, any>> =
   | {
@@ -117,6 +133,7 @@ export type QueryResult<T extends Record<string, any>> =
   | ErrorResult
   | DmlResult
   | DdlResult
+  | NoticeResult
 
 export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
@@ -501,6 +518,13 @@ export class Client {
           ...data,
           type: Type.ERROR,
         })
+      }
+
+      if (data.notice) {
+        return {
+          ...data,
+          type: Type.NOTICE,
+        }
       }
 
       return {
