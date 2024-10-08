@@ -59,7 +59,8 @@ const Content = styled(PaneContent)`
     }
   }
 
-  .cursorQueryGlyph {
+  .cursorQueryGlyph,
+  .cancelQueryGlyph {
     margin-left: 2rem;
     z-index: 1;
     cursor: pointer;
@@ -67,9 +68,20 @@ const Content = styled(PaneContent)`
     &:after {
       display: block;
       content: "";
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
       width: 18px;
       height: 18px;
+    }
+  }
+
+  .cursorQueryGlyph {
+    &:after {
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
+    }
+  }
+
+  .cancelQueryGlyph {
+    &:after {
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
     }
   }
 
@@ -141,7 +153,10 @@ const MonacoEditor = () => {
   }
 
   const handleEditorClick = (e: BaseSyntheticEvent) => {
-    if (e.target.classList.contains("cursorQueryGlyph")) {
+    if (
+      e.target.classList.contains("cursorQueryGlyph") ||
+      e.target.classList.contains("cancelQueryGlyph")
+    ) {
       editorRef?.current?.focus()
       toggleRunning()
     }
@@ -194,7 +209,9 @@ const MonacoEditor = () => {
               ),
               options: {
                 isWholeLine: false,
-                glyphMarginClassName: "cursorQueryGlyph",
+                glyphMarginClassName: running.value
+                  ? "cancelQueryGlyph"
+                  : "cursorQueryGlyph",
               },
             },
             ...(errorRangeRef.current &&
@@ -289,6 +306,10 @@ const MonacoEditor = () => {
         clearModelMarkers(monacoRef.current, editorRef.current)
       }
 
+      if (monacoRef?.current && editorRef?.current) {
+        renderLineMarkings(monacoRef.current, editorRef?.current)
+      }
+
       const request = running.isRefresh
         ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
         : getQueryRequestFromEditor(editorRef.current)
@@ -302,10 +323,6 @@ const MonacoEditor = () => {
             errorRangeRef.current = undefined
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
-
-            if (monacoRef?.current && editorRef?.current) {
-              renderLineMarkings(monacoRef.current, editorRef?.current)
-            }
 
             if (
               result.type === QuestDB.Type.DDL ||
@@ -363,13 +380,16 @@ const MonacoEditor = () => {
                   lineNumber: errorRange.startLineNumber,
                   column: errorRange.startColumn,
                 })
-                renderLineMarkings(monacoRef?.current, editorRef?.current)
               }
             }
           })
         setRequest(request)
       } else {
         dispatch(actions.query.stopRunning())
+      }
+    } else {
+      if (monacoRef?.current && editorRef?.current) {
+        renderLineMarkings(monacoRef?.current, editorRef?.current)
       }
     }
   }, [running])
