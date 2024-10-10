@@ -153,7 +153,6 @@ const Schema = ({
   const [copied, setCopied] = useState(false)
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
-  const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
   const [dropdownOpen, setDropdownOpen] = useState(false)
 
   const handleChange = (name: string) => {
@@ -190,22 +189,6 @@ const Schema = ({
     }
   }
 
-  const fetchColumns = async () => {
-    try {
-      const response = await quest.query<QuestDB.InformationSchemaColumn>(
-        "information_schema.columns()",
-      )
-      if (response && response && response.type === QuestDB.Type.DQL) {
-        setColumns(response.data)
-        dispatch(actions.query.setColumns(response.data))
-      }
-    } catch (error) {
-      dispatchState({
-        view: View.error,
-      })
-    }
-  }
-
   const copySchemasToClipboard = async () => {
     if (!tables) return
     const ddls = await Promise.all(
@@ -232,11 +215,9 @@ const Schema = ({
 
   useEffect(() => {
     void fetchTables()
-    void fetchColumns()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
       void fetchTables()
-      void fetchColumns()
     })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
@@ -250,19 +231,16 @@ const Schema = ({
       // The connection has been re-established, and we have an error in memory
       if (errorRef.current !== null) {
         void fetchTables()
-        void fetchColumns()
       }
     })
 
     window.addEventListener("focus", () => {
       void fetchTables()
-      void fetchColumns()
     })
 
     return () =>
       window.removeEventListener("focus", () => {
         void fetchTables()
-        void fetchColumns()
       })
   }, [])
 
