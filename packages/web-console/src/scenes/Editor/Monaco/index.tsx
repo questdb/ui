@@ -101,6 +101,7 @@ const DEFAULT_LINE_CHARS = 5
 const MonacoEditor = () => {
   const editorContext = useEditor()
   const {
+    buffers,
     editorRef,
     monacoRef,
     insertTextAtCursor,
@@ -121,9 +122,12 @@ const MonacoEditor = () => {
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
-  const errorRef = useRef<ErrorResult | undefined>()
-  const errorRangeRef = useRef<IRange | undefined>()
   const runningValueRef = useRef(running.value)
+  const activeBufferRef = useRef(activeBuffer)
+
+  const errorRefs = useRef<
+    Record<string, { error?: ErrorResult; range?: IRange }>
+  >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -170,6 +174,8 @@ const MonacoEditor = () => {
     const queryAtCursor = getQueryFromCursor(editor)
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
+      const activeBufferId = activeBufferRef.current.id as number
+
       const cleanedModel = monaco.editor.createModel(
         stripSQLComments(model.getValue()),
         QuestDBLanguageName,
@@ -180,7 +186,12 @@ const MonacoEditor = () => {
       cleanedModel.dispose()
 
       if (matches.length > 0) {
-        const hasError = errorRef.current?.query === queryAtCursor.query
+        const hasError =
+          errorRefs.current &&
+          errorRefs.current[activeBufferId]?.error?.query ===
+            queryAtCursor.query
+        const errorRange =
+          errorRefs.current && errorRefs.current[activeBufferId]?.range
         const cursorMatch = matches.find(
           (m) => m.range.startLineNumber === queryAtCursor.row + 1,
         )
@@ -215,15 +226,15 @@ const MonacoEditor = () => {
                   : "cursorQueryGlyph",
               },
             },
-            ...(errorRangeRef.current &&
-            cursorMatch.range.startLineNumber !==
-              errorRangeRef.current.startLineNumber
+            ...(hasError &&
+            errorRange &&
+            cursorMatch.range.startLineNumber !== errorRange.startLineNumber
               ? [
                   {
                     range: new monaco.Range(
-                      errorRangeRef.current.startLineNumber,
+                      errorRange.startLineNumber,
                       0,
-                      errorRangeRef.current.startLineNumber,
+                      errorRange.startLineNumber,
                       0,
                     ),
                     options: {
@@ -294,6 +305,19 @@ const MonacoEditor = () => {
   }
 
   useEffect(() => {
+    // Remove all errors for the buffers that have been deleted
+    Object.keys(errorRefs.current).map((key) => {
+      if (!buffers.find((b) => b.id === parseInt(key))) {
+        delete errorRefs.current[key]
+      }
+    })
+  }, [buffers])
+
+  useEffect(() => {
+    activeBufferRef.current = activeBuffer
+  }, [activeBuffer])
+
+  useEffect(() => {
     if (!running.value && request) {
       quest.abort()
       dispatch(actions.query.stopRunning())
@@ -321,8 +345,8 @@ const MonacoEditor = () => {
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
             setRequest(undefined)
-            errorRef.current = undefined
-            errorRangeRef.current = undefined
+            delete errorRefs.current[activeBuffer.id as number]
+
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
 
@@ -353,7 +377,9 @@ const MonacoEditor = () => {
             }
           })
           .catch((error: ErrorResult) => {
-            errorRef.current = error
+            errorRefs.current[activeBuffer.id as number] = {
+              error,
+            }
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
             dispatch(
@@ -370,8 +396,8 @@ const MonacoEditor = () => {
                 request,
                 error.position,
               )
-              errorRangeRef.current = errorRange ?? undefined
               if (errorRange) {
+                errorRefs.current[activeBuffer.id as number].range = errorRange
                 setErrorMarker(
                   monacoRef?.current,
                   editorRef.current,
@@ -415,6 +441,12 @@ const MonacoEditor = () => {
       setCompletionProvider()
     }
   }, [tables, columns, monacoRef, editorReady])
+
+  useEffect(() => {
+    if (monacoRef.current && editorRef.current) {
+      clearModelMarkers(monacoRef.current, editorRef.current)
+    }
+  }, [activeBuffer])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)
