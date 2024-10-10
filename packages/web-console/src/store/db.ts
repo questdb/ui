@@ -48,7 +48,19 @@ export class Storage extends Dexie {
     this.version(2).stores({
       read_notifications: "++id, newsId",
     })
-
+    this.version(3)
+      .stores({
+        buffers: "++id, label, position, archived, archivedAt",
+      })
+      .upgrade((tx) => {
+        let counter = 0
+        tx.table("buffers")
+          .toCollection()
+          .modify((buffer) => {
+            buffer.position = counter
+            counter++
+          })
+      })
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", () => {
@@ -63,6 +75,7 @@ export class Storage extends Dexie {
         makeBuffer({
           label: "SQL",
           value: valueFromDeprecatedStorage ?? "",
+          position: 0,
         }),
       )
 
@@ -90,6 +103,7 @@ export class Storage extends Dexie {
           makeBuffer({
             label: "SQL",
             value: "",
+            position: 0,
           }),
         )
       }

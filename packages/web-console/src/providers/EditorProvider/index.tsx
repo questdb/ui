@@ -10,10 +10,10 @@ import React, {
 import type { editor } from "monaco-editor"
 import { Monaco } from "@monaco-editor/react"
 import {
+  AppendQueryOptions,
   insertTextAtCursor,
   appendQuery,
   QuestDBLanguageName,
-  AppendQueryOptions,
 } from "../../scenes/Editor/Monaco/utils"
 import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
 import { db } from "../../store/db"
@@ -28,6 +28,7 @@ export type EditorContext = {
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string, options?: AppendQueryOptions) => void
+  buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => Promise<void>
   addBuffer: (
@@ -35,6 +36,8 @@ export type EditorContext = {
     options?: { shouldSelectAll?: boolean },
   ) => Promise<Buffer>
   deleteBuffer: (id: number) => Promise<void>
+  archiveBuffer: (id: number) => Promise<void>
+  deleteAllBuffers: () => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   inFocus: boolean
@@ -44,11 +47,14 @@ const defaultValues = {
   editorRef: { current: null },
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
-  appendQuery: (query: string, options?: AppendQueryOptions) => undefined,
+  appendQuery: () => undefined,
+  buffers: [],
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
+  archiveBuffer: () => Promise.resolve(),
+  deleteAllBuffers: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
   inFocus: false,
@@ -59,27 +65,27 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
+  const buffers = useLiveQuery(bufferStore.getAll, [])
+  const activeBufferId = useLiveQuery(
+    () => bufferStore.getActiveId(),
+    [],
+  )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const [inFocus, setInFocus] = useState(false)
-  const [buffersInitialised, setBuffersInitialised] = useState(false)
 
+  const ranOnce = useRef(false)
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
-    async function initBuffers() {
-      const buffers = await bufferStore.getAll()
-      const activeBufferId = (await bufferStore.getActiveId())?.value
-      if (buffers && activeBufferId) {
-        const buffer =
-          buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
-        setActiveBufferState(buffer)
-        setBuffersInitialised(true)
-      }
+    if (!ranOnce.current && buffers && activeBufferId) {
+      const buffer =
+        buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
+      setActiveBufferState(buffer)
+      ranOnce.current = true
     }
-    initBuffers()
-  }, [])
+  }, [buffers, activeBufferId])
 
-  if (!buffersInitialised) {
+  if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
   }
 
@@ -89,7 +95,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       if (buffer.id === currentActiveBufferId) {
         // early return if trying to set active an already active buffer
         // but keep focus on editor
-        editorRef.current?.focus()
+        // editorRef.current?.focus()
         return
       }
 
@@ -141,6 +147,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     const buffer = makeBuffer({
       ...newBuffer,
       label: newBuffer?.label ?? `${fallbackBuffer.label} ${nextNumber()}`,
+      position: buffers.filter((b) => !b.archived).length,
     })
     const id = await db.buffers.add(buffer)
     await setActiveBuffer(buffer)
@@ -163,6 +170,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return { id, ...buffer }
   }
 
+  const deleteAllBuffers = async () => {
+    await bufferStore.deleteAll()
+  }
+
   const updateBuffer: EditorContext["updateBuffer"] = async (id, payload) => {
     const editorViewState = editorRef.current?.saveViewState()
     await bufferStore.update(id, {
@@ -171,17 +182,34 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     })
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
-    await bufferStore.delete(id)
-
+  const setActiveBufferOnRemoved = async (id: number) => {
     // set new active buffer only when removing currently active buffer
     const activeBufferId = (await bufferStore.getActiveId())?.value
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
-      const nextActive = await db.buffers.toCollection().last()
+      const nextActive = await db.buffers
+        .toCollection()
+        .filter((buffer) => {
+          return !buffer.archived
+        })
+        .last()
       await setActiveBuffer(nextActive ?? fallbackBuffer)
     } else {
       editorRef.current?.focus()
     }
+  }
+
+  const archiveBuffer: EditorContext["archiveBuffer"] = async (id) => {
+    await updateBuffer(id, {
+      archived: true,
+      archivedAt: new Date().getTime(),
+      position: -1,
+    })
+    await setActiveBufferOnRemoved(id)
+  }
+
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
+    await bufferStore.delete(id)
+    await setActiveBufferOnRemoved(id)
   }
 
   return (
@@ -199,10 +227,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             appendQuery(editorRef.current, text, options)
           }
         },
+        inFocus,
+        buffers,
         activeBuffer,
         setActiveBuffer,
         addBuffer,
         deleteBuffer,
+        archiveBuffer,
+        deleteAllBuffers,
         updateBuffer,
         editorReadyTrigger: (editor) => {
           editor.focus()
@@ -213,7 +245,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             editor.restoreViewState(activeBuffer.editorViewState)
           }
         },
-        inFocus,
       }}
     >
       {children}
