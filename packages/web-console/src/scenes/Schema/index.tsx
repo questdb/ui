@@ -146,6 +146,8 @@ const Schema = ({
   const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
   const { autoRefreshTables, updateSettings } = useLocalStorage()
 
+  console.log(autoRefreshTables)
+
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
   }

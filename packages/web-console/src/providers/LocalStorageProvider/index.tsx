@@ -100,10 +100,9 @@ export const LocalStorageProvider = ({
   )
 
   const [autoRefreshTables, setAutoRefreshTables] = useState<boolean>(
-    parseBoolean(
-      getValue(StoreKey.EXAMPLE_QUERIES_VISITED),
-      defaultConfig.autoRefreshTables,
-    ),
+    getValue(StoreKey.AUTO_REFRESH_TABLES)
+      ? getValue(StoreKey.AUTO_REFRESH_TABLES) === "true"
+      : defaultConfig.autoRefreshTables,
   )
 
   const updateSettings = (key: StoreKey, value: SettingsType) => {
@@ -137,9 +136,7 @@ export const LocalStorageProvider = ({
         )
         break
       case StoreKey.AUTO_REFRESH_TABLES:
-        setAutoRefreshTables(
-          parseBoolean(value, defaultConfig.autoRefreshTables),
-        )
+        setAutoRefreshTables(value === "true")
         break
     }
   }
