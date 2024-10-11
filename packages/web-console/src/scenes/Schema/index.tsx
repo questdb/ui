@@ -34,13 +34,7 @@ import React, {
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
-import {
-  Add,
-  FileCopy,
-  Loader3,
-  Refresh,
-  Settings4,
-} from "@styled-icons/remix-line"
+import { Loader3, Refresh } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import {
   PaneContent,
@@ -48,15 +42,14 @@ import {
   PopperHover,
   spinAnimation,
   Tooltip,
-  Text,
 } from "../../components"
 import { actions } from "../../store"
-import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
+import { color, copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
-import { Button, DropdownMenu, ForwardRef } from "@questdb/react-components"
+import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
@@ -64,6 +57,8 @@ import { EventType } from "../../modules/EventBus/types"
 import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { StoreKey } from "../../utils/localStorage/types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -103,11 +98,6 @@ const StyledCheckboxCircle = styled(CheckboxCircle)`
   position: absolute;
   transform: translate(75%, -75%);
   color: ${({ theme }) => theme.color.green};
-`
-
-const DropdownMenuContent = styled(DropdownMenu.Content)`
-  z-index: 100;
-  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const Loading = () => {
@@ -154,7 +144,7 @@ const Schema = ({
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const { autoRefreshTables, updateSettings } = useLocalStorage()
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -234,11 +224,6 @@ const Schema = ({
     void fetchTables()
     void fetchColumns()
 
-    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
-      void fetchTables()
-      void fetchColumns()
-    })
-
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
       if (error) {
         errorRef.current = error
@@ -253,18 +238,28 @@ const Schema = ({
         void fetchColumns()
       }
     })
+  }, [])
 
-    window.addEventListener("focus", () => {
-      void fetchTables()
-      void fetchColumns()
-    })
+  useEffect(() => {
+    if (autoRefreshTables) {
+      eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
+        void fetchTables()
+        void fetchColumns()
+      })
 
-    return () =>
+      window.addEventListener("focus", () => {
+        void fetchTables()
+        void fetchColumns()
+      })
+    } else {
+      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
+
       window.removeEventListener("focus", () => {
         void fetchTables()
         void fetchColumns()
       })
-  }, [])
+    }
+  }, [autoRefreshTables])
 
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => <Loading />,
@@ -325,53 +320,29 @@ const Schema = ({
             <div style={{ display: "flex" }}>
               {tables && (
                 <Box align="center" gap="0.5rem">
-                  <DropdownMenu.Root
-                    modal={false}
-                    onOpenChange={setDropdownOpen}
+                  <PopperHover
+                    delay={350}
+                    placement="right"
+                    trigger={
+                      <Button
+                        skin={autoRefreshTables ? "secondary" : "transparent"}
+                        onClick={() => {
+                          updateSettings(
+                            StoreKey.AUTO_REFRESH_TABLES,
+                            !autoRefreshTables,
+                          )
+                          void fetchTables()
+                          void fetchColumns()
+                        }}
+                      >
+                        <Refresh size="18px" />
+                      </Button>
+                    }
                   >
-                    <DropdownMenu.Trigger asChild>
-                      <ForwardRef>
-                        <PopperHover
-                          delay={350}
-                          placement="right"
-                          trigger={
-                            <Button
-                              skin="transparent"
-                              data-hook="schema-settings-button"
-                            >
-                              {copied && <StyledCheckboxCircle size="14px" />}
-                              <Settings4 size="18px" />
-                            </Button>
-                          }
-                        >
-                          <Tooltip>Settings</Tooltip>
-                        </PopperHover>
-                      </ForwardRef>
-                    </DropdownMenu.Trigger>
-
-                    <DropdownMenu.Portal>
-                      <DropdownMenuContent>
-                        {tables.length > 0 && (
-                          <DropdownMenu.Item
-                            onClick={copySchemasToClipboard}
-                            data-hook="schema-copy-all"
-                          >
-                            <FileCopy size="18px" />
-                            <Text color="foreground">
-                              Copy schemas to clipboard
-                            </Text>
-                          </DropdownMenu.Item>
-                        )}
-                        <DropdownMenu.Item
-                          onClick={fetchTables}
-                          data-hook="schema-refresh"
-                        >
-                          <Refresh size="18px" />
-                          <Text color="foreground">Refresh tables</Text>
-                        </DropdownMenu.Item>
-                      </DropdownMenuContent>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
+                    <Tooltip>
+                      Auto refresh {autoRefreshTables ? "enabled" : "disabled"}
+                    </Tooltip>
+                  </PopperHover>
                 </Box>
               )}
             </div>

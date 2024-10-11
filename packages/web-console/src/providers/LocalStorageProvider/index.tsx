@@ -43,6 +43,7 @@ const defaultConfig: LocalConfig = {
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
+  autoRefreshTables: true,
 }
 
 type ContextProps = {
@@ -53,6 +54,7 @@ type ContextProps = {
   resultsSplitterBasis: number
   updateSettings: (key: StoreKey, value: SettingsType) => void
   exampleQueriesVisited: boolean
+  autoRefreshTables: boolean
 }
 
 const defaultValues: ContextProps = {
@@ -63,6 +65,7 @@ const defaultValues: ContextProps = {
   resultsSplitterBasis: 350,
   updateSettings: (key: StoreKey, value: SettingsType) => undefined,
   exampleQueriesVisited: false,
+  autoRefreshTables: true,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -96,6 +99,13 @@ export const LocalStorageProvider = ({
     getValue(StoreKey.EXAMPLE_QUERIES_VISITED) === "true",
   )
 
+  const [autoRefreshTables, setAutoRefreshTables] = useState<boolean>(
+    parseBoolean(
+      getValue(StoreKey.EXAMPLE_QUERIES_VISITED),
+      defaultConfig.autoRefreshTables,
+    ),
+  )
+
   const updateSettings = (key: StoreKey, value: SettingsType) => {
     setValue(key, value.toString())
     refreshSettings(key)
@@ -126,6 +136,11 @@ export const LocalStorageProvider = ({
           parseInteger(value, defaultConfig.resultsSplitterBasis),
         )
         break
+      case StoreKey.AUTO_REFRESH_TABLES:
+        setAutoRefreshTables(
+          parseBoolean(value, defaultConfig.autoRefreshTables),
+        )
+        break
     }
   }
 
@@ -139,6 +154,7 @@ export const LocalStorageProvider = ({
         resultsSplitterBasis,
         updateSettings,
         exampleQueriesVisited,
+        autoRefreshTables,
       }}
     >
       {children}
