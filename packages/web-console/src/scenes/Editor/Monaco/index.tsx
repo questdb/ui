@@ -404,7 +404,21 @@ const MonacoEditor = () => {
                   errorRange,
                   error.error,
                 )
-                editorRef?.current.revealPositionInCenter({
+
+                const fontInfo = editorRef?.current
+                  .getOptions()
+                  .get(monacoRef?.current.editor.EditorOption.fontInfo)
+                const charWidth = fontInfo.typicalHalfwidthCharacterWidth
+
+                const scrollLeft = (errorRange.startColumn - 1) * charWidth
+
+                editorRef?.current.revealLineInCenter(
+                  errorRange.startLineNumber,
+                )
+
+                editorRef?.current.setScrollPosition({ scrollLeft })
+
+                editorRef?.current.setPosition({
                   lineNumber: errorRange.startLineNumber,
                   column: errorRange.startColumn,
                 })
