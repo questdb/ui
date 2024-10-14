@@ -34,8 +34,7 @@ import React, {
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
-import { Loader3, Refresh } from "@styled-icons/remix-line"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle, Loader3, Refresh } from "@styled-icons/remix-line"
 import {
   PaneContent,
   PaneWrapper,
@@ -54,7 +53,7 @@ import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
+import { formatTableSchemaQueryResult } from "./formatTableSchemaQueryResult"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -94,10 +93,10 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
-const StyledCheckboxCircle = styled(CheckboxCircle)`
-  position: absolute;
-  transform: translate(75%, -75%);
-  color: ${({ theme }) => theme.color.green};
+const ToggleButton = styled(Button)`
+  &.selected {
+    background: ${({ theme }) => theme.color.comment};
+  }
 `
 
 const Loading = () => {
@@ -145,8 +144,8 @@ const Schema = ({
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
   const { autoRefreshTables, updateSettings } = useLocalStorage()
-
-  console.log(autoRefreshTables)
+  const [selectOpen, setSelectOpen] = useState(false)
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -220,6 +219,14 @@ const Schema = ({
     copyToClipboard(ddls.join("\n\n"))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSelectToggle = (table_name: string) => {
+    if (selectedTables.includes(table_name)) {
+      setSelectedTables(selectedTables.filter((t) => t !== table_name))
+    } else {
+      setSelectedTables([...selectedTables, table_name])
+    }
   }
 
   useEffect(() => {
@@ -306,6 +313,9 @@ const Schema = ({
                   (wt) => wt.name === table.table_name,
                 )}
                 dedup={table.dedup}
+                selectOpen={selectOpen}
+                selected={selectedTables.includes(table.table_name)}
+                onSelectToggle={handleSelectToggle}
               />
             ))}
         <FlexSpacer />
@@ -321,13 +331,33 @@ const Schema = ({
           afterTitle={
             <div style={{ display: "flex" }}>
               {tables && (
-                <Box align="center" gap="0.5rem">
+                <Box align="center" gap="1rem">
                   <PopperHover
                     delay={350}
                     placement="right"
                     trigger={
-                      <Button
-                        skin={autoRefreshTables ? "secondary" : "transparent"}
+                      <ToggleButton
+                        skin="secondary"
+                        onClick={() => {
+                          if (selectOpen) {
+                            setSelectedTables([])
+                          }
+                          setSelectOpen(!selectOpen)
+                        }}
+                        {...(selectOpen ? { className: "selected" } : {})}
+                      >
+                        <CheckboxCircle size="18px" />
+                      </ToggleButton>
+                    }
+                  >
+                    <Tooltip>Select</Tooltip>
+                  </PopperHover>
+                  <PopperHover
+                    delay={350}
+                    placement="right"
+                    trigger={
+                      <ToggleButton
+                        skin="secondary"
                         onClick={() => {
                           updateSettings(
                             StoreKey.AUTO_REFRESH_TABLES,
@@ -336,9 +366,12 @@ const Schema = ({
                           void fetchTables()
                           void fetchColumns()
                         }}
+                        {...(autoRefreshTables
+                          ? { className: "selected" }
+                          : {})}
                       >
                         <Refresh size="18px" />
-                      </Button>
+                      </ToggleButton>
                     }
                   >
                     <Tooltip>

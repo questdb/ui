@@ -31,7 +31,6 @@ import { ContextMenuTrigger } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
-import ContextualMenu from "./ContextualMenu"
 import { useSelector, useDispatch } from "react-redux"
 import { actions, selectors } from "../../../store"
 import { QuestContext } from "../../../providers"
@@ -47,6 +46,9 @@ type Props = QuestDB.Table &
     expanded?: boolean
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
+    selected: boolean
+    selectOpen: boolean
+    onSelectToggle: (table_name: string) => void
   }>
 
 const Wrapper = styled.div`
@@ -124,6 +126,9 @@ const Table = ({
   walTableData,
   onChange,
   dedup,
+  selected,
+  selectOpen,
+  onSelectToggle,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
@@ -224,6 +229,9 @@ const Table = ({
               walTableData={walTableData}
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
+              selectOpen={selectOpen}
+              selected={selected}
+              onSelectToggle={onSelectToggle}
             />
           </ContextMenuTrigger>
         )
@@ -233,15 +241,6 @@ const Table = ({
 
   return (
     <Wrapper _height={columns ? columns.length * 30 : 0}>
-      {!isScrolling && (
-        <ContextualMenu
-          name={table_name}
-          partitionBy={partitionBy}
-          walEnabled={walEnabled}
-          dedup={dedup}
-        />
-      )}
-
       <Tree root={tree} />
     </Wrapper>
   )
