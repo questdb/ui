@@ -184,6 +184,7 @@ const Checkbox = styled(Box).attrs({
 })`
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
 `
 
 const CheckboxUnchecked = styled.div`
