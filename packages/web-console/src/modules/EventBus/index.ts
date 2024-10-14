@@ -21,7 +21,7 @@ class EventBus {
 
   unsubscribe<T extends any>(
     eventType: EventType,
-    handler: (eventPayload?: T) => void,
+    handler?: (eventPayload?: T) => void,
   ): void {
     this.emitter.off(eventType, handler)
   }

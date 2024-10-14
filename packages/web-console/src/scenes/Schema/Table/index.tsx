@@ -26,15 +26,15 @@ import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
 import { Loader4 } from "@styled-icons/remix-line"
 import { Tree, collapseTransition, spinAnimation } from "../../../components"
-import type { TreeNode, TreeNodeRenderParams } from "../../../components"
+import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
 import { ContextMenuTrigger } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
-import ContextualMenu from "./ContextualMenu"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
+import { useSelector, useDispatch } from "react-redux"
+import { actions, selectors } from "../../../store"
 import { QuestContext } from "../../../providers"
+import { NotificationType } from "../../../types"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -46,6 +46,9 @@ type Props = QuestDB.Table &
     expanded?: boolean
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
+    selected: boolean
+    selectOpen: boolean
+    onSelectToggle: (table_name: string) => void
   }>
 
 const Wrapper = styled.div`
@@ -123,22 +126,43 @@ const Table = ({
   walTableData,
   onChange,
   dedup,
+  selected,
+  selectOpen,
+  onSelectToggle,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
   const tables = useSelector(selectors.query.getTables)
+  const dispatch = useDispatch()
 
   const showColumns = async (name: string) => {
-    const response = await quest.showColumns(table_name)
-    if (response && response.type === QuestDB.Type.DQL) {
-      setColumns(response.data)
+    try {
+      const response = await quest.showColumns(name)
+      if (response && response.type === QuestDB.Type.DQL) {
+        return response
+      }
+    } catch (error: any) {
+      dispatch(
+        actions.query.addNotification({
+          content: (
+            <Text color="red">Cannot show columns from table '{name}'</Text>
+          ),
+          type: NotificationType.ERROR,
+        }),
+      )
     }
   }
 
   useEffect(() => {
-    if (tables && expanded && table_name) {
-      void showColumns(table_name)
+    const fetchColumns = async () => {
+      if (tables && expanded && table_name) {
+        const response = await showColumns(table_name)
+        if (response && response.data) {
+          setColumns(response.data)
+        }
+      }
     }
+    fetchColumns()
   }, [tables, table_name])
 
   const tree: TreeNode[] = [
@@ -153,9 +177,9 @@ const Table = ({
           wrapper: Columns,
           async onOpen({ setChildren }) {
             onChange(table_name)
-            const response = (await quest.showColumns(table_name)) ?? []
+            const response = await showColumns(table_name)
 
-            if (response && response.type === QuestDB.Type.DQL) {
+            if (response && response.data && response.data.length > 0) {
               setColumns(response.data)
 
               setChildren(
@@ -164,6 +188,13 @@ const Table = ({
                   render: columnRender({ column, designatedTimestamp }),
                 })),
               )
+            } else {
+              setChildren([
+                {
+                  name: "error",
+                  render: () => <Text color="gray2">No columns found</Text>,
+                },
+              ])
             }
           },
 
@@ -198,6 +229,9 @@ const Table = ({
               walTableData={walTableData}
               suffix={isLoading && <Loader size="18px" />}
               tooltip={!!description}
+              selectOpen={selectOpen}
+              selected={selected}
+              onSelectToggle={onSelectToggle}
             />
           </ContextMenuTrigger>
         )
@@ -207,15 +241,6 @@ const Table = ({
 
   return (
     <Wrapper _height={columns ? columns.length * 30 : 0}>
-      {!isScrolling && (
-        <ContextualMenu
-          name={table_name}
-          partitionBy={partitionBy}
-          walEnabled={walEnabled}
-          dedup={dedup}
-        />
-      )}
-
       <Tree root={tree} />
     </Wrapper>
   )

@@ -35,4 +35,5 @@ export enum StoreKey {
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
   REST_TOKEN = "rest.token",
   BASIC_AUTH_HEADER = "basic.auth.header",
+  AUTO_REFRESH_TABLES = "auto.refresh.tables",
 }

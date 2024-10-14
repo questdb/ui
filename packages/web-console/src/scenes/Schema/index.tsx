@@ -34,36 +34,30 @@ import React, {
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
-import {
-  Add,
-  FileCopy,
-  Loader3,
-  Refresh,
-  Settings4,
-} from "@styled-icons/remix-line"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle, Loader3, Refresh } from "@styled-icons/remix-line"
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
   spinAnimation,
   Tooltip,
-  Text,
 } from "../../components"
 import { actions } from "../../store"
-import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
+import { color, copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
-import { Button, DropdownMenu, ForwardRef } from "@questdb/react-components"
+import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
+import { formatTableSchemaQueryResult } from "./formatTableSchemaQueryResult"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { StoreKey } from "../../utils/localStorage/types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -99,15 +93,10 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
-const StyledCheckboxCircle = styled(CheckboxCircle)`
-  position: absolute;
-  transform: translate(75%, -75%);
-  color: ${({ theme }) => theme.color.green};
-`
-
-const DropdownMenuContent = styled(DropdownMenu.Content)`
-  z-index: 100;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+const ToggleButton = styled(Button)`
+  &.selected {
+    background: ${({ theme }) => theme.color.comment};
+  }
 `
 
 const Loading = () => {
@@ -154,7 +143,9 @@ const Schema = ({
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const { autoRefreshTables, updateSettings } = useLocalStorage()
+  const [selectOpen, setSelectOpen] = useState(false)
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -230,14 +221,17 @@ const Schema = ({
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleSelectToggle = (table_name: string) => {
+    if (selectedTables.includes(table_name)) {
+      setSelectedTables(selectedTables.filter((t) => t !== table_name))
+    } else {
+      setSelectedTables([...selectedTables, table_name])
+    }
+  }
+
   useEffect(() => {
     void fetchTables()
     void fetchColumns()
-
-    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
-      void fetchTables()
-      void fetchColumns()
-    })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
       if (error) {
@@ -253,18 +247,28 @@ const Schema = ({
         void fetchColumns()
       }
     })
+  }, [])
 
-    window.addEventListener("focus", () => {
-      void fetchTables()
-      void fetchColumns()
-    })
+  useEffect(() => {
+    if (autoRefreshTables) {
+      eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
+        void fetchTables()
+        void fetchColumns()
+      })
 
-    return () =>
+      window.addEventListener("focus", () => {
+        void fetchTables()
+        void fetchColumns()
+      })
+    } else {
+      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
+
       window.removeEventListener("focus", () => {
         void fetchTables()
         void fetchColumns()
       })
-  }, [])
+    }
+  }, [autoRefreshTables])
 
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => <Loading />,
@@ -309,6 +313,9 @@ const Schema = ({
                   (wt) => wt.name === table.table_name,
                 )}
                 dedup={table.dedup}
+                selectOpen={selectOpen}
+                selected={selectedTables.includes(table.table_name)}
+                onSelectToggle={handleSelectToggle}
               />
             ))}
         <FlexSpacer />
@@ -324,54 +331,53 @@ const Schema = ({
           afterTitle={
             <div style={{ display: "flex" }}>
               {tables && (
-                <Box align="center" gap="0.5rem">
-                  <DropdownMenu.Root
-                    modal={false}
-                    onOpenChange={setDropdownOpen}
-                  >
-                    <DropdownMenu.Trigger asChild>
-                      <ForwardRef>
-                        <PopperHover
-                          delay={350}
-                          placement="right"
-                          trigger={
-                            <Button
-                              skin="transparent"
-                              data-hook="schema-settings-button"
-                            >
-                              {copied && <StyledCheckboxCircle size="14px" />}
-                              <Settings4 size="18px" />
-                            </Button>
+                <Box align="center" gap="1rem">
+                  <PopperHover
+                    delay={350}
+                    placement="right"
+                    trigger={
+                      <ToggleButton
+                        skin="secondary"
+                        onClick={() => {
+                          if (selectOpen) {
+                            setSelectedTables([])
                           }
-                        >
-                          <Tooltip>Settings</Tooltip>
-                        </PopperHover>
-                      </ForwardRef>
-                    </DropdownMenu.Trigger>
-
-                    <DropdownMenu.Portal>
-                      <DropdownMenuContent>
-                        {tables.length > 0 && (
-                          <DropdownMenu.Item
-                            onClick={copySchemasToClipboard}
-                            data-hook="schema-copy-all"
-                          >
-                            <FileCopy size="18px" />
-                            <Text color="foreground">
-                              Copy schemas to clipboard
-                            </Text>
-                          </DropdownMenu.Item>
-                        )}
-                        <DropdownMenu.Item
-                          onClick={fetchTables}
-                          data-hook="schema-refresh"
-                        >
-                          <Refresh size="18px" />
-                          <Text color="foreground">Refresh tables</Text>
-                        </DropdownMenu.Item>
-                      </DropdownMenuContent>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
+                          setSelectOpen(!selectOpen)
+                        }}
+                        {...(selectOpen ? { className: "selected" } : {})}
+                      >
+                        <CheckboxCircle size="18px" />
+                      </ToggleButton>
+                    }
+                  >
+                    <Tooltip>Select</Tooltip>
+                  </PopperHover>
+                  <PopperHover
+                    delay={350}
+                    placement="right"
+                    trigger={
+                      <ToggleButton
+                        skin="secondary"
+                        onClick={() => {
+                          updateSettings(
+                            StoreKey.AUTO_REFRESH_TABLES,
+                            !autoRefreshTables,
+                          )
+                          void fetchTables()
+                          void fetchColumns()
+                        }}
+                        {...(autoRefreshTables
+                          ? { className: "selected" }
+                          : {})}
+                      >
+                        <Refresh size="18px" />
+                      </ToggleButton>
+                    }
+                  >
+                    <Tooltip>
+                      Auto refresh {autoRefreshTables ? "enabled" : "disabled"}
+                    </Tooltip>
+                  </PopperHover>
                 </Box>
               )}
             </div>

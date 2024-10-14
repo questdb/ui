@@ -1,6 +1,6 @@
-import { pick } from "./../../../../utils/pick"
-import { Column } from "./../../../../utils/questdb"
-import { formatTableSchemaQuery } from "./../../../../utils/formatTableSchemaQuery"
+import { pick } from "./../../utils/pick"
+import { Column } from "./../../utils/questdb"
+import { formatTableSchemaQuery } from "./../../utils/formatTableSchemaQuery"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -25,7 +25,7 @@ import { formatTableSchemaQuery } from "./../../../../utils/formatTableSchemaQue
  *
  ******************************************************************************/
 
-import * as QuestDB from "../../../../utils/questdb"
+import * as QuestDB from "../../utils/questdb"
 
 export const formatTableSchemaQueryResult = (
   name: string,
