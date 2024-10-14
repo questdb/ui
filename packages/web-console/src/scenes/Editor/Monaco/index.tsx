@@ -418,6 +418,8 @@ const MonacoEditor = () => {
 
                 editorRef?.current.setScrollPosition({ scrollLeft })
 
+                editorRef?.current.focus()
+
                 editorRef?.current.setPosition({
                   lineNumber: errorRange.startLineNumber,
                   column: errorRange.startColumn,
