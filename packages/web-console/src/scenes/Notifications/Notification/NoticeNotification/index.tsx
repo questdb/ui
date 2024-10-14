@@ -22,20 +22,27 @@
  *
  ******************************************************************************/
 
-export enum TelemetryTable {
-  MAIN = "telemetry",
-  CONFIG = "telemetry_config",
-  WAL = "sys.telemetry_wal",
+import React from "react"
+import styled from "styled-components"
+import { Wrapper, Content, SideContent } from "../styles"
+import { Timestamp } from "../Timestamp"
+import { NotificationShape } from "../../../../types"
+import { InfoOutline } from "@styled-icons/evaicons-outline"
+import { color } from "../../../../utils"
+
+const InfoOutlineIcon = styled(InfoOutline)`
+  color: ${color("yellow")};
+  flex-shrink: 0;
+`
+
+export const NoticeNotification = (props: NotificationShape) => {
+  const { createdAt, content, sideContent, isMinimized } = props
+  return (
+    <Wrapper isMinimized={isMinimized}>
+      <Timestamp createdAt={createdAt} />
+      <InfoOutlineIcon size="18px" />
+      <Content>{content}</Content>
+      <SideContent>{sideContent}</SideContent>
+    </Wrapper>
+  )
 }
-
-const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
-
-export const API = `https://${BASE}.questdb.io`
-
-// QuestDB API version
-// to be included in all requests
-// so server-side can construct a reply
-// the console will understand
-export const API_VERSION = "2";
-
-export const BUTTON_ICON_SIZE = "26px"
