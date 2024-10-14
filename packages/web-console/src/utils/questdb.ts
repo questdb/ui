@@ -27,6 +27,7 @@ import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { AuthPayload } from "../modules/OAuth2/types"
 import { StoreKey } from "./localStorage/types"
+import {API_VERSION} from "../consts";
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -418,6 +419,7 @@ export class Client {
       src: "con",
       query,
       timings: true,
+      version: API_VERSION,
       ...options,
     }
 
@@ -618,6 +620,7 @@ export class Client {
         `chk?${Client.encodeParams({
           f: "json",
           j: name,
+          version: API_VERSION,  
         })}`,
         { headers: this.commonHeaders },
       )
@@ -691,7 +694,7 @@ export class Client {
   async exportQueryToCsv(query: string) {
     try {
       const response: Response = await fetch(
-        `exp?${Client.encodeParams({ query })}`,
+        `exp?${Client.encodeParams({ query, version: API_VERSION })}`,
         { headers: this.commonHeaders },
       )
       const blob = await response.blob()
