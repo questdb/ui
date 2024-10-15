@@ -103,6 +103,10 @@ const Content = styled(PaneContent)`
   }
 `
 
+const CancelButton = styled(Button)`
+  padding: 1.2rem 0.6rem;
+`
+
 const DEFAULT_LINE_CHARS = 5
 
 const MonacoEditor = () => {
@@ -361,13 +365,9 @@ const MonacoEditor = () => {
                 content: (
                   <Box gap="1rem" align="center">
                     <Text color="foreground">Running...</Text>
-                    <Button
-                      skin="error"
-                      onClick={() => toggleRunning()}
-                      prefixIcon={<Stop size="18px" />}
-                    >
-                      Cancel
-                    </Button>
+                    <CancelButton skin="error" onClick={() => toggleRunning()}>
+                      <Stop size="18px" />
+                    </CancelButton>
                   </Box>
                 ),
                 sideContent: <QueryInNotification query={request.query} />,
