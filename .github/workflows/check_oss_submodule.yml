@@ -13,8 +13,9 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
       - name: Check OSS branch
         run: |
-          python3 -m pip install -U pip
-          python3 -m pip install --upgrade pygit2==1.14.1
-          python3 submodule_is_mergeable.py
+          uv run --with "pygit2==1.14.1" submodule_is_mergeable.py
