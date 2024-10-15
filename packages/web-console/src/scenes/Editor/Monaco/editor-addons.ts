@@ -47,13 +47,13 @@ enum Command {
 export const registerEditorActions = ({
   editor,
   monaco,
-  toggleRunning,
+  runQuery,
   dispatch,
   editorContext,
 }: {
   editor: editor.IStandaloneCodeEditor
   monaco: Monaco
-  toggleRunning: (isRefresh?: boolean) => void
+  runQuery: () => void
   dispatch: Dispatch
   editorContext: EditorContext
 }) => {
@@ -65,7 +65,7 @@ export const registerEditorActions = ({
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
     ],
     run: () => {
-      toggleRunning()
+      runQuery()
     },
   })
 

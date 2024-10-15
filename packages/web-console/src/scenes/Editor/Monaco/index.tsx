@@ -270,7 +270,11 @@ const MonacoEditor = () => {
     registerEditorActions({
       editor,
       monaco,
-      toggleRunning,
+      runQuery: () => {
+        if (!runningValueRef.current) {
+          toggleRunning()
+        }
+      },
       dispatch,
       editorContext,
     })
