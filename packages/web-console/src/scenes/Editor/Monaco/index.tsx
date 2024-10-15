@@ -350,6 +350,19 @@ const MonacoEditor = () => {
         : getQueryRequestFromEditor(editorRef.current)
 
       if (request?.query) {
+        // give the notification a slight delay to prevent flashing for fast queries
+        setTimeout(() => {
+          if (runningValueRef.current) {
+            dispatch(
+              actions.query.addNotification({
+                type: NotificationType.LOADING,
+                content: <Text color="foreground">Running...</Text>,
+                sideContent: <QueryInNotification query={request.query} />,
+              }),
+            )
+          }
+        }, 250)
+
         void quest
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {

@@ -43,6 +43,7 @@ import { actions, selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
+import { NotificationType } from "../../store/Query/types"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
@@ -142,9 +143,16 @@ const Notifications = () => {
         </Button>
       </Menu>
       {!isMinimized && (
-        <Content minimized={isMinimized} ref={contentRef}>
-          <TransitionGroup data-hook="notifications-expanded">
-            {notifications.map((notification) => (
+        <Content
+          minimized={isMinimized}
+          ref={contentRef}
+          data-hook="notifications-expanded"
+        >
+          {notifications
+            .filter(
+              (notification) => notification.type !== NotificationType.LOADING,
+            )
+            .map((notification) => (
               <Notification
                 isMinimized={false}
                 key={
@@ -153,7 +161,6 @@ const Notifications = () => {
                 {...notification}
               />
             ))}
-          </TransitionGroup>
           {!isMinimized && (
             <ClearAllNotifications>
               <Button
