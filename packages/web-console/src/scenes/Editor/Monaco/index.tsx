@@ -110,6 +110,7 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
   const errorRef = useRef<ErrorResult | undefined>()
   const errorRangeRef = useRef<IRange | undefined>()
+  const isRunningRef = useRef(false)
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -235,7 +236,11 @@ const MonacoEditor = () => {
     registerEditorActions({
       editor,
       monaco,
-      toggleRunning,
+      runQuery: () => {
+        if (!isRunningRef.current) {
+          toggleRunning()
+        }
+      },
       dispatch,
       editorContext,
     })
@@ -283,6 +288,8 @@ const MonacoEditor = () => {
   }, [request, quest, dispatch, running])
 
   useEffect(() => {
+    isRunningRef.current = running.value
+
     if (running.value && editorRef?.current) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
@@ -328,7 +335,9 @@ const MonacoEditor = () => {
                   content: (
                     <Text color="foreground" ellipsis title={result.query}>
                       {result.notice}
-                      {result.query !== undefined && result.query !== '' && `: ${result.query}`}
+                      {result.query !== undefined &&
+                        result.query !== "" &&
+                        `: ${result.query}`}
                     </Text>
                   ),
                   type: NotificationType.NOTICE,
