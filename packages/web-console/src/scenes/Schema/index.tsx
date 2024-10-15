@@ -235,6 +235,7 @@ const Schema = ({
     void fetchColumns()
 
     eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
+      setOpened(undefined)
       void fetchTables()
       void fetchColumns()
     })
@@ -301,6 +302,7 @@ const Schema = ({
                 expanded={table.table_name === opened}
                 isScrolling={isScrolling}
                 key={table.table_name}
+                id={table.id}
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
@@ -381,7 +383,7 @@ const Schema = ({
         <Content
           _loading={state.view === View.loading}
           ref={scrollerRef}
-          onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
+          // onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
         >
           {views[state.view]()}
         </Content>
