@@ -6,6 +6,8 @@ import { CopyButton } from "../../../components/CopyButton"
 
 const StyledText = styled(Text)`
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `
 
 export const QueryInNotification = ({ query }: { query: string }) => {
@@ -14,7 +16,7 @@ export const QueryInNotification = ({ query }: { query: string }) => {
   return (
     <Box gap="1rem" align="center">
       <StyledText color="foreground" title={query}>
-        {query.length > 50 ? `${query.slice(0, 50)}...` : query}
+        {query}
       </StyledText>
       <CopyButton text={query} iconOnly={true} />
     </Box>

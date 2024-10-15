@@ -54,6 +54,7 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;
+  overflow: hidden;
 `
 
 const Content = styled(PaneContent)<{ minimized: boolean }>`
@@ -71,6 +72,7 @@ const Header = styled(Text)`
 const LatestNotification = styled.div`
   margin-left: 1rem;
   flex: 1;
+  width: calc(100% - 10rem);
 `
 
 const TerminalBoxIcon = styled(TerminalBox)`
