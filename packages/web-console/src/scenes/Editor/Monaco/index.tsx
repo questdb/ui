@@ -34,6 +34,8 @@ import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QueryInNotification } from "./query-in-notification"
+import { Box, Button } from "@questdb/react-components"
+import { Stop } from "@styled-icons/remix-line"
 
 loader.config({
   paths: {
@@ -356,7 +358,18 @@ const MonacoEditor = () => {
             dispatch(
               actions.query.addNotification({
                 type: NotificationType.LOADING,
-                content: <Text color="foreground">Running...</Text>,
+                content: (
+                  <Box gap="1rem" align="center">
+                    <Text color="foreground">Running...</Text>
+                    <Button
+                      skin="error"
+                      onClick={() => toggleRunning()}
+                      prefixIcon={<Stop size="18px" />}
+                    >
+                      Cancel
+                    </Button>
+                  </Box>
+                ),
                 sideContent: <QueryInNotification query={request.query} />,
               }),
             )

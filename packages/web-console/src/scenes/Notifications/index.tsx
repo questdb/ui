@@ -30,7 +30,6 @@ import React, {
   useLayoutEffect,
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
-import { TransitionGroup } from "react-transition-group"
 import styled from "styled-components"
 import {
   PaneContent,
