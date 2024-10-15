@@ -47,7 +47,7 @@ const Content = styled(PaneContent)`
 
   .monaco-editor .squiggly-error {
     background: none;
-    border-bottom: 0.2rem ${color("red")} solid;
+    border-bottom: 0.3rem ${color("red")} solid;
   }
 
   .monaco-scrollable-element > .scrollbar > .slider {
@@ -373,7 +373,9 @@ const MonacoEditor = () => {
                   content: (
                     <Text color="foreground" ellipsis title={result.query}>
                       {result.notice}
-                      {result.query !== undefined && result.query !== '' && `: ${result.query}`}
+                      {result.query !== undefined &&
+                        result.query !== "" &&
+                        `: ${result.query}`}
                     </Text>
                   ),
                   type: NotificationType.NOTICE,
@@ -425,30 +427,16 @@ const MonacoEditor = () => {
                   error.error,
                 )
 
-                const layoutInfo = editorRef?.current.getLayoutInfo()
-                const editorWidth = layoutInfo.contentWidth
-
-                const fontInfo = editorRef?.current
-                  .getOptions()
-                  .get(monacoRef?.current.editor.EditorOption.fontInfo)
-                const charWidth = fontInfo.typicalHalfwidthCharacterWidth
-
-                const columnsInViewport = Math.floor(editorWidth / charWidth)
-
-                editorRef?.current.revealLineInCenter(
-                  errorRange.startLineNumber,
-                )
-
-                if (errorRange.startColumn > columnsInViewport) {
-                  const scrollLeft = (errorRange.startColumn - 1) * charWidth
-                  editorRef?.current.setScrollPosition({ scrollLeft })
-                }
-
                 editorRef?.current.focus()
 
                 editorRef?.current.setPosition({
                   lineNumber: errorRange.startLineNumber,
                   column: errorRange.startColumn,
+                })
+
+                editorRef?.current.revealPosition({
+                  lineNumber: errorRange.startLineNumber,
+                  column: errorRange.endColumn,
                 })
               }
             }
