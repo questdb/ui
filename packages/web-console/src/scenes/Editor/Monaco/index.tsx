@@ -405,18 +405,24 @@ const MonacoEditor = () => {
                   error.error,
                 )
 
+                const layoutInfo = editorRef?.current.getLayoutInfo()
+                const editorWidth = layoutInfo.contentWidth
+
                 const fontInfo = editorRef?.current
                   .getOptions()
                   .get(monacoRef?.current.editor.EditorOption.fontInfo)
                 const charWidth = fontInfo.typicalHalfwidthCharacterWidth
 
-                const scrollLeft = (errorRange.startColumn - 1) * charWidth
+                const columnsInViewport = Math.floor(editorWidth / charWidth)
 
                 editorRef?.current.revealLineInCenter(
                   errorRange.startLineNumber,
                 )
 
-                editorRef?.current.setScrollPosition({ scrollLeft })
+                if (errorRange.startColumn > columnsInViewport) {
+                  const scrollLeft = (errorRange.startColumn - 1) * charWidth
+                  editorRef?.current.setScrollPosition({ scrollLeft })
+                }
 
                 editorRef?.current.focus()
 
