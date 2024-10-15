@@ -135,6 +135,7 @@ const MonacoEditor = () => {
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
   const runningValueRef = useRef(running.value)
   const activeBufferRef = useRef(activeBuffer)
+  const requestRef = useRef(request)
 
   const errorRefs = useRef<
     Record<string, { error?: ErrorResult; range?: IRange }>
@@ -232,9 +233,15 @@ const MonacoEditor = () => {
               ),
               options: {
                 isWholeLine: false,
-                glyphMarginClassName: runningValueRef.current
-                  ? "cancelQueryGlyph"
-                  : "cursorQueryGlyph",
+                glyphMarginClassName:
+                  runningValueRef.current &&
+                  requestRef.current?.row &&
+                  requestRef.current?.row + 1 ===
+                    cursorMatch.range.startLineNumber
+                    ? "cancelQueryGlyph"
+                    : runningValueRef.current
+                    ? ""
+                    : "cursorQueryGlyph",
               },
             },
             ...(hasError &&
@@ -481,6 +488,13 @@ const MonacoEditor = () => {
       }
     }
   }, [running])
+
+  useEffect(() => {
+    requestRef.current = request
+    if (monacoRef?.current && editorRef?.current) {
+      renderLineMarkings(monacoRef?.current, editorRef?.current)
+    }
+  }, [request])
 
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
