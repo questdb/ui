@@ -45,6 +45,11 @@ const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
 
+  .monaco-editor .squiggly-error {
+    background: none;
+    border-bottom: 0.2rem ${color("red")} solid;
+  }
+
   .monaco-scrollable-element > .scrollbar > .slider {
     background: ${color("selection")};
   }
