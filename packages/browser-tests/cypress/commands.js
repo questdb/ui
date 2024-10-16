@@ -111,7 +111,7 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditorContent().realClick().type(query)
+  cy.getEditor().realClick().type(query)
 );
 
 Cypress.Commands.add("runLine", () => {
