@@ -87,8 +87,7 @@ beforeEach(() => {
 });
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
-  cy.typeQuery("select simulate_warnings('', '');");
-  cy.clickRun();
+  cy.execQuery("select simulate_warnings('', '');");
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -204,26 +203,23 @@ Cypress.Commands.add("getExpandedNotifications", () =>
   cy.get('[data-hook="notifications-expanded"]')
 );
 
-Cypress.Commands.add("createTable", (name) => {
+Cypress.Commands.add("execQuery", (query) => {
   const authHeader = localStorage.getItem("basic.auth.header");
   cy.request({
     method: "GET",
-    url: `${baseUrl}/exec?query=${encodeURIComponent(tableSchemas[name])};`,
+    url: `${baseUrl}/exec?query=${encodeURIComponent(query)};`,
     headers: {
       Authorization: authHeader,
     },
   });
 });
 
+Cypress.Commands.add("createTable", (name) => {
+  cy.execQuery(tableSchemas[name]);
+});
+
 Cypress.Commands.add("dropTable", (name) => {
-  const authHeader = localStorage.getItem("basic.auth.header");
-  cy.request({
-    method: "GET",
-    url: `${baseUrl}/exec?query=${encodeURIComponent(`DROP TABLE ${name};`)}`,
-    headers: {
-      Authorization: authHeader,
-    },
-  });
+  cy.execQuery(`DROP TABLE ${name};`);
 });
 
 Cypress.Commands.add("interceptQuery", (query, alias, response) => {

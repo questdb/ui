@@ -419,6 +419,7 @@ describe("editor tabs", () => {
     );
     cy.getEditorTabs().first().should("contain", "SQL 1");
     cy.getEditorTabs().last().should("contain", "SQL");
+    cy.wait(1000);
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")
     );
