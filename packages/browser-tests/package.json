@@ -3,8 +3,8 @@
   "packageManager": "yarn@3.1.1",
   "private": true,
   "scripts": {
-    "test": "cypress run --record --key 5ba043f2-5bb6-4130-aa6a-03b2dffd25ba --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/console/*.spec.js'",
-    "test:auth": "cypress run --record --key 5ba043f2-5bb6-4130-aa6a-03b2dffd25ba --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/auth/*.spec.js'",
+    "test": "cypress run --record --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/console/*.spec.js'",
+    "test:auth": "cypress run --record --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/auth/*.spec.js'",
     "test:update": "yarn run test --env updateSnapshots=true"
   },
   "devDependencies": {
