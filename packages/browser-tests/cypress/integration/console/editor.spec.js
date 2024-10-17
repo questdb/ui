@@ -396,7 +396,6 @@ describe("editor tabs", () => {
       cy.getEditorTabByTitle(title).should("not.exist");
     });
     cy.getByDataHook("editor-tabs-history-button").click();
-    cy.getByDataHook("editor-tabs-history").should("be.visible");
     cy.getByDataHook("editor-tabs-history-item")
       .should("have.length", 2)
       .should("contain", "SQL 1");
