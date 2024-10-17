@@ -383,20 +383,19 @@ describe("editor tabs", () => {
 
   it("should close and archive tabs", () => {
     cy.getEditorContent().should("be.visible");
-    cy.typeQuery("--1");
-    cy.get(".new-tab-button").click();
-    cy.get(".new-tab-button").click();
     ["SQL 1", "SQL 2"].forEach((title, index) => {
+      cy.get(".new-tab-button").click();
       cy.get(getTabDragHandleByTitle(title)).click();
       cy.getEditorContent().should("be.visible");
+      cy.wait(500);
       cy.typeQuery(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });
       cy.getEditorTabByTitle(title).should("not.exist");
     });
-    cy.wait(1000);
     cy.getByDataHook("editor-tabs-history-button").click();
+    cy.wait(1000);
     cy.getByDataHook("editor-tabs-history-item")
       .should("have.length", 2)
       .should("contain", "SQL 1");
