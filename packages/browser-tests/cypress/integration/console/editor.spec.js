@@ -395,6 +395,7 @@ describe("editor tabs", () => {
       });
       cy.getEditorTabByTitle(title).should("not.exist");
     });
+    cy.wait(1000);
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history-item")
       .should("have.length", 2)
