@@ -65,6 +65,7 @@ import { SchemaContext } from "./SchemaContext"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { NotificationType } from "../../types"
+import { Checkbox } from "./checkbox"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -104,6 +105,21 @@ const ToggleButton = styled(Button)`
   &.selected {
     background: ${({ theme }) => theme.color.comment};
   }
+`
+
+const SelectionToolbar = styled(Box).attrs({
+  align: "center",
+  justifyContent: "space-between",
+})<{ $selectOpen?: boolean }>`
+  position: absolute;
+  bottom: 0;
+  padding: 0 1rem;
+  transform: translateY(${({ $selectOpen }) => ($selectOpen ? "0" : "100%")});
+  opacity: ${({ $selectOpen }) => ($selectOpen ? 1 : 0.75)};
+  width: 100%;
+  height: 4.6rem;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+  transition: transform 275ms ease-in-out, opacity 275ms ease-in-out;
 `
 
 const Loading = () => {
@@ -350,6 +366,56 @@ const Schema = ({
               />
             ))}
         <FlexSpacer />
+        <SelectionToolbar $selectOpen={selectOpen}>
+          <PopperHover
+            delay={350}
+            placement="bottom"
+            trigger={
+              <Button
+                skin="secondary"
+                onClick={() => {
+                  selectedTables.length === tables?.length
+                    ? setSelectedTables([])
+                    : setSelectedTables(tables?.map((t) => t.table_name) ?? [])
+                }}
+              >
+                <Checkbox
+                  visible={true}
+                  checked={selectedTables.length === tables?.length}
+                />
+              </Button>
+            }
+          >
+            <Tooltip>
+              {selectedTables.length === tables?.length ? "Deselect" : "Select"}{" "}
+              all
+            </Tooltip>
+          </PopperHover>
+          <FlexSpacer />
+          <Text color="foreground">
+            {selectedTables.length > 0
+              ? `${selectedTables.length} selected`
+              : "Select tables"}
+          </Text>
+          <FlexSpacer />
+          <Box gap="1rem" align="center">
+            <PopperHover
+              delay={350}
+              placement="bottom"
+              trigger={
+                <Button
+                  skin="secondary"
+                  onClick={copySchemasToClipboard}
+                  disabled={selectedTables.length === 0}
+                >
+                  <FileCopy size="18px" />
+                </Button>
+              }
+            >
+              <Tooltip>Copy schemas to clipboard</Tooltip>
+            </PopperHover>
+          </Box>
+        </SelectionToolbar>
       </>
     ),
   }
@@ -363,22 +429,6 @@ const Schema = ({
             <div style={{ display: "flex" }}>
               {tables && (
                 <Box align="center" gap="1rem">
-                  {selectOpen && selectedTables.length > 0 && (
-                    <PopperHover
-                      delay={350}
-                      placement="right"
-                      trigger={
-                        <Button
-                          skin="secondary"
-                          onClick={copySchemasToClipboard}
-                        >
-                          <FileCopy size="18px" />
-                        </Button>
-                      }
-                    >
-                      <Tooltip>Copy schemas to clipboard</Tooltip>
-                    </PopperHover>
-                  )}
                   <PopperHover
                     delay={350}
                     placement="right"

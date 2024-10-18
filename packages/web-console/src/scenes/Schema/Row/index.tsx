@@ -28,18 +28,18 @@ import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { FileCopy, Information } from "@styled-icons/remix-line"
+import { Information } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 import { Button, Box } from "@questdb/react-components"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { Checkbox } from "../checkbox"
 
 type Props = Readonly<{
   className?: string
@@ -180,28 +180,6 @@ const InfoIconWrapper = styled.div`
   justify-content: center;
 `
 
-const Checkbox = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})<{ $visible?: boolean }>`
-  position: absolute;
-  left: 0;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  opacity: ${({ $visible }) => ($visible ? 1 : 0)};
-  transition: opacity 275ms ease-in-out;
-  pointer-events: ${({ $visible }) => ($visible ? "auto" : "none")};
-`
-
-const CheckboxUnchecked = styled.div`
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1px solid ${color("gray2")};
-  cursor: pointer;
-`
-
 const Row = ({
   className,
   designatedTimestamp,
@@ -243,9 +221,12 @@ const Row = ({
         style={{ width: "100%", position: "relative" }}
       >
         {kind === "table" && (
-          <Checkbox $visible={selectOpen && onSelectToggle !== undefined}>
-            {selected ? <CheckboxCircle size="16px" /> : <CheckboxUnchecked />}
-          </Checkbox>
+          <div style={{ position: "absolute" }}>
+            <Checkbox
+              visible={selectOpen && onSelectToggle !== undefined}
+              checked={selected}
+            />
+          </div>
         )}
         <FlexRow $selectOpen={selectOpen}>
           {kind === "table" && (
