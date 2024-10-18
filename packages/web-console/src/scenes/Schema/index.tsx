@@ -34,12 +34,18 @@ import React, {
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
-import { CheckboxCircle, Loader3, Refresh } from "@styled-icons/remix-line"
+import {
+  CheckboxCircle,
+  FileCopy,
+  Loader3,
+  Refresh,
+} from "@styled-icons/remix-line"
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
   spinAnimation,
+  Text,
   Tooltip,
 } from "../../components"
 import { actions } from "../../store"
@@ -58,6 +64,7 @@ import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
+import { NotificationType } from "../../types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -199,26 +206,52 @@ const Schema = ({
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
+    let tablesWithError: string[] = []
     const ddls = await Promise.all(
-      tables.map(async (table) => {
-        const columnResponse = await quest.showColumns(table.table_name)
-        if (
-          columnResponse.type === QuestDB.Type.DQL &&
-          columnResponse.data.length > 0
-        ) {
-          return formatTableSchemaQueryResult(
-            table.table_name,
-            table.partitionBy,
-            columnResponse.data,
-            table.walEnabled,
-            table.dedup,
+      selectedTables.map(async (table) => {
+        try {
+          const columnResponse = await quest.showColumns(
+            table === "btc_trades" || table === "activities"
+              ? `${table}_`
+              : table,
           )
+          const tableData = tables.find((t) => t.table_name === table)
+          if (
+            tableData &&
+            columnResponse.type === QuestDB.Type.DQL &&
+            columnResponse.data.length > 0
+          ) {
+            return formatTableSchemaQueryResult(
+              tableData.table_name,
+              tableData.partitionBy,
+              columnResponse.data,
+              tableData.walEnabled,
+              tableData.dedup,
+            )
+          }
+        } catch (error) {
+          tablesWithError.push(table)
         }
       }),
     )
-    copyToClipboard(ddls.join("\n\n"))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    console.log(tablesWithError)
+    if (tablesWithError.length === 0) {
+      copyToClipboard(ddls.join("\n\n"))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } else {
+      dispatch(
+        actions.query.addNotification({
+          content: (
+            <Text color="red">
+              Cannot copy schemas from tables:{" "}
+              {tablesWithError.sort().join(", ")}
+            </Text>
+          ),
+          type: NotificationType.ERROR,
+        }),
+      )
+    }
   }
 
   const handleSelectToggle = (table_name: string) => {
@@ -332,6 +365,22 @@ const Schema = ({
             <div style={{ display: "flex" }}>
               {tables && (
                 <Box align="center" gap="1rem">
+                  {selectOpen && selectedTables.length > 0 && (
+                    <PopperHover
+                      delay={350}
+                      placement="right"
+                      trigger={
+                        <Button
+                          skin="secondary"
+                          onClick={copySchemasToClipboard}
+                        >
+                          <FileCopy size="18px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Copy schemas to clipboard</Tooltip>
+                    </PopperHover>
+                  )}
                   <PopperHover
                     delay={350}
                     placement="right"
