@@ -129,7 +129,6 @@ const StyledTitle = styled(Title)`
 const TableActions = styled.span`
   z-index: 1;
   position: relative;
-  margin-right: 1rem;
 `
 
 const FlexRow = styled.div<{ $selectOpen?: boolean }>`

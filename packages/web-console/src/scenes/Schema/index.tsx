@@ -113,7 +113,7 @@ const SelectionToolbar = styled(Box).attrs({
 })<{ $selectOpen?: boolean }>`
   position: absolute;
   bottom: 0;
-  padding: 0 1rem;
+  padding: 0 2rem;
   transform: translateY(${({ $selectOpen }) => ($selectOpen ? "0" : "100%")});
   opacity: ${({ $selectOpen }) => ($selectOpen ? 1 : 0.75)};
   width: 100%;
@@ -426,7 +426,7 @@ const Schema = ({
         <Panel.Header
           title="Tables"
           afterTitle={
-            <div style={{ display: "flex" }}>
+            <div style={{ display: "flex", marginRight: "1rem" }}>
               {tables && (
                 <Box align="center" gap="1rem">
                   <PopperHover
