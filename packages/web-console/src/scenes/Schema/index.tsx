@@ -210,11 +210,7 @@ const Schema = ({
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          const columnResponse = await quest.showColumns(
-            table === "btc_trades" || table === "activities"
-              ? `${table}_`
-              : table,
-          )
+          const columnResponse = await quest.showColumns(table)
           const tableData = tables.find((t) => t.table_name === table)
           if (
             tableData &&
@@ -234,11 +230,13 @@ const Schema = ({
         }
       }),
     )
-    console.log(tablesWithError)
     if (tablesWithError.length === 0) {
       copyToClipboard(ddls.join("\n\n"))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      dispatch(
+        actions.query.addNotification({
+          content: <Text color="foreground">Schemas copied to clipboard</Text>,
+        }),
+      )
     } else {
       dispatch(
         actions.query.addNotification({
