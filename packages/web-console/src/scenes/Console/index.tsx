@@ -142,7 +142,7 @@ const Console = () => {
                             : 0,
                         )
                       }}
-                      selected={resultsSplitterBasis !== 0}
+                      selected={editorSplitterBasis !== 0}
                     >
                       <Database2 size={BUTTON_ICON_SIZE} />
                     </Navigation>

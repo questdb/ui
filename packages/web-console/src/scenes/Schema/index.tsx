@@ -44,6 +44,7 @@ import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PrimaryToggleButton,
   spinAnimation,
   Text,
   Tooltip,
@@ -101,9 +102,12 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
-const ToggleButton = styled(Button)`
-  &.selected {
-    background: ${({ theme }) => theme.color.comment};
+const ToolbarToggleButton = styled(PrimaryToggleButton)`
+  && {
+    height: 3rem;
+    background: ${({ theme }) => theme.color.selection};
+    color: ${({ selected, theme }) =>
+      theme.color[`${selected ? "green" : "foreground"}`]};
   }
 `
 
@@ -438,9 +442,8 @@ const Schema = ({
                     delay={350}
                     placement="right"
                     trigger={
-                      <ToggleButton
+                      <ToolbarToggleButton
                         data-hook="schema-select-button"
-                        skin="secondary"
                         onClick={() => {
                           if (selectOpen) {
                             setSelectedTables([])
@@ -448,9 +451,10 @@ const Schema = ({
                           setSelectOpen(!selectOpen)
                         }}
                         {...(selectOpen ? { className: "selected" } : {})}
+                        selected={selectOpen}
                       >
                         <CheckboxCircle size="18px" />
-                      </ToggleButton>
+                      </ToolbarToggleButton>
                     }
                   >
                     <Tooltip>Select</Tooltip>
@@ -459,9 +463,8 @@ const Schema = ({
                     delay={350}
                     placement="right"
                     trigger={
-                      <ToggleButton
+                      <ToolbarToggleButton
                         data-hook="schema-auto-refresh-button"
-                        skin="secondary"
                         onClick={() => {
                           updateSettings(
                             StoreKey.AUTO_REFRESH_TABLES,
@@ -470,12 +473,10 @@ const Schema = ({
                           void fetchTables()
                           void fetchColumns()
                         }}
-                        {...(autoRefreshTables
-                          ? { className: "selected" }
-                          : {})}
+                        selected={autoRefreshTables}
                       >
                         <Refresh size="18px" />
-                      </ToggleButton>
+                      </ToolbarToggleButton>
                     }
                   >
                     <Tooltip>
