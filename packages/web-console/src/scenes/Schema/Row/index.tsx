@@ -202,6 +202,7 @@ const Row = ({
 
   return (
     <Wrapper
+      data-hook="schema-row"
       className={className}
       expanded={expanded}
       suspended={walTableData?.suspended && kind === "table"}

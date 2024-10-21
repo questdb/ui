@@ -366,12 +366,16 @@ const Schema = ({
               />
             ))}
         <FlexSpacer />
-        <SelectionToolbar $selectOpen={selectOpen}>
+        <SelectionToolbar
+          $selectOpen={selectOpen}
+          data-hook="selection-toolbar"
+        >
           <PopperHover
             delay={350}
             placement="bottom"
             trigger={
               <Button
+                data-hook="schema-select-all-button"
                 skin="secondary"
                 onClick={() => {
                   selectedTables.length === tables?.length
@@ -404,6 +408,7 @@ const Schema = ({
               placement="bottom"
               trigger={
                 <Button
+                  data-hook="schema-copy-to-clipboard-button"
                   skin="secondary"
                   onClick={copySchemasToClipboard}
                   disabled={selectedTables.length === 0}

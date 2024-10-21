@@ -132,6 +132,55 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
 });
 
+describe.only("table select UI", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+
+    tables.forEach((table) => {
+      cy.createTable(table);
+    });
+    cy.refreshSchema();
+  });
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  it("should show select ui on click", () => {
+    cy.getByDataHook("schema-select-button").click();
+    cy.getByDataHook("selection-toolbar").should("be.visible");
+    cy.getByDataHook("selection-toolbar").should("contain", "Select tables");
+    cy.getByDataHook("schema-copy-to-clipboard-button").should("be.disabled");
+  });
+
+  it("should select and deselect tables", () => {
+    cy.getByDataHook("schema-select-button").click();
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-table-title")
+      .contains("chicago_weather_stations")
+      .click();
+    cy.getByDataHook("selection-toolbar").should("contain", "2 selected");
+    cy.getByDataHook("schema-copy-to-clipboard-button")
+      .should("not.be.disabled")
+      .click();
+    // Electron only!
+    if (Cypress.isBrowser("electron")) {
+      ["btc_trades", "chicago_weather_stations"].forEach((table) => {
+        cy.window()
+          .its("navigator.clipboard")
+          .then((clip) => clip.readText())
+          .should("contain", `CREATE TABLE '${table}'`);
+      });
+    }
+  });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+    tables.forEach((table) => {
+      cy.dropTable(table);
+    });
+  });
+});
+
 describe("questdb schema in read-only mode", () => {
   before(() => {
     cy.intercept(
