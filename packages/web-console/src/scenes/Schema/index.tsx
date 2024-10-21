@@ -434,6 +434,7 @@ const Schema = ({
                     placement="right"
                     trigger={
                       <ToggleButton
+                        data-hook="schema-select-button"
                         skin="secondary"
                         onClick={() => {
                           if (selectOpen) {
@@ -454,6 +455,7 @@ const Schema = ({
                     placement="right"
                     trigger={
                       <ToggleButton
+                        data-hook="schema-auto-refresh-button"
                         skin="secondary"
                         onClick={() => {
                           updateSettings(
