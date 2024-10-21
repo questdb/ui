@@ -42,7 +42,7 @@ const CopySQLLink = () => (
     target="_blank"
     rel="noopener noreferrer"
   >
-    COPY SQL
+    here
   </a>
 )
 
@@ -124,8 +124,8 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
                 </InfoText>
               ) : (
                 <InfoText>
-                  Note: <CopySQLLink /> is not available for CSV Import on this
-                  database.
+                  Note: COPY SQL is not available for CSV Import on this
+                  database. Refer <CopySQLLink /> to enable it.
                 </InfoText>
               )}
             </Info>
