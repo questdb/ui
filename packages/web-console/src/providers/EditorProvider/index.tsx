@@ -14,6 +14,7 @@ import {
   insertTextAtCursor,
   appendQuery,
   QuestDBLanguageName,
+  clearModelMarkers,
 } from "../../scenes/Editor/Monaco/utils"
 import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
 import { db } from "../../store/db"
@@ -113,6 +114,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
       editorRef.current.setModel(model)
       editorRef.current.focus()
+
+      clearModelMarkers(monacoRef.current, editorRef.current)
     }
     if (buffer.editorViewState) {
       editorRef.current?.restoreViewState(buffer.editorViewState)

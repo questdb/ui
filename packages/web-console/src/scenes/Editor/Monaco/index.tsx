@@ -33,6 +33,9 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { QueryInNotification } from "./query-in-notification"
+import { Box, Button } from "@questdb/react-components"
+import { Stop } from "@styled-icons/remix-line"
 
 loader.config({
   paths: {
@@ -43,6 +46,11 @@ loader.config({
 const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
+
+  .monaco-editor .squiggly-error {
+    background: none;
+    border-bottom: 0.3rem ${color("red")} solid;
+  }
 
   .monaco-scrollable-element > .scrollbar > .slider {
     background: ${color("selection")};
@@ -58,7 +66,8 @@ const Content = styled(PaneContent)`
     }
   }
 
-  .cursorQueryGlyph {
+  .cursorQueryGlyph,
+  .cancelQueryGlyph {
     margin-left: 2rem;
     z-index: 1;
     cursor: pointer;
@@ -66,9 +75,20 @@ const Content = styled(PaneContent)`
     &:after {
       display: block;
       content: "";
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
       width: 18px;
       height: 18px;
+    }
+  }
+
+  .cursorQueryGlyph {
+    &:after {
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
+    }
+  }
+
+  .cancelQueryGlyph {
+    &:after {
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
     }
   }
 
@@ -83,11 +103,16 @@ const Content = styled(PaneContent)`
   }
 `
 
+const CancelButton = styled(Button)`
+  padding: 1.2rem 0.6rem;
+`
+
 const DEFAULT_LINE_CHARS = 5
 
 const MonacoEditor = () => {
   const editorContext = useEditor()
   const {
+    buffers,
     editorRef,
     monacoRef,
     insertTextAtCursor,
@@ -108,8 +133,13 @@ const MonacoEditor = () => {
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
-  const errorRef = useRef<ErrorResult | undefined>()
-  const errorRangeRef = useRef<IRange | undefined>()
+  const runningValueRef = useRef(running.value)
+  const activeBufferRef = useRef(activeBuffer)
+  const requestRef = useRef(request)
+
+  const errorRefs = useRef<
+    Record<string, { error?: ErrorResult; range?: IRange }>
+  >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -140,7 +170,10 @@ const MonacoEditor = () => {
   }
 
   const handleEditorClick = (e: BaseSyntheticEvent) => {
-    if (e.target.classList.contains("cursorQueryGlyph")) {
+    if (
+      e.target.classList.contains("cursorQueryGlyph") ||
+      e.target.classList.contains("cancelQueryGlyph")
+    ) {
       editorRef?.current?.focus()
       toggleRunning()
     }
@@ -153,6 +186,8 @@ const MonacoEditor = () => {
     const queryAtCursor = getQueryFromCursor(editor)
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
+      const activeBufferId = activeBufferRef.current.id as number
+
       const cleanedModel = monaco.editor.createModel(
         stripSQLComments(model.getValue()),
         QuestDBLanguageName,
@@ -163,7 +198,12 @@ const MonacoEditor = () => {
       cleanedModel.dispose()
 
       if (matches.length > 0) {
-        const hasError = errorRef.current?.query === queryAtCursor.query
+        const hasError =
+          errorRefs.current &&
+          errorRefs.current[activeBufferId]?.error?.query ===
+            queryAtCursor.query
+        const errorRange =
+          errorRefs.current && errorRefs.current[activeBufferId]?.range
         const cursorMatch = matches.find(
           (m) => m.range.startLineNumber === queryAtCursor.row + 1,
         )
@@ -193,18 +233,26 @@ const MonacoEditor = () => {
               ),
               options: {
                 isWholeLine: false,
-                glyphMarginClassName: "cursorQueryGlyph",
+                glyphMarginClassName:
+                  runningValueRef.current &&
+                  requestRef.current?.row &&
+                  requestRef.current?.row + 1 ===
+                    cursorMatch.range.startLineNumber
+                    ? "cancelQueryGlyph"
+                    : runningValueRef.current
+                    ? ""
+                    : "cursorQueryGlyph",
               },
             },
-            ...(errorRangeRef.current &&
-            cursorMatch.range.startLineNumber !==
-              errorRangeRef.current.startLineNumber
+            ...(hasError &&
+            errorRange &&
+            cursorMatch.range.startLineNumber !== errorRange.startLineNumber
               ? [
                   {
                     range: new monaco.Range(
-                      errorRangeRef.current.startLineNumber,
+                      errorRange.startLineNumber,
                       0,
-                      errorRangeRef.current.startLineNumber,
+                      errorRange.startLineNumber,
                       0,
                     ),
                     options: {
@@ -235,7 +283,11 @@ const MonacoEditor = () => {
     registerEditorActions({
       editor,
       monaco,
-      toggleRunning,
+      runQuery: () => {
+        if (!runningValueRef.current) {
+          toggleRunning()
+        }
+      },
       dispatch,
       editorContext,
     })
@@ -275,6 +327,19 @@ const MonacoEditor = () => {
   }
 
   useEffect(() => {
+    // Remove all errors for the buffers that have been deleted
+    Object.keys(errorRefs.current).map((key) => {
+      if (!buffers.find((b) => b.id === parseInt(key))) {
+        delete errorRefs.current[key]
+      }
+    })
+  }, [buffers])
+
+  useEffect(() => {
+    activeBufferRef.current = activeBuffer
+  }, [activeBuffer])
+
+  useEffect(() => {
     if (!running.value && request) {
       quest.abort()
       dispatch(actions.query.stopRunning())
@@ -283,9 +348,14 @@ const MonacoEditor = () => {
   }, [request, quest, dispatch, running])
 
   useEffect(() => {
+    runningValueRef.current = running.value
     if (running.value && editorRef?.current) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
+      }
+
+      if (monacoRef?.current && editorRef?.current) {
+        renderLineMarkings(monacoRef.current, editorRef?.current)
       }
 
       const request = running.isRefresh
@@ -293,18 +363,34 @@ const MonacoEditor = () => {
         : getQueryRequestFromEditor(editorRef.current)
 
       if (request?.query) {
+        // give the notification a slight delay to prevent flashing for fast queries
+        setTimeout(() => {
+          if (runningValueRef.current) {
+            dispatch(
+              actions.query.addNotification({
+                type: NotificationType.LOADING,
+                content: (
+                  <Box gap="1rem" align="center">
+                    <Text color="foreground">Running...</Text>
+                    <CancelButton skin="error" onClick={() => toggleRunning()}>
+                      <Stop size="18px" />
+                    </CancelButton>
+                  </Box>
+                ),
+                sideContent: <QueryInNotification query={request.query} />,
+              }),
+            )
+          }
+        }, 250)
+
         void quest
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
             setRequest(undefined)
-            errorRef.current = undefined
-            errorRangeRef.current = undefined
+            delete errorRefs.current[activeBuffer.id as number]
+
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
-
-            if (monacoRef?.current && editorRef?.current) {
-              renderLineMarkings(monacoRef.current, editorRef?.current)
-            }
 
             if (
               result.type === QuestDB.Type.DDL ||
@@ -312,11 +398,24 @@ const MonacoEditor = () => {
             ) {
               dispatch(
                 actions.query.addNotification({
+                  content: <QueryInNotification query={result.query} />,
+                }),
+              )
+              eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+            }
+
+            if (result.type === QuestDB.Type.NOTICE) {
+              dispatch(
+                actions.query.addNotification({
                   content: (
                     <Text color="foreground" ellipsis title={result.query}>
-                      {result.query}
+                      {result.notice}
+                      {result.query !== undefined &&
+                        result.query !== "" &&
+                        `: ${result.query}`}
                     </Text>
                   ),
+                  type: NotificationType.NOTICE,
                 }),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -330,28 +429,22 @@ const MonacoEditor = () => {
                   content: (
                     <QueryResult {...result.timings} rowCount={result.count} />
                   ),
-                  sideContent: (
-                    <Text color="foreground" ellipsis title={result.query}>
-                      {result.query}
-                    </Text>
-                  ),
+                  sideContent: <QueryInNotification query={result.query} />,
                 }),
               )
               eventBus.publish(EventType.MSG_QUERY_DATASET, result)
             }
           })
           .catch((error: ErrorResult) => {
-            errorRef.current = error
+            errorRefs.current[activeBuffer.id as number] = {
+              error,
+            }
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
             dispatch(
               actions.query.addNotification({
                 content: <Text color="red">{error.error}</Text>,
-                sideContent: (
-                  <Text color="foreground" ellipsis title={request.query}>
-                    {request.query}
-                  </Text>
-                ),
+                sideContent: <QueryInNotification query={request.query} />,
                 type: NotificationType.ERROR,
               }),
             )
@@ -362,15 +455,26 @@ const MonacoEditor = () => {
                 request,
                 error.position,
               )
-              errorRangeRef.current = errorRange ?? undefined
               if (errorRange) {
+                errorRefs.current[activeBuffer.id as number].range = errorRange
                 setErrorMarker(
                   monacoRef?.current,
                   editorRef.current,
                   errorRange,
                   error.error,
                 )
-                renderLineMarkings(monacoRef?.current, editorRef?.current)
+
+                editorRef?.current.focus()
+
+                editorRef?.current.setPosition({
+                  lineNumber: errorRange.startLineNumber,
+                  column: errorRange.startColumn,
+                })
+
+                editorRef?.current.revealPosition({
+                  lineNumber: errorRange.startLineNumber,
+                  column: errorRange.endColumn,
+                })
               }
             }
           })
@@ -378,8 +482,19 @@ const MonacoEditor = () => {
       } else {
         dispatch(actions.query.stopRunning())
       }
+    } else {
+      if (monacoRef?.current && editorRef?.current) {
+        renderLineMarkings(monacoRef?.current, editorRef?.current)
+      }
     }
   }, [running])
+
+  useEffect(() => {
+    requestRef.current = request
+    if (monacoRef?.current && editorRef?.current) {
+      renderLineMarkings(monacoRef?.current, editorRef?.current)
+    }
+  }, [request])
 
   const setCompletionProvider = async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
@@ -400,6 +515,12 @@ const MonacoEditor = () => {
       setCompletionProvider()
     }
   }, [tables, columns, monacoRef, editorReady])
+
+  useEffect(() => {
+    if (monacoRef.current && editorRef.current) {
+      clearModelMarkers(monacoRef.current, editorRef.current)
+    }
+  }, [activeBuffer])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)

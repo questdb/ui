@@ -34,6 +34,8 @@ export enum NotificationType {
   ERROR = "error",
   INFO = "info",
   SUCCESS = "success",
+  NOTICE = "notice",
+  LOADING = "loading",
 }
 
 export type NotificationShape = Readonly<{

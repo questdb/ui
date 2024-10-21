@@ -16,6 +16,17 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.6.2 - 2024.10.15
+
+### Fixed
+
+- UX improvements around editor [#338](https://github.com/questdb/ui/pull/338)
+- Running query is not cancelled when Run button is clicked
+
+### Changed
+
+- Support for notice responses from server, such as empty SQL notice [#334](https://github.com/questdb/ui/pull/334)
+
 ## 0.6.1 - 2024.10.07
 
 ### Fixed
