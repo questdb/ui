@@ -132,7 +132,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
 });
 
-describe.only("table select UI", () => {
+describe("table select UI", () => {
   before(() => {
     cy.loadConsoleWithAuth();
 
@@ -147,9 +147,9 @@ describe.only("table select UI", () => {
 
   it("should show select ui on click", () => {
     cy.getByDataHook("schema-select-button").click();
-    cy.getByDataHook("selection-toolbar").should("be.visible");
-    cy.getByDataHook("selection-toolbar").should("contain", "Select tables");
+    cy.getByDataHook("schema-copy-to-clipboard-button").should("be.visible");
     cy.getByDataHook("schema-copy-to-clipboard-button").should("be.disabled");
+    cy.getByDataHook("schema-select-all-button").should("be.visible");
   });
 
   it("should select and deselect tables", () => {
@@ -158,7 +158,6 @@ describe.only("table select UI", () => {
     cy.getByDataHook("schema-table-title")
       .contains("chicago_weather_stations")
       .click();
-    cy.getByDataHook("selection-toolbar").should("contain", "2 selected");
     cy.getByDataHook("schema-copy-to-clipboard-button")
       .should("not.be.disabled")
       .click();

@@ -378,6 +378,7 @@ const Schema = ({
                       trigger={
                         <Button
                           skin="secondary"
+                          data-hook="schema-copy-to-clipboard-button"
                           disabled={selectedTables.length === 0}
                           onClick={copySchemasToClipboard}
                         >
@@ -396,6 +397,7 @@ const Schema = ({
                       trigger={
                         <Button
                           skin="secondary"
+                          data-hook="schema-select-all-button"
                           onClick={() => {
                             selectedTables.length === tables?.length
                               ? setSelectedTables([])
@@ -426,6 +428,7 @@ const Schema = ({
                       placement="bottom"
                       trigger={
                         <Button
+                          data-hook="schema-cancel-select-button"
                           skin="secondary"
                           onClick={() => {
                             setSelectedTables([])
