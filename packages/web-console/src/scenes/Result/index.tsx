@@ -24,7 +24,7 @@
 
 import $ from "jquery"
 import React, { useContext, useEffect, useRef, useState } from "react"
-import { useSelector } from "react-redux"
+import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
@@ -39,8 +39,8 @@ import {
   Text,
   Tooltip,
 } from "../../components"
-import { selectors } from "../../store"
-import { color, QueryRawResult } from "../../utils"
+import { actions, selectors } from "../../store"
+import {color, ErrorResult, QueryRawResult} from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
@@ -48,6 +48,8 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
+import {QueryInNotification} from "../Editor/Monaco/query-in-notification";
+import {NotificationType} from "../../store/Query/types";
 
 const Root = styled.div`
   display: flex;
@@ -98,17 +100,29 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
-
+  const dispatch = useDispatch()
+  
   useEffect(() => {
     const _grid = grid(
       document.getElementById("grid"),
       async function (sql, lo, hi, rendererFn: (data: QueryRawResult) => void) {
-        const result = await quest.queryRaw(sql, {
-          limit: `${lo},${hi}`,
-          nm: true,
-        })
-        if (result.type === QuestDB.Type.DQL) {
-          rendererFn(result)
+        try {
+          const result = await quest.queryRaw(sql, {
+            limit: `${lo},${hi}`,
+            nm: true,
+          })
+          if (result.type === QuestDB.Type.DQL) {
+            rendererFn(result)
+          }
+        } catch (err) {
+          dispatch(actions.query.stopRunning())
+          dispatch(
+            actions.query.addNotification({
+              content: <Text color="red">{(err as ErrorResult).error}</Text>,
+              sideContent: <QueryInNotification query={sql} />,
+              type: NotificationType.ERROR,
+            }),
+          )
         }
       },
     )
