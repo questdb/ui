@@ -98,6 +98,9 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
 
   it("should show the suspension dialog on click with details for btc_trades", () => {
     cy.get('input[name="table_filter"]').click().type("btc_trades");
+    cy.getByDataHook("schema-table-row")
+      .should("contain", "btc_trades")
+      .click();
     cy.getByDataHook("schema-suspension-dialog-trigger").click();
     cy.getByDataHook("schema-suspension-dialog").should(
       "have.attr",
@@ -117,7 +120,10 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
 
   it("should resume WAL for btc_trades from the suspension popover", () => {
     cy.get('input[name="table_filter"]').click().type("btc_trades");
-    cy.contains("Suspended").click();
+    cy.getByDataHook("schema-table-row")
+      .should("contain", "btc_trades")
+      .click();
+    cy.getByDataHook("schema-suspension-dialog-trigger").click();
     cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
     cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
