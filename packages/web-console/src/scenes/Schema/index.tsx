@@ -36,6 +36,7 @@ import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
 import {
   CheckboxCircle,
+  Close,
   FileCopy,
   Loader3,
   Refresh,
@@ -104,26 +105,14 @@ const FlexSpacer = styled.div`
 
 const ToolbarToggleButton = styled(PrimaryToggleButton)`
   && {
+    width: auto;
+    padding: 0 1rem;
+    border: 1px solid ${({ theme }) => theme.color.selection};
     height: 3rem;
     background: ${({ theme }) => theme.color.selection};
     color: ${({ selected, theme }) =>
       theme.color[`${selected ? "green" : "foreground"}`]};
   }
-`
-
-const SelectionToolbar = styled(Box).attrs({
-  align: "center",
-  justifyContent: "space-between",
-})<{ $selectOpen?: boolean }>`
-  position: absolute;
-  bottom: 0;
-  padding: 0 2rem;
-  transform: translateY(${({ $selectOpen }) => ($selectOpen ? "0" : "100%")});
-  opacity: ${({ $selectOpen }) => ($selectOpen ? 1 : 0.75)};
-  width: 100%;
-  height: 4.6rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  transition: transform 275ms ease-in-out, opacity 275ms ease-in-out;
 `
 
 const Loading = () => {
@@ -369,62 +358,6 @@ const Schema = ({
                 onSelectToggle={handleSelectToggle}
               />
             ))}
-        <FlexSpacer />
-        <SelectionToolbar
-          $selectOpen={selectOpen}
-          data-hook="selection-toolbar"
-        >
-          <PopperHover
-            delay={350}
-            placement="bottom"
-            trigger={
-              <Button
-                data-hook="schema-select-all-button"
-                skin="secondary"
-                onClick={() => {
-                  selectedTables.length === tables?.length
-                    ? setSelectedTables([])
-                    : setSelectedTables(tables?.map((t) => t.table_name) ?? [])
-                }}
-              >
-                <Checkbox
-                  visible={true}
-                  checked={selectedTables.length === tables?.length}
-                />
-              </Button>
-            }
-          >
-            <Tooltip>
-              {selectedTables.length === tables?.length ? "Deselect" : "Select"}{" "}
-              all
-            </Tooltip>
-          </PopperHover>
-          <FlexSpacer />
-          <Text color="foreground">
-            {selectedTables.length > 0
-              ? `${selectedTables.length} selected`
-              : "Select tables"}
-          </Text>
-          <FlexSpacer />
-          <Box gap="1rem" align="center">
-            <PopperHover
-              delay={350}
-              placement="bottom"
-              trigger={
-                <Button
-                  data-hook="schema-copy-to-clipboard-button"
-                  skin="secondary"
-                  onClick={copySchemasToClipboard}
-                  disabled={selectedTables.length === 0}
-                >
-                  <FileCopy size="18px" />
-                </Button>
-              }
-            >
-              <Tooltip>Copy schemas to clipboard</Tooltip>
-            </PopperHover>
-          </Box>
-        </SelectionToolbar>
       </>
     ),
   }
@@ -438,57 +371,133 @@ const Schema = ({
             <div style={{ display: "flex", marginRight: "1rem" }}>
               {tables && (
                 <Box align="center" gap="1rem">
-                  <PopperHover
-                    delay={350}
-                    placement="right"
-                    trigger={
-                      <ToolbarToggleButton
-                        data-hook="schema-select-button"
-                        onClick={() => {
-                          if (selectOpen) {
+                  {selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          skin="secondary"
+                          disabled={selectedTables.length === 0}
+                          onClick={copySchemasToClipboard}
+                        >
+                          <FileCopy size="18px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Copy schemas to clipboard</Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          skin="secondary"
+                          onClick={() => {
+                            selectedTables.length === tables?.length
+                              ? setSelectedTables([])
+                              : setSelectedTables(
+                                  tables?.map((t) => t.table_name) ?? [],
+                                )
+                          }}
+                        >
+                          <Checkbox
+                            visible={true}
+                            checked={selectedTables.length === tables?.length}
+                          />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>
+                        {selectedTables.length === tables?.length
+                          ? "Deselect"
+                          : "Select"}{" "}
+                        all
+                      </Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          skin="secondary"
+                          onClick={() => {
                             setSelectedTables([])
-                          }
-                          setSelectOpen(!selectOpen)
-                        }}
-                        {...(selectOpen ? { className: "selected" } : {})}
-                        selected={selectOpen}
-                      >
-                        <CheckboxCircle size="18px" />
-                      </ToolbarToggleButton>
-                    }
-                  >
-                    <Tooltip>Select</Tooltip>
-                  </PopperHover>
-                  <PopperHover
-                    delay={350}
-                    placement="right"
-                    trigger={
-                      <ToolbarToggleButton
-                        data-hook="schema-auto-refresh-button"
-                        onClick={() => {
-                          updateSettings(
-                            StoreKey.AUTO_REFRESH_TABLES,
-                            !autoRefreshTables,
-                          )
-                          void fetchTables()
-                          void fetchColumns()
-                        }}
-                        selected={autoRefreshTables}
-                      >
-                        <Refresh size="18px" />
-                      </ToolbarToggleButton>
-                    }
-                  >
-                    <Tooltip>
-                      Auto refresh {autoRefreshTables ? "enabled" : "disabled"}
-                    </Tooltip>
-                  </PopperHover>
+                            setSelectOpen(false)
+                          }}
+                        >
+                          <Close size="18px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Cancel</Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="right"
+                      trigger={
+                        <ToolbarToggleButton
+                          data-hook="schema-select-button"
+                          onClick={() => {
+                            if (selectOpen) {
+                              setSelectedTables([])
+                            }
+                            setSelectOpen(!selectOpen)
+                          }}
+                          {...(selectOpen ? { className: "selected" } : {})}
+                          selected={selectOpen}
+                        >
+                          <CheckboxCircle size="18px" />
+                        </ToolbarToggleButton>
+                      }
+                    >
+                      <Tooltip>Select</Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="right"
+                      trigger={
+                        <ToolbarToggleButton
+                          data-hook="schema-auto-refresh-button"
+                          onClick={() => {
+                            updateSettings(
+                              StoreKey.AUTO_REFRESH_TABLES,
+                              !autoRefreshTables,
+                            )
+                            void fetchTables()
+                            void fetchColumns()
+                          }}
+                          selected={autoRefreshTables}
+                        >
+                          <Refresh size="18px" />
+                        </ToolbarToggleButton>
+                      }
+                    >
+                      <Tooltip>
+                        Auto refresh{" "}
+                        {autoRefreshTables ? "enabled" : "disabled"}
+                      </Tooltip>
+                    </PopperHover>
+                  )}
                 </Box>
               )}
             </div>
           }
           shadow={!scrollAtTop}
         />
+
         <Content
           _loading={state.view === View.loading}
           ref={scrollerRef}
