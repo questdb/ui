@@ -104,7 +104,7 @@ const FlexSpacer = styled.div`
 `
 
 const ToolbarToggleButton = styled(PrimaryToggleButton)`
-  && {
+  &&:not(:disabled) {
     width: auto;
     padding: 0 1rem;
     border: 1px solid ${({ theme }) => theme.color.selection};
@@ -458,6 +458,7 @@ const Schema = ({
                           }}
                           {...(selectOpen ? { className: "selected" } : {})}
                           selected={selectOpen}
+                          disabled={tables?.length === 0}
                         >
                           <CheckboxCircle size="18px" />
                         </ToolbarToggleButton>
