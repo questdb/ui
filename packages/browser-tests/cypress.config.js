@@ -4,11 +4,12 @@ const {
 } = require("@simonsmith/cypress-image-snapshot/plugin");
 
 module.exports = defineConfig({
+  projectId: "8vtikv",
   defaultCommandTimeout: 10000,
   e2e: {
     defaultCommandTimeout: 30000,
     screenshotOnRunFailure: false,
-    video: false,
+    video: true,
     baseUrl: "http://localhost:9999",
     viewportWidth: 1280,
     viewportHeight: 720,
