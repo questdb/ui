@@ -42,7 +42,7 @@ export const skins = [
   "transparent",
 ] as const;
 
-export type Skin = typeof skins[number];
+export type Skin = (typeof skins)[number];
 
 const themes: {
   [key in Skin]: {
@@ -164,10 +164,6 @@ export const makeSkin = (skin: Skin) => {
     background: ${getColor(theme.normal.background)};
     color: ${getColor(theme.normal.color)};
     border-color: ${getColor(theme.normal.border)};
-
-    &:focus {
-      box-shadow: inset 0 0 0 1px ${getColor("foreground")};
-    }
 
     &:hover:not([disabled]) {
       background: ${getColor(theme.hover.background)};
