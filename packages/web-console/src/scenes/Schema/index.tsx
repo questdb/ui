@@ -289,6 +289,11 @@ const Schema = ({
     })
   }, [])
 
+  const focusListener = () => {
+    void fetchTables()
+    void fetchColumns()
+  }
+
   useEffect(() => {
     if (autoRefreshTables) {
       eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
@@ -296,17 +301,11 @@ const Schema = ({
         void fetchColumns()
       })
 
-      window.addEventListener("focus", () => {
-        void fetchTables()
-        void fetchColumns()
-      })
+      window.addEventListener("focus", focusListener)
     } else {
       eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
 
-      window.removeEventListener("focus", () => {
-        void fetchTables()
-        void fetchColumns()
-      })
+      window.removeEventListener("focus", focusListener)
     }
   }, [autoRefreshTables])
 
