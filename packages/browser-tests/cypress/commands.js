@@ -263,8 +263,9 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
 });
 
 Cypress.Commands.add("refreshSchema", () => {
-  cy.getByDataHook("schema-settings-button").click();
-  cy.getByDataHook("schema-refresh").click();
+  // toggle between auto-refresh modes to trigger a schema refresh
+  cy.getByDataHook("schema-auto-refresh-button").click();
+  cy.getByDataHook("schema-auto-refresh-button").click();
 });
 
 Cypress.Commands.add("getEditorTabs", () => {

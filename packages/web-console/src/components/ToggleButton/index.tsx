@@ -82,7 +82,7 @@ const baseStyles = css<Props>`
   ${bezierTransition};
   ${({ disabled }) => disabled && "cursor: default; pointer-events: none;"};
   color: ${({ selected, theme }) =>
-    theme.color[selected ? "foreground" : "offWhite"]};
+    theme.color[selected ? "green" : "offWhite"]};
 
   svg + span,
   img + span {
