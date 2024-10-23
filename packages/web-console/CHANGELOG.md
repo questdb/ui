@@ -16,6 +16,17 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.6.3 - 2024.10.23
+
+### Added
+
+- Improvements for Tables UI section
+  [#340](https://github.com/questdb/ui/pull/340)
+
+### Changed
+
+- Change upload COPY info [#347](https://github.com/questdb/ui/pull/347)
+
 ## 0.6.2 - 2024.10.15
 
 ### Fixed
@@ -25,7 +36,8 @@ and this project adheres to
 
 ### Changed
 
-- Support for notice responses from server, such as empty SQL notice [#334](https://github.com/questdb/ui/pull/334)
+- Support for notice responses from server, such as empty SQL notice
+  [#334](https://github.com/questdb/ui/pull/334)
 
 ## 0.6.1 - 2024.10.07
 

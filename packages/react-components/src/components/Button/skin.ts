@@ -24,6 +24,7 @@ type ColorShape = {
   white: string;
   inherit: string;
   tooltipBackground: string;
+  offWhite: string;
 };
 
 type Color = keyof ColorShape;
@@ -42,7 +43,7 @@ export const skins = [
   "transparent",
 ] as const;
 
-export type Skin = typeof skins[number];
+export type Skin = (typeof skins)[number];
 
 const themes: {
   [key in Skin]: {
@@ -125,16 +126,16 @@ const themes: {
     normal: {
       background: "transparent",
       border: "transparent",
-      color: "foreground",
+      color: "offWhite",
     },
     hover: {
       background: "comment",
       border: "transparent",
-      color: "foreground",
+      color: "offWhite",
     },
     disabled: {
       background: "transparent",
-      border: "gray1",
+      border: "transparent",
       color: "gray1",
     },
   },
@@ -164,10 +165,6 @@ export const makeSkin = (skin: Skin) => {
     background: ${getColor(theme.normal.background)};
     color: ${getColor(theme.normal.color)};
     border-color: ${getColor(theme.normal.border)};
-
-    &:focus {
-      box-shadow: inset 0 0 0 1px ${getColor("foreground")};
-    }
 
     &:hover:not([disabled]) {
       background: ${getColor(theme.hover.background)};
