@@ -64,6 +64,9 @@ describe("questdb grid", () => {
     cy.typeQuery(`select simulate_crash('P') from long_sequence(${rows})`);
     cy.runLine();
 
+    cy.getGridViewport().scrollTo(0, 999 * rowHeight);
+    cy.getCollapsedNotifications().should("contain", "1,200 rows in");
+
     cy.getGridViewport().scrollTo("bottom");
     cy.wait(100);
     cy.getCollapsedNotifications().should("contain", "HTTP 400 (Bad request)");
