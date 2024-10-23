@@ -159,6 +159,7 @@ const Schema = ({
   const [selectOpen, setSelectOpen] = useState(false)
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [focusListenerActive, setFocusListenerActive] = useState(false)
+  const listenerActiveRef = useRef(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -287,8 +288,10 @@ const Schema = ({
   }, [])
 
   const focusListener = () => {
-    void fetchTables()
-    void fetchColumns()
+    if (listenerActiveRef.current) {
+      void fetchTables()
+      void fetchColumns()
+    }
   }
 
   useEffect(() => {
@@ -300,11 +303,13 @@ const Schema = ({
 
       window.addEventListener("focus", focusListener)
       setFocusListenerActive(true)
+      listenerActiveRef.current = true
     } else if (focusListenerActive) {
       eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
 
       window.removeEventListener("focus", focusListener)
       setFocusListenerActive(false)
+      listenerActiveRef.current = false
     }
   }, [autoRefreshTables])
 
