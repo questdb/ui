@@ -158,6 +158,7 @@ const Schema = ({
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
   const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [focusListenerActive, setFocusListenerActive] = useState(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -298,10 +299,12 @@ const Schema = ({
       })
 
       window.addEventListener("focus", focusListener)
-    } else {
+      setFocusListenerActive(true)
+    } else if (focusListenerActive) {
       eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
 
       window.removeEventListener("focus", focusListener)
+      setFocusListenerActive(false)
     }
   }, [autoRefreshTables])
 
