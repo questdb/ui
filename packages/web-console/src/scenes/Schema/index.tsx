@@ -373,7 +373,7 @@ const Schema = ({
           afterTitle={
             <div style={{ display: "flex", marginRight: "1rem" }}>
               {tables && (
-                <Box align="center" gap="1rem">
+                <Box align="center" gap="0">
                   {selectOpen && (
                     <PopperHover
                       delay={350}

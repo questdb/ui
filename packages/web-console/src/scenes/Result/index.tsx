@@ -74,11 +74,10 @@ const Actions = styled.div`
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
-  gap: 1rem;
+  gap: 0;
   align-items: center;
   justify-content: flex-end;
   padding: 0 1rem;
-
   width: 100%;
   height: 4.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
