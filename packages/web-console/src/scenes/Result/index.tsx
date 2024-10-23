@@ -36,6 +36,7 @@ import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PrimaryToggleButton,
   Text,
   Tooltip,
 } from "../../components"
@@ -167,15 +168,15 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Freeze left column",
       trigger: (
-        <Button
-          skin={gridFreezeLeftState > 0 ? "success" : "transparent"}
+        <PrimaryToggleButton
           onClick={() => {
             gridRef?.current?.toggleFreezeLeft()
             gridRef?.current?.focus()
           }}
+          selected={gridFreezeLeftState > 0}
         >
           <TableFreezeColumnIcon size="18px" />
-        </Button>
+        </PrimaryToggleButton>
       ),
     },
     {
