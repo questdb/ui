@@ -31,4 +31,5 @@ export type LocalConfig = {
   editorSplitterBasis: number
   resultsSplitterBasis: number
   exampleQueriesVisited: boolean
+  autoRefreshTables: boolean
 }

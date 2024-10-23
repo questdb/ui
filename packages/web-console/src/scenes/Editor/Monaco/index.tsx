@@ -381,7 +381,7 @@ const MonacoEditor = () => {
               }),
             )
           }
-        }, 250)
+        }, 1000)
 
         void quest
           .queryRaw(request.query, { limit: "0,1000", explain: true })

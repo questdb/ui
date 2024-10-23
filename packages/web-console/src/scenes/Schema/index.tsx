@@ -35,35 +35,39 @@ import React, {
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
 import {
-  Add,
+  CheckboxCircle,
+  Close,
   FileCopy,
   Loader3,
   Refresh,
-  Settings4,
 } from "@styled-icons/remix-line"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PrimaryToggleButton,
   spinAnimation,
-  Tooltip,
   Text,
+  Tooltip,
 } from "../../components"
 import { actions } from "../../store"
-import { color, copyToClipboard, ErrorResult, isServerError } from "../../utils"
+import { color, copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import Table from "./Table"
 import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
-import { Button, DropdownMenu, ForwardRef } from "@questdb/react-components"
+import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { formatTableSchemaQueryResult } from "./Table/ContextualMenu/services"
+import { formatTableSchemaQueryResult } from "./formatTableSchemaQueryResult"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { StoreKey } from "../../utils/localStorage/types"
+import { NotificationType } from "../../types"
+import { Checkbox } from "./checkbox"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -99,15 +103,12 @@ const FlexSpacer = styled.div`
   flex: 1;
 `
 
-const StyledCheckboxCircle = styled(CheckboxCircle)`
-  position: absolute;
-  transform: translate(75%, -75%);
-  color: ${({ theme }) => theme.color.green};
-`
-
-const DropdownMenuContent = styled(DropdownMenu.Content)`
-  z-index: 100;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+const ToolbarToggleButton = styled(PrimaryToggleButton)`
+  &&:not(:disabled) {
+    width: auto;
+    padding: 0 1rem;
+    height: 3rem;
+  }
 `
 
 const Loading = () => {
@@ -154,7 +155,11 @@ const Schema = ({
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const { autoRefreshTables, updateSettings } = useLocalStorage()
+  const [selectOpen, setSelectOpen] = useState(false)
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [focusListenerActive, setFocusListenerActive] = useState(false)
+  const listenerActiveRef = useRef(false)
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -208,36 +213,63 @@ const Schema = ({
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
+    let tablesWithError: string[] = []
     const ddls = await Promise.all(
-      tables.map(async (table) => {
-        const columnResponse = await quest.showColumns(table.table_name)
-        if (
-          columnResponse.type === QuestDB.Type.DQL &&
-          columnResponse.data.length > 0
-        ) {
-          return formatTableSchemaQueryResult(
-            table.table_name,
-            table.partitionBy,
-            columnResponse.data,
-            table.walEnabled,
-            table.dedup,
-          )
+      selectedTables.map(async (table) => {
+        try {
+          const columnResponse = await quest.showColumns(table)
+          const tableData = tables.find((t) => t.table_name === table)
+          if (
+            tableData &&
+            columnResponse.type === QuestDB.Type.DQL &&
+            columnResponse.data.length > 0
+          ) {
+            return formatTableSchemaQueryResult(
+              tableData.table_name,
+              tableData.partitionBy,
+              columnResponse.data,
+              tableData.walEnabled,
+              tableData.dedup,
+            )
+          }
+        } catch (error) {
+          tablesWithError.push(table)
         }
       }),
     )
-    copyToClipboard(ddls.join("\n\n"))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (tablesWithError.length === 0) {
+      copyToClipboard(ddls.join("\n\n"))
+      dispatch(
+        actions.query.addNotification({
+          content: <Text color="foreground">Schemas copied to clipboard</Text>,
+        }),
+      )
+    } else {
+      dispatch(
+        actions.query.addNotification({
+          content: (
+            <Text color="red">
+              Cannot copy schemas from tables:{" "}
+              {tablesWithError.sort().join(", ")}
+            </Text>
+          ),
+          type: NotificationType.ERROR,
+        }),
+      )
+    }
+  }
+
+  const handleSelectToggle = (table_name: string) => {
+    if (selectedTables.includes(table_name)) {
+      setSelectedTables(selectedTables.filter((t) => t !== table_name))
+    } else {
+      setSelectedTables([...selectedTables, table_name])
+    }
   }
 
   useEffect(() => {
     void fetchTables()
     void fetchColumns()
-
-    eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
-      void fetchTables()
-      void fetchColumns()
-    })
 
     eventBus.subscribe<ErrorResult>(EventType.MSG_CONNECTION_ERROR, (error) => {
       if (error) {
@@ -253,18 +285,33 @@ const Schema = ({
         void fetchColumns()
       }
     })
+  }, [])
 
-    window.addEventListener("focus", () => {
+  const focusListener = () => {
+    if (listenerActiveRef.current) {
       void fetchTables()
       void fetchColumns()
-    })
+    }
+  }
 
-    return () =>
-      window.removeEventListener("focus", () => {
+  useEffect(() => {
+    if (autoRefreshTables) {
+      eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
         void fetchTables()
         void fetchColumns()
       })
-  }, [])
+
+      window.addEventListener("focus", focusListener)
+      setFocusListenerActive(true)
+      listenerActiveRef.current = true
+    } else if (focusListenerActive) {
+      eventBus.unsubscribe(EventType.MSG_QUERY_SCHEMA)
+
+      window.removeEventListener("focus", focusListener)
+      setFocusListenerActive(false)
+      listenerActiveRef.current = false
+    }
+  }, [autoRefreshTables])
 
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => <Loading />,
@@ -309,9 +356,11 @@ const Schema = ({
                   (wt) => wt.name === table.table_name,
                 )}
                 dedup={table.dedup}
+                selectOpen={selectOpen}
+                selected={selectedTables.includes(table.table_name)}
+                onSelectToggle={handleSelectToggle}
               />
             ))}
-        <FlexSpacer />
       </>
     ),
   }
@@ -322,62 +371,140 @@ const Schema = ({
         <Panel.Header
           title="Tables"
           afterTitle={
-            <div style={{ display: "flex" }}>
+            <div style={{ display: "flex", marginRight: "1rem" }}>
               {tables && (
-                <Box align="center" gap="0.5rem">
-                  <DropdownMenu.Root
-                    modal={false}
-                    onOpenChange={setDropdownOpen}
-                  >
-                    <DropdownMenu.Trigger asChild>
-                      <ForwardRef>
-                        <PopperHover
-                          delay={350}
-                          placement="right"
-                          trigger={
-                            <Button
-                              skin="transparent"
-                              data-hook="schema-settings-button"
-                            >
-                              {copied && <StyledCheckboxCircle size="14px" />}
-                              <Settings4 size="18px" />
-                            </Button>
-                          }
+                <Box align="center" gap="0">
+                  {selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          skin="transparent"
+                          data-hook="schema-copy-to-clipboard-button"
+                          disabled={selectedTables.length === 0}
+                          onClick={copySchemasToClipboard}
                         >
-                          <Tooltip>Settings</Tooltip>
-                        </PopperHover>
-                      </ForwardRef>
-                    </DropdownMenu.Trigger>
+                          <FileCopy size="18px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Copy schemas to clipboard</Tooltip>
+                    </PopperHover>
+                  )}
 
-                    <DropdownMenu.Portal>
-                      <DropdownMenuContent>
-                        {tables.length > 0 && (
-                          <DropdownMenu.Item
-                            onClick={copySchemasToClipboard}
-                            data-hook="schema-copy-all"
-                          >
-                            <FileCopy size="18px" />
-                            <Text color="foreground">
-                              Copy schemas to clipboard
-                            </Text>
-                          </DropdownMenu.Item>
-                        )}
-                        <DropdownMenu.Item
-                          onClick={fetchTables}
-                          data-hook="schema-refresh"
+                  {selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          skin="transparent"
+                          data-hook="schema-select-all-button"
+                          onClick={() => {
+                            selectedTables.length === tables?.length
+                              ? setSelectedTables([])
+                              : setSelectedTables(
+                                  tables?.map((t) => t.table_name) ?? [],
+                                )
+                          }}
+                        >
+                          <Checkbox
+                            visible={true}
+                            checked={selectedTables.length === tables?.length}
+                          />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>
+                        {selectedTables.length === tables?.length
+                          ? "Deselect"
+                          : "Select"}{" "}
+                        all
+                      </Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          data-hook="schema-cancel-select-button"
+                          skin="transparent"
+                          onClick={() => {
+                            setSelectedTables([])
+                            setSelectOpen(false)
+                          }}
+                        >
+                          <Close size="18px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Cancel</Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="right"
+                      trigger={
+                        <ToolbarToggleButton
+                          data-hook="schema-select-button"
+                          onClick={() => {
+                            if (selectOpen) {
+                              setSelectedTables([])
+                            }
+                            setSelectOpen(!selectOpen)
+                          }}
+                          {...(selectOpen ? { className: "selected" } : {})}
+                          selected={selectOpen}
+                          disabled={tables?.length === 0}
+                        >
+                          <CheckboxCircle size="18px" />
+                        </ToolbarToggleButton>
+                      }
+                    >
+                      <Tooltip>Select</Tooltip>
+                    </PopperHover>
+                  )}
+
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="right"
+                      trigger={
+                        <ToolbarToggleButton
+                          data-hook="schema-auto-refresh-button"
+                          onClick={() => {
+                            updateSettings(
+                              StoreKey.AUTO_REFRESH_TABLES,
+                              !autoRefreshTables,
+                            )
+                            void fetchTables()
+                            void fetchColumns()
+                          }}
+                          selected={autoRefreshTables}
                         >
                           <Refresh size="18px" />
-                          <Text color="foreground">Refresh tables</Text>
-                        </DropdownMenu.Item>
-                      </DropdownMenuContent>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
+                        </ToolbarToggleButton>
+                      }
+                    >
+                      <Tooltip>
+                        Auto refresh{" "}
+                        {autoRefreshTables ? "enabled" : "disabled"}
+                      </Tooltip>
+                    </PopperHover>
+                  )}
                 </Box>
               )}
             </div>
           }
           shadow={!scrollAtTop}
         />
+
         <Content
           _loading={state.view === View.loading}
           ref={scrollerRef}
