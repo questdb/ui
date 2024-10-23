@@ -36,6 +36,7 @@ import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PrimaryToggleButton,
   Text,
   Tooltip,
 } from "../../components"
@@ -73,11 +74,10 @@ const Actions = styled.div`
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
-  gap: 1rem;
+  gap: 0;
   align-items: center;
   justify-content: flex-end;
   padding: 0 1rem;
-
   width: 100%;
   height: 4.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
@@ -167,22 +167,22 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Freeze left column",
       trigger: (
-        <Button
-          skin={gridFreezeLeftState > 0 ? "success" : "secondary"}
+        <PrimaryToggleButton
           onClick={() => {
             gridRef?.current?.toggleFreezeLeft()
             gridRef?.current?.focus()
           }}
+          selected={gridFreezeLeftState > 0}
         >
           <TableFreezeColumnIcon size="18px" />
-        </Button>
+        </PrimaryToggleButton>
       ),
     },
     {
       tooltipText: "Move selected column to the front",
       trigger: (
         <Button
-          skin="secondary"
+          skin="transparent"
           onClick={gridRef?.current?.shuffleFocusedColumnToFront}
         >
           <HandPointLeft size="18px" />
@@ -192,7 +192,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Reset grid layout",
       trigger: (
-        <Button skin="secondary" onClick={gridRef?.current?.clearCustomLayout}>
+        <Button
+          skin="transparent"
+          onClick={gridRef?.current?.clearCustomLayout}
+        >
           <Reset size="18px" />
         </Button>
       ),
@@ -201,7 +204,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Refresh",
       trigger: (
         <Button
-          skin="secondary"
+          skin="transparent"
           onClick={() => {
             const sql = gridRef?.current?.getSQL()
             if (sql) {
@@ -247,7 +250,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             placement="bottom"
             trigger={
               <Button
-                skin="secondary"
+                skin="transparent"
                 onClick={() => {
                   const sql = gridRef?.current?.getSQL()
                   if (sql) {

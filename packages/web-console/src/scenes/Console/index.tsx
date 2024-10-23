@@ -142,7 +142,7 @@ const Console = () => {
                             : 0,
                         )
                       }}
-                      selected={resultsSplitterBasis !== 0}
+                      selected={editorSplitterBasis !== 0}
                     >
                       <Database2 size={BUTTON_ICON_SIZE} />
                     </Navigation>
@@ -167,6 +167,7 @@ const Console = () => {
               <Allotment.Pane
                 preferredSize={editorSplitterBasis}
                 visible={editorSplitterBasis !== 0 && !sm}
+                minSize={250}
               >
                 <Schema />
               </Allotment.Pane>
