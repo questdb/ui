@@ -59,6 +59,16 @@ describe("questdb grid", () => {
     cy.getGridViewport().scrollTo("bottom");
   });
 
+  it("multiple scrolls till the bottom with error", () => {
+    const rows = 1200;
+    cy.typeQuery(`select simulate_crash('P') from long_sequence(${rows})`);
+    cy.runLine();
+
+    cy.getGridViewport().scrollTo("bottom");
+    cy.wait(100);
+    cy.getCollapsedNotifications().should("contain", "HTTP 400 (Bad request)");
+  });
+
   it("copy cell into the clipboard", () => {
     cy.typeQuery("select x from long_sequence(10)");
     cy.runLine();
