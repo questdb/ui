@@ -75,8 +75,8 @@ const baseStyles = css<Props>`
   font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize]};
   font-weight: 400;
   line-height: 1.15;
+  width: 3.5rem;
   height: 3.5rem;
-  padding: 0 1rem;
   border-radius: 0.4rem;
   cursor: pointer;
   ${bezierTransition};
