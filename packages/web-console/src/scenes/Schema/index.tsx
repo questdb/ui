@@ -107,11 +107,7 @@ const ToolbarToggleButton = styled(PrimaryToggleButton)`
   &&:not(:disabled) {
     width: auto;
     padding: 0 1rem;
-    border: 1px solid ${({ theme }) => theme.color.selection};
     height: 3rem;
-    background: ${({ theme }) => theme.color.selection};
-    color: ${({ selected, theme }) =>
-      theme.color[`${selected ? "green" : "foreground"}`]};
   }
 `
 
@@ -376,7 +372,7 @@ const Schema = ({
                       placement="bottom"
                       trigger={
                         <Button
-                          skin="secondary"
+                          skin="transparent"
                           data-hook="schema-copy-to-clipboard-button"
                           disabled={selectedTables.length === 0}
                           onClick={copySchemasToClipboard}
@@ -395,7 +391,7 @@ const Schema = ({
                       placement="bottom"
                       trigger={
                         <Button
-                          skin="secondary"
+                          skin="transparent"
                           data-hook="schema-select-all-button"
                           onClick={() => {
                             selectedTables.length === tables?.length
@@ -428,7 +424,7 @@ const Schema = ({
                       trigger={
                         <Button
                           data-hook="schema-cancel-select-button"
-                          skin="secondary"
+                          skin="transparent"
                           onClick={() => {
                             setSelectedTables([])
                             setSelectOpen(false)

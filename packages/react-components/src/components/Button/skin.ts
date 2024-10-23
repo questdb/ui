@@ -24,6 +24,7 @@ type ColorShape = {
   white: string;
   inherit: string;
   tooltipBackground: string;
+  offWhite: string;
 };
 
 type Color = keyof ColorShape;
@@ -125,16 +126,16 @@ const themes: {
     normal: {
       background: "transparent",
       border: "transparent",
-      color: "foreground",
+      color: "offWhite",
     },
     hover: {
       background: "comment",
       border: "transparent",
-      color: "foreground",
+      color: "offWhite",
     },
     disabled: {
       background: "transparent",
-      border: "gray1",
+      border: "transparent",
       color: "gray1",
     },
   },

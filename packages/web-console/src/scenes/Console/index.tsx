@@ -167,6 +167,7 @@ const Console = () => {
               <Allotment.Pane
                 preferredSize={editorSplitterBasis}
                 visible={editorSplitterBasis !== 0 && !sm}
+                minSize={250}
               >
                 <Schema />
               </Allotment.Pane>

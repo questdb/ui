@@ -168,7 +168,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Freeze left column",
       trigger: (
         <Button
-          skin={gridFreezeLeftState > 0 ? "success" : "secondary"}
+          skin={gridFreezeLeftState > 0 ? "success" : "transparent"}
           onClick={() => {
             gridRef?.current?.toggleFreezeLeft()
             gridRef?.current?.focus()
@@ -182,7 +182,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Move selected column to the front",
       trigger: (
         <Button
-          skin="secondary"
+          skin="transparent"
           onClick={gridRef?.current?.shuffleFocusedColumnToFront}
         >
           <HandPointLeft size="18px" />
@@ -192,7 +192,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Reset grid layout",
       trigger: (
-        <Button skin="secondary" onClick={gridRef?.current?.clearCustomLayout}>
+        <Button
+          skin="transparent"
+          onClick={gridRef?.current?.clearCustomLayout}
+        >
           <Reset size="18px" />
         </Button>
       ),
@@ -201,7 +204,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Refresh",
       trigger: (
         <Button
-          skin="secondary"
+          skin="transparent"
           onClick={() => {
             const sql = gridRef?.current?.getSQL()
             if (sql) {
@@ -247,7 +250,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             placement="bottom"
             trigger={
               <Button
-                skin="secondary"
+                skin="transparent"
                 onClick={() => {
                   const sql = gridRef?.current?.getSQL()
                   if (sql) {
