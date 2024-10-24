@@ -168,8 +168,6 @@ const News = () => {
     setNewsOpened(activeSidebar === "news")
   }, [activeSidebar])
 
-  console.log(enterpriseNews)
-
   return (
     <Drawer
       mode="side"
