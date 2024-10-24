@@ -233,6 +233,32 @@ const News = () => {
                       alt={`${newsItem.title} thumbnail`}
                       width={newsItem.thumbnail[0].thumbnails.large.width}
                       height={newsItem.thumbnail[0].thumbnails.large.height}
+                      fadeIn={true}
+                      {...(newsItem && newsItem.thumbnail
+                        ? {
+                            onMouseOver: () => {
+                              if (newsItem.thumbnail)
+                                dispatch(
+                                  actions.console.setImageToZoom({
+                                    src: newsItem.thumbnail[0].thumbnails.large
+                                      .url,
+                                    width:
+                                      newsItem.thumbnail[0].thumbnails.large
+                                        .width,
+                                    height:
+                                      newsItem.thumbnail[0].thumbnails.large
+                                        .height,
+                                    alt: newsItem.title,
+                                  }),
+                                )
+                            },
+                            onMouseOut: () => {
+                              dispatch(
+                                actions.console.setImageToZoom(undefined),
+                              )
+                            },
+                          }
+                        : {})}
                     />
                   )}
 

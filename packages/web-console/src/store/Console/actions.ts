@@ -24,6 +24,7 @@
 import {
   ConsoleAction,
   ConsoleAT,
+  ImageToZoom,
   TopPanel,
   Sidebar,
   BottomPanel,
@@ -43,6 +44,11 @@ const setActiveBottomPanel = (panel: BottomPanel): ConsoleAction => ({
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL,
 })
 
+const setImageToZoom = (image?: ImageToZoom): ConsoleAction => ({
+  payload: image,
+  type: ConsoleAT.SET_IMAGE_TO_ZOOM,
+})
+
 const toggleSideMenu = (): ConsoleAction => ({
   type: ConsoleAT.TOGGLE_SIDE_MENU,
 })
@@ -52,4 +58,5 @@ export default {
   setActiveTopPanel,
   setActiveSidebar,
   setActiveBottomPanel,
+  setImageToZoom,
 }
