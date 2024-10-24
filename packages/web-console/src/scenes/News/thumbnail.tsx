@@ -18,13 +18,12 @@ const Root = styled.div`
   }
 `
 
-const ThumbImg = styled.img<{ loaded: boolean }>`
-  width: 46rem;
+const ThumbImg = styled.img<{ loaded: boolean; fadeIn?: boolean }>`
   height: auto;
 
-  ${({ loaded }) => `
+  ${({ loaded, fadeIn }) => `
     opacity: ${loaded ? 1 : 0};
-    transition: opacity 0.2s ease-in-out;
+    ${fadeIn && `transition: opacity 0.2s ease-in-out;`}
   `}
 `
 export const Thumbnail = ({
@@ -33,12 +32,15 @@ export const Thumbnail = ({
   width,
   height,
   containerWidth,
+  fadeIn,
+  ...rest
 }: {
   src: string
   alt: string
   width: number
   height: number
   containerWidth: number
+  fadeIn?: boolean
 }) => {
   const [isLoaded, setIsLoaded] = useState(false)
 
@@ -55,7 +57,7 @@ export const Thumbnail = ({
   }, [src])
 
   return (
-    <Root>
+    <Root {...rest}>
       {!isLoaded && <Loader />}
       <ThumbImg
         src={src}
@@ -63,6 +65,7 @@ export const Thumbnail = ({
         width={scaledImageWidth}
         height={scaledImageHeight}
         loaded={isLoaded}
+        fadeIn={fadeIn}
       />
     </Root>
   )
