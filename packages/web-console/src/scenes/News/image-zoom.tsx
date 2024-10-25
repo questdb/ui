@@ -36,12 +36,17 @@ export const ImageZoom = () => {
   const imageToZoom = useSelector(selectors.console.getImageToZoom)
   const rootRef = useRef<HTMLDivElement>(null)
   const [rootWidth, setRootWidth] = useState(0)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
   useEffect(() => {
     if (rootRef.current) {
       setRootWidth(rootRef.current.offsetWidth)
     }
   }, [imageToZoom])
+
+  if (activeSidebar !== "news") {
+    return null
+  }
 
   return (
     <Root ref={rootRef} visible={imageToZoom !== undefined}>
