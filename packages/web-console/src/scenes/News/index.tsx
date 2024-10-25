@@ -17,6 +17,7 @@ import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
 import { BUTTON_ICON_SIZE } from "../../consts"
+import { clear } from "console"
 
 const Loading = styled.div`
   display: grid;
@@ -91,6 +92,8 @@ const News = () => {
   // This boolean is to animate the bell icon and display a bullet indicator
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+
+  let hoverTimeout: NodeJS.Timeout
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)
@@ -237,22 +240,28 @@ const News = () => {
                       {...(newsItem && newsItem.thumbnail
                         ? {
                             onMouseOver: () => {
-                              if (newsItem.thumbnail)
-                                dispatch(
-                                  actions.console.setImageToZoom({
-                                    src: newsItem.thumbnail[0].thumbnails.large
-                                      .url,
-                                    width:
-                                      newsItem.thumbnail[0].thumbnails.large
-                                        .width,
-                                    height:
-                                      newsItem.thumbnail[0].thumbnails.large
-                                        .height,
-                                    alt: newsItem.title,
-                                  }),
-                                )
+                              if (newsItem.thumbnail) {
+                                hoverTimeout = setTimeout(() => {
+                                  if (newsItem && newsItem.thumbnail) {
+                                    dispatch(
+                                      actions.console.setImageToZoom({
+                                        src: newsItem.thumbnail[0].thumbnails
+                                          .large.url,
+                                        width:
+                                          newsItem.thumbnail[0].thumbnails.large
+                                            .width,
+                                        height:
+                                          newsItem.thumbnail[0].thumbnails.large
+                                            .height,
+                                        alt: newsItem.title,
+                                      }),
+                                    )
+                                  }
+                                }, 500)
+                              }
                             },
                             onMouseOut: () => {
+                              clearTimeout(hoverTimeout)
                               dispatch(
                                 actions.console.setImageToZoom(undefined),
                               )
