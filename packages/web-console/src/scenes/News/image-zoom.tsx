@@ -69,15 +69,7 @@ export const ImageZoom = () => {
   }
 
   return (
-    <Root
-      ref={rootRef}
-      visible={imageToZoom !== undefined}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          dispatch(actions.console.setImageToZoom(undefined))
-        }
-      }}
-    >
+    <Root ref={rootRef} visible={imageToZoom !== undefined}>
       <Overlay visible={imageToZoom !== undefined} />
       {imageToZoom && (
         <Wrapper>
