@@ -17,7 +17,6 @@ import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
 import { BUTTON_ICON_SIZE } from "../../consts"
-import { clear } from "console"
 
 const Loading = styled.div`
   display: grid;
@@ -61,13 +60,15 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
     font-size: 1.6rem;
   }
 
-  p {
+  p,
+  li {
     font-size: ${({ theme }) => theme.fontSize.lg};
     line-height: 1.75;
   }
 
   code {
     background-color: ${({ theme }) => theme.color.selection};
+    color: ${({ theme }) => theme.color.pink};
     padding: 0.2rem 0.4rem;
     border-radius: 0.2rem;
   }
