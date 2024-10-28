@@ -262,9 +262,11 @@ const News = () => {
                             },
                             onMouseOut: () => {
                               clearTimeout(hoverTimeout)
-                              dispatch(
-                                actions.console.setImageToZoom(undefined),
-                              )
+                              setTimeout(() => {
+                                dispatch(
+                                  actions.console.setImageToZoom(undefined),
+                                )
+                              }, 250)
                             },
                           }
                         : {})}
