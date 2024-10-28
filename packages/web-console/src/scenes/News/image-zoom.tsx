@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Box } from "@questdb/react-components"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
+import { useSelector, useDispatch } from "react-redux"
+import { selectors, actions } from "../../store"
 import { Thumbnail } from "./thumbnail"
 
 const Root = styled(Box).attrs({ align: "center", justifyContent: "center" })<{
@@ -22,7 +22,7 @@ const Overlay = styled.div<{ visible: boolean }>`
   top: 0;
   width: 100%;
   height: 100%;
-  background: rgba(33, 34, 44, 0.5);
+  background: rgba(33, 34, 44, 0.9);
   opacity: ${({ visible }) => (visible ? 1 : 0)};
   pointer-events: ${({ visible }) => (visible ? "auto" : "none")};
   transition: opacity 0.2s ease-in-out;
@@ -30,13 +30,25 @@ const Overlay = styled.div<{ visible: boolean }>`
 
 const Wrapper = styled.div`
   z-index: 1001;
+
+  img {
+    border: 1px solid ${({ theme }) => theme.color.offWhite};
+    border-radius: ${({ theme }) => theme.borderRadius};
+  }
 `
 
 export const ImageZoom = () => {
   const imageToZoom = useSelector(selectors.console.getImageToZoom)
+  const dispatch = useDispatch()
   const rootRef = useRef<HTMLDivElement>(null)
   const [rootWidth, setRootWidth] = useState(0)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+
+  const handleEsc = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      dispatch(actions.console.setImageToZoom(undefined))
+    }
+  }
 
   useEffect(() => {
     if (rootRef.current) {
@@ -44,12 +56,28 @@ export const ImageZoom = () => {
     }
   }, [imageToZoom])
 
+  useEffect(() => {
+    if (activeSidebar === "news") {
+      document.addEventListener("keydown", handleEsc)
+    } else {
+      document.removeEventListener("keydown", handleEsc)
+    }
+  }, [activeSidebar])
+
   if (activeSidebar !== "news") {
     return null
   }
 
   return (
-    <Root ref={rootRef} visible={imageToZoom !== undefined}>
+    <Root
+      ref={rootRef}
+      visible={imageToZoom !== undefined}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          dispatch(actions.console.setImageToZoom(undefined))
+        }
+      }}
+    >
       <Overlay visible={imageToZoom !== undefined} />
       {imageToZoom && (
         <Wrapper>
