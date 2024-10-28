@@ -233,6 +233,7 @@ const News = () => {
                   newsItem.thumbnail[0].thumbnails.large && (
                     <Thumbnail
                       containerWidth={460}
+                      containerHeight={460}
                       src={newsItem.thumbnail[0].thumbnails.large.url}
                       alt={`${newsItem.title} thumbnail`}
                       width={newsItem.thumbnail[0].thumbnails.large.width}

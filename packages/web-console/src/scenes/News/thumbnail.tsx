@@ -32,6 +32,7 @@ export const Thumbnail = ({
   width,
   height,
   containerWidth,
+  containerHeight,
   fadeIn,
   ...rest
 }: {
@@ -40,12 +41,18 @@ export const Thumbnail = ({
   width: number
   height: number
   containerWidth: number
+  containerHeight: number
   fadeIn?: boolean
 }) => {
   const [isLoaded, setIsLoaded] = useState(false)
 
-  const scaledImageWidth = containerWidth
-  const scaledImageHeight = (scaledImageWidth / width) * height
+  let scaledImageWidth = containerWidth
+  let scaledImageHeight = (scaledImageWidth / width) * height
+  if (scaledImageHeight > containerHeight) {
+    const ratio = containerHeight / scaledImageHeight
+    scaledImageHeight = containerHeight
+    scaledImageWidth *= ratio
+  }
 
   useEffect(() => {
     const imgElement = new Image()

@@ -42,6 +42,7 @@ export const ImageZoom = () => {
   const dispatch = useDispatch()
   const rootRef = useRef<HTMLDivElement>(null)
   const [rootWidth, setRootWidth] = useState(0)
+  const [rootHeight, setRootHeight] = useState(0)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
   const handleEsc = (event: KeyboardEvent) => {
@@ -53,6 +54,7 @@ export const ImageZoom = () => {
   useEffect(() => {
     if (rootRef.current) {
       setRootWidth(rootRef.current.offsetWidth)
+      setRootHeight(rootRef.current.offsetHeight)
     }
   }, [imageToZoom])
 
@@ -76,6 +78,7 @@ export const ImageZoom = () => {
           <Thumbnail
             {...imageToZoom}
             containerWidth={rootWidth ? rootWidth * 0.9 : 460}
+            containerHeight={rootHeight ? rootHeight * 0.75 : 460}
           />
         </Wrapper>
       )}
