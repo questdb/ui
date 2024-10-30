@@ -28,9 +28,9 @@ import styled from "styled-components"
 import { PaneWrapper } from "../../components"
 
 import Monaco from "./Monaco"
-import Menu from "./Menu"
-import Notifications from "../Notifications"
 import { Tabs } from "./Monaco/tabs"
+import { useEditor } from "../../providers/EditorProvider"
+import { Metrics } from "./Metrics"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -44,13 +44,17 @@ const EditorPaneWrapper = styled(PaneWrapper)`
 const Editor = ({
   innerRef,
   ...rest
-}: Props & { innerRef: Ref<HTMLDivElement> }) => (
-  <EditorPaneWrapper ref={innerRef} {...rest}>
-    <Tabs />
-    <Monaco />
-    <Notifications />
-  </EditorPaneWrapper>
-)
+}: Props & { innerRef: Ref<HTMLDivElement> }) => {
+  const { activeBuffer } = useEditor()
+
+  return (
+    <EditorPaneWrapper ref={innerRef} {...rest}>
+      <Tabs />
+      {activeBuffer.editorViewState && <Monaco />}
+      {activeBuffer.metricsViewState && <Metrics />}
+    </EditorPaneWrapper>
+  )
+}
 
 const EditorWithRef = (props: Props, ref: Ref<HTMLDivElement>) => (
   <Editor {...props} innerRef={ref} />

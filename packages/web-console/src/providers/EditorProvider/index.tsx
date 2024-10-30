@@ -36,6 +36,7 @@ export type EditorContext = {
     buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
   ) => Promise<Buffer>
+  showOrAddMetricsBuffer: (buffer?: Partial<Buffer>) => Promise<void>
   deleteBuffer: (id: number) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
   deleteAllBuffers: () => Promise<void>
@@ -53,6 +54,7 @@ const defaultValues = {
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
   addBuffer: () => Promise.resolve(fallbackBuffer),
+  showOrAddMetricsBuffer: () => Promise.resolve(),
   deleteBuffer: () => Promise.resolve(),
   archiveBuffer: () => Promise.resolve(),
   deleteAllBuffers: () => Promise.resolve(),
@@ -157,7 +159,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     if (
       editorRef.current &&
       monacoRef.current &&
-      typeof buffer.value === "string"
+      typeof buffer.value === "string" &&
+      !buffer.metricsViewState
     ) {
       const model = monacoRef.current?.editor.createModel(
         buffer.value,
@@ -215,6 +218,27 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await setActiveBufferOnRemoved(id)
   }
 
+  const showOrAddMetricsBuffer: EditorContext["showOrAddMetricsBuffer"] =
+    async (payload) => {
+      const metricsBuffer = buffers.find(
+        (b) =>
+          b.metricsViewState?.tableId === payload?.metricsViewState?.tableId,
+      )
+      if (metricsBuffer) {
+        await updateBuffer(metricsBuffer.id as number, {
+          ...payload,
+          archived: false,
+          archivedAt: undefined,
+          position: buffers.length - 1,
+        })
+        await setActiveBuffer(metricsBuffer)
+      } else {
+        await addBuffer({
+          ...payload,
+        })
+      }
+    }
+
   return (
     <EditorContext.Provider
       value={{
@@ -235,6 +259,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         activeBuffer,
         setActiveBuffer,
         addBuffer,
+        showOrAddMetricsBuffer,
         deleteBuffer,
         archiveBuffer,
         deleteAllBuffers,

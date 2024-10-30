@@ -29,6 +29,7 @@ import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
 import { Information } from "@styled-icons/remix-line"
+import { LineChart } from "@styled-icons/boxicons-regular"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
@@ -40,6 +41,7 @@ import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { Checkbox } from "../checkbox"
+import { useEditor } from "../../../providers/EditorProvider"
 
 type Props = Readonly<{
   className?: string
@@ -48,6 +50,7 @@ type Props = Readonly<{
   expanded?: boolean
   indexed?: boolean
   kind: TreeNodeKind
+  table_id?: number
   name: string
   onClick?: (event: MouseEvent) => void
   partitionBy?: QuestDB.PartitionBy
@@ -179,6 +182,11 @@ const InfoIconWrapper = styled.div`
   justify-content: center;
 `
 
+const MetricsButton = styled(Button)`
+  position: absolute;
+  right: 0;
+`
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -186,6 +194,7 @@ const Row = ({
   expanded,
   kind,
   indexed,
+  table_id,
   name,
   partitionBy,
   walEnabled,
@@ -199,6 +208,7 @@ const Row = ({
   onSelectToggle,
 }: Props) => {
   const { query } = useContext(SchemaContext)
+  const { showOrAddMetricsBuffer } = useEditor()
 
   return (
     <Wrapper
@@ -302,6 +312,23 @@ const Row = ({
               placement="right"
               tooltip={description}
             />
+          )}
+
+          {walTableData && !selectOpen && table_id && (
+            <MetricsButton
+              skin="transparent"
+              onClick={(e) => {
+                showOrAddMetricsBuffer({
+                  label: name,
+                  metricsViewState: {
+                    tableId: table_id,
+                  },
+                })
+                e.stopPropagation()
+              }}
+            >
+              <LineChart size="18px" />
+            </MetricsButton>
           )}
         </FlexRow>
         {!tooltip && <Text color="comment">{description}</Text>}

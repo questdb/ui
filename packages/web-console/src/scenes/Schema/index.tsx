@@ -348,6 +348,7 @@ const Schema = ({
                 expanded={table.table_name === opened}
                 isScrolling={isScrolling}
                 key={table.table_name}
+                id={table.id}
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}

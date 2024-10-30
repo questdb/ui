@@ -27,7 +27,7 @@ import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { AuthPayload } from "../modules/OAuth2/types"
 import { StoreKey } from "./localStorage/types"
-import {API_VERSION} from "../consts";
+import { API_VERSION } from "../consts"
 
 type ColumnDefinition = Readonly<{ name: string; type: string }>
 
@@ -86,12 +86,12 @@ type RawErrorResult = {
 }
 
 type RawNoticeResult = {
-    ddl: undefined
-    dml: undefined
-    error: undefined
-    notice: "<notice message>"
-    position: undefined
-    query: string
+  ddl: undefined
+  dml: undefined
+  error: undefined
+  notice: "<notice message>"
+  position: undefined
+  query: string
 }
 
 type DdlResult = {
@@ -104,7 +104,12 @@ type DmlResult = {
   type: Type.DML
 }
 
-type RawResult = RawDqlResult | RawDmlResult | RawDdlResult | RawErrorResult | RawNoticeResult
+type RawResult =
+  | RawDqlResult
+  | RawDmlResult
+  | RawDdlResult
+  | RawErrorResult
+  | RawNoticeResult
 
 export type ErrorResult = RawErrorResult & {
   type: Type.ERROR
@@ -112,7 +117,7 @@ export type ErrorResult = RawErrorResult & {
 }
 
 export type NoticeResult = RawNoticeResult & {
-    type: Type.NOTICE
+  type: Type.NOTICE
 }
 
 export type QueryRawResult =
@@ -139,6 +144,7 @@ export type QueryResult<T extends Record<string, any>> =
 export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
 export type Table = {
+  id: number
   table_name: string
   partitionBy: PartitionBy
   designatedTimestamp: string
@@ -620,7 +626,7 @@ export class Client {
         `chk?${Client.encodeParams({
           f: "json",
           j: name,
-          version: API_VERSION,  
+          version: API_VERSION,
         })}`,
         { headers: this.commonHeaders },
       )

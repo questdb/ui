@@ -25,6 +25,12 @@
 import { db } from "./db"
 import type { editor } from "monaco-editor"
 
+export type MetricsViewState = {
+  tableId: number
+  metricDuration?: string
+  sampleBy?: string
+}
+
 export type Buffer = {
   /** auto incremented number by Dexie */
   id?: number
@@ -34,6 +40,7 @@ export type Buffer = {
   archived?: boolean
   archivedAt?: number
   editorViewState?: editor.ICodeEditorViewState
+  metricsViewState?: MetricsViewState
 }
 
 const defaultEditorViewState: editor.ICodeEditorViewState = {
@@ -74,6 +81,7 @@ export const makeBuffer = ({
   label,
   value,
   editorViewState = defaultEditorViewState,
+  metricsViewState = undefined,
   position,
   archived,
   archivedAt,
@@ -81,13 +89,15 @@ export const makeBuffer = ({
   label: string
   value?: string
   editorViewState?: editor.ICodeEditorViewState
+  metricsViewState?: MetricsViewState
   position: number
   archived?: boolean
   archivedAt?: number
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
-  editorViewState,
+  editorViewState: metricsViewState ? undefined : editorViewState,
+  metricsViewState,
   position,
   archived,
   archivedAt,
