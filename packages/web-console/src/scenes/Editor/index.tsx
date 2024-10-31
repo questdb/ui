@@ -31,6 +31,7 @@ import Monaco from "./Monaco"
 import { Tabs } from "./Monaco/tabs"
 import { useEditor } from "../../providers/EditorProvider"
 import { Metrics } from "./Metrics"
+import Notifications from "../../scenes/Notifications"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -52,6 +53,7 @@ const Editor = ({
       <Tabs />
       {activeBuffer.editorViewState && <Monaco />}
       {activeBuffer.metricsViewState && <Metrics />}
+      {activeBuffer.editorViewState && <Notifications />}
     </EditorPaneWrapper>
   )
 }

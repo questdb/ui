@@ -7,7 +7,7 @@ import {
 } from "./utils"
 
 export const rowsApplied = (
-  id: string,
+  id: number,
   metricDuration: MetricDuration,
   sampleBy?: SampleBy,
 ) => `
@@ -27,7 +27,7 @@ and created < date_trunc('minute', now())
 sample by ${sampleBy ?? mappedSampleBy[metricDuration]}`
 
 export const latency = (
-  id: string,
+  id: number,
   metricDuration: MetricDuration,
   sampleBy?: SampleBy,
 ) => `

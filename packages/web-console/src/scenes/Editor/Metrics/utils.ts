@@ -65,7 +65,6 @@ export enum GraphType {
 export type ChartTypeConfig = {
   key: GraphType
   label: string
-  data: uPlot.AlignedData
   yValue: (rawValue: number) => string
 }
 
