@@ -53,7 +53,7 @@ const Editor = ({
       <Tabs />
       {activeBuffer.editorViewState && <Monaco />}
       {activeBuffer.metricsViewState && <Metrics />}
-      {activeBuffer.editorViewState && <Notifications />}
+      {!activeBuffer.metricsViewState && <Notifications />}
     </EditorPaneWrapper>
   )
 }

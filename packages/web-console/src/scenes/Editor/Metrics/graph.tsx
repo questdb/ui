@@ -64,7 +64,7 @@ export const Graph = ({ label, data, duration, yValue }: Props) => {
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
       width: entries[0].contentRect.width,
-      height: 180,
+      height: 200,
     })
   })
 
