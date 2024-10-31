@@ -225,13 +225,15 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
           b.metricsViewState?.tableId === payload?.metricsViewState?.tableId,
       )
       if (metricsBuffer) {
-        await updateBuffer(metricsBuffer.id as number, {
+        const newBuffer = {
+          ...metricsBuffer,
           ...payload,
           archived: false,
           archivedAt: undefined,
           position: buffers.length - 1,
-        })
-        await setActiveBuffer(metricsBuffer)
+        }
+        await updateBuffer(metricsBuffer.id as number, newBuffer)
+        await setActiveBuffer(newBuffer)
       } else {
         await addBuffer({
           ...payload,

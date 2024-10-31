@@ -2,7 +2,13 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
-import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
+import {
+  File,
+  History,
+  LineChart,
+  Show,
+  Trash,
+} from "@styled-icons/boxicons-regular"
 import {
   Box,
   Button,
@@ -59,6 +65,7 @@ export const Tabs = () => {
     updateBuffer,
     deleteBuffer,
     archiveBuffer,
+    showOrAddMetricsBuffer,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
@@ -197,12 +204,7 @@ export const Tabs = () => {
                 data-hook="editor-tabs-history-item"
                 key={buffer.id}
                 onClick={async () => {
-                  await updateBuffer(buffer.id as number, {
-                    archived: false,
-                    archivedAt: undefined,
-                    position: buffers.length - 1,
-                  })
-                  await setActiveBuffer(buffer)
+                  showOrAddMetricsBuffer(buffer)
                 }}
               >
                 <Box
