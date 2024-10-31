@@ -133,6 +133,9 @@ export const Metrics = () => {
         metricDuration,
       },
     })
+
+    fetchLatency(activeBuffer.metricsViewState.tableId)
+    fetchRowsApplied(activeBuffer.metricsViewState.tableId)
   }, [metricDuration])
 
   if (!table) return null
