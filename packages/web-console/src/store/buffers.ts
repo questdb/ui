@@ -81,7 +81,7 @@ export const makeBuffer = ({
   label,
   value,
   editorViewState = defaultEditorViewState,
-  metricsViewState = undefined,
+  metricsViewState,
   position,
   archived,
   archivedAt,
