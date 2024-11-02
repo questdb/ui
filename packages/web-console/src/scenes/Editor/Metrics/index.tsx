@@ -11,8 +11,10 @@ import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { Graph } from "./graph"
+import { History } from "@styled-icons/boxicons-regular"
 
 const Root = styled.div`
+  display: flex;
   width: 100%;
   height: 100%;
   background: #2c2e3d;
@@ -44,6 +46,13 @@ const Charts = styled.div`
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
+`
+
+const GlobalError = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  margin: auto;
 `
 
 export const Metrics = () => {
@@ -138,7 +147,16 @@ export const Metrics = () => {
     fetchRowsApplied(activeBuffer.metricsViewState.tableId)
   }, [metricDuration])
 
-  if (!table) return null
+  if (!table)
+    return (
+      <Root>
+        <GlobalError>
+          <Text color="foreground">
+            Error: Cannot load metrics. Table not found in the database
+          </Text>
+        </GlobalError>
+      </Root>
+    )
 
   return (
     <Root>
@@ -165,6 +183,7 @@ export const Metrics = () => {
             onChange={(e) =>
               setMetricDuration(e.target.value as MetricDuration)
             }
+            prefixIcon={<History size="18px" />}
           />
         </Box>
       </Toolbar>
