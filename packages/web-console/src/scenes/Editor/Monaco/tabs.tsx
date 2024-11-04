@@ -204,7 +204,16 @@ export const Tabs = () => {
                 data-hook="editor-tabs-history-item"
                 key={buffer.id}
                 onClick={async () => {
-                  showOrAddMetricsBuffer(buffer)
+                  if (buffer.metricsViewState) {
+                    showOrAddMetricsBuffer(buffer)
+                  } else {
+                    await updateBuffer(buffer.id as number, {
+                      archived: false,
+                      archivedAt: undefined,
+                      position: buffers.length - 1,
+                    })
+                    await setActiveBuffer(buffer)
+                  }
                 }}
               >
                 <Box
