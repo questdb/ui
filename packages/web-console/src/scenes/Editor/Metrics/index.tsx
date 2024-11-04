@@ -11,7 +11,7 @@ import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { Graph } from "./graph"
-import { History } from "@styled-icons/boxicons-regular"
+import { Time } from "@styled-icons/boxicons-regular"
 
 const Root = styled.div`
   display: flex;
@@ -79,6 +79,7 @@ export const Metrics = () => {
   )
 
   const fetchRowsApplied = async (tableId: number) => {
+    setRowsAppliedLoading(true)
     try {
       const response = await quest.query<RowsApplied>(
         rowsAppliedSQL(tableId, metricDuration),
@@ -102,6 +103,7 @@ export const Metrics = () => {
   }
 
   const fetchLatency = async (tableId: number) => {
+    setLatencyLoading(true)
     try {
       const response = await quest.query<Latency>(
         latencySQL(tableId, metricDuration),
@@ -120,17 +122,6 @@ export const Metrics = () => {
       setLatencyLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (activeBuffer.metricsViewState) {
-      fetchLatency(activeBuffer.metricsViewState.tableId)
-      fetchRowsApplied(activeBuffer.metricsViewState.tableId)
-      setMetricDuration(
-        (activeBuffer.metricsViewState.metricDuration as MetricDuration) ??
-          MetricDuration.SEVEN_DAYS,
-      )
-    }
-  }, [activeBuffer])
 
   useEffect(() => {
     if (!activeBuffer.id || !activeBuffer.metricsViewState || !metricDuration)
@@ -169,6 +160,22 @@ export const Metrics = () => {
             value={metricDuration}
             options={[
               {
+                label: formatDurationLabel(MetricDuration.ONE_HOUR),
+                value: MetricDuration.ONE_HOUR,
+              },
+              {
+                label: formatDurationLabel(MetricDuration.THREE_HOURS),
+                value: MetricDuration.THREE_HOURS,
+              },
+              {
+                label: formatDurationLabel(MetricDuration.SIX_HOURS),
+                value: MetricDuration.SIX_HOURS,
+              },
+              {
+                label: formatDurationLabel(MetricDuration.TWELVE_HOURS),
+                value: MetricDuration.TWELVE_HOURS,
+              },
+              {
                 label: formatDurationLabel(MetricDuration.TWENTY_FOUR_HOURS),
                 value: MetricDuration.TWENTY_FOUR_HOURS,
               },
@@ -184,50 +191,44 @@ export const Metrics = () => {
             onChange={(e) =>
               setMetricDuration(e.target.value as MetricDuration)
             }
-            prefixIcon={<History size="18px" />}
+            prefixIcon={<Time size="18px" />}
           />
         </Box>
       </Toolbar>
       <Charts>
-        {!latencyLoading && (
-          <div>
-            <Graph
-              label="Read latency in ms"
-              duration={metricDuration}
-              data={[
-                latency.map((l) => new Date(l.time).getTime()),
-                latency.map((l) => parseFloat(l.avg_latency)),
-              ]}
-              yValue={(rawValue: number) => (+rawValue).toFixed(2) + "ms"}
-            />
-          </div>
-        )}
-        {!rowsAppliedLoading && (
-          <div>
-            <Graph
-              label="Write throughput"
-              duration={metricDuration}
-              data={[
-                rowsApplied.map((l) => new Date(l.time).getTime()),
-                rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
-              ]}
-              yValue={(rawValue: number) => (+rawValue).toFixed(0)}
-            />
-          </div>
-        )}
-        {!rowsAppliedLoading && (
-          <div>
-            <Graph
-              label="Write amplification"
-              duration={metricDuration}
-              data={[
-                rowsApplied.map((l) => new Date(l.time).getTime()),
-                rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
-              ]}
-              yValue={(rawValue: number) => (+rawValue).toFixed(0) + "x"}
-            />
-          </div>
-        )}
+        <div>
+          <Graph
+            label="Read latency in ms"
+            duration={metricDuration}
+            data={[
+              latency.map((l) => new Date(l.time).getTime()),
+              latency.map((l) => parseFloat(l.avg_latency)),
+            ]}
+            yValue={(rawValue: number) => (+rawValue).toFixed(2) + "ms"}
+          />
+        </div>
+        <div>
+          <Graph
+            label="Write throughput"
+            duration={metricDuration}
+            data={[
+              rowsApplied.map((l) => new Date(l.time).getTime()),
+              rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
+            ]}
+            yValue={(rawValue: number) => (+rawValue).toFixed(0)}
+          />
+        </div>
+        <div>
+          <Graph
+            label="Write amplification"
+            duration={metricDuration}
+            data={[
+              rowsApplied.map((l) => new Date(l.time).getTime()),
+              rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
+            ]}
+            yValue={(rawValue: number) => (+rawValue).toFixed(0) + "x"}
+          />
+        </div>
       </Charts>
     </Root>
   )

@@ -34,8 +34,8 @@ export const mappedSampleBy: Record<MetricDuration, SampleBy> = {
   [MetricDuration.TEN_MINUTES]: SampleBy.ONE_MINUTE,
   [MetricDuration.THIRTY_MINUTES]: SampleBy.ONE_MINUTE,
   [MetricDuration.ONE_HOUR]: SampleBy.ONE_MINUTE,
-  [MetricDuration.THREE_HOURS]: SampleBy.FIFTEEN_MINUTES,
-  [MetricDuration.SIX_HOURS]: SampleBy.FIFTEEN_MINUTES,
+  [MetricDuration.THREE_HOURS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.SIX_HOURS]: SampleBy.ONE_MINUTE,
   [MetricDuration.TWELVE_HOURS]: SampleBy.FIFTEEN_MINUTES,
   [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.FIFTEEN_MINUTES,
   [MetricDuration.THREE_DAYS]: SampleBy.ONE_HOUR,
@@ -70,3 +70,6 @@ export type ChartTypeConfig = {
 
 export const minutesToDays = (durationInMinutes: number) =>
   durationInMinutes / 60 / 24
+
+export const minutesToHours = (durationInMinutes: number) =>
+  durationInMinutes / 60

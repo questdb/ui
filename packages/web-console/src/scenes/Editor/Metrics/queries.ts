@@ -2,6 +2,7 @@ import {
   MetricDuration,
   SampleBy,
   minutesToDays,
+  minutesToHours,
   mappedSampleBy,
   durationInMinutes,
 } from "./utils"
@@ -10,7 +11,10 @@ export const rowsApplied = (
   id: number,
   metricDuration: MetricDuration,
   sampleBy?: SampleBy,
-) => `
+) => {
+  const minutes = durationInMinutes[metricDuration]
+
+  return `
 select
     created time,
     count(rowCount) numOfWalApplies,
@@ -20,17 +24,20 @@ select
 from sys.telemetry_wal
 where tableId = ${id}
 and event = 105
-and created > date_trunc('minute', dateadd('d', -${minutesToDays(
-  durationInMinutes[metricDuration],
-)}, now()))
+and created > date_trunc('minute', dateadd('${minutes >= 1440 ? "d" : "h"}', -${
+    minutes >= 1440 ? minutesToDays(minutes) : minutesToHours(minutes)
+  }, now()))
 and created < date_trunc('minute', now())
 sample by ${sampleBy ?? mappedSampleBy[metricDuration]}`
+}
 
 export const latency = (
   id: number,
   metricDuration: MetricDuration,
   sampleBy?: SampleBy,
-) => `
+) => {
+  const minutes = durationInMinutes[metricDuration]
+  return `
 select
     created time,
     count(latency) / 2 numOfWalApplies,
@@ -38,9 +45,10 @@ select
 from sys.telemetry_wal
 where tableId = ${id}
 and (event = 105 or event = 103)
-and created > date_trunc('minute', dateadd('d', -${minutesToDays(
-  durationInMinutes[metricDuration],
-)}, now()))
+and created > date_trunc('minute', dateadd('${minutes >= 1440 ? "d" : "h"}', -${
+    minutes >= 1440 ? minutesToDays(minutes) : minutesToHours(minutes)
+  }, now()))
 and created < date_trunc('minute', now())
 sample by ${sampleBy ?? mappedSampleBy[metricDuration]}
 `
+}
