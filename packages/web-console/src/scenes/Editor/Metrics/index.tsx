@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useState, useMemo } from "react"
 import styled from "styled-components"
 import { Box, Select } from "@questdb/react-components"
 import { Text } from "../../../components"
@@ -13,6 +13,8 @@ import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
 import { Graph } from "./graph"
 import { Time } from "@styled-icons/boxicons-regular"
 import isEqual from "lodash.isequal"
+import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
+import { format } from "date-fns"
 
 const Root = styled.div`
   display: flex;
@@ -81,6 +83,7 @@ export const Metrics = () => {
     useState<RowsApplied>()
   const [latency, setLatency] = useState<Latency[]>([])
   const [lastNotNullLatency, setLastNotNullLatency] = useState<Latency>()
+  const userLocale = useMemo(fetchUserLocale, [])
 
   const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
 
@@ -176,6 +179,11 @@ export const Metrics = () => {
       <Toolbar>
         <Header>WAL metrics for {table.table_name}</Header>
         <Box align="center" gap="1rem">
+          <Text color="gray2">
+            {format(new Date(), "OOOO", {
+              locale: getLocaleFromLanguage(userLocale),
+            })}
+          </Text>
           <Select
             name="duration"
             value={metricDuration}
