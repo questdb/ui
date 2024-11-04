@@ -40,7 +40,11 @@ const Header = styled(Text)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const Charts = styled(Box).attrs({ align: "flex-start", gap: "2.5rem" })`
+const Charts = styled(Box).attrs({
+  align: "flex-start",
+  gap: "2.5rem",
+})`
+  align-content: flex-start;
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
