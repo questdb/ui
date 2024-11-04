@@ -184,7 +184,9 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     const editorViewState = editorRef.current?.saveViewState()
     await bufferStore.update(id, {
       ...payload,
-      ...(editorViewState ? { editorViewState } : {}),
+      ...(editorViewState && !payload?.metricsViewState
+        ? { editorViewState }
+        : {}),
     })
   }
 
