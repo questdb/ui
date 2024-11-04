@@ -15,6 +15,7 @@ import { History } from "@styled-icons/boxicons-regular"
 
 const Root = styled.div`
   display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   background: #2c2e3d;
