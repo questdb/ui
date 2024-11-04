@@ -130,6 +130,17 @@ export const Metrics = () => {
   }
 
   useEffect(() => {
+    if (activeBuffer.metricsViewState) {
+      fetchLatency(activeBuffer.metricsViewState.tableId)
+      fetchRowsApplied(activeBuffer.metricsViewState.tableId)
+      setMetricDuration(
+        (activeBuffer.metricsViewState.metricDuration as MetricDuration) ??
+          MetricDuration.SEVEN_DAYS,
+      )
+    }
+  }, [activeBuffer])
+
+  useEffect(() => {
     if (!activeBuffer.id || !activeBuffer.metricsViewState || !metricDuration)
       return
 
