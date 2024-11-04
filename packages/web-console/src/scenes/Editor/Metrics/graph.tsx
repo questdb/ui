@@ -42,12 +42,13 @@ const LabelValue = styled.span`
 
 type Props = {
   label: string
+  loading?: boolean
   data: uPlot.AlignedData
   duration: MetricDuration
   yValue: (rawValue: number) => string
 }
 
-export const Graph = ({ label, data, duration, yValue }: Props) => {
+export const Graph = ({ label, data, duration, yValue, loading }: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
