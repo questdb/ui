@@ -109,9 +109,9 @@ export const language: monaco.languages.IMonarchLanguage = {
       ],
     ],
     numbers: [
-      [/0[xX][0-9a-fA-F]*/, "number"],
-      [/[$][+-]*\d*(\.\d*)?/, "number"],
-      [/((\d+(\.\d*)?)|(\.\d+))([eE][\-+]?\d+)?/, "number"],
+      [/0[xX][0-9a-fA-F]*/, "number"], // hex integers
+      [/[+-]?\d+((_)?\d+)*[Ll]?/, "number"], // integers
+      [/[+-]?\d*(\.\d*)?[Ee]/, "number"], // floating point number
     ],
     strings: [
       [/N'/, { token: "string", next: "@string" }],
