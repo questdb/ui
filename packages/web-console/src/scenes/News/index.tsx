@@ -60,13 +60,15 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
     font-size: 1.6rem;
   }
 
-  p {
+  p,
+  li {
     font-size: ${({ theme }) => theme.fontSize.lg};
     line-height: 1.75;
   }
 
   code {
     background-color: ${({ theme }) => theme.color.selection};
+    color: ${({ theme }) => theme.color.pink};
     padding: 0.2rem 0.4rem;
     border-radius: 0.2rem;
   }
@@ -91,6 +93,8 @@ const News = () => {
   // This boolean is to animate the bell icon and display a bullet indicator
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+
+  let hoverTimeout: NodeJS.Timeout
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)
@@ -229,10 +233,45 @@ const News = () => {
                   newsItem.thumbnail[0].thumbnails.large && (
                     <Thumbnail
                       containerWidth={460}
+                      containerHeight={460}
                       src={newsItem.thumbnail[0].thumbnails.large.url}
                       alt={`${newsItem.title} thumbnail`}
                       width={newsItem.thumbnail[0].thumbnails.large.width}
                       height={newsItem.thumbnail[0].thumbnails.large.height}
+                      fadeIn={true}
+                      {...(newsItem && newsItem.thumbnail
+                        ? {
+                            onMouseOver: () => {
+                              if (newsItem.thumbnail) {
+                                hoverTimeout = setTimeout(() => {
+                                  if (newsItem && newsItem.thumbnail) {
+                                    dispatch(
+                                      actions.console.setImageToZoom({
+                                        src: newsItem.thumbnail[0].thumbnails
+                                          .large.url,
+                                        width:
+                                          newsItem.thumbnail[0].thumbnails.large
+                                            .width,
+                                        height:
+                                          newsItem.thumbnail[0].thumbnails.large
+                                            .height,
+                                        alt: newsItem.title,
+                                      }),
+                                    )
+                                  }
+                                }, 500)
+                              }
+                            },
+                            onMouseOut: () => {
+                              clearTimeout(hoverTimeout)
+                              setTimeout(() => {
+                                dispatch(
+                                  actions.console.setImageToZoom(undefined),
+                                )
+                              }, 250)
+                            },
+                          }
+                        : {})}
                     />
                   )}
 
