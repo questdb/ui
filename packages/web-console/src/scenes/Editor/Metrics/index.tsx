@@ -79,7 +79,7 @@ export const Metrics = () => {
     if (metrics) {
       setMetrics(metrics)
     }
-  }, [buffers])
+  }, [buffers, activeBuffer])
 
   return (
     <Root>

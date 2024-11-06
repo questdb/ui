@@ -67,6 +67,7 @@ export const Metric = ({
   }
 
   const fetchMetric = async () => {
+    setLoading(true)
     try {
       const response = await fetchers[metric.metricType]()
       if (response && response.type === QuestDB.Type.DQL) {
