@@ -67,7 +67,6 @@ export const Metric = ({
   }
 
   const fetchMetric = async () => {
-    setLoading(true)
     try {
       const response = await fetchers[metric.metricType]()
       if (response && response.type === QuestDB.Type.DQL) {
@@ -78,8 +77,6 @@ export const Metric = ({
       }
     } catch (err) {
       console.error(err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -92,13 +89,19 @@ export const Metric = ({
         setTableName(response.data[0].table_name)
       }
     } catch (err) {
-      console.error
+      console.error(err)
     }
   }
 
+  const fetchAll = async () => {
+    setLoading(true)
+    Promise.all([fetchMetric(), fetchTableName()]).finally(() => {
+      setLoading(false)
+    })
+  }
+
   useEffect(() => {
-    fetchMetric()
-    fetchTableName()
+    fetchAll()
   }, [metric, metricDuration])
 
   if ((!data || !tableName) && !loading)
