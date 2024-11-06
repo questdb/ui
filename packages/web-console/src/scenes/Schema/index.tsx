@@ -68,6 +68,8 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { NotificationType } from "../../types"
 import { Checkbox } from "./checkbox"
+import { AddChart } from "@styled-icons/material"
+import { useEditor } from "../../providers/EditorProvider"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -160,6 +162,7 @@ const Schema = ({
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
+  const { addBuffer } = useEditor()
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -447,6 +450,29 @@ const Schema = ({
                     </PopperHover>
                   )}
 
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          data-hook="schema-add-metrics-button"
+                          skin="transparent"
+                          onClick={() => {
+                            addBuffer({
+                              metricsViewState: {
+                                metrics: [],
+                              },
+                            })
+                          }}
+                        >
+                          <AddChart size="20px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Add Metrics</Tooltip>
+                    </PopperHover>
+                  )}
                   {!selectOpen && (
                     <PopperHover
                       delay={350}

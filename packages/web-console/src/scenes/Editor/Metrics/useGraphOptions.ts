@@ -122,13 +122,6 @@ export const useGraphOptions = ({
     ms: 1,
     padding: [10, 20, 0, 20],
 
-    cursor: {
-      sync: {
-        key: "wal-metrics",
-        setSeries: true,
-      },
-    },
-
     axes: Object.values(axes),
     series: Object.values(series),
     scales,

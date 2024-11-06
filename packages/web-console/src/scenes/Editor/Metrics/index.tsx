@@ -1,20 +1,15 @@
-import React, { useContext, useEffect, useState, useMemo } from "react"
+import React, { useEffect, useState, useMemo } from "react"
 import styled from "styled-components"
 import { Box, Select } from "@questdb/react-components"
 import { Text } from "../../../components"
 import { useEditor } from "../../../providers"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
 import { MetricDuration } from "./utils"
-import type { Latency, RowsApplied } from "./utils"
-import * as QuestDB from "../../../utils/questdb"
-import { QuestContext } from "../../../providers"
-import { rowsApplied as rowsAppliedSQL, latency as latencySQL } from "./queries"
-import { Graph } from "./graph"
 import { Time } from "@styled-icons/boxicons-regular"
-import isEqual from "lodash.isequal"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format } from "date-fns"
+import { AddMetricDialog } from "./add-metric-dialog"
+import type { Metric } from "../../../store/buffers"
+import { Metric as MetricComponent } from "./metric"
 
 const Root = styled.div`
   display: flex;
@@ -67,117 +62,30 @@ const GlobalError = styled(Box).attrs({
 `
 
 export const Metrics = () => {
-  const { quest } = useContext(QuestContext)
-  const { activeBuffer, updateBuffer } = useEditor()
-  const tables = useSelector(selectors.query.getTables, (prev, next) => {
-    return isEqual(prev, next)
-  })
+  const { activeBuffer, buffers } = useEditor()
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     (activeBuffer?.metricsViewState?.metricDuration as MetricDuration) ??
       MetricDuration.SEVEN_DAYS,
   )
-  const [rowsAppliedLoading, setRowsAppliedLoading] = useState(false)
-  const [latencyLoading, setLatencyLoading] = useState(false)
-  const [rowsApplied, setRowsApplied] = useState<RowsApplied[]>([])
-  const [lastNotNullRowsApplied, setLastNotNullRowsApplied] =
-    useState<RowsApplied>()
-  const [latency, setLatency] = useState<Latency[]>([])
-  const [lastNotNullLatency, setLastNotNullLatency] = useState<Latency>()
   const userLocale = useMemo(fetchUserLocale, [])
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [metrics, setMetrics] = useState<Metric[]>([])
 
   const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
 
-  const table = tables.find(
-    (table) => table.id === activeBuffer?.metricsViewState?.tableId,
-  )
-
-  const fetchRowsApplied = async (tableId: number) => {
-    setRowsAppliedLoading(true)
-    try {
-      const response = await quest.query<RowsApplied>(
-        rowsAppliedSQL(tableId, metricDuration),
-      )
-      if (response && response.type === QuestDB.Type.DQL) {
-        setRowsApplied(response.data)
-        const lastNotNullRowsApplied = response.data
-          .slice()
-          .reverse()
-          .find(
-            (l) =>
-              l.avgWalAmplification !== null && l.numOfRowsWritten !== null,
-          )
-        setLastNotNullRowsApplied(lastNotNullRowsApplied)
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setRowsAppliedLoading(false)
-    }
-  }
-
-  const fetchLatency = async (tableId: number) => {
-    setLatencyLoading(true)
-    try {
-      const response = await quest.query<Latency>(
-        latencySQL(tableId, metricDuration),
-      )
-      if (response && response.type === QuestDB.Type.DQL) {
-        setLatency(response.data)
-        const lastNotNullLatency = response.data
-          .slice()
-          .reverse()
-          .find((l) => l.numOfWalApplies !== null && l.avg_latency !== null)
-        setLastNotNullLatency(lastNotNullLatency)
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLatencyLoading(false)
-    }
-  }
-
   useEffect(() => {
-    if (activeBuffer.metricsViewState) {
-      fetchLatency(activeBuffer.metricsViewState.tableId)
-      fetchRowsApplied(activeBuffer.metricsViewState.tableId)
-      setMetricDuration(
-        (activeBuffer.metricsViewState.metricDuration as MetricDuration) ??
-          MetricDuration.SEVEN_DAYS,
-      )
+    const metrics = buffers.find((b) => b.id === activeBuffer?.id)
+      ?.metricsViewState?.metrics
+    if (metrics) {
+      setMetrics(metrics)
     }
-  }, [activeBuffer])
-
-  useEffect(() => {
-    if (!activeBuffer.id || !activeBuffer.metricsViewState || !metricDuration)
-      return
-
-    updateBuffer(activeBuffer.id, {
-      ...activeBuffer,
-      metricsViewState: {
-        ...activeBuffer.metricsViewState,
-        metricDuration,
-      },
-    })
-
-    fetchLatency(activeBuffer.metricsViewState.tableId)
-    fetchRowsApplied(activeBuffer.metricsViewState.tableId)
-  }, [metricDuration])
-
-  if (!table)
-    return (
-      <Root>
-        <GlobalError>
-          <Text color="foreground">
-            Error: Cannot load metrics. Table not found in the database
-          </Text>
-        </GlobalError>
-      </Root>
-    )
+  }, [buffers])
 
   return (
     <Root>
       <Toolbar>
-        <Header>WAL metrics for {table.table_name}</Header>
+        {/* <Header>WAL metrics for {table.table_name}</Header> */}
+        <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">
           <Text color="gray2">
             {format(new Date(), "OOOO", {
@@ -225,36 +133,16 @@ export const Metrics = () => {
         </Box>
       </Toolbar>
       <Charts>
-        <Graph
-          loading={latencyLoading}
-          label="Read latency in ms"
-          duration={metricDuration}
-          data={[
-            latency.map((l) => new Date(l.time).getTime()),
-            latency.map((l) => parseFloat(l.avg_latency)),
-          ]}
-          yValue={(rawValue: number) => (+rawValue).toFixed(2) + "ms"}
-        />
-        <Graph
-          loading={rowsAppliedLoading}
-          label="Write throughput"
-          duration={metricDuration}
-          data={[
-            rowsApplied.map((l) => new Date(l.time).getTime()),
-            rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
-          ]}
-          yValue={(rawValue: number) => (+rawValue).toFixed(0)}
-        />
-        <Graph
-          loading={rowsAppliedLoading}
-          label="Write amplification"
-          duration={metricDuration}
-          data={[
-            rowsApplied.map((l) => new Date(l.time).getTime()),
-            rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
-          ]}
-          yValue={(rawValue: number) => (+rawValue).toFixed(0) + "x"}
-        />
+        {metrics &&
+          metrics
+            .sort((a, b) => a.position - b.position)
+            .map((metric, index) => (
+              <MetricComponent
+                key={index}
+                metric={metric}
+                metricDuration={metricDuration}
+              />
+            ))}
       </Charts>
     </Root>
   )

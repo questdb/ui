@@ -51,7 +51,7 @@ const DropdownMenuContent = styled(DropdownMenu.Content)`
 
 const mapTabIconToType = (buffer: Buffer) => {
   if (buffer.metricsViewState) {
-    return "/assets/icon-line-chart.svg"
+    return "/assets/icon-chart.svg"
   }
   return "/assets/icon-file.svg"
 }
@@ -65,7 +65,6 @@ export const Tabs = () => {
     updateBuffer,
     deleteBuffer,
     archiveBuffer,
-    showOrAddMetricsBuffer,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
@@ -204,16 +203,12 @@ export const Tabs = () => {
                 data-hook="editor-tabs-history-item"
                 key={buffer.id}
                 onClick={async () => {
-                  if (buffer.metricsViewState) {
-                    showOrAddMetricsBuffer(buffer)
-                  } else {
-                    await updateBuffer(buffer.id as number, {
-                      archived: false,
-                      archivedAt: undefined,
-                      position: buffers.length - 1,
-                    })
-                    await setActiveBuffer(buffer)
-                  }
+                  await updateBuffer(buffer.id as number, {
+                    archived: false,
+                    archivedAt: undefined,
+                    position: buffers.length - 1,
+                  })
+                  await setActiveBuffer(buffer)
                 }}
               >
                 <Box

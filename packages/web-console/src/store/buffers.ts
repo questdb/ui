@@ -24,11 +24,18 @@
 
 import { db } from "./db"
 import type { editor } from "monaco-editor"
+import { MetricType, MetricDuration } from "scenes/Editor/Metrics/utils"
+
+export type Metric = {
+  tableId: number
+  metricType: MetricType
+  position: number
+}
 
 export type MetricsViewState = {
-  tableId: number
-  metricDuration?: string
+  metricDuration?: MetricDuration
   sampleBy?: string
+  metrics?: Metric[]
 }
 
 export type Buffer = {

@@ -1,4 +1,8 @@
-import uPlot from "uplot"
+export enum MetricType {
+  ROWS_APPLIED = "Write throughput",
+  LATENCY = "Latency in ms",
+  WRITE_AMPLIFICATION = "Write amplification",
+}
 
 export enum MetricDuration {
   TEN_MINUTES = "10min",
@@ -54,18 +58,6 @@ export type Latency = {
   time: string
   numOfWalApplies: string
   avg_latency: string
-}
-
-export enum GraphType {
-  RowsApplied = "Rows Applied",
-  Latency = "Latency",
-  WriteAmplification = "Write Amplification",
-}
-
-export type ChartTypeConfig = {
-  key: GraphType
-  label: string
-  yValue: (rawValue: number) => string
 }
 
 export const minutesToDays = (durationInMinutes: number) =>
