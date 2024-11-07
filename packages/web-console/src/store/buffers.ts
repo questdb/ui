@@ -26,6 +26,11 @@ import { db } from "./db"
 import type { editor } from "monaco-editor"
 import { MetricType, MetricDuration } from "scenes/Editor/Metrics/utils"
 
+export enum BufferType {
+  SQL = "SQL",
+  METRICS = "Metrics",
+}
+
 export type Metric = {
   tableId: number
   metricType: MetricType
@@ -109,6 +114,13 @@ export const makeBuffer = ({
   archived,
   archivedAt,
 })
+
+export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {
+  return {
+    id: 1,
+    ...makeBuffer({ label: bufferType, position: 0 }),
+  }
+}
 
 export const fallbackBuffer = {
   id: 1,

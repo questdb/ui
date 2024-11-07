@@ -106,7 +106,9 @@ export const Tabs = () => {
     if (!buffer || buffers.filter((buffer) => !buffer.archived).length === 1) {
       return
     }
-    buffer?.value !== "" || buffer.metricsViewState
+    buffer?.value !== "" ||
+    (buffer.metricsViewState?.metrics &&
+      buffer.metricsViewState.metrics.length > 0)
       ? await archiveBuffer(parseInt(id))
       : await deleteBuffer(parseInt(id))
     await repositionActiveBuffers(id)

@@ -16,7 +16,13 @@ import {
   QuestDBLanguageName,
   clearModelMarkers,
 } from "../../scenes/Editor/Monaco/utils"
-import { fallbackBuffer, makeBuffer, bufferStore } from "../../store/buffers"
+import {
+  fallbackBuffer,
+  makeBuffer,
+  bufferStore,
+  makeFallbackBuffer,
+  BufferType,
+} from "../../store/buffers"
 import { db } from "../../store/db"
 import type { Buffer } from "../../store/buffers"
 
@@ -126,9 +132,18 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     newBuffer,
     { shouldSelectAll = false } = {},
   ) => {
+    const fallbackBuffer = makeFallbackBuffer(
+      newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+    )
+
     const currentDefaultTabNumbers = (
       await db.buffers
-        .filter((buffer) => buffer.label.startsWith(fallbackBuffer.label))
+        .filter((buffer) =>
+          buffer.label.startsWith(fallbackBuffer.label) &&
+          newBuffer?.metricsViewState
+            ? buffer.metricsViewState !== undefined
+            : true,
+        )
         .toArray()
     )
       .map((buffer) =>

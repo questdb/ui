@@ -470,7 +470,7 @@ const Schema = ({
                         </Button>
                       }
                     >
-                      <Tooltip>Add Metrics</Tooltip>
+                      <Tooltip>Add metrics</Tooltip>
                     </PopperHover>
                   )}
                   {!selectOpen && (
