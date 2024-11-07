@@ -3251,6 +3251,7 @@ __metadata:
     "@types/draggabilly": "npm:^2.1.6"
     "@types/echarts": "npm:^4.9.22"
     "@types/jquery": "npm:3.5.1"
+    "@types/lodash.merge": "npm:^4.6.9"
     "@types/node": "npm:^17.0.41"
     "@types/ramda": "npm:0.27.40"
     "@types/react": "npm:16.9.35"
@@ -3306,6 +3307,7 @@ __metadata:
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
     lodash.isequal: "npm:^4.5.0"
+    lodash.merge: "npm:^4.6.2"
     mini-css-extract-plugin: "npm:^2.6.0"
     monaco-editor: "npm:^0.44.0"
     posthog-js: "npm:^1.131.2"
@@ -5949,6 +5951,22 @@ __metadata:
   version: 0.0.29
   resolution: "@types/json5@npm:0.0.29"
   checksum: 10/4e5aed58cabb2bbf6f725da13421aa50a49abb6bc17bfab6c31b8774b073fa7b50d557c61f961a09a85f6056151190f8ac95f13f5b48136ba5841f7d4484ec56
+  languageName: node
+  linkType: hard
+
+"@types/lodash.merge@npm:^4.6.9":
+  version: 4.6.9
+  resolution: "@types/lodash.merge@npm:4.6.9"
+  dependencies:
+    "@types/lodash": "npm:*"
+  checksum: 10/d0dd6654547c9d8d905184d14aa5c2a37a1ed1c3204f5ab20b7d591a05f34859ef09d3b72c065e94ca1989abf9109eb8230f67c4d64a5768b1d65b9ed8baf8e7
+  languageName: node
+  linkType: hard
+
+"@types/lodash@npm:*":
+  version: 4.17.13
+  resolution: "@types/lodash@npm:4.17.13"
+  checksum: 10/ddb34e20810c71be2d9445bcc4b64ec25b83976738454de709854b79c7f655b03704b76235445699956d65012987720e0e429a35489de65495cdb5420202d905
   languageName: node
   linkType: hard
 

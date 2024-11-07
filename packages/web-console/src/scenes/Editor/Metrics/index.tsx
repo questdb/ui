@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react"
 import styled from "styled-components"
-import { Box, Button, Select } from "@questdb/react-components"
+import { Box, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
 import { MetricDuration } from "./utils"
@@ -13,6 +13,7 @@ import { Metric as MetricComponent } from "./metric"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
+import merge from "lodash.merge"
 
 const Root = styled.div`
   display: flex;
@@ -20,7 +21,7 @@ const Root = styled.div`
   width: 100%;
   height: 100%;
   background: #2c2e3d;
-  padding-bottom: calc(4.5rem + 2.5rem + 2.5rem);
+  padding-bottom: calc(4.5rem);
 `
 
 const Toolbar = styled(Box).attrs({
@@ -65,8 +66,10 @@ const GlobalInfo = styled(Box).attrs({
   margin: auto;
 `
 
+const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
+
 export const Metrics = () => {
-  const { activeBuffer, buffers } = useEditor()
+  const { activeBuffer, updateBuffer, buffers } = useEditor()
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     (activeBuffer?.metricsViewState?.metricDuration as MetricDuration) ??
       MetricDuration.SEVEN_DAYS,
@@ -76,15 +79,32 @@ export const Metrics = () => {
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
 
-  const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
+  const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
   useEffect(() => {
-    const metrics = buffers.find((b) => b.id === activeBuffer?.id)
-      ?.metricsViewState?.metrics
+    const metrics = buffer?.metricsViewState?.metrics
+    const metricDuration = buffer?.metricsViewState?.metricDuration
     if (metrics) {
       setMetrics(metrics)
     }
+    if (metricDuration) {
+      setMetricDuration(metricDuration)
+    }
   }, [buffers, activeBuffer])
+
+  useEffect(() => {
+    if (
+      buffer?.id &&
+      metricDuration !== buffer?.metricsViewState?.metricDuration
+    ) {
+      const merged = merge(buffer, {
+        metricsViewState: {
+          metricDuration,
+        },
+      })
+      updateBuffer(buffer.id, merged)
+    }
+  }, [metricDuration])
 
   if (!telemetryConfig?.enabled) {
     return (

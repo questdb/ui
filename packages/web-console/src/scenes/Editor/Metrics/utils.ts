@@ -1,7 +1,13 @@
 export enum MetricType {
-  ROWS_APPLIED = "Write throughput",
-  LATENCY = "Latency in ms",
+  ROWS_APPLIED = "Rows applied",
+  LATENCY = "Latency",
   WRITE_AMPLIFICATION = "Write amplification",
+}
+
+export const metricTypeLabel: Record<MetricType, string> = {
+  [MetricType.ROWS_APPLIED]: "Write throughput",
+  [MetricType.LATENCY]: "Read latency in ms",
+  [MetricType.WRITE_AMPLIFICATION]: "Write amplification",
 }
 
 export enum MetricDuration {

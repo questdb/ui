@@ -6597,6 +6597,7 @@ const RAW_RUNTIME_STATE =
           ["@types/draggabilly", "npm:2.1.6"],\
           ["@types/echarts", "npm:4.9.22"],\
           ["@types/jquery", "npm:3.5.1"],\
+          ["@types/lodash.merge", "npm:4.6.9"],\
           ["@types/node", "npm:17.0.45"],\
           ["@types/ramda", "npm:0.27.40"],\
           ["@types/react", "npm:17.0.2"],\
@@ -6652,6 +6653,7 @@ const RAW_RUNTIME_STATE =
           ["js-base64", "npm:3.7.7"],\
           ["js-sha256", "npm:0.11.0"],\
           ["lodash.isequal", "npm:4.5.0"],\
+          ["lodash.merge", "npm:4.6.2"],\
           ["mini-css-extract-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.6"],\
           ["monaco-editor", "npm:0.44.0"],\
           ["posthog-js", "npm:1.131.2"],\
@@ -10859,6 +10861,23 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/@types-lodash-npm-4.14.199-39fe418e7a-340aabe9b0.zip/node_modules/@types/lodash/",\
         "packageDependencies": [\
           ["@types/lodash", "npm:4.14.199"]\
+        ],\
+        "linkType": "HARD"\
+      }],\
+      ["npm:4.17.13", {\
+        "packageLocation": "./.yarn/cache/@types-lodash-npm-4.17.13-ec44e3530a-ddb34e2081.zip/node_modules/@types/lodash/",\
+        "packageDependencies": [\
+          ["@types/lodash", "npm:4.17.13"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["@types/lodash.merge", [\
+      ["npm:4.6.9", {\
+        "packageLocation": "./.yarn/cache/@types-lodash.merge-npm-4.6.9-a6df58a50c-d0dd665454.zip/node_modules/@types/lodash.merge/",\
+        "packageDependencies": [\
+          ["@types/lodash.merge", "npm:4.6.9"],\
+          ["@types/lodash", "npm:4.17.13"]\
         ],\
         "linkType": "HARD"\
       }]\

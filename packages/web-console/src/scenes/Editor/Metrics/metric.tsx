@@ -1,6 +1,12 @@
 import React, { useEffect, useState, useContext } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
-import { MetricDuration, MetricType, Latency, RowsApplied } from "./utils"
+import {
+  MetricDuration,
+  MetricType,
+  Latency,
+  RowsApplied,
+  metricTypeLabel,
+} from "./utils"
 import { QuestContext } from "../../../providers"
 import { latency as latencySQL, rowsApplied as rowsAppliedSQL } from "./queries"
 import * as QuestDB from "../../../utils/questdb"
@@ -108,7 +114,7 @@ export const Metric = ({
     return (
       <MetricInfoRoot>
         <Error size="18px" />
-        Cannot load metric: {metric.metricType}
+        Cannot load metric: {metricTypeLabel[metric.metricType]}
       </MetricInfoRoot>
     )
 
@@ -126,7 +132,7 @@ export const Metric = ({
       data={data}
       loading={loading}
       duration={metricDuration}
-      label={`${tableName}: ${metric.metricType as unknown as string}`}
+      label={`${tableName}: ${metricTypeLabel[metric.metricType]}`}
       yValue={graphDataConfigs[metric.metricType].yValue}
     />
   )
