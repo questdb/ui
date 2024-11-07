@@ -119,9 +119,11 @@ export const Metric = ({
       </MetricInfoRoot>
     )
 
+  if (!data) return null
+
   return (
     <Graph
-      data={data ?? [[], []]}
+      data={data}
       loading={loading}
       duration={metricDuration}
       label={`${tableName}: ${metric.metricType as unknown as string}`}

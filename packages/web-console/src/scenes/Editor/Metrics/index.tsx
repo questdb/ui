@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react"
 import styled from "styled-components"
-import { Box, Select } from "@questdb/react-components"
-import { Text } from "../../../components"
+import { Box, Button, Select } from "@questdb/react-components"
+import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
 import { MetricDuration } from "./utils"
 import { Time } from "@styled-icons/boxicons-regular"
@@ -10,6 +10,9 @@ import { format } from "date-fns"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
 import { Metric as MetricComponent } from "./metric"
+import { useSelector } from "react-redux"
+import { selectors } from "../../../store"
+import { ExternalLink } from "@styled-icons/remix-line"
 
 const Root = styled.div`
   display: flex;
@@ -35,6 +38,7 @@ const Header = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
   color: ${({ theme }) => theme.color.foreground};
+  margin-bottom: 1rem;
 `
 
 const Charts = styled(Box).attrs({
@@ -54,7 +58,7 @@ const Charts = styled(Box).attrs({
   }
 `
 
-const GlobalError = styled(Box).attrs({
+const GlobalInfo = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
@@ -70,6 +74,7 @@ export const Metrics = () => {
   const userLocale = useMemo(fetchUserLocale, [])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
 
   const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
 
@@ -80,6 +85,37 @@ export const Metrics = () => {
       setMetrics(metrics)
     }
   }, [buffers, activeBuffer])
+
+  if (!telemetryConfig?.enabled) {
+    return (
+      <Root>
+        <GlobalInfo>
+          <Box gap="1.5rem" flexDirection="column">
+            <Header>Metrics unavailable</Header>
+            <Text color="foreground">
+              Enable Telemetry to access WAL table metrics.
+            </Text>
+            <Text color="foreground">
+              Set <code>telemetry.enabled</code> in your server.conf file and
+              restart the server.
+            </Text>
+            <Link
+              color="cyan"
+              hoverColor="cyan"
+              href="https://questdb.io/docs/configuration/#telemetry"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Box align="center" gap="0.25rem">
+                <ExternalLink size="16px" />
+                Documentation
+              </Box>
+            </Link>
+          </Box>
+        </GlobalInfo>
+      </Root>
+    )
+  }
 
   return (
     <Root>

@@ -4,13 +4,8 @@ import { MetricDuration } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
 import { ThemeContext } from "styled-components"
 import { Box } from "@questdb/react-components"
-
-const NO_DATA_TEXT = "No data available for this period"
-const TELEMETRY_DISABLED_TEXT = "Enable Telemetry to see metrics"
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -53,15 +48,7 @@ export const Graph = ({ label, data, duration, yValue, loading }: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const theme = useContext(ThemeContext)
-
-  let featureUnavailableText: string
-  if (!telemetryConfig?.enabled) {
-    featureUnavailableText = TELEMETRY_DISABLED_TEXT
-  } else {
-    featureUnavailableText = NO_DATA_TEXT
-  }
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -101,34 +88,32 @@ export const Graph = ({ label, data, duration, yValue, loading }: Props) => {
   return (
     <Root ref={graphRootRef}>
       <Header>{label}</Header>
-      {!loading && (
-        <UplotReact
-          options={{
-            ...graphOptions,
-            height: 200,
-            width: graphRootRef.current?.clientWidth
-              ? graphRootRef.current.clientWidth - 22
-              : 0,
-          }}
-          data={data}
-          onCreate={(uplot) => {
-            uPlotRef.current = uplot
-            if (uplot.data[0].length === 0 || !telemetryConfig?.enabled) {
-              const noData = document.createElement("div")
-              noData.innerText = featureUnavailableText
-              noData.style.position = "absolute"
-              noData.style.left = "50%"
-              noData.style.top = "50%"
-              noData.style.transform = "translate(-50%, -50%)"
-              noData.style.color = theme.color.gray2
-              noData.style.fontSize = "1.2rem"
-              noData.style.width = "100%"
-              noData.style.textAlign = "center"
-              uplot.over.appendChild(noData)
-            }
-          }}
-        />
-      )}
+      <UplotReact
+        options={{
+          ...graphOptions,
+          height: 200,
+          width: graphRootRef.current?.clientWidth
+            ? graphRootRef.current.clientWidth - 22
+            : 0,
+        }}
+        data={data}
+        onCreate={(uplot) => {
+          uPlotRef.current = uplot
+          if (data[0].length === 0) {
+            const noData = document.createElement("div")
+            noData.innerText = "No data available for this period"
+            noData.style.position = "absolute"
+            noData.style.left = "50%"
+            noData.style.top = "50%"
+            noData.style.transform = "translate(-50%, -50%)"
+            noData.style.color = theme.color.gray2
+            noData.style.fontSize = "1.2rem"
+            noData.style.width = "100%"
+            noData.style.textAlign = "center"
+            uplot.over.appendChild(noData)
+          }
+        }}
+      />
       <Label>
         <span ref={timeRef} />
         <LabelValue ref={valueRef} />
