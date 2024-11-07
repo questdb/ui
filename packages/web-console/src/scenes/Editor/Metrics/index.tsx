@@ -81,6 +81,20 @@ export const Metrics = () => {
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
+  const handleRemoveMetric = (metric: Metric) => {
+    if (buffer?.id && buffer?.metricsViewState?.metrics) {
+      const newMetrics = buffer?.metricsViewState?.metrics
+        .filter((m) => m.position !== metric.position)
+        .map((m, index) => ({ ...m, position: index }))
+      updateBuffer(buffer?.id, {
+        metricsViewState: {
+          ...buffer?.metricsViewState,
+          metrics: newMetrics,
+        },
+      })
+    }
+  }
+
   useEffect(() => {
     const metrics = buffer?.metricsViewState?.metrics
     const metricDuration = buffer?.metricsViewState?.metricDuration
@@ -197,6 +211,7 @@ export const Metrics = () => {
                 key={index}
                 metric={metric}
                 metricDuration={metricDuration}
+                onRemove={handleRemoveMetric}
               />
             ))}
       </Charts>

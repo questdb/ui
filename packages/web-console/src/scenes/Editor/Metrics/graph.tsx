@@ -7,6 +7,12 @@ import UplotReact from "uplot-react"
 import { ThemeContext } from "styled-components"
 import { Box } from "@questdb/react-components"
 
+const Actions = styled.div`
+  position: absolute;
+  right: 0;
+  top: 0;
+`
+
 const Root = styled(Box).attrs({
   align: "center",
   flexDirection: "column",
@@ -15,13 +21,24 @@ const Root = styled(Box).attrs({
   position: relative;
   background-color: ${({ theme }) => theme.color.backgroundLighter};
   height: 25rem;
-  padding: 1rem;
 `
 
-const Header = styled.span`
+const Header = styled(Box).attrs({ align: "center", justifyContent: "center" })`
+  position: relative;
+  width: 100%;
+  padding: 1rem 0;
+`
+
+const HeaderText = styled.span`
   font-size: 1.4rem;
   font-weight: 600;
-  margin-bottom: 1rem;
+`
+
+const GraphWrapper = styled(Box).attrs({
+  flexDirection: "column",
+  align: "center",
+})`
+  padding: 1rem 0;
 `
 
 const Label = styled.div`
@@ -42,9 +59,17 @@ type Props = {
   data: uPlot.AlignedData
   duration: MetricDuration
   yValue: (rawValue: number) => string
+  actions?: React.ReactNode
 }
 
-export const Graph = ({ label, data, duration, yValue, loading }: Props) => {
+export const Graph = ({
+  label,
+  data,
+  duration,
+  yValue,
+  loading,
+  actions,
+}: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
@@ -87,37 +112,40 @@ export const Graph = ({ label, data, duration, yValue, loading }: Props) => {
 
   return (
     <Root ref={graphRootRef}>
-      <Header>{label}</Header>
-      <UplotReact
-        options={{
-          ...graphOptions,
-          height: 200,
-          width: graphRootRef.current?.clientWidth
-            ? graphRootRef.current.clientWidth - 22
-            : 0,
-        }}
-        data={data}
-        onCreate={(uplot) => {
-          uPlotRef.current = uplot
-          if (data[0].length === 0) {
-            const noData = document.createElement("div")
-            noData.innerText = "No data available for this period"
-            noData.style.position = "absolute"
-            noData.style.left = "50%"
-            noData.style.top = "50%"
-            noData.style.transform = "translate(-50%, -50%)"
-            noData.style.color = theme.color.gray2
-            noData.style.fontSize = "1.2rem"
-            noData.style.width = "100%"
-            noData.style.textAlign = "center"
-            uplot.over.appendChild(noData)
-          }
-        }}
-      />
-      <Label>
-        <span ref={timeRef} />
-        <LabelValue ref={valueRef} />
-      </Label>
+      <Header>
+        <HeaderText>{label}</HeaderText>
+        <Actions>{actions}</Actions>
+      </Header>
+      <GraphWrapper>
+        <UplotReact
+          options={{
+            ...graphOptions,
+            height: 200,
+            width: graphRootRef.current?.clientWidth ?? 0,
+          }}
+          data={data}
+          onCreate={(uplot) => {
+            uPlotRef.current = uplot
+            if (data[0].length === 0) {
+              const noData = document.createElement("div")
+              noData.innerText = "No data available for this period"
+              noData.style.position = "absolute"
+              noData.style.left = "50%"
+              noData.style.top = "50%"
+              noData.style.transform = "translate(-50%, -50%)"
+              noData.style.color = theme.color.gray2
+              noData.style.fontSize = "1.2rem"
+              noData.style.width = "100%"
+              noData.style.textAlign = "center"
+              uplot.over.appendChild(noData)
+            }
+          }}
+        />
+        <Label>
+          <span ref={timeRef} />
+          <LabelValue ref={valueRef} />
+        </Label>
+      </GraphWrapper>
     </Root>
   )
 }

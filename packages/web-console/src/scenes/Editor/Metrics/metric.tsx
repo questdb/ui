@@ -13,8 +13,14 @@ import * as QuestDB from "../../../utils/questdb"
 import { Graph } from "./graph"
 import uPlot from "uplot"
 import styled from "styled-components"
-import { Box, Loader } from "@questdb/react-components"
-import { Error } from "@styled-icons/boxicons-regular"
+import {
+  Box,
+  Button,
+  ForwardRef,
+  Loader,
+  DropdownMenu,
+} from "@questdb/react-components"
+import { Error, Menu, Trash } from "@styled-icons/boxicons-regular"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -24,12 +30,18 @@ const MetricInfoRoot = styled(Box).attrs({
   height: 25rem;
 `
 
+const DropdownMenuContent = styled(DropdownMenu.Content)`
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
 export const Metric = ({
   metric,
   metricDuration,
+  onRemove,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
+  onRemove: (metric: MetricItem) => void
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(true)
@@ -134,6 +146,24 @@ export const Metric = ({
       duration={metricDuration}
       label={`${tableName}: ${metricTypeLabel[metric.metricType]}`}
       yValue={graphDataConfigs[metric.metricType].yValue}
+      actions={
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <ForwardRef>
+              <Button skin="transparent">
+                <Menu size="18px" />
+              </Button>
+            </ForwardRef>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenuContent>
+              <DropdownMenu.Item onClick={() => onRemove(metric)}>
+                <Trash size="18px" /> Remove
+              </DropdownMenu.Item>
+            </DropdownMenuContent>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      }
     />
   )
 }
