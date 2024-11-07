@@ -70,6 +70,7 @@ import { NotificationType } from "../../types"
 import { Checkbox } from "./checkbox"
 import { AddChart } from "@styled-icons/material"
 import { useEditor } from "../../providers/EditorProvider"
+import { MetricDuration } from "../../scenes/Editor/Metrics/utils"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -462,6 +463,7 @@ const Schema = ({
                             addBuffer({
                               metricsViewState: {
                                 metrics: [],
+                                metricDuration: MetricDuration.SEVEN_DAYS,
                               },
                             })
                           }}
