@@ -83,12 +83,14 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
               <Form.Item name="tableId" label="Table name">
                 <Form.Select
                   name="tableId"
-                  options={tables.map((t) => {
-                    return {
-                      label: t.table_name,
-                      value: t.id,
-                    }
-                  })}
+                  options={tables
+                    .filter((t) => t.walEnabled)
+                    .map((t) => {
+                      return {
+                        label: t.table_name,
+                        value: t.id,
+                      }
+                    })}
                 />
               </Form.Item>
               <Form.Item name="metricType" label="Metric type">
