@@ -34,7 +34,7 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
           <Button
             skin="secondary"
             prefixIcon={<AddChart size="18px" />}
-            onClick={() => onOpenChange(true)}
+            onClick={() => onOpenChange(!open)}
           >
             Add widget
           </Button>

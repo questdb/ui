@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react"
 import styled from "styled-components"
-import { Box, Select } from "@questdb/react-components"
+import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
 import { MetricDuration } from "./utils"
@@ -14,6 +14,7 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
 import merge from "lodash.merge"
+import { AddChart } from "@styled-icons/material"
 
 const Root = styled.div`
   display: flex;
@@ -45,8 +46,8 @@ const Header = styled(Text)`
 const Charts = styled(Box).attrs({
   align: "flex-start",
   gap: "2.5rem",
-})`
-  align-content: flex-start;
+})<{ noMetrics: boolean }>`
+  align-content: ${({ noMetrics }) => (noMetrics ? "center" : "flex-start")};
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
@@ -202,7 +203,21 @@ export const Metrics = () => {
           />
         </Box>
       </Toolbar>
-      <Charts>
+      <Charts noMetrics={metrics.length === 0}>
+        {metrics.length === 0 && (
+          <GlobalInfo>
+            <Box gap="1.5rem" flexDirection="column">
+              <Header>Add your first widget to see metrics</Header>
+              <Button
+                skin="secondary"
+                onClick={() => setDialogOpen(true)}
+                prefixIcon={<AddChart size="18px" />}
+              >
+                Add widget
+              </Button>
+            </Box>
+          </GlobalInfo>
+        )}
         {metrics &&
           metrics
             .sort((a, b) => a.position - b.position)
