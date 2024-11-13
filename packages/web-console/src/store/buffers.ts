@@ -32,7 +32,7 @@ export enum BufferType {
 }
 
 export type Metric = {
-  tableId: number
+  tableId?: number
   metricType: MetricType
   position: number
 }

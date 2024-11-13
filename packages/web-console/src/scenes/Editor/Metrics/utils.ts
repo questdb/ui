@@ -71,3 +71,50 @@ export const minutesToDays = (durationInMinutes: number) =>
 
 export const minutesToHours = (durationInMinutes: number) =>
   durationInMinutes / 60
+
+export const xAxisFormat = {
+  [MetricDuration.TEN_MINUTES]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  [MetricDuration.THIRTY_MINUTES]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  [MetricDuration.ONE_HOUR]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  [MetricDuration.THREE_HOURS]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  [MetricDuration.SIX_HOURS]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+    }),
+  [MetricDuration.TWELVE_HOURS]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+    }),
+  [MetricDuration.TWENTY_FOUR_HOURS]: (rawValue: number) =>
+    new Date(rawValue).toLocaleTimeString(navigator.language, {
+      hour: "2-digit",
+    }),
+  [MetricDuration.THREE_DAYS]: (rawValue: number) =>
+    new Date(rawValue).toLocaleDateString(navigator.language, {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+  [MetricDuration.SEVEN_DAYS]: (rawValue: number) =>
+    new Date(rawValue).toLocaleDateString(navigator.language, {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+}

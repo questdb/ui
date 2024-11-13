@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef } from "react"
 import styled from "styled-components"
-import { MetricDuration } from "./utils"
+import { MetricDuration, xAxisFormat } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -8,9 +8,7 @@ import { ThemeContext } from "styled-components"
 import { Box } from "@questdb/react-components"
 
 const Actions = styled.div`
-  position: absolute;
-  right: 0;
-  top: 0;
+  margin-right: 0;
 `
 
 const Root = styled(Box).attrs({
@@ -23,15 +21,22 @@ const Root = styled(Box).attrs({
   height: 25rem;
 `
 
-const Header = styled(Box).attrs({ align: "center", justifyContent: "center" })`
+const BeforeLabel = styled.div`
+  margin-left: 0;
+`
+
+const Header = styled(Box).attrs({
+  align: "center",
+  justifyContent: "space-between",
+})`
   position: relative;
   width: 100%;
-  padding: 1rem 0;
 `
 
 const HeaderText = styled.span`
   font-size: 1.4rem;
   font-weight: 600;
+  padding: 0 1rem;
 `
 
 const GraphWrapper = styled(Box).attrs({
@@ -55,6 +60,7 @@ const LabelValue = styled.span`
 
 type Props = {
   label: string
+  beforeLabel?: React.ReactNode
   loading?: boolean
   data: uPlot.AlignedData
   duration: MetricDuration
@@ -64,6 +70,7 @@ type Props = {
 
 export const Graph = ({
   label,
+  beforeLabel,
   data,
   duration,
   yValue,
@@ -87,14 +94,7 @@ export const Graph = ({
     duration,
     timeRef,
     valueRef,
-    xValue: (rawValue, index, ticks) =>
-      index === 0 || index === ticks.length - 1
-        ? new Date(rawValue).toLocaleTimeString(navigator.language, {
-            hour: "2-digit",
-            minute: "2-digit",
-            hourCycle: "h23",
-          })
-        : null,
+    xValue: xAxisFormat[duration],
     yValue,
   })
 
@@ -113,7 +113,10 @@ export const Graph = ({
   return (
     <Root ref={graphRootRef}>
       <Header>
-        <HeaderText>{label}</HeaderText>
+        <Box gap="0.5rem" align="center">
+          <BeforeLabel>{beforeLabel}</BeforeLabel>
+          <HeaderText>{label}</HeaderText>
+        </Box>
         <Actions>{actions}</Actions>
       </Header>
       <GraphWrapper>

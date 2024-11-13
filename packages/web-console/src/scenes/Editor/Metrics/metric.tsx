@@ -19,8 +19,12 @@ import {
   ForwardRef,
   Loader,
   DropdownMenu,
+  Select,
 } from "@questdb/react-components"
 import { Error, Menu, Trash } from "@styled-icons/boxicons-regular"
+import { Table } from "@styled-icons/remix-line"
+import { useSelector } from "react-redux"
+import { selectors } from "../../../store"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -38,21 +42,30 @@ export const Metric = ({
   metric,
   metricDuration,
   onRemove,
+  onTableChange,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
   onRemove: (metric: MetricItem) => void
+  onTableChange: (metric: MetricItem, tableId: number) => void
 }) => {
   const { quest } = useContext(QuestContext)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [data, setData] = useState<uPlot.AlignedData>()
-  const [tableName, setTableName] = useState<string>()
 
-  const fetchLatency = async () =>
-    quest.query<Latency>(latencySQL(metric.tableId, metricDuration))
+  const tables = useSelector(selectors.query.getTables)
 
-  const fetchRowsApplied = async () =>
-    quest.query<RowsApplied>(rowsAppliedSQL(metric.tableId, metricDuration))
+  const fetchLatency = async () => {
+    if (!metric.tableId) return Promise.reject()
+    return quest.query<Latency>(latencySQL(metric.tableId, metricDuration))
+  }
+
+  const fetchRowsApplied = async () => {
+    if (!metric.tableId) return Promise.reject()
+    return quest.query<RowsApplied>(
+      rowsAppliedSQL(metric.tableId, metricDuration),
+    )
+  }
 
   const fetchers = {
     [MetricType.LATENCY]: fetchLatency,
@@ -95,34 +108,23 @@ export const Metric = ({
       }
     } catch (err) {
       console.error(err)
-    }
-  }
-
-  const fetchTableName = async () => {
-    try {
-      const response = await quest.query<{ table_name: string }>(
-        `SELECT table_name FROM tables() WHERE id = ${metric.tableId}`,
-      )
-      if (response && response.type === QuestDB.Type.DQL) {
-        setTableName(response.data[0].table_name)
-      }
-    } catch (err) {
-      console.error(err)
+    } finally {
+      setLoading(false)
     }
   }
 
   const fetchAll = async () => {
     setLoading(true)
-    Promise.all([fetchMetric(), fetchTableName()]).finally(() => {
-      setLoading(false)
-    })
+    await fetchMetric()
   }
 
   useEffect(() => {
-    fetchAll()
+    if (metric.tableId) {
+      fetchAll()
+    }
   }, [metric, metricDuration])
 
-  if ((!data || !tableName) && !loading)
+  if (!data && !loading && metric.tableId)
     return (
       <MetricInfoRoot>
         <Error size="18px" />
@@ -137,15 +139,31 @@ export const Metric = ({
       </MetricInfoRoot>
     )
 
-  if (!data) return null
-
   return (
     <Graph
-      data={data}
+      data={metric.tableId && data ? data : [[], []]}
       loading={loading}
       duration={metricDuration}
-      label={`${tableName}: ${metricTypeLabel[metric.metricType]}`}
+      label={metricTypeLabel[metric.metricType]}
       yValue={graphDataConfigs[metric.metricType].yValue}
+      beforeLabel={
+        <Select
+          value={metric.tableId}
+          name="metric-select-table"
+          prefixIcon={<Table size="18px" />}
+          options={tables
+            .filter((t) => t.walEnabled)
+            .map((t) => {
+              return {
+                label: t.table_name,
+                value: t.id,
+              }
+            })}
+          onChange={(e) => {
+            onTableChange(metric, parseInt(e.target.value))
+          }}
+        />
+      }
       actions={
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>

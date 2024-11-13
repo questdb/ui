@@ -96,6 +96,20 @@ export const Metrics = () => {
     }
   }
 
+  const handleTableChange = (metric: Metric, tableId: number) => {
+    if (buffer?.id && buffer?.metricsViewState?.metrics) {
+      const newMetrics = buffer?.metricsViewState?.metrics.map((m) =>
+        m.position === metric.position ? { ...m, tableId } : m,
+      )
+      updateBuffer(buffer?.id, {
+        metricsViewState: {
+          ...buffer?.metricsViewState,
+          metrics: newMetrics,
+        },
+      })
+    }
+  }
+
   useEffect(() => {
     const metrics = buffer?.metricsViewState?.metrics
     const metricDuration = buffer?.metricsViewState?.metricDuration
@@ -227,6 +241,7 @@ export const Metrics = () => {
                 metric={metric}
                 metricDuration={metricDuration}
                 onRemove={handleRemoveMetric}
+                onTableChange={handleTableChange}
               />
             ))}
       </Charts>
