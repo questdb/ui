@@ -31,7 +31,7 @@ const Metric = styled(Box).attrs({ flexDirection: "column", gap: "0" })`
   cursor: pointer;
   border: 1px solid transparent;
   padding-bottom: 2rem;
-  background: ${({ theme }) => theme.color.black70};
+  background: ${({ theme }) => theme.color.backgroundLighter};
 
   &:hover {
     border-color: ${({ theme }) => theme.color.comment};
