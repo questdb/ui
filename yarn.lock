@@ -3324,6 +3324,7 @@ __metadata:
     react-popper: "npm:2.2.3"
     react-redux: "npm:7.2.0"
     react-refresh: "npm:^0.14.0"
+    react-select-search: "npm:^4.1.8"
     react-toastify: "npm:^9.1.3"
     react-transition-group: "npm:4.4.1"
     react-virtuoso: "npm:^2.2.6"
@@ -18029,6 +18030,17 @@ __metadata:
     "@types/react":
       optional: true
   checksum: 10/f0646ac384ce3852d1f41e30a9f9e251b11cf3b430d1d114c937c8fa7f90a895c06378d0d6b6ff0b2d00cbccf15e845921944fd6074ae67a0fb347a718106d88
+  languageName: node
+  linkType: hard
+
+"react-select-search@npm:^4.1.8":
+  version: 4.1.8
+  resolution: "react-select-search@npm:4.1.8"
+  peerDependencies:
+    prop-types: ^15.8.1
+    react: ^18.0.1 || ^17.0.1
+    react-dom: ^18.0.1 || ^17.0.1
+  checksum: 10/8f587c1f22b147098ad7913e63a3eb6782a2b9c18988115c837f42649e5f800c0c2ca1dd22fc8b56332bb714be65cb24c085c21d367a1e3ee345fbafea13d692
   languageName: node
   linkType: hard
 

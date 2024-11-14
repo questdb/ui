@@ -6670,6 +6670,7 @@ const RAW_RUNTIME_STATE =
           ["react-popper", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.2.3"],\
           ["react-redux", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.2.0"],\
           ["react-refresh", "npm:0.14.0"],\
+          ["react-select-search", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.1.8"],\
           ["react-toastify", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:9.1.3"],\
           ["react-transition-group", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.4.1"],\
           ["react-virtuoso", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.19.1"],\
@@ -25527,6 +25528,36 @@ const RAW_RUNTIME_STATE =
         ],\
         "packagePeers": [\
           "@types/react",\
+          "react"\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["react-select-search", [\
+      ["npm:4.1.8", {\
+        "packageLocation": "./.yarn/cache/react-select-search-npm-4.1.8-73f24dc680-8f587c1f22.zip/node_modules/react-select-search/",\
+        "packageDependencies": [\
+          ["react-select-search", "npm:4.1.8"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.1.8", {\
+        "packageLocation": "./.yarn/__virtual__/react-select-search-virtual-ab492d99fa/0/cache/react-select-search-npm-4.1.8-73f24dc680-8f587c1f22.zip/node_modules/react-select-search/",\
+        "packageDependencies": [\
+          ["react-select-search", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.1.8"],\
+          ["@types/prop-types", null],\
+          ["@types/react", "npm:17.0.2"],\
+          ["@types/react-dom", "npm:16.9.8"],\
+          ["prop-types", "npm:15.8.1"],\
+          ["react", "npm:17.0.2"],\
+          ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"]\
+        ],\
+        "packagePeers": [\
+          "@types/prop-types",\
+          "@types/react-dom",\
+          "@types/react",\
+          "prop-types",\
+          "react-dom",\
           "react"\
         ],\
         "linkType": "HARD"\

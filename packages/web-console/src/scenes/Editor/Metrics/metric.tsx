@@ -25,6 +25,7 @@ import { Error, Menu, Trash } from "@styled-icons/boxicons-regular"
 import { Table } from "@styled-icons/remix-line"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
+import SelectSearch from "react-select-search"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -147,22 +148,40 @@ export const Metric = ({
       label={metricTypeLabel[metric.metricType]}
       yValue={graphDataConfigs[metric.metricType].yValue}
       beforeLabel={
-        <Select
-          value={metric.tableId}
-          name="metric-select-table"
-          prefixIcon={<Table size="18px" />}
+        <SelectSearch
           options={tables
             .filter((t) => t.walEnabled)
             .map((t) => {
               return {
-                label: t.table_name,
+                name: t.table_name,
                 value: t.id,
               }
             })}
-          onChange={(e) => {
-            onTableChange(metric, parseInt(e.target.value))
-          }}
+          placeholder="Choose table"
+          onChange={(value) => onTableChange(metric, parseInt(value as string))}
+          onFocus={() => {}}
+          onBlur={() => {}}
+          search
+          {...(metric.tableId && {
+            value: metric.tableId as unknown as string,
+          })}
         />
+        // <Select
+        //   value={metric.tableId}
+        //   name="metric-select-table"
+        //   prefixIcon={<Table size="18px" />}
+        // options={tables
+        //   .filter((t) => t.walEnabled)
+        //   .map((t) => {
+        //     return {
+        //       label: t.table_name,
+        //       value: t.id,
+        //     }
+        //   })}
+        //   onChange={(e) => {
+        //     onTableChange(metric, parseInt(e.target.value))
+        //   }}
+        // />
       }
       actions={
         <DropdownMenu.Root>

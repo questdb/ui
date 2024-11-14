@@ -21,33 +21,26 @@ const StyledDescription = styled(Dialog.Description)`
 
 const Metrics = styled.div`
   display: grid;
-  gap: 1rem;
+  gap: 2rem;
   grid-template-columns: repeat(2, 1fr);
 `
 
-const Metric = styled(Box).attrs({ flexDirection: "column", gap: "1rem" })`
-  background: ${({ theme }) => theme.color.selectionDarker};
+const Metric = styled(Box).attrs({ flexDirection: "column", gap: "0" })`
+  /* background: ${({ theme }) => theme.color.selectionDarker}; */
   border-radius: 0.4rem;
   cursor: pointer;
   border: 1px solid transparent;
-  padding-bottom: 1rem;
-  transition: background 0.1s ease-in;
+  padding-bottom: 2rem;
+  background: ${({ theme }) => theme.color.black70};
 
   &:hover {
-    background: ${({ theme }) => theme.color.selection};
+    border-color: ${({ theme }) => theme.color.comment};
   }
 `
 
 const Image = styled(Box).attrs({ align: "center", justifyContent: "center" })`
   width: 100%;
   height: 10rem;
-  background: linear-gradient(
-    309deg,
-    rgba(30, 31, 37, 1) 0%,
-    rgba(36, 37, 47, 1) 100%
-  );
-  border-top-left-radius: 0.4rem;
-  border-top-right-radius: 0.4rem;
 `
 
 type Props = {
@@ -146,18 +139,6 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
               ))}
             </Metrics>
           </StyledDescription>
-
-          <Dialog.ActionButtons>
-            <Dialog.Close asChild>
-              <Button
-                prefixIcon={<Undo size={18} />}
-                skin="secondary"
-                onClick={() => onOpenChange(false)}
-              >
-                Dismiss
-              </Button>
-            </Dialog.Close>
-          </Dialog.ActionButtons>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
