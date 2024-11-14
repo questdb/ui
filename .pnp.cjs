@@ -5165,6 +5165,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["@date-fns/tz", [\
+      ["npm:1.2.0", {\
+        "packageLocation": "./.yarn/cache/@date-fns-tz-npm-1.2.0-3d4c196513-a9c2d32f98.zip/node_modules/@date-fns/tz/",\
+        "packageDependencies": [\
+          ["@date-fns/tz", "npm:1.2.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["@design-systems/utils", [\
       ["npm:2.12.0", {\
         "packageLocation": "./.yarn/cache/@design-systems-utils-npm-2.12.0-19602124b1-a4d16e0300.zip/node_modules/@design-systems/utils/",\
@@ -6571,6 +6580,7 @@ const RAW_RUNTIME_STATE =
           ["@babel/preset-env", "virtual:e49d39393ba37529f9a804f2bb1b00429525eeeacf4cbbbcc8cdb6781e1e2afa26e9710d4bd0ec7b88be3aaf8e9c0266d2a7856806e05f8a0512234efc8d0f28#npm:7.22.20"],\
           ["@babel/preset-react", "virtual:e49d39393ba37529f9a804f2bb1b00429525eeeacf4cbbbcc8cdb6781e1e2afa26e9710d4bd0ec7b88be3aaf8e9c0266d2a7856806e05f8a0512234efc8d0f28#npm:7.22.15"],\
           ["@babel/preset-typescript", "virtual:e49d39393ba37529f9a804f2bb1b00429525eeeacf4cbbbcc8cdb6781e1e2afa26e9710d4bd0ec7b88be3aaf8e9c0266d2a7856806e05f8a0512234efc8d0f28#npm:7.23.0"],\
+          ["@date-fns/tz", "npm:1.2.0"],\
           ["@docsearch/css", "npm:3.5.2"],\
           ["@docsearch/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.2"],\
           ["@hookform/resolvers", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.8.5"],\
@@ -6624,7 +6634,7 @@ const RAW_RUNTIME_STATE =
           ["core-js", "npm:3.33.0"],\
           ["cross-env", "npm:7.0.2"],\
           ["css-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.3"],\
-          ["date-fns", "npm:2.14.0"],\
+          ["date-fns", "npm:4.1.0"],\
           ["dexie", "npm:3.2.4"],\
           ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
           ["dotenv", "npm:10.0.0"],\
@@ -15220,10 +15230,10 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["date-fns", [\
-      ["npm:2.14.0", {\
-        "packageLocation": "./.yarn/cache/date-fns-npm-2.14.0-dd7ec830f5-e87106d6da.zip/node_modules/date-fns/",\
+      ["npm:4.1.0", {\
+        "packageLocation": "./.yarn/cache/date-fns-npm-4.1.0-764604ee0f-d5f6e9de5b.zip/node_modules/date-fns/",\
         "packageDependencies": [\
-          ["date-fns", "npm:2.14.0"]\
+          ["date-fns", "npm:4.1.0"]\
         ],\
         "linkType": "HARD"\
       }]\

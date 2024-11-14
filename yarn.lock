@@ -2221,6 +2221,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@date-fns/tz@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@date-fns/tz@npm:1.2.0"
+  checksum: 10/a9c2d32f98a5a5c655a7d3843046a5a36779b2ef0db803c608291976e6254e594a085777bf738379f50c7e9fc2ffebbf8bb836e9e9759a5ef2b703f91bb785de
+  languageName: node
+  linkType: hard
+
 "@design-systems/utils@npm:2.12.0":
   version: 2.12.0
   resolution: "@design-systems/utils@npm:2.12.0"
@@ -3225,6 +3232,7 @@ __metadata:
     "@babel/preset-env": "npm:^7.20.2"
     "@babel/preset-react": "npm:^7.17.12"
     "@babel/preset-typescript": "npm:^7.18.6"
+    "@date-fns/tz": "npm:^1.2.0"
     "@docsearch/css": "npm:^3.5.2"
     "@docsearch/react": "npm:^3.5.2"
     "@hookform/resolvers": "npm:2.8.5"
@@ -3278,7 +3286,7 @@ __metadata:
     core-js: "npm:^3.22.8"
     cross-env: "npm:7.0.2"
     css-loader: "npm:3.5.3"
-    date-fns: "npm:2.14.0"
+    date-fns: "npm:4.1.0"
     dexie: "npm:^3.2.4"
     dexie-react-hooks: "npm:^1.1.6"
     dotenv: "npm:^10.0.0"
@@ -9389,10 +9397,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"date-fns@npm:2.14.0":
-  version: 2.14.0
-  resolution: "date-fns@npm:2.14.0"
-  checksum: 10/e87106d6daada6964b3cc41a32bcc6883d7b4d3a2ce1b519a9efdbbcb666d271b936bbb5c33e6a486a272b7d11de4b5ab1d8ced69fc8a4dd2b9bac1f80a8c61f
+"date-fns@npm:4.1.0":
+  version: 4.1.0
+  resolution: "date-fns@npm:4.1.0"
+  checksum: 10/d5f6e9de5bbc52310f786099e18609289ed5e30af60a71e0646784c8185ddd1d0eebcf7c96b7faaaefc4a8366f3a3a4244d099b6d0866ee2bec80d1361e64342
   languageName: node
   linkType: hard
 

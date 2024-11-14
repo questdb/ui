@@ -65,6 +65,11 @@ const GlobalInfo = styled(Box).attrs({
   justifyContent: "center",
 })`
   margin: auto;
+
+  code {
+    background: #505368;
+    color: ${({ theme }) => theme.color.foreground};
+  }
 `
 
 const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
@@ -145,8 +150,12 @@ export const Metrics = () => {
               Enable Telemetry to access WAL table metrics.
             </Text>
             <Text color="foreground">
-              Set <code>telemetry.enabled</code> in your server.conf file and
-              restart the server.
+              Set <code>telemetry.enabled=true</code> in your server.conf file
+              and restart the server.
+            </Text>
+            <Text color="foreground">
+              Alternatively, set <code>QDB_TELEMETRY_ENABLED=true</code> ENV var
+              for the same effect.
             </Text>
             <Link
               color="cyan"
