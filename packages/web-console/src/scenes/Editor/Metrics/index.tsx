@@ -140,7 +140,7 @@ export const Metrics = () => {
     }
   }, [metricDuration])
 
-  if (!telemetryConfig?.enabled) {
+  if (telemetryConfig && !telemetryConfig.enabled) {
     return (
       <Root>
         <GlobalInfo>
