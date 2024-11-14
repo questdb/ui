@@ -26,6 +26,7 @@ import { Table } from "@styled-icons/remix-line"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import SelectSearch from "react-select-search"
+import isEqual from "lodash.isequal"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -53,6 +54,7 @@ export const Metric = ({
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<uPlot.AlignedData>()
+  const [lastMetric, setLastMetric] = useState<MetricItem>()
 
   const tables = useSelector(selectors.query.getTables)
 
@@ -99,6 +101,7 @@ export const Metric = ({
   }
 
   const fetchMetric = async () => {
+    setLoading(true)
     try {
       const response = await fetchers[metric.metricType]()
       if (response && response.type === QuestDB.Type.DQL) {
@@ -114,16 +117,18 @@ export const Metric = ({
     }
   }
 
-  const fetchAll = async () => {
-    setLoading(true)
-    await fetchMetric()
-  }
+  useEffect(() => {
+    if (!isEqual(metric, lastMetric) && metric.tableId) {
+      fetchMetric()
+      setLastMetric(metric)
+    }
+  }, [metric])
 
   useEffect(() => {
     if (metric.tableId) {
-      fetchAll()
+      fetchMetric()
     }
-  }, [metric, metricDuration])
+  }, [metricDuration])
 
   if (!data && !loading && metric.tableId)
     return (
