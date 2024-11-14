@@ -133,12 +133,12 @@ export const Metric = ({
       </MetricInfoRoot>
     )
 
-  if (loading)
-    return (
-      <MetricInfoRoot>
-        <Loader />
-      </MetricInfoRoot>
-    )
+  // if (loading)
+  //   return (
+  //     <MetricInfoRoot>
+  //       <Loader />
+  //     </MetricInfoRoot>
+  //   )
 
   return (
     <Graph
