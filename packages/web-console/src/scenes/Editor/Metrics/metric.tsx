@@ -60,6 +60,7 @@ export const Metric = ({
   const tables = useSelector(selectors.query.getTables)
 
   const intervalRef = React.useRef<NodeJS.Timeout>()
+  const focusListenerRef = React.useRef(false)
 
   const { autoRefreshTables } = useLocalStorage()
 
@@ -135,11 +136,21 @@ export const Metric = ({
     }
   }, [metricDuration])
 
+  const focusListener = () => {
+    if (focusListenerRef.current) {
+      fetchMetric()
+    }
+  }
+
   useEffect(() => {
     if (autoRefreshTables) {
       intervalRef.current = setInterval(() => fetchMetric(), 30000)
+      window.addEventListener("focus", focusListener)
+      focusListenerRef.current = true
     } else {
       clearInterval(intervalRef.current)
+      window.removeEventListener("focus", focusListener)
+      focusListenerRef.current = false
     }
   }, [autoRefreshTables])
 
