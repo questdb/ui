@@ -87,31 +87,34 @@ export const Metrics = () => {
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
-  const handleRemoveMetric = (metric: Metric) => {
-    if (buffer?.id && buffer?.metricsViewState?.metrics) {
-      const newMetrics = buffer?.metricsViewState?.metrics
-        .filter((m) => m.position !== metric.position)
-        .map((m, index) => ({ ...m, position: index }))
+  const updateMetrics = (metrics: Metric[]) => {
+    if (buffer?.id) {
       updateBuffer(buffer?.id, {
         metricsViewState: {
           ...buffer?.metricsViewState,
-          metrics: newMetrics,
+          metrics,
         },
       })
     }
   }
 
+  const handleRemoveMetric = (metric: Metric) => {
+    if (buffer?.id && buffer?.metricsViewState?.metrics) {
+      updateMetrics(
+        buffer?.metricsViewState?.metrics
+          .filter((m) => m.position !== metric.position)
+          .map((m, index) => ({ ...m, position: index })),
+      )
+    }
+  }
+
   const handleTableChange = (metric: Metric, tableId: number) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
-      const newMetrics = buffer?.metricsViewState?.metrics.map((m) =>
-        m.position === metric.position ? { ...m, tableId } : m,
+      updateMetrics(
+        buffer?.metricsViewState?.metrics.map((m) =>
+          m.position === metric.position ? { ...m, tableId } : m,
+        ),
       )
-      updateBuffer(buffer?.id, {
-        metricsViewState: {
-          ...buffer?.metricsViewState,
-          metrics: newMetrics,
-        },
-      })
     }
   }
 
