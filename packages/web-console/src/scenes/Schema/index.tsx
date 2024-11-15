@@ -31,6 +31,7 @@ import React, {
   useState,
   useContext,
   useReducer,
+  useCallback,
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
@@ -291,12 +292,12 @@ const Schema = ({
     })
   }, [])
 
-  const focusListener = () => {
+  const focusListener = useCallback(() => {
     if (listenerActiveRef.current) {
       void fetchTables()
       void fetchColumns()
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (autoRefreshTables) {

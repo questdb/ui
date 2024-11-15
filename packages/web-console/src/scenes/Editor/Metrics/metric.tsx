@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react"
+import React, { useEffect, useState, useContext, useCallback } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   MetricDuration,
@@ -136,11 +136,11 @@ export const Metric = ({
     }
   }, [metricDuration])
 
-  const focusListener = () => {
+  const focusListener = useCallback(() => {
     if (focusListenerRef.current) {
       fetchMetric()
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (autoRefreshTables) {
