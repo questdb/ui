@@ -4,13 +4,11 @@ export type Settings = Partial<{
   "release.version": string
   "acl.enabled": boolean
   "acl.basic.auth.realm.enabled": boolean
+  "acl.oidc.groups.encoded.in.token": boolean
   "acl.oidc.enabled": boolean
   "acl.oidc.client.id": string
   "acl.oidc.redirect.uri": string
   "acl.oidc.scope": string
-  "acl.oidc.host": string
-  "acl.oidc.port": number
-  "acl.oidc.tls.enabled": boolean
   "acl.oidc.authorization.endpoint": string
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean

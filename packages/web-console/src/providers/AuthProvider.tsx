@@ -77,14 +77,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   )
   const [state, dispatch] = useReducer(reducer, initialState)
 
-  const setAuthToken = (tokenResponse: AuthPayload) => {
-    if (tokenResponse.access_token) {
+  const setAuthToken = (tokenResponse: AuthPayload, settings: Settings) => {
+    if (tokenResponse.access_token && tokenResponse.id_token) {
+      tokenResponse.groups_encoded_in_token = settings["acl.oidc.groups.encoded.in.token"]
+      tokenResponse.expires_at = getTokenExpirationDate(tokenResponse.expires_in).toString() // convert from the sec offset
       setValue(
         StoreKey.AUTH_PAYLOAD,
-        JSON.stringify({
-          ...tokenResponse,
-          expires_at: getTokenExpirationDate(tokenResponse.expires_in), // convert from the sec offset
-        }),
+        JSON.stringify(tokenResponse),
       )
       // if the token payload does not contain the rolling refresh token, we'll keep the old one
       if (tokenResponse.refresh_token) {
@@ -119,7 +118,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       client_id: settings["acl.oidc.client.id"],
     })
     const tokenResponse = await response.json()
-    setAuthToken(tokenResponse)
+    setAuthToken(tokenResponse, settings)
     return tokenResponse
   }
 
@@ -175,15 +174,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       // User is authenticated already
       if (authPayload !== "") {
-        const token = JSON.parse(authPayload)
+        const tokenResponse = JSON.parse(authPayload)
         // Check if the token expired or is about to in 30 seconds
         if (
-          new Date(token.expires_at).getTime() - Date.now() < 30000 &&
+          new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000 &&
           getValue(StoreKey.AUTH_REFRESH_TOKEN) !== ""
         ) {
           await refreshAuthToken(settings)
         } else {
-          setSessionData(token)
+          setSessionData(tokenResponse)
         }
       } else {
         // User has just been redirected back from the OAuth2 provider and has the code
@@ -198,7 +197,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.origin + window.location.pathname,
             })
             const tokenResponse = await response.json()
-            setAuthToken(tokenResponse)
+            setAuthToken(tokenResponse, settings)
           } catch (e) {
             throw e
           }
@@ -253,7 +252,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
     window.location.href = getAuthorisationURL({
-      config: settings,
+      settings,
       code_challenge,
       login,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
