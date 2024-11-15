@@ -27,6 +27,7 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import SelectSearch from "react-select-search"
 import isEqual from "lodash.isequal"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -57,6 +58,10 @@ export const Metric = ({
   const [lastMetric, setLastMetric] = useState<MetricItem>()
 
   const tables = useSelector(selectors.query.getTables)
+
+  const intervalRef = React.useRef<NodeJS.Timeout>()
+
+  const { autoRefreshTables } = useLocalStorage()
 
   const fetchLatency = async () => {
     if (!metric.tableId) return Promise.reject()
@@ -129,6 +134,14 @@ export const Metric = ({
       fetchMetric()
     }
   }, [metricDuration])
+
+  useEffect(() => {
+    if (autoRefreshTables) {
+      intervalRef.current = setInterval(() => fetchMetric(), 30000)
+    } else {
+      clearInterval(intervalRef.current)
+    }
+  }, [autoRefreshTables])
 
   if (!data && !loading && metric.tableId)
     return (
