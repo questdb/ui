@@ -25,6 +25,7 @@ type Tab = {
   title: string
   favicon: string
   active: boolean
+  className?: string
 }
 
 const Root = styled(Box).attrs({
@@ -177,6 +178,7 @@ export const Tabs = () => {
                 favicon: mapTabIconToType(buffer),
                 title: buffer.label,
                 active: activeBuffer.id === buffer.id,
+                className: buffer.metricsViewState ? "metrics-tab" : "",
               } as Tab),
           )}
       />

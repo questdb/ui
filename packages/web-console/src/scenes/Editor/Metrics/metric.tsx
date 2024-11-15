@@ -162,13 +162,6 @@ export const Metric = ({
       </MetricInfoRoot>
     )
 
-  // if (loading)
-  //   return (
-  //     <MetricInfoRoot>
-  //       <Loader />
-  //     </MetricInfoRoot>
-  //   )
-
   return (
     <Graph
       data={metric.tableId && data ? data : [[], []]}
