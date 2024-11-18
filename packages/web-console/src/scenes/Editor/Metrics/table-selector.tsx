@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { Box, Input } from "@questdb/react-components"
 import { Table } from "@styled-icons/remix-line"
 import Highlighter from "react-highlight-words"
+import { useKeyPress } from "../../../components"
 
 type Option = {
   label: string
@@ -51,22 +52,26 @@ const Options = styled.ul`
   margin: 0;
   padding: 0.5rem;
   border-radius: 0.4rem;
+`
 
-  li {
-    display: flex;
-    align-items: center;
-    height: 3rem;
-    cursor: pointer;
-    padding: 0 1rem;
+const Item = styled.li<{ active: boolean }>`
+  display: flex;
+  align-items: center;
+  height: 3rem;
+  cursor: pointer;
+  padding: 0 1rem;
 
-    &:hover {
-      background: ${({ theme }) => theme.color.selection};
-    }
+  &:hover {
+    background: ${({ theme }) => theme.color.selection};
+  }
 
-    .highlight {
-      background-color: #7c804f;
-      color: ${({ theme }) => theme.color.foreground};
-    }
+  ${({ active, theme }) => `
+    background: ${active ? theme.color.selection : "transparent"};
+  `}
+
+  .highlight {
+    background-color: #7c804f;
+    color: ${({ theme }) => theme.color.foreground};
   }
 `
 
@@ -80,6 +85,14 @@ export const TableSelector = ({
   const [hasFocus, setHasFocus] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [query, setQuery] = useState(defaultValue)
+  const [keyIndex, setKeyIndex] = useState(-1)
+  const downPress = useKeyPress("ArrowDown")
+  const upPress = useKeyPress("ArrowUp")
+  const enterPress = useKeyPress("Enter")
+
+  const filteredOptions = options.filter((option) =>
+    query ? option.label.toLowerCase().includes(query.toLowerCase()) : true,
+  )
 
   useEffect(() => {
     if (!inputRef.current) return
@@ -110,9 +123,22 @@ export const TableSelector = ({
     }
   }, [defaultValue, inputRef, loading])
 
-  const filteredOptions = options.filter((option) =>
-    query ? option.label.toLowerCase().includes(query.toLowerCase()) : true,
-  )
+  useEffect(() => {
+    if (downPress) {
+      setKeyIndex(keyIndex < filteredOptions.length - 1 ? keyIndex + 1 : 0)
+    } else if (upPress) {
+      setKeyIndex(keyIndex > 0 ? keyIndex - 1 : filteredOptions.length - 1)
+    }
+  }, [downPress, upPress])
+
+  useEffect(() => {
+    if (enterPress && filteredOptions.length > 0) {
+      onSelect(filteredOptions[keyIndex].value)
+      inputRef.current!.value = filteredOptions[keyIndex].label
+      setHasFocus(false)
+      setQuery("")
+    }
+  }, [enterPress])
 
   return (
     <Root>
@@ -155,7 +181,8 @@ export const TableSelector = ({
       {hasFocus && (
         <Options>
           {filteredOptions.map((option) => (
-            <li
+            <Item
+              active={keyIndex === filteredOptions.indexOf(option)}
               key={option.value}
               onClick={() => {
                 inputRef.current!.value = option.label
@@ -169,7 +196,7 @@ export const TableSelector = ({
                 searchWords={[query ?? ""]}
                 textToHighlight={option.label}
               />
-            </li>
+            </Item>
           ))}
         </Options>
       )}
