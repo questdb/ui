@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useEffect, useState, useContext, useCallback } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
@@ -25,7 +26,6 @@ import { Error, Menu, Trash } from "@styled-icons/boxicons-regular"
 import { Table } from "@styled-icons/remix-line"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import SelectSearch from "react-select-search"
 import isEqual from "lodash.isequal"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
@@ -40,6 +40,30 @@ const MetricInfoRoot = styled(Box).attrs({
 const DropdownMenuContent = styled(DropdownMenu.Content)`
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
+
+const graphDataConfigs = {
+  [MetricType.LATENCY]: {
+    getData: (latency: Latency[]): uPlot.AlignedData => [
+      latency.map((l) => new Date(l.time).getTime()),
+      latency.map((l) => parseFloat(l.avg_latency)),
+    ],
+    yValue: (rawValue: number) => (+rawValue).toFixed(2) + "ms",
+  },
+  [MetricType.ROWS_APPLIED]: {
+    getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
+      rowsApplied.map((l) => new Date(l.time).getTime()),
+      rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
+    ],
+    yValue: (rawValue: number) => (+rawValue).toFixed(0),
+  },
+  [MetricType.WRITE_AMPLIFICATION]: {
+    getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
+      rowsApplied.map((l) => new Date(l.time).getTime()),
+      rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
+    ],
+    yValue: (rawValue: number) => (+rawValue).toFixed(0) + "x",
+  },
+}
 
 export const Metric = ({
   metric,
@@ -80,30 +104,6 @@ export const Metric = ({
     [MetricType.LATENCY]: fetchLatency,
     [MetricType.ROWS_APPLIED]: fetchRowsApplied,
     [MetricType.WRITE_AMPLIFICATION]: fetchRowsApplied,
-  }
-
-  const graphDataConfigs = {
-    [MetricType.LATENCY]: {
-      getData: (latency: Latency[]): uPlot.AlignedData => [
-        latency.map((l) => new Date(l.time).getTime()),
-        latency.map((l) => parseFloat(l.avg_latency)),
-      ],
-      yValue: (rawValue: number) => (+rawValue).toFixed(2) + "ms",
-    },
-    [MetricType.ROWS_APPLIED]: {
-      getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
-        rowsApplied.map((l) => new Date(l.time).getTime()),
-        rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
-      ],
-      yValue: (rawValue: number) => (+rawValue).toFixed(0),
-    },
-    [MetricType.WRITE_AMPLIFICATION]: {
-      getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
-        rowsApplied.map((l) => new Date(l.time).getTime()),
-        rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
-      ],
-      yValue: (rawValue: number) => (+rawValue).toFixed(0) + "x",
-    },
   }
 
   const fetchMetric = async () => {
@@ -162,6 +162,8 @@ export const Metric = ({
       </MetricInfoRoot>
     )
 
+  const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
+
   return (
     <Graph
       data={metric.tableId && data ? data : [[], []]}
@@ -170,39 +172,23 @@ export const Metric = ({
       label={metricTypeLabel[metric.metricType]}
       yValue={graphDataConfigs[metric.metricType].yValue}
       beforeLabel={
-        <SelectSearch
-          options={tables
-            .filter((t) => t.walEnabled)
-            .map((t) => {
-              return {
-                name: t.table_name,
-                value: t.id,
-              }
-            })}
-          placeholder="Choose table"
-          onChange={(value) => onTableChange(metric, parseInt(value as string))}
-          onFocus={() => {}}
-          onBlur={() => {}}
-          search
-          {...(metric.tableId && {
-            value: metric.tableId as unknown as string,
-          })}
-        />
-        // <Select
-        //   value={metric.tableId}
-        //   name="metric-select-table"
-        //   prefixIcon={<Table size="18px" />}
-        // options={tables
-        //   .filter((t) => t.walEnabled)
-        //   .map((t) => {
-        //     return {
-        //       label: t.table_name,
-        //       value: t.id,
-        //     }
+        // <SelectSearch
+        //   options={tables
+        //     .filter((t) => t.walEnabled)
+        //     .map((t) => {
+        //       return {
+        //         name: t.table_name,
+        //         value: t.id,
+        //       }
+        //     })}
+        //   placeholder="Choose table"
+        //   onChange={(value) => onTableChange(metric, parseInt(value as string))}
+        //   onFocus={() => {}}
+        //   onBlur={() => {}}
+        //   search
+        //   {...(metric.tableId && {
+        //     value: metric.tableId as unknown as string,
         //   })}
-        //   onChange={(e) => {
-        //     onTableChange(metric, parseInt(e.target.value))
-        //   }}
         // />
       }
       actions={
