@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState, useContext, useCallback } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
@@ -20,7 +19,6 @@ import {
   ForwardRef,
   Loader,
   DropdownMenu,
-  Select,
 } from "@questdb/react-components"
 import { Error, Menu, Trash } from "@styled-icons/boxicons-regular"
 import { Table } from "@styled-icons/remix-line"
@@ -28,6 +26,7 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import isEqual from "lodash.isequal"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import { TableSelector } from "./table-selector"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -172,24 +171,22 @@ export const Metric = ({
       label={metricTypeLabel[metric.metricType]}
       yValue={graphDataConfigs[metric.metricType].yValue}
       beforeLabel={
-        // <SelectSearch
-        //   options={tables
-        //     .filter((t) => t.walEnabled)
-        //     .map((t) => {
-        //       return {
-        //         name: t.table_name,
-        //         value: t.id,
-        //       }
-        //     })}
-        //   placeholder="Choose table"
-        //   onChange={(value) => onTableChange(metric, parseInt(value as string))}
-        //   onFocus={() => {}}
-        //   onBlur={() => {}}
-        //   search
-        //   {...(metric.tableId && {
-        //     value: metric.tableId as unknown as string,
-        //   })}
-        // />
+        <TableSelector
+          loading={loading}
+          options={tables
+            .filter((t) => t.walEnabled)
+            .map((t) => {
+              return {
+                label: t.table_name,
+                value: t.id.toString(),
+              }
+            })}
+          placeholder="Select table"
+          onSelect={(value) => onTableChange(metric, parseInt(value as string))}
+          {...(metric.tableId && {
+            defaultValue: tableName,
+          })}
+        />
       }
       actions={
         <DropdownMenu.Root>
