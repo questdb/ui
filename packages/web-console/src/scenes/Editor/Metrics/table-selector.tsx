@@ -157,6 +157,8 @@ export const TableSelector = ({
             if (e.key === "Backspace") {
               if (inputRef.current!.value === "") {
                 setQuery("")
+                setHasFocus(true)
+                setKeyIndex(-1)
               }
             } else if (e.key === "Escape") {
               if (defaultValue) {
