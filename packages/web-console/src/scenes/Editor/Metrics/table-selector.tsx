@@ -153,7 +153,7 @@ export const TableSelector = ({
         <TableIcon size="18px" />
         <StyledInput
           value={query}
-          placeholder={defaultValue ?? placeholder}
+          placeholder={defaultValue !== "" ? defaultValue : placeholder}
           ref={inputRef}
           onFocus={() => {
             setQuery(defaultValue)
