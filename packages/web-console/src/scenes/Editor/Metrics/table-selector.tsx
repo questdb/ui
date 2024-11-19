@@ -61,10 +61,6 @@ const Item = styled.li<{ active: boolean }>`
   cursor: pointer;
   padding: 0 1rem;
 
-  &:hover {
-    background: ${({ theme }) => theme.color.selection};
-  }
-
   ${({ active, theme }) => `
     background: ${active ? theme.color.selection : "transparent"};
   `}
@@ -182,7 +178,7 @@ export const TableSelector = ({
       </Box>
       {hasFocus && (
         <Options>
-          {filteredOptions.map((option) => (
+          {filteredOptions.map((option, index) => (
             <Item
               active={keyIndex === filteredOptions.indexOf(option)}
               key={option.value}
@@ -192,6 +188,8 @@ export const TableSelector = ({
                 setQuery(option.label)
                 setHasFocus(false)
               }}
+              onMouseEnter={() => setKeyIndex(index)}
+              onMouseLeave={() => setKeyIndex(-1)}
             >
               <Highlighter
                 highlightClassName="highlight"
