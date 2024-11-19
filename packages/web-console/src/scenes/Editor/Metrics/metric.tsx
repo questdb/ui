@@ -173,14 +173,13 @@ export const Metric = ({
       beforeLabel={
         <TableSelector
           loading={loading}
-          options={tables
-            .filter((t) => t.walEnabled)
-            .map((t) => {
-              return {
-                label: t.table_name,
-                value: t.id.toString(),
-              }
-            })}
+          options={tables.map((t) => {
+            return {
+              label: t.table_name,
+              value: t.id.toString(),
+              disabled: !t.walEnabled,
+            }
+          })}
           placeholder="Select table"
           onSelect={(value) => onTableChange(metric, parseInt(value as string))}
           defaultValue={metric.tableId && tableName ? tableName : ""}

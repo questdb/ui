@@ -8,6 +8,7 @@ import { useKeyPress } from "../../../components"
 type Option = {
   label: string
   value: string
+  disabled: boolean
 }
 type Props = {
   defaultValue: string
@@ -55,15 +56,19 @@ const Options = styled.ul`
   border-radius: 0.4rem;
 `
 
-const Item = styled.li<{ active: boolean }>`
+const Item = styled.li<{ active: boolean; disabled: boolean }>`
   display: flex;
   align-items: center;
   height: 3rem;
-  cursor: pointer;
   padding: 0 1rem;
 
   ${({ active, theme }) => `
     background: ${active ? theme.color.selection : "transparent"};
+  `}
+
+  ${({ disabled, theme }) => `
+    color: ${disabled ? theme.color.gray1 : theme.color.foreground};
+    cursor: ${disabled ? "not-allowed" : "pointer"};
   `}
 
   .highlight {
@@ -131,6 +136,7 @@ export const TableSelector = ({
   useEffect(() => {
     if (enterPress && filteredOptions.length > 0) {
       if (keyIndex !== -1) {
+        if (filteredOptions[keyIndex].disabled) return
         onSelect(filteredOptions[keyIndex].value)
         setHasFocus(false)
         setQuery(filteredOptions[keyIndex].label)
@@ -183,14 +189,17 @@ export const TableSelector = ({
             <Item
               active={keyIndex === filteredOptions.indexOf(option)}
               key={option.value}
-              onClick={() => {
-                inputRef.current!.value = option.label
-                onSelect(option.value)
-                setQuery(option.label)
-                setHasFocus(false)
-              }}
               onMouseEnter={() => setKeyIndex(index)}
               onMouseLeave={() => setKeyIndex(-1)}
+              disabled={option.disabled}
+              {...(!option.disabled && {
+                onClick: () => {
+                  inputRef.current!.value = option.label
+                  onSelect(option.value)
+                  setQuery(option.label)
+                  setHasFocus(false)
+                },
+              })}
             >
               <Highlighter
                 highlightClassName="highlight"
