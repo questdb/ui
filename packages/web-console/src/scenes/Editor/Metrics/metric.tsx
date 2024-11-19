@@ -13,15 +13,8 @@ import * as QuestDB from "../../../utils/questdb"
 import { Graph } from "./graph"
 import uPlot from "uplot"
 import styled from "styled-components"
-import {
-  Box,
-  Button,
-  ForwardRef,
-  Loader,
-  DropdownMenu,
-} from "@questdb/react-components"
-import { Error, Menu, Trash } from "@styled-icons/boxicons-regular"
-import { Table } from "@styled-icons/remix-line"
+import { Box, Button } from "@questdb/react-components"
+import { Error, Trash } from "@styled-icons/boxicons-regular"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import isEqual from "lodash.isequal"
@@ -34,10 +27,6 @@ const MetricInfoRoot = styled(Box).attrs({
 })`
   background-color: ${({ theme }) => theme.color.backgroundLighter};
   height: 25rem;
-`
-
-const DropdownMenuContent = styled(DropdownMenu.Content)`
-  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const graphDataConfigs = {
@@ -186,22 +175,11 @@ export const Metric = ({
         />
       }
       actions={
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <ForwardRef>
-              <Button skin="transparent">
-                <Menu size="18px" />
-              </Button>
-            </ForwardRef>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenuContent>
-              <DropdownMenu.Item onClick={() => onRemove(metric)}>
-                <Trash size="18px" /> Remove
-              </DropdownMenu.Item>
-            </DropdownMenuContent>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <Box gap="0.5rem" align="center">
+          <Button skin="transparent" onClick={() => onRemove(metric)}>
+            <Trash size="18px" />
+          </Button>
+        </Box>
       }
     />
   )
