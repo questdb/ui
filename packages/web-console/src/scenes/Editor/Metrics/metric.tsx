@@ -183,9 +183,7 @@ export const Metric = ({
             })}
           placeholder="Select table"
           onSelect={(value) => onTableChange(metric, parseInt(value as string))}
-          {...(metric.tableId && {
-            defaultValue: tableName,
-          })}
+          defaultValue={metric.tableId && tableName ? tableName : ""}
         />
       }
       actions={

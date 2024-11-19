@@ -10,7 +10,7 @@ type Option = {
   value: string
 }
 type Props = {
-  defaultValue?: string
+  defaultValue: string
   options: Option[]
   onSelect: (value: string) => void
   placeholder: string
@@ -49,6 +49,7 @@ const Options = styled.ul`
   list-style: none;
   z-index: 100;
   background: ${({ theme }) => theme.color.backgroundDarker};
+  box-shadow: 0 5px 5px 0 ${({ theme }) => theme.color.black40};
   margin: 0;
   padding: 0.5rem;
   border-radius: 0.4rem;
@@ -80,7 +81,7 @@ export const TableSelector = ({
 }: Props) => {
   const [hasFocus, setHasFocus] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [query, setQuery] = useState(defaultValue)
+  const [query, setQuery] = useState<string | undefined>(defaultValue ?? "")
   const [keyIndex, setKeyIndex] = useState(-1)
   const downPress = useKeyPress("ArrowDown")
   const upPress = useKeyPress("ArrowUp")
@@ -94,12 +95,12 @@ export const TableSelector = ({
     if (!inputRef.current) return
 
     inputRef.current.style.width = `calc(${
-      defaultValue ? defaultValue.length : placeholder.length
+      defaultValue !== "" ? defaultValue.length : placeholder.length
     }ch + 1.2rem)`
 
     if (inputRef.current && !loading) {
-      setQuery(defaultValue)
-      if (!defaultValue) {
+      setQuery(defaultValue ?? "")
+      if (defaultValue === "") {
         inputRef.current!.focus()
       }
 
@@ -109,7 +110,7 @@ export const TableSelector = ({
         }
         if (e.target instanceof HTMLElement && e.target.tagName !== "LI") {
           if (defaultValue) {
-            inputRef.current!.value = defaultValue
+            setQuery(defaultValue)
           }
           setHasFocus(false)
         }
@@ -129,19 +130,29 @@ export const TableSelector = ({
 
   useEffect(() => {
     if (enterPress && filteredOptions.length > 0) {
-      onSelect(filteredOptions[keyIndex].value)
-      inputRef.current!.value = filteredOptions[keyIndex].label
-      setHasFocus(false)
-      setQuery("")
+      if (keyIndex !== -1) {
+        onSelect(filteredOptions[keyIndex].value)
+        setHasFocus(false)
+        setQuery(filteredOptions[keyIndex].label)
+      }
     }
   }, [enterPress])
+
+  useEffect(() => {
+    if (
+      filteredOptions.length === 1 &&
+      query?.toLowerCase() === filteredOptions[0].label.toLowerCase()
+    ) {
+      setKeyIndex(0)
+    }
+  }, [query, filteredOptions])
 
   return (
     <Root>
       <Box align="center" gap="0.5rem">
         <TableIcon size="18px" />
         <StyledInput
-          defaultValue={defaultValue}
+          value={query}
           placeholder={defaultValue ?? placeholder}
           ref={inputRef}
           onFocus={() => {
@@ -151,29 +162,19 @@ export const TableSelector = ({
           }}
           onKeyUp={(e) => {
             if (e.key === "Backspace") {
-              if (inputRef.current!.value === "") {
+              if (query === "") {
                 setQuery("")
                 setHasFocus(true)
                 setKeyIndex(-1)
               }
             } else if (e.key === "Escape") {
-              if (defaultValue) {
-                inputRef.current!.value = defaultValue
-              }
               setQuery(defaultValue)
               setHasFocus(false)
-            } else if (e.key === "Enter") {
-              if (
-                filteredOptions.length === 1 &&
-                query?.toLowerCase() === filteredOptions[0].label.toLowerCase()
-              ) {
-                onSelect(filteredOptions[0].value)
-                setQuery(filteredOptions[0].label)
-                setHasFocus(false)
-              }
             }
           }}
-          onChange={(e) => setQuery(e.target.value ?? "")}
+          onChange={(e) => {
+            setQuery(e.target.value ?? "")
+          }}
         />
       </Box>
       {hasFocus && (
