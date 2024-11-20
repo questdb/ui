@@ -43,12 +43,17 @@ const StyledInput = styled(Input)`
   }
 `
 
-const Options = styled.ul`
+const Wrapper = styled.div`
   position: absolute;
   width: 20rem;
-  top: 100%;
-  list-style: none;
   z-index: 100;
+  top: 100%;
+  overflow-y: auto;
+  max-height: calc(10 * 3rem);
+`
+
+const Options = styled.ul`
+  list-style: none;
   background: ${({ theme }) => theme.color.backgroundDarker};
   box-shadow: 0 5px 5px 0 ${({ theme }) => theme.color.black40};
   margin: 0;
@@ -91,6 +96,7 @@ export const TableSelector = ({
   const downPress = useKeyPress("ArrowDown")
   const upPress = useKeyPress("ArrowUp")
   const enterPress = useKeyPress("Enter")
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   const filteredOptions = options.filter((option) =>
     query ? option.label.toLowerCase().includes(query.toLowerCase()) : true,
@@ -113,7 +119,10 @@ export const TableSelector = ({
         if (inputRef.current?.contains(e.target as Node)) {
           return
         }
-        if (e.target instanceof HTMLElement && e.target.tagName !== "LI") {
+        if (
+          (e.target instanceof HTMLElement || e.target instanceof SVGElement) &&
+          e.target.getAttribute("data-hook") !== "table-selector-item"
+        ) {
           if (defaultValue) {
             setQuery(defaultValue)
           }
@@ -184,31 +193,39 @@ export const TableSelector = ({
         />
       </Box>
       {hasFocus && (
-        <Options>
-          {filteredOptions.map((option, index) => (
-            <Item
-              active={keyIndex === filteredOptions.indexOf(option)}
-              key={option.value}
-              onMouseEnter={() => setKeyIndex(index)}
-              onMouseLeave={() => setKeyIndex(-1)}
-              disabled={option.disabled}
-              {...(!option.disabled && {
-                onClick: () => {
-                  inputRef.current!.value = option.label
-                  onSelect(option.value)
-                  setQuery(option.label)
-                  setHasFocus(false)
-                },
-              })}
-            >
-              <Highlighter
-                highlightClassName="highlight"
-                searchWords={[query ?? ""]}
-                textToHighlight={option.label}
-              />
-            </Item>
-          ))}
-        </Options>
+        <Wrapper ref={wrapperRef}>
+          <Options>
+            {filteredOptions
+              .sort((a, b) =>
+                a.disabled === b.disabled ? 0 : a.disabled ? 1 : -1,
+              )
+              .map((option, index) => (
+                <Item
+                  data-hook="table-selector-item"
+                  tabIndex={index}
+                  active={keyIndex === filteredOptions.indexOf(option)}
+                  key={option.value}
+                  onMouseEnter={() => setKeyIndex(index)}
+                  onMouseLeave={() => setKeyIndex(-1)}
+                  disabled={option.disabled}
+                  {...(!option.disabled && {
+                    onClick: () => {
+                      inputRef.current!.value = option.label
+                      onSelect(option.value)
+                      setQuery(option.label)
+                      setHasFocus(false)
+                    },
+                  })}
+                >
+                  <Highlighter
+                    highlightClassName="highlight"
+                    searchWords={[query ?? ""]}
+                    textToHighlight={option.label}
+                  />
+                </Item>
+              ))}
+          </Options>
+        </Wrapper>
       )}
     </Root>
   )
