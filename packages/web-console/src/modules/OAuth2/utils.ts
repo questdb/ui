@@ -9,6 +9,18 @@ type TokenPayload = Partial<{
   refresh_token: string
 }>
 
+const getBaseURL = (settings: Settings) => {
+    // if there is no host in settings, no need to construct base URL at all
+    if (!settings["acl.oidc.host"]) {
+        return "";
+    }
+
+    // if there is host in settings, we are in legacy mode, and we should construct the base URL
+    return `${settings["acl.oidc.tls.enabled"] ? "https" : "http"}://${
+        settings["acl.oidc.host"]
+    }:${settings["acl.oidc.port"]}`
+}
+
 export const getAuthorisationURL = ({
   settings,
   code_challenge = null,
@@ -37,6 +49,7 @@ export const getAuthorisationURL = ({
   }
 
   return (
+    getBaseURL(settings) +
     settings["acl.oidc.authorization.endpoint"] +
     "?" +
     urlParams
@@ -52,7 +65,7 @@ export const getAuthToken = async (
   payload: TokenPayload,
 ) => {
   return fetch(
-    `${settings["acl.oidc.token.endpoint"]}`,
+    `${getBaseURL(settings)}${settings["acl.oidc.token.endpoint"]}`,
     {
       method: "POST",
       headers: {

@@ -9,6 +9,9 @@ export type Settings = Partial<{
   "acl.oidc.client.id": string
   "acl.oidc.redirect.uri": string
   "acl.oidc.scope": string
+  "acl.oidc.host": string
+  "acl.oidc.port": number
+  "acl.oidc.tls.enabled": boolean
   "acl.oidc.authorization.endpoint": string
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean
