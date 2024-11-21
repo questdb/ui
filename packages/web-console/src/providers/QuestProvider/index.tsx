@@ -83,7 +83,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
 
   const setupClient = async (sessionData: Partial<AuthPayload>) => {
     questClient.setCommonHeaders({
-      Authorization: `Bearer ${sessionData.access_token}`,
+      Authorization: `Bearer ${sessionData.groups_encoded_in_token ? sessionData.id_token : sessionData.access_token}`,
     })
 
     questClient.refreshTokenMethod = () => {
@@ -101,11 +101,11 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   }, [sessionData])
 
   useEffect(() => {
-    const token = getValue(StoreKey.REST_TOKEN)
+    const restToken = getValue(StoreKey.REST_TOKEN)
     // User has provided the basic auth credentials
-    if (token) {
+    if (restToken) {
       questClient.setCommonHeaders({
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${restToken}`,
       })
       void finishAuthCheck()
     } else {
