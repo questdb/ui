@@ -13,6 +13,7 @@ import { AddChart } from "@styled-icons/material"
 import { MetricType, metricTypeLabel } from "./utils"
 import { useEditor } from "../../../providers"
 import merge from "lodash.merge"
+import { defaultColor, getColorForNewMetric } from "./color-palette"
 
 const StyledDescription = styled(Dialog.Description)`
   display: grid;
@@ -53,6 +54,17 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
+  const metrics = buffer?.metricsViewState?.metrics ?? []
+  const previousMetric =
+    metrics.length > 0 ? metrics[metrics.length - 1] : undefined
+
+  const color = previousMetric
+    ? getColorForNewMetric(
+        metrics.map((m) => m.color),
+        previousMetric.color,
+      )
+    : defaultColor
+
   const handleSelectMetric = async (metricType: MetricType) => {
     if (buffer?.id) {
       const newBuffer = merge(buffer, {
@@ -62,6 +74,7 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
             {
               metricType,
               position: buffer.metricsViewState?.metrics?.length ?? 0,
+              color,
             },
           ],
         },

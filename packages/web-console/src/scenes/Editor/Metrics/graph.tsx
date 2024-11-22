@@ -63,6 +63,7 @@ type Props = {
   beforeLabel?: React.ReactNode
   loading?: boolean
   data: uPlot.AlignedData
+  colors: string[]
   duration: MetricDuration
   yValue: (rawValue: number) => string
   actions?: React.ReactNode
@@ -72,6 +73,7 @@ export const Graph = ({
   label,
   beforeLabel,
   data,
+  colors,
   duration,
   yValue,
   loading,
@@ -91,6 +93,7 @@ export const Graph = ({
 
   const graphOptions = useGraphOptions({
     data,
+    colors,
     duration,
     timeRef,
     valueRef,

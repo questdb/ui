@@ -118,6 +118,16 @@ export const Metrics = () => {
     }
   }
 
+  const handleColorChange = (metric: Metric, color: string) => {
+    if (buffer?.id && buffer?.metricsViewState?.metrics) {
+      updateMetrics(
+        buffer?.metricsViewState?.metrics.map((m) =>
+          m.position === metric.position ? { ...m, color } : m,
+        ),
+      )
+    }
+  }
+
   useEffect(() => {
     const metrics = buffer?.metricsViewState?.metrics
     const metricDuration = buffer?.metricsViewState?.metricDuration
@@ -254,6 +264,7 @@ export const Metrics = () => {
                 metricDuration={metricDuration}
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
+                onColorChange={handleColorChange}
               />
             ))}
       </Charts>

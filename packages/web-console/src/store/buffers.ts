@@ -25,6 +25,7 @@
 import { db } from "./db"
 import type { editor } from "monaco-editor"
 import { MetricType, MetricDuration } from "scenes/Editor/Metrics/utils"
+import { Color } from "types"
 
 export enum BufferType {
   SQL = "SQL",
@@ -35,6 +36,7 @@ export type Metric = {
   tableId?: number
   metricType: MetricType
   position: number
+  color: string
 }
 
 export type MetricsViewState = {

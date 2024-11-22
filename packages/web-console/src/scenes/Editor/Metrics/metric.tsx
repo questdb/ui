@@ -13,13 +13,15 @@ import * as QuestDB from "../../../utils/questdb"
 import { Graph } from "./graph"
 import uPlot from "uplot"
 import styled from "styled-components"
-import { Box, Button } from "@questdb/react-components"
-import { Error, Trash } from "@styled-icons/boxicons-regular"
+import { Box, Button, ForwardRef, Popover } from "@questdb/react-components"
+import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import isEqual from "lodash.isequal"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { TableSelector } from "./table-selector"
+import { IconWithTooltip } from "../../../components/IconWithTooltip"
+import { ColorPalette } from "./color-palette"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -27,6 +29,11 @@ const MetricInfoRoot = styled(Box).attrs({
 })`
   background-color: ${({ theme }) => theme.color.backgroundLighter};
   height: 25rem;
+`
+
+const ActionButton = styled(Button)`
+  padding: 0;
+  width: 3rem;
 `
 
 const graphDataConfigs = {
@@ -58,16 +65,19 @@ export const Metric = ({
   metricDuration,
   onRemove,
   onTableChange,
+  onColorChange,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
+  onColorChange: (metric: MetricItem, color: string) => void
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<uPlot.AlignedData>()
   const [lastMetric, setLastMetric] = useState<MetricItem>()
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
 
   const tables = useSelector(selectors.query.getTables)
 
@@ -155,6 +165,7 @@ export const Metric = ({
   return (
     <Graph
       data={metric.tableId && data ? data : [[], []]}
+      colors={[metric.color]}
       loading={loading}
       duration={metricDuration}
       label={metricTypeLabel[metric.metricType]}
@@ -176,9 +187,38 @@ export const Metric = ({
       }
       actions={
         <Box gap="0.5rem" align="center">
-          <Button skin="transparent" onClick={() => onRemove(metric)}>
-            <Trash size="18px" />
-          </Button>
+          <IconWithTooltip
+            icon={
+              <ForwardRef>
+                <Popover
+                  open={colorPickerOpen}
+                  onOpenChange={setColorPickerOpen}
+                  trigger={
+                    <ActionButton skin="transparent">
+                      <Palette size="18px" />
+                    </ActionButton>
+                  }
+                  align="center"
+                >
+                  <ColorPalette
+                    onSelect={(color) => onColorChange(metric, color)}
+                    selectedColor={metric.color}
+                  />
+                </Popover>
+              </ForwardRef>
+            }
+            tooltip="Choose series color"
+            placement="top"
+          />
+          <IconWithTooltip
+            icon={
+              <ActionButton skin="transparent" onClick={() => onRemove(metric)}>
+                <Trash size="18px" />
+              </ActionButton>
+            }
+            tooltip="Remove metric"
+            placement="top"
+          />
         </Box>
       }
     />

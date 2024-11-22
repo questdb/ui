@@ -6,6 +6,7 @@ import { MetricDuration, durationInMinutes } from "./utils"
 
 type Params = {
   data: uPlot.AlignedData
+  colors: string[]
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
   xValue?: (rawValue: number, index: number, ticks: number[]) => string | null
@@ -43,6 +44,7 @@ const valuePlugin = (
 
 export const useGraphOptions = ({
   data,
+  colors,
   duration,
   tickValue = (rawValue) => (+rawValue).toString(),
   xValue,
@@ -100,7 +102,7 @@ export const useGraphOptions = ({
       points: {
         show: data[0].length === 1,
       },
-      stroke: theme.color.cyan,
+      stroke: colors[0],
       width: 2,
       value: (_self, rawValue) => yValue(rawValue),
     },
