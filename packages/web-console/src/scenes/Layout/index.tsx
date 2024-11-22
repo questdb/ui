@@ -36,6 +36,7 @@ import { CreateTableDialog } from "../../components/CreateTableDialog"
 import { EditorProvider } from "../../providers"
 import { Help } from "./help"
 import { Warnings } from "./warning"
+import { ImageZoom } from "../News/image-zoom"
 
 import "allotment/dist/style.css"
 
@@ -62,6 +63,7 @@ const Root = styled.div`
 `
 
 const Main = styled.div<{ sideOpened: boolean }>`
+  position: relative;
   flex: 1;
   display: flex;
   width: ${({ sideOpened }) =>
@@ -81,6 +83,7 @@ const Layout = () => {
       <Warnings />
       <Root>
         <Main sideOpened={activeSidebar !== undefined}>
+          <ImageZoom />
           <Page>
             <Console />
           </Page>

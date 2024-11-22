@@ -32,12 +32,10 @@ describe("Auth - UI", () => {
       "acl.basic.auth.realm.enabled": false,
       "acl.oidc.enabled": false,
       "acl.oidc.client.id": null,
-      "acl.oidc.host": null,
-      "acl.oidc.port": null,
-      "acl.oidc.tls.enabled": null,
       "acl.oidc.authorization.endpoint": null,
       "acl.oidc.token.endpoint": null,
       "acl.oidc.pkce.required": null,
+      "acl.oidc.groups.encoded.in.token": false,
     });
     cy.visit(baseUrl);
   });
@@ -59,12 +57,10 @@ describe("Auth - OIDC", () => {
       "acl.basic.auth.realm.enabled": false,
       "acl.oidc.enabled": true,
       "acl.oidc.client.id": "test",
-      "acl.oidc.host": "host",
-      "acl.oidc.port": 9999,
-      "acl.oidc.tls.enabled": true,
-      "acl.oidc.authorization.endpoint": "/auth",
-      "acl.oidc.token.endpoint": "/token",
+      "acl.oidc.authorization.endpoint": "https://host:9999/auth",
+      "acl.oidc.token.endpoint": "https://host:9999/token",
       "acl.oidc.pkce.required": true,
+      "acl.oidc.groups.encoded.in.token": false,
     });
     cy.visit(baseUrl);
   });
@@ -86,12 +82,10 @@ describe("Auth - Basic", () => {
       "acl.basic.auth.realm.enabled": true,
       "acl.oidc.enabled": false,
       "acl.oidc.client.id": null,
-      "acl.oidc.host": null,
-      "acl.oidc.port": null,
-      "acl.oidc.tls.enabled": null,
       "acl.oidc.authorization.endpoint": null,
       "acl.oidc.token.endpoint": null,
       "acl.oidc.pkce.required": null,
+      "acl.oidc.groups.encoded.in.token": false,
     });
     cy.visit(baseUrl);
   });
@@ -111,12 +105,10 @@ describe("Auth - Disabled", () => {
       "acl.basic.auth.realm.enabled": true,
       "acl.oidc.enabled": false,
       "acl.oidc.client.id": null,
-      "acl.oidc.host": null,
-      "acl.oidc.port": null,
-      "acl.oidc.tls.enabled": null,
       "acl.oidc.authorization.endpoint": null,
       "acl.oidc.token.endpoint": null,
       "acl.oidc.pkce.required": null,
+      "acl.oidc.groups.encoded.in.token": false,
     });
     cy.visit(baseUrl);
   });
