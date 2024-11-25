@@ -1,3 +1,4 @@
+import { TelemetryTable } from "./../../../consts"
 import {
   MetricDuration,
   SampleBy,
@@ -21,7 +22,7 @@ select
     sum(rowCount) numOfRowsApplied,
     sum(physicalRowCount) numOfRowsWritten,
     avg(physicalRowCount/rowCount) avgWalAmplification
-from sys.telemetry_wal
+from ${TelemetryTable.WAL}
 where tableId = ${id}
 and event = 105
 and created > date_trunc('minute', dateadd('${minutes >= 1440 ? "d" : "h"}', -${
@@ -42,7 +43,7 @@ select
     created time,
     count(latency) / 2 numOfWalApplies,
     avg(latency) * 2 avg_latency
-from sys.telemetry_wal
+from ${TelemetryTable.WAL}
 where tableId = ${id}
 and (event = 105 or event = 103)
 and created > date_trunc('minute', dateadd('${minutes >= 1440 ? "d" : "h"}', -${
