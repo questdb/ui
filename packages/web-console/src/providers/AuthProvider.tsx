@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, dispatch] = useReducer(reducer, initialState)
 
   const setAuthToken = (tokenResponse: AuthPayload, settings: Settings) => {
-    if (tokenResponse.access_token && tokenResponse.id_token) {
+    if (tokenResponse.access_token) {
       tokenResponse.groups_encoded_in_token = settings["acl.oidc.groups.encoded.in.token"]
       tokenResponse.expires_at = getTokenExpirationDate(tokenResponse.expires_in).toString() // convert from the sec offset
       setValue(
@@ -110,11 +110,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const refreshAuthToken = async (settings: Settings) => {
-    const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
     const response = await getAuthToken(settings, {
       grant_type: "refresh_token",
       refresh_token: getValue(StoreKey.AUTH_REFRESH_TOKEN),
-      code_verifier,
       client_id: settings["acl.oidc.client.id"],
     })
     const tokenResponse = await response.json()
