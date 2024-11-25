@@ -344,7 +344,7 @@ export class Client {
         if (Client.numOfPendingQueries === 0) {
           clearInterval(interval)
           const newToken = await this.refreshTokenMethod()
-          if (newToken.access_token && newToken.id_token) {
+          if (newToken.access_token) {
             this.setCommonHeaders({
               ...this.commonHeaders,
               Authorization: `Bearer ${newToken.groups_encoded_in_token ? newToken.id_token : newToken.access_token}`,
