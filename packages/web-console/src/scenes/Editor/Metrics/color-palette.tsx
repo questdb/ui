@@ -3,21 +3,13 @@ import styled from "styled-components"
 import { Box } from "@questdb/react-components"
 import { Check } from "@styled-icons/boxicons-regular"
 
-export const colors = [
-  "#bbbbbb",
-  "#f8f8f2",
-  "#6272a4",
-  "#ff5555",
-  "#ffb86c",
-  "#f1fa8c",
-  "#50fa7b",
-  "#bd93f9",
-  "#8be9fd",
-  "#d14671",
-  "#fafafa",
-]
+const primaryColors = ["#FF6B6B", "#4ECDC4", "#FFD93D", "#95D86E", "#FF8F40"]
 
-export const defaultColor = "#8be9fd"
+const secondaryColors = ["#BD93F9", "#50FA7B", "#FF79C6", "#8BE9FD", "#F1FA8C"]
+
+export const colors = [...primaryColors, ...secondaryColors]
+
+export const defaultColor = "#FF6B6B"
 
 export const getColorForNewMetric = (
   existingColors: string[],
