@@ -1,3 +1,4 @@
+import { uniq } from "./../../../utils/uniq"
 import { subMinutes } from "date-fns"
 import { useContext } from "react"
 import { ThemeContext } from "styled-components"
@@ -9,8 +10,8 @@ type Params = {
   colors: string[]
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
-  xValue?: (rawValue: number, index: number, ticks: number[]) => string | null
-  yValue?: (rawValue: number) => string
+  xValue: (rawValue: number, index: number, ticks: number[]) => string | null
+  yValue: (rawValue: number) => string
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
 }
@@ -60,7 +61,7 @@ export const useGraphOptions = ({
   const end = now.getTime()
 
   const baseAxisConfig: uPlot.Axis = {
-    stroke: theme.color.graphLegend,
+    stroke: theme.color.gray2,
     labelFont: `600 12px ${theme.font}`,
     font: `12px ${theme.font}`,
     ticks: {
@@ -79,14 +80,19 @@ export const useGraphOptions = ({
     {
       ...baseAxisConfig,
       values: (_self, ticks) => {
-        return ticks.map((rawValue, index) =>
-          xValue
-            ? xValue(rawValue, index, ticks)
-            : new Date(rawValue).toLocaleTimeString(navigator.language, {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-        )
+        let found: string[] = []
+        return ticks.map((rawValue, index) => {
+          const mapped = xValue(rawValue, index, ticks)
+          if (mapped === null) {
+            return null
+          }
+          if (found.includes(mapped)) {
+            return null
+          } else {
+            found.push(mapped)
+            return mapped
+          }
+        })
       },
     },
     {

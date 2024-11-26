@@ -42,21 +42,28 @@ const graphDataConfigs = {
       latency.map((l) => new Date(l.time).getTime()),
       latency.map((l) => parseFloat(l.avg_latency)),
     ],
-    yValue: (rawValue: number) => (+rawValue).toFixed(2) + "ms",
+    yValue: (rawValue: number) => (+rawValue).toFixed(2) + " ms",
   },
   [MetricType.ROWS_APPLIED]: {
     getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
       rowsApplied.map((l) => new Date(l.time).getTime()),
       rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
     ],
-    yValue: (rawValue: number) => (+rawValue).toFixed(0),
+    yValue: (rawValue: number) => {
+      if (rawValue >= 1e6) {
+        return (rawValue / 1e6).toFixed(1).replace(/\.0$/, "") + " M"
+      } else if (rawValue >= 1e3) {
+        return (rawValue / 1e3).toFixed(1).replace(/\.0$/, "") + " k"
+      }
+      return rawValue.toString()
+    },
   },
   [MetricType.WRITE_AMPLIFICATION]: {
     getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
       rowsApplied.map((l) => new Date(l.time).getTime()),
       rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
     ],
-    yValue: (rawValue: number) => (+rawValue).toFixed(0) + "x",
+    yValue: (rawValue: number) => (+rawValue).toFixed(0) + " x",
   },
 }
 

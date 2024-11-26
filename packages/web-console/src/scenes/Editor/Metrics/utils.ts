@@ -1,3 +1,5 @@
+import { utcToLocal } from "../../../utils/dateTime"
+
 export enum MetricType {
   ROWS_APPLIED = "Rows applied",
   LATENCY = "Latency",
@@ -74,39 +76,19 @@ export const minutesToHours = (durationInMinutes: number) =>
 
 export const xAxisFormat = {
   [MetricDuration.TEN_MINUTES]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm:ss"),
   [MetricDuration.THIRTY_MINUTES]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm:ss"),
   [MetricDuration.ONE_HOUR]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.THREE_HOURS]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.SIX_HOURS]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.TWELVE_HOURS]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.TWENTY_FOUR_HOURS]: (rawValue: number) =>
-    new Date(rawValue).toLocaleTimeString(navigator.language, {
-      hour: "2-digit",
-    }),
+    utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.THREE_DAYS]: (rawValue: number) =>
     new Date(rawValue).toLocaleDateString(navigator.language, {
       day: "2-digit",

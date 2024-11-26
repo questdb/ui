@@ -5,8 +5,6 @@ import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
 import { MetricDuration } from "./utils"
 import { Time } from "@styled-icons/boxicons-regular"
-import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
-import { format } from "date-fns"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
 import { Metric as MetricComponent } from "./metric"
@@ -15,6 +13,7 @@ import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
 import merge from "lodash.merge"
 import { AddChart } from "@styled-icons/material"
+import { getLocalTimeZone } from "../../../utils/dateTime"
 
 const Root = styled.div`
   display: flex;
@@ -34,6 +33,7 @@ const Toolbar = styled(Box).attrs({
   padding: 0 2.5rem;
   border-bottom: 1px solid ${({ theme }) => theme.color.backgroundDarker};
   box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
+  white-space: nowrap;
 `
 
 const Header = styled(Text)`
@@ -80,7 +80,6 @@ export const Metrics = () => {
     (activeBuffer?.metricsViewState?.metricDuration as MetricDuration) ??
       MetricDuration.SEVEN_DAYS,
   )
-  const userLocale = useMemo(fetchUserLocale, [])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
@@ -194,11 +193,7 @@ export const Metrics = () => {
         {/* <Header>WAL metrics for {table.table_name}</Header> */}
         <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">
-          <Text color="gray2">
-            {format(new Date(), "OOOO", {
-              locale: getLocaleFromLanguage(userLocale),
-            })}
-          </Text>
+          <Text color="gray2">{getLocalTimeZone()}</Text>
           <Select
             name="duration"
             value={metricDuration}
