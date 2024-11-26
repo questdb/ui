@@ -90,13 +90,7 @@ export const xAxisFormat = {
   [MetricDuration.TWENTY_FOUR_HOURS]: (rawValue: number) =>
     utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.THREE_DAYS]: (rawValue: number) =>
-    new Date(rawValue).toLocaleDateString(navigator.language, {
-      day: "2-digit",
-      month: "2-digit",
-    }),
+    utcToLocal(rawValue, "dd/MM"),
   [MetricDuration.SEVEN_DAYS]: (rawValue: number) =>
-    new Date(rawValue).toLocaleDateString(navigator.language, {
-      day: "2-digit",
-      month: "2-digit",
-    }),
+    utcToLocal(rawValue, "dd/MM"),
 }

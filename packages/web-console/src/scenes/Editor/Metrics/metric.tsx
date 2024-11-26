@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useContext, useCallback } from "react"
+import React, {
+  useEffect,
+  useState,
+  useContext,
+  useCallback,
+  useRef,
+} from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   MetricDuration,
@@ -83,8 +89,8 @@ export const Metric = ({
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<uPlot.AlignedData>()
-  const [lastMetric, setLastMetric] = useState<MetricItem>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  const metricDurationRef = useRef(metricDuration)
 
   const tables = useSelector(selectors.query.getTables)
 
@@ -95,13 +101,15 @@ export const Metric = ({
 
   const fetchLatency = async () => {
     if (!metric.tableId) return Promise.reject()
-    return quest.query<Latency>(latencySQL(metric.tableId, metricDuration))
+    return quest.query<Latency>(
+      latencySQL(metric.tableId, metricDurationRef.current),
+    )
   }
 
   const fetchRowsApplied = async () => {
     if (!metric.tableId) return Promise.reject()
     return quest.query<RowsApplied>(
-      rowsAppliedSQL(metric.tableId, metricDuration),
+      rowsAppliedSQL(metric.tableId, metricDurationRef.current),
     )
   }
 
@@ -129,17 +137,11 @@ export const Metric = ({
   }
 
   useEffect(() => {
-    if (!isEqual(metric, lastMetric) && metric.tableId) {
-      fetchMetric()
-      setLastMetric(metric)
-    }
-  }, [metric])
-
-  useEffect(() => {
+    metricDurationRef.current = metricDuration
     if (metric.tableId) {
       fetchMetric()
     }
-  }, [metricDuration])
+  }, [metricDuration, metric.tableId])
 
   const focusListener = useCallback(() => {
     if (focusListenerRef.current) {

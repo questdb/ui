@@ -1,3 +1,4 @@
+import { utcToLocal } from "./../../../utils/dateTime"
 import { uniq } from "./../../../utils/uniq"
 import { subMinutes } from "date-fns"
 import { useContext } from "react"
@@ -30,10 +31,10 @@ const valuePlugin = (
       const x = idx !== null && idx !== undefined ? u.data[0][idx] : null
       const y = idx !== null && idx !== undefined ? u.data[1][idx] : null
       if ([y, x].every(Boolean)) {
-        const date = new Date(x as number)
-        timeRef.current!.textContent = `${date.toLocaleDateString(
-          navigator.language,
-        )} ${date.toLocaleTimeString(navigator.language)}:`
+        timeRef.current!.textContent = utcToLocal(
+          x as number,
+          "dd/MM/yyyy HH:mm:ss",
+        )
         valueRef.current!.textContent = yValue(y as number)
       } else {
         timeRef.current!.textContent = null
