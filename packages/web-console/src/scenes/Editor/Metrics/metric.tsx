@@ -159,6 +159,16 @@ export const Metric = ({
       window.removeEventListener("focus", focusListener)
       focusListenerRef.current = false
     }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+      if (focusListenerRef.current) {
+        window.removeEventListener("focus", focusListener)
+        focusListenerRef.current = false
+      }
+    }
   }, [autoRefreshTables])
 
   if (!data && !loading && metric.tableId)
