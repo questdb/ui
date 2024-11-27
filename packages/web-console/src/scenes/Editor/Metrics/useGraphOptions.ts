@@ -122,7 +122,7 @@ export const useGraphOptions = ({
     },
     y: {
       range: (u, min, max) => {
-        return [u.data[0].length > 1 ? min : 0, max]
+        return [u.data[0].length > 1 && min !== max ? min : 0, max]
       },
     },
   }
