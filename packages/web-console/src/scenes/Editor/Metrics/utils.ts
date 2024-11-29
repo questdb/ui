@@ -13,8 +13,6 @@ export const metricTypeLabel: Record<MetricType, string> = {
 }
 
 export enum MetricDuration {
-  TEN_MINUTES = "10min",
-  THIRTY_MINUTES = "30min",
   ONE_HOUR = "1h",
   THREE_HOURS = "3h",
   SIX_HOURS = "6h",
@@ -31,8 +29,6 @@ export enum SampleBy {
 }
 
 export const durationInMinutes: Record<MetricDuration, number> = {
-  [MetricDuration.TEN_MINUTES]: 10,
-  [MetricDuration.THIRTY_MINUTES]: 30,
   [MetricDuration.ONE_HOUR]: 60,
   [MetricDuration.THREE_HOURS]: 60 * 3,
   [MetricDuration.SIX_HOURS]: 60 * 6,
@@ -43,8 +39,6 @@ export const durationInMinutes: Record<MetricDuration, number> = {
 }
 
 export const mappedSampleBy: Record<MetricDuration, SampleBy> = {
-  [MetricDuration.TEN_MINUTES]: SampleBy.ONE_MINUTE,
-  [MetricDuration.THIRTY_MINUTES]: SampleBy.ONE_MINUTE,
   [MetricDuration.ONE_HOUR]: SampleBy.ONE_MINUTE,
   [MetricDuration.THREE_HOURS]: SampleBy.ONE_MINUTE,
   [MetricDuration.SIX_HOURS]: SampleBy.ONE_MINUTE,
@@ -68,6 +62,10 @@ export type Latency = {
   avg_latency: string
 }
 
+export type LastNotNull = {
+  created: string
+}
+
 export const minutesToDays = (durationInMinutes: number) =>
   durationInMinutes / 60 / 24
 
@@ -75,10 +73,6 @@ export const minutesToHours = (durationInMinutes: number) =>
   durationInMinutes / 60
 
 export const xAxisFormat = {
-  [MetricDuration.TEN_MINUTES]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm:ss"),
-  [MetricDuration.THIRTY_MINUTES]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm:ss"),
   [MetricDuration.ONE_HOUR]: (rawValue: number) =>
     utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.THREE_HOURS]: (rawValue: number) =>

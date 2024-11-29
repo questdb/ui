@@ -32,6 +32,17 @@ and created < date_trunc('minute', now())
 sample by ${sampleBy ?? mappedSampleBy[metricDuration]}`
 }
 
+export const rowsAppliedLastNotNull = (id: number) => `
+select
+  created
+from ${TelemetryTable.WAL}
+where tableId = ${id} 
+and event = 105
+and rowCount != null
+and physicalRowCount != null
+limit -1
+`
+
 export const latency = (
   id: number,
   metricDuration: MetricDuration,
@@ -53,3 +64,13 @@ and created < date_trunc('minute', now())
 sample by ${sampleBy ?? mappedSampleBy[metricDuration]}
 `
 }
+
+export const latencyLastNotNull = (id: number) => `
+select
+  created
+from ${TelemetryTable.WAL}
+where tableId = ${id} 
+and (event = 105 or event = 103)
+and latency != null
+limit -1
+`

@@ -44,6 +44,40 @@ const GraphWrapper = styled(Box).attrs({
   align: "center",
 })`
   padding: 1rem 0;
+
+  .graph-no-data {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    text-align: center;
+  }
+
+  .graph-no-data-text {
+    color: ${({ theme }) => theme.color.gray2};
+    font-size: 1.4rem;
+    text-align: center;
+  }
+
+  .graph-no-data-button {
+    align-self: center;
+    background-color: ${({ theme }) => theme.color.selection};
+    border: none;
+    color: ${({ theme }) => theme.color.foreground};
+    border-radius: 0.4rem;
+    height: 3rem;
+    padding: 0 1rem;
+    cursor: pointer;
+
+    &:hover {
+      background-color: ${({ theme }) => theme.color.comment};
+    }
+  }
 `
 
 const Label = styled.div`
@@ -63,21 +97,25 @@ type Props = {
   beforeLabel?: React.ReactNode
   loading?: boolean
   data: uPlot.AlignedData
+  canZoomToData?: boolean
   colors: string[]
   duration: MetricDuration
   yValue: (rawValue: number) => string
   actions?: React.ReactNode
+  onZoomToData?: () => void
 }
 
 export const Graph = ({
   label,
   beforeLabel,
   data,
+  canZoomToData,
   colors,
   duration,
   yValue,
   loading,
   actions,
+  onZoomToData,
 }: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
@@ -134,16 +172,25 @@ export const Graph = ({
             uPlotRef.current = uplot
             if (data[0].length === 0) {
               const noData = document.createElement("div")
-              noData.innerText = "No data available for this period"
-              noData.style.position = "absolute"
-              noData.style.left = "50%"
-              noData.style.top = "50%"
-              noData.style.transform = "translate(-50%, -50%)"
-              noData.style.color = theme.color.gray2
-              noData.style.fontSize = "1.2rem"
-              noData.style.width = "100%"
-              noData.style.textAlign = "center"
+              noData.className = "graph-no-data"
               uplot.over.appendChild(noData)
+
+              const noDataText = document.createElement("span")
+              noDataText.innerText = "No data available for this period"
+              noDataText.className = "graph-no-data-text"
+              noData.appendChild(noDataText)
+
+              if (canZoomToData) {
+                const zoomToDataButton = document.createElement("button")
+                zoomToDataButton.className = "graph-no-data-button"
+                zoomToDataButton.innerText = "Zoom to data"
+                zoomToDataButton.onclick = () => {
+                  if (onZoomToData) {
+                    onZoomToData()
+                  }
+                }
+                noData.appendChild(zoomToDataButton)
+              }
             }
           }}
         />

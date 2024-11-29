@@ -197,36 +197,10 @@ export const Metrics = () => {
           <Select
             name="duration"
             value={metricDuration}
-            options={[
-              {
-                label: formatDurationLabel(MetricDuration.ONE_HOUR),
-                value: MetricDuration.ONE_HOUR,
-              },
-              {
-                label: formatDurationLabel(MetricDuration.THREE_HOURS),
-                value: MetricDuration.THREE_HOURS,
-              },
-              {
-                label: formatDurationLabel(MetricDuration.SIX_HOURS),
-                value: MetricDuration.SIX_HOURS,
-              },
-              {
-                label: formatDurationLabel(MetricDuration.TWELVE_HOURS),
-                value: MetricDuration.TWELVE_HOURS,
-              },
-              {
-                label: formatDurationLabel(MetricDuration.TWENTY_FOUR_HOURS),
-                value: MetricDuration.TWENTY_FOUR_HOURS,
-              },
-              {
-                label: formatDurationLabel(MetricDuration.THREE_DAYS),
-                value: MetricDuration.THREE_DAYS,
-              },
-              {
-                label: formatDurationLabel(MetricDuration.SEVEN_DAYS),
-                value: MetricDuration.SEVEN_DAYS,
-              },
-            ]}
+            options={Object.values(MetricDuration).map((duration) => ({
+              label: formatDurationLabel(duration),
+              value: duration,
+            }))}
             onChange={(e) =>
               setMetricDuration(e.target.value as MetricDuration)
             }
@@ -260,6 +234,7 @@ export const Metrics = () => {
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
+                onMetricDurationChange={setMetricDuration}
               />
             ))}
       </Charts>

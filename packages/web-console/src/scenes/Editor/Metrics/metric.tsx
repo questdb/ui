@@ -7,14 +7,21 @@ import React, {
 } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
+  durationInMinutes,
   MetricDuration,
   MetricType,
   Latency,
   RowsApplied,
   metricTypeLabel,
+  LastNotNull,
 } from "./utils"
 import { QuestContext } from "../../../providers"
-import { latency as latencySQL, rowsApplied as rowsAppliedSQL } from "./queries"
+import {
+  latency as latencySQL,
+  rowsApplied as rowsAppliedSQL,
+  latencyLastNotNull as latencyLasNotNullSQL,
+  rowsAppliedLastNotNull as rowsAppliedLastNotNullSQL,
+} from "./queries"
 import * as QuestDB from "../../../utils/questdb"
 import { Graph } from "./graph"
 import uPlot from "uplot"
@@ -23,11 +30,11 @@ import { Box, Button, ForwardRef, Popover } from "@questdb/react-components"
 import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import isEqual from "lodash.isequal"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { TableSelector } from "./table-selector"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { ColorPalette } from "./color-palette"
+import { subMinutes } from "date-fns"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -79,16 +86,19 @@ export const Metric = ({
   onRemove,
   onTableChange,
   onColorChange,
+  onMetricDurationChange,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
+  onMetricDurationChange: (duration: MetricDuration) => void
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<uPlot.AlignedData>()
+  const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const metricDurationRef = useRef(metricDuration)
 
@@ -99,11 +109,20 @@ export const Metric = ({
 
   const { autoRefreshTables } = useLocalStorage()
 
+  const minuteDurations: [MetricDuration, number][] = Object.entries(
+    durationInMinutes,
+  ) as [MetricDuration, number][]
+
   const fetchLatency = async () => {
     if (!metric.tableId) return Promise.reject()
     return quest.query<Latency>(
       latencySQL(metric.tableId, metricDurationRef.current),
     )
+  }
+
+  const fetchLatencyLastNotNull = async () => {
+    if (!metric.tableId) return Promise.reject()
+    return quest.query<LastNotNull>(latencyLasNotNullSQL(metric.tableId))
   }
 
   const fetchRowsApplied = async () => {
@@ -113,26 +132,60 @@ export const Metric = ({
     )
   }
 
+  const fetchRowsAppliedLastNotNull = async () => {
+    if (!metric.tableId) return Promise.reject()
+    return quest.query<LastNotNull>(rowsAppliedLastNotNullSQL(metric.tableId))
+  }
+
   const fetchers = {
     [MetricType.LATENCY]: fetchLatency,
     [MetricType.ROWS_APPLIED]: fetchRowsApplied,
     [MetricType.WRITE_AMPLIFICATION]: fetchRowsApplied,
   }
 
+  const fetchersLastNotNull = {
+    [MetricType.LATENCY]: fetchLatencyLastNotNull,
+    [MetricType.ROWS_APPLIED]: fetchRowsAppliedLastNotNull,
+    [MetricType.WRITE_AMPLIFICATION]: fetchRowsAppliedLastNotNull,
+  }
+
   const fetchMetric = async () => {
     setLoading(true)
     try {
-      const response = await fetchers[metric.metricType]()
-      if (response && response.type === QuestDB.Type.DQL) {
+      const responses = await Promise.all<
+        | QuestDB.QueryResult<RowsApplied>
+        | QuestDB.QueryResult<Latency>
+        | QuestDB.QueryResult<LastNotNull>
+      >([
+        fetchers[metric.metricType](),
+        fetchersLastNotNull[metric.metricType](),
+      ])
+
+      if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
         const alignedData = graphDataConfigs[metric.metricType].getData(
-          response.data as any,
+          responses[0].data as any,
         )
         setData(alignedData)
+      }
+      if (responses[1] && responses[1].type === QuestDB.Type.DQL) {
+        const lastNotNull = responses[1].data[0] as LastNotNull
+        setLastNotNull(new Date(lastNotNull.created).getTime())
       }
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleZoomToData = () => {
+    if (lastNotNull) {
+      const durationsWithData = minuteDurations.filter(
+        (d) => lastNotNull >= subMinutes(new Date(), d[1]).getTime(),
+      )
+      if (durationsWithData.length) {
+        onMetricDurationChange(durationsWithData[0][0])
+      }
     }
   }
 
@@ -181,9 +234,19 @@ export const Metric = ({
 
   const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
 
+  const canZoomToData = lastNotNull
+    ? lastNotNull >=
+      subMinutes(
+        new Date(),
+        minuteDurations[minuteDurations.length - 1][1],
+      ).getTime()
+    : false
+
   return (
     <Graph
       data={metric.tableId && data ? data : [[], []]}
+      canZoomToData={canZoomToData}
+      onZoomToData={handleZoomToData}
       colors={[metric.color]}
       loading={loading}
       duration={metricDuration}
