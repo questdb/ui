@@ -55,7 +55,13 @@ const graphDataConfigs = {
       latency.map((l) => new Date(l.time).getTime()),
       latency.map((l) => parseFloat(l.avg_latency)),
     ],
-    yValue: (rawValue: number) => (+rawValue).toFixed(2) + " ms",
+    yValue: (rawValue: number) => {
+      if (rawValue >= 1000) {
+        const seconds = rawValue / 1000
+        return `${seconds.toFixed(2)} s`
+      }
+      return `${rawValue} ms`
+    },
   },
   [MetricType.ROWS_APPLIED]: {
     getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
@@ -76,7 +82,7 @@ const graphDataConfigs = {
       rowsApplied.map((l) => new Date(l.time).getTime()),
       rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
     ],
-    yValue: (rawValue: number) => (+rawValue).toFixed(0) + " x",
+    yValue: (rawValue: number) => `${rawValue} x`,
   },
 }
 
