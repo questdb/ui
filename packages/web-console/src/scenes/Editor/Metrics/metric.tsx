@@ -169,7 +169,9 @@ export const Metric = ({
       }
       if (responses[1] && responses[1].type === QuestDB.Type.DQL) {
         const lastNotNull = responses[1].data[0] as LastNotNull
-        setLastNotNull(new Date(lastNotNull.created).getTime())
+        if (lastNotNull) {
+          setLastNotNull(new Date(lastNotNull.created).getTime())
+        }
       }
     } catch (err) {
       console.error(err)
