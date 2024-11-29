@@ -196,20 +196,28 @@ const Schema = ({
   }
 
   const fetchColumns = async () => {
-    try {
-      const response = await quest.query<QuestDB.InformationSchemaColumn>(
-        "information_schema.columns()",
-      )
-      if (response && response && response.type === QuestDB.Type.DQL) {
-        setColumns(response.data)
-        dispatch(actions.query.setColumns(response.data))
+    const queries = [
+      "information_schema.questdb_columns()",
+      "information_schema.columns()" // fallback for older servers
+    ]
+
+    for (const query of queries) {
+      try {
+        const response = await quest.query<QuestDB.InformationSchemaColumn>(query)
+
+        if (response?.type === QuestDB.Type.DQL) {
+          setColumns(response.data)
+          dispatch(actions.query.setColumns(response.data))
+          return
+        }
+      } catch {
+        // let's try another query
       }
-    } catch (error) {
-      dispatchState({
-        view: View.error,
-      })
     }
+
+    dispatchState({ view: View.error })
   }
+
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
