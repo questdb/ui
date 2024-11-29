@@ -21,7 +21,7 @@ select
     count(rowCount) numOfWalApplies,
     sum(rowCount) numOfRowsApplied,
     sum(physicalRowCount) numOfRowsWritten,
-    avg(physicalRowCount/rowCount) avgWalAmplification
+    coalesce(avg(physicalRowCount/rowCount), 1) avgWalAmplification
 from ${TelemetryTable.WAL}
 where tableId = ${id}
 and event = 105
