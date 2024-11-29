@@ -189,20 +189,7 @@ export const Metric = ({
     }
   }
 
-  useEffect(() => {
-    metricDurationRef.current = metricDuration
-    if (metric.tableId) {
-      fetchMetric()
-    }
-  }, [metricDuration, metric.tableId])
-
-  const focusListener = useCallback(() => {
-    if (focusListenerRef.current) {
-      fetchMetric()
-    }
-  }, [])
-
-  useEffect(() => {
+  const setupListeners = () => {
     if (autoRefreshTables) {
       intervalRef.current = setInterval(() => fetchMetric(), 30000)
       window.addEventListener("focus", focusListener)
@@ -212,6 +199,24 @@ export const Metric = ({
       window.removeEventListener("focus", focusListener)
       focusListenerRef.current = false
     }
+  }
+
+  useEffect(() => {
+    metricDurationRef.current = metricDuration
+    if (metric.tableId) {
+      fetchMetric()
+      setupListeners()
+    }
+  }, [metricDuration, metric.tableId])
+
+  const focusListener = useCallback(() => {
+    if (focusListenerRef.current) {
+      fetchMetric()
+    }
+  }, [metric.tableId])
+
+  useEffect(() => {
+    setupListeners()
 
     return () => {
       if (intervalRef.current) {
