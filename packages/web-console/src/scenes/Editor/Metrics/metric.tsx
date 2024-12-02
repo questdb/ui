@@ -8,6 +8,7 @@ import React, {
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   durationInMinutes,
+  graphDataConfigs,
   MetricDuration,
   MetricType,
   Latency,
@@ -52,43 +53,6 @@ const ActionButton = styled(Button)`
 const sqlValueToFixed = (value: string, decimals: number = 2) => {
   const parsed = parseFloat(value)
   return Number(parsed.toFixed(decimals)) as unknown as number
-}
-
-const graphDataConfigs = {
-  [MetricType.LATENCY]: {
-    getData: (latency: Latency[]): uPlot.AlignedData => [
-      latency.map((l) => new Date(l.time).getTime()),
-      latency.map((l) => sqlValueToFixed(l.avg_latency)),
-    ],
-    yValue: (rawValue: number) => {
-      if (rawValue >= 1000) {
-        const seconds = rawValue / 1000
-        return `${seconds.toFixed(2)} s`
-      }
-      return `${rawValue} ms`
-    },
-  },
-  [MetricType.ROWS_APPLIED]: {
-    getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
-      rowsApplied.map((l) => new Date(l.time).getTime()),
-      rowsApplied.map((l) => sqlValueToFixed(l.numOfRowsApplied)),
-    ],
-    yValue: (rawValue: number) => {
-      if (rawValue >= 1e6) {
-        return (rawValue / 1e6).toFixed(1).replace(/\.0$/, "") + " M"
-      } else if (rawValue >= 1e3) {
-        return (rawValue / 1e3).toFixed(1).replace(/\.0$/, "") + " k"
-      }
-      return rawValue.toString()
-    },
-  },
-  [MetricType.WRITE_AMPLIFICATION]: {
-    getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
-      rowsApplied.map((l) => new Date(l.time).getTime()),
-      rowsApplied.map((l) => sqlValueToFixed(l.avgWalAmplification)),
-    ],
-    yValue: (rawValue: number) => `${rawValue} x`,
-  },
 }
 
 export const Metric = ({
@@ -173,7 +137,7 @@ export const Metric = ({
       ])
 
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
-        const alignedData = graphDataConfigs[metric.metricType].getData(
+        const alignedData = graphDataConfigs[metric.metricType].alignData(
           responses[0].data as any,
         )
         setData(alignedData)
@@ -266,7 +230,7 @@ export const Metric = ({
       loading={loading}
       duration={metricDuration}
       label={metricTypeLabel[metric.metricType]}
-      yValue={graphDataConfigs[metric.metricType].yValue}
+      yValue={graphDataConfigs[metric.metricType].mapYValue}
       beforeLabel={
         <TableSelector
           loading={loading}

@@ -1,4 +1,5 @@
 import { utcToLocal } from "../../../utils/dateTime"
+import uPlot from "uplot"
 
 export enum MetricType {
   ROWS_APPLIED = "Rows applied",
@@ -87,4 +88,46 @@ export const xAxisFormat = {
     utcToLocal(rawValue, "dd/MM"),
   [MetricDuration.SEVEN_DAYS]: (rawValue: number) =>
     utcToLocal(rawValue, "dd/MM"),
+}
+
+const sqlValueToFixed = (value: string, decimals: number = 2) => {
+  const parsed = parseFloat(value)
+  return Number(parsed.toFixed(decimals)) as unknown as number
+}
+
+export const graphDataConfigs = {
+  [MetricType.LATENCY]: {
+    alignData: (latency: Latency[]): uPlot.AlignedData => [
+      latency.map((l) => new Date(l.time).getTime()),
+      latency.map((l) => sqlValueToFixed(l.avg_latency)),
+    ],
+    mapYValue: (rawValue: number) => {
+      if (rawValue >= 1000) {
+        const seconds = rawValue / 1000
+        return `${seconds.toFixed(2)} s`
+      }
+      return `${rawValue} ms`
+    },
+  },
+  [MetricType.ROWS_APPLIED]: {
+    alignData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
+      rowsApplied.map((l) => new Date(l.time).getTime()),
+      rowsApplied.map((l) => sqlValueToFixed(l.numOfRowsApplied)),
+    ],
+    mapYValue: (rawValue: number) => {
+      if (rawValue >= 1e6) {
+        return (rawValue / 1e6).toFixed(1).replace(/\.0$/, "") + " M"
+      } else if (rawValue >= 1e3) {
+        return (rawValue / 1e3).toFixed(1).replace(/\.0$/, "") + " k"
+      }
+      return rawValue.toString()
+    },
+  },
+  [MetricType.WRITE_AMPLIFICATION]: {
+    alignData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
+      rowsApplied.map((l) => new Date(l.time).getTime()),
+      rowsApplied.map((l) => sqlValueToFixed(l.avgWalAmplification)),
+    ],
+    mapYValue: (rawValue: number) => `${rawValue} x`,
+  },
 }
