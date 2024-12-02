@@ -77,8 +77,7 @@ const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
-    (activeBuffer?.metricsViewState?.metricDuration as MetricDuration) ??
-      MetricDuration.SEVEN_DAYS,
+    MetricDuration.ONE_HOUR,
   )
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
@@ -128,15 +127,17 @@ export const Metrics = () => {
   }
 
   useEffect(() => {
-    const metrics = buffer?.metricsViewState?.metrics
-    const metricDuration = buffer?.metricsViewState?.metricDuration
-    if (metrics) {
-      setMetrics(metrics)
+    if (buffer) {
+      const metrics = buffer?.metricsViewState?.metrics
+      const metricDuration = buffer?.metricsViewState?.metricDuration
+      if (metrics) {
+        setMetrics(metrics)
+      }
+      if (metricDuration) {
+        setMetricDuration(metricDuration)
+      }
     }
-    if (metricDuration) {
-      setMetricDuration(metricDuration)
-    }
-  }, [buffers, activeBuffer])
+  }, [buffer])
 
   useEffect(() => {
     if (

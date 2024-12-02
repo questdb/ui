@@ -50,11 +50,6 @@ const ActionButton = styled(Button)`
   width: 3rem;
 `
 
-const sqlValueToFixed = (value: string, decimals: number = 2) => {
-  const parsed = parseFloat(value)
-  return Number(parsed.toFixed(decimals)) as unknown as number
-}
-
 export const Metric = ({
   metric,
   metricDuration,

@@ -469,7 +469,7 @@ const Schema = ({
                             addBuffer({
                               metricsViewState: {
                                 metrics: [],
-                                metricDuration: MetricDuration.SEVEN_DAYS,
+                                metricDuration: MetricDuration.ONE_HOUR,
                               },
                             })
                           }}

@@ -24,6 +24,7 @@ export enum MetricDuration {
 }
 
 export enum SampleBy {
+  ONE_SECOND = "1s",
   ONE_MINUTE = "1m",
   FIFTEEN_MINUTES = "15m",
   ONE_HOUR = "1h",
@@ -40,13 +41,13 @@ export const durationInMinutes: Record<MetricDuration, number> = {
 }
 
 export const mappedSampleBy: Record<MetricDuration, SampleBy> = {
-  [MetricDuration.ONE_HOUR]: SampleBy.ONE_MINUTE,
-  [MetricDuration.THREE_HOURS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.SIX_HOURS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.TWELVE_HOURS]: SampleBy.FIFTEEN_MINUTES,
-  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.FIFTEEN_MINUTES,
-  [MetricDuration.THREE_DAYS]: SampleBy.ONE_HOUR,
-  [MetricDuration.SEVEN_DAYS]: SampleBy.ONE_HOUR,
+  [MetricDuration.ONE_HOUR]: SampleBy.ONE_SECOND,
+  [MetricDuration.THREE_HOURS]: SampleBy.ONE_SECOND,
+  [MetricDuration.SIX_HOURS]: SampleBy.ONE_SECOND,
+  [MetricDuration.TWELVE_HOURS]: SampleBy.ONE_SECOND,
+  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.THREE_DAYS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.SEVEN_DAYS]: SampleBy.ONE_MINUTE,
 }
 
 export type RowsApplied = {
@@ -72,6 +73,9 @@ export const minutesToDays = (durationInMinutes: number) =>
 
 export const minutesToHours = (durationInMinutes: number) =>
   durationInMinutes / 60
+
+export const minutesToSeconds = (durationInMinutes: number) =>
+  durationInMinutes * 60
 
 export const xAxisFormat = {
   [MetricDuration.ONE_HOUR]: (rawValue: number) =>
