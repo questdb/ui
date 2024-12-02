@@ -49,11 +49,16 @@ const ActionButton = styled(Button)`
   width: 3rem;
 `
 
+const sqlValueToFixed = (value: string, decimals: number = 2) => {
+  const parsed = parseFloat(value)
+  return Number(parsed.toFixed(decimals)) as unknown as number
+}
+
 const graphDataConfigs = {
   [MetricType.LATENCY]: {
     getData: (latency: Latency[]): uPlot.AlignedData => [
       latency.map((l) => new Date(l.time).getTime()),
-      latency.map((l) => parseFloat(l.avg_latency)),
+      latency.map((l) => sqlValueToFixed(l.avg_latency)),
     ],
     yValue: (rawValue: number) => {
       if (rawValue >= 1000) {
@@ -66,7 +71,7 @@ const graphDataConfigs = {
   [MetricType.ROWS_APPLIED]: {
     getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
       rowsApplied.map((l) => new Date(l.time).getTime()),
-      rowsApplied.map((l) => parseFloat(l.numOfRowsWritten)),
+      rowsApplied.map((l) => sqlValueToFixed(l.numOfRowsApplied)),
     ],
     yValue: (rawValue: number) => {
       if (rawValue >= 1e6) {
@@ -80,7 +85,7 @@ const graphDataConfigs = {
   [MetricType.WRITE_AMPLIFICATION]: {
     getData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
       rowsApplied.map((l) => new Date(l.time).getTime()),
-      rowsApplied.map((l) => parseFloat(l.avgWalAmplification)),
+      rowsApplied.map((l) => sqlValueToFixed(l.avgWalAmplification)),
     ],
     yValue: (rawValue: number) => `${rawValue} x`,
   },
