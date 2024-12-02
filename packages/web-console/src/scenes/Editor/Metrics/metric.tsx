@@ -216,20 +216,11 @@ export const Metric = ({
 
   useEffect(() => {
     metricDurationRef.current = metricDuration
+
     if (metric.tableId) {
       fetchMetric()
       setupListeners()
     }
-  }, [metricDuration, metric.tableId])
-
-  const focusListener = useCallback(() => {
-    if (focusListenerRef.current) {
-      fetchMetric()
-    }
-  }, [metric.tableId])
-
-  useEffect(() => {
-    setupListeners()
 
     return () => {
       if (intervalRef.current) {
@@ -240,7 +231,13 @@ export const Metric = ({
         focusListenerRef.current = false
       }
     }
-  }, [autoRefreshTables])
+  }, [autoRefreshTables, metricDuration, metric.tableId])
+
+  const focusListener = useCallback(() => {
+    if (focusListenerRef.current) {
+      fetchMetric()
+    }
+  }, [metric.tableId])
 
   if (!data && !loading && metric.tableId)
     return (

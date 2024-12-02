@@ -347,6 +347,11 @@ const Schema = ({
                   : true)
               )
             })
+            .sort((a, b) =>
+              a.table_name
+                .toLowerCase()
+                .localeCompare(b.table_name.toLowerCase()),
+            )
             .map((table: QuestDB.Table) => (
               <Table
                 designatedTimestamp={table.designatedTimestamp}

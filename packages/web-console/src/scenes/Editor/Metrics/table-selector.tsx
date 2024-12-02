@@ -98,9 +98,11 @@ export const TableSelector = ({
   const enterPress = useKeyPress("Enter")
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
-  const filteredOptions = options.filter((option) =>
-    query ? option.label.toLowerCase().includes(query.toLowerCase()) : true,
-  )
+  const filteredOptions = options
+    .filter((option) =>
+      query ? option.label.toLowerCase().includes(query.toLowerCase()) : true,
+    )
+    .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
 
   useEffect(() => {
     if (!inputRef.current) return
