@@ -8,21 +8,13 @@ import React, {
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   durationInMinutes,
-  graphDataConfigs,
   MetricDuration,
   MetricType,
-  Latency,
-  RowsApplied,
-  metricTypeLabel,
   LastNotNull,
+  ResultType,
 } from "./utils"
+import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
-import {
-  latency as latencySQL,
-  rowsApplied as rowsAppliedSQL,
-  latencyLastNotNull as latencyLasNotNullSQL,
-  rowsAppliedLastNotNull as rowsAppliedLastNotNullSQL,
-} from "./queries"
 import * as QuestDB from "../../../utils/questdb"
 import { Graph } from "./graph"
 import uPlot from "uplot"
@@ -79,64 +71,37 @@ export const Metric = ({
 
   const { autoRefreshTables } = useLocalStorage()
 
+  const widgetConfig = widgets[metric.metricType]
+
   const minuteDurations: [MetricDuration, number][] = Object.entries(
     durationInMinutes,
   ) as [MetricDuration, number][]
-
-  const fetchLatency = async () => {
-    if (!metric.tableId) return Promise.reject()
-    return quest.query<Latency>(
-      latencySQL(metric.tableId, metricDurationRef.current),
-    )
-  }
-
-  const fetchLatencyLastNotNull = async () => {
-    if (!metric.tableId) return Promise.reject()
-    return quest.query<LastNotNull>(latencyLasNotNullSQL(metric.tableId))
-  }
-
-  const fetchRowsApplied = async () => {
-    if (!metric.tableId) return Promise.reject()
-    return quest.query<RowsApplied>(
-      rowsAppliedSQL(metric.tableId, metricDurationRef.current),
-    )
-  }
-
-  const fetchRowsAppliedLastNotNull = async () => {
-    if (!metric.tableId) return Promise.reject()
-    return quest.query<LastNotNull>(rowsAppliedLastNotNullSQL(metric.tableId))
-  }
-
-  const fetchers = {
-    [MetricType.LATENCY]: fetchLatency,
-    [MetricType.ROWS_APPLIED]: fetchRowsApplied,
-    [MetricType.WRITE_AMPLIFICATION]: fetchRowsApplied,
-  }
-
-  const fetchersLastNotNull = {
-    [MetricType.LATENCY]: fetchLatencyLastNotNull,
-    [MetricType.ROWS_APPLIED]: fetchRowsAppliedLastNotNull,
-    [MetricType.WRITE_AMPLIFICATION]: fetchRowsAppliedLastNotNull,
-  }
 
   const fetchMetric = async () => {
     setLoading(true)
     try {
       const responses = await Promise.all<
-        | QuestDB.QueryResult<RowsApplied>
-        | QuestDB.QueryResult<Latency>
+        | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>
       >([
-        fetchers[metric.metricType](),
-        fetchersLastNotNull[metric.metricType](),
+        quest.query<any>(
+          widgetConfig.getQuery({
+            tableId: metric.tableId,
+            metricDuration: metricDurationRef.current,
+          }),
+        ),
+        quest.query<LastNotNull>(
+          widgetConfig.getQueryLastNotNull(metric.tableId),
+        ),
       ])
 
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
-        const alignedData = graphDataConfigs[metric.metricType].alignData(
-          responses[0].data as any,
+        const alignedData = widgetConfig.alignData(
+          responses[0].data as unknown as ResultType[MetricType],
         )
         setData(alignedData)
       }
+
       if (responses[1] && responses[1].type === QuestDB.Type.DQL) {
         const lastNotNull = responses[1].data[0] as LastNotNull
         if (lastNotNull) {
@@ -202,7 +167,7 @@ export const Metric = ({
     return (
       <MetricInfoRoot>
         <Error size="18px" />
-        Cannot load metric: {metricTypeLabel[metric.metricType]}
+        Cannot load metric: {widgetConfig.label}
       </MetricInfoRoot>
     )
 
@@ -224,8 +189,8 @@ export const Metric = ({
       colors={[metric.color]}
       loading={loading}
       duration={metricDuration}
-      label={metricTypeLabel[metric.metricType]}
-      yValue={graphDataConfigs[metric.metricType].mapYValue}
+      label={widgetConfig.label}
+      yValue={widgetConfig.mapYValue}
       beforeLabel={
         <TableSelector
           loading={loading}

@@ -2,15 +2,27 @@ import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
 
 export enum MetricType {
-  ROWS_APPLIED = "Rows applied",
+  COMMIT_RATE = "Commit rate",
+  WRITE_THROUGHPUT = "Rows applied",
   LATENCY = "Latency",
   WRITE_AMPLIFICATION = "Write amplification",
 }
 
-export const metricTypeLabel: Record<MetricType, string> = {
-  [MetricType.ROWS_APPLIED]: "Write throughput",
-  [MetricType.LATENCY]: "WAL apply latency in ms",
-  [MetricType.WRITE_AMPLIFICATION]: "Write amplification",
+export type Widget = {
+  label: string
+  iconUrl: string
+  getQuery: ({
+    tableId,
+    metricDuration,
+    sampleBy,
+  }: {
+    tableId?: number
+    metricDuration: MetricDuration
+    sampleBy?: SampleBy
+  }) => string
+  getQueryLastNotNull: (id?: number) => string
+  alignData: (data: any) => uPlot.AlignedData
+  mapYValue: (rawValue: number) => string
 }
 
 export enum MetricDuration {
@@ -50,6 +62,17 @@ export const mappedSampleBy: Record<MetricDuration, SampleBy> = {
   [MetricDuration.SEVEN_DAYS]: SampleBy.ONE_MINUTE,
 }
 
+export type CommitRate = {
+  created: string
+  commit_rate: string
+  commit_rate_smooth: string
+}
+
+export type WriteAmplification = {
+  created: string
+  writeAmplification: string
+}
+
 export type RowsApplied = {
   time: string
   numOfWalApplies: string
@@ -66,6 +89,13 @@ export type Latency = {
 
 export type LastNotNull = {
   created: string
+}
+
+export type ResultType = {
+  [MetricType.COMMIT_RATE]: CommitRate
+  [MetricType.LATENCY]: Latency
+  [MetricType.WRITE_THROUGHPUT]: RowsApplied
+  [MetricType.WRITE_AMPLIFICATION]: RowsApplied
 }
 
 export const minutesToDays = (durationInMinutes: number) =>
@@ -94,46 +124,16 @@ export const xAxisFormat = {
     utcToLocal(rawValue, "dd/MM"),
 }
 
-const sqlValueToFixed = (value: string, decimals: number = 2) => {
+export const sqlValueToFixed = (value: string, decimals: number = 2) => {
   const parsed = parseFloat(value)
   return Number(parsed.toFixed(decimals)) as unknown as number
 }
 
-const formatNumbers = (value: number) => {
+export const formatNumbers = (value: number) => {
   if (value >= 1e6) {
     return (value / 1e6).toFixed(1).replace(/\.0$/, "") + " M"
   } else if (value >= 1e3) {
     return (value / 1e3).toFixed(1).replace(/\.0$/, "") + " k"
   }
   return value.toString()
-}
-
-export const graphDataConfigs = {
-  [MetricType.LATENCY]: {
-    alignData: (latency: Latency[]): uPlot.AlignedData => [
-      latency.map((l) => new Date(l.time).getTime()),
-      latency.map((l) => sqlValueToFixed(l.avg_latency)),
-    ],
-    mapYValue: (rawValue: number) => {
-      if (rawValue >= 1000) {
-        const seconds = rawValue / 1000
-        return `${seconds.toFixed(2)} s`
-      }
-      return `${rawValue} ms`
-    },
-  },
-  [MetricType.ROWS_APPLIED]: {
-    alignData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
-      rowsApplied.map((l) => new Date(l.time).getTime()),
-      rowsApplied.map((l) => sqlValueToFixed(l.numOfRowsApplied)),
-    ],
-    mapYValue: (rawValue: number) => formatNumbers(rawValue),
-  },
-  [MetricType.WRITE_AMPLIFICATION]: {
-    alignData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
-      rowsApplied.map((l) => new Date(l.time).getTime()),
-      rowsApplied.map((l) => sqlValueToFixed(l.avgWalAmplification)),
-    ],
-    mapYValue: (rawValue: number) => formatNumbers(rawValue),
-  },
 }

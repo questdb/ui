@@ -6,14 +6,14 @@ import {
   Button,
   Overlay,
 } from "@questdb/react-components"
-import { Undo } from "@styled-icons/boxicons-regular"
 import { Text } from "../../../components/Text"
 import styled from "styled-components"
 import { AddChart } from "@styled-icons/material"
-import { MetricType, metricTypeLabel } from "./utils"
+import { MetricType } from "./utils"
 import { useEditor } from "../../../providers"
 import merge from "lodash.merge"
 import { defaultColor, getColorForNewMetric } from "./color-palette"
+import { widgets } from "./widgets"
 
 const StyledDescription = styled(Dialog.Description)`
   display: grid;
@@ -116,37 +116,21 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
 
           <StyledDescription>
             <Metrics>
-              {[
-                {
-                  label: metricTypeLabel[MetricType.LATENCY],
-                  value: MetricType.LATENCY,
-                  iconUrl: "/assets/metric-read-latency.svg",
-                },
-                {
-                  label: metricTypeLabel[MetricType.WRITE_AMPLIFICATION],
-                  value: MetricType.WRITE_AMPLIFICATION,
-                  iconUrl: "/assets/metric-write-amplification.svg",
-                },
-                {
-                  label: metricTypeLabel[MetricType.ROWS_APPLIED],
-                  value: MetricType.ROWS_APPLIED,
-                  iconUrl: "/assets/metric-rows-applied.svg",
-                },
-              ].map((metric) => (
+              {Object.entries(widgets).map(([metricType, widget]) => (
                 <Metric
-                  key={metric.value}
-                  onClick={() => handleSelectMetric(metric.value)}
+                  key={metricType}
+                  onClick={() => handleSelectMetric(metricType as MetricType)}
                 >
                   <Image>
                     <img
-                      src={metric.iconUrl}
-                      alt={`${metric.label} icon`}
+                      src={widget.iconUrl}
+                      alt={`${widget.label} icon`}
                       width="64"
                       height="64"
                     />
                   </Image>
                   <Text color="foreground" weight={600}>
-                    {metric.label}
+                    {widget.label}
                   </Text>
                 </Metric>
               ))}
