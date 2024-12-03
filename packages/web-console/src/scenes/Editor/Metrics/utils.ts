@@ -99,6 +99,15 @@ const sqlValueToFixed = (value: string, decimals: number = 2) => {
   return Number(parsed.toFixed(decimals)) as unknown as number
 }
 
+const formatNumbers = (value: number) => {
+  if (value >= 1e6) {
+    return (value / 1e6).toFixed(1).replace(/\.0$/, "") + " M"
+  } else if (value >= 1e3) {
+    return (value / 1e3).toFixed(1).replace(/\.0$/, "") + " k"
+  }
+  return value.toString()
+}
+
 export const graphDataConfigs = {
   [MetricType.LATENCY]: {
     alignData: (latency: Latency[]): uPlot.AlignedData => [
@@ -118,20 +127,13 @@ export const graphDataConfigs = {
       rowsApplied.map((l) => new Date(l.time).getTime()),
       rowsApplied.map((l) => sqlValueToFixed(l.numOfRowsApplied)),
     ],
-    mapYValue: (rawValue: number) => {
-      if (rawValue >= 1e6) {
-        return (rawValue / 1e6).toFixed(1).replace(/\.0$/, "") + " M"
-      } else if (rawValue >= 1e3) {
-        return (rawValue / 1e3).toFixed(1).replace(/\.0$/, "") + " k"
-      }
-      return rawValue.toString()
-    },
+    mapYValue: (rawValue: number) => formatNumbers(rawValue),
   },
   [MetricType.WRITE_AMPLIFICATION]: {
     alignData: (rowsApplied: RowsApplied[]): uPlot.AlignedData => [
       rowsApplied.map((l) => new Date(l.time).getTime()),
       rowsApplied.map((l) => sqlValueToFixed(l.avgWalAmplification)),
     ],
-    mapYValue: (rawValue: number) => `${rawValue} x`,
+    mapYValue: (rawValue: number) => formatNumbers(rawValue),
   },
 }
