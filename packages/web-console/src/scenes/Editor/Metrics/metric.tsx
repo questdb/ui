@@ -174,7 +174,7 @@ export const Metric = ({
   }, [autoRefreshTables, metricDuration, metric.tableId, refreshRate])
 
   const focusListener = useCallback(() => {
-    if (focusListenerRef.current) {
+    if (focusListenerRef.current && refreshRate !== RefreshRate.OFF) {
       fetchMetric()
     }
   }, [metric.tableId])
