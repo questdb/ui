@@ -27,6 +27,8 @@ export type Widget = {
 }
 
 export enum MetricDuration {
+  FIVE_MINUTES = "5m",
+  FIFTEEN_MINUTES = "15m",
   ONE_HOUR = "1h",
   THREE_HOURS = "3h",
   SIX_HOURS = "6h",
@@ -43,7 +45,44 @@ export enum SampleBy {
   ONE_HOUR = "1h",
 }
 
+export enum RefreshRate {
+  AUTO = "Auto",
+  ONE_SECOND = "1s",
+  FIVE_SECONDS = "5s",
+  TEN_SECONDS = "10s",
+  THIRTY_SECONDS = "30s",
+  ONE_MINUTE = "1m",
+  OFF = "Off",
+}
+
+export const refreshRates: Record<RefreshRate, number> = {
+  [RefreshRate.AUTO]: 0,
+  [RefreshRate.OFF]: 0,
+  [RefreshRate.ONE_SECOND]: 1 * 1000,
+  [RefreshRate.FIVE_SECONDS]: 5 * 1000,
+  [RefreshRate.TEN_SECONDS]: 10 * 1000,
+  [RefreshRate.THIRTY_SECONDS]: 30 * 1000,
+  [RefreshRate.ONE_MINUTE]: 60 * 1000,
+}
+
+export const autoRefreshRates: Record<
+  MetricDuration,
+  Exclude<RefreshRate, RefreshRate.AUTO>
+> = {
+  [MetricDuration.FIVE_MINUTES]: RefreshRate.ONE_SECOND,
+  [MetricDuration.FIFTEEN_MINUTES]: RefreshRate.FIVE_SECONDS,
+  [MetricDuration.ONE_HOUR]: RefreshRate.TEN_SECONDS,
+  [MetricDuration.THREE_HOURS]: RefreshRate.THIRTY_SECONDS,
+  [MetricDuration.SIX_HOURS]: RefreshRate.THIRTY_SECONDS,
+  [MetricDuration.TWELVE_HOURS]: RefreshRate.THIRTY_SECONDS,
+  [MetricDuration.TWENTY_FOUR_HOURS]: RefreshRate.THIRTY_SECONDS,
+  [MetricDuration.THREE_DAYS]: RefreshRate.ONE_MINUTE,
+  [MetricDuration.SEVEN_DAYS]: RefreshRate.ONE_MINUTE,
+}
+
 export const durationInMinutes: Record<MetricDuration, number> = {
+  [MetricDuration.FIVE_MINUTES]: 5,
+  [MetricDuration.FIFTEEN_MINUTES]: 15,
   [MetricDuration.ONE_HOUR]: 60,
   [MetricDuration.THREE_HOURS]: 60 * 3,
   [MetricDuration.SIX_HOURS]: 60 * 6,
@@ -54,6 +93,8 @@ export const durationInMinutes: Record<MetricDuration, number> = {
 }
 
 export const defaultSampleByForDuration: Record<MetricDuration, SampleBy> = {
+  [MetricDuration.FIVE_MINUTES]: SampleBy.ONE_SECOND,
+  [MetricDuration.FIFTEEN_MINUTES]: SampleBy.ONE_SECOND,
   [MetricDuration.ONE_HOUR]: SampleBy.ONE_SECOND,
   [MetricDuration.THREE_HOURS]: SampleBy.ONE_SECOND,
   [MetricDuration.SIX_HOURS]: SampleBy.ONE_SECOND,
@@ -108,6 +149,10 @@ export const minutesToSeconds = (durationInMinutes: number) =>
   durationInMinutes * 60
 
 export const xAxisFormat = {
+  [MetricDuration.FIVE_MINUTES]: (rawValue: number) =>
+    utcToLocal(rawValue, "HH:mm:ss"),
+  [MetricDuration.FIFTEEN_MINUTES]: (rawValue: number) =>
+    utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.ONE_HOUR]: (rawValue: number) =>
     utcToLocal(rawValue, "HH:mm"),
   [MetricDuration.THREE_HOURS]: (rawValue: number) =>

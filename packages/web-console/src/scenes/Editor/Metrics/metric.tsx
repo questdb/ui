@@ -12,6 +12,9 @@ import {
   MetricType,
   LastNotNull,
   ResultType,
+  RefreshRate,
+  refreshRates,
+  autoRefreshRates,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -45,6 +48,7 @@ const ActionButton = styled(Button)`
 export const Metric = ({
   metric,
   metricDuration,
+  refreshRate,
   onRemove,
   onTableChange,
   onColorChange,
@@ -52,6 +56,7 @@ export const Metric = ({
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
+  refreshRate: RefreshRate
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
@@ -128,7 +133,16 @@ export const Metric = ({
 
   const setupListeners = () => {
     if (autoRefreshTables) {
-      intervalRef.current = setInterval(() => fetchMetric(), 30000)
+      if (refreshRate === RefreshRate.OFF) {
+        clearInterval(intervalRef.current)
+      } else {
+        intervalRef.current = setInterval(
+          () => fetchMetric(),
+          refreshRate === RefreshRate.AUTO
+            ? refreshRates[autoRefreshRates[metricDuration]]
+            : refreshRates[refreshRate],
+        )
+      }
       window.addEventListener("focus", focusListener)
       focusListenerRef.current = true
     } else {
@@ -155,7 +169,7 @@ export const Metric = ({
         focusListenerRef.current = false
       }
     }
-  }, [autoRefreshTables, metricDuration, metric.tableId])
+  }, [autoRefreshTables, metricDuration, metric.tableId, refreshRate])
 
   const focusListener = useCallback(() => {
     if (focusListenerRef.current) {

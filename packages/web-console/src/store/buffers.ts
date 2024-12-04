@@ -1,3 +1,4 @@
+import { RefreshRate } from "./../scenes/Editor/Metrics/utils"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -41,6 +42,7 @@ export type Metric = {
 
 export type MetricsViewState = {
   metricDuration?: MetricDuration
+  refreshRate?: RefreshRate
   sampleBy?: string
   metrics?: Metric[]
 }

@@ -3,8 +3,8 @@ import styled from "styled-components"
 import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
-import { MetricDuration } from "./utils"
-import { Time } from "@styled-icons/boxicons-regular"
+import { MetricDuration, RefreshRate, autoRefreshRates } from "./utils"
+import { Time, Refresh } from "@styled-icons/boxicons-regular"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
 import { Metric as MetricComponent } from "./metric"
@@ -74,11 +74,22 @@ const GlobalInfo = styled(Box).attrs({
 
 const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
 
+const formatRefreshRateLabel = (
+  rate: RefreshRate,
+  duration: MetricDuration,
+) => {
+  if (rate === RefreshRate.AUTO) {
+    return `${RefreshRate.AUTO} (${autoRefreshRates[duration]})`
+  }
+  return rate
+}
+
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     MetricDuration.ONE_HOUR,
   )
+  const [refreshRate, setRefreshRate] = useState<RefreshRate>(RefreshRate.AUTO)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
@@ -130,28 +141,34 @@ export const Metrics = () => {
     if (buffer) {
       const metrics = buffer?.metricsViewState?.metrics
       const metricDuration = buffer?.metricsViewState?.metricDuration
+      const refreshRate = buffer?.metricsViewState?.refreshRate
       if (metrics) {
         setMetrics(metrics)
       }
       if (metricDuration) {
         setMetricDuration(metricDuration)
       }
+      if (refreshRate) {
+        setRefreshRate(refreshRate)
+      }
     }
   }, [buffer])
 
   useEffect(() => {
-    if (
-      buffer?.id &&
-      metricDuration !== buffer?.metricsViewState?.metricDuration
-    ) {
+    if (buffer?.id) {
       const merged = merge(buffer, {
         metricsViewState: {
-          metricDuration,
+          ...(metricDuration !== buffer?.metricsViewState?.metricDuration && {
+            metricDuration,
+          }),
+          ...(refreshRate !== buffer?.metricsViewState?.refreshRate && {
+            refreshRate,
+          }),
         },
       })
       updateBuffer(buffer.id, merged)
     }
-  }, [metricDuration])
+  }, [metricDuration, refreshRate])
 
   if (telemetryConfig && !telemetryConfig.enabled) {
     return (
@@ -196,6 +213,16 @@ export const Metrics = () => {
         <Box align="center" gap="1rem">
           <Text color="gray2">{getLocalTimeZone()}</Text>
           <Select
+            name="refresh_rate"
+            value={refreshRate}
+            options={Object.values(RefreshRate).map((rate) => ({
+              label: formatRefreshRateLabel(rate, metricDuration),
+              value: rate,
+            }))}
+            onChange={(e) => setRefreshRate(e.target.value as RefreshRate)}
+            prefixIcon={<Refresh size="18px" />}
+          />
+          <Select
             name="duration"
             value={metricDuration}
             options={Object.values(MetricDuration).map((duration) => ({
@@ -232,6 +259,7 @@ export const Metrics = () => {
                 key={index}
                 metric={metric}
                 metricDuration={metricDuration}
+                refreshRate={refreshRate}
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}

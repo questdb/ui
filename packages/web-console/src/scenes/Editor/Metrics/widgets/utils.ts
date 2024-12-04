@@ -24,8 +24,12 @@ export const minutesToSeconds = (durationInMinutes: number) =>
 export const getTimeFilter = (
   minutes: number,
 ) => `created > date_trunc('minute', dateadd('${
-  minutes >= 1440 ? "d" : "h"
+  minutes >= 1440 ? "d" : minutes >= 60 ? "h" : "s"
 }', -${
-  minutes >= 1440 ? minutesToDays(minutes) : minutesToHours(minutes)
+  minutes >= 1440
+    ? minutesToDays(minutes)
+    : minutes >= 60
+    ? minutesToHours(minutes)
+    : minutesToSeconds(minutes)
 }, now()))
-and created < date_trunc('minute', now())`
+and created < date_trunc('${minutes >= 60 ? "minute" : "second"}', now())`
