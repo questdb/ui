@@ -75,6 +75,7 @@ export const Metric = ({
 
   const intervalRef = React.useRef<NodeJS.Timeout>()
   const focusListenerRef = React.useRef(false)
+  const refreshRateRef = useRef<RefreshRate>(refreshRate)
 
   const { autoRefreshTables } = useLocalStorage()
 
@@ -156,6 +157,7 @@ export const Metric = ({
 
   useEffect(() => {
     metricDurationRef.current = metricDuration
+    refreshRateRef.current = refreshRate
 
     if (metric.tableId) {
       fetchMetric()
@@ -174,12 +176,15 @@ export const Metric = ({
   }, [autoRefreshTables, metricDuration, metric.tableId, refreshRate])
 
   const focusListener = useCallback(() => {
-    if (focusListenerRef.current && refreshRate !== RefreshRate.OFF) {
+    if (
+      focusListenerRef.current &&
+      refreshRateRef.current !== RefreshRate.OFF
+    ) {
       fetchMetric()
     }
-  }, [metric.tableId])
+  }, [metric.tableId, refreshRateRef.current])
 
-  useCallback(() => {
+  useEffect(() => {
     if (lastRefresh) {
       fetchMetric()
     }
@@ -206,6 +211,7 @@ export const Metric = ({
 
   return (
     <Graph
+      lastRefresh={lastRefresh}
       data={metric.tableId && data ? data : [[], []]}
       canZoomToData={canZoomToData}
       onZoomToData={handleZoomToData}

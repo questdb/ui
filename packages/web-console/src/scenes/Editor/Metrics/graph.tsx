@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef } from "react"
+import React, { useContext, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { MetricDuration, xAxisFormat } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
@@ -91,6 +91,7 @@ const LabelValue = styled.span`
 `
 
 type Props = {
+  lastRefresh?: number
   tableId?: number
   tableName?: string
   isTableMetric: boolean
@@ -107,6 +108,7 @@ type Props = {
 }
 
 export const Graph = ({
+  lastRefresh,
   tableId,
   tableName,
   isTableMetric,
@@ -124,6 +126,7 @@ export const Graph = ({
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
+  const [dateNow, setDateNow] = useState(new Date())
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -134,6 +137,7 @@ export const Graph = ({
 
   const graphOptions = useGraphOptions({
     data,
+    dateNow,
     colors,
     duration,
     timeRef,
@@ -153,6 +157,10 @@ export const Graph = ({
       resizeObserver.disconnect()
     }
   }, [graphRootRef.current])
+
+  useEffect(() => {
+    setDateNow(new Date())
+  }, [lastRefresh])
 
   return (
     <Root ref={graphRootRef}>
