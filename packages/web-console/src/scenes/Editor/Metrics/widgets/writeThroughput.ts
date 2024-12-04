@@ -7,6 +7,7 @@ import { getTimeFilter } from "./utils"
 export const writeThroughput: Widget = {
   label: "Write throughput",
   iconUrl: "/assets/metric-rows-applied.svg",
+  isTableMetric: true,
   getQuery: ({ tableId, metricDuration, sampleBy }) => {
     const minutes = durationInMinutes[metricDuration]
 

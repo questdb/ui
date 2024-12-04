@@ -93,6 +93,9 @@ const LabelValue = styled.span`
 `
 
 type Props = {
+  tableId?: number
+  tableName?: string
+  isTableMetric: boolean
   label: string
   beforeLabel?: React.ReactNode
   loading?: boolean
@@ -106,6 +109,9 @@ type Props = {
 }
 
 export const Graph = ({
+  tableId,
+  tableName,
+  isTableMetric,
   label,
   beforeLabel,
   data,
@@ -176,7 +182,13 @@ export const Graph = ({
               uplot.over.appendChild(noData)
 
               const noDataText = document.createElement("span")
-              noDataText.innerText = "No data available for this period"
+              if (isTableMetric && !tableName) {
+                noDataText.innerText = tableId
+                  ? "Table does not exist. Please select another one"
+                  : "Select a table to see metrics"
+              } else {
+                noDataText.innerText = "No data available for this period"
+              }
               noDataText.className = "graph-no-data-text"
               noData.appendChild(noDataText)
 

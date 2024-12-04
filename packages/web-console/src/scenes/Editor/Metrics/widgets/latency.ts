@@ -7,6 +7,7 @@ import { TelemetryTable } from "../../../../consts"
 export const latency: Widget = {
   label: "WAL apply latency in ms",
   iconUrl: "/assets/metric-read-latency.svg",
+  isTableMetric: true,
   getQuery: ({ tableId, metricDuration, sampleBy }) => {
     const minutes = durationInMinutes[metricDuration]
     return `

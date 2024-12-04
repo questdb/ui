@@ -173,13 +173,14 @@ export const Metric = ({
 
   const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
 
-  const canZoomToData = lastNotNull
-    ? lastNotNull >=
-      subMinutes(
-        new Date(),
-        minuteDurations[minuteDurations.length - 1][1],
-      ).getTime()
-    : false
+  const canZoomToData =
+    tableName && lastNotNull
+      ? lastNotNull >=
+        subMinutes(
+          new Date(),
+          minuteDurations[minuteDurations.length - 1][1],
+        ).getTime()
+      : false
 
   return (
     <Graph
@@ -191,8 +192,12 @@ export const Metric = ({
       duration={metricDuration}
       label={widgetConfig.label}
       yValue={widgetConfig.mapYValue}
+      tableId={metric.tableId}
+      tableName={tableName}
+      isTableMetric={widgetConfig.isTableMetric}
       beforeLabel={
         <TableSelector
+          tableId={metric.tableId}
           loading={loading}
           options={tables.map((t) => {
             return {

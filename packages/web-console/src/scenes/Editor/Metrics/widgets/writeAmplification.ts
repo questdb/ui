@@ -7,6 +7,7 @@ import { getTimeFilter } from "./utils"
 export const writeAmplification: Widget = {
   label: "Write amplification",
   iconUrl: "/assets/metric-write-amplification.svg",
+  isTableMetric: true,
   getQuery: ({ tableId, metricDuration, sampleBy }) => {
     const minutes = durationInMinutes[metricDuration]
     return `

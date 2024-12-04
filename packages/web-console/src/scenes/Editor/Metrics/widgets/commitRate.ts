@@ -7,6 +7,7 @@ import { getTimeFilter, sqlValueToFixed, formatNumbers } from "./utils"
 export const commitRate: Widget = {
   label: "Commit rate per second",
   iconUrl: "/assets/metric-commit-rate.svg",
+  isTableMetric: true,
   getQuery: ({ tableId, metricDuration, sampleBy }) => {
     const minutes = durationInMinutes[metricDuration]
     return `

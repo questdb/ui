@@ -11,6 +11,7 @@ type Option = {
   disabled: boolean
 }
 type Props = {
+  tableId?: number
   defaultValue: string
   options: Option[]
   onSelect: (value: string) => void
@@ -83,6 +84,7 @@ const Item = styled.li<{ active: boolean; disabled: boolean }>`
 `
 
 export const TableSelector = ({
+  tableId,
   defaultValue,
   options,
   onSelect,
@@ -113,7 +115,7 @@ export const TableSelector = ({
 
     if (inputRef.current && !loading) {
       setQuery(defaultValue ?? "")
-      if (defaultValue === "") {
+      if (defaultValue === "" && !tableId) {
         inputRef.current!.focus()
       }
 
