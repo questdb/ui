@@ -31,6 +31,7 @@ import React, {
   useState,
   useContext,
   useReducer,
+  useCallback,
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
@@ -68,6 +69,9 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { NotificationType } from "../../types"
 import { Checkbox } from "./checkbox"
+import { AddChart } from "@styled-icons/material"
+import { useEditor } from "../../providers/EditorProvider"
+import { MetricDuration, RefreshRate } from "../../scenes/Editor/Metrics/utils"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -160,6 +164,7 @@ const Schema = ({
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
+  const { addBuffer } = useEditor()
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -295,12 +300,12 @@ const Schema = ({
     })
   }, [])
 
-  const focusListener = () => {
+  const focusListener = useCallback(() => {
     if (listenerActiveRef.current) {
       void fetchTables()
       void fetchColumns()
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (autoRefreshTables) {
@@ -350,12 +355,18 @@ const Schema = ({
                   : true)
               )
             })
+            .sort((a, b) =>
+              a.table_name
+                .toLowerCase()
+                .localeCompare(b.table_name.toLowerCase()),
+            )
             .map((table: QuestDB.Table) => (
               <Table
                 designatedTimestamp={table.designatedTimestamp}
                 expanded={table.table_name === opened}
                 isScrolling={isScrolling}
                 key={table.table_name}
+                id={table.id}
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
@@ -454,6 +465,31 @@ const Schema = ({
                     </PopperHover>
                   )}
 
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          data-hook="schema-add-metrics-button"
+                          skin="transparent"
+                          onClick={() => {
+                            addBuffer({
+                              metricsViewState: {
+                                metrics: [],
+                                metricDuration: MetricDuration.ONE_HOUR,
+                                refreshRate: RefreshRate.AUTO,
+                              },
+                            })
+                          }}
+                        >
+                          <AddChart size="20px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Add metrics</Tooltip>
+                    </PopperHover>
+                  )}
                   {!selectOpen && (
                     <PopperHover
                       delay={350}

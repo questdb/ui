@@ -1,3 +1,4 @@
+import { RefreshRate } from "./../scenes/Editor/Metrics/utils"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -24,6 +25,27 @@
 
 import { db } from "./db"
 import type { editor } from "monaco-editor"
+import { MetricType, MetricDuration } from "scenes/Editor/Metrics/utils"
+import { Color } from "types"
+
+export enum BufferType {
+  SQL = "SQL",
+  METRICS = "Metrics",
+}
+
+export type Metric = {
+  tableId?: number
+  metricType: MetricType
+  position: number
+  color: string
+}
+
+export type MetricsViewState = {
+  metricDuration?: MetricDuration
+  refreshRate?: RefreshRate
+  sampleBy?: string
+  metrics?: Metric[]
+}
 
 export type Buffer = {
   /** auto incremented number by Dexie */
@@ -34,6 +56,7 @@ export type Buffer = {
   archived?: boolean
   archivedAt?: number
   editorViewState?: editor.ICodeEditorViewState
+  metricsViewState?: MetricsViewState
 }
 
 const defaultEditorViewState: editor.ICodeEditorViewState = {
@@ -74,6 +97,7 @@ export const makeBuffer = ({
   label,
   value,
   editorViewState = defaultEditorViewState,
+  metricsViewState,
   position,
   archived,
   archivedAt,
@@ -81,17 +105,26 @@ export const makeBuffer = ({
   label: string
   value?: string
   editorViewState?: editor.ICodeEditorViewState
+  metricsViewState?: MetricsViewState
   position: number
   archived?: boolean
   archivedAt?: number
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
-  editorViewState,
+  editorViewState: metricsViewState ? undefined : editorViewState,
+  metricsViewState,
   position,
   archived,
   archivedAt,
 })
+
+export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {
+  return {
+    id: 1,
+    ...makeBuffer({ label: bufferType, position: 0 }),
+  }
+}
 
 export const fallbackBuffer = {
   id: 1,
