@@ -14,6 +14,7 @@ import { ExternalLink } from "@styled-icons/remix-line"
 import merge from "lodash.merge"
 import { AddChart } from "@styled-icons/material"
 import { getLocalTimeZone } from "../../../utils/dateTime"
+import { IconWithTooltip } from "../../../components/IconWithTooltip"
 
 const Root = styled.div`
   display: flex;
@@ -93,6 +94,7 @@ export const Metrics = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
+  const [lastRefresh, setLastRefresh] = useState<number | undefined>()
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
@@ -212,16 +214,29 @@ export const Metrics = () => {
         <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">
           <Text color="gray2">{getLocalTimeZone()}</Text>
-          <Select
-            name="refresh_rate"
-            value={refreshRate}
-            options={Object.values(RefreshRate).map((rate) => ({
-              label: formatRefreshRateLabel(rate, metricDuration),
-              value: rate,
-            }))}
-            onChange={(e) => setRefreshRate(e.target.value as RefreshRate)}
-            prefixIcon={<Refresh size="18px" />}
-          />
+          <Box gap="0.5rem" style={{ flexShrink: 0 }}>
+            <IconWithTooltip
+              icon={
+                <Button
+                  skin="secondary"
+                  onClick={() => setLastRefresh(new Date().getTime())}
+                >
+                  <Refresh size="20px" />
+                </Button>
+              }
+              tooltip="Refresh all widgets"
+              placement="bottom"
+            />
+            <Select
+              name="refresh_rate"
+              value={refreshRate}
+              options={Object.values(RefreshRate).map((rate) => ({
+                label: formatRefreshRateLabel(rate, metricDuration),
+                value: rate,
+              }))}
+              onChange={(e) => setRefreshRate(e.target.value as RefreshRate)}
+            />
+          </Box>
           <Select
             name="duration"
             value={metricDuration}
@@ -264,6 +279,7 @@ export const Metrics = () => {
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
                 onMetricDurationChange={setMetricDuration}
+                lastRefresh={lastRefresh}
               />
             ))}
       </Charts>

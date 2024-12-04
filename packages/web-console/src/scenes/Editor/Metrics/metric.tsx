@@ -53,6 +53,7 @@ export const Metric = ({
   onTableChange,
   onColorChange,
   onMetricDurationChange,
+  lastRefresh,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
@@ -61,6 +62,7 @@ export const Metric = ({
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
   onMetricDurationChange: (duration: MetricDuration) => void
+  lastRefresh?: number
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
@@ -89,7 +91,7 @@ export const Metric = ({
         | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>
       >([
-        quest.query<any>(
+        quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
             tableId: metric.tableId,
             metricDuration: metricDurationRef.current,
@@ -176,6 +178,12 @@ export const Metric = ({
       fetchMetric()
     }
   }, [metric.tableId])
+
+  useCallback(() => {
+    if (lastRefresh) {
+      fetchMetric()
+    }
+  }, [lastRefresh])
 
   if (!data && !loading && metric.tableId)
     return (

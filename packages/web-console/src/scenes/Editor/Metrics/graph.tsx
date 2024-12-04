@@ -4,7 +4,6 @@ import { MetricDuration, xAxisFormat } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import { ThemeContext } from "styled-components"
 import { Box } from "@questdb/react-components"
 
 const Actions = styled.div`
@@ -54,7 +53,6 @@ const GraphWrapper = styled(Box).attrs({
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    width: 100%;
     text-align: center;
   }
 
@@ -126,7 +124,6 @@ export const Graph = ({
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
-  const theme = useContext(ThemeContext)
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -176,7 +173,7 @@ export const Graph = ({
           data={data}
           onCreate={(uplot) => {
             uPlotRef.current = uplot
-            if (data[0].length === 0) {
+            if (data[0].length === 0 && !loading) {
               const noData = document.createElement("div")
               noData.className = "graph-no-data"
               uplot.over.appendChild(noData)
