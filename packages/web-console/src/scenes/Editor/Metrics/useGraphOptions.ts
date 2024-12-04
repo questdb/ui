@@ -12,8 +12,8 @@ type Params = {
   colors: string[]
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
-  xValue: (rawValue: number, index: number, ticks: number[]) => string | null
-  yValue: (rawValue: number) => string
+  mapXValue: (rawValue: number, index: number, ticks: number[]) => string | null
+  mapYValue: (rawValue: number) => string
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
 }
@@ -21,7 +21,7 @@ type Params = {
 const valuePlugin = (
   timeRef: React.RefObject<HTMLSpanElement>,
   valueRef: React.RefObject<HTMLSpanElement>,
-  yValue: (rawValue: number) => string,
+  mapYValue: (rawValue: number) => string,
 ) => ({
   hooks: {
     setCursor: (u: uPlot) => {
@@ -36,7 +36,7 @@ const valuePlugin = (
           x as number,
           "dd/MM/yyyy HH:mm:ss",
         )
-        valueRef.current!.textContent = yValue(y as number)
+        valueRef.current!.textContent = mapYValue(y as number)
       } else {
         timeRef.current!.textContent = null
         valueRef.current!.textContent = null
@@ -51,8 +51,8 @@ export const useGraphOptions = ({
   colors,
   duration,
   tickValue = (rawValue) => (+rawValue).toString(),
-  xValue,
-  yValue = (rawValue) => (+rawValue).toFixed(4),
+  mapXValue,
+  mapYValue = (rawValue) => (+rawValue).toFixed(4),
   timeRef,
   valueRef,
 }: Params): Omit<uPlot.Options, "width" | "height"> => {
@@ -84,7 +84,7 @@ export const useGraphOptions = ({
       values: (_self, ticks) => {
         let found: string[] = []
         return ticks.map((rawValue, index) => {
-          const mapped = xValue(rawValue, index, ticks)
+          const mapped = mapXValue(rawValue, index, ticks)
           if (mapped === null) {
             return null
           }
@@ -99,7 +99,7 @@ export const useGraphOptions = ({
     },
     {
       ...baseAxisConfig,
-      values: (_self, ticks) => ticks.map((rawValue) => yValue(rawValue)),
+      values: (_self, ticks) => ticks.map((rawValue) => mapYValue(rawValue)),
     },
   ]
 
@@ -112,7 +112,7 @@ export const useGraphOptions = ({
       },
       stroke: colors[0],
       width: 2,
-      value: (_self, rawValue) => yValue(rawValue),
+      value: (_self, rawValue) => mapYValue(rawValue),
     },
   }
 
@@ -150,6 +150,6 @@ export const useGraphOptions = ({
       },
     },
 
-    plugins: [valuePlugin(timeRef, valueRef, yValue)],
+    plugins: [valuePlugin(timeRef, valueRef, mapYValue)],
   }
 }

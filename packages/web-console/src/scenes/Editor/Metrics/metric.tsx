@@ -218,11 +218,9 @@ export const Metric = ({
       colors={[metric.color]}
       loading={loading}
       duration={metricDuration}
-      label={widgetConfig.label}
-      yValue={widgetConfig.mapYValue}
       tableId={metric.tableId}
       tableName={tableName}
-      isTableMetric={widgetConfig.isTableMetric}
+      widgetConfig={widgetConfig}
       beforeLabel={
         <TableSelector
           tableId={metric.tableId}

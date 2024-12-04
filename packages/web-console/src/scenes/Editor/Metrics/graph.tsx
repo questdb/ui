@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { MetricDuration, xAxisFormat } from "./utils"
+import { MetricDuration, Widget, xAxisFormat } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -94,39 +94,37 @@ type Props = {
   lastRefresh?: number
   tableId?: number
   tableName?: string
-  isTableMetric: boolean
-  label: string
   beforeLabel?: React.ReactNode
   loading?: boolean
   data: uPlot.AlignedData
   canZoomToData?: boolean
   colors: string[]
   duration: MetricDuration
-  yValue: (rawValue: number) => string
   actions?: React.ReactNode
   onZoomToData?: () => void
+  widgetConfig: Widget
 }
 
 export const Graph = ({
   lastRefresh,
   tableId,
   tableName,
-  isTableMetric,
-  label,
   beforeLabel,
   data,
   canZoomToData,
   colors,
   duration,
-  yValue,
   loading,
   actions,
   onZoomToData,
+  widgetConfig,
 }: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
   const [dateNow, setDateNow] = useState(new Date())
+
+  const { isTableMetric, mapYValue, label } = widgetConfig
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -142,8 +140,8 @@ export const Graph = ({
     duration,
     timeRef,
     valueRef,
-    xValue: xAxisFormat[duration],
-    yValue,
+    mapXValue: xAxisFormat[duration],
+    mapYValue,
   })
 
   const graphRootRef = useRef<HTMLDivElement>(null)
@@ -160,7 +158,7 @@ export const Graph = ({
 
   useEffect(() => {
     setDateNow(new Date())
-  }, [lastRefresh])
+  }, [lastRefresh, data])
 
   return (
     <Root ref={graphRootRef}>

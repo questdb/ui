@@ -41,6 +41,7 @@ export enum MetricDuration {
 export enum SampleBy {
   ONE_SECOND = "1s",
   ONE_MINUTE = "1m",
+  FIVE_MINUTES = "5m",
   FIFTEEN_MINUTES = "15m",
   ONE_HOUR = "1h",
 }
@@ -96,12 +97,12 @@ export const defaultSampleByForDuration: Record<MetricDuration, SampleBy> = {
   [MetricDuration.FIVE_MINUTES]: SampleBy.ONE_SECOND,
   [MetricDuration.FIFTEEN_MINUTES]: SampleBy.ONE_SECOND,
   [MetricDuration.ONE_HOUR]: SampleBy.ONE_SECOND,
-  [MetricDuration.THREE_HOURS]: SampleBy.ONE_SECOND,
-  [MetricDuration.SIX_HOURS]: SampleBy.ONE_SECOND,
-  [MetricDuration.TWELVE_HOURS]: SampleBy.ONE_SECOND,
-  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.THREE_DAYS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.SEVEN_DAYS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.THREE_HOURS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.SIX_HOURS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.TWELVE_HOURS]: SampleBy.ONE_MINUTE,
+  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.FIVE_MINUTES,
+  [MetricDuration.THREE_DAYS]: SampleBy.FIFTEEN_MINUTES,
+  [MetricDuration.SEVEN_DAYS]: SampleBy.FIFTEEN_MINUTES,
 }
 
 export type CommitRate = {
