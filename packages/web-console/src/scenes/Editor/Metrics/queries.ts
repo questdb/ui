@@ -4,7 +4,7 @@ import {
   SampleBy,
   minutesToDays,
   minutesToHours,
-  mappedSampleBy,
+  defaultSampleByForDuration,
   durationInMinutes,
 } from "./utils"
 
@@ -29,7 +29,7 @@ and created > date_trunc('minute', dateadd('${minutes >= 1440 ? "d" : "h"}', -${
     minutes >= 1440 ? minutesToDays(minutes) : minutesToHours(minutes)
   }, now()))
 and created < date_trunc('minute', now())
-sample by ${sampleBy ?? mappedSampleBy[metricDuration]}`
+sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}`
 }
 
 export const rowsAppliedLastNotNull = (id: number) => `
@@ -61,7 +61,7 @@ and created > date_trunc('minute', dateadd('${minutes >= 1440 ? "d" : "h"}', -${
     minutes >= 1440 ? minutesToDays(minutes) : minutesToHours(minutes)
   }, now()))
 and created < date_trunc('minute', now())
-sample by ${sampleBy ?? mappedSampleBy[metricDuration]}
+sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
 `
 }
 

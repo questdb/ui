@@ -1,6 +1,6 @@
 import uPlot from "uplot"
 import { sqlValueToFixed, formatNumbers, WriteAmplification } from "../utils"
-import { Widget, mappedSampleBy, durationInMinutes } from "../utils"
+import { Widget, defaultSampleByForDuration, durationInMinutes } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 import { getTimeFilter } from "./utils"
 
@@ -29,8 +29,8 @@ from (
       where ${tableId ? `tableId = ${tableId} and ` : ""}
          event = 105
          and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
-         ${getTimeFilter(minutes)}
-      sample by ${sampleBy ?? mappedSampleBy[metricDuration]}      
+         and ${getTimeFilter(minutes)}
+      sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}      
       -- fill with null to avoid spurious values and division by 0
       fill(null,null)
   )

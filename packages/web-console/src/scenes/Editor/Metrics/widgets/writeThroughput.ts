@@ -1,6 +1,6 @@
 import uPlot from "uplot"
 import { RowsApplied, sqlValueToFixed, formatNumbers } from "../utils"
-import { Widget, mappedSampleBy, durationInMinutes } from "../utils"
+import { Widget, defaultSampleByForDuration, durationInMinutes } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 import { getTimeFilter } from "./utils"
 
@@ -21,8 +21,8 @@ select
 from ${TelemetryTable.WAL}
 where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
-${getTimeFilter(minutes)}
-sample by ${sampleBy ?? mappedSampleBy[metricDuration]}`
+and ${getTimeFilter(minutes)}
+sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}`
   },
   getQueryLastNotNull: (tableId) => `
 select

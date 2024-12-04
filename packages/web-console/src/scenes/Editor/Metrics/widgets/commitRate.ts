@@ -31,7 +31,7 @@ export const commitRate: Widget = {
       from ${TelemetryTable.WAL}
       where ${tableId ? `tableId = ${tableId} and ` : ""}
       event = 103
-      ${getTimeFilter(minutes)}
+      and ${getTimeFilter(minutes)}
       -- it is important this is 1s, should this value change
       -- the "commit_rate" value will have to be adjusted to rate/s
       sample by 1s 

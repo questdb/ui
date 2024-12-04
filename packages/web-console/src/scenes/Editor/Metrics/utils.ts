@@ -53,7 +53,7 @@ export const durationInMinutes: Record<MetricDuration, number> = {
   [MetricDuration.SEVEN_DAYS]: 60 * 168,
 }
 
-export const mappedSampleBy: Record<MetricDuration, SampleBy> = {
+export const defaultSampleByForDuration: Record<MetricDuration, SampleBy> = {
   [MetricDuration.ONE_HOUR]: SampleBy.ONE_SECOND,
   [MetricDuration.THREE_HOURS]: SampleBy.ONE_SECOND,
   [MetricDuration.SIX_HOURS]: SampleBy.ONE_SECOND,
@@ -83,9 +83,8 @@ export type RowsApplied = {
 }
 
 export type Latency = {
-  time: string
-  numOfWalApplies: string
-  avg_latency: string
+  created: string
+  latency: string
 }
 
 export type LastNotNull = {
