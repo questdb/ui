@@ -161,6 +161,10 @@ export const Metrics = () => {
     }
   }, [refreshRateRef.current])
 
+  const blurListener = useCallback(() => {
+    tabInFocusRef.current = false
+  }, [])
+
   const setupListeners = () => {
     if (autoRefreshTables && refreshRate && refreshRate !== RefreshRate.OFF) {
       intervalRef.current = setInterval(
@@ -221,12 +225,11 @@ export const Metrics = () => {
 
   useEffect(() => {
     eventBus.subscribe(EventType.TAB_FOCUS, focusListener)
-    eventBus.subscribe(EventType.TAB_BLUR, () => {
-      tabInFocusRef.current = false
-    })
+    eventBus.subscribe(EventType.TAB_BLUR, blurListener)
 
     return () => {
       eventBus.unsubscribe(EventType.TAB_FOCUS, focusListener)
+      eventBus.unsubscribe(EventType.TAB_BLUR, blurListener)
     }
   }, [])
 
