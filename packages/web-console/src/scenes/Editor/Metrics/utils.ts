@@ -16,10 +16,12 @@ export type Widget = {
     tableId,
     metricDuration,
     sampleBy,
+    limit,
   }: {
     tableId?: number
     metricDuration: MetricDuration
     sampleBy?: SampleBy
+    limit?: number
   }) => string
   getQueryLastNotNull: (id?: number) => string
   alignData: (data: any) => uPlot.AlignedData
@@ -56,14 +58,14 @@ export enum RefreshRate {
   OFF = "Off",
 }
 
-export const refreshRates: Record<RefreshRate, number> = {
+export const refreshRatesInSeconds: Record<RefreshRate, number> = {
   [RefreshRate.AUTO]: 0,
   [RefreshRate.OFF]: 0,
-  [RefreshRate.ONE_SECOND]: 1 * 1000,
-  [RefreshRate.FIVE_SECONDS]: 5 * 1000,
-  [RefreshRate.TEN_SECONDS]: 10 * 1000,
-  [RefreshRate.THIRTY_SECONDS]: 30 * 1000,
-  [RefreshRate.ONE_MINUTE]: 60 * 1000,
+  [RefreshRate.ONE_SECOND]: 1,
+  [RefreshRate.FIVE_SECONDS]: 5,
+  [RefreshRate.TEN_SECONDS]: 10,
+  [RefreshRate.THIRTY_SECONDS]: 30,
+  [RefreshRate.ONE_MINUTE]: 60,
 }
 
 export const autoRefreshRates: Record<
@@ -103,6 +105,14 @@ export const defaultSampleByForDuration: Record<MetricDuration, SampleBy> = {
   [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.FIVE_MINUTES,
   [MetricDuration.THREE_DAYS]: SampleBy.FIFTEEN_MINUTES,
   [MetricDuration.SEVEN_DAYS]: SampleBy.FIFTEEN_MINUTES,
+}
+
+export const sampleByInSeconds: Record<SampleBy, number> = {
+  [SampleBy.ONE_SECOND]: 1,
+  [SampleBy.ONE_MINUTE]: 60,
+  [SampleBy.FIVE_MINUTES]: 60 * 5,
+  [SampleBy.FIFTEEN_MINUTES]: 60 * 15,
+  [SampleBy.ONE_HOUR]: 60 * 60,
 }
 
 export type CommitRate = {
@@ -183,3 +193,21 @@ export const formatNumbers = (value: number) => {
   }
   return value.toString()
 }
+
+export const getTimeFilter = (
+  minutes: number,
+) => `created > date_trunc('minute', dateadd('${
+  minutes >= 1440 ? "d" : minutes >= 60 ? "h" : "s"
+}', -${
+  minutes >= 1440
+    ? minutesToDays(minutes)
+    : minutes >= 60
+    ? minutesToHours(minutes)
+    : minutesToSeconds(minutes)
+}, now()))
+and created < date_trunc('${minutes >= 60 ? "minute" : "second"}', now())`
+
+export const getRollingAppendRowLimit = (
+  refreshRateInSeconds: number,
+  sampleBy: SampleBy,
+) => Math.ceil(refreshRateInSeconds / sampleByInSeconds[sampleBy])

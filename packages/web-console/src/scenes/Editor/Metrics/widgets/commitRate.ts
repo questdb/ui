@@ -1,14 +1,19 @@
 import uPlot from "uplot"
-import { Widget, durationInMinutes } from "../utils"
+import type { Widget } from "../utils"
+import {
+  durationInMinutes,
+  getTimeFilter,
+  sqlValueToFixed,
+  formatNumbers,
+} from "../utils"
 import type { CommitRate } from "../utils"
 import { TelemetryTable } from "../../../../consts"
-import { getTimeFilter, sqlValueToFixed, formatNumbers } from "./utils"
 
 export const commitRate: Widget = {
   label: "Commit rate per second",
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
-  getQuery: ({ tableId, metricDuration, sampleBy }) => {
+  getQuery: ({ tableId, metricDuration, sampleBy, limit }) => {
     const minutes = durationInMinutes[metricDuration]
     return `
     select 
@@ -40,6 +45,7 @@ export const commitRate: Widget = {
     -- there is a bug in QuestDB, which does not sort the window dataset
     -- once the bug is fixed the order can be removed
     order by 1
+    ${limit ? `limit ${limit}` : ""}
 );
     `
   },
@@ -53,9 +59,9 @@ event = 103
 and physicalRowCount != null
 limit -1
 `,
-  alignData: (rowsApplied: CommitRate[]): uPlot.AlignedData => [
-    rowsApplied.map((l) => new Date(l.created).getTime()),
-    rowsApplied.map((l) => sqlValueToFixed(l.commit_rate_smooth)),
+  alignData: (data: CommitRate[]): uPlot.AlignedData => [
+    data.map((l) => new Date(l.created).getTime()),
+    data.map((l) => sqlValueToFixed(l.commit_rate_smooth)),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

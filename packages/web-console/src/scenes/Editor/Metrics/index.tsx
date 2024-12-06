@@ -7,7 +7,9 @@ import {
   MetricDuration,
   RefreshRate,
   autoRefreshRates,
-  refreshRates,
+  refreshRatesInSeconds,
+  defaultSampleByForDuration,
+  getRollingAppendRowLimit,
 } from "./utils"
 import { Time, Refresh } from "@styled-icons/boxicons-regular"
 import { AddMetricDialog } from "./add-metric-dialog"
@@ -113,6 +115,17 @@ export const Metrics = () => {
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
+  const refreshRateInSec = refreshRate
+    ? refreshRate === RefreshRate.AUTO
+      ? refreshRatesInSeconds[autoRefreshRates[metricDuration]] * 1000
+      : refreshRatesInSeconds[refreshRate]
+    : 0
+
+  const rollingAppendLimit = getRollingAppendRowLimit(
+    refreshRateInSec,
+    defaultSampleByForDuration[metricDuration],
+  )
+
   const updateMetrics = (metrics: Metric[]) => {
     if (buffer?.id) {
       updateBuffer(buffer?.id, {
@@ -172,9 +185,7 @@ export const Metrics = () => {
           if (!tabInFocusRef.current) return
           setLastRefresh(new Date().getTime())
         },
-        refreshRate === RefreshRate.AUTO
-          ? refreshRates[autoRefreshRates[metricDuration]]
-          : refreshRates[refreshRate],
+        refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
       )
     } else {
       clearInterval(intervalRef.current)

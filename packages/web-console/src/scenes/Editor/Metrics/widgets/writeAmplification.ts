@@ -1,14 +1,20 @@
 import uPlot from "uplot"
-import { sqlValueToFixed, formatNumbers, WriteAmplification } from "../utils"
-import { Widget, defaultSampleByForDuration, durationInMinutes } from "../utils"
+import type { Widget } from "../utils"
+import { WriteAmplification } from "../utils"
+import {
+  defaultSampleByForDuration,
+  durationInMinutes,
+  sqlValueToFixed,
+  formatNumbers,
+  getTimeFilter,
+} from "../utils"
 import { TelemetryTable } from "../../../../consts"
-import { getTimeFilter } from "./utils"
 
 export const writeAmplification: Widget = {
   label: "Write amplification",
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
-  getQuery: ({ tableId, metricDuration, sampleBy }) => {
+  getQuery: ({ tableId, metricDuration, sampleBy, limit }) => {
     const minutes = durationInMinutes[metricDuration]
     return `
 select 
@@ -33,6 +39,7 @@ from (
       sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}      
       -- fill with null to avoid spurious values and division by 0
       fill(null,null)
+      ${limit ? `limit ${limit}` : ""}
   )
 );
     `

@@ -1,14 +1,19 @@
 import uPlot from "uplot"
-import { Latency, sqlValueToFixed } from "../utils"
-import { Widget, defaultSampleByForDuration, durationInMinutes } from "../utils"
-import { getTimeFilter } from "./utils"
+import type { Widget } from "../utils"
+import {
+  Latency,
+  defaultSampleByForDuration,
+  durationInMinutes,
+  sqlValueToFixed,
+  getTimeFilter,
+} from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const latency: Widget = {
   label: "WAL apply latency in ms",
   iconUrl: "/assets/metric-read-latency.svg",
   isTableMetric: true,
-  getQuery: ({ tableId, metricDuration, sampleBy }) => {
+  getQuery: ({ tableId, metricDuration, sampleBy, limit }) => {
     const minutes = durationInMinutes[metricDuration]
     return `
 select created, approx_percentile(latency, 0.9, 3) latency
@@ -20,6 +25,7 @@ select created, approx_percentile(latency, 0.9, 3) latency
       ${tableId ? `and tableId = ${tableId}` : ""}
   sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
   fill(0)
+  ${limit ? `limit ${limit}` : ""}
   `
   },
   getQueryLastNotNull: (tableId) => `
@@ -31,9 +37,9 @@ event = 105
 and latency != null and rowCount > 0
 limit -1
 `,
-  alignData: (latency: Latency[]): uPlot.AlignedData => [
-    latency.map((l) => new Date(l.created).getTime()),
-    latency.map((l) => sqlValueToFixed(l.latency)),
+  alignData: (data: Latency[]): uPlot.AlignedData => [
+    data.map((l) => new Date(l.created).getTime()),
+    data.map((l) => sqlValueToFixed(l.latency)),
   ],
   mapYValue: (rawValue: number) => {
     if (rawValue >= 1000) {
