@@ -129,7 +129,7 @@ export const Metrics = () => {
 
   const refreshRateInSec = refreshRate
     ? refreshRate === RefreshRate.AUTO
-      ? refreshRatesInSeconds[autoRefreshRates[metricDuration]] * 1000
+      ? refreshRatesInSeconds[autoRefreshRates[metricDuration]]
       : refreshRatesInSeconds[refreshRate]
     : 0
 

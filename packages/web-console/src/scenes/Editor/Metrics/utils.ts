@@ -1,7 +1,5 @@
-import { Grid } from "@styled-icons/remix-line"
 import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
-import { List } from "@styled-icons/fluentui-system-filled"
 
 export enum MetricType {
   COMMIT_RATE = "Commit rate",
