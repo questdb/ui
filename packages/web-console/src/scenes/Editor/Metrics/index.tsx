@@ -1,9 +1,14 @@
-import React, { useEffect, useState, useMemo } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
 import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
-import { MetricDuration, RefreshRate, autoRefreshRates } from "./utils"
+import {
+  MetricDuration,
+  RefreshRate,
+  autoRefreshRates,
+  refreshRates,
+} from "./utils"
 import { Time, Refresh } from "@styled-icons/boxicons-regular"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
@@ -15,6 +20,9 @@ import merge from "lodash.merge"
 import { AddChart } from "@styled-icons/material"
 import { getLocalTimeZone } from "../../../utils/dateTime"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 
 const Root = styled.div`
   display: flex;
@@ -87,14 +95,21 @@ const formatRefreshRateLabel = (
 
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
+
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     MetricDuration.ONE_HOUR,
   )
-  const [refreshRate, setRefreshRate] = useState<RefreshRate>(RefreshRate.AUTO)
+  const [refreshRate, setRefreshRate] = useState<RefreshRate>()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [lastRefresh, setLastRefresh] = useState<number | undefined>()
+  const [lastRefresh, setLastRefresh] = useState<number>(new Date().getTime())
+
+  const tabInFocusRef = React.useRef<boolean>(true)
+  const refreshRateRef = React.useRef<RefreshRate>()
+  const intervalRef = React.useRef<NodeJS.Timeout>()
+
+  const { autoRefreshTables } = useLocalStorage()
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
@@ -139,6 +154,29 @@ export const Metrics = () => {
     }
   }
 
+  const focusListener = useCallback(() => {
+    tabInFocusRef.current = true
+    if (refreshRateRef.current !== RefreshRate.OFF) {
+      setLastRefresh(new Date().getTime())
+    }
+  }, [refreshRateRef.current])
+
+  const setupListeners = () => {
+    if (autoRefreshTables && refreshRate && refreshRate !== RefreshRate.OFF) {
+      intervalRef.current = setInterval(
+        () => {
+          if (!tabInFocusRef.current) return
+          setLastRefresh(new Date().getTime())
+        },
+        refreshRate === RefreshRate.AUTO
+          ? refreshRates[autoRefreshRates[metricDuration]]
+          : refreshRates[refreshRate],
+      )
+    } else {
+      clearInterval(intervalRef.current)
+    }
+  }
+
   useEffect(() => {
     if (buffer) {
       const metrics = buffer?.metricsViewState?.metrics
@@ -169,8 +207,28 @@ export const Metrics = () => {
         },
       })
       updateBuffer(buffer.id, merged)
+
+      setLastRefresh(new Date().getTime())
     }
   }, [metricDuration, refreshRate])
+
+  useEffect(() => {
+    if (refreshRate) {
+      refreshRateRef.current = refreshRate
+      setupListeners()
+    }
+  }, [refreshRate])
+
+  useEffect(() => {
+    eventBus.subscribe(EventType.TAB_FOCUS, focusListener)
+    eventBus.subscribe(EventType.TAB_BLUR, () => {
+      tabInFocusRef.current = false
+    })
+
+    return () => {
+      eventBus.unsubscribe(EventType.TAB_FOCUS, focusListener)
+    }
+  }, [])
 
   if (telemetryConfig && !telemetryConfig.enabled) {
     return (
@@ -227,27 +285,41 @@ export const Metrics = () => {
               tooltip="Refresh all widgets"
               placement="bottom"
             />
-            <Select
-              name="refresh_rate"
-              value={refreshRate}
-              options={Object.values(RefreshRate).map((rate) => ({
-                label: formatRefreshRateLabel(rate, metricDuration),
-                value: rate,
-              }))}
-              onChange={(e) => setRefreshRate(e.target.value as RefreshRate)}
+            <IconWithTooltip
+              icon={
+                <Select
+                  name="refresh_rate"
+                  value={refreshRate}
+                  options={Object.values(RefreshRate).map((rate) => ({
+                    label: formatRefreshRateLabel(rate, metricDuration),
+                    value: rate,
+                  }))}
+                  onChange={(e) =>
+                    setRefreshRate(e.target.value as RefreshRate)
+                  }
+                />
+              }
+              tooltip="Widget refresh rate"
+              placement="bottom"
             />
           </Box>
-          <Select
-            name="duration"
-            value={metricDuration}
-            options={Object.values(MetricDuration).map((duration) => ({
-              label: formatDurationLabel(duration),
-              value: duration,
-            }))}
-            onChange={(e) =>
-              setMetricDuration(e.target.value as MetricDuration)
+          <IconWithTooltip
+            icon={
+              <Select
+                name="duration"
+                value={metricDuration}
+                options={Object.values(MetricDuration).map((duration) => ({
+                  label: formatDurationLabel(duration),
+                  value: duration,
+                }))}
+                onChange={(e) =>
+                  setMetricDuration(e.target.value as MetricDuration)
+                }
+                prefixIcon={<Time size="18px" />}
+              />
             }
-            prefixIcon={<Time size="18px" />}
+            tooltip="Time duration"
+            placement="bottom"
           />
         </Box>
       </Toolbar>
@@ -274,7 +346,6 @@ export const Metrics = () => {
                 key={index}
                 metric={metric}
                 metricDuration={metricDuration}
-                refreshRate={refreshRate}
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}

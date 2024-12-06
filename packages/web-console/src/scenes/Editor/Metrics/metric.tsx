@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useState,
-  useContext,
-  useCallback,
-  useRef,
-} from "react"
+import React, { useEffect, useState, useContext } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   durationInMinutes,
@@ -12,9 +6,6 @@ import {
   MetricType,
   LastNotNull,
   ResultType,
-  RefreshRate,
-  refreshRates,
-  autoRefreshRates,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -26,7 +17,6 @@ import { Box, Button, ForwardRef, Popover } from "@questdb/react-components"
 import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { TableSelector } from "./table-selector"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { ColorPalette } from "./color-palette"
@@ -48,7 +38,6 @@ const ActionButton = styled(Button)`
 export const Metric = ({
   metric,
   metricDuration,
-  refreshRate,
   onRemove,
   onTableChange,
   onColorChange,
@@ -57,7 +46,6 @@ export const Metric = ({
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
-  refreshRate: RefreshRate
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
@@ -69,15 +57,8 @@ export const Metric = ({
   const [data, setData] = useState<uPlot.AlignedData>()
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const metricDurationRef = useRef(metricDuration)
 
   const tables = useSelector(selectors.query.getTables)
-
-  const intervalRef = React.useRef<NodeJS.Timeout>()
-  const focusListenerRef = React.useRef(false)
-  const refreshRateRef = useRef<RefreshRate>(refreshRate)
-
-  const { autoRefreshTables } = useLocalStorage()
 
   const widgetConfig = widgets[metric.metricType]
 
@@ -95,7 +76,7 @@ export const Metric = ({
         quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
             tableId: metric.tableId,
-            metricDuration: metricDurationRef.current,
+            metricDuration: metricDuration,
           }),
         ),
         quest.query<LastNotNull>(
@@ -134,61 +115,11 @@ export const Metric = ({
     }
   }
 
-  const setupListeners = () => {
-    if (autoRefreshTables) {
-      if (refreshRate === RefreshRate.OFF) {
-        clearInterval(intervalRef.current)
-      } else {
-        intervalRef.current = setInterval(
-          () => fetchMetric(),
-          refreshRate === RefreshRate.AUTO
-            ? refreshRates[autoRefreshRates[metricDuration]]
-            : refreshRates[refreshRate],
-        )
-      }
-      window.addEventListener("focus", focusListener)
-      focusListenerRef.current = true
-    } else {
-      clearInterval(intervalRef.current)
-      window.removeEventListener("focus", focusListener)
-      focusListenerRef.current = false
-    }
-  }
-
   useEffect(() => {
-    metricDurationRef.current = metricDuration
-    refreshRateRef.current = refreshRate
-
-    if (metric.tableId) {
-      fetchMetric()
-      setupListeners()
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-      if (focusListenerRef.current) {
-        window.removeEventListener("focus", focusListener)
-        focusListenerRef.current = false
-      }
-    }
-  }, [autoRefreshTables, metricDuration, metric.tableId, refreshRate])
-
-  const focusListener = useCallback(() => {
-    if (
-      focusListenerRef.current &&
-      refreshRateRef.current !== RefreshRate.OFF
-    ) {
+    if (lastRefresh || metric.tableId) {
       fetchMetric()
     }
-  }, [metric.tableId, refreshRateRef.current])
-
-  useEffect(() => {
-    if (lastRefresh) {
-      fetchMetric()
-    }
-  }, [lastRefresh])
+  }, [lastRefresh, metric.tableId])
 
   if (!data && !loading && metric.tableId)
     return (
