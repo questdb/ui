@@ -1,5 +1,7 @@
+import { Grid } from "@styled-icons/remix-line"
 import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
+import { List } from "@styled-icons/fluentui-system-filled"
 
 export enum MetricType {
   COMMIT_RATE = "Commit rate",
@@ -38,6 +40,11 @@ export enum MetricDuration {
   TWENTY_FOUR_HOURS = "24h",
   THREE_DAYS = "3 days",
   SEVEN_DAYS = "7 days",
+}
+
+export enum MetricViewMode {
+  LIST = "List",
+  GRID = "Grid",
 }
 
 export enum SampleBy {

@@ -6,11 +6,11 @@ import {
   sqlValueToFixed,
   formatNumbers,
 } from "../utils"
-import type { CommitRate } from "../utils"
+import { CommitRate, defaultSampleByForDuration } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const commitRate: Widget = {
-  label: "Commit rate per second",
+  label: "Commit rate",
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
   getQuery: ({ tableId, metricDuration, sampleBy, limit }) => {
@@ -39,7 +39,7 @@ export const commitRate: Widget = {
       and ${getTimeFilter(minutes)}
       -- it is important this is 1s, should this value change
       -- the "commit_rate" value will have to be adjusted to rate/s
-      sample by 1s 
+      sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
       -- fill(0)
     )
     -- there is a bug in QuestDB, which does not sort the window dataset

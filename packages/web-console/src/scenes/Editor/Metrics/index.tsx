@@ -10,8 +10,16 @@ import {
   refreshRatesInSeconds,
   defaultSampleByForDuration,
   getRollingAppendRowLimit,
+  MetricViewMode,
 } from "./utils"
-import { Time, Refresh } from "@styled-icons/boxicons-regular"
+import {
+  GridAlt,
+  Menu,
+  Time,
+  Refresh,
+  World,
+} from "@styled-icons/boxicons-regular"
+import { Soundwave } from "@styled-icons/bootstrap"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
 import { Metric as MetricComponent } from "./metric"
@@ -57,7 +65,7 @@ const Header = styled(Text)`
 const Charts = styled(Box).attrs({
   align: "flex-start",
   gap: "2.5rem",
-})<{ noMetrics: boolean }>`
+})<{ noMetrics: boolean; viewMode: MetricViewMode }>`
   align-content: ${({ noMetrics }) => (noMetrics ? "center" : "flex-start")};
   padding: 2.5rem;
   overflow-y: auto;
@@ -66,7 +74,8 @@ const Charts = styled(Box).attrs({
   flex-wrap: wrap;
 
   > div {
-    width: calc(50% - 1.25rem);
+    width: ${({ viewMode }) =>
+      viewMode === MetricViewMode.GRID ? "calc(50% - 1.25rem)" : "100%"};
     flex-shrink: 0;
   }
 `
@@ -100,6 +109,9 @@ export const Metrics = () => {
 
   const [metricDuration, setMetricDuration] = useState<MetricDuration>(
     MetricDuration.ONE_HOUR,
+  )
+  const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
+    MetricViewMode.GRID,
   )
   const [refreshRate, setRefreshRate] = useState<RefreshRate>()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -197,6 +209,7 @@ export const Metrics = () => {
       const metrics = buffer?.metricsViewState?.metrics
       const metricDuration = buffer?.metricsViewState?.metricDuration
       const refreshRate = buffer?.metricsViewState?.refreshRate
+      const metricViewMode = buffer?.metricsViewState?.viewMode
       if (metrics) {
         setMetrics(metrics)
       }
@@ -205,6 +218,9 @@ export const Metrics = () => {
       }
       if (refreshRate) {
         setRefreshRate(refreshRate)
+      }
+      if (metricViewMode) {
+        setMetricViewMode(metricViewMode)
       }
     }
   }, [buffer])
@@ -219,13 +235,16 @@ export const Metrics = () => {
           ...(refreshRate !== buffer?.metricsViewState?.refreshRate && {
             refreshRate,
           }),
+          ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
+            viewMode: metricViewMode,
+          }),
         },
       })
       updateBuffer(buffer.id, merged)
 
       setLastRefresh(new Date().getTime())
     }
-  }, [metricDuration, refreshRate])
+  }, [metricDuration, refreshRate, metricViewMode])
 
   useEffect(() => {
     if (refreshRate) {
@@ -282,10 +301,18 @@ export const Metrics = () => {
   return (
     <Root>
       <Toolbar>
-        {/* <Header>WAL metrics for {table.table_name}</Header> */}
         <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">
-          <Text color="gray2">{getLocalTimeZone()}</Text>
+          <Box gap="0.5rem">
+            <World size="14px" />
+            <Text color="foreground">{getLocalTimeZone()}</Text>
+          </Box>
+          <Box gap="0.5rem">
+            <Soundwave size="14px" />
+            <Text color="foreground">
+              Sample: {defaultSampleByForDuration[metricDuration]}
+            </Text>
+          </Box>
           <Box gap="0.5rem" style={{ flexShrink: 0 }}>
             <IconWithTooltip
               icon={
@@ -335,9 +362,31 @@ export const Metrics = () => {
             tooltip="Time duration"
             placement="bottom"
           />
+          <IconWithTooltip
+            icon={
+              <Button
+                skin="secondary"
+                onClick={() =>
+                  setMetricViewMode(
+                    metricViewMode === MetricViewMode.GRID
+                      ? MetricViewMode.LIST
+                      : MetricViewMode.GRID,
+                  )
+                }
+              >
+                {metricViewMode === MetricViewMode.GRID ? (
+                  <GridAlt size="18px" />
+                ) : (
+                  <Menu size="18px" />
+                )}
+              </Button>
+            }
+            tooltip="Toogle view mode"
+            placement="bottom"
+          />
         </Box>
       </Toolbar>
-      <Charts noMetrics={metrics.length === 0}>
+      <Charts noMetrics={metrics.length === 0} viewMode={metricViewMode}>
         {metrics.length === 0 && (
           <GlobalInfo>
             <Box gap="1.5rem" flexDirection="column">

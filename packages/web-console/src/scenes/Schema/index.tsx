@@ -71,7 +71,11 @@ import { NotificationType } from "../../types"
 import { Checkbox } from "./checkbox"
 import { AddChart } from "@styled-icons/material"
 import { useEditor } from "../../providers/EditorProvider"
-import { MetricDuration, RefreshRate } from "../../scenes/Editor/Metrics/utils"
+import {
+  MetricDuration,
+  MetricViewMode,
+  RefreshRate,
+} from "../../scenes/Editor/Metrics/utils"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -471,6 +475,7 @@ const Schema = ({
                                 metrics: [],
                                 metricDuration: MetricDuration.ONE_HOUR,
                                 refreshRate: RefreshRate.AUTO,
+                                viewMode: MetricViewMode.GRID,
                               },
                             })
                           }}

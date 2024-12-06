@@ -25,8 +25,11 @@ import { RefreshRate } from "./../scenes/Editor/Metrics/utils"
 
 import { db } from "./db"
 import type { editor } from "monaco-editor"
-import { MetricType, MetricDuration } from "scenes/Editor/Metrics/utils"
-import { Color } from "types"
+import {
+  MetricType,
+  MetricDuration,
+  MetricViewMode,
+} from "scenes/Editor/Metrics/utils"
 
 export enum BufferType {
   SQL = "SQL",
@@ -44,6 +47,7 @@ export type MetricsViewState = {
   metricDuration?: MetricDuration
   refreshRate?: RefreshRate
   sampleBy?: string
+  viewMode?: MetricViewMode
   metrics?: Metric[]
 }
 
