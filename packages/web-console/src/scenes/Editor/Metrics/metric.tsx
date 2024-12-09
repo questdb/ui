@@ -6,6 +6,7 @@ import {
   MetricType,
   LastNotNull,
   ResultType,
+  hasData,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -54,7 +55,7 @@ export const Metric = ({
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<uPlot.AlignedData>()
+  const [data, setData] = useState<uPlot.AlignedData>([[], []])
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
 
@@ -143,7 +144,7 @@ export const Metric = ({
   return (
     <Graph
       lastRefresh={lastRefresh}
-      data={metric.tableId && data ? data : [[], []]}
+      data={metric.tableId && hasData(data) ? data : [[], []]}
       canZoomToData={canZoomToData}
       onZoomToData={handleZoomToData}
       colors={[metric.color]}

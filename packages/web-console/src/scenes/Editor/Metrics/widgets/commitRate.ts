@@ -40,7 +40,7 @@ export const commitRate: Widget = {
       -- it is important this is 1s, should this value change
       -- the "commit_rate" value will have to be adjusted to rate/s
       sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
-      -- fill(0)
+      fill(0)
     )
     -- there is a bug in QuestDB, which does not sort the window dataset
     -- once the bug is fixed the order can be removed

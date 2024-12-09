@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { MetricDuration, Widget, xAxisFormat } from "./utils"
+import { MetricDuration, Widget, xAxisFormat, hasData } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -179,7 +179,7 @@ export const Graph = ({
           data={data}
           onCreate={(uplot) => {
             uPlotRef.current = uplot
-            if (data[0].length === 0 && !loading) {
+            if (!hasData(data) && !loading) {
               const noData = document.createElement("div")
               noData.className = "graph-no-data"
               uplot.over.appendChild(noData)
