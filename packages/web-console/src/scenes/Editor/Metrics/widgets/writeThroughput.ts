@@ -29,6 +29,7 @@ where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
 and ${getTimeFilter(minutes)}
 sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
+fill(null)
 ${limit ? `limit ${limit}` : ""}`
   },
   getQueryLastNotNull: (tableId) => `

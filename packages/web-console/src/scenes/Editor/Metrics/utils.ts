@@ -63,6 +63,11 @@ export enum RefreshRate {
   OFF = "Off",
 }
 
+export enum FetchMode {
+  ROLLING_APPEND = "Rolling append",
+  OVERWRITE = "Overwrite",
+}
+
 export const refreshRatesInSeconds: Record<RefreshRate, number> = {
   [RefreshRate.AUTO]: 0,
   [RefreshRate.OFF]: 0,
@@ -222,4 +227,19 @@ export const hasData = (data?: uPlot.AlignedData) => {
   return (
     data[1].length > 0 && data[1].some((value) => value !== null && value !== 0)
   )
+}
+
+export const mergeRollingData = (
+  oldData: uPlot.AlignedData | undefined,
+  alignedData: uPlot.AlignedData,
+  rollingAppendLimit: number,
+) => {
+  const slicedOldData: uPlot.AlignedData = oldData
+    ? oldData.map((d) => d.slice(rollingAppendLimit))
+    : Array(alignedData.length).fill([])
+
+  return alignedData.map((d, i) => [
+    ...slicedOldData[i],
+    ...d,
+  ]) as uPlot.AlignedData
 }

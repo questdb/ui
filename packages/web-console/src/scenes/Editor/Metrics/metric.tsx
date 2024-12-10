@@ -7,6 +7,8 @@ import {
   LastNotNull,
   ResultType,
   hasData,
+  FetchMode,
+  mergeRollingData,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -44,6 +46,8 @@ export const Metric = ({
   onColorChange,
   onMetricDurationChange,
   lastRefresh,
+  fetchMode,
+  rollingAppendLimit,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
@@ -52,6 +56,8 @@ export const Metric = ({
   onColorChange: (metric: MetricItem, color: string) => void
   onMetricDurationChange: (duration: MetricDuration) => void
   lastRefresh?: number
+  fetchMode: FetchMode
+  rollingAppendLimit: number
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
@@ -78,6 +84,9 @@ export const Metric = ({
           widgetConfig.getQuery({
             tableId: metric.tableId,
             metricDuration: metricDuration,
+            // ...(fetchMode === FetchMode.ROLLING_APPEND && {
+            //   limit: -rollingAppendLimit,
+            // }),
           }),
         ),
         quest.query<LastNotNull>(
@@ -89,7 +98,16 @@ export const Metric = ({
         const alignedData = widgetConfig.alignData(
           responses[0].data as unknown as ResultType[MetricType],
         )
-        setData(alignedData)
+        if (fetchMode === FetchMode.ROLLING_APPEND) {
+          setData(alignedData)
+          // console.log(
+          //   metric.metricType,
+          //   mergeRollingData(data, alignedData, rollingAppendLimit),
+          // )
+          // setData(mergeRollingData(data, alignedData, rollingAppendLimit))
+        } else {
+          setData(alignedData)
+        }
       }
 
       if (responses[1] && responses[1].type === QuestDB.Type.DQL) {

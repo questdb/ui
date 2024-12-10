@@ -11,6 +11,7 @@ import {
   defaultSampleByForDuration,
   getRollingAppendRowLimit,
   MetricViewMode,
+  FetchMode,
 } from "./utils"
 import {
   GridAlt,
@@ -118,6 +119,7 @@ export const Metrics = () => {
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const [lastRefresh, setLastRefresh] = useState<number>(new Date().getTime())
+  const [fetchMode, setFetchMode] = useState<FetchMode>(FetchMode.OVERWRITE)
 
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
@@ -182,6 +184,7 @@ export const Metrics = () => {
   const focusListener = useCallback(() => {
     tabInFocusRef.current = true
     if (refreshRateRef.current !== RefreshRate.OFF) {
+      setFetchMode(FetchMode.OVERWRITE)
       setLastRefresh(new Date().getTime())
     }
   }, [refreshRateRef.current])
@@ -195,6 +198,7 @@ export const Metrics = () => {
       intervalRef.current = setInterval(
         () => {
           if (!tabInFocusRef.current) return
+          setFetchMode(FetchMode.ROLLING_APPEND)
           setLastRefresh(new Date().getTime())
         },
         refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
@@ -241,7 +245,7 @@ export const Metrics = () => {
         },
       })
       updateBuffer(buffer.id, merged)
-
+      setFetchMode(FetchMode.OVERWRITE)
       setLastRefresh(new Date().getTime())
     }
   }, [metricDuration, refreshRate, metricViewMode])
@@ -414,6 +418,8 @@ export const Metrics = () => {
                 onColorChange={handleColorChange}
                 onMetricDurationChange={setMetricDuration}
                 lastRefresh={lastRefresh}
+                fetchMode={fetchMode}
+                rollingAppendLimit={rollingAppendLimit}
               />
             ))}
       </Charts>
