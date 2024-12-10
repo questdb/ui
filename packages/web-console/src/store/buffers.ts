@@ -29,6 +29,7 @@ import {
   MetricType,
   MetricDuration,
   MetricViewMode,
+  SampleBy,
 } from "scenes/Editor/Metrics/utils"
 
 export enum BufferType {
@@ -46,7 +47,7 @@ export type Metric = {
 export type MetricsViewState = {
   metricDuration?: MetricDuration
   refreshRate?: RefreshRate
-  sampleBy?: string
+  sampleBy?: SampleBy
   viewMode?: MetricViewMode
   metrics?: Metric[]
 }

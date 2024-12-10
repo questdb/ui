@@ -46,6 +46,7 @@ export enum MetricViewMode {
 }
 
 export enum SampleBy {
+  AUTO = "Auto",
   ONE_SECOND = "1s",
   ONE_MINUTE = "1m",
   FIVE_MINUTES = "5m",
@@ -105,7 +106,10 @@ export const durationInMinutes: Record<MetricDuration, number> = {
   [MetricDuration.SEVEN_DAYS]: 60 * 168,
 }
 
-export const defaultSampleByForDuration: Record<MetricDuration, SampleBy> = {
+export const defaultSampleByForDuration: Record<
+  MetricDuration,
+  Exclude<SampleBy, SampleBy.AUTO>
+> = {
   [MetricDuration.FIVE_MINUTES]: SampleBy.ONE_SECOND,
   [MetricDuration.FIFTEEN_MINUTES]: SampleBy.ONE_SECOND,
   [MetricDuration.ONE_HOUR]: SampleBy.ONE_SECOND,
@@ -117,7 +121,10 @@ export const defaultSampleByForDuration: Record<MetricDuration, SampleBy> = {
   [MetricDuration.SEVEN_DAYS]: SampleBy.FIFTEEN_MINUTES,
 }
 
-export const sampleByInSeconds: Record<SampleBy, number> = {
+export const sampleByInSeconds: Record<
+  Exclude<SampleBy, SampleBy.AUTO>,
+  number
+> = {
   [SampleBy.ONE_SECOND]: 1,
   [SampleBy.ONE_MINUTE]: 60,
   [SampleBy.FIVE_MINUTES]: 60 * 5,
@@ -219,7 +226,7 @@ and created < date_trunc('${minutes >= 60 ? "minute" : "second"}', now())`
 
 export const getRollingAppendRowLimit = (
   refreshRateInSeconds: number,
-  sampleBy: SampleBy,
+  sampleBy: Exclude<SampleBy, SampleBy.AUTO>,
 ) => Math.ceil(refreshRateInSeconds / sampleByInSeconds[sampleBy])
 
 export const hasData = (data?: uPlot.AlignedData) => {

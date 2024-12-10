@@ -12,6 +12,7 @@ import {
   getRollingAppendRowLimit,
   MetricViewMode,
   FetchMode,
+  SampleBy,
 } from "./utils"
 import {
   GridAlt,
@@ -105,20 +106,26 @@ const formatRefreshRateLabel = (
   return rate
 }
 
+const formatSampleByLabel = (sampleBy: SampleBy, duration: MetricDuration) => {
+  if (sampleBy === SampleBy.AUTO) {
+    return `${SampleBy.AUTO} (${defaultSampleByForDuration[duration]})`
+  }
+  return sampleBy
+}
+
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
 
-  const [metricDuration, setMetricDuration] = useState<MetricDuration>(
-    MetricDuration.ONE_HOUR,
-  )
+  const [metricDuration, setMetricDuration] = useState<MetricDuration>()
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
     MetricViewMode.GRID,
   )
   const [refreshRate, setRefreshRate] = useState<RefreshRate>()
+  const [sampleBy, setSampleBy] = useState<SampleBy>()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [lastRefresh, setLastRefresh] = useState<number>(new Date().getTime())
+  const [lastRefresh, setLastRefresh] = useState<number | undefined>()
   const [fetchMode, setFetchMode] = useState<FetchMode>(FetchMode.OVERWRITE)
 
   const tabInFocusRef = React.useRef<boolean>(true)
@@ -129,15 +136,19 @@ export const Metrics = () => {
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
+  const duration = metricDuration || MetricDuration.ONE_HOUR
+
   const refreshRateInSec = refreshRate
     ? refreshRate === RefreshRate.AUTO
-      ? refreshRatesInSeconds[autoRefreshRates[metricDuration]]
+      ? refreshRatesInSeconds[autoRefreshRates[duration]]
       : refreshRatesInSeconds[refreshRate]
     : 0
 
   const rollingAppendLimit = getRollingAppendRowLimit(
     refreshRateInSec,
-    defaultSampleByForDuration[metricDuration],
+    sampleBy && sampleBy !== SampleBy.AUTO
+      ? sampleBy
+      : defaultSampleByForDuration[duration],
   )
 
   const updateMetrics = (metrics: Metric[]) => {
@@ -214,11 +225,17 @@ export const Metrics = () => {
       const metricDuration = buffer?.metricsViewState?.metricDuration
       const refreshRate = buffer?.metricsViewState?.refreshRate
       const metricViewMode = buffer?.metricsViewState?.viewMode
+      const sampleBy = buffer?.metricsViewState?.sampleBy
+
       if (metrics) {
         setMetrics(metrics)
       }
       if (metricDuration) {
         setMetricDuration(metricDuration)
+        setSampleBy(defaultSampleByForDuration[metricDuration])
+      }
+      if (sampleBy) {
+        setSampleBy(sampleBy)
       }
       if (refreshRate) {
         setRefreshRate(refreshRate)
@@ -242,13 +259,18 @@ export const Metrics = () => {
           ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
             viewMode: metricViewMode,
           }),
+          ...(sampleBy !== buffer?.metricsViewState?.sampleBy && {
+            sampleBy,
+          }),
         },
       })
-      updateBuffer(buffer.id, merged)
-      setFetchMode(FetchMode.OVERWRITE)
-      setLastRefresh(new Date().getTime())
+      if (metricDuration && refreshRate && metricViewMode && sampleBy) {
+        updateBuffer(buffer.id, merged)
+        setFetchMode(FetchMode.OVERWRITE)
+        setLastRefresh(new Date().getTime())
+      }
     }
-  }, [metricDuration, refreshRate, metricViewMode])
+  }, [metricDuration, refreshRate, metricViewMode, sampleBy])
 
   useEffect(() => {
     if (refreshRate) {
@@ -311,11 +333,23 @@ export const Metrics = () => {
             <World size="14px" />
             <Text color="foreground">{getLocalTimeZone()}</Text>
           </Box>
-          <Box gap="0.5rem">
-            <Soundwave size="14px" />
-            <Text color="foreground">
-              Sample: {defaultSampleByForDuration[metricDuration]}
-            </Text>
+          <Box gap="0.5rem" style={{ flexShrink: 0 }}>
+            <IconWithTooltip
+              icon={
+                <Select
+                  name="sample_by"
+                  value={sampleBy}
+                  options={Object.values(SampleBy).map((rate) => ({
+                    label: formatSampleByLabel(rate, duration),
+                    value: rate,
+                  }))}
+                  prefixIcon={<Soundwave size="18px" />}
+                  onChange={(e) => setSampleBy(e.target.value as SampleBy)}
+                />
+              }
+              tooltip="Data sample rate"
+              placement="bottom"
+            />
           </Box>
           <Box gap="0.5rem" style={{ flexShrink: 0 }}>
             <IconWithTooltip
@@ -336,7 +370,7 @@ export const Metrics = () => {
                   name="refresh_rate"
                   value={refreshRate}
                   options={Object.values(RefreshRate).map((rate) => ({
-                    label: formatRefreshRateLabel(rate, metricDuration),
+                    label: formatRefreshRateLabel(rate, duration),
                     value: rate,
                   }))}
                   onChange={(e) =>
@@ -412,7 +446,12 @@ export const Metrics = () => {
               <MetricComponent
                 key={index}
                 metric={metric}
-                metricDuration={metricDuration}
+                metricDuration={duration}
+                sampleBy={
+                  sampleBy && sampleBy !== SampleBy.AUTO
+                    ? sampleBy
+                    : defaultSampleByForDuration[duration]
+                }
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}

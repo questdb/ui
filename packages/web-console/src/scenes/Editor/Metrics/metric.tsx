@@ -9,6 +9,7 @@ import {
   hasData,
   FetchMode,
   mergeRollingData,
+  SampleBy,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -48,6 +49,7 @@ export const Metric = ({
   lastRefresh,
   fetchMode,
   rollingAppendLimit,
+  sampleBy,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
@@ -58,6 +60,7 @@ export const Metric = ({
   lastRefresh?: number
   fetchMode: FetchMode
   rollingAppendLimit: number
+  sampleBy: SampleBy
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(false)
@@ -83,7 +86,8 @@ export const Metric = ({
         quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
             tableId: metric.tableId,
-            metricDuration: metricDuration,
+            metricDuration,
+            sampleBy,
             // ...(fetchMode === FetchMode.ROLLING_APPEND && {
             //   limit: -rollingAppendLimit,
             // }),
@@ -135,7 +139,7 @@ export const Metric = ({
   }
 
   useEffect(() => {
-    if (lastRefresh || metric.tableId) {
+    if (lastRefresh && metric.tableId) {
       fetchMetric()
     }
   }, [lastRefresh, metric.tableId])
