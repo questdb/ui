@@ -4,7 +4,7 @@ import { MetricDuration, Widget, xAxisFormat, hasData } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import { Box } from "@questdb/react-components"
+import { Box, Loader } from "@questdb/react-components"
 
 const Actions = styled.div`
   margin-right: 0;
@@ -166,6 +166,7 @@ export const Graph = ({
         <Box gap="0.5rem" align="center">
           <BeforeLabel>{beforeLabel}</BeforeLabel>
           <HeaderText>{label}</HeaderText>
+          {loading && <Loader size="18px" spin />}
         </Box>
         <Actions>{actions}</Actions>
       </Header>
