@@ -14,6 +14,7 @@ import {
   FetchMode,
   SampleBy,
   durationInMinutes,
+  MetricsRefreshPayload,
 } from "./utils"
 import {
   GridAlt,
@@ -121,19 +122,11 @@ export const Metrics = () => {
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
     MetricViewMode.GRID,
   )
-  const [dateFrom, setDateFrom] = useState(
-    subMinutes(
-      new Date(),
-      durationInMinutes[metricDuration || MetricDuration.ONE_HOUR],
-    ),
-  )
-  const [dateNow, setDateNow] = useState(new Date())
   const [refreshRate, setRefreshRate] = useState<RefreshRate>()
   const [sampleBy, setSampleBy] = useState<SampleBy>()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [lastRefresh, setLastRefresh] = useState<number | undefined>()
   const [fetchMode, setFetchMode] = useState<FetchMode>(FetchMode.OVERWRITE)
 
   const tabInFocusRef = React.useRef<boolean>(true)
@@ -170,6 +163,16 @@ export const Metrics = () => {
     }
   }
 
+  const refreshMetricsData = () => {
+    const now = new Date()
+    const dateFrom = subMinutes(now, durationInMinutes[duration])
+    const dateTo = now
+    eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
+      dateFrom,
+      dateTo,
+    })
+  }
+
   const handleRemoveMetric = (metric: Metric) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
@@ -204,7 +207,7 @@ export const Metrics = () => {
     tabInFocusRef.current = true
     if (refreshRateRef.current !== RefreshRate.OFF) {
       setFetchMode(FetchMode.OVERWRITE)
-      setLastRefresh(new Date().getTime())
+      refreshMetricsData()
     }
   }, [refreshRateRef.current])
 
@@ -221,7 +224,7 @@ export const Metrics = () => {
         () => {
           if (!tabInFocusRef.current) return
           setFetchMode(FetchMode.ROLLING_APPEND)
-          setLastRefresh(new Date().getTime())
+          refreshMetricsData()
         },
         refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
       )
@@ -278,16 +281,10 @@ export const Metrics = () => {
       if (metricDuration && refreshRate && metricViewMode && sampleBy) {
         updateBuffer(buffer.id, merged)
         setFetchMode(FetchMode.OVERWRITE)
-        setLastRefresh(new Date().getTime())
+        refreshMetricsData()
       }
     }
   }, [metricDuration, refreshRate, metricViewMode, sampleBy])
-
-  useEffect(() => {
-    const now = new Date()
-    setDateFrom(subMinutes(now, durationInMinutes[duration]))
-    setDateNow(now)
-  }, [lastRefresh])
 
   useEffect(() => {
     if (refreshRate) {
@@ -371,10 +368,7 @@ export const Metrics = () => {
           <Box gap="0.5rem" style={{ flexShrink: 0 }}>
             <IconWithTooltip
               icon={
-                <Button
-                  skin="secondary"
-                  onClick={() => setLastRefresh(new Date().getTime())}
-                >
+                <Button skin="secondary" onClick={() => refreshMetricsData()}>
                   <Refresh size="20px" />
                 </Button>
               }
@@ -461,8 +455,6 @@ export const Metrics = () => {
             .sort((a, b) => a.position - b.position)
             .map((metric, index) => (
               <MetricComponent
-                dateFrom={dateFrom}
-                dateNow={dateNow}
                 key={index}
                 metric={metric}
                 metricDuration={duration}
@@ -475,7 +467,6 @@ export const Metrics = () => {
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
                 onMetricDurationChange={setMetricDuration}
-                lastRefresh={lastRefresh}
                 fetchMode={fetchMode}
                 rollingAppendLimit={rollingAppendLimit}
               />

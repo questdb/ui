@@ -92,8 +92,8 @@ const LabelValue = styled.span`
 
 type Props = {
   dateFrom: Date
-  dateNow: Date
-  lastRefresh?: number
+  dateTo: Date
+  lastRefresh?: Date
   tableId?: number
   tableName?: string
   beforeLabel?: React.ReactNode
@@ -109,7 +109,7 @@ type Props = {
 
 export const Graph = ({
   dateFrom,
-  dateNow,
+  dateTo,
   lastRefresh,
   tableId,
   tableName,
@@ -139,7 +139,7 @@ export const Graph = ({
   const graphOptions = useGraphOptions({
     data,
     dateFrom,
-    dateNow,
+    dateTo,
     colors,
     duration,
     timeRef,

@@ -31,6 +31,11 @@ export type Widget = {
   mapYValue: (rawValue: number) => string
 }
 
+export type MetricsRefreshPayload = {
+  dateFrom: Date
+  dateTo: Date
+}
+
 export enum MetricDuration {
   FIVE_MINUTES = "5m",
   FIFTEEN_MINUTES = "15m",

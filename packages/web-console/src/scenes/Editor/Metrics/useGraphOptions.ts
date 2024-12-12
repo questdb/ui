@@ -9,7 +9,7 @@ import { MetricDuration, durationInMinutes } from "./utils"
 type Params = {
   data: uPlot.AlignedData
   dateFrom: Date
-  dateNow: Date
+  dateTo: Date
   colors: string[]
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
@@ -49,7 +49,7 @@ const valuePlugin = (
 export const useGraphOptions = ({
   data,
   dateFrom,
-  dateNow,
+  dateTo,
   colors,
   duration,
   tickValue = (rawValue) => (+rawValue).toString(),
@@ -62,7 +62,7 @@ export const useGraphOptions = ({
 
   const start = dateFrom.getTime()
 
-  const end = dateNow.getTime()
+  const end = dateTo.getTime()
 
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.gray2,

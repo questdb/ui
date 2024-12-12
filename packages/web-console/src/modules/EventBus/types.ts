@@ -19,4 +19,5 @@ export enum EventType {
   REACT_READY = "react.ready",
   TAB_FOCUS = "tab.focus",
   TAB_BLUR = "tab.blur",
+  METRICS_REFRESH_DATA = "metrics.refresh.data",
 }
