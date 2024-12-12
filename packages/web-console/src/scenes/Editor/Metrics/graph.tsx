@@ -91,6 +91,8 @@ const LabelValue = styled.span`
 `
 
 type Props = {
+  dateFrom: Date
+  dateNow: Date
   lastRefresh?: number
   tableId?: number
   tableName?: string
@@ -106,6 +108,8 @@ type Props = {
 }
 
 export const Graph = ({
+  dateFrom,
+  dateNow,
   lastRefresh,
   tableId,
   tableName,
@@ -122,7 +126,6 @@ export const Graph = ({
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
-  const [dateNow, setDateNow] = useState(new Date())
 
   const { isTableMetric, mapYValue, label } = widgetConfig
 
@@ -135,6 +138,7 @@ export const Graph = ({
 
   const graphOptions = useGraphOptions({
     data,
+    dateFrom,
     dateNow,
     colors,
     duration,
@@ -155,10 +159,6 @@ export const Graph = ({
       resizeObserver.disconnect()
     }
   }, [graphRootRef.current])
-
-  useEffect(() => {
-    setDateNow(new Date())
-  }, [lastRefresh, data])
 
   return (
     <Root ref={graphRootRef}>

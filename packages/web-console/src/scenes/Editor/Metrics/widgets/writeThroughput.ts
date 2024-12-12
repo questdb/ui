@@ -3,10 +3,8 @@ import type { Widget } from "../utils"
 import {
   RowsApplied,
   defaultSampleByForDuration,
-  durationInMinutes,
   sqlValueToFixed,
   formatNumbers,
-  getTimeFilter,
 } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
@@ -14,21 +12,19 @@ export const writeThroughput: Widget = {
   label: "Write throughput",
   iconUrl: "/assets/metric-rows-applied.svg",
   isTableMetric: true,
-  getQuery: ({ tableId, metricDuration, sampleBy, limit }) => {
-    const minutes = durationInMinutes[metricDuration]
-
+  querySupportsRollingAppend: true,
+  getQuery: ({ tableId, metricDuration, sampleBy, limit, timeFilter }) => {
     return `
 select
     created time,
     count(rowCount) numOfWalApplies,
     sum(rowCount) numOfRowsApplied,
-    sum(physicalRowCount) numOfRowsWritten,
-    coalesce(avg(physicalRowCount/rowCount), 1) avgWalAmplification
+    sum(physicalRowCount) numOfRowsWritten
 from ${TelemetryTable.WAL}
 where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
-and ${getTimeFilter(minutes)}
 sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
+${timeFilter ? timeFilter : ""}
 fill(null)
 ${limit ? `limit ${limit}` : ""}`
   },
@@ -44,7 +40,9 @@ limit -1
 `,
   alignData: (data: RowsApplied[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.time).getTime()),
-    data.map((l) => sqlValueToFixed(l.numOfRowsApplied)),
+    data.map((l) =>
+      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
+    ),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

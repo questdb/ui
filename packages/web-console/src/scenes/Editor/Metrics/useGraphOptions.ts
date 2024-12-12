@@ -8,11 +8,12 @@ import { MetricDuration, durationInMinutes } from "./utils"
 
 type Params = {
   data: uPlot.AlignedData
+  dateFrom: Date
   dateNow: Date
   colors: string[]
   duration: MetricDuration
   tickValue?: (rawValue: number) => string
-  mapXValue: (rawValue: number, index: number, ticks: number[]) => string | null
+  mapXValue: (rawValue: number, index: number, ticks: number[]) => string
   mapYValue: (rawValue: number) => string
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
@@ -31,11 +32,11 @@ const valuePlugin = (
       const { idx } = u.cursor
       const x = idx !== null && idx !== undefined ? u.data[0][idx] : null
       const y = idx !== null && idx !== undefined ? u.data[1][idx] : null
-      if ([y, x].every(Boolean)) {
+      if ([y, x].every((v) => v !== null)) {
         timeRef.current!.textContent = utcToLocal(
           x as number,
           "dd/MM/yyyy HH:mm:ss",
-        )
+        ) as string
         valueRef.current!.textContent = mapYValue(y as number)
       } else {
         timeRef.current!.textContent = null
@@ -47,6 +48,7 @@ const valuePlugin = (
 
 export const useGraphOptions = ({
   data,
+  dateFrom,
   dateNow,
   colors,
   duration,
@@ -58,7 +60,7 @@ export const useGraphOptions = ({
 }: Params): Omit<uPlot.Options, "width" | "height"> => {
   const theme = useContext(ThemeContext)
 
-  const start = subMinutes(dateNow, durationInMinutes[duration]).getTime()
+  const start = dateFrom.getTime()
 
   const end = dateNow.getTime()
 

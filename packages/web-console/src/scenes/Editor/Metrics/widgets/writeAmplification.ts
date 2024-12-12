@@ -3,10 +3,8 @@ import type { Widget } from "../utils"
 import { WriteAmplification } from "../utils"
 import {
   defaultSampleByForDuration,
-  durationInMinutes,
   sqlValueToFixed,
   formatNumbers,
-  getTimeFilter,
 } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
@@ -14,8 +12,8 @@ export const writeAmplification: Widget = {
   label: "Write amplification",
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
-  getQuery: ({ tableId, metricDuration, sampleBy, limit }) => {
-    const minutes = durationInMinutes[metricDuration]
+  querySupportsRollingAppend: true,
+  getQuery: ({ tableId, metricDuration, sampleBy, limit, timeFilter }) => {
     return `
 select 
   created,
@@ -35,10 +33,10 @@ from (
       where ${tableId ? `tableId = ${tableId} and ` : ""}
          event = 105
          and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
-         and ${getTimeFilter(minutes)}
       sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}      
+      ${timeFilter ? timeFilter : ""}
       -- fill with null to avoid spurious values and division by 0
-      fill(null,null)
+      fill(null)
       ${limit ? `limit ${limit}` : ""}
   )
 );
@@ -56,7 +54,9 @@ limit -1
 `,
   alignData: (data: WriteAmplification[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.created).getTime()),
-    data.map((l) => sqlValueToFixed(l.writeAmplification)),
+    data.map((l) =>
+      l.writeAmplification ? sqlValueToFixed(l.writeAmplification) : 0,
+    ),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

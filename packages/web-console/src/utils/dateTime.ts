@@ -5,5 +5,7 @@ export const getLocalTimeZone = () => {
   return Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
-export const utcToLocal = (utcDate: number, dateFormat: string) =>
-  format(new TZDate(utcDate, getLocalTimeZone()), dateFormat)
+export const utcToLocal = (utcDate: number, dateFormat?: string): string =>
+  dateFormat
+    ? format(new TZDate(utcDate, getLocalTimeZone()), dateFormat)
+    : new TZDate(utcDate, getLocalTimeZone()).toISOString()

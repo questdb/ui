@@ -1,3 +1,4 @@
+import { formatISO, subMinutes } from "date-fns"
 import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
 
@@ -22,8 +23,10 @@ export type Widget = {
     metricDuration: MetricDuration
     sampleBy?: SampleBy
     limit?: number
+    timeFilter?: string
   }) => string
   getQueryLastNotNull: (id?: number) => string
+  querySupportsRollingAppend: boolean
   alignData: (data: any) => uPlot.AlignedData
   mapYValue: (rawValue: number) => string
 }
@@ -211,18 +214,14 @@ export const formatNumbers = (value: number) => {
   return value.toString()
 }
 
-export const getTimeFilter = (
-  minutes: number,
-) => `created > date_trunc('minute', dateadd('${
-  minutes >= 1440 ? "d" : minutes >= 60 ? "h" : "s"
-}', -${
-  minutes >= 1440
-    ? minutesToDays(minutes)
-    : minutes >= 60
-    ? minutesToHours(minutes)
-    : minutesToSeconds(minutes)
-}, now()))
-and created < date_trunc('${minutes >= 60 ? "minute" : "second"}', now())`
+const formatToISOIfNeeded = (date: Date | string) => {
+  if (date instanceof Date) return formatISO(date)
+  return date
+}
+
+export const getTimeFilter = (from: Date | string, to: Date | string) => {
+  return `FROM '${formatToISOIfNeeded(from)}' TO '${formatToISOIfNeeded(to)}'`
+}
 
 export const getRollingAppendRowLimit = (
   refreshRateInSeconds: number,
@@ -237,16 +236,22 @@ export const hasData = (data?: uPlot.AlignedData) => {
 }
 
 export const mergeRollingData = (
-  oldData: uPlot.AlignedData | undefined,
-  alignedData: uPlot.AlignedData,
-  rollingAppendLimit: number,
+  oldData: uPlot.AlignedData,
+  newData: uPlot.AlignedData,
+  dateFrom: Date,
 ) => {
-  const slicedOldData: uPlot.AlignedData = oldData
-    ? oldData.map((d) => d.slice(rollingAppendLimit))
-    : Array(alignedData.length).fill([])
+  const from = dateFrom.getTime()
 
-  return alignedData.map((d, i) => [
-    ...slicedOldData[i],
+  const mergedData = newData.map((d, i) => [
+    ...oldData[i],
     ...d,
   ]) as uPlot.AlignedData
+
+  return mergedData.map((arr, arrIndex) =>
+    arrIndex === 0
+      ? Array.from(arr).filter((time) => time && time >= from)
+      : Array.from(arr).filter(
+          (_, index) => mergedData[0] && mergedData[0][index] >= from,
+        ),
+  ) as uPlot.AlignedData
 }

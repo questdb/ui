@@ -10,6 +10,7 @@ import {
   FetchMode,
   mergeRollingData,
   SampleBy,
+  getTimeFilter,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -40,6 +41,8 @@ const ActionButton = styled(Button)`
 `
 
 export const Metric = ({
+  dateFrom,
+  dateNow,
   metric,
   metricDuration,
   onRemove,
@@ -51,6 +54,8 @@ export const Metric = ({
   rollingAppendLimit,
   sampleBy,
 }: {
+  dateFrom: Date
+  dateNow: Date
   metric: MetricItem
   metricDuration: MetricDuration
   onRemove: (metric: MetricItem) => void
@@ -79,6 +84,8 @@ export const Metric = ({
   const fetchMetric = async () => {
     setLoading(true)
     try {
+      const subtracted = subMinutes(dateNow, durationInMinutes[metricDuration])
+      const timeFilter = getTimeFilter(subtracted, dateNow)
       const responses = await Promise.all<
         | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>
@@ -88,9 +95,11 @@ export const Metric = ({
             tableId: metric.tableId,
             metricDuration,
             sampleBy,
-            // ...(fetchMode === FetchMode.ROLLING_APPEND && {
-            //   limit: -rollingAppendLimit,
-            // }),
+            timeFilter,
+            ...(widgetConfig.querySupportsRollingAppend &&
+              fetchMode === FetchMode.ROLLING_APPEND && {
+                limit: -rollingAppendLimit,
+              }),
           }),
         ),
         quest.query<LastNotNull>(
@@ -102,13 +111,13 @@ export const Metric = ({
         const alignedData = widgetConfig.alignData(
           responses[0].data as unknown as ResultType[MetricType],
         )
-        if (fetchMode === FetchMode.ROLLING_APPEND) {
-          setData(alignedData)
-          // console.log(
-          //   metric.metricType,
-          //   mergeRollingData(data, alignedData, rollingAppendLimit),
-          // )
-          // setData(mergeRollingData(data, alignedData, rollingAppendLimit))
+        if (
+          data &&
+          widgetConfig.querySupportsRollingAppend &&
+          fetchMode === FetchMode.ROLLING_APPEND
+        ) {
+          console.log(mergeRollingData(data, alignedData, dateFrom))
+          setData(mergeRollingData(data, alignedData, dateFrom))
         } else {
           setData(alignedData)
         }
@@ -158,13 +167,15 @@ export const Metric = ({
     tableName && lastNotNull
       ? lastNotNull >=
         subMinutes(
-          new Date(),
+          dateNow,
           minuteDurations[minuteDurations.length - 1][1],
         ).getTime()
       : false
 
   return (
     <Graph
+      dateFrom={dateFrom}
+      dateNow={dateNow}
       lastRefresh={lastRefresh}
       data={metric.tableId && hasData(data) ? data : [[], []]}
       canZoomToData={canZoomToData}

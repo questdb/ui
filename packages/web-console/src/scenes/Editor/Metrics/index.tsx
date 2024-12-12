@@ -13,6 +13,7 @@ import {
   MetricViewMode,
   FetchMode,
   SampleBy,
+  durationInMinutes,
 } from "./utils"
 import {
   GridAlt,
@@ -35,6 +36,7 @@ import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { subMinutes } from "date-fns"
 
 const Root = styled.div`
   display: flex;
@@ -115,11 +117,17 @@ const formatSampleByLabel = (sampleBy: SampleBy, duration: MetricDuration) => {
 
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
-
   const [metricDuration, setMetricDuration] = useState<MetricDuration>()
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
     MetricViewMode.GRID,
   )
+  const [dateFrom, setDateFrom] = useState(
+    subMinutes(
+      new Date(),
+      durationInMinutes[metricDuration || MetricDuration.ONE_HOUR],
+    ),
+  )
+  const [dateNow, setDateNow] = useState(new Date())
   const [refreshRate, setRefreshRate] = useState<RefreshRate>()
   const [sampleBy, setSampleBy] = useState<SampleBy>()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -205,6 +213,9 @@ export const Metrics = () => {
   }, [])
 
   const setupListeners = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
     if (autoRefreshTables && refreshRate && refreshRate !== RefreshRate.OFF) {
       intervalRef.current = setInterval(
         () => {
@@ -271,6 +282,12 @@ export const Metrics = () => {
       }
     }
   }, [metricDuration, refreshRate, metricViewMode, sampleBy])
+
+  useEffect(() => {
+    const now = new Date()
+    setDateFrom(subMinutes(now, durationInMinutes[duration]))
+    setDateNow(now)
+  }, [lastRefresh])
 
   useEffect(() => {
     if (refreshRate) {
@@ -444,6 +461,8 @@ export const Metrics = () => {
             .sort((a, b) => a.position - b.position)
             .map((metric, index) => (
               <MetricComponent
+                dateFrom={dateFrom}
+                dateNow={dateNow}
                 key={index}
                 metric={metric}
                 metricDuration={duration}
