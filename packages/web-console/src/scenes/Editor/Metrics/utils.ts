@@ -4,7 +4,7 @@ import uPlot from "uplot"
 
 export enum MetricType {
   COMMIT_RATE = "Commit rate",
-  WRITE_THROUGHPUT = "Rows applied",
+  WRITE_THROUGHPUT = "Write throughput",
   LATENCY = "Latency",
   WRITE_AMPLIFICATION = "Write amplification",
 }
@@ -183,6 +183,11 @@ export const minutesToHours = (durationInMinutes: number) =>
 
 export const minutesToSeconds = (durationInMinutes: number) =>
   durationInMinutes * 60
+
+export const metricDurationToDate = (
+  metricDuration: MetricDuration,
+  dateNow: Date,
+) => subMinutes(dateNow, durationInMinutes[metricDuration])
 
 export const xAxisFormat = {
   [MetricDuration.FIVE_MINUTES]: (rawValue: number) =>

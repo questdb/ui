@@ -12,6 +12,7 @@ import {
   SampleBy,
   getTimeFilter,
   MetricsRefreshPayload,
+  metricDurationToDate,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -72,6 +73,9 @@ export const Metric = ({
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [fromTo, setFromTo] = useState<MetricsRefreshPayload>()
+  const [lastTableId, setLastTableId] = useState<number | undefined>(
+    metric.tableId,
+  )
 
   const tables = useSelector(selectors.query.getTables)
 
@@ -86,10 +90,14 @@ export const Metric = ({
     widgetConfig.querySupportsRollingAppend &&
     fetchMode === FetchMode.ROLLING_APPEND
 
+  const dateNow = new Date()
+  const dateFrom = fromTo?.dateFrom
+    ? fromTo.dateFrom
+    : subMinutes(dateNow, durationInMinutes[metricDuration])
+  const dateTo = fromTo?.dateTo ?? dateNow
+
   const fetchMetric = async () => {
-    if (!fromTo) return
-    const { dateFrom, dateTo } = fromTo
-    const timeout = setTimeout(() => setLoading(true), 250)
+    setLoading(true)
     try {
       const subtracted = subMinutes(dateTo, durationInMinutes[metricDuration])
       const timeFilter = getTimeFilter(subtracted, dateTo)
@@ -133,7 +141,6 @@ export const Metric = ({
     } catch (err) {
       console.error(err)
     } finally {
-      clearTimeout(timeout)
       setLoading(false)
     }
   }
@@ -156,7 +163,8 @@ export const Metric = ({
   }
 
   useEffect(() => {
-    if (metric.tableId && fromTo) {
+    if ((metric.tableId && metric.tableId !== lastTableId) || fromTo) {
+      setLastTableId(metric.tableId)
       fetchMetric()
     }
   }, [metric.tableId, fromTo])
@@ -183,20 +191,18 @@ export const Metric = ({
   const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
 
   const canZoomToData =
-    fromTo?.dateTo && tableName && lastNotNull
+    dateTo && tableName && lastNotNull
       ? lastNotNull >=
         subMinutes(
-          fromTo.dateTo,
+          dateTo,
           minuteDurations[minuteDurations.length - 1][1],
         ).getTime()
       : false
 
-  if (!fromTo) return null
-
   return (
     <Graph
-      dateFrom={fromTo.dateFrom}
-      dateTo={fromTo.dateTo}
+      dateFrom={dateFrom}
+      dateTo={dateTo}
       lastRefresh={lastRefresh}
       data={metric.tableId && hasData(data) ? data : [[], []]}
       canZoomToData={canZoomToData}

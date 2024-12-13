@@ -110,7 +110,6 @@ type Props = {
 export const Graph = ({
   dateFrom,
   dateTo,
-  lastRefresh,
   tableId,
   tableName,
   beforeLabel,

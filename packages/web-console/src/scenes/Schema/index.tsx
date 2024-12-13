@@ -276,6 +276,17 @@ const Schema = ({
     }
   }
 
+  const handleAddMetricsBuffer = async () => {
+    await addBuffer({
+      metricsViewState: {
+        metrics: [],
+        metricDuration: MetricDuration.ONE_HOUR,
+        refreshRate: RefreshRate.AUTO,
+        viewMode: MetricViewMode.GRID,
+      },
+    })
+  }
+
   useEffect(() => {
     void fetchTables()
     void fetchColumns()
@@ -469,16 +480,7 @@ const Schema = ({
                         <Button
                           data-hook="schema-add-metrics-button"
                           skin="transparent"
-                          onClick={() => {
-                            addBuffer({
-                              metricsViewState: {
-                                metrics: [],
-                                metricDuration: MetricDuration.ONE_HOUR,
-                                refreshRate: RefreshRate.AUTO,
-                                viewMode: MetricViewMode.GRID,
-                              },
-                            })
-                          }}
+                          onClick={handleAddMetricsBuffer}
                         >
                           <AddChart size="20px" />
                         </Button>

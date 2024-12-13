@@ -132,6 +132,7 @@ export const Metrics = () => {
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
   const intervalRef = React.useRef<NodeJS.Timeout>()
+  const metricDurationRef = React.useRef<MetricDuration>()
 
   const { autoRefreshTables } = useLocalStorage()
 
@@ -164,8 +165,12 @@ export const Metrics = () => {
   }
 
   const refreshMetricsData = () => {
+    if (!metricDurationRef?.current) return
     const now = new Date()
-    const dateFrom = subMinutes(now, durationInMinutes[duration])
+    const dateFrom = subMinutes(
+      now,
+      durationInMinutes[metricDurationRef.current],
+    )
     const dateTo = now
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
       dateFrom,
@@ -246,7 +251,9 @@ export const Metrics = () => {
       }
       if (metricDuration) {
         setMetricDuration(metricDuration)
-        setSampleBy(defaultSampleByForDuration[metricDuration])
+        if (!sampleBy) {
+          setSampleBy(defaultSampleByForDuration[metricDuration])
+        }
       }
       if (sampleBy) {
         setSampleBy(sampleBy)
@@ -278,6 +285,9 @@ export const Metrics = () => {
           }),
         },
       })
+      if (metricDuration) {
+        metricDurationRef.current = metricDuration
+      }
       if (metricDuration && refreshRate && metricViewMode && sampleBy) {
         updateBuffer(buffer.id, merged)
         setFetchMode(FetchMode.OVERWRITE)
