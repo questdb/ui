@@ -287,6 +287,9 @@ export const Metrics = () => {
       })
       if (metricDuration) {
         metricDurationRef.current = metricDuration
+        if (refreshRate === RefreshRate.AUTO) {
+          setupListeners()
+        }
       }
       if (metricDuration && refreshRate && metricViewMode && sampleBy) {
         updateBuffer(buffer.id, merged)

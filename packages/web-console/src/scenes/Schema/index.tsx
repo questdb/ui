@@ -75,6 +75,7 @@ import {
   MetricDuration,
   MetricViewMode,
   RefreshRate,
+  SampleBy,
 } from "../../scenes/Editor/Metrics/utils"
 
 type Props = Readonly<{
@@ -283,6 +284,7 @@ const Schema = ({
         metricDuration: MetricDuration.ONE_HOUR,
         refreshRate: RefreshRate.AUTO,
         viewMode: MetricViewMode.GRID,
+        sampleBy: SampleBy.AUTO,
       },
     })
   }
