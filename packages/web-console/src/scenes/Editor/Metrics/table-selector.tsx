@@ -111,7 +111,7 @@ export const TableSelector = ({
 
     inputRef.current.style.width = `calc(${
       defaultValue !== "" ? defaultValue.length : placeholder.length
-    }ch + 1.2rem)`
+    }ch + 1.5rem)`
 
     if (inputRef.current && !loading) {
       setQuery(defaultValue ?? "")
