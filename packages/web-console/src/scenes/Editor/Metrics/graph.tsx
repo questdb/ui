@@ -4,7 +4,8 @@ import { MetricDuration, Widget, xAxisFormat, hasData } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import { Box, Loader } from "@questdb/react-components"
+import { Box, Button, Loader } from "@questdb/react-components"
+import { Text } from "../../../components/Text"
 
 const Actions = styled.div`
   margin-right: 0;
@@ -42,40 +43,19 @@ const GraphWrapper = styled(Box).attrs({
   flexDirection: "column",
   align: "center",
 })`
+  position: relative;
   padding: 1rem 0;
+`
 
-  .graph-no-data {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    width: 100%;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-  }
-
-  .graph-no-data-text {
-    color: ${({ theme }) => theme.color.gray2};
-    font-size: 1.4rem;
-    text-align: center;
-  }
-
-  .graph-no-data-button {
-    align-self: center;
-    background-color: ${({ theme }) => theme.color.selection};
-    border: none;
-    color: ${({ theme }) => theme.color.foreground};
-    border-radius: 0.4rem;
-    height: 3rem;
-    padding: 0 1rem;
-    cursor: pointer;
-
-    &:hover {
-      background-color: ${({ theme }) => theme.color.comment};
-    }
-  }
+const GraphOverlay = styled(Box).attrs({
+  flexDirection: "column",
+  align: "center",
+  justifyContent: "center",
+})`
+  width: 100%;
+  height: 15rem;
+  position: absolute;
+  z-index: 1;
 `
 
 const Label = styled.div`
@@ -93,7 +73,6 @@ const LabelValue = styled.span`
 type Props = {
   dateFrom: Date
   dateTo: Date
-  lastRefresh?: Date
   tableId?: number
   tableName?: string
   beforeLabel?: React.ReactNode
@@ -170,6 +149,24 @@ export const Graph = ({
         <Actions>{actions}</Actions>
       </Header>
       <GraphWrapper>
+        {!hasData(data) && !loading && (
+          <GraphOverlay>
+            {isTableMetric && !tableName ? (
+              <Text color="gray2">
+                {tableId
+                  ? "Table does not exist. Please select another one"
+                  : "Select a table to see metrics"}
+              </Text>
+            ) : (
+              <Text color="gray2">No data available for this period</Text>
+            )}
+            {canZoomToData && (
+              <Button skin="secondary" onClick={onZoomToData}>
+                Zoom to data
+              </Button>
+            )}
+          </GraphOverlay>
+        )}
         <UplotReact
           options={{
             ...graphOptions,
@@ -179,34 +176,6 @@ export const Graph = ({
           data={data}
           onCreate={(uplot) => {
             uPlotRef.current = uplot
-            if (!hasData(data) && !loading) {
-              const noData = document.createElement("div")
-              noData.className = "graph-no-data"
-              uplot.over.appendChild(noData)
-
-              const noDataText = document.createElement("span")
-              if (isTableMetric && !tableName) {
-                noDataText.innerText = tableId
-                  ? "Table does not exist. Please select another one"
-                  : "Select a table to see metrics"
-              } else {
-                noDataText.innerText = "No data available for this period"
-              }
-              noDataText.className = "graph-no-data-text"
-              noData.appendChild(noDataText)
-
-              if (canZoomToData) {
-                const zoomToDataButton = document.createElement("button")
-                zoomToDataButton.className = "graph-no-data-button"
-                zoomToDataButton.innerText = "Zoom to data"
-                zoomToDataButton.onclick = () => {
-                  if (onZoomToData) {
-                    onZoomToData()
-                  }
-                }
-                noData.appendChild(zoomToDataButton)
-              }
-            }
           }}
         />
         <Label>

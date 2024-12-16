@@ -51,7 +51,6 @@ export const Metric = ({
   onTableChange,
   onColorChange,
   onMetricDurationChange,
-  lastRefresh,
   fetchMode,
   rollingAppendLimit,
   sampleBy,
@@ -62,13 +61,12 @@ export const Metric = ({
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
   onMetricDurationChange: (duration: MetricDuration) => void
-  lastRefresh?: Date
   fetchMode: FetchMode
   rollingAppendLimit: number
   sampleBy: SampleBy
 }) => {
   const { quest } = useContext(QuestContext)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(metric.tableId !== undefined)
   const [data, setData] = useState<uPlot.AlignedData>([[], []])
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
@@ -203,7 +201,6 @@ export const Metric = ({
     <Graph
       dateFrom={dateFrom}
       dateTo={dateTo}
-      lastRefresh={lastRefresh}
       data={metric.tableId && hasData(data) ? data : [[], []]}
       canZoomToData={canZoomToData}
       onZoomToData={handleZoomToData}
