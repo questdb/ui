@@ -15,13 +15,12 @@ export type Widget = {
   isTableMetric: boolean
   getQuery: ({
     tableId,
-    metricDuration,
     sampleBy,
     limit,
+    timeFilter,
   }: {
     tableId?: number
-    metricDuration: MetricDuration
-    sampleBy?: SampleBy
+    sampleBy: string
     limit?: number
     timeFilter?: string
   }) => string
@@ -112,32 +111,6 @@ export const durationInMinutes: Record<MetricDuration, number> = {
   [MetricDuration.TWENTY_FOUR_HOURS]: 60 * 24,
   [MetricDuration.THREE_DAYS]: 60 * 72,
   [MetricDuration.SEVEN_DAYS]: 60 * 168,
-}
-
-export const defaultSampleByForDuration: Record<
-  MetricDuration,
-  Exclude<SampleBy, SampleBy.AUTO>
-> = {
-  [MetricDuration.FIVE_MINUTES]: SampleBy.ONE_SECOND,
-  [MetricDuration.FIFTEEN_MINUTES]: SampleBy.ONE_SECOND,
-  [MetricDuration.ONE_HOUR]: SampleBy.ONE_SECOND,
-  [MetricDuration.THREE_HOURS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.SIX_HOURS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.TWELVE_HOURS]: SampleBy.ONE_MINUTE,
-  [MetricDuration.TWENTY_FOUR_HOURS]: SampleBy.FIVE_MINUTES,
-  [MetricDuration.THREE_DAYS]: SampleBy.FIFTEEN_MINUTES,
-  [MetricDuration.SEVEN_DAYS]: SampleBy.FIFTEEN_MINUTES,
-}
-
-export const sampleByInSeconds: Record<
-  Exclude<SampleBy, SampleBy.AUTO>,
-  number
-> = {
-  [SampleBy.ONE_SECOND]: 1,
-  [SampleBy.ONE_MINUTE]: 60,
-  [SampleBy.FIVE_MINUTES]: 60 * 5,
-  [SampleBy.FIFTEEN_MINUTES]: 60 * 15,
-  [SampleBy.ONE_HOUR]: 60 * 60,
 }
 
 export type CommitRate = {
@@ -233,10 +206,24 @@ export const getTimeFilter = (from: Date | string, to: Date | string) => {
   return `FROM '${formatToISOIfNeeded(from)}' TO '${formatToISOIfNeeded(to)}'`
 }
 
+export const getSamplingRateForPeriod = (
+  from: Date,
+  to: Date,
+  pointsToPlot = 600,
+) => {
+  const seconds = (to.getTime() - from.getTime()) / 1000
+  return Math.ceil(seconds / pointsToPlot)
+}
+
 export const getRollingAppendRowLimit = (
   refreshRateInSeconds: number,
-  sampleBy: Exclude<SampleBy, SampleBy.AUTO>,
-) => Math.ceil(refreshRateInSeconds / sampleByInSeconds[sampleBy])
+  duration: MetricDuration,
+) => {
+  const dateNow = new Date()
+  const subtracted = subMinutes(dateNow, durationInMinutes[duration])
+  const sampleRate = getSamplingRateForPeriod(subtracted, dateNow)
+  return Math.ceil(refreshRateInSeconds / sampleRate)
+}
 
 export const hasData = (data?: uPlot.AlignedData) => {
   if (!data || data[1].length === 0) return false

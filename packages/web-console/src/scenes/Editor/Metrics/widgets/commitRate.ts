@@ -1,7 +1,7 @@
 import uPlot from "uplot"
 import type { Widget } from "../utils"
 import { sqlValueToFixed, formatNumbers } from "../utils"
-import { CommitRate, defaultSampleByForDuration } from "../utils"
+import { CommitRate } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const commitRate: Widget = {
@@ -9,7 +9,7 @@ export const commitRate: Widget = {
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, metricDuration, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
     return `
     select 
    created, 
@@ -33,7 +33,7 @@ export const commitRate: Widget = {
       event = 103
       -- it is important this is 1s, should this value change
       -- the "commit_rate" value will have to be adjusted to rate/s
-      sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
+      sample by ${sampleBy}
       ${timeFilter ? timeFilter : ""}
       fill(0)
     )

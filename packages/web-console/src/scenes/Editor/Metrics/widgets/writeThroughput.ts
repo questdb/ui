@@ -1,11 +1,6 @@
 import uPlot from "uplot"
 import type { Widget } from "../utils"
-import {
-  RowsApplied,
-  defaultSampleByForDuration,
-  sqlValueToFixed,
-  formatNumbers,
-} from "../utils"
+import { RowsApplied, sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const writeThroughput: Widget = {
@@ -13,7 +8,7 @@ export const writeThroughput: Widget = {
   iconUrl: "/assets/metric-rows-applied.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, metricDuration, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
     return `
 select
     created time,
@@ -23,7 +18,7 @@ select
 from ${TelemetryTable.WAL}
 where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
-sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
+sample by ${sampleBy}
 ${timeFilter ? timeFilter : ""}
 fill(null)
 ${limit ? `limit ${limit}` : ""}`

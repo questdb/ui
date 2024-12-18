@@ -1,6 +1,6 @@
 import uPlot from "uplot"
 import type { Widget } from "../utils"
-import { Latency, defaultSampleByForDuration, sqlValueToFixed } from "../utils"
+import { Latency, sqlValueToFixed } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const latency: Widget = {
@@ -8,7 +8,7 @@ export const latency: Widget = {
   iconUrl: "/assets/metric-read-latency.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, metricDuration, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
     return `
 select created, approx_percentile(latency, 0.9, 3) latency
   from ${TelemetryTable.WAL}
@@ -16,7 +16,7 @@ select created, approx_percentile(latency, 0.9, 3) latency
       event = 105 -- event is fixed
       and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
       ${tableId ? `and tableId = ${tableId}` : ""}
-  sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}
+  sample by ${sampleBy}
   ${timeFilter ? timeFilter : ""}
   fill(0)
   ${limit ? `limit ${limit}` : ""}

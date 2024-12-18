@@ -1,11 +1,7 @@
 import uPlot from "uplot"
 import type { Widget } from "../utils"
 import { WriteAmplification } from "../utils"
-import {
-  defaultSampleByForDuration,
-  sqlValueToFixed,
-  formatNumbers,
-} from "../utils"
+import { sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const writeAmplification: Widget = {
@@ -13,7 +9,7 @@ export const writeAmplification: Widget = {
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, metricDuration, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
     return `
 select 
   created,
@@ -33,7 +29,7 @@ from (
       where ${tableId ? `tableId = ${tableId} and ` : ""}
          event = 105
          and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
-      sample by ${sampleBy ?? defaultSampleByForDuration[metricDuration]}      
+      sample by ${sampleBy}      
       ${timeFilter ? timeFilter : ""}
       -- fill with null to avoid spurious values and division by 0
       fill(null)

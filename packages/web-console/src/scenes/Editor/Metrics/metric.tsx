@@ -9,10 +9,9 @@ import {
   hasData,
   FetchMode,
   mergeRollingData,
-  SampleBy,
   getTimeFilter,
   MetricsRefreshPayload,
-  metricDurationToDate,
+  getSamplingRateForPeriod,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -53,7 +52,6 @@ export const Metric = ({
   onMetricDurationChange,
   fetchMode,
   rollingAppendLimit,
-  sampleBy,
 }: {
   metric: MetricItem
   metricDuration: MetricDuration
@@ -63,7 +61,6 @@ export const Metric = ({
   onMetricDurationChange: (duration: MetricDuration) => void
   fetchMode: FetchMode
   rollingAppendLimit: number
-  sampleBy: SampleBy
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(metric.tableId !== undefined)
@@ -106,8 +103,7 @@ export const Metric = ({
         quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
             tableId: metric.tableId,
-            metricDuration,
-            sampleBy,
+            sampleBy: `${getSamplingRateForPeriod(subtracted, dateTo)}s`,
             timeFilter,
             ...(isRollingAppendEnabled && {
               limit: -rollingAppendLimit,
