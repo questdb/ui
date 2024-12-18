@@ -44,6 +44,13 @@ const StyledInput = styled(Input)`
   }
 `
 
+const ShadowInput = styled(StyledInput)`
+  visibility: hidden;
+  width: max-content;
+  z-index: 1;
+  position: fixed;
+`
+
 const Wrapper = styled.div`
   position: absolute;
   width: 20rem;
@@ -93,6 +100,7 @@ export const TableSelector = ({
 }: Props) => {
   const [hasFocus, setHasFocus] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const shadowInputRef = useRef<HTMLSpanElement | null>(null)
   const [query, setQuery] = useState<string | undefined>(defaultValue ?? "")
   const [keyIndex, setKeyIndex] = useState(-1)
   const downPress = useKeyPress("ArrowDown")
@@ -107,14 +115,13 @@ export const TableSelector = ({
     .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
 
   useEffect(() => {
-    if (!inputRef.current) return
+    if (!inputRef.current || !shadowInputRef.current) return
 
-    inputRef.current.style.width = `calc(${
-      defaultValue !== "" ? defaultValue.length : placeholder.length
-    }ch + 1.5rem)`
+    if (inputRef.current && shadowInputRef.current && !loading) {
+      inputRef.current.style.width = `${shadowInputRef.current.offsetWidth}px`
 
-    if (inputRef.current && !loading) {
       setQuery(defaultValue ?? "")
+
       if (defaultValue === "" && !tableId) {
         inputRef.current!.focus()
       }
@@ -196,6 +203,9 @@ export const TableSelector = ({
           }}
         />
       </Box>
+      <ShadowInput ref={shadowInputRef} as="span">
+        {defaultValue !== "" ? defaultValue : placeholder}
+      </ShadowInput>
       {hasFocus && (
         <Wrapper ref={wrapperRef}>
           <Options>
