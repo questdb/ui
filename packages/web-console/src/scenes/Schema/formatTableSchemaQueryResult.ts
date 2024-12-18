@@ -30,15 +30,19 @@ import * as QuestDB from "../../utils/questdb"
 export const formatTableSchemaQueryResult = (
   name: string,
   partitionBy: string,
+  ttlValue: number,
+  ttlUnit: string,
   columns: QuestDB.Column[],
   walEnabled: boolean,
-  dedup: boolean,
+  dedup: boolean
 ): string => {
   const findTimestampColumn = columns.find((c) => c.designated)
   return formatTableSchemaQuery({
     name,
-    partitionBy,
     timestamp: findTimestampColumn ? findTimestampColumn.column : "",
+    partitionBy,
+    ttlValue,
+    ttlUnit,
     walEnabled,
     dedup,
     schemaColumns: columns.map((c) => {

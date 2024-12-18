@@ -12,5 +12,7 @@ export type SchemaFormValues = {
   schemaColumns: SchemaColumn[]
   partitionBy: string
   timestamp: string
+  ttlValue: number
+  ttlUnit: string
   walEnabled?: string
 }

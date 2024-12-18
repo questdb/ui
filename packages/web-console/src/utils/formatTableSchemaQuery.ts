@@ -18,6 +18,8 @@ type Props = {
   timestamp: string
   dedup: boolean
   walEnabled: boolean
+  ttlValue: number
+  ttlUnit: string
   schemaColumns: Column[]
 }
 
@@ -27,6 +29,8 @@ export const formatTableSchemaQuery = ({
   timestamp,
   walEnabled,
   dedup,
+  ttlValue,
+  ttlUnit,
   schemaColumns,
 }: Props) => {
   const hasValidTimestamp =
@@ -75,7 +79,11 @@ export const formatTableSchemaQuery = ({
   }
 
   if (partitionBy !== "NONE") {
-    query += ` PARTITION BY ${partitionBy} ${walEnabled ? "WAL" : "BYPASS WAL"}`
+    query += ` PARTITION BY ${partitionBy}`
+    if ((ttlValue ?? 0) !== 0) {
+      query += ` TTL ${ttlValue} ${ttlUnit}`
+    }
+    query += ` ${walEnabled ? "WAL" : "BYPASS WAL"}`
   }
 
   // For deduplication keys to work, WAL has to be enabled and a designated timestamp has to be set.

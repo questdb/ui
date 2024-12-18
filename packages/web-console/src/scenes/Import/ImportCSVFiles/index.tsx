@@ -94,6 +94,22 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
               })()
             : "NONE"
 
+        const ttlValue =
+          result.status === FileCheckStatus.EXISTS && tables
+            ? await (async () => {
+                const table = tables.find((t) => t.table_name === file.name)
+                return table?.ttlValue ?? 0
+              })()
+            : 0
+
+        const ttlUnit =
+          result.status === FileCheckStatus.EXISTS && tables
+            ? await (async () => {
+                const table = tables.find((t) => t.table_name === file.name)
+                return table?.ttlUnit ?? "HOURS"
+              })()
+            : "HOURS"
+
         const timestamp =
           result.status === FileCheckStatus.EXISTS && tables
             ? await (async () => {
@@ -110,6 +126,8 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           exists: result.status === FileCheckStatus.EXISTS,
           schema,
           partitionBy,
+          ttlValue,
+          ttlUnit,
           timestamp,
           settings: {
             forceHeader: false,
