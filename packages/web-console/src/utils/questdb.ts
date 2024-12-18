@@ -149,6 +149,8 @@ export type Table = {
   designatedTimestamp: string
   walEnabled: boolean
   dedup: boolean
+  ttlValue: number
+  ttlUnit: string
 }
 
 export type Partition = {
