@@ -1,6 +1,10 @@
 import { format } from "date-fns"
 import { TZDate } from "@date-fns/tz"
 
+export const isValidDate = (date: string): boolean => {
+  return !isNaN(Date.parse(date))
+}
+
 export const getLocalTimeZone = () => {
   return Intl.DateTimeFormat().resolvedOptions().timeZone
 }

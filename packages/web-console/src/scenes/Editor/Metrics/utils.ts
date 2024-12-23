@@ -1,3 +1,4 @@
+import { isValidDate } from "./../../../utils/dateTime"
 import { format, formatISO, subMinutes } from "date-fns"
 import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
@@ -292,8 +293,7 @@ export const isDateToken = (token: string) => {
 
 // Converts tokens like `now-1h` or `now-7d` to date string
 export const durationTokenToDate = (token: string) => {
-  if (!isDateToken(token))
-    return token.startsWith("now") ? "Invalid date" : token
+  if (!isDateToken(token)) return isValidDate(token) ? token : "Invalid date"
   const now = new Date()
   if (token === "now") return formatISO(now)
   const [_, _operator, value, unit] = token.match(/now(-)?(\d+)([a-z]+)$/)!
