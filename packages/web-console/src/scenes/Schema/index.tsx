@@ -72,7 +72,8 @@ import { Checkbox } from "./checkbox"
 import { AddChart } from "@styled-icons/material"
 import { useEditor } from "../../providers/EditorProvider"
 import {
-  MetricDuration,
+  Duration,
+  metricDurations,
   MetricViewMode,
   RefreshRate,
 } from "../../scenes/Editor/Metrics/utils"
@@ -277,10 +278,14 @@ const Schema = ({
   }
 
   const handleAddMetricsBuffer = async () => {
+    const last1h = metricDurations.find(
+      (d) => d.dateFrom === "now-1h" && d.dateTo === "now",
+    ) as Duration
     await addBuffer({
       metricsViewState: {
         metrics: [],
-        metricDuration: MetricDuration.ONE_HOUR,
+        dateFrom: last1h.dateFrom,
+        dateTo: last1h.dateTo,
         refreshRate: RefreshRate.AUTO,
         viewMode: MetricViewMode.GRID,
       },

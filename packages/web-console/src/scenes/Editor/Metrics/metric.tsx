@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useContext } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
-  durationInMinutes,
-  MetricDuration,
   MetricType,
   LastNotNull,
   ResultType,
@@ -10,8 +8,8 @@ import {
   FetchMode,
   mergeRollingData,
   getTimeFilter,
-  MetricsRefreshPayload,
   getSamplingRateForPeriod,
+  durationTokenToDate,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -26,7 +24,6 @@ import { selectors } from "../../../store"
 import { TableSelector } from "./table-selector"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { ColorPalette } from "./color-palette"
-import { subMinutes } from "date-fns"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 
@@ -44,21 +41,21 @@ const ActionButton = styled(Button)`
 `
 
 export const Metric = ({
+  dateFrom,
+  dateTo,
   metric,
-  metricDuration,
   onRemove,
   onTableChange,
   onColorChange,
-  onMetricDurationChange,
   fetchMode,
   rollingAppendLimit,
 }: {
+  dateFrom: string
+  dateTo: string
   metric: MetricItem
-  metricDuration: MetricDuration
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
-  onMetricDurationChange: (duration: MetricDuration) => void
   fetchMode: FetchMode
   rollingAppendLimit: number
 }) => {
@@ -67,35 +64,30 @@ export const Metric = ({
   const [data, setData] = useState<uPlot.AlignedData>([[], []])
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const [fromTo, setFromTo] = useState<MetricsRefreshPayload>()
   const [lastTableId, setLastTableId] = useState<number | undefined>(
     metric.tableId,
   )
+  const dateFromRef = React.useRef(dateFrom)
+  const dateToRef = React.useRef(dateTo)
+
+  dateFromRef.current = dateFrom
+  dateToRef.current = dateTo
 
   const tables = useSelector(selectors.query.getTables)
 
   const widgetConfig = widgets[metric.metricType]
-
-  const minuteDurations: [MetricDuration, number][] = Object.entries(
-    durationInMinutes,
-  ) as [MetricDuration, number][]
 
   const isRollingAppendEnabled =
     data &&
     widgetConfig.querySupportsRollingAppend &&
     fetchMode === FetchMode.ROLLING_APPEND
 
-  const dateNow = new Date()
-  const dateFrom = fromTo?.dateFrom
-    ? fromTo.dateFrom
-    : subMinutes(dateNow, durationInMinutes[metricDuration])
-  const dateTo = fromTo?.dateTo ?? dateNow
-
   const fetchMetric = async () => {
     setLoading(true)
     try {
-      const subtracted = subMinutes(dateTo, durationInMinutes[metricDuration])
-      const timeFilter = getTimeFilter(subtracted, dateTo)
+      const from = durationTokenToDate(dateFromRef.current)
+      const to = durationTokenToDate(dateToRef.current)
+      const timeFilter = getTimeFilter(from, to)
       const responses = await Promise.all<
         | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>
@@ -103,7 +95,7 @@ export const Metric = ({
         quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
             tableId: metric.tableId,
-            sampleBy: `${getSamplingRateForPeriod(subtracted, dateTo)}s`,
+            sampleBy: `${getSamplingRateForPeriod(from, to)}s`,
             timeFilter,
             ...(isRollingAppendEnabled && {
               limit: -rollingAppendLimit,
@@ -120,7 +112,7 @@ export const Metric = ({
           responses[0].data as unknown as ResultType[MetricType],
         )
         if (isRollingAppendEnabled) {
-          setData(mergeRollingData(data, alignedData, dateFrom))
+          setData(mergeRollingData(data, alignedData, from))
         } else {
           setData(alignedData)
         }
@@ -141,33 +133,23 @@ export const Metric = ({
 
   const handleZoomToData = () => {
     if (lastNotNull) {
-      const durationsWithData = minuteDurations.filter(
-        (d) => lastNotNull >= subMinutes(new Date(), d[1]).getTime(),
-      )
-      if (durationsWithData.length) {
-        onMetricDurationChange(durationsWithData[0][0])
-      }
+      // zoom to data
     }
   }
 
-  const refreshMetricsData = (payload?: MetricsRefreshPayload) => {
-    if (payload) {
-      setFromTo(payload)
-    }
+  const refreshMetricsData = () => {
+    fetchMetric()
   }
 
   useEffect(() => {
-    if ((metric.tableId && metric.tableId !== lastTableId) || fromTo) {
+    if (metric.tableId && metric.tableId !== lastTableId) {
       setLastTableId(metric.tableId)
       fetchMetric()
     }
-  }, [metric.tableId, fromTo])
+  }, [metric.tableId])
 
   useEffect(() => {
-    eventBus.subscribe<MetricsRefreshPayload>(
-      EventType.METRICS_REFRESH_DATA,
-      refreshMetricsData,
-    )
+    eventBus.subscribe(EventType.METRICS_REFRESH_DATA, refreshMetricsData)
 
     return () => {
       eventBus.unsubscribe(EventType.METRICS_REFRESH_DATA, refreshMetricsData)
@@ -184,14 +166,8 @@ export const Metric = ({
 
   const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
 
-  const canZoomToData =
-    dateTo && tableName && lastNotNull
-      ? lastNotNull >=
-        subMinutes(
-          dateTo,
-          minuteDurations[minuteDurations.length - 1][1],
-        ).getTime()
-      : false
+  // const canZoomToData = tableName !== undefined && lastNotNull !== undefined
+  const canZoomToData = false
 
   return (
     <Graph
@@ -202,7 +178,6 @@ export const Metric = ({
       onZoomToData={handleZoomToData}
       colors={[metric.color]}
       loading={loading}
-      duration={metricDuration}
       tableId={metric.tableId}
       tableName={tableName}
       widgetConfig={widgetConfig}

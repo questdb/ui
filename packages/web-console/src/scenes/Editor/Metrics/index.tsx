@@ -4,23 +4,15 @@ import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
 import { useEditor } from "../../../providers"
 import {
-  MetricDuration,
   RefreshRate,
-  autoRefreshRates,
   refreshRatesInSeconds,
   getRollingAppendRowLimit,
   MetricViewMode,
   FetchMode,
-  durationInMinutes,
   MetricsRefreshPayload,
+  getAutoRefreshRate,
 } from "./utils"
-import {
-  GridAlt,
-  Menu,
-  Time,
-  Refresh,
-  World,
-} from "@styled-icons/boxicons-regular"
+import { GridAlt, Menu, Refresh } from "@styled-icons/boxicons-regular"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
 import { Metric as MetricComponent } from "./metric"
@@ -29,12 +21,13 @@ import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
 import merge from "lodash.merge"
 import { AddChart } from "@styled-icons/material"
-import { getLocalTimeZone } from "../../../utils/dateTime"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
-import { subMinutes } from "date-fns"
+import { formatISO } from "date-fns"
+import { DateTimePicker } from "./date-time-picker"
+import { ForwardRef } from "@questdb/react-components"
 
 const Root = styled.div`
   display: flex;
@@ -94,24 +87,13 @@ const GlobalInfo = styled(Box).attrs({
   }
 `
 
-const formatDurationLabel = (duration: MetricDuration) => `Last ${duration}`
-
-const formatRefreshRateLabel = (
-  rate: RefreshRate,
-  duration: MetricDuration,
-) => {
-  if (rate === RefreshRate.AUTO) {
-    return `${RefreshRate.AUTO} (${autoRefreshRates[duration]})`
-  }
-  return rate
-}
-
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
-  const [metricDuration, setMetricDuration] = useState<MetricDuration>()
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
     MetricViewMode.GRID,
   )
+  const [dateFrom, setDateFrom] = useState<string>(formatISO(new Date()))
+  const [dateTo, setDateTo] = useState<string>(formatISO(new Date()))
   const [refreshRate, setRefreshRate] = useState<RefreshRate>()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
@@ -121,23 +103,21 @@ export const Metrics = () => {
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
   const intervalRef = React.useRef<NodeJS.Timeout>()
-  const metricDurationRef = React.useRef<MetricDuration>()
 
   const { autoRefreshTables } = useLocalStorage()
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
-  const duration = metricDuration || MetricDuration.ONE_HOUR
-
   const refreshRateInSec = refreshRate
     ? refreshRate === RefreshRate.AUTO
-      ? refreshRatesInSeconds[autoRefreshRates[duration]]
+      ? refreshRatesInSeconds[getAutoRefreshRate(dateFrom, dateTo)]
       : refreshRatesInSeconds[refreshRate]
     : 0
 
   const rollingAppendLimit = getRollingAppendRowLimit(
     refreshRateInSec,
-    duration,
+    dateFrom,
+    dateTo,
   )
 
   const updateMetrics = (metrics: Metric[]) => {
@@ -152,13 +132,6 @@ export const Metrics = () => {
   }
 
   const refreshMetricsData = () => {
-    if (!metricDurationRef?.current) return
-    const now = new Date()
-    const dateFrom = subMinutes(
-      now,
-      durationInMinutes[metricDurationRef.current],
-    )
-    const dateTo = now
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
       dateFrom,
       dateTo,
@@ -195,6 +168,11 @@ export const Metrics = () => {
     }
   }
 
+  const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
+    setDateFrom(dateFrom)
+    setDateTo(dateTo)
+  }
+
   const focusListener = useCallback(() => {
     tabInFocusRef.current = true
     if (refreshRateRef.current !== RefreshRate.OFF) {
@@ -228,15 +206,19 @@ export const Metrics = () => {
   useEffect(() => {
     if (buffer) {
       const metrics = buffer?.metricsViewState?.metrics
-      const metricDuration = buffer?.metricsViewState?.metricDuration
       const refreshRate = buffer?.metricsViewState?.refreshRate
       const metricViewMode = buffer?.metricsViewState?.viewMode
+      const dateFrom = buffer?.metricsViewState?.dateFrom
+      const dateTo = buffer?.metricsViewState?.dateTo
 
+      if (dateFrom) {
+        setDateFrom(dateFrom)
+      }
+      if (dateTo) {
+        setDateTo(dateTo)
+      }
       if (metrics) {
         setMetrics(metrics)
-      }
-      if (metricDuration) {
-        setMetricDuration(metricDuration)
       }
       if (refreshRate) {
         setRefreshRate(refreshRate)
@@ -251,30 +233,32 @@ export const Metrics = () => {
     if (buffer?.id) {
       const merged = merge(buffer, {
         metricsViewState: {
-          ...(metricDuration !== buffer?.metricsViewState?.metricDuration && {
-            metricDuration,
-          }),
           ...(refreshRate !== buffer?.metricsViewState?.refreshRate && {
             refreshRate,
           }),
           ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
             viewMode: metricViewMode,
           }),
+          ...(dateFrom !== buffer?.metricsViewState?.dateFrom && {
+            dateFrom,
+          }),
+          ...(dateTo !== buffer?.metricsViewState?.dateTo && {
+            dateTo,
+          }),
         },
       })
-      if (metricDuration) {
-        metricDurationRef.current = metricDuration
+      if (dateFrom && dateTo) {
         if (refreshRate === RefreshRate.AUTO) {
           setupListeners()
         }
       }
-      if (metricDuration && refreshRate && metricViewMode) {
+      if (dateFrom && dateTo && refreshRate && metricViewMode) {
         updateBuffer(buffer.id, merged)
         setFetchMode(FetchMode.OVERWRITE)
         refreshMetricsData()
       }
     }
-  }, [metricDuration, refreshRate, metricViewMode])
+  }, [refreshRate, metricViewMode, dateFrom, dateTo])
 
   useEffect(() => {
     if (refreshRate) {
@@ -333,10 +317,6 @@ export const Metrics = () => {
       <Toolbar>
         <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">
-          <Box gap="0.5rem">
-            <World size="14px" />
-            <Text color="foreground">{getLocalTimeZone()}</Text>
-          </Box>
           <Box gap="0.5rem" style={{ flexShrink: 0 }}>
             <IconWithTooltip
               icon={
@@ -353,7 +333,7 @@ export const Metrics = () => {
                   name="refresh_rate"
                   value={refreshRate}
                   options={Object.values(RefreshRate).map((rate) => ({
-                    label: formatRefreshRateLabel(rate, duration),
+                    label: `Refresh: ${rate}`,
                     value: rate,
                   }))}
                   onChange={(e) =>
@@ -367,18 +347,13 @@ export const Metrics = () => {
           </Box>
           <IconWithTooltip
             icon={
-              <Select
-                name="duration"
-                value={metricDuration}
-                options={Object.values(MetricDuration).map((duration) => ({
-                  label: formatDurationLabel(duration),
-                  value: duration,
-                }))}
-                onChange={(e) =>
-                  setMetricDuration(e.target.value as MetricDuration)
-                }
-                prefixIcon={<Time size="18px" />}
-              />
+              <ForwardRef>
+                <DateTimePicker
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  onDateFromToChange={handleDateFromToChange}
+                />
+              </ForwardRef>
             }
             tooltip="Time duration"
             placement="bottom"
@@ -427,13 +402,13 @@ export const Metrics = () => {
             .sort((a, b) => a.position - b.position)
             .map((metric, index) => (
               <MetricComponent
+                dateFrom={dateFrom}
+                dateTo={dateTo}
                 key={index}
                 metric={metric}
-                metricDuration={duration}
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
-                onMetricDurationChange={setMetricDuration}
                 fetchMode={fetchMode}
                 rollingAppendLimit={rollingAppendLimit}
               />

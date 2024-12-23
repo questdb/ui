@@ -1,17 +1,14 @@
 import { utcToLocal } from "./../../../utils/dateTime"
-import { uniq } from "./../../../utils/uniq"
-import { subMinutes } from "date-fns"
 import { useContext } from "react"
 import { ThemeContext } from "styled-components"
 import uPlot from "uplot"
-import { MetricDuration, durationInMinutes } from "./utils"
+import { durationTokenToDate } from "./utils"
 
 type Params = {
   data: uPlot.AlignedData
-  dateFrom: Date
-  dateTo: Date
+  dateFrom: string
+  dateTo: string
   colors: string[]
-  duration: MetricDuration
   tickValue?: (rawValue: number) => string
   mapXValue: (rawValue: number, index: number, ticks: number[]) => string
   mapYValue: (rawValue: number) => string
@@ -51,7 +48,6 @@ export const useGraphOptions = ({
   dateFrom,
   dateTo,
   colors,
-  duration,
   tickValue = (rawValue) => (+rawValue).toString(),
   mapXValue,
   mapYValue = (rawValue) => (+rawValue).toFixed(4),
@@ -60,9 +56,9 @@ export const useGraphOptions = ({
 }: Params): Omit<uPlot.Options, "width" | "height"> => {
   const theme = useContext(ThemeContext)
 
-  const start = dateFrom.getTime()
+  const start = new Date(durationTokenToDate(dateFrom)).getTime()
 
-  const end = dateTo.getTime()
+  const end = new Date(durationTokenToDate(dateTo)).getTime()
 
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.gray2,

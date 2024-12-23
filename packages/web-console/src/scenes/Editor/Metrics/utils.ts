@@ -1,6 +1,8 @@
-import { formatISO, subMinutes } from "date-fns"
+import { format, formatISO, subMinutes } from "date-fns"
 import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
+
+export const DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss"
 
 export enum MetricType {
   COMMIT_RATE = "Commit rate",
@@ -31,21 +33,63 @@ export type Widget = {
 }
 
 export type MetricsRefreshPayload = {
-  dateFrom: Date
-  dateTo: Date
+  dateFrom: string
+  dateTo: string
 }
 
-export enum MetricDuration {
-  FIVE_MINUTES = "5m",
-  FIFTEEN_MINUTES = "15m",
-  ONE_HOUR = "1h",
-  THREE_HOURS = "3h",
-  SIX_HOURS = "6h",
-  TWELVE_HOURS = "12h",
-  TWENTY_FOUR_HOURS = "24h",
-  THREE_DAYS = "3 days",
-  SEVEN_DAYS = "7 days",
+export type Duration = {
+  dateFrom: string
+  dateTo: string
+  label: string
 }
+
+export const metricDurations: Duration[] = [
+  {
+    dateFrom: "now-5m",
+    dateTo: "now",
+    label: "Last 5m",
+  },
+  {
+    dateFrom: "now-15m",
+    dateTo: "now",
+    label: "Last 15m",
+  },
+  {
+    dateFrom: "now-1h",
+    dateTo: "now",
+    label: "Last 1h",
+  },
+  {
+    dateFrom: "now-3h",
+    dateTo: "now",
+    label: "Last 3h",
+  },
+  {
+    dateFrom: "now-6h",
+    dateTo: "now",
+    label: "Last 6h",
+  },
+  {
+    dateFrom: "now-12h",
+    dateTo: "now",
+    label: "Last 12h",
+  },
+  {
+    dateFrom: "now-24h",
+    dateTo: "now",
+    label: "Last 24h",
+  },
+  {
+    dateFrom: "now-3d",
+    dateTo: "now",
+    label: "Last 3 days",
+  },
+  {
+    dateFrom: "now-7d",
+    dateTo: "now",
+    label: "Last 7 days",
+  },
+]
 
 export enum MetricViewMode {
   LIST = "List",
@@ -86,31 +130,19 @@ export const refreshRatesInSeconds: Record<RefreshRate, number> = {
   [RefreshRate.ONE_MINUTE]: 60,
 }
 
-export const autoRefreshRates: Record<
-  MetricDuration,
-  Exclude<RefreshRate, RefreshRate.AUTO>
-> = {
-  [MetricDuration.FIVE_MINUTES]: RefreshRate.ONE_SECOND,
-  [MetricDuration.FIFTEEN_MINUTES]: RefreshRate.FIVE_SECONDS,
-  [MetricDuration.ONE_HOUR]: RefreshRate.TEN_SECONDS,
-  [MetricDuration.THREE_HOURS]: RefreshRate.THIRTY_SECONDS,
-  [MetricDuration.SIX_HOURS]: RefreshRate.THIRTY_SECONDS,
-  [MetricDuration.TWELVE_HOURS]: RefreshRate.THIRTY_SECONDS,
-  [MetricDuration.TWENTY_FOUR_HOURS]: RefreshRate.THIRTY_SECONDS,
-  [MetricDuration.THREE_DAYS]: RefreshRate.ONE_MINUTE,
-  [MetricDuration.SEVEN_DAYS]: RefreshRate.ONE_MINUTE,
-}
-
-export const durationInMinutes: Record<MetricDuration, number> = {
-  [MetricDuration.FIVE_MINUTES]: 5,
-  [MetricDuration.FIFTEEN_MINUTES]: 15,
-  [MetricDuration.ONE_HOUR]: 60,
-  [MetricDuration.THREE_HOURS]: 60 * 3,
-  [MetricDuration.SIX_HOURS]: 60 * 6,
-  [MetricDuration.TWELVE_HOURS]: 60 * 12,
-  [MetricDuration.TWENTY_FOUR_HOURS]: 60 * 24,
-  [MetricDuration.THREE_DAYS]: 60 * 72,
-  [MetricDuration.SEVEN_DAYS]: 60 * 168,
+export const getAutoRefreshRate = (dateFrom: string, dateTo: string) => {
+  const seconds =
+    (new Date(durationTokenToDate(dateTo)).getTime() -
+      new Date(durationTokenToDate(dateFrom)).getTime()) /
+    1000
+  if (seconds <= 60 * 5) return RefreshRate.ONE_SECOND
+  if (seconds <= 60 * 15) return RefreshRate.FIVE_SECONDS
+  if (seconds <= 60 * 60) return RefreshRate.TEN_SECONDS
+  if (seconds <= 60 * 60 * 3) return RefreshRate.THIRTY_SECONDS
+  if (seconds <= 60 * 60 * 6) return RefreshRate.THIRTY_SECONDS
+  if (seconds <= 60 * 60 * 12) return RefreshRate.THIRTY_SECONDS
+  if (seconds <= 60 * 60 * 24) return RefreshRate.THIRTY_SECONDS
+  return RefreshRate.ONE_MINUTE
 }
 
 export type CommitRate = {
@@ -157,30 +189,26 @@ export const minutesToHours = (durationInMinutes: number) =>
 export const minutesToSeconds = (durationInMinutes: number) =>
   durationInMinutes * 60
 
-export const metricDurationToDate = (
-  metricDuration: MetricDuration,
-  dateNow: Date,
-) => subMinutes(dateNow, durationInMinutes[metricDuration])
-
-export const xAxisFormat = {
-  [MetricDuration.FIVE_MINUTES]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm:ss"),
-  [MetricDuration.FIFTEEN_MINUTES]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm"),
-  [MetricDuration.ONE_HOUR]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm"),
-  [MetricDuration.THREE_HOURS]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm"),
-  [MetricDuration.SIX_HOURS]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm"),
-  [MetricDuration.TWELVE_HOURS]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm"),
-  [MetricDuration.TWENTY_FOUR_HOURS]: (rawValue: number) =>
-    utcToLocal(rawValue, "HH:mm"),
-  [MetricDuration.THREE_DAYS]: (rawValue: number) =>
-    utcToLocal(rawValue, "dd/MM"),
-  [MetricDuration.SEVEN_DAYS]: (rawValue: number) =>
-    utcToLocal(rawValue, "dd/MM"),
+export const getXAxisFormat = (
+  rawValue: number,
+  dateFrom: string,
+  dateTo: string,
+) => {
+  let format = "HH:mm:ss"
+  const seconds =
+    (new Date(durationTokenToDate(dateTo)).getTime() -
+      new Date(durationTokenToDate(dateFrom)).getTime()) /
+    1000
+  if (seconds < 60) {
+    format = "HH:mm:ss"
+  } else if (seconds < 60 * 60) {
+    format = "HH:mm"
+  } else if (seconds < 60 * 60 * 24) {
+    format = "HH:mm"
+  } else {
+    format = "dd/MM"
+  }
+  return utcToLocal(rawValue, format)
 }
 
 export const sqlValueToFixed = (value: string, decimals: number = 2) => {
@@ -207,21 +235,26 @@ export const getTimeFilter = (from: Date | string, to: Date | string) => {
 }
 
 export const getSamplingRateForPeriod = (
-  from: Date,
-  to: Date,
+  from: string,
+  to: string,
   pointsToPlot = 600,
 ) => {
-  const seconds = (to.getTime() - from.getTime()) / 1000
+  const seconds =
+    (new Date(durationTokenToDate(to)).getTime() -
+      new Date(durationTokenToDate(from)).getTime()) /
+    1000
   return Math.ceil(seconds / pointsToPlot)
 }
 
 export const getRollingAppendRowLimit = (
   refreshRateInSeconds: number,
-  duration: MetricDuration,
+  dateFrom: string,
+  dateTo: string,
 ) => {
-  const dateNow = new Date()
-  const subtracted = subMinutes(dateNow, durationInMinutes[duration])
-  const sampleRate = getSamplingRateForPeriod(subtracted, dateNow)
+  const sampleRate = getSamplingRateForPeriod(
+    durationTokenToDate(dateFrom),
+    durationTokenToDate(dateTo),
+  )
   return Math.ceil(refreshRateInSeconds / sampleRate)
 }
 
@@ -235,9 +268,9 @@ export const hasData = (data?: uPlot.AlignedData) => {
 export const mergeRollingData = (
   oldData: uPlot.AlignedData,
   newData: uPlot.AlignedData,
-  dateFrom: Date,
+  dateFrom: string,
 ) => {
-  const from = dateFrom.getTime()
+  const from = new Date(durationTokenToDate(dateFrom)).getTime()
 
   const mergedData = newData.map((d, i) => [
     ...oldData[i],
@@ -251,4 +284,44 @@ export const mergeRollingData = (
           (_, index) => mergedData[0] && mergedData[0][index] >= from,
         ),
   ) as uPlot.AlignedData
+}
+
+export const isDateToken = (token: string) => {
+  return /^now(-\d+[hdm]$)?$/.test(token)
+}
+
+// Converts tokens like `now-1h` or `now-7d` to date string
+export const durationTokenToDate = (token: string) => {
+  if (!isDateToken(token))
+    return token.startsWith("now") ? "Invalid date" : token
+  const now = new Date()
+  if (token === "now") return formatISO(now)
+  const [_, _operator, value, unit] = token.match(/now(-)?(\d+)([a-z]+)$/)!
+  let subtractedMinutes = 0
+  switch (unit) {
+    case "m":
+      subtractedMinutes = parseInt(value)
+      break
+    case "h":
+      subtractedMinutes = parseInt(value) * 60
+      break
+    case "d":
+      subtractedMinutes = parseInt(value) * 60 * 24
+      break
+    default:
+      return "Invalid date"
+  }
+  return formatISO(subMinutes(now, subtractedMinutes))
+}
+
+export const durationToHumanReadable = (from: string, to: string) => {
+  const findDuration = metricDurations.find(
+    (d) => d.dateFrom === from && d.dateTo === to,
+  )
+  if (findDuration) return findDuration.label
+  return `${
+    from.startsWith("now") ? from : format(new Date(from), DATETIME_FORMAT)
+  } - ${to.startsWith("now") ? to : format(new Date(to), DATETIME_FORMAT)}
+  `
+  return null
 }

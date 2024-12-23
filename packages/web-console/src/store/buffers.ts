@@ -27,7 +27,6 @@ import { db } from "./db"
 import type { editor } from "monaco-editor"
 import {
   MetricType,
-  MetricDuration,
   MetricViewMode,
   SampleBy,
 } from "scenes/Editor/Metrics/utils"
@@ -45,7 +44,8 @@ export type Metric = {
 }
 
 export type MetricsViewState = {
-  metricDuration?: MetricDuration
+  dateFrom?: string
+  dateTo?: string
   refreshRate?: RefreshRate
   sampleBy?: SampleBy
   viewMode?: MetricViewMode

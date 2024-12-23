@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef } from "react"
 import styled from "styled-components"
-import { MetricDuration, Widget, xAxisFormat, hasData } from "./utils"
+import { Widget, hasData, getXAxisFormat } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -71,8 +71,8 @@ const LabelValue = styled.span`
 `
 
 type Props = {
-  dateFrom: Date
-  dateTo: Date
+  dateFrom: string
+  dateTo: string
   tableId?: number
   tableName?: string
   beforeLabel?: React.ReactNode
@@ -80,7 +80,6 @@ type Props = {
   data: uPlot.AlignedData
   canZoomToData?: boolean
   colors: string[]
-  duration: MetricDuration
   actions?: React.ReactNode
   onZoomToData?: () => void
   widgetConfig: Widget
@@ -95,7 +94,6 @@ export const Graph = ({
   data,
   canZoomToData,
   colors,
-  duration,
   loading,
   actions,
   onZoomToData,
@@ -119,10 +117,9 @@ export const Graph = ({
     dateFrom,
     dateTo,
     colors,
-    duration,
     timeRef,
     valueRef,
-    mapXValue: xAxisFormat[duration],
+    mapXValue: (rawValue) => getXAxisFormat(rawValue, dateFrom, dateTo),
     mapYValue,
   })
 

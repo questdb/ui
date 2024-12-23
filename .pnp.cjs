@@ -6674,6 +6674,7 @@ const RAW_RUNTIME_STATE =
           ["prop-types", "npm:15.8.1"],\
           ["ramda", "npm:0.27.1"],\
           ["react", "npm:17.0.2"],\
+          ["react-calendar", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.8.0"],\
           ["react-contextmenu", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.14.0"],\
           ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
           ["react-highlight-words", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.20.0"],\
@@ -12402,6 +12403,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["@wojtekmaj/date-utils", [\
+      ["npm:1.5.1", {\
+        "packageLocation": "./.yarn/cache/@wojtekmaj-date-utils-npm-1.5.1-e21d58f022-73dced08ab.zip/node_modules/@wojtekmaj/date-utils/",\
+        "packageDependencies": [\
+          ["@wojtekmaj/date-utils", "npm:1.5.1"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["@xtuc/ieee754", [\
       ["npm:1.2.0", {\
         "packageLocation": "./.yarn/cache/@xtuc-ieee754-npm-1.2.0-ec0ce4e025-ab033b0329.zip/node_modules/@xtuc/ieee754/",\
@@ -14912,6 +14922,13 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/clsx-npm-1.2.1-77792dc182-5ded6f61f1.zip/node_modules/clsx/",\
         "packageDependencies": [\
           ["clsx", "npm:1.2.1"]\
+        ],\
+        "linkType": "HARD"\
+      }],\
+      ["npm:2.1.1", {\
+        "packageLocation": "./.yarn/cache/clsx-npm-2.1.1-96125b98be-cdfb57fa6c.zip/node_modules/clsx/",\
+        "packageDependencies": [\
+          ["clsx", "npm:2.1.1"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -18980,6 +18997,16 @@ const RAW_RUNTIME_STATE =
         "packageDependencies": [\
           ["get-tsconfig", "npm:4.7.3"],\
           ["resolve-pkg-maps", "npm:1.0.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["get-user-locale", [\
+      ["npm:2.3.2", {\
+        "packageLocation": "./.yarn/cache/get-user-locale-npm-2.3.2-3b463b4839-58c1dd99b8.zip/node_modules/get-user-locale/",\
+        "packageDependencies": [\
+          ["get-user-locale", "npm:2.3.2"],\
+          ["mem", "npm:8.1.1"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -25623,6 +25650,37 @@ const RAW_RUNTIME_STATE =
           ["react", "npm:17.0.2"],\
           ["loose-envify", "npm:1.4.0"],\
           ["object-assign", "npm:4.1.1"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["react-calendar", [\
+      ["npm:4.8.0", {\
+        "packageLocation": "./.yarn/cache/react-calendar-npm-4.8.0-daa5462842-26a58d9bbe.zip/node_modules/react-calendar/",\
+        "packageDependencies": [\
+          ["react-calendar", "npm:4.8.0"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.8.0", {\
+        "packageLocation": "./.yarn/__virtual__/react-calendar-virtual-a36b69e08e/0/cache/react-calendar-npm-4.8.0-daa5462842-26a58d9bbe.zip/node_modules/react-calendar/",\
+        "packageDependencies": [\
+          ["react-calendar", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.8.0"],\
+          ["@types/react", "npm:17.0.2"],\
+          ["@types/react-dom", "npm:16.9.8"],\
+          ["@wojtekmaj/date-utils", "npm:1.5.1"],\
+          ["clsx", "npm:2.1.1"],\
+          ["get-user-locale", "npm:2.3.2"],\
+          ["prop-types", "npm:15.8.1"],\
+          ["react", "npm:17.0.2"],\
+          ["react-dom", "virtual:455cc1315669a6e622038e6093381f8d95ab8bb473af09abaaf7e72fce2d6a9ff2602fe53215abe1948a8259d689b4411a17531ea4acc5522a659c642ee7696d#npm:17.0.2"],\
+          ["warning", "npm:4.0.3"]\
+        ],\
+        "packagePeers": [\
+          "@types/react-dom",\
+          "@types/react",\
+          "react-dom",\
+          "react"\
         ],\
         "linkType": "HARD"\
       }]\
