@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useLayoutEffect } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import styled from "styled-components"
 import { Box, Input } from "@questdb/react-components"
 import { Table } from "@styled-icons/remix-line"

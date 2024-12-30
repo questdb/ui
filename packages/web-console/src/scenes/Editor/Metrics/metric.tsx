@@ -61,7 +61,6 @@ export const Metric = ({
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(metric.tableId !== undefined)
-  const [data, setData] = useState<uPlot.AlignedData>([[], []])
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [lastTableId, setLastTableId] = useState<number | undefined>(
@@ -69,6 +68,8 @@ export const Metric = ({
   )
   const dateFromRef = React.useRef(dateFrom)
   const dateToRef = React.useRef(dateTo)
+  const dataRef = React.useRef<uPlot.AlignedData>([[], []])
+  const tableIdRef = React.useRef(metric.tableId)
 
   dateFromRef.current = dateFrom
   dateToRef.current = dateTo
@@ -78,11 +79,10 @@ export const Metric = ({
   const widgetConfig = widgets[metric.metricType]
 
   const isRollingAppendEnabled =
-    data &&
     widgetConfig.querySupportsRollingAppend &&
     fetchMode === FetchMode.ROLLING_APPEND
 
-  const fetchMetric = async () => {
+  const fetchMetric = async (overwrite?: boolean) => {
     setLoading(true)
     try {
       const from = durationTokenToDate(dateFromRef.current)
@@ -94,16 +94,17 @@ export const Metric = ({
       >([
         quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
-            tableId: metric.tableId,
+            tableId: tableIdRef.current,
             sampleBy: `${getSamplingRateForPeriod(from, to)}s`,
             timeFilter,
-            ...(isRollingAppendEnabled && {
-              limit: -rollingAppendLimit,
-            }),
+            ...(!overwrite &&
+              isRollingAppendEnabled && {
+                limit: -rollingAppendLimit,
+              }),
           }),
         ),
         quest.query<LastNotNull>(
-          widgetConfig.getQueryLastNotNull(metric.tableId),
+          widgetConfig.getQueryLastNotNull(tableIdRef.current),
         ),
       ])
 
@@ -112,9 +113,9 @@ export const Metric = ({
           responses[0].data as unknown as ResultType[MetricType],
         )
         if (isRollingAppendEnabled) {
-          setData(mergeRollingData(data, alignedData, from))
+          dataRef.current = mergeRollingData(dataRef.current, alignedData, from)
         } else {
-          setData(alignedData)
+          dataRef.current = alignedData
         }
       }
 
@@ -143,8 +144,10 @@ export const Metric = ({
 
   useEffect(() => {
     if (metric.tableId && metric.tableId !== lastTableId) {
+      tableIdRef.current = metric.tableId
+      dataRef.current = [[], []]
       setLastTableId(metric.tableId)
-      fetchMetric()
+      fetchMetric(true)
     }
   }, [metric.tableId])
 
@@ -156,7 +159,7 @@ export const Metric = ({
     }
   }, [])
 
-  if (!data && !loading && metric.tableId)
+  if (!dataRef.current && !loading && metric.tableId)
     return (
       <MetricInfoRoot>
         <Error size="18px" />
@@ -173,7 +176,9 @@ export const Metric = ({
     <Graph
       dateFrom={dateFrom}
       dateTo={dateTo}
-      data={metric.tableId && hasData(data) ? data : [[], []]}
+      data={
+        metric.tableId && hasData(dataRef.current) ? dataRef.current : [[], []]
+      }
       canZoomToData={canZoomToData}
       onZoomToData={handleZoomToData}
       colors={[metric.color]}
