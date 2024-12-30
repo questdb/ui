@@ -20,6 +20,7 @@ import { Calendar } from "../../../components/Calendar"
 import { formatISO, subMonths } from "date-fns"
 import { useFormContext } from "react-hook-form"
 import Joi from "joi"
+import { utcToLocal } from "../../../utils/dateTime"
 
 const Root = styled(Box).attrs({
   gap: "1rem",
@@ -117,7 +118,7 @@ const DatePickerItem = ({
 
               ;["dateFrom", "dateTo"].forEach((name, index) => {
                 if (values && vals[index]) {
-                  setValue(name, vals[index])
+                  setValue(name, utcToLocal(new Date(vals[index]).getTime()))
                 }
               })
 
