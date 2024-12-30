@@ -86,17 +86,16 @@ const DatePickerItem = ({
   max,
   name,
   label,
-  onChange,
 }: {
   min: Date
   max: Date
   name: string
   label: string
-  onChange: (values: string[]) => void
 }) => {
   const { getValues, setValue } = useFormContext()
 
   const values = getValues()
+
   return (
     <Form.Item name={name} label={label}>
       <Box gap="0.5rem" align="center">
@@ -121,8 +120,6 @@ const DatePickerItem = ({
                   setValue(name, utcToLocal(new Date(vals[index]).getTime()))
                 }
               })
-
-              onChange(vals)
             }}
             value={[
               new Date(durationTokenToDate(values.dateFrom)),
@@ -152,8 +149,6 @@ export const DateTimePicker = ({
   onDateFromToChange: (dateFrom: string, dateTo: string) => void
 }) => {
   const [mainOpen, setMainOpen] = useState(false)
-  const [currentFrom, setCurrentFrom] = useState(dateFrom)
-  const [currentTo, setCurrentTo] = useState(dateTo)
 
   const handleSubmit = async (values: FormValues) => {
     if (values.dateFrom && values.dateTo) {
@@ -178,7 +173,8 @@ export const DateTimePicker = ({
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
         } else if (
-          new Date(dateValue).getTime() >= new Date(currentTo).getTime()
+          new Date(dateValue).getTime() >=
+          new Date(helpers.state.ancestors[0].dateTo).getTime()
         ) {
           return helpers.error("string.fromIsAfterTo")
         }
@@ -196,7 +192,8 @@ export const DateTimePicker = ({
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
         } else if (
-          new Date(dateValue).getTime() <= new Date(currentFrom).getTime()
+          new Date(dateValue).getTime() <=
+          new Date(helpers.state.ancestors[0].dateFrom).getTime()
         ) {
           return helpers.error("string.toIsBeforeFrom")
         }
@@ -208,11 +205,6 @@ export const DateTimePicker = ({
         "string.toIsBeforeFrom": "To date must be after From date",
       }),
   })
-
-  const setCurrentRange = (values: string[]) => {
-    setCurrentFrom(values[0])
-    setCurrentTo(values[1])
-  }
 
   return (
     <Popover
@@ -247,15 +239,8 @@ export const DateTimePicker = ({
                   label="From"
                   min={min}
                   max={max}
-                  onChange={setCurrentRange}
                 />
-                <DatePickerItem
-                  name="dateTo"
-                  label="To"
-                  min={min}
-                  max={max}
-                  onChange={setCurrentRange}
-                />
+                <DatePickerItem name="dateTo" label="To" min={min} max={max} />
                 <Form.Submit>Apply</Form.Submit>
               </Box>
             </Form>
