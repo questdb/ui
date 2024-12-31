@@ -196,7 +196,7 @@ export const getXAxisFormat = (
   endTime: number,
 ) => {
   let format = "HH:mm:ss"
-  const seconds = (startTime - endTime) / 1000
+  const seconds = (endTime - startTime) / 1000
   if (seconds < 60) {
     format = "HH:mm:ss"
   } else if (seconds < 60 * 60) {
