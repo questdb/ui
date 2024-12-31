@@ -99,12 +99,18 @@
   text-decoration: underline;
 }
 
-.react-calendar__tile--active {
+.react-calendar__tile--active,
+.react-calendar__tile--range,
+ .react-calendar__tile--hasActive{
   background: #b93d64;
   color: #fff;
 }
 
 .react-calendar__tile--active:enabled:hover,
-.react-calendar__tile--active:enabled:focus {
+.react-calendar__tile--active:enabled:focus,
+.react-calendar__tile--range:enabled:hover,
+.react-calendar__tile--range:enabled:focus,
+.react-calendar__tile--hasActive:enabled:hover,
+.react-calendar__tile--hasActive:enabled:focus {
   background: #b93d64;
 }

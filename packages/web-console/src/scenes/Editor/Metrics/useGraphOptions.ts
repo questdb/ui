@@ -2,7 +2,7 @@ import { utcToLocal } from "./../../../utils/dateTime"
 import { useContext } from "react"
 import { ThemeContext } from "styled-components"
 import uPlot from "uplot"
-import { durationTokenToDate } from "./utils"
+import { durationTokenToDate, DATETIME_FORMAT } from "./utils"
 
 type Params = {
   data: uPlot.AlignedData
@@ -32,7 +32,7 @@ const valuePlugin = (
       if ([y, x].every((v) => v !== null)) {
         timeRef.current!.textContent = utcToLocal(
           x as number,
-          "dd/MM/yyyy HH:mm:ss",
+          DATETIME_FORMAT,
         ) as string
         valueRef.current!.textContent = mapYValue(y as number)
       } else {

@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import {
   metricDurations,
@@ -86,20 +86,36 @@ const DatePickerItem = ({
   max,
   name,
   label,
+  dateFrom,
+  dateTo,
+  onChange,
 }: {
   min: Date
   max: Date
   name: string
   label: string
+  dateFrom: string
+  dateTo: string
+  onChange: (date: string[]) => void
 }) => {
-  const { getValues, setValue } = useFormContext()
+  const { setValue } = useFormContext()
 
-  const values = getValues()
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = durationTokenToDate(e.target.value)
+    if (value === "Invalid date") {
+      return
+    }
+    if (name === "dateFrom") {
+      onChange([value, dateTo])
+    } else if (name === "dateTo") {
+      onChange([dateFrom, value])
+    }
+  }
 
   return (
     <Form.Item name={name} label={label}>
       <Box gap="0.5rem" align="center">
-        <Form.Input name={name} />
+        <Form.Input name={name} onChange={handleChange} />
         <Popover
           trigger={
             <Button skin="secondary">
@@ -122,8 +138,8 @@ const DatePickerItem = ({
               })
             }}
             value={[
-              new Date(durationTokenToDate(values.dateFrom)),
-              new Date(durationTokenToDate(values.dateTo)),
+              new Date(durationTokenToDate(dateFrom)),
+              new Date(durationTokenToDate(dateTo)),
             ]}
             selectRange={true}
           />
@@ -149,6 +165,8 @@ export const DateTimePicker = ({
   onDateFromToChange: (dateFrom: string, dateTo: string) => void
 }) => {
   const [mainOpen, setMainOpen] = useState(false)
+  const [currentDateFrom, setCurrentDateFrom] = useState(dateFrom)
+  const [currentDateTo, setCurrentDateTo] = useState(dateTo)
 
   const handleSubmit = async (values: FormValues) => {
     if (values.dateFrom && values.dateTo) {
@@ -206,6 +224,22 @@ export const DateTimePicker = ({
       }),
   })
 
+  const datePickerProps = {
+    min,
+    max,
+    dateFrom: currentDateFrom,
+    dateTo: currentDateTo,
+    onChange: ([from, to]: string[]) => {
+      setCurrentDateFrom(from)
+      setCurrentDateTo(to)
+    },
+  }
+
+  useEffect(() => {
+    setCurrentDateFrom(dateFrom)
+    setCurrentDateTo(dateTo)
+  }, [dateFrom, dateTo])
+
   return (
     <Popover
       open={mainOpen}
@@ -237,10 +271,9 @@ export const DateTimePicker = ({
                 <DatePickerItem
                   name="dateFrom"
                   label="From"
-                  min={min}
-                  max={max}
+                  {...datePickerProps}
                 />
-                <DatePickerItem name="dateTo" label="To" min={min} max={max} />
+                <DatePickerItem name="dateTo" label="To" {...datePickerProps} />
                 <Form.Submit>Apply</Form.Submit>
               </Box>
             </Form>
