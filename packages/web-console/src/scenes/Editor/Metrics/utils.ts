@@ -192,14 +192,11 @@ export const minutesToSeconds = (durationInMinutes: number) =>
 
 export const getXAxisFormat = (
   rawValue: number,
-  dateFrom: string,
-  dateTo: string,
+  startTime: number,
+  endTime: number,
 ) => {
   let format = "HH:mm:ss"
-  const seconds =
-    (new Date(durationTokenToDate(dateTo)).getTime() -
-      new Date(durationTokenToDate(dateFrom)).getTime()) /
-    1000
+  const seconds = (startTime - endTime) / 1000
   if (seconds < 60) {
     format = "HH:mm:ss"
   } else if (seconds < 60 * 60) {

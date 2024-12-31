@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Widget, hasData, getXAxisFormat } from "./utils"
+import { Widget, hasData, getXAxisFormat, durationTokenToDate } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -102,6 +102,12 @@ export const Graph = ({
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
+  const [startTime, setStartTime] = useState<number>(
+    new Date(durationTokenToDate(dateFrom)).getTime(),
+  )
+  const [endTime, setEndTime] = useState<number>(
+    new Date(durationTokenToDate(dateTo)).getTime(),
+  )
 
   const { isTableMetric, mapYValue, label } = widgetConfig
 
@@ -112,14 +118,19 @@ export const Graph = ({
     })
   })
 
+  useEffect(() => {
+    setStartTime(new Date(durationTokenToDate(dateFrom)).getTime())
+    setEndTime(new Date(durationTokenToDate(dateTo)).getTime())
+  }, [data, dateFrom, dateTo])
+
   const graphOptions = useGraphOptions({
     data,
-    dateFrom,
-    dateTo,
+    startTime,
+    endTime,
     colors,
     timeRef,
     valueRef,
-    mapXValue: (rawValue) => getXAxisFormat(rawValue, dateFrom, dateTo),
+    mapXValue: (rawValue) => getXAxisFormat(rawValue, startTime, endTime),
     mapYValue,
   })
 

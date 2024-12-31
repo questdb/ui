@@ -6,8 +6,8 @@ import { durationTokenToDate, DATETIME_FORMAT } from "./utils"
 
 type Params = {
   data: uPlot.AlignedData
-  dateFrom: string
-  dateTo: string
+  startTime: number
+  endTime: number
   colors: string[]
   tickValue?: (rawValue: number) => string
   mapXValue: (rawValue: number, index: number, ticks: number[]) => string
@@ -45,8 +45,8 @@ const valuePlugin = (
 
 export const useGraphOptions = ({
   data,
-  dateFrom,
-  dateTo,
+  startTime,
+  endTime,
   colors,
   tickValue = (rawValue) => (+rawValue).toString(),
   mapXValue,
@@ -55,10 +55,6 @@ export const useGraphOptions = ({
   valueRef,
 }: Params): Omit<uPlot.Options, "width" | "height"> => {
   const theme = useContext(ThemeContext)
-
-  const start = new Date(durationTokenToDate(dateFrom)).getTime()
-
-  const end = new Date(durationTokenToDate(dateTo)).getTime()
 
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.gray2,
@@ -117,7 +113,7 @@ export const useGraphOptions = ({
   const scales: uPlot.Scales = {
     x: {
       time: true,
-      range: [start, end],
+      range: [startTime, endTime],
     },
     y: {
       range: (u, min, max) => {
