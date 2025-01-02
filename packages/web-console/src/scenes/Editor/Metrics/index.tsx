@@ -169,8 +169,14 @@ export const Metrics = () => {
   }
 
   const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
+    setFetchMode(FetchMode.OVERWRITE)
     setDateFrom(dateFrom)
     setDateTo(dateTo)
+  }
+
+  const handleFullRefresh = () => {
+    setFetchMode(FetchMode.OVERWRITE)
+    refreshMetricsData()
   }
 
   const focusListener = useCallback(() => {
@@ -320,7 +326,7 @@ export const Metrics = () => {
           <Box gap="0.5rem" style={{ flexShrink: 0 }}>
             <IconWithTooltip
               icon={
-                <Button skin="secondary" onClick={() => refreshMetricsData()}>
+                <Button skin="secondary" onClick={handleFullRefresh}>
                   <Refresh size="20px" />
                 </Button>
               }
