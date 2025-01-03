@@ -10,6 +10,11 @@ const trimQuotesFromTableName = (tableName: string) => {
   return tableName.replace(/(^")|("$)/g, "")
 }
 
+const isInColumnListing = (text: string) =>
+  text.match(
+    /(?:,$|,\s$|\b(?:SELECT|UPDATE|COLUMN|ON|JOIN|BY|WHERE|DISTINCT)\s$)/gim,
+  )
+
 export const createSchemaCompletionProvider = (
   editor: monaco.editor.IStandaloneCodeEditor,
   tables: Table[] = [],
@@ -124,18 +129,20 @@ export const createSchemaCompletionProvider = (
                 textUntilPosition.match(/\sON\s/gim) !== null
               return {
                 suggestions: [
-                  ...getColumnCompletions({
-                    columns: informationSchemaColumns.filter((item) =>
-                      tableContext.includes(item.table_name),
-                    ),
-                    range,
-                    withTableName,
-                    priority: CompletionItemPriority.High,
-                  }),
+                  ...(isInColumnListing(textUntilPosition)
+                    ? getColumnCompletions({
+                        columns: informationSchemaColumns.filter((item) =>
+                          tableContext.includes(item.table_name),
+                        ),
+                        range,
+                        withTableName,
+                        priority: CompletionItemPriority.High,
+                      })
+                    : []),
                   ...getLanguageCompletions(range),
                 ],
               }
-            } else {
+            } else if (isInColumnListing(textUntilPosition)) {
               return {
                 suggestions: [
                   ...getColumnCompletions({
@@ -144,14 +151,6 @@ export const createSchemaCompletionProvider = (
                     withTableName: false,
                     priority: CompletionItemPriority.High,
                   }),
-                  ...getTableCompletions({
-                    tables,
-                    range,
-                    priority: CompletionItemPriority.MediumHigh,
-                    openQuote,
-                    nextCharQuote,
-                  }),
-                  ...getLanguageCompletions(range),
                 ],
               }
             }

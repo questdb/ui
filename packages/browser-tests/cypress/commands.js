@@ -158,6 +158,8 @@ Cypress.Commands.add("getAutocomplete", () =>
   cy.get('[widgetid="editor.widget.suggestWidget"]')
 );
 
+Cypress.Commands.add("getMonacoListRow", () => cy.get(".monaco-list-row"));
+
 Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
 
 Cypress.Commands.add("getCursorQueryDecoration", () =>
