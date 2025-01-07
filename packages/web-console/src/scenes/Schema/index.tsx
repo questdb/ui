@@ -347,6 +347,8 @@ const Schema = ({
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
+                ttlValue={table.ttlValue}
+                ttlUnit={table.ttlUnit}
                 walEnabled={table.walEnabled}
                 walTableData={walTables?.find(
                   (wt) => wt.name === table.table_name,
