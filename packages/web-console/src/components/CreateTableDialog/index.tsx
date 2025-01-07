@@ -26,12 +26,14 @@ export const CreateTableDialog = () => {
   const { appendQuery } = useEditor()
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
-    const { name, partitionBy, timestamp, schemaColumns, walEnabled } = values
+    const { name, partitionBy, timestamp, ttlValue, ttlUnit, schemaColumns, walEnabled } = values
     const tableSchemaQuery = formatTableSchemaQuery({
       name,
       partitionBy,
       timestamp,
       walEnabled: walEnabled === "true",
+      ttlValue,
+      ttlUnit,
       schemaColumns: schemaColumns.map((column) => ({
         column: column.name,
         type: column.type,
@@ -75,6 +77,8 @@ export const CreateTableDialog = () => {
       walEnabled={false}
       name=""
       partitionBy="NONE"
+      ttlValue={0}
+      ttlUnit="HOURS"
       schema={[]}
       tables={tables}
       timestamp=""

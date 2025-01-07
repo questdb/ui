@@ -118,9 +118,11 @@ const columnRender =
 const Table = ({
   description,
   isScrolling,
-  designatedTimestamp,
   table_name,
+  designatedTimestamp,
   partitionBy,
+  ttlValue,
+  ttlUnit,
   expanded = false,
   walEnabled,
   walTableData,
