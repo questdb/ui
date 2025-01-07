@@ -61,7 +61,6 @@ import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { formatTableSchemaQueryResult } from "./formatTableSchemaQueryResult"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -151,10 +150,8 @@ const Schema = ({
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [copied, setCopied] = useState(false)
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
-  const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
   const [selectedTables, setSelectedTables] = useState<string[]>([])
@@ -198,15 +195,16 @@ const Schema = ({
   const fetchColumns = async () => {
     const queries = [
       "information_schema.questdb_columns()",
-      "information_schema.columns()" // fallback for older servers
+      "information_schema.columns()", // fallback for older servers
     ]
 
     for (const query of queries) {
       try {
-        const response = await quest.query<QuestDB.InformationSchemaColumn>(query)
+        const response = await quest.query<QuestDB.InformationSchemaColumn>(
+          query,
+        )
 
         if (response?.type === QuestDB.Type.DQL) {
-          setColumns(response.data)
           dispatch(actions.query.setColumns(response.data))
           return
         }
@@ -218,27 +216,17 @@ const Schema = ({
     dispatchState({ view: View.error })
   }
 
-
   const copySchemasToClipboard = async () => {
     if (!tables) return
     let tablesWithError: string[] = []
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          const columnResponse = await quest.showColumns(table)
-          const tableData = tables.find((t) => t.table_name === table)
-          if (
-            tableData &&
-            columnResponse.type === QuestDB.Type.DQL &&
-            columnResponse.data.length > 0
-          ) {
-            return formatTableSchemaQueryResult(
-              tableData.table_name,
-              tableData.partitionBy,
-              columnResponse.data,
-              tableData.walEnabled,
-              tableData.dedup,
-            )
+          const tableDDLResponse = await quest.query<{ ddl: string }>(
+            `SHOW CREATE TABLE ${table}`,
+          )
+          if (tableDDLResponse && tableDDLResponse.type === QuestDB.Type.DQL) {
+            return tableDDLResponse.data[0].ddl
           }
         } catch (error) {
           tablesWithError.push(table)
