@@ -10,6 +10,8 @@ export type ProcessedFile = {
   schema: SchemaColumn[]
   partitionBy: string
   timestamp: string
+  ttlValue: number
+  ttlUnit: string
   isUploading: boolean
   uploaded: boolean
   uploadResult?: UploadResult

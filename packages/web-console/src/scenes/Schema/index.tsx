@@ -235,9 +235,11 @@ const Schema = ({
             return formatTableSchemaQueryResult(
               tableData.table_name,
               tableData.partitionBy,
+              tableData.ttlValue,
+              tableData.ttlUnit,
               columnResponse.data,
               tableData.walEnabled,
-              tableData.dedup,
+              tableData.dedup
             )
           }
         } catch (error) {
@@ -359,6 +361,8 @@ const Schema = ({
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
+                ttlValue={table.ttlValue}
+                ttlUnit={table.ttlUnit}
                 walEnabled={table.walEnabled}
                 walTableData={walTables?.find(
                   (wt) => wt.name === table.table_name,
