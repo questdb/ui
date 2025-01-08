@@ -23,7 +23,7 @@ and this project adheres to
 - use a new information_schema.questdb_columns() instead of
   information_schema.columns() [#359](https://github.com/questdb/ui/pull/359)
 
-## O.6.4 - 2024.11.25
+## 0.6.4 - 2024.11.25
 
 ### Added
 
