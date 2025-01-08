@@ -280,6 +280,7 @@ export const Metrics = () => {
     return () => {
       eventBus.unsubscribe(EventType.TAB_FOCUS, focusListener)
       eventBus.unsubscribe(EventType.TAB_BLUR, blurListener)
+      clearInterval(intervalRef.current)
     }
   }, [])
 
