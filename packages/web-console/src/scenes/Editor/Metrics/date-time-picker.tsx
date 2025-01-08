@@ -115,7 +115,7 @@ const DatePickerItem = ({
   return (
     <Form.Item name={name} label={label}>
       <Box gap="0.5rem" align="center">
-        <Form.Input name={name} onChange={handleChange} />
+        <Form.Input name={name} onChange={handleChange} placeholder="now" />
         <Popover
           trigger={
             <Button skin="secondary">
@@ -183,6 +183,13 @@ export const DateTimePicker = ({
   const min = subMonths(new Date(), 12)
   const max = new Date()
 
+  const errorMessages = {
+    "string.empty": "Please enter a date or duration",
+    "string.invalidDate": "Date format or duration is invalid",
+    "string.toIsBeforeFrom": "To date must be after From date",
+    "string.dateInFuture": "Date cannot be in the future",
+  }
+
   const schema = Joi.object({
     dateFrom: Joi.any()
       .required()
@@ -195,14 +202,12 @@ export const DateTimePicker = ({
           new Date(helpers.state.ancestors[0].dateTo).getTime()
         ) {
           return helpers.error("string.fromIsAfterTo")
+        } else if (new Date(dateValue).getTime() > new Date().getTime()) {
+          return helpers.error("string.dateInFuture")
         }
         return value
       })
-      .messages({
-        "string.empty": "Please enter a date or duration",
-        "string.invalidDate": "Date format or duration is invalid",
-        "string.fromIsAfterTo": "From date must be before To date",
-      }),
+      .messages(errorMessages),
     dateTo: Joi.any()
       .required()
       .custom((value, helpers) => {
@@ -214,14 +219,12 @@ export const DateTimePicker = ({
           new Date(helpers.state.ancestors[0].dateFrom).getTime()
         ) {
           return helpers.error("string.toIsBeforeFrom")
+        } else if (new Date(dateValue).getTime() > new Date().getTime()) {
+          return helpers.error("string.dateInFuture")
         }
         return value
       })
-      .messages({
-        "string.empty": "Please enter a date or duration",
-        "string.invalidDate": "Date format or duration is invalid",
-        "string.toIsBeforeFrom": "To date must be after From date",
-      }),
+      .messages(errorMessages),
   })
 
   const datePickerProps = {

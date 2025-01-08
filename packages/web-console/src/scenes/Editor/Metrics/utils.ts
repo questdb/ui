@@ -136,7 +136,7 @@ export const getAutoRefreshRate = (dateFrom: string, dateTo: string) => {
     (new Date(durationTokenToDate(dateTo)).getTime() -
       new Date(durationTokenToDate(dateFrom)).getTime()) /
     1000
-  if (seconds <= 60 * 5) return RefreshRate.ONE_SECOND
+  if (seconds <= 60 * 5) return RefreshRate.FIVE_SECONDS
   if (seconds <= 60 * 15) return RefreshRate.FIVE_SECONDS
   if (seconds <= 60 * 60) return RefreshRate.TEN_SECONDS
   if (seconds <= 60 * 60 * 3) return RefreshRate.THIRTY_SECONDS

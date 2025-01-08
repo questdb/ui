@@ -103,9 +103,9 @@ export const Metric = ({
               }),
           }),
         ),
-        quest.query<LastNotNull>(
-          widgetConfig.getQueryLastNotNull(tableIdRef.current),
-        ),
+        // quest.query<LastNotNull>(
+        //   widgetConfig.getQueryLastNotNull(tableIdRef.current),
+        // ),
       ])
 
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
