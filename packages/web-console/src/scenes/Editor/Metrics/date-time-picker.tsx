@@ -187,7 +187,8 @@ export const DateTimePicker = ({
     "string.empty": "Please enter a date or duration",
     "string.invalidDate": "Date format or duration is invalid",
     "string.toIsBeforeFrom": "To date must be after From date",
-    "string.dateInFuture": "Date cannot be in the future",
+    "string.dateInFuture": "Please set a date in the past or use `now`",
+    "string.fromIsAfterTo": "From date must be before To date",
   }
 
   const schema = Joi.object({
@@ -199,7 +200,9 @@ export const DateTimePicker = ({
           return helpers.error("string.invalidDate")
         } else if (
           new Date(dateValue).getTime() >=
-          new Date(helpers.state.ancestors[0].dateTo).getTime()
+          new Date(
+            durationTokenToDate(helpers.state.ancestors[0].dateTo),
+          ).getTime()
         ) {
           return helpers.error("string.fromIsAfterTo")
         } else if (new Date(dateValue).getTime() > new Date().getTime()) {
@@ -216,7 +219,9 @@ export const DateTimePicker = ({
           return helpers.error("string.invalidDate")
         } else if (
           new Date(dateValue).getTime() <=
-          new Date(helpers.state.ancestors[0].dateFrom).getTime()
+          new Date(
+            durationTokenToDate(helpers.state.ancestors[0].dateFrom),
+          ).getTime()
         ) {
           return helpers.error("string.toIsBeforeFrom")
         } else if (new Date(dateValue).getTime() > new Date().getTime()) {
