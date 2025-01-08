@@ -5,6 +5,8 @@ import { TelemetryTable } from "../../../../consts"
 
 export const writeThroughput: Widget = {
   label: "Write throughput",
+  description:
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
   iconUrl: "/assets/metric-rows-applied.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

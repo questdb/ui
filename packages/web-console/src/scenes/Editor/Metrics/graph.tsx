@@ -6,6 +6,8 @@ import uPlot from "uplot"
 import UplotReact from "uplot-react"
 import { Box, Button, Loader } from "@questdb/react-components"
 import { Text } from "../../../components/Text"
+import { IconWithTooltip } from "../../../components/IconWithTooltip"
+import { Information } from "@styled-icons/remix-line"
 
 const Actions = styled.div`
   margin-right: 0;
@@ -36,7 +38,7 @@ const Header = styled(Box).attrs({
 const HeaderText = styled.span`
   font-size: 1.4rem;
   font-weight: 600;
-  padding: 0 1rem;
+  padding: 0 0 0 1rem;
 `
 
 const GraphWrapper = styled(Box).attrs({
@@ -152,6 +154,11 @@ export const Graph = ({
         <Box gap="0.5rem" align="center">
           <BeforeLabel>{beforeLabel}</BeforeLabel>
           <HeaderText>{label}</HeaderText>
+          <IconWithTooltip
+            icon={<Information size="16px" />}
+            tooltip={widgetConfig.description}
+            placement="bottom"
+          />
           {loading && <Loader size="18px" spin />}
         </Box>
         <Actions>{actions}</Actions>

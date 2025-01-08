@@ -14,6 +14,7 @@ export enum MetricType {
 
 export type Widget = {
   label: string
+  description: string
   iconUrl: string
   isTableMetric: boolean
   getQuery: ({

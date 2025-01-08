@@ -189,6 +189,7 @@ export const DateTimePicker = ({
     "string.toIsBeforeFrom": "To date must be after From date",
     "string.dateInFuture": "Please set a date in the past or use `now`",
     "string.fromIsAfterTo": "From date must be before To date",
+    "string.sameValues": "From and To dates cannot be the same",
   }
 
   const schema = Joi.object({
@@ -196,17 +197,21 @@ export const DateTimePicker = ({
       .required()
       .custom((value, helpers) => {
         const dateValue = durationTokenToDate(value)
+        const timeValue = new Date(dateValue).getTime()
+        const timeNow = new Date().getTime()
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
         } else if (
-          new Date(dateValue).getTime() >=
+          timeValue >=
           new Date(
             durationTokenToDate(helpers.state.ancestors[0].dateTo),
           ).getTime()
         ) {
           return helpers.error("string.fromIsAfterTo")
-        } else if (new Date(dateValue).getTime() > new Date().getTime()) {
+        } else if (timeValue > timeNow) {
           return helpers.error("string.dateInFuture")
+        } else if (timeValue === timeNow) {
+          return helpers.error("string.sameValues")
         }
         return value
       })
@@ -215,17 +220,21 @@ export const DateTimePicker = ({
       .required()
       .custom((value, helpers) => {
         const dateValue = durationTokenToDate(value)
+        const timeValue = new Date(dateValue).getTime()
+        const timeNow = new Date().getTime()
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
         } else if (
-          new Date(dateValue).getTime() <=
+          timeValue <=
           new Date(
             durationTokenToDate(helpers.state.ancestors[0].dateFrom),
           ).getTime()
         ) {
           return helpers.error("string.toIsBeforeFrom")
-        } else if (new Date(dateValue).getTime() > new Date().getTime()) {
+        } else if (timeValue > timeNow) {
           return helpers.error("string.dateInFuture")
+        } else if (timeValue === timeNow) {
+          return helpers.error("string.sameValues")
         }
         return value
       })

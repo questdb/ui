@@ -5,6 +5,8 @@ import { TelemetryTable } from "../../../../consts"
 
 export const latency: Widget = {
   label: "WAL apply latency in ms",
+  description:
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
   iconUrl: "/assets/metric-read-latency.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

@@ -48,6 +48,7 @@ const Toolbar = styled(Box).attrs({
   border-bottom: 1px solid ${({ theme }) => theme.color.backgroundDarker};
   box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
   white-space: nowrap;
+  flex-shrink: 0;
 `
 
 const Header = styled(Text)`

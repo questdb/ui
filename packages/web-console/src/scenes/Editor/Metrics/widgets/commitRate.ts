@@ -6,6 +6,8 @@ import { TelemetryTable } from "../../../../consts"
 
 export const commitRate: Widget = {
   label: "Commit rate",
+  description:
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

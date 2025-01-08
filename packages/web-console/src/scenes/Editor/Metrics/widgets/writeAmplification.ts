@@ -6,6 +6,8 @@ import { TelemetryTable } from "../../../../consts"
 
 export const writeAmplification: Widget = {
   label: "Write amplification",
+  description:
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
