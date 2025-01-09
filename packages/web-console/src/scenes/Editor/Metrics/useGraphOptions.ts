@@ -2,7 +2,7 @@ import { utcToLocal } from "./../../../utils/dateTime"
 import { useContext } from "react"
 import { ThemeContext } from "styled-components"
 import uPlot from "uplot"
-import { durationTokenToDate, DATETIME_FORMAT } from "./utils"
+import { DATETIME_FORMAT } from "./utils"
 
 type Params = {
   data: uPlot.AlignedData

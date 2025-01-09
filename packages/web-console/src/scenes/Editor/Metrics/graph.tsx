@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Widget, hasData, getXAxisFormat, durationTokenToDate } from "./utils"
+import type { Widget } from "./types"
+import { hasData, getXAxisFormat, durationTokenToDate } from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"

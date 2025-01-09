@@ -1,6 +1,6 @@
 import uPlot from "uplot"
-import type { Widget } from "../utils"
-import { RowsApplied, sqlValueToFixed, formatNumbers } from "../utils"
+import type { Widget, RowsApplied } from "../types"
+import { sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const writeThroughput: Widget = {

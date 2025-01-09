@@ -72,11 +72,11 @@ import { Checkbox } from "./checkbox"
 import { AddChart } from "@styled-icons/material"
 import { useEditor } from "../../providers/EditorProvider"
 import {
-  Duration,
   metricDurations,
   MetricViewMode,
   RefreshRate,
 } from "../../scenes/Editor/Metrics/utils"
+import type { Duration } from "../../scenes/Editor/Metrics/types"
 
 type Props = Readonly<{
   hideMenu?: boolean

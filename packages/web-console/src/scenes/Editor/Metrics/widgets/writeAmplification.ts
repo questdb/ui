@@ -1,6 +1,5 @@
 import uPlot from "uplot"
-import type { Widget } from "../utils"
-import { WriteAmplification } from "../utils"
+import type { Widget, WriteAmplification } from "../types"
 import { sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 

@@ -1,6 +1,6 @@
 import uPlot from "uplot"
-import type { Widget } from "../utils"
-import { Latency, sqlValueToFixed } from "../utils"
+import type { Widget, Latency } from "../types"
+import { sqlValueToFixed } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const latency: Widget = {

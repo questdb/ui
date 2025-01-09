@@ -2,16 +2,14 @@ import React, { useEffect, useState, useContext } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   MetricType,
-  LastNotNull,
-  ResultType,
   hasData,
   FetchMode,
   mergeRollingData,
   getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
-  MetricsRefreshPayload,
 } from "./utils"
+import type { LastNotNull, ResultType, MetricsRefreshPayload } from "./types"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"

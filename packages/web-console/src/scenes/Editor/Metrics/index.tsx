@@ -9,9 +9,9 @@ import {
   getRollingAppendRowLimit,
   MetricViewMode,
   FetchMode,
-  MetricsRefreshPayload,
   getAutoRefreshRate,
 } from "./utils"
+import type { MetricsRefreshPayload } from "./types"
 import { GridAlt, Menu, Refresh } from "@styled-icons/boxicons-regular"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"

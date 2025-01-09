@@ -2,6 +2,7 @@ import { isValidDate } from "./../../../utils/dateTime"
 import { format, formatISO, subMinutes } from "date-fns"
 import { utcToLocal } from "../../../utils/dateTime"
 import uPlot from "uplot"
+import type { Duration } from "./types"
 
 export const DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss"
 
@@ -10,40 +11,6 @@ export enum MetricType {
   WRITE_THROUGHPUT = "Write throughput",
   LATENCY = "Latency",
   WRITE_AMPLIFICATION = "Write amplification",
-}
-
-export type Widget = {
-  label: string
-  description: string
-  iconUrl: string
-  isTableMetric: boolean
-  getQuery: ({
-    tableId,
-    sampleBy,
-    limit,
-    timeFilter,
-  }: {
-    tableId?: number
-    sampleBy: string
-    limit?: number
-    timeFilter?: string
-  }) => string
-  getQueryLastNotNull: (id?: number) => string
-  querySupportsRollingAppend: boolean
-  alignData: (data: any) => uPlot.AlignedData
-  mapYValue: (rawValue: number) => string
-}
-
-export type MetricsRefreshPayload = {
-  dateFrom: string
-  dateTo: string
-  overwrite?: boolean
-}
-
-export type Duration = {
-  dateFrom: string
-  dateTo: string
-  label: string
 }
 
 export const metricDurations: Duration[] = [
@@ -146,41 +113,6 @@ export const getAutoRefreshRate = (dateFrom: string, dateTo: string) => {
   if (seconds <= 60 * 60 * 12) return RefreshRate.THIRTY_SECONDS
   if (seconds <= 60 * 60 * 24) return RefreshRate.THIRTY_SECONDS
   return RefreshRate.ONE_MINUTE
-}
-
-export type CommitRate = {
-  created: string
-  commit_rate: string
-  commit_rate_smooth: string
-}
-
-export type WriteAmplification = {
-  created: string
-  writeAmplification: string
-}
-
-export type RowsApplied = {
-  time: string
-  numOfWalApplies: string
-  numOfRowsApplied: string
-  numOfRowsWritten: string
-  avgWalAmplification: string
-}
-
-export type Latency = {
-  created: string
-  latency: string
-}
-
-export type LastNotNull = {
-  created: string
-}
-
-export type ResultType = {
-  [MetricType.COMMIT_RATE]: CommitRate
-  [MetricType.LATENCY]: Latency
-  [MetricType.WRITE_THROUGHPUT]: RowsApplied
-  [MetricType.WRITE_AMPLIFICATION]: RowsApplied
 }
 
 export const minutesToDays = (durationInMinutes: number) =>
