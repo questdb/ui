@@ -37,6 +37,7 @@ export type Widget = {
 export type MetricsRefreshPayload = {
   dateFrom: string
   dateTo: string
+  overwrite?: boolean
 }
 
 export type Duration = {

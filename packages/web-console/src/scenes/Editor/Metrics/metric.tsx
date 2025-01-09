@@ -10,6 +10,7 @@ import {
   getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
+  MetricsRefreshPayload,
 } from "./utils"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
@@ -138,8 +139,8 @@ export const Metric = ({
     }
   }
 
-  const refreshMetricsData = () => {
-    fetchMetric()
+  const refreshMetricsData = (payload?: MetricsRefreshPayload) => {
+    fetchMetric(payload?.overwrite)
   }
 
   useEffect(() => {
@@ -152,7 +153,10 @@ export const Metric = ({
   }, [metric.tableId])
 
   useEffect(() => {
-    eventBus.subscribe(EventType.METRICS_REFRESH_DATA, refreshMetricsData)
+    eventBus.subscribe<MetricsRefreshPayload>(
+      EventType.METRICS_REFRESH_DATA,
+      refreshMetricsData,
+    )
 
     return () => {
       eventBus.unsubscribe(EventType.METRICS_REFRESH_DATA, refreshMetricsData)

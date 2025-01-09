@@ -99,11 +99,11 @@ export const Metrics = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
-  const [fetchMode, setFetchMode] = useState<FetchMode>(FetchMode.OVERWRITE)
 
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
   const intervalRef = React.useRef<NodeJS.Timeout>()
+  const fetchModeRef = React.useRef<FetchMode>(FetchMode.OVERWRITE)
 
   const { autoRefreshTables } = useLocalStorage()
 
@@ -136,6 +136,7 @@ export const Metrics = () => {
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
       dateFrom,
       dateTo,
+      overwrite: fetchModeRef.current === FetchMode.OVERWRITE,
     })
   }
 
@@ -170,20 +171,20 @@ export const Metrics = () => {
   }
 
   const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
-    setFetchMode(FetchMode.OVERWRITE)
+    fetchModeRef.current = FetchMode.OVERWRITE
     setDateFrom(dateFrom)
     setDateTo(dateTo)
   }
 
   const handleFullRefresh = () => {
-    setFetchMode(FetchMode.OVERWRITE)
+    fetchModeRef.current = FetchMode.OVERWRITE
     refreshMetricsData()
   }
 
   const focusListener = useCallback(() => {
     tabInFocusRef.current = true
     if (refreshRateRef.current !== RefreshRate.OFF) {
-      setFetchMode(FetchMode.OVERWRITE)
+      fetchModeRef.current = FetchMode.OVERWRITE
       refreshMetricsData()
     }
   }, [refreshRateRef.current])
@@ -200,7 +201,7 @@ export const Metrics = () => {
       intervalRef.current = setInterval(
         () => {
           if (!tabInFocusRef.current) return
-          setFetchMode(FetchMode.ROLLING_APPEND)
+          fetchModeRef.current = FetchMode.ROLLING_APPEND
           refreshMetricsData()
         },
         refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
@@ -261,7 +262,7 @@ export const Metrics = () => {
       }
       if (dateFrom && dateTo && refreshRate && metricViewMode) {
         updateBuffer(buffer.id, merged)
-        setFetchMode(FetchMode.OVERWRITE)
+        fetchModeRef.current = FetchMode.OVERWRITE
         refreshMetricsData()
       }
     }
@@ -417,7 +418,7 @@ export const Metrics = () => {
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
-                fetchMode={fetchMode}
+                fetchMode={fetchModeRef.current}
                 rollingAppendLimit={rollingAppendLimit}
               />
             ))}
