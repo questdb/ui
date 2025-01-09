@@ -101,16 +101,20 @@ const DatePickerItem = ({
   const { setValue } = useFormContext()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = durationTokenToDate(e.target.value)
-    if (value === "Invalid date") {
+    setValue(name, e.target.value)
+    const dateValue = durationTokenToDate(e.target.value)
+    if (dateValue === "Invalid date") {
       return
     }
     if (name === "dateFrom") {
-      onChange([value, dateTo])
+      onChange([dateValue, dateTo])
     } else if (name === "dateTo") {
-      onChange([dateFrom, value])
+      onChange([dateFrom, dateValue])
     }
   }
+
+  const fromDate = durationTokenToDate(dateFrom)
+  const toDate = durationTokenToDate(dateTo)
 
   return (
     <Form.Item name={name} label={label}>
@@ -138,8 +142,12 @@ const DatePickerItem = ({
               })
             }}
             value={[
-              new Date(durationTokenToDate(dateFrom)),
-              new Date(durationTokenToDate(dateTo)),
+              fromDate !== "Invalid date"
+                ? new Date(durationTokenToDate(dateFrom))
+                : new Date(),
+              toDate! == "Invalid date"
+                ? new Date(durationTokenToDate(dateTo))
+                : new Date(),
             ]}
             selectRange={true}
           />
