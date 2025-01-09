@@ -9,7 +9,12 @@ import {
   getSamplingRateForPeriod,
   durationTokenToDate,
 } from "./utils"
-import type { LastNotNull, ResultType, MetricsRefreshPayload } from "./types"
+import type {
+  DateRange,
+  LastNotNull,
+  ResultType,
+  MetricsRefreshPayload,
+} from "./types"
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
@@ -48,9 +53,7 @@ export const Metric = ({
   onColorChange,
   fetchMode,
   rollingAppendLimit,
-}: {
-  dateFrom: string
-  dateTo: string
+}: DateRange & {
   metric: MetricItem
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void

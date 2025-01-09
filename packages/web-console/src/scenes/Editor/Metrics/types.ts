@@ -1,6 +1,11 @@
 import uPlot from "uplot"
 import { MetricType } from "./utils"
 
+export type DateRange = {
+  dateFrom: string
+  dateTo: string
+}
+
 export type Widget = {
   label: string
   description: string
@@ -23,15 +28,11 @@ export type Widget = {
   mapYValue: (rawValue: number) => string
 }
 
-export type MetricsRefreshPayload = {
-  dateFrom: string
-  dateTo: string
+export type MetricsRefreshPayload = DateRange & {
   overwrite?: boolean
 }
 
-export type Duration = {
-  dateFrom: string
-  dateTo: string
+export type Duration = DateRange & {
   label: string
 }
 

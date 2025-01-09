@@ -6,6 +6,7 @@ import {
   durationTokenToDate,
   isDateToken,
 } from "./utils"
+import { DateRange } from "./types"
 import { Box, Button, Popover } from "@questdb/react-components"
 import {
   Calendar as CalendarIcon,
@@ -89,13 +90,11 @@ const DatePickerItem = ({
   dateFrom,
   dateTo,
   onChange,
-}: {
+}: DateRange & {
   min: Date
   max: Date
   name: string
   label: string
-  dateFrom: string
-  dateTo: string
   onChange: (date: string[]) => void
 }) => {
   const { setValue } = useFormContext()
@@ -157,18 +156,13 @@ const DatePickerItem = ({
   )
 }
 
-type FormValues = {
-  dateFrom: string
-  dateTo: string
-}
+type FormValues = DateRange
 
 export const DateTimePicker = ({
   dateFrom,
   dateTo,
   onDateFromToChange,
-}: {
-  dateFrom: string
-  dateTo: string
+}: DateRange & {
   // This can be either a date string or something like `now-2h` which does not exist on the list
   onDateFromToChange: (dateFrom: string, dateTo: string) => void
 }) => {

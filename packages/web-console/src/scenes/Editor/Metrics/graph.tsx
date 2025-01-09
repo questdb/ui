@@ -9,6 +9,7 @@ import { Box, Button, Loader } from "@questdb/react-components"
 import { Text } from "../../../components/Text"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { Information } from "@styled-icons/remix-line"
+import type { DateRange } from "./types"
 
 const Actions = styled.div`
   margin-right: 0;
@@ -73,9 +74,7 @@ const LabelValue = styled.span`
   color: ${({ theme }) => theme.color.cyan};
 `
 
-type Props = {
-  dateFrom: string
-  dateTo: string
+type Props = DateRange & {
   tableId?: number
   tableName?: string
   beforeLabel?: React.ReactNode
