@@ -41,6 +41,7 @@ const config = {
   port: 9999,
   backendUrl: "http://127.0.0.1:9000",
   isProduction: process.env.NODE_ENV === "production",
+  contextPath: process.env.CONTEXT_PATH || "",
 }
 
 module.exports = {
@@ -80,10 +81,22 @@ module.exports = {
     host: "localhost",
     hot: true,
     port: config.port,
-    proxy: {
-      context: ["/imp", "/exp", "/exec", "/chk", "/settings", "/warnings"],
-      target: config.backendUrl,
-    },
+    proxy: [
+      {
+        context: [
+          config.contextPath + "/imp", config.contextPath + "/exp", config.contextPath + "/exec",
+          config.contextPath + "/chk", config.contextPath + "/settings", config.contextPath + "/warnings"
+        ],
+        target: config.backendUrl,
+      },
+      {
+        context: [ config.contextPath ],
+        target: 'http://localhost:' + config.port,
+        pathRewrite: path => {
+          return path.startsWith(config.contextPath) ? path.substr(config.contextPath.length) : path;
+        },
+      },
+    ],
     client: {
       overlay: false,
     },
