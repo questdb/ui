@@ -101,14 +101,18 @@ const DatePickerItem = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValue(name, e.target.value)
-    const dateValue = durationTokenToDate(e.target.value)
-    if (dateValue === "Invalid date") {
-      return
-    }
-    if (name === "dateFrom") {
-      onChange([dateValue, dateTo])
-    } else if (name === "dateTo") {
-      onChange([dateFrom, dateValue])
+    try {
+      const dateValue = durationTokenToDate(e.target.value)
+      if (dateValue === "Invalid date") {
+        return
+      }
+      if (name === "dateFrom") {
+        onChange([dateValue, dateTo])
+      } else if (name === "dateTo") {
+        onChange([dateFrom, dateValue])
+      }
+    } catch (e) {
+      console.error(e)
     }
   }
 
@@ -192,6 +196,7 @@ export const DateTimePicker = ({
     "string.dateInFuture": "Please set a date in the past or use `now`",
     "string.fromIsAfterTo": "From date must be before To date",
     "string.sameValues": "From and To dates cannot be the same",
+    "any.custom": "One of the values is invalid",
   }
 
   const schema = Joi.object({
@@ -201,21 +206,25 @@ export const DateTimePicker = ({
         const dateValue = durationTokenToDate(value)
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
-        if (dateValue === "Invalid date") {
-          return helpers.error("string.invalidDate")
-        } else if (
-          timeValue >=
-          new Date(
-            durationTokenToDate(helpers.state.ancestors[0].dateTo),
-          ).getTime()
-        ) {
-          return helpers.error("string.fromIsAfterTo")
-        } else if (timeValue > timeNow) {
-          return helpers.error("string.dateInFuture")
-        } else if (timeValue === timeNow) {
-          return helpers.error("string.sameValues")
+        try {
+          if (dateValue === "Invalid date") {
+            return helpers.error("string.invalidDate")
+          } else if (
+            timeValue >=
+            new Date(
+              durationTokenToDate(helpers.state.ancestors[0].dateTo),
+            ).getTime()
+          ) {
+            return helpers.error("string.fromIsAfterTo")
+          } else if (timeValue > timeNow) {
+            return helpers.error("string.dateInFuture")
+          } else if (timeValue === timeNow) {
+            return helpers.error("string.sameValues")
+          }
+          return value
+        } catch (e) {
+          return helpers.error("any.custom")
         }
-        return value
       })
       .messages(errorMessages),
     dateTo: Joi.any()
