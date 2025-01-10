@@ -65,18 +65,19 @@ export const Metric = ({
   const [loading, setLoading] = useState(metric.tableId !== undefined)
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const [lastTableId, setLastTableId] = useState<number | undefined>(
-    metric.tableId,
-  )
+  const tableIdRef = React.useRef(metric.tableId)
   const dateFromRef = React.useRef(dateFrom)
   const dateToRef = React.useRef(dateTo)
   const dataRef = React.useRef<uPlot.AlignedData>([[], []])
-  const tableIdRef = React.useRef(metric.tableId)
+  const tableNameRef = React.useRef<string | undefined>()
 
   dateFromRef.current = dateFrom
   dateToRef.current = dateTo
 
   const tables = useSelector(selectors.query.getTables)
+
+  const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
+  tableNameRef.current = tableName
 
   const widgetConfig = widgets[metric.metricType]
 
@@ -141,17 +142,22 @@ export const Metric = ({
   }
 
   const refreshMetricsData = (payload?: MetricsRefreshPayload) => {
-    fetchMetric(payload?.overwrite)
+    if (tableNameRef.current) {
+      fetchMetric(payload?.overwrite)
+    } else {
+      dataRef.current = [[], []]
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    if (metric.tableId && metric.tableId !== lastTableId) {
+    if (tableName) {
+      tableNameRef.current = tableName
       tableIdRef.current = metric.tableId
       dataRef.current = [[], []]
-      setLastTableId(metric.tableId)
       fetchMetric(true)
     }
-  }, [metric.tableId])
+  }, [tableName])
 
   useEffect(() => {
     eventBus.subscribe<MetricsRefreshPayload>(
@@ -171,8 +177,6 @@ export const Metric = ({
         Cannot load metric: {widgetConfig.label}
       </MetricInfoRoot>
     )
-
-  const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
 
   // const canZoomToData = tableName !== undefined && lastNotNull !== undefined
   const canZoomToData = false
