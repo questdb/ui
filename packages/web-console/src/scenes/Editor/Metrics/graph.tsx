@@ -110,6 +110,7 @@ export const Graph = ({
   const [endTime, setEndTime] = useState<number>(
     new Date(durationTokenToDate(dateTo)).getTime(),
   )
+  const [delayedLoading, setDelayedLoading] = useState(loading)
 
   const { isTableMetric, mapYValue, label } = widgetConfig
 
@@ -148,6 +149,16 @@ export const Graph = ({
     }
   }, [graphRootRef.current])
 
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        setDelayedLoading(true)
+      }, 1000)
+      return () => clearTimeout(timeout)
+    }
+    setDelayedLoading(false)
+  }, [loading])
+
   return (
     <Root ref={graphRootRef}>
       <Header>
@@ -159,12 +170,12 @@ export const Graph = ({
             tooltip={widgetConfig.description}
             placement="bottom"
           />
-          {loading && <Loader size="18px" spin />}
+          {delayedLoading && <Loader size="18px" spin />}
         </Box>
         <Actions>{actions}</Actions>
       </Header>
       <GraphWrapper>
-        {!hasData(data) && !loading && (
+        {!hasData(data) && (
           <GraphOverlay>
             {isTableMetric && !tableName ? (
               <Text color="gray2">
