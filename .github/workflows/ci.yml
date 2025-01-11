@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
       - uses: ./.github/workflows/build_and_run_tests.yml
         with:
           context-path: ""
