@@ -5,14 +5,7 @@ on:
 
 jobs:
   run_tests_with_context_path:
-    name: Running Tests With Context Path
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-
-      - uses: ./.github/workflows/build_and_run_tests.yml
-        with:
-          context-path: "/context"
+    uses: ./.github/workflows/build_and_run_tests.yml
+    with:
+      context-path: "/context"
+    secrets: inherit

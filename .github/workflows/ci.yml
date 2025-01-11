@@ -4,6 +4,11 @@ on:
   push:
 
 jobs:
+  run_tests_with_context_path:
+    uses: ./.github/workflows/build_and_run_tests.yml
+    with:
+      context-path: ""
+    secrets: inherit
   CI:
     name: Monorepo CI flow
     runs-on: ubuntu-latest
@@ -12,10 +17,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
-
-      - uses: ./.github/workflows/build_and_run_tests.yml
-        with:
-          context-path: ""
 
       - name: Publish @questdb/web-console to npm
         if: github.ref == 'refs/heads/main'
