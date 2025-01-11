@@ -1,7 +1,5 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
-
 const rowHeight = 30;
 
 const assertRowCount = () => {
