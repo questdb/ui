@@ -79,27 +79,30 @@ where:
 
 Knowing this it's easy to run any script of any package.
 
-If you want to work on `@questdb/web-console` package, you can start its development server with:
+For example, if you want to work on the `@questdb/web-console` package, you can start its
+development server with:
 
 ```
 yarn workspace @questdb/web-console start
 ```
 _You might need to run_ `yarn workspace @questdb/react-components build` _first._
 
-[localhost:9999](http://localhost:9999) should show web console.
+[localhost:9999](http://localhost:9999) should display the web console.
 
 ### 4. Hack!
 
 The setup is done! All packages are ready to be worked on.
 
-They all have a `readme.md` with more details, for instance, here's a link to [`@questdb/web-console/readme.md`](../packages/web-console/README.md).
+They all have a `README.md` with more details.\
+For instance, further details on working with the web console locally can be found
+in [`@questdb/web-console/readme.md`](../packages/web-console/README.md).
 
-Vim and VSCode should work out of the box. If they don't or you use some
-other IDE, you might need to setup and SDK as explained in [Yarn
+Vim and VSCode should work out of the box. If they don't, or you use some
+other IDE, you might need to setup an SDK as explained in [Yarn
 documentation](https://yarnpkg.com/getting-started/editor-sdks).
 
 If you need help, here are some useful links:
 
-* [Github issues](https://github.com/questdb/ui/issues), might already have an answer to your question
+* [GitHub issues](https://github.com/questdb/ui/issues), might already have an answer to your question
 * [QuestDB Documentation](https://questdb.io/docs/) includes a lot of useful information
 * [QuestDB Slack](https://slack.questdb.io/) join our helpful community!

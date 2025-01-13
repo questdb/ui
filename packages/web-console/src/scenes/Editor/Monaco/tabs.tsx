@@ -52,9 +52,9 @@ const DropdownMenuContent = styled(DropdownMenu.Content)`
 
 const mapTabIconToType = (buffer: Buffer) => {
   if (buffer.metricsViewState) {
-    return "/assets/icon-chart.svg"
+    return "assets/icon-chart.svg"
   }
-  return "/assets/icon-file.svg"
+  return "assets/icon-file.svg"
 }
 
 export const Tabs = () => {
@@ -175,7 +175,7 @@ export const Tabs = () => {
             (buffer) =>
               ({
                 id: buffer.id?.toString(),
-                favicon: mapTabIconToType(buffer),
+                favicon: "assets/icon-file.svg",
                 title: buffer.label,
                 active: activeBuffer.id === buffer.id,
                 className: buffer.metricsViewState ? "metrics-tab" : "",
