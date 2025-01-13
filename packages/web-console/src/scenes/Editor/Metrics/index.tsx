@@ -115,12 +115,6 @@ export const Metrics = () => {
       : refreshRatesInSeconds[refreshRate]
     : 0
 
-  const rollingAppendLimit = getRollingAppendRowLimit(
-    refreshRateInSec,
-    dateFrom,
-    dateTo,
-  )
-
   const updateMetrics = (metrics: Metric[]) => {
     if (buffer?.id) {
       updateBuffer(buffer?.id, {
@@ -419,7 +413,7 @@ export const Metrics = () => {
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
                 fetchMode={fetchModeRef.current}
-                rollingAppendLimit={rollingAppendLimit}
+                refreshRateInSec={refreshRateInSec}
               />
             ))}
       </Charts>
