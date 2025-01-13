@@ -122,13 +122,9 @@ const columnRender =
 const Table = ({
   description,
   isScrolling,
-<<<<<<< HEAD
   designatedTimestamp,
   id,
-=======
->>>>>>> main
   table_name,
-  designatedTimestamp,
   partitionBy,
   ttlValue,
   ttlUnit,
