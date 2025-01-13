@@ -206,20 +206,28 @@ const Schema = ({
   }
 
   const fetchColumns = async () => {
-    try {
-      const response = await quest.query<QuestDB.InformationSchemaColumn>(
-        "information_schema.columns()",
-      )
-      if (response && response && response.type === QuestDB.Type.DQL) {
-        setColumns(response.data)
-        dispatch(actions.query.setColumns(response.data))
+    const queries = [
+      "information_schema.questdb_columns()",
+      "information_schema.columns()" // fallback for older servers
+    ]
+
+    for (const query of queries) {
+      try {
+        const response = await quest.query<QuestDB.InformationSchemaColumn>(query)
+
+        if (response?.type === QuestDB.Type.DQL) {
+          setColumns(response.data)
+          dispatch(actions.query.setColumns(response.data))
+          return
+        }
+      } catch {
+        // let's try another query
       }
-    } catch (error) {
-      dispatchState({
-        view: View.error,
-      })
     }
+
+    dispatchState({ view: View.error })
   }
+
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
@@ -237,9 +245,11 @@ const Schema = ({
             return formatTableSchemaQueryResult(
               tableData.table_name,
               tableData.partitionBy,
+              tableData.ttlValue,
+              tableData.ttlUnit,
               columnResponse.data,
               tableData.walEnabled,
-              tableData.dedup,
+              tableData.dedup
             )
           }
         } catch (error) {
@@ -382,6 +392,8 @@ const Schema = ({
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
+                ttlValue={table.ttlValue}
+                ttlUnit={table.ttlUnit}
                 walEnabled={table.walEnabled}
                 walTableData={walTables?.find(
                   (wt) => wt.name === table.table_name,

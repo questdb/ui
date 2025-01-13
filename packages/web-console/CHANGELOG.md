@@ -16,6 +16,27 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.6.5 - 2024.12.02
+
+### Changed
+
+- use a new information_schema.questdb_columns() instead of
+  information_schema.columns() [#359](https://github.com/questdb/ui/pull/359)
+
+## O.6.4 - 2024.11.25
+
+### Added
+
+- Support for ID token in Auth [#355](https://github.com/questdb/ui/pull/355)
+- News Image zoom [#350](https://github.com/questdb/ui/pull/350)
+
+### Changed
+
+- Highlight integer numbers that include `_` (underscore) separator
+  [#353](https://github.com/questdb/ui/pull/353)
+- Handle and display error received while scrolling the grid
+  [#348](https://github.com/questdb/ui/pull/348)
+
 ## 0.6.3 - 2024.10.23
 
 ### Added

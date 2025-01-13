@@ -1,6 +1,6 @@
 {
   "name": "@questdb/web-console",
-  "version": "0.6.3",
+  "version": "0.6.5",
   "license": "Apache-2.0",
   "description": "QuestDB Console",
   "files": [
@@ -29,7 +29,7 @@
     "@monaco-editor/react": "^4.6.0",
     "@popperjs/core": "2.4.2",
     "@questdb/react-components": "workspace:^",
-    "@questdb/sql-grammar": "1.0.15",
+    "@questdb/sql-grammar": "1.2.0",
     "@radix-ui/react-dialog": "^1.0.3",
     "@styled-icons/bootstrap": "10.47.0",
     "@styled-icons/boxicons-logos": "10.47.0",

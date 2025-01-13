@@ -1,3 +1,4 @@
+<<<<<<< HEAD:packages/web-console/src/utils/questdb/client.ts
 import { isServerError } from "../../utils"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
@@ -23,6 +24,322 @@ import {
   UploadResult,
   Value,
 } from "./types"
+=======
+/*******************************************************************************
+ *     ___                  _   ____  ____
+ *    / _ \ _   _  ___  ___| |_|  _ \| __ )
+ *   | | | | | | |/ _ \/ __| __| | | |  _ \
+ *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
+ *    \__\_\\__,_|\___||___/\__|____/|____/
+ *
+ *  Copyright (c) 2014-2019 Appsicle
+ *  Copyright (c) 2019-2022 QuestDB
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+import { isServerError } from "../utils"
+import { TelemetryConfigShape } from "../store/Telemetry/types"
+import { eventBus } from "../modules/EventBus"
+import { EventType } from "../modules/EventBus/types"
+import { AuthPayload } from "../modules/OAuth2/types"
+import { StoreKey } from "./localStorage/types"
+import { API_VERSION } from "../consts"
+
+type ColumnDefinition = Readonly<{ name: string; type: string }>
+
+type Value = string | number | boolean
+type RawData = Record<string, Value>
+
+export enum Type {
+  DDL = "ddl",
+  DML = "dml",
+  DQL = "dql",
+  ERROR = "error",
+  NOTICE = "notice",
+}
+
+export type Timings = {
+  compiler: number
+  authentication: number
+  count: number
+  execute: number
+  fetch: number
+}
+
+export type Explain = { jitCompiled: boolean }
+
+type DatasetType = Array<boolean | string | number>
+
+type RawDqlResult = {
+  columns: ColumnDefinition[]
+  count: number
+  dataset: DatasetType[]
+  ddl: undefined
+  dml: undefined
+  notice: undefined
+  error: undefined
+  query: string
+  timings: Timings
+  explain?: Explain
+}
+
+type RawDdlResult = {
+  ddl: "OK"
+  dml: undefined
+}
+
+type RawDmlResult = {
+  ddl: undefined
+  dml: "OK"
+}
+
+type RawErrorResult = {
+  ddl: undefined
+  dml: undefined
+  error: "<error message>"
+  position: number
+  query: string
+}
+
+type RawNoticeResult = {
+  ddl: undefined
+  dml: undefined
+  error: undefined
+  notice: "<notice message>"
+  position: undefined
+  query: string
+}
+
+type DdlResult = {
+  query: string
+  type: Type.DDL
+}
+
+type DmlResult = {
+  query: string
+  type: Type.DML
+}
+
+type RawResult =
+  | RawDqlResult
+  | RawDmlResult
+  | RawDdlResult
+  | RawErrorResult
+  | RawNoticeResult
+
+export type ErrorResult = RawErrorResult & {
+  type: Type.ERROR
+  status: number
+}
+
+export type NoticeResult = RawNoticeResult & {
+  type: Type.NOTICE
+}
+
+export type QueryRawResult =
+  | (Omit<RawDqlResult, "ddl" | "dml"> & { type: Type.DQL })
+  | DmlResult
+  | DdlResult
+  | ErrorResult
+  | NoticeResult
+
+export type QueryResult<T extends Record<string, any>> =
+  | {
+      columns: ColumnDefinition[]
+      count: number
+      data: T[]
+      timings: Timings
+      type: Type.DQL
+      explain?: Explain
+    }
+  | ErrorResult
+  | DmlResult
+  | DdlResult
+  | NoticeResult
+
+export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
+
+export type Table = {
+  table_name: string
+  partitionBy: PartitionBy
+  designatedTimestamp: string
+  walEnabled: boolean
+  dedup: boolean
+  ttlValue: number
+  ttlUnit: string
+}
+
+export type Partition = {
+  index: number
+  partitionBy: PartitionBy
+  name: string
+  minTimestamp: string | null
+  maxTimestamp: string | null
+  numRows: string
+  diskSize: string
+  diskSizeHuman: string
+  readOnly: boolean
+  active: boolean
+  attached: boolean
+  detached: boolean
+  attachable: boolean
+}
+
+export enum ErrorTag {
+  DISK_FULL = "DISK FULL",
+  TOO_MANY_OPEN_FILES = "TOO MANY OPEN FILES",
+  OUT_OF_MMAP_AREAS = "OUT OF MMAP AREAS",
+  OUT_OF_MEMORY = "OUT OF MEMORY",
+  UNSUPPORTED_FILE_SYSTEM = "UNSUPPORTED FILE SYSTEM",
+}
+
+export type WalTable = {
+  name: string
+  suspended: boolean
+  writerTxn: string
+  writerLagTxnCount: string
+  sequencerTxn: string
+  errorTag?: ErrorTag
+  errorMessage?: string
+}
+
+export type Column = {
+  column: string
+  indexed: boolean
+  designated: boolean
+  indexBlockCapacity: number
+  symbolCached: boolean
+  symbolCapacity: number
+  type: string
+  upsertKey: boolean
+}
+
+export type Options = {
+  limit?: string
+  explain?: boolean
+  nm?: boolean
+  count?: boolean
+  cols?: string
+  src?: string
+}
+
+export type Release = {
+  assets: {
+    browser_download_url: string
+    name: string
+    size: number
+  }[]
+  html_url: string
+  name: string
+  published_at: string
+}
+
+export type NewsThumbnail = {
+  id: string
+  width: number
+  height: number
+  url: string
+  filename: string
+  size: number
+  type: string
+  thumbnails: Record<
+    "small" | "large" | "full",
+    {
+      url: string
+      width: number
+      height: number
+    }
+  >
+}
+
+export type NewsItem = {
+  id: string
+  title: string
+  body: string
+  thumbnail?: NewsThumbnail[]
+  status: "published" | "draft"
+  date: string
+}
+
+export enum FileCheckStatus {
+  EXISTS = "Exists",
+  DOES_NOT_EXIST = "Does not exist",
+  RESERVED_NAME = "Reserved name",
+}
+
+export type FileCheckResponse = {
+  status: FileCheckStatus
+}
+
+export type UploadModeSettings = {
+  forceHeader: boolean
+  overwrite: boolean
+  skipLev: boolean
+  delimiter: string
+  atomicity: string
+  maxUncommitedRows: number
+}
+
+export type SchemaColumn = {
+  name: string
+  type: string
+  pattern?: string
+  upsertKey?: boolean
+}
+
+export type InformationSchemaColumn = {
+  table_name: string
+  ordinal_position: number
+  column_name: string
+  data_type: string
+}
+
+type UploadOptions = {
+  file: File
+  name: string
+  settings?: UploadModeSettings
+  schema?: SchemaColumn[]
+  partitionBy?: string
+  timestamp?: string
+  onProgress: (progress: number) => void
+}
+
+export type UploadResultColumn = {
+  name: string
+  type: string
+  size: number
+  errors: number
+}
+
+export type UploadResult = {
+  columns: UploadResultColumn[]
+  header: boolean
+  location: string
+  rowsImported: number
+  rowsRejected: number
+  status: string
+}
+
+export type Parameter = {
+  property_path: string
+  env_var_name: string
+  value: string | null
+  value_source: string
+  sensitive: boolean
+  dynamic: boolean
+}
+>>>>>>> main:packages/web-console/src/utils/questdb.ts
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -295,12 +612,7 @@ export class Client {
   }
 
   async showTables(): Promise<QueryResult<Table>> {
-    type BackwardsCompatibleTable = Table & {
-      /** @deprecated use `table_name` instead  */
-      name: string
-    }
-
-    const response = await this.query<BackwardsCompatibleTable>("tables();")
+    const response = await this.query<Table>("tables();")
 
     if (response.type === Type.DQL) {
       return {
@@ -308,8 +620,8 @@ export class Client {
         data: response.data
           .slice()
           .sort((a, b) => {
-            const aName = a.table_name ?? a.name
-            const bName = b.table_name ?? b.name
+            const aName = a.table_name
+            const bName = b.table_name
             if (aName > bName) {
               return 1
             }
@@ -320,12 +632,6 @@ export class Client {
 
             return 0
           })
-
-          // @TODO: remove this once upstream questdb releases version with `table_name`
-          .map((table) => ({
-            ...table,
-            table_name: table.table_name ?? table.name,
-          })),
       }
     }
 

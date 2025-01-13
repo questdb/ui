@@ -6565,10 +6565,10 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["@questdb/sql-grammar", [\
-      ["npm:1.0.15", {\
-        "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.0.15-5d5ff601c1-887e5fb452.zip/node_modules/@questdb/sql-grammar/",\
+      ["npm:1.2.0", {\
+        "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.2.0-7f390b396c-c503bf7ea3.zip/node_modules/@questdb/sql-grammar/",\
         "packageDependencies": [\
-          ["@questdb/sql-grammar", "npm:1.0.15"]\
+          ["@questdb/sql-grammar", "npm:1.2.0"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -6591,7 +6591,7 @@ const RAW_RUNTIME_STATE =
           ["@pmmmwh/react-refresh-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.5.11"],\
           ["@popperjs/core", "npm:2.4.2"],\
           ["@questdb/react-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#workspace:packages/react-components"],\
-          ["@questdb/sql-grammar", "npm:1.0.15"],\
+          ["@questdb/sql-grammar", "npm:1.2.0"],\
           ["@radix-ui/react-dialog", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.0.5"],\
           ["@styled-icons/bootstrap", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
           ["@styled-icons/boxicons-logos", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:10.47.0"],\
