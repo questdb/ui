@@ -8,6 +8,9 @@ jobs:
     name: Running Tests With Context Path
     runs-on: ubuntu-latest
 
+    env:
+      QDB_HTTP_CONTEXT_PATH: "/context"
+      
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +35,6 @@ jobs:
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
-          QDB_HTTP_CONTEXT_PATH: "/context"
 
       - uses: actions/setup-node@v4
         with:
@@ -66,7 +68,6 @@ jobs:
           QDB_DEV_MODE_ENABLED: "true"
           QDB_HTTP_USER: "admin"
           QDB_HTTP_PASSWORD: "quest"
-          QDB_HTTP_CONTEXT_PATH: "/context"
 
       - name: Run browser-tests test
         run: yarn workspace browser-tests test
