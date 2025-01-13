@@ -13,7 +13,8 @@ addMatchImageSnapshotCommand({
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
-const baseUrl = "http://localhost:9999";
+const contextPath = process.env.QDB_HTTP_CONTEXT_PATH || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tableSchemas = {
   btc_trades:
