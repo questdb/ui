@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import type { Widget } from "./types"
-import { hasData, getXAxisFormat, durationTokenToDate } from "./utils"
+import {
+  hasData,
+  getXAxisFormat,
+  durationTokenToDate,
+  getSamplingRateForPeriod,
+  formatSamplingRate,
+} from "./utils"
 import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -121,9 +127,12 @@ export const Graph = ({
     })
   })
 
+  const from = durationTokenToDate(dateFrom)
+  const to = durationTokenToDate(dateTo)
+
   useEffect(() => {
-    setStartTime(new Date(durationTokenToDate(dateFrom)).getTime())
-    setEndTime(new Date(durationTokenToDate(dateTo)).getTime())
+    setStartTime(new Date(from).getTime())
+    setEndTime(new Date(to).getTime())
   }, [data, dateFrom, dateTo])
 
   const graphOptions = useGraphOptions({
@@ -167,7 +176,11 @@ export const Graph = ({
           <HeaderText>{label}</HeaderText>
           <IconWithTooltip
             icon={<Information size="16px" />}
-            tooltip={widgetConfig.description}
+            tooltip={`${
+              widgetConfig.description
+            }. Sample by ${formatSamplingRate(
+              getSamplingRateForPeriod(from, to),
+            )}`}
             placement="bottom"
           />
           {delayedLoading && <Loader size="18px" spin />}
