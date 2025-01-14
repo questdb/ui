@@ -412,7 +412,6 @@ export const Metrics = () => {
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
-                fetchMode={fetchModeRef.current}
                 refreshRateInSec={refreshRateInSec}
               />
             ))}

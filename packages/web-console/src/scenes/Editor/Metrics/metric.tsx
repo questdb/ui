@@ -52,14 +52,12 @@ export const Metric = ({
   onRemove,
   onTableChange,
   onColorChange,
-  fetchMode,
   refreshRateInSec,
 }: DateRange & {
   metric: MetricItem
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
-  fetchMode: FetchMode
   refreshRateInSec: number
 }) => {
   const { quest } = useContext(QuestContext)
@@ -82,10 +80,6 @@ export const Metric = ({
 
   const widgetConfig = widgets[metric.metricType]
 
-  const isRollingAppendEnabled =
-    widgetConfig.querySupportsRollingAppend &&
-    fetchMode === FetchMode.ROLLING_APPEND
-
   const rollingAppendLimit = getRollingAppendRowLimit(
     refreshRateInSec,
     dateFrom,
@@ -93,6 +87,8 @@ export const Metric = ({
   )
 
   const fetchMetric = async (overwrite?: boolean) => {
+    const isRollingAppendEnabled =
+      widgetConfig.querySupportsRollingAppend && !overwrite
     setLoading(true)
     try {
       const from = durationTokenToDate(dateFromRef.current)
@@ -107,10 +103,9 @@ export const Metric = ({
             tableId: tableIdRef.current,
             sampleBy: `${getSamplingRateForPeriod(from, to)}s`,
             timeFilter,
-            ...(!overwrite &&
-              isRollingAppendEnabled && {
-                limit: -rollingAppendLimit,
-              }),
+            ...(isRollingAppendEnabled && {
+              limit: -rollingAppendLimit,
+            }),
           }),
         ),
         // quest.query<LastNotNull>(
