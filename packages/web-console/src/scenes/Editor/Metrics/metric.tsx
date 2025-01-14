@@ -3,12 +3,12 @@ import { Metric as MetricItem } from "../../../store/buffers"
 import {
   MetricType,
   hasData,
-  FetchMode,
   mergeRollingData,
   getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
   getRollingAppendRowLimit,
+  formatSamplingRate,
 } from "./utils"
 import type {
   DateRange,
@@ -87,6 +87,10 @@ export const Metric = ({
   )
 
   const fetchMetric = async (overwrite?: boolean) => {
+    const lastTimestamp =
+      dataRef.current[0]?.length > 0
+        ? dataRef.current[0]?.[dataRef.current[0].length - 1]
+        : undefined
     const isRollingAppendEnabled =
       widgetConfig.querySupportsRollingAppend && !overwrite
     setLoading(true)
@@ -94,6 +98,11 @@ export const Metric = ({
       const from = durationTokenToDate(dateFromRef.current)
       const to = durationTokenToDate(dateToRef.current)
       const timeFilter = getTimeFilter(from, to)
+      console.log(
+        from,
+        to,
+        formatSamplingRate(getSamplingRateForPeriod(from, to)),
+      )
       const responses = await Promise.all<
         | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>

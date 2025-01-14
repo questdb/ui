@@ -157,6 +157,18 @@ export const formatNumbers = (value: number) => {
   return value.toString()
 }
 
+export const formatSamplingRate = (seconds: number) => {
+  if (seconds >= 3600) {
+    const hours = (seconds / 3600).toFixed(0)
+    return `${hours}h`
+  } else if (seconds >= 60) {
+    const minutes = (seconds / 60).toFixed(0)
+    return `${minutes}m`
+  } else {
+    return `${seconds}s`
+  }
+}
+
 const formatToISOIfNeeded = (date: Date | string) => {
   if (date instanceof Date) return formatISO(date)
   return date
@@ -166,16 +178,27 @@ export const getTimeFilter = (from: Date | string, to: Date | string) => {
   return `FROM '${formatToISOIfNeeded(from)}' TO '${formatToISOIfNeeded(to)}'`
 }
 
+const seconds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45, 75, 90]
+
+const minutes = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45, 75, 90]
+
+const hours = [1, 2, 3, 4, 6, 8, 12, 18, 24]
+
 export const getSamplingRateForPeriod = (
   from: string,
   to: string,
   pointsToPlot = 600,
 ) => {
-  const seconds =
-    (new Date(durationTokenToDate(to)).getTime() -
-      new Date(durationTokenToDate(from)).getTime()) /
-    1000
-  return Math.ceil(seconds / pointsToPlot)
+  const durationInSeconds =
+    (new Date(to).getTime() - new Date(from).getTime()) / 1000
+  const all = [
+    ...seconds,
+    ...minutes.map((m) => m * 60),
+    ...hours.map((h) => h * 3600),
+  ]
+  return all
+    .sort((a, b) => Math.abs(a) - Math.abs(b))
+    .find((s) => s > durationInSeconds / pointsToPlot) as number
 }
 
 export const getRollingAppendRowLimit = (
@@ -187,6 +210,7 @@ export const getRollingAppendRowLimit = (
     durationTokenToDate(dateFrom),
     durationTokenToDate(dateTo),
   )
+  if (sampleRate === undefined) return 0
   return Math.ceil(refreshRateInSeconds / sampleRate)
 }
 
