@@ -4,6 +4,7 @@ import { sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const writeAmplification: Widget = {
+  distribution: 3,
   label: "Write amplification",
   description:
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
@@ -53,8 +54,8 @@ limit -1
   alignData: (data: WriteAmplification[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.created).getTime()),
     data.map((l) =>
-      l.writeAmplification ? sqlValueToFixed(l.writeAmplification) : 0,
+      l.writeAmplification ? sqlValueToFixed(l.writeAmplification) : 1,
     ),
   ],
-  mapYValue: (rawValue: number) => formatNumbers(rawValue),
+  mapYValue: (rawValue: number) => rawValue,
 }

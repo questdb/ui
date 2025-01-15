@@ -11,12 +11,21 @@ export type Widget = {
   description: string
   iconUrl: string
   isTableMetric: boolean
+  /**
+   * Scale distribution:
+   * 1 - Linear
+   * 2 - Ordinal
+   * 3 - Logarithmic
+   * 4 - ArcSinh
+   * 100 - Custom
+   */
+  distribution: uPlot.Scale.Distr
   getQuery: ({
     tableId,
     sampleBy,
     limit,
     from,
-     to,
+    to,
   }: {
     tableId?: number
     sampleBy: string
@@ -27,7 +36,7 @@ export type Widget = {
   getQueryLastNotNull: (id?: number) => string
   querySupportsRollingAppend: boolean
   alignData: (data: any) => uPlot.AlignedData
-  mapYValue: (rawValue: number) => string
+  mapYValue: (rawValue: number) => number | string
 }
 
 export type MetricsRefreshPayload = DateRange & {

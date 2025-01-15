@@ -4,6 +4,7 @@ import { sqlValueToFixed } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const latency: Widget = {
+  distribution: 1,
   label: "WAL apply latency in ms",
   description:
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",

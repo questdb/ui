@@ -144,6 +144,7 @@ export const Graph = ({
     valueRef,
     mapXValue: (rawValue) => getXAxisFormat(rawValue, startTime, endTime),
     mapYValue,
+    widgetConfig,
   })
 
   const graphRootRef = useRef<HTMLDivElement>(null)

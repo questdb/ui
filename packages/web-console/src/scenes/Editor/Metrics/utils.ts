@@ -215,8 +215,7 @@ export const mergeRollingData = (
   newData: uPlot.AlignedData,
   dateFrom: string,
 ) => {
-
-  const current_time = new Date();
+  const current_time = new Date()
   const bucket_size = newData.values()
   const from = new Date(durationTokenToDate(dateFrom)).getTime()
 
@@ -225,9 +224,9 @@ export const mergeRollingData = (
     ...d,
   ]) as uPlot.AlignedData
 
-  return newData;
+  return newData
 
-  const merged =  mergedData.map((arr, arrIndex) =>
+  const merged = mergedData.map((arr, arrIndex) =>
     arrIndex === 0
       ? Array.from(arr).filter((time) => time && time >= from)
       : Array.from(arr).filter(
@@ -239,7 +238,7 @@ export const mergeRollingData = (
   console.log(new Date())
   // console.log(merged.length)/*
   // console.log(merged.slice(merged.length - 1, 0))*/
-  return merged;
+  return merged
 }
 
 export const isDateToken = (token: string) => {

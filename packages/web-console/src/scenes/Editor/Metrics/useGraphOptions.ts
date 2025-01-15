@@ -3,6 +3,7 @@ import { useContext } from "react"
 import { ThemeContext } from "styled-components"
 import uPlot from "uplot"
 import { DATETIME_FORMAT } from "./utils"
+import { Widget } from "./types"
 
 type Params = {
   data: uPlot.AlignedData
@@ -11,15 +12,16 @@ type Params = {
   colors: string[]
   tickValue?: (rawValue: number) => string
   mapXValue: (rawValue: number, index: number, ticks: number[]) => string
-  mapYValue: (rawValue: number) => string
+  mapYValue: (rawValue: number) => number | string
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
+  widgetConfig: Widget
 }
 
 const valuePlugin = (
   timeRef: React.RefObject<HTMLSpanElement>,
   valueRef: React.RefObject<HTMLSpanElement>,
-  mapYValue: (rawValue: number) => string,
+  mapYValue: Params["mapYValue"],
 ) => ({
   hooks: {
     setCursor: (u: uPlot) => {
@@ -34,7 +36,7 @@ const valuePlugin = (
           x as number,
           DATETIME_FORMAT,
         ) as string
-        valueRef.current!.textContent = mapYValue(y as number)
+        valueRef.current!.textContent = mapYValue(y as number) as string
       } else {
         timeRef.current!.textContent = null
         valueRef.current!.textContent = null
@@ -53,6 +55,7 @@ export const useGraphOptions = ({
   mapYValue = (rawValue) => (+rawValue).toFixed(4),
   timeRef,
   valueRef,
+  widgetConfig,
 }: Params): Omit<uPlot.Options, "width" | "height"> => {
   const theme = useContext(ThemeContext)
 
@@ -106,7 +109,8 @@ export const useGraphOptions = ({
       },
       stroke: colors[0],
       width: 2,
-      value: (_self, rawValue) => mapYValue(rawValue),
+      value: (_self, rawValue) =>
+        widgetConfig.distribution !== 3 ? mapYValue(rawValue) : rawValue,
     },
   }
 
@@ -116,6 +120,7 @@ export const useGraphOptions = ({
       range: [startTime, endTime],
     },
     y: {
+      distr: widgetConfig.distribution,
       range: (u, min, max) => {
         return [u.data[0].length > 1 && min !== max ? min : 0, max]
       },

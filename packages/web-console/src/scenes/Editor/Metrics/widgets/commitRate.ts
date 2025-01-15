@@ -4,6 +4,7 @@ import { sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
 export const commitRate: Widget = {
+  distribution: 1,
   label: "Commit rate",
   description:
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
