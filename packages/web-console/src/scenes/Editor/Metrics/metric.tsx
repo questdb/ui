@@ -7,7 +7,6 @@ import {
   getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
-  getRollingAppendRowLimit,
   formatSamplingRate,
 } from "./utils"
 import type {
@@ -53,13 +52,11 @@ export const Metric = ({
   onRemove,
   onTableChange,
   onColorChange,
-  refreshRateInSec,
 }: DateRange & {
   metric: MetricItem
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
-  refreshRateInSec: number
 }) => {
   const { quest } = useContext(QuestContext)
   const [loading, setLoading] = useState(metric.tableId !== undefined)

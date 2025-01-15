@@ -203,19 +203,6 @@ export const getSamplingRateForPeriod = (
     .find((s) => s > durationInSeconds / pointsToPlot) as number
 }
 
-export const getRollingAppendRowLimit = (
-  refreshRateInSeconds: number,
-  dateFrom: string,
-  dateTo: string,
-) => {
-  const sampleRate = getSamplingRateForPeriod(
-    durationTokenToDate(dateFrom),
-    durationTokenToDate(dateTo),
-  )
-  if (sampleRate === undefined) return 0
-  return Math.ceil(refreshRateInSeconds / sampleRate)
-}
-
 export const hasData = (data?: uPlot.AlignedData) => {
   if (!data || data[1].length === 0) return false
   return (

@@ -6,9 +6,7 @@ import { useEditor } from "../../../providers"
 import {
   RefreshRate,
   refreshRatesInSeconds,
-  getRollingAppendRowLimit,
   MetricViewMode,
-  FetchMode,
   getAutoRefreshRate,
 } from "./utils"
 import type { MetricsRefreshPayload } from "./types"
@@ -411,7 +409,6 @@ export const Metrics = () => {
                 onRemove={handleRemoveMetric}
                 onTableChange={handleTableChange}
                 onColorChange={handleColorChange}
-                refreshRateInSec={refreshRateInSec}
               />
             ))}
       </Charts>
