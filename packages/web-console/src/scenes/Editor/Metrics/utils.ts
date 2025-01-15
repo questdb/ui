@@ -225,6 +225,7 @@ export const mergeRollingData = (
     ...d,
   ]) as uPlot.AlignedData
 
+  return newData;
 
   const merged =  mergedData.map((arr, arrIndex) =>
     arrIndex === 0
