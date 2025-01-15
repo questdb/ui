@@ -98,11 +98,8 @@ export const Metric = ({
       const from = durationTokenToDate(dateFromRef.current)
       const to = durationTokenToDate(dateToRef.current)
       const timeFilter = getTimeFilter(from, to)
-      console.log(
-        from,
-        to,
-        formatSamplingRate(getSamplingRateForPeriod(from, to)),
-      )
+      const sampleBySeconds = getSamplingRateForPeriod(from, to)
+      console.log(from, to, formatSamplingRate(sampleBySeconds))
       const responses = await Promise.all<
         | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>
@@ -110,7 +107,7 @@ export const Metric = ({
         quest.query<ResultType[MetricType]>(
           widgetConfig.getQuery({
             tableId: tableIdRef.current,
-            sampleBy: `${getSamplingRateForPeriod(from, to)}s`,
+            sampleBy: `${sampleBySeconds}s`,
             timeFilter,
             ...(isRollingAppendEnabled && {
               limit: -rollingAppendLimit,
