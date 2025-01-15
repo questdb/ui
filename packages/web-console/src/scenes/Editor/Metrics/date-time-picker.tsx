@@ -5,6 +5,7 @@ import {
   durationToHumanReadable,
   durationTokenToDate,
   isDateToken,
+  MAX_DATE_RANGE,
 } from "./utils"
 import { DateRange } from "./types"
 import { Box, Button, Popover } from "@questdb/react-components"
@@ -197,6 +198,7 @@ export const DateTimePicker = ({
     "string.fromIsAfterTo": "From date must be before To date",
     "string.sameValues": "From and To dates cannot be the same",
     "any.custom": "One of the values is invalid",
+    "string.maxDateRange": "Date range cannot exceed 7 days",
   }
 
   const schema = Joi.object({
@@ -207,19 +209,19 @@ export const DateTimePicker = ({
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
         try {
+          const timeTo = new Date(
+            durationTokenToDate(helpers.state.ancestors[0].dateTo),
+          ).getTime()
           if (dateValue === "Invalid date") {
             return helpers.error("string.invalidDate")
-          } else if (
-            timeValue >=
-            new Date(
-              durationTokenToDate(helpers.state.ancestors[0].dateTo),
-            ).getTime()
-          ) {
+          } else if (timeValue >= timeTo) {
             return helpers.error("string.fromIsAfterTo")
           } else if (timeValue > timeNow) {
             return helpers.error("string.dateInFuture")
           } else if (timeValue === timeNow) {
             return helpers.error("string.sameValues")
+          } else if (timeTo - timeValue > MAX_DATE_RANGE * 1000) {
+            return helpers.error("string.maxDateRange")
           }
           return value
         } catch (e) {
@@ -233,19 +235,19 @@ export const DateTimePicker = ({
         const dateValue = durationTokenToDate(value)
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
+        const timeFrom = new Date(
+          durationTokenToDate(helpers.state.ancestors[0].dateFrom),
+        ).getTime()
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
-        } else if (
-          timeValue <=
-          new Date(
-            durationTokenToDate(helpers.state.ancestors[0].dateFrom),
-          ).getTime()
-        ) {
+        } else if (timeValue <= timeFrom) {
           return helpers.error("string.toIsBeforeFrom")
         } else if (timeValue > timeNow) {
           return helpers.error("string.dateInFuture")
         } else if (timeValue === timeNow) {
           return helpers.error("string.sameValues")
+        } else if (timeValue - timeFrom > MAX_DATE_RANGE * 1000) {
+          return helpers.error("string.maxDateRange")
         }
         return value
       })

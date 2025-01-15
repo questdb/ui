@@ -6,6 +6,8 @@ import type { Duration } from "./types"
 
 export const DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss"
 
+export const MAX_DATE_RANGE = 7 * 24 * 60 * 60
+
 export enum MetricType {
   COMMIT_RATE = "Commit rate",
   WRITE_THROUGHPUT = "Write throughput",
