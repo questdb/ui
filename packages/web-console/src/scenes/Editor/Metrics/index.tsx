@@ -103,7 +103,6 @@ export const Metrics = () => {
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
   const intervalRef = React.useRef<NodeJS.Timeout>()
-  const fetchModeRef = React.useRef<FetchMode>(FetchMode.OVERWRITE)
 
   const { autoRefreshTables } = useLocalStorage()
 
@@ -126,11 +125,11 @@ export const Metrics = () => {
     }
   }
 
-  const refreshMetricsData = () => {
+  const refreshMetricsData = (overwrite?: boolean) => {
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
       dateFrom,
       dateTo,
-      overwrite: fetchModeRef.current === FetchMode.OVERWRITE,
+      overwrite,
     })
   }
 
@@ -165,21 +164,18 @@ export const Metrics = () => {
   }
 
   const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
-    fetchModeRef.current = FetchMode.OVERWRITE
     setDateFrom(dateFrom)
     setDateTo(dateTo)
   }
 
   const handleFullRefresh = () => {
-    fetchModeRef.current = FetchMode.OVERWRITE
-    refreshMetricsData()
+    refreshMetricsData(true)
   }
 
   const focusListener = useCallback(() => {
     tabInFocusRef.current = true
     if (refreshRateRef.current !== RefreshRate.OFF) {
-      fetchModeRef.current = FetchMode.OVERWRITE
-      refreshMetricsData()
+      refreshMetricsData(true)
     }
   }, [refreshRateRef.current])
 
@@ -195,7 +191,6 @@ export const Metrics = () => {
       intervalRef.current = setInterval(
         () => {
           if (!tabInFocusRef.current) return
-          fetchModeRef.current = FetchMode.ROLLING_APPEND
           refreshMetricsData()
         },
         refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
@@ -235,9 +230,6 @@ export const Metrics = () => {
     if (buffer?.id) {
       const merged = merge(buffer, {
         metricsViewState: {
-          ...(refreshRate !== buffer?.metricsViewState?.refreshRate && {
-            refreshRate,
-          }),
           ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
             viewMode: metricViewMode,
           }),
@@ -254,18 +246,25 @@ export const Metrics = () => {
           setupListeners()
         }
       }
-      if (dateFrom && dateTo && refreshRate && metricViewMode) {
+      if (dateFrom && dateTo) {
         updateBuffer(buffer.id, merged)
-        fetchModeRef.current = FetchMode.OVERWRITE
-        refreshMetricsData()
+        refreshMetricsData(true)
       }
     }
-  }, [refreshRate, metricViewMode, dateFrom, dateTo])
+  }, [metricViewMode, dateFrom, dateTo])
 
   useEffect(() => {
     if (refreshRate) {
       refreshRateRef.current = refreshRate
       setupListeners()
+      if (buffer?.id) {
+        updateBuffer(buffer.id, {
+          metricsViewState: {
+            ...buffer?.metricsViewState,
+            refreshRate,
+          },
+        })
+      }
     }
   }, [refreshRate])
 
