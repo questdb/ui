@@ -31,6 +31,7 @@ import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { ColorPalette } from "./color-palette"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { formatISO } from "date-fns"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -69,7 +70,6 @@ export const Metric = ({
   const dateToRef = React.useRef(dateTo)
   const dataRef = React.useRef<uPlot.AlignedData>([[], []])
   const tableNameRef = React.useRef<string | undefined>()
-  const rollingAppendLimitRef = React.useRef<number>(0)
 
   dateFromRef.current = dateFrom
   dateToRef.current = dateTo
@@ -80,12 +80,6 @@ export const Metric = ({
   tableNameRef.current = tableName
 
   const widgetConfig = widgets[metric.metricType]
-
-  rollingAppendLimitRef.current = getRollingAppendRowLimit(
-    refreshRateInSec,
-    dateFrom,
-    dateTo,
-  )
 
   const fetchMetric = async (overwrite?: boolean) => {
     const lastTimestamp =
@@ -98,7 +92,12 @@ export const Metric = ({
     try {
       const from = durationTokenToDate(dateFromRef.current)
       const to = durationTokenToDate(dateToRef.current)
-      const timeFilter = getTimeFilter(from, to)
+      const timeFilter = getTimeFilter(
+        isRollingAppendEnabled && lastTimestamp
+          ? formatISO(new Date(lastTimestamp))
+          : from,
+        to,
+      )
       const sampleBySeconds = getSamplingRateForPeriod(from, to)
       console.log(from, to, formatSamplingRate(sampleBySeconds))
       const responses = await Promise.all<
@@ -110,9 +109,6 @@ export const Metric = ({
             tableId: tableIdRef.current,
             sampleBy: `${sampleBySeconds}s`,
             timeFilter,
-            ...(isRollingAppendEnabled && {
-              limit: -rollingAppendLimitRef.current,
-            }),
           }),
         ),
         // quest.query<LastNotNull>(
