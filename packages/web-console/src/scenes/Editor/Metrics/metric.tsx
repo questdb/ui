@@ -69,6 +69,7 @@ export const Metric = ({
   const dateToRef = React.useRef(dateTo)
   const dataRef = React.useRef<uPlot.AlignedData>([[], []])
   const tableNameRef = React.useRef<string | undefined>()
+  const rollingAppendLimitRef = React.useRef<number>(0)
 
   dateFromRef.current = dateFrom
   dateToRef.current = dateTo
@@ -80,7 +81,7 @@ export const Metric = ({
 
   const widgetConfig = widgets[metric.metricType]
 
-  const rollingAppendLimit = getRollingAppendRowLimit(
+  rollingAppendLimitRef.current = getRollingAppendRowLimit(
     refreshRateInSec,
     dateFrom,
     dateTo,
@@ -110,7 +111,7 @@ export const Metric = ({
             sampleBy: `${sampleBySeconds}s`,
             timeFilter,
             ...(isRollingAppendEnabled && {
-              limit: -rollingAppendLimit,
+              limit: -rollingAppendLimitRef.current,
             }),
           }),
         ),
