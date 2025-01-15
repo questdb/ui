@@ -171,7 +171,7 @@ export const formatSamplingRate = (seconds: number) => {
   }
 }
 
-const formatToISOIfNeeded = (date: Date | string) => {
+export const formatToISOIfNeeded = (date: Date | string) => {
   if (date instanceof Date) return formatISO(date)
   return date
 }
@@ -215,6 +215,9 @@ export const mergeRollingData = (
   newData: uPlot.AlignedData,
   dateFrom: string,
 ) => {
+
+  const current_time = new Date();
+  const bucket_size = newData.values()
   const from = new Date(durationTokenToDate(dateFrom)).getTime()
 
   const mergedData = newData.map((d, i) => [
@@ -222,13 +225,20 @@ export const mergeRollingData = (
     ...d,
   ]) as uPlot.AlignedData
 
-  return mergedData.map((arr, arrIndex) =>
+
+  const merged =  mergedData.map((arr, arrIndex) =>
     arrIndex === 0
       ? Array.from(arr).filter((time) => time && time >= from)
       : Array.from(arr).filter(
           (_, index) => mergedData[0] && mergedData[0][index] >= from,
         ),
   ) as uPlot.AlignedData
+  console.log(merged)
+  console.log(dateFrom)
+  console.log(new Date())
+  // console.log(merged.length)/*
+  // console.log(merged.slice(merged.length - 1, 0))*/
+  return merged;
 }
 
 export const isDateToken = (token: string) => {

@@ -10,7 +10,7 @@ export const latency: Widget = {
   iconUrl: "/assets/metric-read-latency.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
     return `
 select created, approx_percentile(latency, 0.9, 3) latency
   from ${TelemetryTable.WAL}
@@ -19,7 +19,8 @@ select created, approx_percentile(latency, 0.9, 3) latency
       and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
       ${tableId ? `and tableId = ${tableId}` : ""}
   sample by ${sampleBy}
-  ${timeFilter ? timeFilter : ""}
+  FROM timestamp_floor('${sampleBy}', '${from}')
+  TO timestamp_floor('${sampleBy}', '${to}')
   fill(0)
   ${limit ? `limit ${limit}` : ""}
   `

@@ -10,7 +10,7 @@ export const writeThroughput: Widget = {
   iconUrl: "/assets/metric-rows-applied.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
     return `
 select
     created time,
@@ -21,7 +21,8 @@ from ${TelemetryTable.WAL}
 where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
 sample by ${sampleBy}
-${timeFilter ? timeFilter : ""}
+FROM timestamp_floor('${sampleBy}', '${from}')
+  TO timestamp_floor('${sampleBy}', '${to}')
 fill(null)
 ${limit ? `limit ${limit}` : ""}`
   },
@@ -38,7 +39,7 @@ limit -1
   alignData: (data: RowsApplied[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.time).getTime()),
     data.map((l) =>
-      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
+      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 1,
     ),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),

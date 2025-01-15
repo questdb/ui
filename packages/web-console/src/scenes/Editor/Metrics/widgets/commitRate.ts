@@ -10,7 +10,7 @@ export const commitRate: Widget = {
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
     return `
     select 
    created, 
@@ -35,7 +35,8 @@ export const commitRate: Widget = {
       -- it is important this is 1s, should this value change
       -- the "commit_rate" value will have to be adjusted to rate/s
       sample by ${sampleBy}
-      ${timeFilter ? timeFilter : ""}
+      FROM timestamp_floor('${sampleBy}', '${from}')
+         TO timestamp_floor('${sampleBy}', '${to}')
       fill(0)
     )
     -- there is a bug in QuestDB, which does not sort the window dataset

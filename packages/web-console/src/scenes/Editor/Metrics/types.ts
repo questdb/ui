@@ -15,12 +15,14 @@ export type Widget = {
     tableId,
     sampleBy,
     limit,
-    timeFilter,
+    from,
+     to,
   }: {
     tableId?: number
     sampleBy: string
     limit?: number
-    timeFilter?: string
+    from?: string
+    to?: string
   }) => string
   getQueryLastNotNull: (id?: number) => string
   querySupportsRollingAppend: boolean

@@ -7,8 +7,8 @@ import {
   getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
-  formatSamplingRate,
-} from "./utils"
+  formatSamplingRate, formatToISOIfNeeded
+} from "./utils";
 import type {
   DateRange,
   LastNotNull,
@@ -89,12 +89,14 @@ export const Metric = ({
     try {
       const from = durationTokenToDate(dateFromRef.current)
       const to = durationTokenToDate(dateToRef.current)
-      const timeFilter = getTimeFilter(
-        isRollingAppendEnabled && lastTimestamp
-          ? formatISO(new Date(lastTimestamp))
-          : from,
-        to,
-      )
+      const fromIso = formatToISOIfNeeded(from)
+      const toIso = formatToISOIfNeeded(to)
+      // const timeFilter = getTimeFilter(
+      //   isRollingAppendEnabled && lastTimestamp
+      //     ? formatISO(new Date(lastTimestamp))
+      //     : from,
+      //   to,
+      // )
       const sampleBySeconds = getSamplingRateForPeriod(from, to)
       console.log(from, to, formatSamplingRate(sampleBySeconds))
       const responses = await Promise.all<
@@ -105,7 +107,8 @@ export const Metric = ({
           widgetConfig.getQuery({
             tableId: tableIdRef.current,
             sampleBy: `${sampleBySeconds}s`,
-            timeFilter,
+            from: fromIso,
+            to: toIso
           }),
         ),
         // quest.query<LastNotNull>(

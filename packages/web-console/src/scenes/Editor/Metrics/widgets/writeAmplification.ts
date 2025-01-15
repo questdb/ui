@@ -10,12 +10,12 @@ export const writeAmplification: Widget = {
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, timeFilter }) => {
+  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
     return `
-select 
-  created,
+select
+created, 
   -- coars, actual write amplification bucketed in 1s buckets
-  phy_row_count/row_count writeAmplification
+  case when phy_row_count/row_count = null then 1 else phy_row_count/row_count end as writeAmplification
 from (  
   select 
     created, 
@@ -31,7 +31,8 @@ from (
          event = 105
          and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
       sample by ${sampleBy}      
-      ${timeFilter ? timeFilter : ""}
+    FROM timestamp_floor('${sampleBy}', '${from}')
+  TO timestamp_floor('${sampleBy}', '${to}')
       -- fill with null to avoid spurious values and division by 0
       fill(null)
       ${limit ? `limit ${limit}` : ""}
