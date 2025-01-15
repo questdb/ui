@@ -173,7 +173,7 @@ export const Metrics = () => {
   const focusListener = useCallback(() => {
     tabInFocusRef.current = true
     if (refreshRateRef.current !== RefreshRate.OFF) {
-      refreshMetricsData(true)
+      refreshMetricsData()
     }
   }, [refreshRateRef.current])
 
