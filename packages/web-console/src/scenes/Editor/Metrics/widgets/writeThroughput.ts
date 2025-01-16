@@ -7,7 +7,8 @@ export const writeThroughput: Widget = {
   distribution: 1,
   label: "Write throughput",
   description:
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
+    "Logical (queryable) rows applied to table. " +
+    "Currently: [last value]/[sample by]",
   iconUrl: "/assets/metric-rows-applied.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

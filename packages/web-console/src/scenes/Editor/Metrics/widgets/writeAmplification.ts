@@ -7,7 +7,10 @@ export const writeAmplification: Widget = {
   distribution: 3,
   label: "Write amplification",
   description:
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
+    "Ratio of rows physically written to disk against logical/queryable rows. " +
+    "If write amplification is higher than 1, this means data has been re-written several times. " +
+    "This will be higher during O3 writes. " +
+    "Currently: [last value] for the last [sample by]", // it is NOT a rate
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

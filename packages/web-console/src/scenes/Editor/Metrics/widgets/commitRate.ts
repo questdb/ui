@@ -7,7 +7,8 @@ export const commitRate: Widget = {
   distribution: 1,
   label: "Commit rate",
   description:
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
+    "Number of commits written to the table. " +
+    "Currently: [last_value]/[sampleBy]",
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

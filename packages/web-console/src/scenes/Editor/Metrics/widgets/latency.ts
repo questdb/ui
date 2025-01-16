@@ -7,7 +7,8 @@ export const latency: Widget = {
   distribution: 1,
   label: "WAL apply latency in ms",
   description:
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio.",
+    "Average time taken to apply WAL transactions to the table, making them readable. " +
+    "Currently: [last_value] for the last [sampleBy]",
   iconUrl: "/assets/metric-read-latency.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
