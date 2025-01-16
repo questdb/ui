@@ -57,9 +57,7 @@ export type WriteAmplification = {
 
 export type RowsApplied = {
   time: string
-  numOfWalApplies: string
   numOfRowsApplied: string
-  numOfRowsWritten: string
   avgWalAmplification: string
 }
 

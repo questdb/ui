@@ -21,9 +21,7 @@ export const writeThroughput: Widget = {
     return `
 select
     created time,
-    count(rowCount) numOfWalApplies,
     sum(rowCount) numOfRowsApplied,
-    sum(physicalRowCount) numOfRowsWritten
 from ${TelemetryTable.WAL}
 where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
