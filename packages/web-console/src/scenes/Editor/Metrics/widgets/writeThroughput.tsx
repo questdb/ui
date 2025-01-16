@@ -1,3 +1,4 @@
+import React from "react"
 import uPlot from "uplot"
 import type { Widget, RowsApplied } from "../types"
 import { sqlValueToFixed, formatNumbers } from "../utils"
@@ -6,9 +7,13 @@ import { TelemetryTable } from "../../../../consts"
 export const writeThroughput: Widget = {
   distribution: 1,
   label: "Write throughput",
-  description:
-    "Logical (queryable) rows applied to table. " +
-    "Currently: [last value]/[sample by]",
+  getDescription: ({ lastValue, sampleBy }) => (
+    <>
+      Logical (queryable) rows applied to table.
+      <br />
+      {lastValue ? `Currently: ${lastValue}/${sampleBy}` : ""}
+    </>
+  ),
   iconUrl: "/assets/metric-rows-applied.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

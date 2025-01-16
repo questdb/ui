@@ -1,3 +1,4 @@
+import React from "react"
 import uPlot from "uplot"
 import type { Widget, CommitRate } from "../types"
 import { sqlValueToFixed, formatNumbers } from "../utils"
@@ -6,9 +7,13 @@ import { TelemetryTable } from "../../../../consts"
 export const commitRate: Widget = {
   distribution: 1,
   label: "Commit rate",
-  description:
-    "Number of commits written to the table. " +
-    "Currently: [last_value]/[sampleBy]",
+  getDescription: ({ lastValue, sampleBy }) => (
+    <>
+      Number of commits written to the table.
+      <br />
+      {lastValue ? `Currently: ${lastValue}/${sampleBy}` : ``}
+    </>
+  ),
   iconUrl: "/assets/metric-commit-rate.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

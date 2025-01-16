@@ -169,6 +169,11 @@ export const Graph = ({
     setDelayedLoading(false)
   }, [loading])
 
+  const lastValue =
+    data[1].length > 0
+      ? mapYValue(Math.floor(data[1][data[1].length - 1] as number))
+      : undefined
+
   return (
     <Root ref={graphRootRef}>
       <Header>
@@ -177,11 +182,10 @@ export const Graph = ({
           <HeaderText>{label}</HeaderText>
           <IconWithTooltip
             icon={<Information size="16px" />}
-            tooltip={`${
-              widgetConfig.description
-            }. Sample by ${formatSamplingRate(
-              getSamplingRateForPeriod(from, to),
-            )}`}
+            tooltip={widgetConfig.getDescription({
+              lastValue,
+              sampleBy: formatSamplingRate(getSamplingRateForPeriod(from, to)),
+            })}
             placement="bottom"
           />
           {delayedLoading && <Loader size="18px" spin />}

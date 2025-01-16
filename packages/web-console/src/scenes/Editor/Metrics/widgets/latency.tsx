@@ -1,3 +1,4 @@
+import React from "react"
 import uPlot from "uplot"
 import type { Widget, Latency } from "../types"
 import { sqlValueToFixed } from "../utils"
@@ -6,9 +7,14 @@ import { TelemetryTable } from "../../../../consts"
 export const latency: Widget = {
   distribution: 1,
   label: "WAL apply latency in ms",
-  description:
-    "Average time taken to apply WAL transactions to the table, making them readable. " +
-    "Currently: [last_value] for the last [sampleBy]",
+  getDescription: ({ lastValue, sampleBy }) => (
+    <>
+      Average time taken to apply WAL transactions to the table, making them
+      readable.
+      <br />
+      {lastValue ? `Currently: ${lastValue} for the last ${sampleBy}` : ""}
+    </>
+  ),
   iconUrl: "/assets/metric-read-latency.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

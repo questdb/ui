@@ -1,3 +1,4 @@
+import React from "react"
 import uPlot from "uplot"
 import type { Widget, WriteAmplification } from "../types"
 import { sqlValueToFixed, formatNumbers } from "../utils"
@@ -6,11 +7,15 @@ import { TelemetryTable } from "../../../../consts"
 export const writeAmplification: Widget = {
   distribution: 3,
   label: "Write amplification",
-  description:
-    "Ratio of rows physically written to disk against logical/queryable rows. " +
-    "If write amplification is higher than 1, this means data has been re-written several times. " +
-    "This will be higher during O3 writes. " +
-    "Currently: [last value] for the last [sample by]", // it is NOT a rate
+  getDescription: ({ lastValue, sampleBy }) => (
+    <>
+      Ratio of rows physically written to disk against logical/queryable rows.
+      If write amplification is higher than 1, this means data has been
+      re-written several times. This will be higher during O3 writes.
+      <br />
+      {lastValue ? `Currently: ${lastValue} for the last ${sampleBy}` : ""}
+    </>
+  ),
   iconUrl: "/assets/metric-write-amplification.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,

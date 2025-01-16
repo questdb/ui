@@ -6,9 +6,18 @@ export type DateRange = {
   dateTo: string
 }
 
+type MethodArgs = {
+  tableId?: number
+  sampleBy?: string
+  lastValue?: number | string
+  limit?: number
+  from?: string
+  to?: string
+}
+
 export type Widget = {
   label: string
-  description: string
+  getDescription: ({ sampleBy }: MethodArgs) => React.ReactNode
   iconUrl: string
   isTableMetric: boolean
   /**
@@ -20,19 +29,7 @@ export type Widget = {
    * 100 - Custom
    */
   distribution: uPlot.Scale.Distr
-  getQuery: ({
-    tableId,
-    sampleBy,
-    limit,
-    from,
-    to,
-  }: {
-    tableId?: number
-    sampleBy: string
-    limit?: number
-    from?: string
-    to?: string
-  }) => string
+  getQuery: ({ tableId, sampleBy, limit, from, to }: MethodArgs) => string
   getQueryLastNotNull: (id?: number) => string
   querySupportsRollingAppend: boolean
   alignData: (data: any) => uPlot.AlignedData
