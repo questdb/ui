@@ -122,7 +122,14 @@ export const useGraphOptions = ({
     y: {
       distr: widgetConfig.distribution,
       range: (u, min, max) => {
-        return [u.data[0].length > 1 && min !== max ? min : 0, max]
+        return [
+          u.data[0].length > 1 && min !== max
+            ? min
+            : widgetConfig.distribution !== 3
+            ? 0
+            : 1,
+          max,
+        ]
       },
     },
   }
