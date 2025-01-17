@@ -174,11 +174,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (authPayload !== "") {
         const tokenResponse = JSON.parse(authPayload)
         // Check if the token expired or is about to in 30 seconds
-        if (
-          new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000 &&
-          getValue(StoreKey.AUTH_REFRESH_TOKEN) !== ""
-        ) {
-          await refreshAuthToken(settings)
+        if (new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000) {
+          if (getValue(StoreKey.AUTH_REFRESH_TOKEN) !== "") {
+            // if there is a refresh token, go to OAuth2 provider to get fresh tokens
+            await refreshAuthToken(settings)
+          } else {
+            // if there is no refresh token, user has to re-authenticate to get fresh tokens
+            dispatch({ view: View.loggedOut })
+          }
         } else {
           setSessionData(tokenResponse)
         }
