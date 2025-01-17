@@ -85,10 +85,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         StoreKey.AUTH_PAYLOAD,
         JSON.stringify(tokenResponse),
       )
-      // if the token payload does not contain the rolling refresh token, we'll keep the old one
-      if (tokenResponse.refresh_token) {
-        setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token)
-      }
+      // if the token payload does not contain refresh token, token refresh has been disabled in
+      // the OAuth2 provider, and we need to clear the refresh token in local storage
+      setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token ?? "")
       setSessionData(tokenResponse)
       // Remove the code from the URL
       history.replaceState &&
