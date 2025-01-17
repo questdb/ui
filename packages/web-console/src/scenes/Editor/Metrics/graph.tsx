@@ -15,6 +15,7 @@ import { Box, Button, Loader } from "@questdb/react-components"
 import { Text } from "../../../components/Text"
 import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { Information } from "@styled-icons/remix-line"
+import { Error } from "@styled-icons/boxicons-regular"
 import type { DateRange } from "./types"
 
 const Actions = styled.div`
@@ -80,6 +81,10 @@ const LabelValue = styled.span`
   color: ${({ theme }) => theme.color.cyan};
 `
 
+const ErrorIcon = styled(Error)`
+  color: ${({ theme }) => theme.color.red};
+`
+
 type Props = DateRange & {
   tableId?: number
   tableName?: string
@@ -91,6 +96,7 @@ type Props = DateRange & {
   actions?: React.ReactNode
   onZoomToData?: () => void
   widgetConfig: Widget
+  hasError?: boolean
 }
 
 export const Graph = ({
@@ -106,6 +112,7 @@ export const Graph = ({
   actions,
   onZoomToData,
   widgetConfig,
+  hasError,
 }: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
@@ -189,6 +196,13 @@ export const Graph = ({
             placement="bottom"
           />
           {delayedLoading && <Loader size="18px" spin />}
+          {hasError && (
+            <IconWithTooltip
+              icon={<ErrorIcon size="18px" />}
+              tooltip="Error fetching latest data, try refreshing manually"
+              placement="bottom"
+            />
+          )}
         </Box>
         <Actions>{actions}</Actions>
       </Header>

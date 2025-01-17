@@ -7,8 +7,9 @@ import {
   getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
-  formatSamplingRate, formatToISOIfNeeded
-} from "./utils";
+  formatSamplingRate,
+  formatToISOIfNeeded,
+} from "./utils"
 import type {
   DateRange,
   LastNotNull,
@@ -67,6 +68,7 @@ export const Metric = ({
   const dateToRef = React.useRef(dateTo)
   const dataRef = React.useRef<uPlot.AlignedData>([[], []])
   const tableNameRef = React.useRef<string | undefined>()
+  const [hasError, setHasError] = useState(false)
 
   dateFromRef.current = dateFrom
   dateToRef.current = dateTo
@@ -86,6 +88,7 @@ export const Metric = ({
     const isRollingAppendEnabled =
       widgetConfig.querySupportsRollingAppend && !overwrite
     setLoading(true)
+    setHasError(false)
     try {
       const from = durationTokenToDate(dateFromRef.current)
       const to = durationTokenToDate(dateToRef.current)
@@ -98,7 +101,6 @@ export const Metric = ({
       //   to,
       // )
       const sampleBySeconds = getSamplingRateForPeriod(from, to)
-      console.log(from, to, formatSamplingRate(sampleBySeconds))
       const responses = await Promise.all<
         | QuestDB.QueryResult<ResultType[MetricType]>
         | QuestDB.QueryResult<LastNotNull>
@@ -108,7 +110,7 @@ export const Metric = ({
             tableId: tableIdRef.current,
             sampleBy: `${sampleBySeconds}s`,
             from: fromIso,
-            to: toIso
+            to: toIso,
           }),
         ),
         // quest.query<LastNotNull>(
@@ -135,6 +137,7 @@ export const Metric = ({
       }
     } catch (err) {
       console.error(err)
+      setHasError(true)
     } finally {
       setLoading(false)
     }
@@ -252,6 +255,7 @@ export const Metric = ({
           />
         </Box>
       }
+      hasError={hasError}
     />
   )
 }
