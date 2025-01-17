@@ -44,7 +44,7 @@ limit -1
   alignData: (data: RowsApplied[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.time).getTime()),
     data.map((l) =>
-      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 1,
+      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
     ),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
