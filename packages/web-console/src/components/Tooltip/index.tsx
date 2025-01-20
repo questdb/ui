@@ -28,12 +28,15 @@ import styled, { css } from "styled-components"
 import { Text } from "../"
 import { color } from "../../utils"
 
+export type TextAlign = "left" | "center" | "right"
+
 type Props = Readonly<{
   arrow?: {
     setArrowElement: Ref<HTMLDivElement>
     styles?: Record<string, string>
   }
   children: ReactNode
+  textAlign?: TextAlign
 }>
 
 const baseStyles = css`
@@ -102,8 +105,13 @@ export const Wrapper = styled.div`
   }
 `
 
-export const Tooltip = ({ arrow, children, ...rest }: Props) => (
-  <Wrapper {...rest} data-hook="tooltip">
+export const Tooltip = ({
+  arrow,
+  children,
+  textAlign = "left",
+  ...rest
+}: Props) => (
+  <Wrapper {...rest} data-hook="tooltip" style={{ textAlign }}>
     <Text color="foreground">{children}</Text>
     {arrow && <TooltipArrow ref={arrow.setArrowElement} style={arrow.styles} />}
   </Wrapper>

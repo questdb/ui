@@ -377,8 +377,15 @@ export const Metrics = () => {
                 )}
               </Button>
             }
-            tooltip="Toogle view mode"
+            tooltip={
+              <>
+                Toogle view mode
+                <br />
+                to {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
+              </>
+            }
             placement="bottom"
+            textAlign="center"
           />
         </Box>
       </Toolbar>
