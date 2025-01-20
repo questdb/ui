@@ -370,7 +370,7 @@ export const Metrics = () => {
                   )
                 }
               >
-                {metricViewMode === MetricViewMode.GRID ? (
+                {metricViewMode === MetricViewMode.LIST ? (
                   <GridAlt size="18px" />
                 ) : (
                   <Menu size="18px" />
@@ -379,7 +379,7 @@ export const Metrics = () => {
             }
             tooltip={
               <>
-                Toogle view mode
+                Toggle view mode
                 <br />
                 to {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
               </>
