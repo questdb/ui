@@ -279,6 +279,8 @@ export const FilesToUpload = ({
                       name={name}
                       schema={data.schema}
                       partitionBy={data.partitionBy}
+                      ttlValue={data.ttlValue}
+                      ttlUnit={data.ttlUnit}
                       timestamp={data.timestamp}
                       isEditLocked={
                         data.exists && data.table_name === data.fileObject.name

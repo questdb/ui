@@ -85,10 +85,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         StoreKey.AUTH_PAYLOAD,
         JSON.stringify(tokenResponse),
       )
-      // if the token payload does not contain the rolling refresh token, we'll keep the old one
-      if (tokenResponse.refresh_token) {
-        setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token)
-      }
+      // if the token payload does not contain refresh token, token refresh has been disabled in
+      // the OAuth2 provider, and we need to clear the refresh token in local storage
+      setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token ?? "")
       setSessionData(tokenResponse)
       // Remove the code from the URL
       history.replaceState &&
@@ -174,11 +173,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (authPayload !== "") {
         const tokenResponse = JSON.parse(authPayload)
         // Check if the token expired or is about to in 30 seconds
-        if (
-          new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000 &&
-          getValue(StoreKey.AUTH_REFRESH_TOKEN) !== ""
-        ) {
-          await refreshAuthToken(settings)
+        if (new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000) {
+          if (getValue(StoreKey.AUTH_REFRESH_TOKEN) !== "") {
+            // if there is a refresh token, go to OAuth2 provider to get fresh tokens
+            await refreshAuthToken(settings)
+          } else {
+            // if there is no refresh token, user has to re-authenticate to get fresh tokens
+            dispatch({ view: View.loggedOut })
+          }
         } else {
           setSessionData(tokenResponse)
         }
