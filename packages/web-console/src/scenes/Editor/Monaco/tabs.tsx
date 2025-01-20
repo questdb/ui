@@ -175,7 +175,7 @@ export const Tabs = () => {
             (buffer) =>
               ({
                 id: buffer.id?.toString(),
-                favicon: "assets/icon-file.svg",
+                favicon: mapTabIconToType(buffer),
                 title: buffer.label,
                 active: activeBuffer.id === buffer.id,
                 className: buffer.metricsViewState ? "metrics-tab" : "",
