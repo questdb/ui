@@ -3,7 +3,7 @@
 This repository is a monorepo hosting the implementation of QuestDB user
 interface and surrounding tooling.
 
-Currently there are these packages:
+Currently, there are these packages:
 
 * [`web-console`](./packages/web-console/README.md) - the GUI tool shipped with QuestDB
 * [`react-components`](./packages/react-components/README.md) - small component library for internal reuse between QuestDB products
@@ -13,4 +13,4 @@ Currently there are these packages:
 
 We always welcome contributions from the community!
 
-Please read our [local development setup](./docs/local-development-setup.md) document to learn how to get started.
+Please, read our [local development setup](./docs/local-development-setup.md) document to learn how to get started.
