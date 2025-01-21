@@ -23,8 +23,8 @@ export const latency: Widget = {
 select created, approx_percentile(latency, 0.9, 3) latency
   from ${TelemetryTable.WAL}
   where 
-      event = 105 -- event is fixed
-      and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
+      event = 105
+      and rowCount > 0
       ${tableId ? `and tableId = ${tableId}` : ""}
   sample by ${sampleBy}
   FROM timestamp_floor('${sampleBy}', '${from}')

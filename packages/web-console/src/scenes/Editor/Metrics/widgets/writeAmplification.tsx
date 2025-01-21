@@ -22,8 +22,7 @@ export const writeAmplification: Widget = {
   getQuery: ({ tableId, sampleBy, limit, from, to }) => {
     return `
 select
-created, 
-  -- coars, actual write amplification bucketed in 1s buckets
+created,
   case when phy_row_count/row_count = null then 1 else phy_row_count/row_count end as writeAmplification
 from (  
   select 
@@ -38,11 +37,10 @@ from (
       from ${TelemetryTable.WAL}
       where ${tableId ? `tableId = ${tableId} and ` : ""}
          event = 105
-         and rowCount > 0 -- this is fixed clause, we have rows with - rowCount logged
+         and rowCount > 0
       sample by ${sampleBy}      
     FROM timestamp_floor('${sampleBy}', '${from}')
   TO timestamp_floor('${sampleBy}', '${to}')
-      -- fill with null to avoid spurious values and division by 0
       fill(null)
       ${limit ? `limit ${limit}` : ""}
   )
