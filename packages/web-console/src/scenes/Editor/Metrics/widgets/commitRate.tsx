@@ -29,7 +29,7 @@ export const commitRate: Widget = {
       , commit_rate
       , avg(commit_rate) over(order by created rows BETWEEN 59 PRECEDING AND CURRENT ROW) commit_rate_smooth
     from (
-      select -- calculates coarse commit_rate (commits per second)
+      select
         created
         , count() commit_rate
       from ${TelemetryTable.WAL}
