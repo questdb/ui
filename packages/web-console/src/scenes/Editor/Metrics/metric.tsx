@@ -4,10 +4,8 @@ import {
   MetricType,
   hasData,
   mergeRollingData,
-  getTimeFilter,
   getSamplingRateForPeriod,
   durationTokenToDate,
-  formatSamplingRate,
   formatToISOIfNeeded,
 } from "./utils"
 import type {
@@ -81,10 +79,6 @@ export const Metric = ({
   const widgetConfig = widgets[metric.metricType]
 
   const fetchMetric = async (overwrite?: boolean) => {
-    const lastTimestamp =
-      dataRef.current[0]?.length > 0
-        ? dataRef.current[0]?.[dataRef.current[0].length - 1]
-        : undefined
     const isRollingAppendEnabled =
       widgetConfig.querySupportsRollingAppend && !overwrite
     setLoading(true)
@@ -94,12 +88,7 @@ export const Metric = ({
       const to = durationTokenToDate(dateToRef.current)
       const fromIso = formatToISOIfNeeded(from)
       const toIso = formatToISOIfNeeded(to)
-      // const timeFilter = getTimeFilter(
-      //   isRollingAppendEnabled && lastTimestamp
-      //     ? formatISO(new Date(lastTimestamp))
-      //     : from,
-      //   to,
-      // )
+
       const sampleBySeconds = getSamplingRateForPeriod(from, to)
       const responses = await Promise.all<
         | QuestDB.QueryResult<ResultType[MetricType]>
@@ -115,9 +104,6 @@ export const Metric = ({
             })
             .replaceAll("\n", " "),
         ),
-        // quest.query<LastNotNull>(
-        //   widgetConfig.getQueryLastNotNull(tableIdRef.current),
-        // ),
       ])
 
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
@@ -188,7 +174,6 @@ export const Metric = ({
       </MetricInfoRoot>
     )
 
-  // const canZoomToData = tableName !== undefined && lastNotNull !== undefined
   const canZoomToData = false
 
   return (

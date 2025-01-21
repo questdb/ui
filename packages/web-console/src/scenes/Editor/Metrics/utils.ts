@@ -233,11 +233,6 @@ export const mergeRollingData = (
           (_, index) => mergedData[0] && mergedData[0][index] >= from,
         ),
   ) as uPlot.AlignedData
-  console.log(merged)
-  console.log(dateFrom)
-  console.log(new Date())
-  // console.log(merged.length)/*
-  // console.log(merged.slice(merged.length - 1, 0))*/
   return merged
 }
 
