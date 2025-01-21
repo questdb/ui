@@ -106,12 +106,14 @@ export const Metric = ({
         | QuestDB.QueryResult<LastNotNull>
       >([
         quest.query<ResultType[MetricType]>(
-          widgetConfig.getQuery({
-            tableId: tableIdRef.current,
-            sampleBy: `${sampleBySeconds}s`,
-            from: fromIso,
-            to: toIso,
-          }),
+          widgetConfig
+            .getQuery({
+              tableId: tableIdRef.current,
+              sampleBy: `${sampleBySeconds}s`,
+              from: fromIso,
+              to: toIso,
+            })
+            .replaceAll("\n", " "),
         ),
         // quest.query<LastNotNull>(
         //   widgetConfig.getQueryLastNotNull(tableIdRef.current),
