@@ -1,3 +1,4 @@
+export { Popover } from "./components/Popover";
 export { AlertDialog } from "./components/AlertDialog";
 export { Badge } from "./components/Badge";
 export { Box } from "./components/Box";

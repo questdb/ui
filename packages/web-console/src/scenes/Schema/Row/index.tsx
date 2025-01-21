@@ -48,6 +48,7 @@ type Props = Readonly<{
   expanded?: boolean
   indexed?: boolean
   kind: TreeNodeKind
+  table_id?: number
   name: string
   onClick?: (event: MouseEvent) => void
   partitionBy?: QuestDB.PartitionBy
@@ -179,6 +180,11 @@ const InfoIconWrapper = styled.div`
   justify-content: center;
 `
 
+const MetricsButton = styled(Button)`
+  position: absolute;
+  right: 0;
+`
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -186,6 +192,7 @@ const Row = ({
   expanded,
   kind,
   indexed,
+  table_id,
   name,
   partitionBy,
   walEnabled,

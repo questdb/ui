@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { useCallback, useEffect } from "react"
 import styled from "styled-components"
 import Footer from "../Footer"
 import Console from "../Console"
@@ -39,6 +39,9 @@ import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
 
 import "allotment/dist/style.css"
+
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const Page = styled.div`
   display: flex;
@@ -76,6 +79,24 @@ const Drawer = styled.div`
 
 const Layout = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+
+  const focusListener = useCallback(() => {
+    eventBus.publish(EventType.TAB_FOCUS)
+  }, [])
+
+  const blurListener = useCallback(() => {
+    eventBus.publish(EventType.TAB_BLUR)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener("focus", focusListener)
+    window.addEventListener("blur", blurListener)
+
+    return () => {
+      window.removeEventListener("focus", focusListener)
+      window.removeEventListener("blur", blurListener)
+    }
+  }, [])
 
   return (
     <EditorProvider>
