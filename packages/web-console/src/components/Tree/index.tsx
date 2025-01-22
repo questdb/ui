@@ -49,6 +49,7 @@ type OnOpen = (onOpenApi: {
 
 export type TreeNode = {
   name: string
+  table_id?: number
   kind?: TreeNodeKind
   render?: TreeNodeRender
   initiallyOpen?: boolean
@@ -69,6 +70,7 @@ const Li = styled.li`
 
 const Leaf = (leaf: TreeNode) => {
   const {
+    table_id,
     name,
     kind,
     initiallyOpen,
@@ -143,6 +145,7 @@ const Leaf = (leaf: TreeNode) => {
         <Row
           kind={kind ?? "folder"}
           name={name}
+          table_id={table_id}
           onClick={() => setOpen(!open)}
         />
       )}

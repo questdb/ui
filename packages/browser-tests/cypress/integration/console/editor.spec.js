@@ -206,6 +206,21 @@ describe("autocomplete", () => {
     cy.matchImageSnapshot();
   });
 
+  it("should be case insensitive", () => {
+    const assertFrom = () =>
+      cy.getAutocomplete().within(() => {
+        cy.getMonacoListRow()
+          .should("have.length", 3)
+          .eq(0)
+          .should("contain", "FROM");
+      });
+    cy.typeQuery("select * from");
+    assertFrom();
+    cy.clearEditor();
+    cy.typeQuery("SELECT * FROM");
+    assertFrom();
+  });
+
   it("should suggest the existing tables on 'from' clause", () => {
     cy.typeQuery("select * from ");
     cy.getAutocomplete()
@@ -226,6 +241,15 @@ describe("autocomplete", () => {
       // list the tables containing `secret` column
       .should("contain", "my_secrets, my_secrets2")
       .clearEditor();
+  });
+
+  it("should suggest columns on SELECT only when applicable", () => {
+    cy.typeQuery("select secret");
+    cy.getAutocomplete().should("contain", "secret").eq(0).click();
+    cy.typeQuery(", public");
+    cy.getAutocomplete().should("contain", "public").eq(0).click();
+    cy.typeQuery(" ");
+    cy.getAutocomplete().should("not.be.visible");
   });
 
   it("should suggest correct columns on 'where' filter", () => {
