@@ -55,7 +55,7 @@ yarn workspace browser-tests test
 read -p "Press any key to continue... " -n1 -s
 
 # Set context path
-export QDB_HTTP_CONTEXT_PATH=/context1
+export QDB_HTTP_CONTEXT_WEB_CONSOLE=/context1
 
 # Restart proxy to pickup context path
 kill -SIGTERM $PID1

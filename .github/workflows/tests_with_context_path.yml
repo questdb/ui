@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      QDB_HTTP_CONTEXT_PATH: "/context"
+      QDB_HTTP_CONTEXT_WEB_CONSOLE: "/context"
       
     steps:
       - uses: actions/checkout@v4

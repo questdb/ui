@@ -13,7 +13,7 @@ addMatchImageSnapshotCommand({
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_PATH || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tableSchemas = {

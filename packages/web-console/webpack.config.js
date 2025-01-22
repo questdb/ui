@@ -41,7 +41,7 @@ const config = {
   port: 9999,
   backendUrl: "http://127.0.0.1:9000",
   isProduction: process.env.NODE_ENV === "production",
-  contextPath: process.env.QDB_HTTP_CONTEXT_PATH || "",
+  contextPath: process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "",
 }
 
 module.exports = {

@@ -3,7 +3,7 @@ const url = require("url")
 const fs = require("fs")
 const path = require("path")
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_PATH || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 
 const server = http.createServer((req, res) => {
   const { method } = req

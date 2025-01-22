@@ -36,8 +36,8 @@ If the server has a context path configured with the `http.context.path` option,
 the dev server is aware of it, and it proxies requests accordingly.\
 We can set the context path with the following environment variable before starting dev server:
 ```
-QDB_HTTP_CONTEXT_PATH=/instance2
-export QDB_HTTP_CONTEXT_PATH
+QDB_HTTP_CONTEXT_WEB_CONSOLE=/instance2
+export QDB_HTTP_CONTEXT_WEB_CONSOLE
 yarn workspace @questdb/web-console start
 ```
 
@@ -46,7 +46,7 @@ After the above the web console is available on [localhost:9999/instance2/](http
 If the context path is removed from the server configuration, we also need to clear the environment variable,
 and restart the dev server:
 ```
-unset QDB_HTTP_CONTEXT_PATH
+unset QDB_HTTP_CONTEXT_WEB_CONSOLE
 yarn workspace @questdb/web-console start
 ```
 
