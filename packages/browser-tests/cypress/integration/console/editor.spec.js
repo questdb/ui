@@ -302,12 +302,32 @@ describe("errors", () => {
     cy.getCollapsedNotifications().should("contain", "Invalid date");
   });
 
-  it("should mark the plus operator as error", () => {
-    const query = 'select x FROM long_sequence(100 + "string");';
-    cy.typeQuery(query);
-    cy.runLine();
-    cy.matchErrorMarkerPosition({ left: 270, width: 8 });
-    cy.matchImageSnapshot();
+  it("should mark operator as error", () => {
+    const operators = [
+      "+",
+      "-",
+      "*",
+      "/",
+      "%",
+      ">",
+      "<",
+      "=",
+      "!",
+      "&",
+      "|",
+      "^",
+      "~",
+      "=>",
+      "<=",
+      "!=",
+    ];
+    operators.forEach((char) => {
+      const query = `select x FROM long_sequence(100 ${char} "string");`;
+      cy.typeQuery(query);
+      cy.runLine();
+      cy.matchErrorMarkerPosition({ left: 270, width: 8 });
+      cy.clearEditor();
+    });
   });
 });
 
