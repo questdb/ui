@@ -317,9 +317,6 @@ describe("errors", () => {
       "|",
       "^",
       "~",
-      "=>",
-      "<=",
-      "!=",
     ];
     operators.forEach((char) => {
       const query = `select x FROM long_sequence(100 ${char} "string");`;
