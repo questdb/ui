@@ -1,7 +1,5 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
-
 describe("questdb charts", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth();

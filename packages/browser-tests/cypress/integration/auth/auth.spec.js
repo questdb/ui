@@ -1,6 +1,7 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
 
 const interceptSettings = (payload) => {
   cy.intercept({ method: "GET", url: `${baseUrl}/settings` }, payload).as(
