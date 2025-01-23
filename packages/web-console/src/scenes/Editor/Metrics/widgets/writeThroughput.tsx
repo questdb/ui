@@ -6,12 +6,12 @@ import { TelemetryTable } from "../../../../consts"
 
 export const writeThroughput: Widget = {
   distribution: 1,
-  label: "Write throughput",
-  getDescription: ({ lastValue, sampleBy }) => (
+  label: "Write throughput per second",
+  getDescription: ({ lastValue }) => (
     <>
       Logical (queryable) rows applied to table.
       <br />
-      {lastValue ? `Currently: ${lastValue}/${sampleBy}` : ""}
+      {lastValue ? `Currently: ${lastValue}/s` : ""}
     </>
   ),
   iconUrl: "/assets/metric-rows-applied.svg",
@@ -41,11 +41,12 @@ and rowCount != null
 and physicalRowCount != null
 limit -1
 `,
-  alignData: (data: RowsApplied[]): uPlot.AlignedData => [
+  alignData: (data: RowsApplied[], sampleBySeconds): uPlot.AlignedData => [
     data.map((l) => new Date(l.time).getTime()),
-    data.map((l) =>
-      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
-    ),
+    data.map((l) => {
+      const value = l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0
+      return sqlValueToFixed(value / sampleBySeconds)
+    }),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }
