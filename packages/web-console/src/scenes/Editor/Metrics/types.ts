@@ -32,7 +32,7 @@ export type Widget = {
   getQuery: ({ tableId, sampleBy, limit, from, to }: MethodArgs) => string
   getQueryLastNotNull: (id?: number) => string
   querySupportsRollingAppend: boolean
-  alignData: (data: any) => uPlot.AlignedData
+  alignData: (data: any, sampleBySeconds: number) => uPlot.AlignedData
   mapYValue: (rawValue: number) => number | string
 }
 

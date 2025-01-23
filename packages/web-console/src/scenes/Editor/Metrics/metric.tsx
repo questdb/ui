@@ -109,6 +109,7 @@ export const Metric = ({
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
         const alignedData = widgetConfig.alignData(
           responses[0].data as unknown as ResultType[MetricType],
+          sampleBySeconds,
         )
         if (isRollingAppendEnabled) {
           dataRef.current = mergeRollingData(dataRef.current, alignedData, from)

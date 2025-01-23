@@ -145,8 +145,11 @@ export const getXAxisFormat = (
   return utcToLocal(rawValue, format)
 }
 
-export const sqlValueToFixed = (value: string, decimals: number = 2) => {
-  const parsed = parseFloat(value)
+export const sqlValueToFixed = (
+  value: number | string,
+  decimals: number = 2,
+) => {
+  const parsed = typeof value === "string" ? parseFloat(value) : value
   return Number(parsed.toFixed(decimals)) as unknown as number
 }
 

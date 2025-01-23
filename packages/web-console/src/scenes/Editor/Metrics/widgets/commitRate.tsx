@@ -6,12 +6,12 @@ import { TelemetryTable } from "../../../../consts"
 
 export const commitRate: Widget = {
   distribution: 1,
-  label: "Commit rate",
-  getDescription: ({ lastValue, sampleBy }) => (
+  label: "Commit rate per second",
+  getDescription: ({ lastValue }) => (
     <>
       Number of commits written to the table.
       <br />
-      {lastValue ? `Currently: ${lastValue}/${sampleBy}` : ``}
+      {lastValue ? `Currently: ${lastValue}/s` : ``}
     </>
   ),
   iconUrl: "/assets/metric-commit-rate.svg",
@@ -55,9 +55,12 @@ event = 103
 and physicalRowCount != null
 limit -1
 `,
-  alignData: (data: CommitRate[]): uPlot.AlignedData => [
+  alignData: (data: CommitRate[], sampleBySeconds): uPlot.AlignedData => [
     data.map((l) => new Date(l.created).getTime()),
-    data.map((l) => sqlValueToFixed(l.commit_rate)),
+    data.map((l) => {
+      const valueNum = Number(l.commit_rate)
+      return sqlValueToFixed(valueNum / sampleBySeconds)
+    }),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }
