@@ -302,6 +302,32 @@ describe("errors", () => {
 
     cy.getCollapsedNotifications().should("contain", "Invalid date");
   });
+
+  const operators = [
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    ">",
+    "<",
+    "=",
+    "!",
+    "&",
+    "|",
+    "^",
+    "~",
+  ];
+
+  operators.forEach((char) => {
+    it(`should mark operator '${char}' as error`, () => {
+      const query = `select x FROM long_sequence(100 ${char} "string");`;
+      cy.typeQuery(query);
+      cy.runLine();
+      cy.matchErrorMarkerPosition({ left: 270, width: 8 });
+      cy.clearEditor();
+    });
+  });
 });
 
 describe("running query with F9", () => {
