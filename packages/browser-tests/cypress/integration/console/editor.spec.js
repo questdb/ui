@@ -302,23 +302,24 @@ describe("errors", () => {
     cy.getCollapsedNotifications().should("contain", "Invalid date");
   });
 
-  it("should mark operator as error", () => {
-    const operators = [
-      "+",
-      "-",
-      "*",
-      "/",
-      "%",
-      ">",
-      "<",
-      "=",
-      "!",
-      "&",
-      "|",
-      "^",
-      "~",
-    ];
-    operators.forEach((char) => {
+  const operators = [
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    ">",
+    "<",
+    "=",
+    "!",
+    "&",
+    "|",
+    "^",
+    "~",
+  ];
+
+  operators.forEach((char) => {
+    it(`should mark operator '${char}' as error`, () => {
       const query = `select x FROM long_sequence(100 ${char} "string");`;
       cy.typeQuery(query);
       cy.runLine();
