@@ -16,7 +16,7 @@ export const writeAmplification: Widget = {
       {lastValue ? `Currently: ${lastValue} for the last ${sampleBy}` : ""}
     </>
   ),
-  iconUrl: "/assets/metric-write-amplification.svg",
+  iconUrl: "assets/metric-write-amplification.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
   getQuery: ({ tableId, sampleBy, limit, from, to }) => {

@@ -14,7 +14,7 @@ export const writeThroughput: Widget = {
       {lastValue ? `Currently: ${lastValue}/s` : ""}
     </>
   ),
-  iconUrl: "/assets/metric-rows-applied.svg",
+  iconUrl: "assets/metric-rows-applied.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
   getQuery: ({ tableId, sampleBy, limit, from, to }) => {

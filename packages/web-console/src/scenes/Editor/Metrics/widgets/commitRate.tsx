@@ -14,7 +14,7 @@ export const commitRate: Widget = {
       {lastValue ? `Currently: ${lastValue}/s` : ``}
     </>
   ),
-  iconUrl: "/assets/metric-commit-rate.svg",
+  iconUrl: "assets/metric-commit-rate.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
   getQuery: ({ tableId, sampleBy, limit, from, to }) => {

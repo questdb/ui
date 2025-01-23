@@ -15,7 +15,7 @@ export const latency: Widget = {
       {lastValue ? `Currently: ${lastValue} for the last ${sampleBy}` : ""}
     </>
   ),
-  iconUrl: "/assets/metric-read-latency.svg",
+  iconUrl: "assets/metric-read-latency.svg",
   isTableMetric: true,
   querySupportsRollingAppend: true,
   getQuery: ({ tableId, sampleBy, limit, from, to }) => {
