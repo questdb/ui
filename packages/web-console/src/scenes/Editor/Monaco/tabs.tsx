@@ -2,7 +2,13 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
-import { File, History, Trash } from "@styled-icons/boxicons-regular"
+import {
+  File,
+  History,
+  LineChart,
+  Show,
+  Trash,
+} from "@styled-icons/boxicons-regular"
 import {
   Box,
   Button,
@@ -12,12 +18,14 @@ import {
 import { Text } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
+import type { Buffer } from "../../../store/buffers"
 
 type Tab = {
   id: string
   title: string
   favicon: string
   active: boolean
+  className?: string
 }
 
 const Root = styled(Box).attrs({
@@ -41,6 +49,13 @@ const DropdownMenuContent = styled(DropdownMenu.Content)`
   z-index: 100;
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
+
+const mapTabIconToType = (buffer: Buffer) => {
+  if (buffer.metricsViewState) {
+    return "assets/icon-chart.svg"
+  }
+  return "assets/icon-file.svg"
+}
 
 export const Tabs = () => {
   const {
@@ -92,7 +107,9 @@ export const Tabs = () => {
     if (!buffer || buffers.filter((buffer) => !buffer.archived).length === 1) {
       return
     }
-    buffer?.value !== ""
+    buffer?.value !== "" ||
+    (buffer.metricsViewState?.metrics &&
+      buffer.metricsViewState.metrics.length > 0)
       ? await archiveBuffer(parseInt(id))
       : await deleteBuffer(parseInt(id))
     await repositionActiveBuffers(id)
@@ -158,9 +175,10 @@ export const Tabs = () => {
             (buffer) =>
               ({
                 id: buffer.id?.toString(),
-                favicon: "/assets/icon-file.svg",
+                favicon: mapTabIconToType(buffer),
                 title: buffer.label,
                 active: activeBuffer.id === buffer.id,
+                className: buffer.metricsViewState ? "metrics-tab" : "",
               } as Tab),
           )}
       />
@@ -203,7 +221,11 @@ export const Tabs = () => {
                   gap="0.5rem"
                   title={buffer.label}
                 >
-                  <File size="18px" />
+                  {buffer.metricsViewState ? (
+                    <LineChart size="18px" />
+                  ) : (
+                    <File size="18px" />
+                  )}
                   <Box
                     flexDirection="column"
                     align="flex-start"

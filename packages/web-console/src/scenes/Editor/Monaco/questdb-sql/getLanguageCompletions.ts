@@ -25,6 +25,7 @@ export const getLanguageCompletions = (range: IRange) => [
     return {
       label: keyword,
       kind: CompletionItemKind.Keyword,
+      filterText: item, // match case-insensitive
       insertText: keyword,
       range,
     }
@@ -34,7 +35,8 @@ export const getLanguageCompletions = (range: IRange) => [
     return {
       label: operator,
       kind: CompletionItemKind.Operator,
-      insertText: operator.toUpperCase(),
+      filterText: item, // match case-insensitive
+      insertText: operator,
       range,
     }
   }),

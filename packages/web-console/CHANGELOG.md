@@ -16,6 +16,27 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.0 - 2025.01.21
+
+### Added
+
+- WAL Metrics for tables [#352](https://github.com/questdb/ui/pull/352)
+- Add TTL feature to tables [#365](https://github.com/questdb/ui/pull/365)
+- webpack dev server proxy to take context path from env variable
+  [#371](https://github.com/questdb/ui/pull/371)
+
+### Changed
+
+- use `SHOW CREATE TABLE` in `Copy schema to clipboard`
+  [#369](https://github.com/questdb/ui/pull/369)
+- Make autocomplete case insensitive
+  [#366](https://github.com/questdb/ui/pull/366)
+
+### Fixed
+
+- kick user out if access token expired and there is no refresh token
+  [#373](https://github.com/questdb/ui/pull/373)
+
 ## 0.6.5 - 2024.12.02
 
 ### Changed
@@ -23,7 +44,7 @@ and this project adheres to
 - use a new information_schema.questdb_columns() instead of
   information_schema.columns() [#359](https://github.com/questdb/ui/pull/359)
 
-## O.6.4 - 2024.11.25
+## 0.6.4 - 2024.11.25
 
 ### Added
 

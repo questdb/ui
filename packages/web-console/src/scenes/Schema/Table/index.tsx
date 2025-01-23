@@ -41,6 +41,7 @@ type Props = QuestDB.Table &
     designatedTimestamp: string
     description?: string
     isScrolling: boolean
+    id: number
     table_name: string
     partitionBy: string
     expanded?: boolean
@@ -98,9 +99,11 @@ const Loader = styled(Loader4)`
 
 const columnRender =
   ({
+    table_id,
     column,
     designatedTimestamp,
   }: {
+    table_id: number
     column: QuestDB.Column
     designatedTimestamp: string
   }) =>
@@ -109,6 +112,7 @@ const columnRender =
       <Row
         {...column}
         designatedTimestamp={designatedTimestamp}
+        table_id={table_id}
         kind="column"
         name={column.column}
         onClick={() => toggleOpen()}
@@ -119,8 +123,11 @@ const Table = ({
   description,
   isScrolling,
   designatedTimestamp,
+  id,
   table_name,
   partitionBy,
+  ttlValue,
+  ttlUnit,
   expanded = false,
   walEnabled,
   walTableData,
@@ -185,7 +192,11 @@ const Table = ({
               setChildren(
                 response.data.map((column) => ({
                   name: column.column,
-                  render: columnRender({ column, designatedTimestamp }),
+                  render: columnRender({
+                    column,
+                    designatedTimestamp,
+                    table_id: id,
+                  }),
                 })),
               )
             } else {
@@ -203,6 +214,7 @@ const Table = ({
               <Row
                 expanded={isOpen && !isLoading}
                 kind="folder"
+                table_id={id}
                 name="Columns"
                 onClick={() => toggleOpen()}
                 suffix={isLoading && <Loader size="18px" />}
@@ -219,6 +231,7 @@ const Table = ({
             <Title
               description={description}
               kind="table"
+              table_id={id}
               name={table_name}
               onClick={() => {
                 toggleOpen()

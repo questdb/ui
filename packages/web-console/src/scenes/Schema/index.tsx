@@ -31,6 +31,7 @@ import React, {
   useState,
   useContext,
   useReducer,
+  useCallback,
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
@@ -61,13 +62,20 @@ import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { formatTableSchemaQueryResult } from "./formatTableSchemaQueryResult"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { NotificationType } from "../../types"
 import { Checkbox } from "./checkbox"
+import { AddChart } from "@styled-icons/material"
+import { useEditor } from "../../providers/EditorProvider"
+import {
+  metricDurations,
+  MetricViewMode,
+  RefreshRate,
+} from "../../scenes/Editor/Metrics/utils"
+import type { Duration } from "../../scenes/Editor/Metrics/types"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -151,15 +159,14 @@ const Schema = ({
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [copied, setCopied] = useState(false)
   const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
-  const [columns, setColumns] = useState<QuestDB.InformationSchemaColumn[]>()
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
+  const { addBuffer } = useEditor()
 
   const handleChange = (name: string) => {
     setOpened(name === opened ? undefined : name)
@@ -198,15 +205,16 @@ const Schema = ({
   const fetchColumns = async () => {
     const queries = [
       "information_schema.questdb_columns()",
-      "information_schema.columns()" // fallback for older servers
+      "information_schema.columns()", // fallback for older servers
     ]
 
     for (const query of queries) {
       try {
-        const response = await quest.query<QuestDB.InformationSchemaColumn>(query)
+        const response = await quest.query<QuestDB.InformationSchemaColumn>(
+          query,
+        )
 
         if (response?.type === QuestDB.Type.DQL) {
-          setColumns(response.data)
           dispatch(actions.query.setColumns(response.data))
           return
         }
@@ -218,27 +226,17 @@ const Schema = ({
     dispatchState({ view: View.error })
   }
 
-
   const copySchemasToClipboard = async () => {
     if (!tables) return
     let tablesWithError: string[] = []
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          const columnResponse = await quest.showColumns(table)
-          const tableData = tables.find((t) => t.table_name === table)
-          if (
-            tableData &&
-            columnResponse.type === QuestDB.Type.DQL &&
-            columnResponse.data.length > 0
-          ) {
-            return formatTableSchemaQueryResult(
-              tableData.table_name,
-              tableData.partitionBy,
-              columnResponse.data,
-              tableData.walEnabled,
-              tableData.dedup,
-            )
+          const tableDDLResponse = await quest.query<{ ddl: string }>(
+            `SHOW CREATE TABLE ${table}`,
+          )
+          if (tableDDLResponse && tableDDLResponse.type === QuestDB.Type.DQL) {
+            return tableDDLResponse.data[0].ddl
           }
         } catch (error) {
           tablesWithError.push(table)
@@ -275,6 +273,21 @@ const Schema = ({
     }
   }
 
+  const handleAddMetricsBuffer = async () => {
+    const last1h = metricDurations.find(
+      (d) => d.dateFrom === "now-1h" && d.dateTo === "now",
+    ) as Duration
+    await addBuffer({
+      metricsViewState: {
+        metrics: [],
+        dateFrom: last1h.dateFrom,
+        dateTo: last1h.dateTo,
+        refreshRate: RefreshRate.AUTO,
+        viewMode: MetricViewMode.GRID,
+      },
+    })
+  }
+
   useEffect(() => {
     void fetchTables()
     void fetchColumns()
@@ -295,12 +308,12 @@ const Schema = ({
     })
   }, [])
 
-  const focusListener = () => {
+  const focusListener = useCallback(() => {
     if (listenerActiveRef.current) {
       void fetchTables()
       void fetchColumns()
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (autoRefreshTables) {
@@ -350,15 +363,23 @@ const Schema = ({
                   : true)
               )
             })
+            .sort((a, b) =>
+              a.table_name
+                .toLowerCase()
+                .localeCompare(b.table_name.toLowerCase()),
+            )
             .map((table: QuestDB.Table) => (
               <Table
                 designatedTimestamp={table.designatedTimestamp}
                 expanded={table.table_name === opened}
                 isScrolling={isScrolling}
                 key={table.table_name}
+                id={table.id}
                 table_name={table.table_name}
                 onChange={handleChange}
                 partitionBy={table.partitionBy}
+                ttlValue={table.ttlValue}
+                ttlUnit={table.ttlUnit}
                 walEnabled={table.walEnabled}
                 walTableData={walTables?.find(
                   (wt) => wt.name === table.table_name,
@@ -454,6 +475,23 @@ const Schema = ({
                     </PopperHover>
                   )}
 
+                  {!selectOpen && (
+                    <PopperHover
+                      delay={350}
+                      placement="bottom"
+                      trigger={
+                        <Button
+                          data-hook="schema-add-metrics-button"
+                          skin="transparent"
+                          onClick={handleAddMetricsBuffer}
+                        >
+                          <AddChart size="20px" />
+                        </Button>
+                      }
+                    >
+                      <Tooltip>Add metrics</Tooltip>
+                    </PopperHover>
+                  )}
                   {!selectOpen && (
                     <PopperHover
                       delay={350}

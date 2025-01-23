@@ -84,6 +84,7 @@ export interface TabProperties {
   active?: boolean
   favicon?: boolean | string
   faviconClass?: string
+  className?: string
 }
 
 let instanceId = 0
@@ -395,7 +396,11 @@ class ChromeTabs {
     input.setAttribute("placeholder", tabProperties.title)
 
     const faviconEl = tabEl.querySelector(".chrome-tab-favicon") as HTMLElement
-    const { favicon, faviconClass } = tabProperties
+    const { favicon, faviconClass, className } = tabProperties
+    if (className) {
+      // add className to existing classes
+      tabEl.className = [tabEl.className, className].join(" ")
+    }
     faviconEl.className = "chrome-tab-favicon"
     faviconEl!.style!.backgroundImage = ""
     if (favicon || faviconClass) {
