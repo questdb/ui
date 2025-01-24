@@ -1,16 +1,16 @@
 import React from "react"
 import uPlot from "uplot"
-import type { Widget, RowsApplied } from "../types"
-import { sqlValueToFixed, formatNumbers } from "../utils"
-import { TelemetryTable } from "../../../../consts"
+import type {Widget, RowsApplied} from "../types"
+import {sqlValueToFixed, formatNumbers} from "../utils"
+import {TelemetryTable} from "../../../../consts"
 
 export const writeThroughput: Widget = {
   distribution: 1,
   label: "Write throughput",
-  getDescription: ({ lastValue, sampleBySeconds }) => (
+  getDescription: ({lastValue}) => (
     <>
       Logical (queryable) rows applied to table.
-      <br />
+      <br/>
       {lastValue ? `Currently: ${lastValue}` : ""}
     </>
   ),
@@ -65,35 +65,20 @@ export const writeThroughput: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
+  getQuery: ({tableId, sampleBySeconds, from, to}) => {
     return `
-select
-    created time,
-    sum(rowCount) numOfRowsApplied,
-from ${TelemetryTable.WAL}
-where ${tableId ? `tableId = ${tableId} and ` : ""}
-event = 105
-sample by ${sampleBySeconds}s
-FROM timestamp_floor('${sampleBySeconds}s', '${from}')
-  TO timestamp_floor('${sampleBySeconds}s', '${to}')
-fill(null)
-${limit ? `limit ${limit}` : ""}`
+      select
+          created time,
+          sum(rowCount) numOfRowsApplied,
+      from ${TelemetryTable.WAL}
+      where ${tableId ? `tableId = ${tableId} and ` : ""}
+      event = 105
+      sample by ${sampleBySeconds}s FROM timestamp_floor('${sampleBySeconds}s', '${from}') TO timestamp_floor('${sampleBySeconds}s', '${to}') fill(0)
+    `
   },
-  getQueryLastNotNull: (tableId) => `
-select
-  created
-from ${TelemetryTable.WAL}
-where ${tableId ? `tableId = ${tableId} and ` : ""}
-event = 105
-and rowCount != null
-and physicalRowCount != null
-limit -1
-`,
   alignData: (data: RowsApplied[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.time).getTime()),
-    data.map((l) =>
-      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
-    ),
+    data.map((l) => l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,),
   ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

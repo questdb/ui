@@ -1,5 +1,6 @@
 import uPlot from "uplot"
 import { MetricType } from "./utils"
+import React from "react";
 
 export type DateRange = {
   dateFrom: string
@@ -30,9 +31,8 @@ export type Widget = {
    */
   distribution: uPlot.Scale.Distr
   getQuery: ({ tableId, sampleBySeconds, limit, from, to }: MethodArgs) => string
-  getQueryLastNotNull: (id?: number) => string
   querySupportsRollingAppend: boolean
-  alignData: (data: any, from?: string, to?: string, sampleBySeconds?: number) => uPlot.AlignedData
+  alignData: (data: any) => uPlot.AlignedData
   mapYValue: (rawValue: number) => number | string
 }
 

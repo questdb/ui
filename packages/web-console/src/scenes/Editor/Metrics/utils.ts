@@ -1,6 +1,6 @@
-import { isValidDate } from "./../../../utils/dateTime"
+import { isValidDate } from "../../../utils"
 import { format, formatISO, subMinutes } from "date-fns"
-import { utcToLocal } from "../../../utils/dateTime"
+import { utcToLocal } from "../../../utils"
 import uPlot from "uplot"
 import type { Duration } from "./types"
 
@@ -131,14 +131,16 @@ export const getXAxisFormat = (
   startTime: number,
   endTime: number,
 ) => {
-  let format = "HH:mm:ss"
-  const seconds = (endTime - startTime) / 1000
+  let format: string
+    const seconds = (endTime - startTime) / 1000
   if (seconds < 60) {
     format = "HH:mm:ss"
   } else if (seconds < 60 * 60) {
     format = "HH:mm"
-  } else if (seconds < 60 * 60 * 24) {
+  } else if (seconds <= 60 * 60 * 24) {
     format = "HH:mm"
+  } else if (seconds <= 60 * 60 * 24) {
+      format = "HH:mm"
   } else {
     format = "dd/MM"
   }
@@ -206,34 +208,8 @@ export const getSamplingRateForPeriod = (
 export const hasData = (data?: uPlot.AlignedData) => {
   if (!data || data[1].length === 0) return false
   return (
-    data[1].length > 0 && data[1].some((value) => value !== null)
+    data[1].length > 0 && data[1].some((value: any) => value !== null)
   )
-}
-
-export const mergeRollingData = (
-  oldData: uPlot.AlignedData,
-  newData: uPlot.AlignedData,
-  dateFrom: string,
-) => {
-  const current_time = new Date()
-  const bucket_size = newData.values()
-  const from = new Date(durationTokenToDate(dateFrom)).getTime()
-
-  const mergedData = newData.map((d, i) => [
-    ...oldData[i],
-    ...d,
-  ]) as uPlot.AlignedData
-
-  return newData
-
-  const merged = mergedData.map((arr, arrIndex) =>
-    arrIndex === 0
-      ? Array.from(arr).filter((time) => time && time >= from)
-      : Array.from(arr).filter(
-          (_, index) => mergedData[0] && mergedData[0][index] >= from,
-        ),
-  ) as uPlot.AlignedData
-  return merged
 }
 
 export const isDateToken = (token: string) => {
@@ -272,5 +248,4 @@ export const durationToHumanReadable = (from: string, to: string) => {
     from.startsWith("now") ? from : format(new Date(from), DATETIME_FORMAT)
   } - ${to.startsWith("now") ? to : format(new Date(to), DATETIME_FORMAT)}
   `
-  return null
 }

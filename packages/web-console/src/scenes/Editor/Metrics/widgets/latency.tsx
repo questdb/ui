@@ -6,13 +6,14 @@ import { TelemetryTable } from "../../../../consts"
 
 export const latency: Widget = {
   distribution: 1,
-  label: "WAL apply latency in ms",
+  label: "WAL commit latency ( 0.9 percentile )",
   getDescription: ({ lastValue, sampleBySeconds }) => (
     <>
-      Average time taken to apply WAL transactions to the table, making them
-      readable.
-      <br />
-      {lastValue ? `Currently: ${lastValue} for the last ${sampleBySeconds}s` : ""}
+      The 0.9 percentile latency of WAL Apply job commits. Higher latency is
+      typically caused by write amplification and high volume of out-of-order writes.
+      <br/>
+      <br/>
+      {lastValue ? `Currently: ${lastValue} within ${sampleBySeconds}s bucket` : ""}
     </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -31,30 +32,20 @@ export const latency: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
+  getQuery: ({ tableId, sampleBySeconds, from, to }) => {
     return `
-select created, approx_percentile(latency, 0.9, 3) latency
-  from ${TelemetryTable.WAL}
-  where 
-      event = 105
-      and rowCount > 0
-      ${tableId ? `and tableId = ${tableId}` : ""}
-  sample by ${sampleBySeconds}s
-  FROM timestamp_floor('${sampleBySeconds}s', '${from}')
-  TO timestamp_floor('${sampleBySeconds}s', '${to}')
-  fill(0)
-  ${limit ? `limit ${limit}` : ""}
-  `
+    select created, approx_percentile(latency, 0.9, 3) latency
+      from ${TelemetryTable.WAL}
+      where 
+          event = 105
+          and rowCount > 0
+          ${tableId ? `and tableId = ${tableId}` : ""}
+      sample by ${sampleBySeconds}s
+      FROM timestamp_floor('${sampleBySeconds}s', '${from}')
+      TO timestamp_floor('${sampleBySeconds}s', '${to}')
+      fill(0)
+    `
   },
-  getQueryLastNotNull: (tableId) => `
-select
-  created
-from ${TelemetryTable.WAL}
-where ${tableId ? `tableId = ${tableId} and ` : ""}
-event = 105
-and latency != null and rowCount > 0
-limit -1
-`,
   alignData: (data: Latency[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.created).getTime()),
     data.map((l) => sqlValueToFixed(l.latency)),

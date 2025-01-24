@@ -6,12 +6,13 @@ import { TelemetryTable } from "../../../../consts"
 
 export const commitRate: Widget = {
   distribution: 1,
-  label: "Commit rate",
-  getDescription: ({ lastValue, sampleBySeconds }) => (
+  label: "WAL commit rate ( transactions/s )",
+  getDescription: ({ lastValue }) => (
     <>
-      Number of commits written to the table.
-      <br />
-      {lastValue ? `Currently: ${lastValue}` : ``}
+      The rate of WAL Apply Job merging transaction to the table.
+      <br/>
+      <br/>
+      {lastValue ? `Currently: ${lastValue} commits/s` : ``}
     </>
   ),
   icon: "<svg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -80,7 +81,7 @@ export const commitRate: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
+  getQuery: ({ tableId, sampleBySeconds, from, to }) => {
     if (sampleBySeconds === 1) {
       return `select
             created created
@@ -104,30 +105,10 @@ export const commitRate: Widget = {
         ) sample by ${sampleBySeconds}s`
     }
   },
-  getQueryLastNotNull: (tableId) => `
-select
-  created
-from ${TelemetryTable.WAL}
-where ${tableId ? `tableId = ${tableId} and ` : ""}
-event = 103
-and physicalRowCount != null
-limit -1
-`,
-  alignData: (data: CommitRate[], from?: string, to?: string, sampleBySeconds?: number): uPlot.AlignedData => {
-    if (data.length > 0 || !from || !to || !sampleBySeconds) {
-      return [
-        data.map((l) => Date.parse(l.created)),
-        data.map((l) => sqlValueToFixed(l.commit_rate)),
-      ]
-    } else {
-      // create zero commits/s chart
-      const start = Date.parse(from);
-      const end = Date.parse(to);
-      const buckets = Math.floor((end - start) / 1000 / sampleBySeconds);
-      const timestamps = Array.from({length: buckets}, (_, i) => (start/1000 + i * sampleBySeconds) * 1000);
-      const values = new Array(buckets).fill(0);
-      return [timestamps, values];
-    }
-  },
+  alignData: (data: CommitRate[]): uPlot.AlignedData =>
+    [
+      data.map((l) => Date.parse(l.created)),
+      data.map((l) => sqlValueToFixed(l.commit_rate)),
+    ],
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

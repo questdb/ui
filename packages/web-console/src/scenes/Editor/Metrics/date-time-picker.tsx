@@ -15,21 +15,21 @@ import {
   World,
 } from "@styled-icons/boxicons-regular"
 import { ArrowDropDown, ArrowDropUp } from "@styled-icons/remix-line"
-import { Text } from "../../../components/Text"
-import { getLocalTimeZone, getLocalGMTOffset } from "../../../utils/dateTime"
+import { Text } from "../../../components"
+import { getLocalTimeZone, getLocalGMTOffset } from "../../../utils"
 import { Form } from "../../../components/Form"
 import { Calendar } from "../../../components/Calendar"
 import { formatISO, subMonths } from "date-fns"
 import { useFormContext } from "react-hook-form"
 import Joi from "joi"
-import { utcToLocal } from "../../../utils/dateTime"
+import { utcToLocal } from "../../../utils"
 
 const Root = styled(Box).attrs({
   gap: "1rem",
   flexDirection: "column",
   align: "flex-start",
 })`
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }: {theme: any}) => theme.color.backgroundDarker};
   width: 50rem;
   padding: 1rem 1rem 0 1rem;
 `
@@ -58,7 +58,7 @@ const MetricDurations = styled.ul`
   list-style: none;
   margin: 0;
   padding: 0 0 0 1rem;
-  border-left: 1px solid ${({ theme }) => theme.color.selection};
+  border-left: 1px solid ${({ theme }: {theme: any}) => theme.color.selection};
 `
 
 const MetricDurationItem = styled.li<{ selected?: boolean }>`
@@ -205,7 +205,7 @@ export const DateTimePicker = ({
   const schema = Joi.object({
     dateFrom: Joi.any()
       .required()
-      .custom((value, helpers) => {
+      .custom((value: any, helpers: any) => {
         const dateValue = durationTokenToDate(value)
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
@@ -232,7 +232,7 @@ export const DateTimePicker = ({
       .messages(errorMessages),
     dateTo: Joi.any()
       .required()
-      .custom((value, helpers) => {
+      .custom((value: any, helpers: any) => {
         const dateValue = durationTokenToDate(value)
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
