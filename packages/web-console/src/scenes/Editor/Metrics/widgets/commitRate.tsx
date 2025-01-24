@@ -7,11 +7,11 @@ import { TelemetryTable } from "../../../../consts"
 export const commitRate: Widget = {
   distribution: 1,
   label: "Commit rate",
-  getDescription: ({ lastValue, sampleBy }) => (
+  getDescription: ({ lastValue, sampleBySeconds }) => (
     <>
       Number of commits written to the table.
       <br />
-      {lastValue ? `Currently: ${lastValue}/${sampleBy}` : ``}
+      {lastValue ? `Currently: ${lastValue}` : ``}
     </>
   ),
   icon: "<svg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -80,35 +80,30 @@ export const commitRate: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
-    return `
-    select 
-   created,
-   commit_rate, 
-   commit_rate_smooth
-   from (
-    select 
-      created
-      , commit_rate
-      , avg(commit_rate) over(order by created rows BETWEEN 59 PRECEDING AND CURRENT ROW) commit_rate_smooth
-    from (
-      select
-        created
-        , count() commit_rate
-      from ${TelemetryTable.WAL}
-      where ${tableId ? `tableId = ${tableId} and ` : ""}
-      event = 103
-      sample by ${sampleBy}
-      FROM timestamp_floor('${sampleBy}', '${from}')
-         TO timestamp_floor('${sampleBy}', '${to}')
-      fill(0)
-    )
-    order by 1
-    ${limit ? `limit ${limit}` : ""}
-);
-    `
+  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
+    if (sampleBySeconds === 1) {
+      return `select
+            created created
+            , count() commit_rate
+          from ${TelemetryTable.WAL}
+          where ${tableId ? `tableId = ${tableId} and ` : ""}
+          event = 103
+          sample by 1s
+          FROM timestamp_floor('${sampleBySeconds}s', '${from}')
+             TO timestamp_floor('${sampleBySeconds}s', '${to}')
+          fill(0)`
+    } else {
+      return `select created, max(commit_rate) commit_rate from (
+        select
+          created created
+          , count() commit_rate
+        from ${TelemetryTable.WAL}
+        where ${tableId ? `tableId = ${tableId} and ` : ""}
+        event = 103
+        sample by 1s FROM timestamp_floor('1s', '${from}') TO timestamp_floor('1s', '${to}') fill(0)
+        ) sample by ${sampleBySeconds}s`
+    }
   },
-  // TODO: Sample, change!
   getQueryLastNotNull: (tableId) => `
 select
   created
@@ -118,9 +113,21 @@ event = 103
 and physicalRowCount != null
 limit -1
 `,
-  alignData: (data: CommitRate[]): uPlot.AlignedData => [
-    data.map((l) => new Date(l.created).getTime()),
-    data.map((l) => sqlValueToFixed(l.commit_rate)),
-  ],
+  alignData: (data: CommitRate[], from?: string, to?: string, sampleBySeconds?: number): uPlot.AlignedData => {
+    if (data.length > 0 || !from || !to || !sampleBySeconds) {
+      return [
+        data.map((l) => Date.parse(l.created)),
+        data.map((l) => sqlValueToFixed(l.commit_rate)),
+      ]
+    } else {
+      // create zero commits/s chart
+      const start = Date.parse(from);
+      const end = Date.parse(to);
+      const buckets = Math.floor((end - start) / 1000 / sampleBySeconds);
+      const timestamps = Array.from({length: buckets}, (_, i) => (start/1000 + i * sampleBySeconds) * 1000);
+      const values = new Array(buckets).fill(0);
+      return [timestamps, values];
+    }
+  },
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

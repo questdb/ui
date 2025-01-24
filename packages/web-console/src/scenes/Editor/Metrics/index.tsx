@@ -163,7 +163,6 @@ export const Metrics = () => {
   }
 
   const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
-    console.log("FROM: " + dateFrom + ", TO: " + dateTo)
     setDateFrom(dateFrom)
     setDateTo(dateTo)
   }

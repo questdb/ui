@@ -206,7 +206,7 @@ export const getSamplingRateForPeriod = (
 export const hasData = (data?: uPlot.AlignedData) => {
   if (!data || data[1].length === 0) return false
   return (
-    data[1].length > 0 && data[1].some((value) => value !== null && value !== 0)
+    data[1].length > 0 && data[1].some((value) => value !== null)
   )
 }
 

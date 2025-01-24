@@ -7,11 +7,11 @@ import { TelemetryTable } from "../../../../consts"
 export const writeThroughput: Widget = {
   distribution: 1,
   label: "Write throughput",
-  getDescription: ({ lastValue, sampleBy }) => (
+  getDescription: ({ lastValue, sampleBySeconds }) => (
     <>
       Logical (queryable) rows applied to table.
       <br />
-      {lastValue ? `Currently: ${lastValue}/${sampleBy}` : ""}
+      {lastValue ? `Currently: ${lastValue}` : ""}
     </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -65,7 +65,7 @@ export const writeThroughput: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
+  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
     return `
 select
     created time,
@@ -73,9 +73,9 @@ select
 from ${TelemetryTable.WAL}
 where ${tableId ? `tableId = ${tableId} and ` : ""}
 event = 105
-sample by ${sampleBy}
-FROM timestamp_floor('${sampleBy}', '${from}')
-  TO timestamp_floor('${sampleBy}', '${to}')
+sample by ${sampleBySeconds}s
+FROM timestamp_floor('${sampleBySeconds}s', '${from}')
+  TO timestamp_floor('${sampleBySeconds}s', '${to}')
 fill(null)
 ${limit ? `limit ${limit}` : ""}`
   },

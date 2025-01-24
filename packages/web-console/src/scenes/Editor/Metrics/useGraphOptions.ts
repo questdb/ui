@@ -32,10 +32,14 @@ const valuePlugin = (
       const x = idx !== null && idx !== undefined ? u.data[0][idx] : null
       const y = idx !== null && idx !== undefined ? u.data[1][idx] : null
       if ([y, x].every((v) => v !== null)) {
-        timeRef.current!.textContent = utcToLocal(
-          x as number,
-          DATETIME_FORMAT,
-        ) as string
+          try {
+              timeRef.current!.textContent = utcToLocal(
+                  x as number,
+                  DATETIME_FORMAT,
+              ) as string
+          } catch (e) {
+              timeRef.current!.textContent = x?.toString() ?? '';
+          }
         valueRef.current!.textContent = mapYValue(y as number) as string
       } else {
         timeRef.current!.textContent = null
@@ -58,7 +62,6 @@ export const useGraphOptions = ({
   widgetConfig,
 }: Params): Omit<uPlot.Options, "width" | "height"> => {
   const theme = useContext(ThemeContext)
-
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.gray2,
     labelFont: `600 12px ${theme.font}`,
@@ -121,16 +124,11 @@ export const useGraphOptions = ({
     },
     y: {
       distr: widgetConfig.distribution,
-      range: (u, min, max) => {
-        return [
-          u.data[0].length > 1 && widgetConfig.distribution !== 3 && min !== max
-            ? min
-            : widgetConfig.distribution !== 3
-            ? 0
-            : 1,
-          max,
-        ]
-      },
+      range: (u, min, max) =>
+          [
+              (u.data[0].length > 1 && widgetConfig.distribution !== 3 && min !== max ? min : widgetConfig.distribution !== 3 ? 0 : 1) || 0,
+              max || 1,
+          ],
     },
   }
 
@@ -147,6 +145,7 @@ export const useGraphOptions = ({
 
     axes: Object.values(axes),
     series: Object.values(series),
+
     scales,
 
     legend: {

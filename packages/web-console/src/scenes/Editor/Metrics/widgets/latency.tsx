@@ -7,12 +7,12 @@ import { TelemetryTable } from "../../../../consts"
 export const latency: Widget = {
   distribution: 1,
   label: "WAL apply latency in ms",
-  getDescription: ({ lastValue, sampleBy }) => (
+  getDescription: ({ lastValue, sampleBySeconds }) => (
     <>
       Average time taken to apply WAL transactions to the table, making them
       readable.
       <br />
-      {lastValue ? `Currently: ${lastValue} for the last ${sampleBy}` : ""}
+      {lastValue ? `Currently: ${lastValue} for the last ${sampleBySeconds}s` : ""}
     </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -31,7 +31,7 @@ export const latency: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
+  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
     return `
 select created, approx_percentile(latency, 0.9, 3) latency
   from ${TelemetryTable.WAL}
@@ -39,9 +39,9 @@ select created, approx_percentile(latency, 0.9, 3) latency
       event = 105
       and rowCount > 0
       ${tableId ? `and tableId = ${tableId}` : ""}
-  sample by ${sampleBy}
-  FROM timestamp_floor('${sampleBy}', '${from}')
-  TO timestamp_floor('${sampleBy}', '${to}')
+  sample by ${sampleBySeconds}s
+  FROM timestamp_floor('${sampleBySeconds}s', '${from}')
+  TO timestamp_floor('${sampleBySeconds}s', '${to}')
   fill(0)
   ${limit ? `limit ${limit}` : ""}
   `

@@ -8,7 +8,7 @@ export type DateRange = {
 
 type MethodArgs = {
   tableId?: number
-  sampleBy?: string
+  sampleBySeconds?: number
   lastValue?: number | string
   limit?: number
   from?: string
@@ -17,7 +17,7 @@ type MethodArgs = {
 
 export type Widget = {
   label: string
-  getDescription: ({ sampleBy }: MethodArgs) => React.ReactNode
+  getDescription: ({ sampleBySeconds }: MethodArgs) => React.ReactNode
   icon: string
   isTableMetric: boolean
   /**
@@ -29,10 +29,10 @@ export type Widget = {
    * 100 - Custom
    */
   distribution: uPlot.Scale.Distr
-  getQuery: ({ tableId, sampleBy, limit, from, to }: MethodArgs) => string
+  getQuery: ({ tableId, sampleBySeconds, limit, from, to }: MethodArgs) => string
   getQueryLastNotNull: (id?: number) => string
   querySupportsRollingAppend: boolean
-  alignData: (data: any) => uPlot.AlignedData
+  alignData: (data: any, from?: string, to?: string, sampleBySeconds?: number) => uPlot.AlignedData
   mapYValue: (rawValue: number) => number | string
 }
 
@@ -47,7 +47,6 @@ export type Duration = DateRange & {
 export type CommitRate = {
   created: string
   commit_rate: string
-  commit_rate_smooth: string
 }
 
 export type WriteAmplification = {

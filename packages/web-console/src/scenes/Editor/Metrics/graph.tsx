@@ -129,8 +129,6 @@ export const Graph = ({
   const { isTableMetric, mapYValue, label } = widgetConfig
 
   const resizeObserver = new ResizeObserver((entries) => {
-    console.log(entries)
-    console.log(uPlotRef)
     uPlotRef.current?.setSize({
       width: entries[0].contentRect.width,
       height: 200,
@@ -197,7 +195,7 @@ export const Graph = ({
               icon={<Information size="16px" />}
               tooltip={widgetConfig.getDescription({
                 lastValue,
-                sampleBy: formatSamplingRate(getSamplingRateForPeriod(from, to)),
+                sampleBySeconds: getSamplingRateForPeriod(from, to)
               })}
               placement="bottom"
             />
@@ -238,7 +236,7 @@ export const Graph = ({
               height: 200,
               width: graphRootRef.current?.clientWidth ?? 0,
             }}
-            data={initialData}
+            data={data}
             onCreate={(uplot) => {
               uPlotRef.current = uplot
             }}

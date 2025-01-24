@@ -7,13 +7,13 @@ import { TelemetryTable } from "../../../../consts"
 export const writeAmplification: Widget = {
   distribution: 3,
   label: "Write amplification",
-  getDescription: ({ lastValue, sampleBy }) => (
+  getDescription: ({ lastValue, sampleBySeconds }) => (
     <>
       Ratio of rows physically written to disk against logical/queryable rows.
       If write amplification is higher than 1, this means data has been
       re-written several times. This will be higher during O3 writes.
       <br />
-      {lastValue ? `Currently: ${lastValue} for the last ${sampleBy}` : ""}
+      {lastValue ? `Currently: ${lastValue} for the last ${sampleBySeconds}s` : ""}
     </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -57,7 +57,7 @@ export const writeAmplification: Widget = {
     "</svg>\n",
   isTableMetric: true,
   querySupportsRollingAppend: true,
-  getQuery: ({ tableId, sampleBy, limit, from, to }) => {
+  getQuery: ({ tableId, sampleBySeconds, limit, from, to }) => {
     return `
 select
 created,
@@ -76,9 +76,9 @@ from (
       where ${tableId ? `tableId = ${tableId} and ` : ""}
          event = 105
          and rowCount > 0
-      sample by ${sampleBy}      
-    FROM timestamp_floor('${sampleBy}', '${from}')
-  TO timestamp_floor('${sampleBy}', '${to}')
+      sample by ${sampleBySeconds}s      
+    FROM timestamp_floor('${sampleBySeconds}s', '${from}')
+  TO timestamp_floor('${sampleBySeconds}s', '${to}')
       fill(null)
       ${limit ? `limit ${limit}` : ""}
   )
