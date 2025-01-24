@@ -47,9 +47,10 @@ const DatePickers = styled(Box).attrs({
   gap: "1rem",
   align: "flex-start",
 })`
-  width: 60%;
+  width: 70%;
   align-self: flex-start;
   padding-right: 1rem;
+  padding-left: 1rem;
 `
 
 const MetricDurations = styled.ul`

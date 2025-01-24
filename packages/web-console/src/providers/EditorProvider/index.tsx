@@ -97,34 +97,33 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   }
 
   const setActiveBuffer = async (buffer: Buffer) => {
-    const currentActiveBufferId = (await bufferStore.getActiveId())?.value
-    if (currentActiveBufferId) {
-      if (buffer.id === currentActiveBufferId) {
-        // early return if trying to set active an already active buffer
-        // but keep focus on editor
-        // editorRef.current?.focus()
-        return
+    try {
+      const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+      if (currentActiveBufferId) {
+        if (buffer.id === currentActiveBufferId) {
+          return
+        }
+        await updateBuffer(activeBuffer.id as number)
       }
 
-      // check if buffer with activeBuffer.id exists, otherwise we might save editor state of a
-      // buffer which is being deleted
-      await updateBuffer(activeBuffer.id as number)
-    }
-    await bufferStore.setActiveId(buffer.id as number)
-    setActiveBufferState(buffer)
-    if (editorRef.current && monacoRef.current) {
-      const model = monacoRef.current.editor.createModel(
-        buffer.value,
-        QuestDBLanguageName,
-      )
+      await bufferStore.setActiveId(buffer.id as number)
+      setActiveBufferState(buffer)
 
-      editorRef.current.setModel(model)
-      editorRef.current.focus()
+      if (editorRef.current && monacoRef.current) {
+        const model = monacoRef.current.editor.createModel(
+          buffer.value,
+          QuestDBLanguageName,
+        )
+        editorRef.current.setModel(model)
+        editorRef.current.focus()
+        clearModelMarkers(monacoRef.current, editorRef.current)
 
-      clearModelMarkers(monacoRef.current, editorRef.current)
-    }
-    if (buffer.editorViewState) {
-      editorRef.current?.restoreViewState(buffer.editorViewState)
+        if (buffer.editorViewState) {
+          editorRef.current.restoreViewState(buffer.editorViewState)
+        }
+      }
+    } catch (e) {
+      console.warn('Error setting active buffer:', e)
     }
   }
 

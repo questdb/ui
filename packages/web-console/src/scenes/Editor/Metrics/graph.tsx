@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import type { Widget } from "./types"
+import {UplotProvider, useUplot} from './uplot-context';
 import {
   hasData,
   getXAxisFormat,
@@ -128,6 +129,8 @@ export const Graph = ({
   const { isTableMetric, mapYValue, label } = widgetConfig
 
   const resizeObserver = new ResizeObserver((entries) => {
+    console.log(entries)
+    console.log(uPlotRef)
     uPlotRef.current?.setSize({
       width: entries[0].contentRect.width,
       height: 200,
@@ -141,6 +144,8 @@ export const Graph = ({
     setStartTime(new Date(from).getTime())
     setEndTime(new Date(to).getTime())
   }, [data, dateFrom, dateTo])
+
+  const initialData: uPlot.AlignedData = [[], []];
 
   const graphOptions = useGraphOptions({
     data,
@@ -181,66 +186,69 @@ export const Graph = ({
       ? mapYValue(Math.floor(data[1][data[1].length - 1] as number))
       : undefined
 
+
   return (
-    <Root ref={graphRootRef}>
-      <Header>
-        <Box gap="0.5rem" align="center">
-          <BeforeLabel>{beforeLabel}</BeforeLabel>
-          <HeaderText>{label}</HeaderText>
-          <IconWithTooltip
-            icon={<Information size="16px" />}
-            tooltip={widgetConfig.getDescription({
-              lastValue,
-              sampleBy: formatSamplingRate(getSamplingRateForPeriod(from, to)),
-            })}
-            placement="bottom"
-          />
-          {delayedLoading && <Loader size="18px" spin />}
-          {hasError && (
+      <Root ref={graphRootRef}>
+        <Header>
+          <Box gap="0.5rem" align="center">
+            <BeforeLabel>{beforeLabel}</BeforeLabel>
+            <HeaderText>{label}</HeaderText>
             <IconWithTooltip
-              icon={<ErrorIcon size="18px" />}
-              tooltip="Error fetching latest data, try refreshing manually"
+              icon={<Information size="16px" />}
+              tooltip={widgetConfig.getDescription({
+                lastValue,
+                sampleBy: formatSamplingRate(getSamplingRateForPeriod(from, to)),
+              })}
               placement="bottom"
             />
+            {delayedLoading && <Loader size="18px" spin />}
+            {hasError && (
+              <IconWithTooltip
+                icon={<ErrorIcon size="18px" />}
+                tooltip="Error fetching latest data, try refreshing manually"
+                placement="bottom"
+              />
+            )}
+          </Box>
+          <Actions>{actions}</Actions>
+        </Header>
+        <GraphWrapper>
+          {!hasData(data) && (
+            <GraphOverlay>
+              {isTableMetric && !tableName ? (
+                <Text color="gray2">
+                  {tableId
+                    ? "Table does not exist. Please select another one"
+                    : "Select a table to see metrics"}
+                </Text>
+              ) : (
+                <Text color="gray2">No data available for this period</Text>
+              )}
+              {canZoomToData && (
+                <Button skin="secondary" onClick={onZoomToData}>
+                  Zoom to data
+                </Button>
+              )}
+            </GraphOverlay>
           )}
-        </Box>
-        <Actions>{actions}</Actions>
-      </Header>
-      <GraphWrapper>
-        {!hasData(data) && (
-          <GraphOverlay>
-            {isTableMetric && !tableName ? (
-              <Text color="gray2">
-                {tableId
-                  ? "Table does not exist. Please select another one"
-                  : "Select a table to see metrics"}
-              </Text>
-            ) : (
-              <Text color="gray2">No data available for this period</Text>
-            )}
-            {canZoomToData && (
-              <Button skin="secondary" onClick={onZoomToData}>
-                Zoom to data
-              </Button>
-            )}
-          </GraphOverlay>
-        )}
-        <UplotReact
-          options={{
-            ...graphOptions,
-            height: 200,
-            width: graphRootRef.current?.clientWidth ?? 0,
-          }}
-          data={data}
-          onCreate={(uplot) => {
-            uPlotRef.current = uplot
-          }}
-        />
-        <Label>
-          <span ref={timeRef} />
-          <LabelValue ref={valueRef} />
-        </Label>
-      </GraphWrapper>
-    </Root>
+          <div ref={graphRootRef}>
+          <UplotReact
+            options={{
+              ...graphOptions,
+              height: 200,
+              width: graphRootRef.current?.clientWidth ?? 0,
+            }}
+            data={initialData}
+            onCreate={(uplot) => {
+              uPlotRef.current = uplot
+            }}
+          />
+          </div>
+          <Label>
+            <span ref={timeRef} />
+            <LabelValue ref={valueRef} />
+          </Label>
+        </GraphWrapper>
+      </Root>
   )
 }

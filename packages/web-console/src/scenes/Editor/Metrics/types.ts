@@ -18,7 +18,7 @@ type MethodArgs = {
 export type Widget = {
   label: string
   getDescription: ({ sampleBy }: MethodArgs) => React.ReactNode
-  iconUrl: string
+  icon: string
   isTableMetric: boolean
   /**
    * Scale distribution:

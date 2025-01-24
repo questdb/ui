@@ -3316,6 +3316,7 @@ __metadata:
     jquery: "npm:3.5.1"
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
+    lodash: "npm:^4.17.21"
     lodash.isequal: "npm:^4.5.0"
     lodash.merge: "npm:^4.6.2"
     mini-css-extract-plugin: "npm:^2.6.0"
@@ -6289,6 +6290,13 @@ __metadata:
   version: 4.14.199
   resolution: "@types/lodash@npm:4.14.199"
   checksum: 10/340aabe9b023553d64e47f2af7f2010814c1178ce3a2b256e8dd54c444578d5e6e937d70c7117ee1fac5c0fc429b592ab9f6d69a966f0a1222ebcbbe6d516c4a
+  languageName: node
+  linkType: hard
+
+"@types/lodash@npm:^4.17.14":
+  version: 4.17.14
+  resolution: "@types/lodash@npm:4.17.14"
+  checksum: 10/6ee40725f3e192f5ef1f493caca19210aa7acd7adc3136b8dba84d418a35be0abea0668105aed9f696ad62a54310a9c0d328971ad4b157f5bcda700424ed5aae
   languageName: node
   linkType: hard
 

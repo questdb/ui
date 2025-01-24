@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState, useRef } from "react"
 import styled from "styled-components"
 import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
@@ -26,6 +26,7 @@ import { EventType } from "../../../modules/EventBus/types"
 import { formatISO } from "date-fns"
 import { DateTimePicker } from "./date-time-picker"
 import { ForwardRef } from "@questdb/react-components"
+import useElementVisibility from '../../../hooks/useElementVisibility';
 
 const Root = styled.div`
   display: flex;
@@ -162,6 +163,7 @@ export const Metrics = () => {
   }
 
   const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
+    console.log("FROM: " + dateFrom + ", TO: " + dateTo)
     setDateFrom(dateFrom)
     setDateTo(dateTo)
   }
@@ -181,22 +183,30 @@ export const Metrics = () => {
     tabInFocusRef.current = false
   }, [])
 
-  const setupListeners = () => {
+  const [elementRef, isVisible] = useElementVisibility(1000);
+  const isVisibleRef = useRef(isVisible);
+
+  useEffect(() => {
+    isVisibleRef.current = isVisible;
+  }, [isVisible]);
+
+  const setupListeners = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
     }
-    if (autoRefreshTables && refreshRate && refreshRate !== RefreshRate.OFF) {
+    if (refreshRate && refreshRate !== RefreshRate.OFF) {
       intervalRef.current = setInterval(
         () => {
-          if (!tabInFocusRef.current) return
-          refreshMetricsData()
+          if (isVisibleRef.current) {
+            refreshMetricsData()
+          }
         },
         refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
       )
     } else {
       clearInterval(intervalRef.current)
     }
-  }
+  }, [refreshRate, refreshRateInSec, refreshMetricsData]);
 
   useEffect(() => {
     if (buffer) {
@@ -277,6 +287,7 @@ export const Metrics = () => {
     }
   }, [])
 
+
   if (telemetryConfig && !telemetryConfig.enabled) {
     return (
       <Root>
@@ -313,7 +324,7 @@ export const Metrics = () => {
   }
 
   return (
-    <Root>
+    <Root ref={elementRef}>
       <Toolbar>
         <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">

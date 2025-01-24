@@ -122,11 +122,10 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
                   onClick={() => handleSelectMetric(metricType as MetricType)}
                 >
                   <Image>
-                    <img
-                      src={widget.iconUrl}
-                      alt={`${widget.label} icon`}
+                    <svg
                       width="64"
                       height="64"
+                      dangerouslySetInnerHTML={{ __html: widget.icon }}
                     />
                   </Image>
                   <Text color="foreground" weight={600}>

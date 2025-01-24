@@ -29,7 +29,7 @@ import { IconWithTooltip } from "../../../components/IconWithTooltip"
 import { ColorPalette } from "./color-palette"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
-import { formatISO } from "date-fns"
+import {useUplot} from "./uplot-context";
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -81,6 +81,7 @@ export const Metric = ({
   const fetchMetric = async (overwrite?: boolean) => {
     const isRollingAppendEnabled =
       widgetConfig.querySupportsRollingAppend && !overwrite
+    let isMounted = true;
     setLoading(true)
     setHasError(false)
     try {
@@ -106,6 +107,7 @@ export const Metric = ({
         ),
       ])
 
+      // console.log("WIDTH: " + width)
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
         const alignedData = widgetConfig.alignData(
           responses[0].data as unknown as ResultType[MetricType],
@@ -124,11 +126,19 @@ export const Metric = ({
         )
       }
     } catch (err) {
-      console.error(err)
-      setHasError(true)
+      if (isMounted) {
+        console.error(err);
+        setHasError(true);
+      }
     } finally {
-      setLoading(false)
+      if (isMounted) {
+        setLoading(false)
+      }
     }
+
+    return () => {
+      isMounted = false;
+    };
   }
 
   const handleZoomToData = () => {
