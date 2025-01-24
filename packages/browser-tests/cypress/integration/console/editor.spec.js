@@ -1,6 +1,7 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
 
 const getTabDragHandleByTitle = (title) =>
   `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
@@ -300,6 +301,32 @@ describe("errors", () => {
     cy.matchErrorMarkerPosition({ left: 506, width: 42 });
 
     cy.getCollapsedNotifications().should("contain", "Invalid date");
+  });
+
+  const operators = [
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    ">",
+    "<",
+    "=",
+    "!",
+    "&",
+    "|",
+    "^",
+    "~",
+  ];
+
+  operators.forEach((char) => {
+    it(`should mark operator '${char}' as error`, () => {
+      const query = `select x FROM long_sequence(100 ${char} "string");`;
+      cy.typeQuery(query);
+      cy.runLine();
+      cy.matchErrorMarkerPosition({ left: 270, width: 8 });
+      cy.clearEditor();
+    });
   });
 });
 

@@ -3,13 +3,16 @@ const {
   addMatchImageSnapshotPlugin,
 } = require("@simonsmith/cypress-image-snapshot/plugin");
 
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
+
 module.exports = defineConfig({
   defaultCommandTimeout: 10000,
   e2e: {
     defaultCommandTimeout: 30000,
     screenshotOnRunFailure: false,
     video: false,
-    baseUrl: "http://localhost:9999",
+    baseUrl: baseUrl,
     viewportWidth: 1280,
     viewportHeight: 720,
     specPattern: "cypress/integration/**/*.spec.js",

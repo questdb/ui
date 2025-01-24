@@ -1,7 +1,5 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
-
 describe("Sidebar tests", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth();
