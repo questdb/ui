@@ -306,7 +306,6 @@ __metadata:
     debug: "npm:^4.1.0"
     gensync: "npm:^1.0.0-beta.1"
     json5: "npm:^2.1.2"
-    lodash: "npm:^4.17.19"
     resolve: "npm:^1.3.2"
     semver: "npm:^5.4.1"
     source-map: "npm:^0.5.0"
@@ -6290,13 +6289,6 @@ __metadata:
   version: 4.14.199
   resolution: "@types/lodash@npm:4.14.199"
   checksum: 10/340aabe9b023553d64e47f2af7f2010814c1178ce3a2b256e8dd54c444578d5e6e937d70c7117ee1fac5c0fc429b592ab9f6d69a966f0a1222ebcbbe6d516c4a
-  languageName: node
-  linkType: hard
-
-"@types/lodash@npm:^4.17.14":
-  version: 4.17.14
-  resolution: "@types/lodash@npm:4.17.14"
-  checksum: 10/6ee40725f3e192f5ef1f493caca19210aa7acd7adc3136b8dba84d418a35be0abea0668105aed9f696ad62a54310a9c0d328971ad4b157f5bcda700424ed5aae
   languageName: node
   linkType: hard
 
