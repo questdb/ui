@@ -65,6 +65,16 @@ export const Metric = ({
 
   const widgetConfig = widgets[metric.metricType]
 
+  if (!dataRef.current && !loading && metric.tableId) {
+    metric.tableId = undefined
+    return (
+      <MetricInfoRoot>
+        <Error size="18px"/>
+        Cannot load metric: {widgetConfig ? widgetConfig.label : metric.metricType}
+      </MetricInfoRoot>
+    )
+  }
+
   const fetchMetric = async (overwrite?: boolean) => {
     const isRollingAppendEnabled =
       widgetConfig.querySupportsRollingAppend && !overwrite
@@ -167,14 +177,6 @@ export const Metric = ({
       eventBus.unsubscribe(EventType.METRICS_REFRESH_DATA, refreshMetricsData)
     }
   }, [])
-
-  if (!dataRef.current && !loading && metric.tableId)
-    return (
-      <MetricInfoRoot>
-        <Error size="18px"/>
-        Cannot load metric: {widgetConfig.label}
-      </MetricInfoRoot>
-    )
 
   const canZoomToData = false
 

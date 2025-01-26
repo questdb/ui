@@ -26,6 +26,7 @@ import { formatISO } from "date-fns"
 import { DateTimePicker } from "./date-time-picker"
 import { ForwardRef } from "@questdb/react-components"
 import useElementVisibility from '../../../hooks/useElementVisibility';
+import {widgets} from "./widgets";
 
 const Root = styled.div`
   display: flex;
@@ -112,6 +113,8 @@ export const Metrics = () => {
 
   const updateMetrics = (metrics: Metric[]) => {
     if (buffer?.id) {
+      console.log("NEW: ")
+      console.log(metrics)
       updateBuffer(buffer?.id, {
         metricsViewState: {
           ...buffer?.metricsViewState,
@@ -131,6 +134,8 @@ export const Metrics = () => {
 
   const handleRemoveMetric = (metric: Metric) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
+      console.log("BEFORE")
+      console.log(metric)
       updateMetrics(
         buffer?.metricsViewState?.metrics
           .filter((m:any) => m.position !== metric.position)
@@ -414,20 +419,23 @@ export const Metrics = () => {
         {metrics &&
           metrics
             .sort((a: Metric, b: Metric) => a.position - b.position)
-            .map((metric:Metric, index: number) => (
-              <MetricComponent
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                // key is not used by the metric component, but
-                // is required to comply with React requirements for
-                // components that are being added to a list
-                key={index}
-                metric={metric}
-                onRemove={handleRemoveMetric}
-                onTableChange={handleTableChange}
-                onColorChange={handleColorChange}
-              />
-            ))}
+            .filter((metric: Metric) => widgets[metric.metricType])
+            .map((metric:Metric, index: number) => {
+              return (
+                <MetricComponent
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  // key is not used by the metric component, but
+                  // is required to comply with React requirements for
+                  // components that are being added to a list
+                  key={index}
+                  metric={metric}
+                  onRemove={handleRemoveMetric}
+                  onTableChange={handleTableChange}
+                  onColorChange={handleColorChange}
+                />
+              );
+            })}
       </Charts>
     </Root>
   )
