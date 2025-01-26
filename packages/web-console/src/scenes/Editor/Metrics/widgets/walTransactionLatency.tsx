@@ -1,19 +1,25 @@
 import React from "react"
 import uPlot from "uplot"
-import type { Widget, Latency } from "../types"
+import type { Widget, WalTransactionLatency } from "../types"
 import { sqlValueToFixed } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
-export const latency: Widget = {
+export const walTransactionLatency: Widget = {
   distribution: 1,
-  label: "WAL commit latency ( 0.9 percentile )",
-  getDescription: ({ lastValue, sampleBySeconds }) => (
+  label: "WAL Transaction Latency",
+  chartTitle: "WAL Transaction Latency ( 0.9 percentile )",
+  getDescription: () => (
     <>
-      The 0.9 percentile latency of WAL Apply job commits. Higher latency is
-      typically caused by write amplification and high volume of out-of-order writes.
-      <br/>
-      <br/>
-      {lastValue ? `Currently: ${lastValue} within ${sampleBySeconds}s bucket` : ""}
+      This chart tracks the time required for data to become readable after being written. Higher latency may stem from:
+
+      <ul>
+        <li>Large transaction sizes (refer to Avg Transaction Size chart if elevated)</li>
+        <li>Unordered data requiring additional processing</li>
+        <li>Write amplification (see dedicated chart if batch size is optimal)</li>
+        <li>Storage I/O limitations or contention</li>
+      </ul>
+
+      Monitor this metric alongside related charts to identify the root cause of performance variations and optimize accordingly.
     </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -46,7 +52,7 @@ export const latency: Widget = {
       fill(0)
     `
   },
-  alignData: (data: Latency[]): uPlot.AlignedData => [
+  alignData: (data: WalTransactionLatency[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.created).getTime()),
     data.map((l) => sqlValueToFixed(l.latency)),
   ],

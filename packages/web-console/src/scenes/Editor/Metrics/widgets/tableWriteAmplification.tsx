@@ -1,19 +1,24 @@
 import React from "react"
 import uPlot from "uplot"
-import type { Widget, WriteAmplification } from "../types"
+import type { Widget, TableWriteAmplification } from "../types"
 import { sqlValueToFixed } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
-export const writeAmplification: Widget = {
+export const tableWriteAmplification: Widget = {
   distribution: 1,
-  label: "Write amplification",
-  getDescription: ({ lastValue, sampleBySeconds }) => (
+  label: "Table Write Amplification",
+  chartTitle: "Write amplification",
+  getDescription: () => (
     <>
-      Ratio of rows physically written to disk against logical/queryable rows.
-      If write amplification is higher than 1, this means data has been
-      re-written several times. This will be higher during O3 writes.
-      <br />
-      {lastValue ? `Currently: ${lastValue} for the last ${sampleBySeconds}s` : ""}
+      This chart tracks the data write overhead during merge operations. Write amplification occurs when:
+
+      <ul>
+        <li>Copy-on-write operations affect large data blocks</li>
+        <li>Datasets are re-ingested for deduplication</li>
+        <li>Data requires extensive rewriting during merges</li>
+      </ul>
+
+      Scale ranges from optimal (1x) to problematic (1000x+). High amplification typically indicates duplicate data ingestion or suboptimal data ordering patterns.
     </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -77,7 +82,7 @@ export const writeAmplification: Widget = {
         );
     `
   },
-  alignData: (data: WriteAmplification[]): uPlot.AlignedData => [
+  alignData: (data: TableWriteAmplification[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.created).getTime()),
     data.map((l) =>      l.writeAmplification ? sqlValueToFixed(l.writeAmplification) : 1,    ),
   ],

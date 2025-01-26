@@ -124,7 +124,7 @@ export const Graph = ({
   )
   const [delayedLoading, setDelayedLoading] = useState(loading)
 
-  const {isTableMetric, mapYValue, label} = widgetConfig
+  const {isTableMetric, mapYValue, chartTitle} = widgetConfig
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -186,7 +186,7 @@ export const Graph = ({
       <Header>
         <Box gap="0.5rem" align="center">
           <BeforeLabel>{beforeLabel}</BeforeLabel>
-          <HeaderText>{label}</HeaderText>
+          <HeaderText>{chartTitle}</HeaderText>
           <IconWithTooltip
             icon={<Information size="16px"/>}
             tooltip={widgetConfig.getDescription({

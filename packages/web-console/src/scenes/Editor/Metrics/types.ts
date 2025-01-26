@@ -18,6 +18,7 @@ type MethodArgs = {
 
 export type Widget = {
   label: string
+  chartTitle: string
   getDescription: ({ sampleBySeconds }: MethodArgs) => React.ReactNode
   icon: string
   isTableMetric: boolean
@@ -44,23 +45,27 @@ export type Duration = DateRange & {
   label: string
 }
 
-export type CommitRate = {
+export type WallTransactionThroughout = {
   created: string
   commit_rate: string
 }
 
-export type WriteAmplification = {
+export type TableWriteAmplification = {
   created: string
   writeAmplification: string
 }
 
-export type RowsApplied = {
-  time: string
-  numOfRowsApplied: string
-  avgWalAmplification: string
+export type TableAverageTransactionSize = {
+    created: string
+    avg_rows: string
 }
 
-export type Latency = {
+export type WalRowThroughput = {
+  time: string
+  numOfRowsApplied: string
+}
+
+export type WalTransactionLatency = {
   created: string
   latency: string
 }
@@ -70,8 +75,9 @@ export type LastNotNull = {
 }
 
 export type ResultType = {
-  [MetricType.COMMIT_RATE]: CommitRate
-  [MetricType.LATENCY]: Latency
-  [MetricType.WRITE_THROUGHPUT]: RowsApplied
-  [MetricType.WRITE_AMPLIFICATION]: RowsApplied
+  [MetricType.WAL_TRANSACTION_THROUGHPUT]: WallTransactionThroughout
+  [MetricType.WAL_TRANSACTION_LATENCY]: WalTransactionLatency
+  [MetricType.WAL_ROW_THROUGHPUT]: WalRowThroughput
+  [MetricType.TABLE_WRITE_AMPLIFICATION]: TableWriteAmplification
+  [MetricType.TABLE_AVERAGE_TRANSACTION_SIZE]: TableAverageTransactionSize
 }

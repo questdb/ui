@@ -1,18 +1,25 @@
 import React from "react"
 import uPlot from "uplot"
-import type {Widget, RowsApplied} from "../types"
+import type {Widget, WalRowThroughput} from "../types"
 import {sqlValueToFixed, formatNumbers} from "../utils"
 import {TelemetryTable} from "../../../../consts"
 
-export const writeThroughput: Widget = {
+export const walRowThroughput: Widget = {
   distribution: 1,
-  label: "Write throughput",
-  getDescription: ({lastValue}) => (
+  label: "WAL Row Throughput",
+  chartTitle: "Row Processing Throughput",
+  getDescription: () => (
     <>
-      Logical (queryable) rows applied to table.
-      <br/>
-      {lastValue ? `Currently: ${lastValue}` : ""}
-    </>
+      This chart displays rows processed per second during transaction merges. While similar to transaction throughput, this metric helps identify:
+
+      <ul>
+        <li>Data density variations within transactions</li>
+        <li>Processing overhead for row-heavy transactions</li>
+        <li>Resource utilization from row-level operations</li>
+        <li>Impact of row complexity on merge performance</li>
+      </ul>
+
+      Use alongside transaction throughput to understand the relationship between transaction size and processing efficiency.    </>
   ),
   icon: "<svg width=\"64\" height=\"64\" viewBox=\"0 0 64 64\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
     "    <path d=\"M61 43H52C52 42.45 51.55 42 51 42H39.17C38.46 39.39 37.38 38 36 38H6C3.25 38 2 43.7 2 49C2 54.3 3.25 60 6 60H36C37.37 60 38.46 58.61 39.17 56H54C54.55 56 55 55.55 55 55V52H57C57.55 52 58 51.55 58 51V49H61C61.55 49 62 48.55 62 48V44C62 43.45 61.55 43 61 43ZM35.98 40C36.11 40.04 36.6 40.51 37.08 42H34.9C35.31 40.72 35.75 40.07 35.97 40H35.98ZM6.01 58C5.65 57.9 4.89 56.56 4.42 54H10V52H4.14C4.05 51.1 4 50.1 4 49C4 47.9 4.05 46.9 4.14 46H18V44H4.42C4.89 41.44 5.65 40.1 6 40H33.57C32.7 41.75 32.22 44.39 32.06 46.94C32.02 47.6 32 48.29 32 49C32 49.71 32.02 50.4 32.06 51.06C32.22 53.61 32.69 56.25 33.57 58H6.01ZM36.01 58C35.77 57.93 35.32 57.28 34.91 56H37.08C36.6 57.5 36.12 57.97 36.01 58ZM52.99 54H34.41C34.3 53.41 34.21 52.74 34.14 52H53V54H52.99ZM55.99 50H34.02C34.01 49.67 33.99 49.35 33.99 49C33.99 48.65 34.01 48.33 34.02 48H35.99V46H34.13C34.2 45.26 34.3 44.59 34.4 44H49.98V46H37.98V48H55.98V50H55.99ZM59.99 47H57.99C57.99 46.45 57.54 46 56.99 46H51.99V45H59.99V47Z\" fill=\"url(#paint0_linear_56_708)\"/>\n" +
@@ -76,7 +83,7 @@ export const writeThroughput: Widget = {
       sample by ${sampleBySeconds}s FROM timestamp_floor('${sampleBySeconds}s', '${from}') TO timestamp_floor('${sampleBySeconds}s', '${to}') fill(0)
     `
   },
-  alignData: (data: RowsApplied[]): uPlot.AlignedData => [
+  alignData: (data: WalRowThroughput[]): uPlot.AlignedData => [
     data.map((l) => new Date(l.time).getTime()),
     data.map((l) => l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,),
   ],

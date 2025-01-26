@@ -62,7 +62,7 @@ export const TooltipArrow = styled.div`
 
 export const Wrapper = styled.div`
   position: relative;
-  max-width: 260px;
+  max-width: 460px;
   padding: 1rem;
   background: ${color("backgroundDarker")};
   border: 1px solid ${color("gray1")};

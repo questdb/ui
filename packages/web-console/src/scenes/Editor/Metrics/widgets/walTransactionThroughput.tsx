@@ -1,18 +1,25 @@
 import React from "react"
 import uPlot from "uplot"
-import type { Widget, CommitRate } from "../types"
+import type { Widget, WallTransactionThroughout } from "../types"
 import { sqlValueToFixed, formatNumbers } from "../utils"
 import { TelemetryTable } from "../../../../consts"
 
-export const commitRate: Widget = {
+export const walTransactionThroughput: Widget = {
   distribution: 1,
-  label: "WAL commit rate ( transactions/s )",
-  getDescription: ({ lastValue }) => (
+  label: "WAL Transaction Throughput",
+  chartTitle: "WAL transaction throughput ( transactions/s )",
+  getDescription: () => (
     <>
-      The rate of WAL Apply Job merging transaction to the table.
-      <br/>
-      <br/>
-      {lastValue ? `Currently: ${lastValue} commits/s` : ``}
+      This chart monitors the rate at which transactions are merged into tables. Performance is influenced by:
+
+      <ul>
+        <li>Batch merging efficiency (multiple transactions processed together)</li>
+        <li>Data ingestion rate from source</li>
+        <li>Storage performance and contention</li>
+        <li>Concurrent writes across multiple tables sharing resources</li>
+      </ul>
+
+      Compare against data source metrics to distinguish between ingestion bottlenecks and system performance limitations.
     </>
   ),
   icon: "<svg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n" +
@@ -105,7 +112,7 @@ export const commitRate: Widget = {
         ) sample by ${sampleBySeconds}s`
     }
   },
-  alignData: (data: CommitRate[]): uPlot.AlignedData =>
+  alignData: (data: WallTransactionThroughout[]): uPlot.AlignedData =>
     [
       data.map((l) => Date.parse(l.created)),
       data.map((l) => sqlValueToFixed(l.commit_rate)),
