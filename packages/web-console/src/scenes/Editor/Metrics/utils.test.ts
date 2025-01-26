@@ -87,7 +87,14 @@ describe("getXAxisFormat", () => {
         new Date("2025-01-01T00:00:00Z").getTime(),
         new Date("2025-01-02T00:00:00Z").getTime(),
       ),
-    ).toBe("01/01")
+    ).toBe("00/00")
+      expect(
+          getXAxisFormat(
+              tickValue,
+              new Date("2025-01-01T00:00:00Z").getTime(),
+              new Date("2025-01-04T00:00:00Z").getTime(),
+          ),
+      ).toBe("01/01")
   })
 })
 
