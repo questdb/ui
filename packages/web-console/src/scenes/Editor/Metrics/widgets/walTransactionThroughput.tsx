@@ -7,10 +7,10 @@ import { TelemetryTable } from "../../../../consts"
 export const walTransactionThroughput: Widget = {
   distribution: 1,
   label: "WAL Transaction Throughput",
-  chartTitle: "WAL transaction throughput ( transactions/s )",
+  chartTitle: "Transaction Throughput (txn/s)",
   getDescription: () => (
     <>
-      This chart monitors the rate at which transactions are merged into tables. Performance is influenced by:
+      This chart monitors the rate at which transactions are applied to tables. Performance is influenced by:
 
       <ul>
         <li>Batch merging efficiency (multiple transactions processed together)</li>

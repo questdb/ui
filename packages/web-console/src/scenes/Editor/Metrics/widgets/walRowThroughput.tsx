@@ -7,7 +7,7 @@ import {TelemetryTable} from "../../../../consts"
 export const walRowThroughput: Widget = {
   distribution: 1,
   label: "WAL Row Throughput",
-  chartTitle: "Row Processing Throughput",
+  chartTitle: "Row Processing Throughput (rows/s)",
   getDescription: () => (
     <>
       This chart displays rows processed per second during transaction merges. While similar to transaction throughput, this metric helps identify:

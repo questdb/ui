@@ -7,7 +7,7 @@ import { TelemetryTable } from "../../../../consts"
 export const walTransactionLatency: Widget = {
   distribution: 1,
   label: "WAL Transaction Latency",
-  chartTitle: "WAL Transaction Latency ( 0.9 percentile )",
+  chartTitle: "WAL Transaction Latency (90th percentile)",
   getDescription: () => (
     <>
       This chart tracks the time required for data to become readable after being written. Higher latency may stem from:

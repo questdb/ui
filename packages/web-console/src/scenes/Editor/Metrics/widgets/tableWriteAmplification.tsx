@@ -7,7 +7,7 @@ import { TelemetryTable } from "../../../../consts"
 export const tableWriteAmplification: Widget = {
   distribution: 1,
   label: "Table Write Amplification",
-  chartTitle: "Write amplification",
+  chartTitle: "Write Amplification",
   getDescription: () => (
     <>
       This chart tracks the data write overhead during merge operations. Write amplification occurs when:

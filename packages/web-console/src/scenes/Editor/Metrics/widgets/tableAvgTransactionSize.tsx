@@ -6,7 +6,7 @@ import { sqlValueToFixed } from "../utils"
 export const tableAvgTransactionSize: Widget = {
   distribution: 1,
   label: "Average Transaction Size",
-  chartTitle: "Average Transaction Size Over Time (rows)",
+  chartTitle: "Average Transaction Size (rows/txn)",
   getDescription: () => (
     <>
       This chart tracks the mean size of transactions processed through the database API. While the database is optimized for both small and large transactions, larger batch sizes generally lead to better database performance. Monitor this metric to understand your API's transaction patterns and identify opportunities for batch size optimization.
