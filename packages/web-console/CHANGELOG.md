@@ -16,6 +16,12 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.1 - 2025.01.27
+
+### Fixed
+
+- fixed issues introduced by [#352](https://github.com/questdb/ui/pull/352) - https://github.com/questdb/ui/pull/378
+
 ## 0.7.0 - 2025.01.21
 
 ### Added
