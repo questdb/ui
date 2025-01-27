@@ -121,7 +121,10 @@ export const Help = () => {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenuContent>
-            <DropdownMenuItem onSelect={(e: Event) => e.preventDefault()}>
+            <DropdownMenuItem
+              onSelect={(e: Event) => e.preventDefault()}
+              data-hook="help-link-contact-us"
+            >
               <Chat3 size="18px" />
               <Text color="foreground" onClick={() => setFeedbackOpen(true)}>
                 Contact us
