@@ -1,41 +1,35 @@
-import React, { useEffect, useState, useContext } from "react"
-import { Metric as MetricItem } from "../../../store/buffers"
+import React, {useContext, useEffect, useState, useMemo} from "react"
+import {Metric as MetricItem} from "../../../store/buffers"
 import {
-  MetricType,
-  hasData,
-  mergeRollingData,
-  getSamplingRateForPeriod,
+  compactSQL,
   durationTokenToDate,
   formatToISOIfNeeded,
+  getSamplingRateForPeriod,
+  hasData,
+  MetricType,
 } from "./utils"
-import type {
-  DateRange,
-  LastNotNull,
-  ResultType,
-  MetricsRefreshPayload,
-} from "./types"
-import { widgets } from "./widgets"
-import { QuestContext } from "../../../providers"
+import type {DateRange, LastNotNull, MetricsRefreshPayload, ResultType,} from "./types"
+import {widgets} from "./widgets"
+import {QuestContext} from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
-import { Graph } from "./graph"
+import {Graph} from "./graph"
 import uPlot from "uplot"
 import styled from "styled-components"
-import { Box, Button, ForwardRef, Popover } from "@questdb/react-components"
-import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
-import { TableSelector } from "./table-selector"
-import { IconWithTooltip } from "../../../components/IconWithTooltip"
-import { ColorPalette } from "./color-palette"
-import { eventBus } from "../../../modules/EventBus"
-import { EventType } from "../../../modules/EventBus/types"
-import { formatISO } from "date-fns"
+import {Box, Button, ForwardRef, Popover} from "@questdb/react-components"
+import {Error, Palette, Trash} from "@styled-icons/boxicons-regular"
+import {useSelector} from "react-redux"
+import {selectors} from "../../../store"
+import {TableSelector} from "./table-selector"
+import {IconWithTooltip} from "../../../components"
+import {ColorPalette} from "./color-palette"
+import {eventBus} from "../../../modules/EventBus"
+import {EventType} from "../../../modules/EventBus/types"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background-color: ${({ theme }) => theme.color.backgroundLighter};
+  background-color: ${({theme}: { theme: any }) => theme.color.backgroundLighter};
   height: 25rem;
 `
 
@@ -45,19 +39,19 @@ const ActionButton = styled(Button)`
 `
 
 export const Metric = ({
-  dateFrom,
-  dateTo,
-  metric,
-  onRemove,
-  onTableChange,
-  onColorChange,
-}: DateRange & {
+                         dateFrom,
+                         dateTo,
+                         metric,
+                         onRemove,
+                         onTableChange,
+                         onColorChange,
+                       }: DateRange & {
   metric: MetricItem
   onRemove: (metric: MetricItem) => void
   onTableChange: (metric: MetricItem, tableId: number) => void
   onColorChange: (metric: MetricItem, color: string) => void
 }) => {
-  const { quest } = useContext(QuestContext)
+  const {quest} = useContext(QuestContext)
   const [loading, setLoading] = useState(metric.tableId !== undefined)
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
@@ -73,14 +67,25 @@ export const Metric = ({
 
   const tables = useSelector(selectors.query.getTables)
 
-  const tableName = tables.find((t) => t.id === metric.tableId)?.table_name
+  const tableName = tables.find((t: any): boolean => t.id === metric.tableId)?.table_name
   tableNameRef.current = tableName
 
   const widgetConfig = widgets[metric.metricType]
 
+  if (!dataRef.current && !loading && metric.tableId) {
+    metric.tableId = undefined
+    return (
+      <MetricInfoRoot>
+        <Error size="18px"/>
+        Cannot load metric: {widgetConfig ? widgetConfig.label : metric.metricType}
+      </MetricInfoRoot>
+    )
+  }
+
   const fetchMetric = async (overwrite?: boolean) => {
     const isRollingAppendEnabled =
       widgetConfig.querySupportsRollingAppend && !overwrite
+    let isMounted = true;
     setLoading(true)
     setHasError(false)
     try {
@@ -95,25 +100,32 @@ export const Metric = ({
         | QuestDB.QueryResult<LastNotNull>
       >([
         quest.query<ResultType[MetricType]>(
-          widgetConfig
-            .getQuery({
-              tableId: tableIdRef.current,
-              sampleBy: `${sampleBySeconds}s`,
-              from: fromIso,
-              to: toIso,
-            })
-            .replaceAll("\n", " "),
+          compactSQL(
+            widgetConfig
+              .getQuery({
+                tableId: tableIdRef.current,
+                sampleBySeconds: sampleBySeconds,
+                from: fromIso,
+                to: toIso,
+              })
+          ),
         ),
       ])
 
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
-        const alignedData = widgetConfig.alignData(
-          responses[0].data as unknown as ResultType[MetricType],
-        )
-        if (isRollingAppendEnabled) {
-          dataRef.current = mergeRollingData(dataRef.current, alignedData, from)
+        const data = responses[0].data as unknown as ResultType[MetricType][]
+        if (data.length > 0 || !from || !to || !sampleBySeconds) {
+          // when data exists and chart parameters are known we use the
+          // available data, otherwise produce zero line
+          dataRef.current = widgetConfig.alignData(data)
         } else {
-          dataRef.current = alignedData
+          // create zero commits/s chart
+          const start = Date.parse(from);
+          const end = Date.parse(to);
+          const buckets = Math.floor((end - start) / 1000 / sampleBySeconds);
+          const timestamps = Array.from({length: buckets}, (_, i) => (start / 1000 + i * sampleBySeconds) * 1000);
+          const values = new Array(buckets).fill(0);
+          dataRef.current = [timestamps, values];
         }
       }
 
@@ -124,11 +136,19 @@ export const Metric = ({
         )
       }
     } catch (err) {
-      console.error(err)
-      setHasError(true)
+      if (isMounted) {
+        console.error(err);
+        setHasError(true);
+      }
     } finally {
-      setLoading(false)
+      if (isMounted) {
+        setLoading(false)
+      }
     }
+
+    return () => {
+      isMounted = false;
+    };
   }
 
   const handleZoomToData = () => {
@@ -166,15 +186,14 @@ export const Metric = ({
     }
   }, [])
 
-  if (!dataRef.current && !loading && metric.tableId)
-    return (
-      <MetricInfoRoot>
-        <Error size="18px" />
-        Cannot load metric: {widgetConfig.label}
-      </MetricInfoRoot>
-    )
-
   const canZoomToData = false
+  const tableOptions = useMemo(() => {
+    return tables.map((t: any) => ({
+      label: t.table_name,
+      value: t.id.toString(),
+      disabled: !t.walEnabled,
+    }));
+  }, [tables])
 
   return (
     <Graph
@@ -194,16 +213,10 @@ export const Metric = ({
         <TableSelector
           tableId={metric.tableId}
           loading={loading}
-          options={tables.map((t) => {
-            return {
-              label: t.table_name,
-              value: t.id.toString(),
-              disabled: !t.walEnabled,
-            }
-          })}
+          options={tableOptions}
           placeholder="Select table"
-          onSelect={(value) => onTableChange(metric, parseInt(value as string))}
-          defaultValue={metric.tableId && tableName ? tableName : ""}
+          onSelect={(value: any) => onTableChange(metric, parseInt(value as string))}
+          defaultValue={tableNameRef.current || ""}
         />
       }
       actions={
@@ -216,7 +229,7 @@ export const Metric = ({
                   onOpenChange={setColorPickerOpen}
                   trigger={
                     <ActionButton skin="transparent">
-                      <Palette size="18px" />
+                      <Palette size="18px"/>
                     </ActionButton>
                   }
                   align="center"
@@ -234,7 +247,7 @@ export const Metric = ({
           <IconWithTooltip
             icon={
               <ActionButton skin="transparent" onClick={() => onRemove(metric)}>
-                <Trash size="18px" />
+                <Trash size="18px"/>
               </ActionButton>
             }
             tooltip="Remove metric"
