@@ -113,8 +113,6 @@ export const Metrics = () => {
 
   const updateMetrics = (metrics: Metric[]) => {
     if (buffer?.id) {
-      console.log("NEW: ")
-      console.log(metrics)
       updateBuffer(buffer?.id, {
         metricsViewState: {
           ...buffer?.metricsViewState,
@@ -134,8 +132,6 @@ export const Metrics = () => {
 
   const handleRemoveMetric = (metric: Metric) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
-      console.log("BEFORE")
-      console.log(metric)
       updateMetrics(
         buffer?.metricsViewState?.metrics
           .filter((m:any) => m.position !== metric.position)

@@ -77,11 +77,11 @@ const Item = styled.li<{ active: boolean; disabled: boolean }>`
   height: 3rem;
   padding: 0 1rem;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  ${({active, theme}:{active: boolean, theme:any}) => `
+  ${({active, theme}: { active: boolean, theme: any }) => `
     background: ${active ? theme.color.selection : "transparent"};
   `}
 
-  ${({disabled, theme}: {disabled: boolean, theme: any}) => `
+  ${({disabled, theme}: { disabled: boolean, theme: any }) => `
     color: ${disabled ? theme.color.gray1 : theme.color.foreground};
     cursor: ${disabled ? "not-allowed" : "pointer"};
   `}
@@ -103,6 +103,7 @@ export const TableSelector = ({
   const upPress = useKeyPress("ArrowUp")
   const enterPress = useKeyPress("Enter")
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const initialQuery = useRef<string | undefined>(undefined);
 
   const filteredOptions = options
     .filter((option) =>
@@ -115,8 +116,15 @@ export const TableSelector = ({
 
     if (inputRef.current && shadowInputRef.current && !loading) {
       inputRef.current.style.width = `${shadowInputRef.current.offsetWidth}px`
+      const nextValue:string = defaultValue ?? ""
 
-      setQuery(defaultValue ?? "")
+      // As we refresh the edit quite frequently, this code is necessary
+      // to allow user change table name. Unchecked table name is overwritten at the same
+      // time as user edits it.
+      if ( initialQuery.current !== nextValue) {
+        setQuery(defaultValue ?? "");
+        initialQuery.current = defaultValue ?? "";
+      }
 
       if (defaultValue === "" && !tableId) {
         inputRef.current!.focus()

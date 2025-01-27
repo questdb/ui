@@ -1,16 +1,16 @@
 // TZ = UTC in Jest config
 
 import {
-  getAutoRefreshRate,
-  getXAxisFormat,
-  sqlValueToFixed,
-  formatNumbers,
-  formatSamplingRate,
-  formatToISOIfNeeded,
-  getSamplingRateForPeriod,
-  hasData,
-  isDateToken,
-  durationToHumanReadable,
+    getAutoRefreshRate,
+    getXAxisFormat,
+    sqlValueToFixed,
+    formatNumbers,
+    formatSamplingRate,
+    formatToISOIfNeeded,
+    getSamplingRateForPeriod,
+    hasData,
+    isDateToken,
+    durationToHumanReadable, compactSQL,
 } from "./utils"
 
 describe("getAutoRefreshRate", () => {
@@ -222,3 +222,89 @@ describe("durationToHumanReadable", () => {
     ).toContain("2025-01-01 00:00:00 - 2025-01-01 00:05:00")
   })
 })
+
+describe("compactSQL", () => {
+    it("should remove consecutive spaces, new lines and leading/trailing spaces", () => {
+        const sqlQuery = `
+            SELECT  id ,  name  -- Get user data
+            FROM users  
+            WHERE ( age  >  21 )  AND ( salary  *  2  >  5000 )  
+            /* Filter only adults */
+            ORDER BY name ASC  
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id,name FROM users WHERE(age>21)AND(salary*2>5000)ORDER BY name ASC");
+    });
+
+    it("should remove single-line comments (--)", () => {
+        const sqlQuery = `
+            SELECT id, name -- This is a comment
+            FROM users;
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id,name FROM users;");
+    });
+
+    it("should remove multi-line comments (/* ... */)", () => {
+        const sqlQuery = `
+            SELECT id, name /* This is a multi-line 
+            comment */
+            FROM users;
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id,name FROM users;");
+    });
+
+    it("should remove unnecessary spaces around commas, parentheses, and operators", () => {
+        const sqlQuery = `
+            SELECT ( id ) , ( name ) FROM users WHERE ( age + 5 ) > ( 21 * 2 );
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT(id),(name)FROM users WHERE(age+5)>(21*2);");
+    });
+
+    it("should collapse multiple spaces into a single space", () => {
+        const sqlQuery = `SELECT    id   ,   name   FROM   users   WHERE   age    >   21;`;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id,name FROM users WHERE age>21;");
+    });
+
+    it("should replace newlines and tabs with spaces", () => {
+        const sqlQuery = `
+            SELECT id, 
+                   name  
+            FROM   users 
+            WHERE  age > 21;
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id,name FROM users WHERE age>21;");
+    });
+
+    it("should handle nested queries correctly", () => {
+        const sqlQuery = `
+            SELECT id FROM (
+                SELECT id FROM users WHERE age > 21
+            ) AS subquery;
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id FROM(SELECT id FROM users WHERE age>21)AS subquery;");
+    });
+
+    it("should preserve spaces inside string literals", () => {
+        const sqlQuery = `
+            SELECT name FROM users WHERE status = '  active  ';
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT name FROM users WHERE status='  active  ';");
+    });
+
+    it("should remove comments but preserve valid SQL with mixed comments", () => {
+        const sqlQuery = `
+            SELECT id -- inline comment
+            , name /* multi-line 
+            comment */ 
+            FROM users 
+            WHERE age > 21;
+        `;
+        expect(compactSQL(sqlQuery)).toBe("SELECT id,name FROM users WHERE age>21;");
+    });
+
+    it("should not modify special characters like @, -, _", () => {
+        const sqlQuery = `
+            SELECT "user-name", 'user-email@domain.com' FROM users;
+        `;
+        expect(compactSQL(sqlQuery)).toBe(`SELECT "user-name",'user-email@domain.com' FROM users;`);
+    });
+});

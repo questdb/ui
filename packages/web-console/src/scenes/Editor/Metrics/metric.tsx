@@ -1,6 +1,13 @@
-import React, {useContext, useEffect, useState} from "react"
+import React, {useContext, useEffect, useState, useMemo} from "react"
 import {Metric as MetricItem} from "../../../store/buffers"
-import {durationTokenToDate, formatToISOIfNeeded, getSamplingRateForPeriod, hasData, MetricType,} from "./utils"
+import {
+  compactSQL,
+  durationTokenToDate,
+  formatToISOIfNeeded,
+  getSamplingRateForPeriod,
+  hasData,
+  MetricType,
+} from "./utils"
 import type {DateRange, LastNotNull, MetricsRefreshPayload, ResultType,} from "./types"
 import {widgets} from "./widgets"
 import {QuestContext} from "../../../providers"
@@ -93,14 +100,15 @@ export const Metric = ({
         | QuestDB.QueryResult<LastNotNull>
       >([
         quest.query<ResultType[MetricType]>(
-          widgetConfig
-            .getQuery({
-              tableId: tableIdRef.current,
-              sampleBySeconds: sampleBySeconds,
-              from: fromIso,
-              to: toIso,
-            })
-            .replaceAll("\n", " "),
+          compactSQL(
+            widgetConfig
+              .getQuery({
+                tableId: tableIdRef.current,
+                sampleBySeconds: sampleBySeconds,
+                from: fromIso,
+                to: toIso,
+              })
+          ),
         ),
       ])
 
@@ -179,6 +187,13 @@ export const Metric = ({
   }, [])
 
   const canZoomToData = false
+  const tableOptions = useMemo(() => {
+    return tables.map((t: any) => ({
+      label: t.table_name,
+      value: t.id.toString(),
+      disabled: !t.walEnabled,
+    }));
+  }, [tables])
 
   return (
     <Graph
@@ -198,16 +213,10 @@ export const Metric = ({
         <TableSelector
           tableId={metric.tableId}
           loading={loading}
-          options={tables.map((t: any) => {
-            return {
-              label: t.table_name,
-              value: t.id.toString(),
-              disabled: !t.walEnabled,
-            }
-          })}
+          options={tableOptions}
           placeholder="Select table"
-          onSelect={(value) => onTableChange(metric, parseInt(value as string))}
-          defaultValue={metric.tableId && tableName ? tableName : ""}
+          onSelect={(value: any) => onTableChange(metric, parseInt(value as string))}
+          defaultValue={tableNameRef.current || ""}
         />
       }
       actions={
