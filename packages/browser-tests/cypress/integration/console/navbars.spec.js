@@ -24,4 +24,15 @@ describe("Sidebar tests", () => {
       )
       .should("have.text", "Web Console Docs");
   });
+
+  it("should open up the feedback form", () => {
+    cy.getByDataHook("help-panel-button").click();
+    cy.getByDataHook("help-link-contact-us").click();
+    cy.get('form[name="feedback-dialog"]').should("be.visible");
+    cy.get('form[name="feedback-dialog"]').within(() => {
+      cy.get('input[name="email"]').type("email@address.com");
+      cy.get('textarea[name="message"]').type("This is a test message");
+      cy.getByDataHook("form-submit-button").should("not.be.disabled");
+    });
+  });
 });

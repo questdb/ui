@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { AlertDialog } from "../AlertDialog";
 import { Box } from "../Box";
 import { Button } from "../Button";
@@ -120,7 +120,7 @@ const Footer = ({
 };
 
 type Props = {
-  trigger: ({
+  trigger?: ({
     setOpen,
   }: {
     setOpen: (open: boolean) => void;
@@ -131,6 +131,8 @@ type Props = {
   initialMessage?: string;
   afterMessage?: React.ReactNode;
   withEmailInput?: boolean;
+  open?: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
 type ErrorList = Record<string, string>;
@@ -143,10 +145,12 @@ export const FeedbackDialog = ({
   initialMessage,
   afterMessage,
   onSubmit,
+  open,
+  onOpenChange,
 }: Props) => {
   const [errors, setErrors] = useState<ErrorList>({});
   const [message, setMessage] = useState<string>(initialMessage ?? "");
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(open);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateFields = (
@@ -181,11 +185,17 @@ export const FeedbackDialog = ({
     }
   };
 
+  useEffect(() => {
+    setIsOpen(open);
+  }, [open]);
+
   return (
-    <AlertDialog.Root open={open}>
-      <AlertDialog.Trigger asChild>
-        <ForwardRef>{trigger({ setOpen })}</ForwardRef>
-      </AlertDialog.Trigger>
+    <AlertDialog.Root open={isOpen} onOpenChange={onOpenChange}>
+      {trigger && (
+        <AlertDialog.Trigger asChild>
+          <ForwardRef>{trigger({ setOpen: setIsOpen })}</ForwardRef>
+        </AlertDialog.Trigger>
+      )}
 
       <AlertDialog.Portal>
         <ForwardRef>
@@ -209,7 +219,8 @@ export const FeedbackDialog = ({
                     email: withEmailInput ? e.target.email.value : undefined,
                     message: e.target.message.value,
                   });
-                  setOpen(false);
+                  setIsOpen(false);
+                  onOpenChange(false);
                 } catch (error) {
                   Promise.reject(error);
                 } finally {
@@ -234,7 +245,10 @@ export const FeedbackDialog = ({
                   <Button
                     type="button"
                     skin="transparent"
-                    onClick={() => setOpen(false)}
+                    onClick={() => {
+                      setIsOpen(false);
+                      onOpenChange(false);
+                    }}
                   >
                     <X size={18} />
                   </Button>
@@ -297,7 +311,8 @@ export const FeedbackDialog = ({
                 onConfirm={() => {
                   setErrors({});
                   setMessage("");
-                  setOpen(false);
+                  setIsOpen(false);
+                  onOpenChange(false);
                 }}
               />
             </Card>
