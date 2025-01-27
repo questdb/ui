@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState, useRef } from "react"
 import styled from "styled-components"
 import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
@@ -19,13 +19,14 @@ import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
 import merge from "lodash.merge"
 import { AddChart } from "@styled-icons/material"
-import { IconWithTooltip } from "../../../components/IconWithTooltip"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import { IconWithTooltip } from "../../../components"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { formatISO } from "date-fns"
 import { DateTimePicker } from "./date-time-picker"
 import { ForwardRef } from "@questdb/react-components"
+import useElementVisibility from '../../../hooks/useElementVisibility';
+import {widgets} from "./widgets";
 
 const Root = styled.div`
   display: flex;
@@ -60,7 +61,7 @@ const Charts = styled(Box).attrs({
   align: "flex-start",
   gap: "2.5rem",
 })<{ noMetrics: boolean; viewMode: MetricViewMode }>`
-  align-content: ${({ noMetrics }) => (noMetrics ? "center" : "flex-start")};
+  align-content: ${({ noMetrics }: {noMetrics: any}) => (noMetrics ? "center" : "flex-start")};
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
@@ -68,7 +69,7 @@ const Charts = styled(Box).attrs({
   flex-wrap: wrap;
 
   > div {
-    width: ${({ viewMode }) =>
+    width: ${({ viewMode } : {viewMode: any}) =>
       viewMode === MetricViewMode.GRID ? "calc(50% - 1.25rem)" : "100%"};
     flex-shrink: 0;
   }
@@ -82,7 +83,7 @@ const GlobalInfo = styled(Box).attrs({
 
   code {
     background: #505368;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }:{theme: any}) => theme.color.foreground};
   }
 `
 
@@ -101,8 +102,6 @@ export const Metrics = () => {
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
   const intervalRef = React.useRef<NodeJS.Timeout>()
-
-  const { autoRefreshTables } = useLocalStorage()
 
   const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
@@ -135,8 +134,8 @@ export const Metrics = () => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics
-          .filter((m) => m.position !== metric.position)
-          .map((m, index) => ({ ...m, position: index })),
+          .filter((m:any) => m.position !== metric.position)
+          .map((m: any, index: any) => ({ ...m, position: index })),
       )
     }
   }
@@ -144,7 +143,7 @@ export const Metrics = () => {
   const handleTableChange = (metric: Metric, tableId: number) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
-        buffer?.metricsViewState?.metrics.map((m) =>
+        buffer?.metricsViewState?.metrics.map((m: any) =>
           m.position === metric.position ? { ...m, tableId } : m,
         ),
       )
@@ -154,7 +153,7 @@ export const Metrics = () => {
   const handleColorChange = (metric: Metric, color: string) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
-        buffer?.metricsViewState?.metrics.map((m) =>
+        buffer?.metricsViewState?.metrics.map((m: any) =>
           m.position === metric.position ? { ...m, color } : m,
         ),
       )
@@ -181,22 +180,30 @@ export const Metrics = () => {
     tabInFocusRef.current = false
   }, [])
 
-  const setupListeners = () => {
+  const [elementRef, isVisible] = useElementVisibility(1000);
+  const isVisibleRef = useRef(isVisible);
+
+  useEffect(() => {
+    isVisibleRef.current = isVisible;
+  }, [isVisible]);
+
+  const setupListeners = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
     }
-    if (autoRefreshTables && refreshRate && refreshRate !== RefreshRate.OFF) {
+    if (refreshRate && refreshRate !== RefreshRate.OFF) {
       intervalRef.current = setInterval(
         () => {
-          if (!tabInFocusRef.current) return
-          refreshMetricsData()
+          if (isVisibleRef.current) {
+            refreshMetricsData()
+          }
         },
         refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
       )
     } else {
       clearInterval(intervalRef.current)
     }
-  }
+  }, [refreshRate, refreshRateInSec, refreshMetricsData]);
 
   useEffect(() => {
     if (buffer) {
@@ -277,6 +284,7 @@ export const Metrics = () => {
     }
   }, [])
 
+
   if (telemetryConfig && !telemetryConfig.enabled) {
     return (
       <Root>
@@ -313,7 +321,7 @@ export const Metrics = () => {
   }
 
   return (
-    <Root>
+    <Root ref={elementRef}>
       <Toolbar>
         <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
         <Box align="center" gap="1rem">
@@ -336,7 +344,7 @@ export const Metrics = () => {
                     label: `Refresh: ${rate}`,
                     value: rate,
                   }))}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setRefreshRate(e.target.value as RefreshRate)
                   }
                 />
@@ -406,18 +414,24 @@ export const Metrics = () => {
         )}
         {metrics &&
           metrics
-            .sort((a, b) => a.position - b.position)
-            .map((metric, index) => (
-              <MetricComponent
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                key={index}
-                metric={metric}
-                onRemove={handleRemoveMetric}
-                onTableChange={handleTableChange}
-                onColorChange={handleColorChange}
-              />
-            ))}
+            .sort((a: Metric, b: Metric) => a.position - b.position)
+            .filter((metric: Metric) => widgets[metric.metricType])
+            .map((metric:Metric, index: number) => {
+              return (
+                <MetricComponent
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  // key is not used by the metric component, but
+                  // is required to comply with React requirements for
+                  // components that are being added to a list
+                  key={index}
+                  metric={metric}
+                  onRemove={handleRemoveMetric}
+                  onTableChange={handleTableChange}
+                  onColorChange={handleColorChange}
+                />
+              );
+            })}
       </Charts>
     </Root>
   )

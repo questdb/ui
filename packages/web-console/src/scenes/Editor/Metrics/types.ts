@@ -1,5 +1,6 @@
 import uPlot from "uplot"
 import { MetricType } from "./utils"
+import React from "react";
 
 export type DateRange = {
   dateFrom: string
@@ -8,7 +9,7 @@ export type DateRange = {
 
 type MethodArgs = {
   tableId?: number
-  sampleBy?: string
+  sampleBySeconds?: number
   lastValue?: number | string
   limit?: number
   from?: string
@@ -17,8 +18,9 @@ type MethodArgs = {
 
 export type Widget = {
   label: string
-  getDescription: ({ sampleBy }: MethodArgs) => React.ReactNode
-  iconUrl: string
+  chartTitle: string
+  getDescription: ({ sampleBySeconds }: MethodArgs) => React.ReactNode
+  icon: string
   isTableMetric: boolean
   /**
    * Scale distribution:
@@ -29,8 +31,7 @@ export type Widget = {
    * 100 - Custom
    */
   distribution: uPlot.Scale.Distr
-  getQuery: ({ tableId, sampleBy, limit, from, to }: MethodArgs) => string
-  getQueryLastNotNull: (id?: number) => string
+  getQuery: ({ tableId, sampleBySeconds, limit, from, to }: MethodArgs) => string
   querySupportsRollingAppend: boolean
   alignData: (data: any) => uPlot.AlignedData
   mapYValue: (rawValue: number) => number | string
@@ -44,24 +45,27 @@ export type Duration = DateRange & {
   label: string
 }
 
-export type CommitRate = {
+export type WallTransactionThroughout = {
   created: string
   commit_rate: string
-  commit_rate_smooth: string
 }
 
-export type WriteAmplification = {
+export type TableWriteAmplification = {
   created: string
   writeAmplification: string
 }
 
-export type RowsApplied = {
-  time: string
-  numOfRowsApplied: string
-  avgWalAmplification: string
+export type TableAverageTransactionSize = {
+    created: string
+    avg_rows: string
 }
 
-export type Latency = {
+export type WalRowThroughput = {
+  time: string
+  numOfRowsApplied: string
+}
+
+export type WalTransactionLatency = {
   created: string
   latency: string
 }
@@ -71,8 +75,9 @@ export type LastNotNull = {
 }
 
 export type ResultType = {
-  [MetricType.COMMIT_RATE]: CommitRate
-  [MetricType.LATENCY]: Latency
-  [MetricType.WRITE_THROUGHPUT]: RowsApplied
-  [MetricType.WRITE_AMPLIFICATION]: RowsApplied
+  [MetricType.WAL_TRANSACTION_THROUGHPUT]: WallTransactionThroughout
+  [MetricType.WAL_TRANSACTION_LATENCY]: WalTransactionLatency
+  [MetricType.WAL_ROW_THROUGHPUT]: WalRowThroughput
+  [MetricType.TABLE_WRITE_AMPLIFICATION]: TableWriteAmplification
+  [MetricType.TABLE_AVERAGE_TRANSACTION_SIZE]: TableAverageTransactionSize
 }
