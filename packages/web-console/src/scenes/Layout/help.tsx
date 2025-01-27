@@ -40,6 +40,12 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
   height: 100%;
 `
 
+const ShortcutsWrapper = styled.div`
+  position: fixed;
+  right: 0;
+  margin-top: 4.5rem;
+`
+
 const MenuLink: React.FunctionComponent<{
   href: string
   text: string
@@ -64,9 +70,38 @@ export const Help = () => {
     setShortcutsPopperActive(active)
   }, [])
   const [open, setOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   return (
     <React.Fragment>
+      <FeedbackDialog
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        withEmailInput
+        title="Contact us"
+        subtitle="Let us know your thoughts"
+        onSubmit={async ({
+          email,
+          message,
+        }: {
+          email: string
+          message: string
+        }) => {
+          try {
+            await quest.sendFeedback({
+              email,
+              message,
+              telemetryConfig,
+            })
+            toast.success(
+              "Thank you for your feedback! Our team will review it shortly.",
+            )
+          } catch (err) {
+            toast.error("Something went wrong. Please try again later.")
+            throw err
+          }
+        }}
+      />
       <DropdownMenu.Root modal={false} onOpenChange={setOpen}>
         <DropdownMenu.Trigger asChild>
           <HelpButton
@@ -86,39 +121,14 @@ export const Help = () => {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenuContent>
-            <DropdownMenuItem onSelect={(e: Event) => e.preventDefault()}>
+            <DropdownMenuItem
+              onSelect={(e: Event) => e.preventDefault()}
+              data-hook="help-link-contact-us"
+            >
               <Chat3 size="18px" />
-              <FeedbackDialog
-                withEmailInput
-                title="Contact us"
-                subtitle="Let us know your thoughts"
-                trigger={({ setOpen }) => (
-                  <Text color="foreground" onClick={() => setOpen(true)}>
-                    Contact us
-                  </Text>
-                )}
-                onSubmit={async ({
-                  email,
-                  message,
-                }: {
-                  email: string
-                  message: string
-                }) => {
-                  try {
-                    await quest.sendFeedback({
-                      email,
-                      message,
-                      telemetryConfig,
-                    })
-                    toast.success(
-                      "Thank you for your feedback! Our team will review it shortly.",
-                    )
-                  } catch (err) {
-                    toast.error("Something went wrong. Please try again later.")
-                    throw err
-                  }
-                }}
-              />
+              <Text color="foreground" onClick={() => setFeedbackOpen(true)}>
+                Contact us
+              </Text>
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Slack size="18px" />
@@ -171,7 +181,9 @@ export const Help = () => {
         onToggle={handleShortcutsToggle}
         trigger={<React.Fragment />}
       >
-        <Shortcuts />
+        <ShortcutsWrapper>
+          <Shortcuts />
+        </ShortcutsWrapper>
       </PopperToggle>
     </React.Fragment>
   )
