@@ -40,6 +40,12 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
   height: 100%;
 `
 
+const ShortcutsWrapper = styled.div`
+  position: fixed;
+  right: 0;
+  margin-top: 4.5rem;
+`
+
 const MenuLink: React.FunctionComponent<{
   href: string
   text: string
@@ -172,7 +178,9 @@ export const Help = () => {
         onToggle={handleShortcutsToggle}
         trigger={<React.Fragment />}
       >
-        <Shortcuts />
+        <ShortcutsWrapper>
+          <Shortcuts />
+        </ShortcutsWrapper>
       </PopperToggle>
     </React.Fragment>
   )
