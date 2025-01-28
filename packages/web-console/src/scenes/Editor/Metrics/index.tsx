@@ -1,30 +1,30 @@
-import React, { useCallback, useEffect, useState, useRef } from "react"
+import React, {useCallback, useEffect, useState, useRef} from "react"
 import styled from "styled-components"
-import { Box, Button, Select } from "@questdb/react-components"
-import { Text, Link } from "../../../components"
-import { useEditor } from "../../../providers"
+import {Box, Button, Select} from "@questdb/react-components"
+import {Text, Link} from "../../../components"
+import {useEditor} from "../../../providers"
 import {
   RefreshRate,
   refreshRatesInSeconds,
   MetricViewMode,
   getAutoRefreshRate,
 } from "./utils"
-import type { MetricsRefreshPayload } from "./types"
-import { GridAlt, Menu, Refresh } from "@styled-icons/boxicons-regular"
-import { AddMetricDialog } from "./add-metric-dialog"
-import type { Metric } from "../../../store/buffers"
-import { Metric as MetricComponent } from "./metric"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
-import { ExternalLink } from "@styled-icons/remix-line"
+import type {MetricsRefreshPayload} from "./types"
+import {GridAlt, Menu, Refresh} from "@styled-icons/boxicons-regular"
+import {AddMetricDialog} from "./add-metric-dialog"
+import type {Metric} from "../../../store/buffers"
+import {Metric as MetricComponent} from "./metric"
+import {useSelector} from "react-redux"
+import {selectors} from "../../../store"
+import {ExternalLink} from "@styled-icons/remix-line"
 import merge from "lodash.merge"
-import { AddChart } from "@styled-icons/material"
-import { IconWithTooltip } from "../../../components"
-import { eventBus } from "../../../modules/EventBus"
-import { EventType } from "../../../modules/EventBus/types"
-import { formatISO } from "date-fns"
-import { DateTimePicker } from "./date-time-picker"
-import { ForwardRef } from "@questdb/react-components"
+import {AddChart} from "@styled-icons/material"
+import {IconWithTooltip} from "../../../components"
+import {eventBus} from "../../../modules/EventBus"
+import {EventType} from "../../../modules/EventBus/types"
+import {formatISO} from "date-fns"
+import {DateTimePicker} from "./date-time-picker"
+import {ForwardRef} from "@questdb/react-components"
 import useElementVisibility from '../../../hooks/useElementVisibility';
 import {widgets} from "./widgets";
 
@@ -44,7 +44,7 @@ const Toolbar = styled(Box).attrs({
   width: 100%;
   height: 4.5rem;
   padding: 0 2.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.backgroundDarker};
+  border-bottom: 1px solid ${({theme}: { theme: any }) => theme.color.backgroundDarker};
   box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
   white-space: nowrap;
   flex-shrink: 0;
@@ -53,7 +53,7 @@ const Toolbar = styled(Box).attrs({
 const Header = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({theme}: { theme: any }) => theme.color.foreground};
   margin-bottom: 1rem;
 `
 
@@ -61,7 +61,7 @@ const Charts = styled(Box).attrs({
   align: "flex-start",
   gap: "2.5rem",
 })<{ noMetrics: boolean; viewMode: MetricViewMode }>`
-  align-content: ${({ noMetrics }: {noMetrics: any}) => (noMetrics ? "center" : "flex-start")};
+  align-content: ${({noMetrics}: { noMetrics: any }) => (noMetrics ? "center" : "flex-start")};
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
@@ -69,7 +69,7 @@ const Charts = styled(Box).attrs({
   flex-wrap: wrap;
 
   > div {
-    width: ${({ viewMode } : {viewMode: any}) =>
+    width: ${({viewMode}: { viewMode: any }) =>
       viewMode === MetricViewMode.GRID ? "calc(50% - 1.25rem)" : "100%"};
     flex-shrink: 0;
   }
@@ -83,12 +83,12 @@ const GlobalInfo = styled(Box).attrs({
 
   code {
     background: #505368;
-    color: ${({ theme }:{theme: any}) => theme.color.foreground};
+    color: ${({theme}: { theme: any }) => theme.color.foreground};
   }
 `
 
 export const Metrics = () => {
-  const { activeBuffer, updateBuffer, buffers } = useEditor()
+  const {activeBuffer, updateBuffer, buffers} = useEditor()
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
     MetricViewMode.GRID,
   )
@@ -103,7 +103,7 @@ export const Metrics = () => {
   const refreshRateRef = React.useRef<RefreshRate>()
   const intervalRef = React.useRef<NodeJS.Timeout>()
 
-  const buffer = buffers.find((b) => b.id === activeBuffer?.id)
+  const buffer = buffers.find((b: any) => b.id === activeBuffer?.id)
 
   const refreshRateInSec = refreshRate
     ? refreshRate === RefreshRate.AUTO
@@ -119,6 +119,9 @@ export const Metrics = () => {
           metrics,
         },
       })
+      if (buffer?.metricsViewState?.metrics) {
+        buffer.metricsViewState.metrics = metrics
+      }
     }
   }
 
@@ -131,11 +134,12 @@ export const Metrics = () => {
   }
 
   const handleRemoveMetric = (metric: Metric) => {
+    metric.removed = true;
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics
-          .filter((m:any) => m.position !== metric.position)
-          .map((m: any, index: any) => ({ ...m, position: index })),
+          .filter((m: Metric) => m.position !== metric.position)
+          .map((m: Metric, index: number) => ({...m, position: index})),
       )
     }
   }
@@ -144,7 +148,7 @@ export const Metrics = () => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics.map((m: any) =>
-          m.position === metric.position ? { ...m, tableId } : m,
+          m.position === metric.position ? {...m, tableId} : m,
         ),
       )
     }
@@ -154,7 +158,7 @@ export const Metrics = () => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics.map((m: any) =>
-          m.position === metric.position ? { ...m, color } : m,
+          m.position === metric.position ? {...m, color} : m,
         ),
       )
     }
@@ -233,6 +237,15 @@ export const Metrics = () => {
 
   useEffect(() => {
     if (buffer?.id) {
+      // remove all unknown (or obsolete) metrics on startup
+      // and also make sure entries without "removed" attribute
+      // receive default value
+      if (buffer?.metricsViewState?.metrics) {
+        buffer.metricsViewState.metrics = buffer.metricsViewState.metrics
+          .filter((metric: Metric) => widgets[metric.metricType])
+          .map((metric: Metric) => ({...metric, removed: false}));
+      }
+
       const merged = merge(buffer, {
         metricsViewState: {
           ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
@@ -243,9 +256,10 @@ export const Metrics = () => {
           }),
           ...(dateTo !== buffer?.metricsViewState?.dateTo && {
             dateTo,
-          }),
+          })
         },
       })
+
       if (dateFrom && dateTo) {
         if (refreshRate === RefreshRate.AUTO) {
           setupListeners()
@@ -310,7 +324,7 @@ export const Metrics = () => {
               target="_blank"
             >
               <Box align="center" gap="0.25rem">
-                <ExternalLink size="16px" />
+                <ExternalLink size="16px"/>
                 Documentation
               </Box>
             </Link>
@@ -323,13 +337,13 @@ export const Metrics = () => {
   return (
     <Root ref={elementRef}>
       <Toolbar>
-        <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+        <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen}/>
         <Box align="center" gap="1rem">
-          <Box gap="0.5rem" style={{ flexShrink: 0 }}>
+          <Box gap="0.5rem" style={{flexShrink: 0}}>
             <IconWithTooltip
               icon={
                 <Button skin="secondary" onClick={handleFullRefresh}>
-                  <Refresh size="20px" />
+                  <Refresh size="20px"/>
                 </Button>
               }
               tooltip="Refresh all widgets"
@@ -379,16 +393,16 @@ export const Metrics = () => {
                 }
               >
                 {metricViewMode === MetricViewMode.LIST ? (
-                  <GridAlt size="18px" />
+                  <GridAlt size="18px"/>
                 ) : (
-                  <Menu size="18px" />
+                  <Menu size="18px"/>
                 )}
               </Button>
             }
             tooltip={
               <>
                 Toggle view mode
-                <br />
+                <br/>
                 to {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
               </>
             }
@@ -405,7 +419,7 @@ export const Metrics = () => {
               <Button
                 skin="secondary"
                 onClick={() => setDialogOpen(true)}
-                prefixIcon={<AddChart size="18px" />}
+                prefixIcon={<AddChart size="18px"/>}
               >
                 Add widget
               </Button>
@@ -415,8 +429,8 @@ export const Metrics = () => {
         {metrics &&
           metrics
             .sort((a: Metric, b: Metric) => a.position - b.position)
-            .filter((metric: Metric) => widgets[metric.metricType])
-            .map((metric:Metric, index: number) => {
+            .filter((metric: Metric) => widgets[metric.metricType] && !metric.removed)
+            .map((metric: Metric, index: number) => {
               return (
                 <MetricComponent
                   dateFrom={dateFrom}

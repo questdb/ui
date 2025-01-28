@@ -1,4 +1,4 @@
-import { RefreshRate } from "./../scenes/Editor/Metrics/utils"
+import { RefreshRate } from "../scenes/Editor/Metrics/utils"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -41,6 +41,7 @@ export type Metric = {
   metricType: MetricType
   position: number
   color: string
+  removed: boolean
 }
 
 export type MetricsViewState = {
