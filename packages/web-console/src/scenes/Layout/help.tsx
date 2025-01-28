@@ -75,7 +75,7 @@ const MenuLink: React.FunctionComponent<{
     target="_blank"
     {...rest}
   >
-    <Box align="center" gap="1rem">
+    <Box align="center" gap="1.5rem">
       {icon}
       <Box align="center" gap="0.75rem">
         {text}
