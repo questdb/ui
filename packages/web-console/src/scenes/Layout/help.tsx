@@ -49,7 +49,8 @@ const ShortcutsWrapper = styled.div`
 const MenuLink: React.FunctionComponent<{
   href: string
   text: string
-}> = ({ href, text, ...rest }) => (
+  icon: React.ReactNode
+}> = ({ href, text, icon, ...rest }) => (
   <Link
     color="foreground"
     hoverColor="foreground"
@@ -58,6 +59,7 @@ const MenuLink: React.FunctionComponent<{
     target="_blank"
     {...rest}
   >
+    {icon}
     {text}
   </Link>
 )
@@ -123,54 +125,53 @@ export const Help = () => {
           <DropdownMenuContent>
             <DropdownMenuItem
               onSelect={(e: Event) => e.preventDefault()}
+              onClick={() => setFeedbackOpen(true)}
               data-hook="help-link-contact-us"
             >
               <Chat3 size="18px" />
-              <Text color="foreground" onClick={() => setFeedbackOpen(true)}>
-                Contact us
-              </Text>
+              <Text color="foreground">Contact us</Text>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Slack size="18px" />
+            <DropdownMenuItem asChild>
               <MenuLink
                 data-hook="help-link-slack"
                 href="https://slack.questdb.io/"
                 text="Slack community"
+                icon={<Slack size="18px" />}
               />
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Discourse size="18px" />
+            <DropdownMenuItem asChild>
               <MenuLink
                 data-hook="help-link-community"
                 href="https://community.questdb.io/"
                 text="Public forum"
+                icon={<Discourse size="18px" />}
               />
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <StackOverflow size="18px" />
+            <DropdownMenuItem asChild>
               <MenuLink
                 data-hook="help-link-stackoverflow"
                 href="https://stackoverflow.com/tags/questdb"
                 text="Stack Overflow"
+                icon={<StackOverflow size="18px" />}
               />
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Question size="18px" />
+            <DropdownMenuItem asChild>
               <MenuLink
                 data-hook="help-link-web-console-docs"
                 href="https://questdb.io/docs/develop/web-console/"
                 text="Web Console Docs"
+                icon={<Question size="18px" />}
               />
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
               <Command size="18px" />
               <Text color="foreground">Shortcuts</Text>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Github size="18px" />
+            <DropdownMenuItem asChild>
               <MenuLink
                 href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
                 text={`Commit id: ${process.env.COMMIT_HASH}`}
+                icon={<Github size="18px" />}
               />
             </DropdownMenuItem>
           </DropdownMenuContent>
