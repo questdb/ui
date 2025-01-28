@@ -41,9 +41,9 @@ const DropdownMenuContent = styled(DropdownMenu.Content)`
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
-const DropdownMenuItem = styled(DropdownMenu.Item)<{ withLink?: boolean }>`
+const DropdownMenuItem = styled(DropdownMenu.Item)<{ withlink?: string }>`
   color: ${({ theme }) => theme.color.foreground};
-  ${({ withLink }) => withLink && "padding: 0;"}
+  ${({ withlink }) => withlink && "padding: 0;"}
 `
 
 const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
@@ -159,7 +159,7 @@ export const Help = () => {
               <Chat3 size="18px" />
               <Text color="foreground">Contact us</Text>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild withLink>
+            <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
                   data-hook="help-link-slack"
@@ -169,7 +169,7 @@ export const Help = () => {
                 />
               </ForwardRef>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild withLink>
+            <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
                   data-hook="help-link-community"
@@ -179,7 +179,7 @@ export const Help = () => {
                 />
               </ForwardRef>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild withLink>
+            <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
                   data-hook="help-link-stackoverflow"
@@ -189,7 +189,7 @@ export const Help = () => {
                 />
               </ForwardRef>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild withLink>
+            <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
                   data-hook="help-link-web-console-docs"
@@ -203,7 +203,7 @@ export const Help = () => {
               <Command size="18px" />
               <Text color="foreground">Shortcuts</Text>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild withLink>
+            <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
                   href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
