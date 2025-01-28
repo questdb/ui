@@ -16,6 +16,12 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.2 - 2025.01.28
+
+### Fixed
+
+- another patch for 0.7.0 (charts)
+
 ## 0.7.1 - 2025.01.27
 
 ### Fixed
