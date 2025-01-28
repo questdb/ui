@@ -44,7 +44,7 @@ const Toolbar = styled(Box).attrs({
   width: 100%;
   height: 4.5rem;
   padding: 0 2.5rem;
-  border-bottom: 1px solid ${({theme}: {theme: any}) => theme.color.backgroundDarker};
+  border-bottom: 1px solid ${({theme}: { theme: any }) => theme.color.backgroundDarker};
   box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
   white-space: nowrap;
   flex-shrink: 0;
@@ -53,7 +53,7 @@ const Toolbar = styled(Box).attrs({
 const Header = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({theme}: {theme: any}) => theme.color.foreground};
+  color: ${({theme}: { theme: any }) => theme.color.foreground};
   margin-bottom: 1rem;
 `
 
@@ -134,6 +134,7 @@ export const Metrics = () => {
   }
 
   const handleRemoveMetric = (metric: Metric) => {
+    metric.removed = true;
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics
@@ -237,10 +238,12 @@ export const Metrics = () => {
   useEffect(() => {
     if (buffer?.id) {
       // remove all unknown (or obsolete) metrics on startup
+      // and also make sure entries without "removed" attribute
+      // receive default value
       if (buffer?.metricsViewState?.metrics) {
-        buffer.metricsViewState.metrics = buffer.metricsViewState.metrics.filter(
-          (metric: Metric) => widgets[metric.metricType]
-        );
+        buffer.metricsViewState.metrics = buffer.metricsViewState.metrics
+          .filter((metric: Metric) => widgets[metric.metricType])
+          .map((metric: Metric) => ({...metric, removed: false}));
       }
 
       const merged = merge(buffer, {
@@ -426,7 +429,7 @@ export const Metrics = () => {
         {metrics &&
           metrics
             .sort((a: Metric, b: Metric) => a.position - b.position)
-            .filter((metric: Metric) => widgets[metric.metricType])
+            .filter((metric: Metric) => widgets[metric.metricType] && !metric.removed)
             .map((metric: Metric, index: number) => {
               return (
                 <MetricComponent
