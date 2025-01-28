@@ -173,7 +173,7 @@ export const Metric = ({
       dataRef.current = [[], []]
       fetchMetric(true)
     }
-  }, [tableName])
+  }, [tableName, widgetConfig])
 
   useEffect(() => {
     eventBus.subscribe<MetricsRefreshPayload>(
