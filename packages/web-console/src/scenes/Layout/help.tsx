@@ -1,5 +1,10 @@
-import React from "react"
-import { Chat3, Command, Question } from "@styled-icons/remix-line"
+import React, { useEffect } from "react"
+import {
+  Chat3,
+  Command,
+  ExternalLink,
+  Question,
+} from "@styled-icons/remix-line"
 import {
   Discourse,
   Github,
@@ -13,9 +18,14 @@ import {
   Link,
   PopperToggle,
 } from "../../components"
-import { DropdownMenu, FeedbackDialog, Box } from "@questdb/react-components"
+import {
+  DropdownMenu,
+  FeedbackDialog,
+  ForwardRef,
+  Box,
+} from "@questdb/react-components"
 import { BUTTON_ICON_SIZE } from "../../consts"
-import { IconWithTooltip } from "../../components"
+import { IconWithTooltip, useKeyPress } from "../../components"
 import { useState, useCallback, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { useSelector } from "react-redux"
@@ -59,8 +69,13 @@ const MenuLink: React.FunctionComponent<{
     target="_blank"
     {...rest}
   >
-    {icon}
-    {text}
+    <Box align="center" gap="1rem">
+      {icon}
+      <Box align="center" gap="0.75rem">
+        {text}
+        <ExternalLink size="14px" />
+      </Box>
+    </Box>
   </Link>
 )
 
@@ -73,6 +88,13 @@ export const Help = () => {
   }, [])
   const [open, setOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const escPress = useKeyPress("Escape")
+
+  useEffect(() => {
+    if (escPress && shortcutsPopperActive) {
+      setShortcutsPopperActive(false)
+    }
+  }, [escPress])
 
   return (
     <React.Fragment>
@@ -132,47 +154,57 @@ export const Help = () => {
               <Text color="foreground">Contact us</Text>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <MenuLink
-                data-hook="help-link-slack"
-                href="https://slack.questdb.io/"
-                text="Slack community"
-                icon={<Slack size="18px" />}
-              />
+              <ForwardRef>
+                <MenuLink
+                  data-hook="help-link-slack"
+                  href="https://slack.questdb.io/"
+                  text="Slack community"
+                  icon={<Slack size="18px" />}
+                />
+              </ForwardRef>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <MenuLink
-                data-hook="help-link-community"
-                href="https://community.questdb.io/"
-                text="Public forum"
-                icon={<Discourse size="18px" />}
-              />
+              <ForwardRef>
+                <MenuLink
+                  data-hook="help-link-community"
+                  href="https://community.questdb.io/"
+                  text="Public forum"
+                  icon={<Discourse size="18px" />}
+                />
+              </ForwardRef>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <MenuLink
-                data-hook="help-link-stackoverflow"
-                href="https://stackoverflow.com/tags/questdb"
-                text="Stack Overflow"
-                icon={<StackOverflow size="18px" />}
-              />
+              <ForwardRef>
+                <MenuLink
+                  data-hook="help-link-stackoverflow"
+                  href="https://stackoverflow.com/tags/questdb"
+                  text="Stack Overflow"
+                  icon={<StackOverflow size="18px" />}
+                />
+              </ForwardRef>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <MenuLink
-                data-hook="help-link-web-console-docs"
-                href="https://questdb.io/docs/develop/web-console/"
-                text="Web Console Docs"
-                icon={<Question size="18px" />}
-              />
+              <ForwardRef>
+                <MenuLink
+                  data-hook="help-link-web-console-docs"
+                  href="https://questdb.io/docs/develop/web-console/"
+                  text="Web Console Docs"
+                  icon={<Question size="18px" />}
+                />
+              </ForwardRef>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleShortcutsToggle(true)}>
               <Command size="18px" />
               <Text color="foreground">Shortcuts</Text>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <MenuLink
-                href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
-                text={`Commit id: ${process.env.COMMIT_HASH}`}
-                icon={<Github size="18px" />}
-              />
+              <ForwardRef>
+                <MenuLink
+                  href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
+                  text={`Commit id: ${process.env.COMMIT_HASH}`}
+                  icon={<Github size="18px" />}
+                />
+              </ForwardRef>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu.Portal>
