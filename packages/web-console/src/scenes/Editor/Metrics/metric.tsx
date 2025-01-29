@@ -184,7 +184,7 @@ export const Metric = ({
     return () => {
       eventBus.unsubscribe(EventType.METRICS_REFRESH_DATA, refreshMetricsData)
     }
-  }, [])
+  }, [tableName, widgetConfig])
 
   const canZoomToData = false
   const tableOptions = useMemo(() => {
