@@ -1,21 +1,21 @@
-import React, {useEffect, useRef, useState} from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import type {Widget} from "./types"
+import type { Widget } from "./types"
 import {
   hasData,
   getXAxisFormat,
   durationTokenToDate,
   getSamplingRateForPeriod,
 } from "./utils"
-import {useGraphOptions} from "./useGraphOptions"
+import { useGraphOptions } from "./useGraphOptions"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import {Box, Button, Loader} from "@questdb/react-components"
-import {Text} from "../../../components"
-import {IconWithTooltip} from "../../../components"
-import {Information} from "@styled-icons/remix-line"
-import {Error} from "@styled-icons/boxicons-regular"
-import type {DateRange} from "./types"
+import { Box, Button, Loader } from "@questdb/react-components"
+import { Text } from "../../../components"
+import { IconWithTooltip } from "../../../components"
+import { Information } from "@styled-icons/remix-line"
+import { Error } from "@styled-icons/boxicons-regular"
+import type { DateRange } from "./types"
 
 const Actions = styled.div`
   margin-right: 0;
@@ -27,7 +27,8 @@ const Root = styled(Box).attrs({
   gap: 0,
 })`
   position: relative;
-  background-color: ${({theme}: { theme: any }) => theme.color.backgroundLighter};
+  background-color: ${({ theme }: { theme: any }) =>
+    theme.color.backgroundLighter};
   height: 25rem;
 `
 
@@ -73,15 +74,15 @@ const Label = styled.div`
   bottom: 1rem;
   display: flex;
   gap: 0.5rem;
-  font-family: ${({theme}: { theme: any }) => theme.font};
+  font-family: ${({ theme }: { theme: any }) => theme.font};
 `
 
 const LabelValue = styled.span`
-  color: ${({theme}: { theme: any }) => theme.color.cyan};
+  color: ${({ theme }: { theme: any }) => theme.color.cyan};
 `
 
 const ErrorIcon = styled(Error)`
-  color: ${({theme}: { theme: any }) => theme.color.red};
+  color: ${({ theme }: { theme: any }) => theme.color.red};
 `
 
 type Props = DateRange & {
@@ -99,20 +100,20 @@ type Props = DateRange & {
 }
 
 export const Graph = ({
-                        dateFrom,
-                        dateTo,
-                        tableId,
-                        tableName,
-                        beforeLabel,
-                        data,
-                        canZoomToData,
-                        colors,
-                        loading,
-                        actions,
-                        onZoomToData,
-                        widgetConfig,
-                        hasError,
-                      }: Props) => {
+  dateFrom,
+  dateTo,
+  tableId,
+  tableName,
+  beforeLabel,
+  data,
+  canZoomToData,
+  colors,
+  loading,
+  actions,
+  onZoomToData,
+  widgetConfig,
+  hasError,
+}: Props) => {
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
@@ -124,7 +125,7 @@ export const Graph = ({
   )
   const [delayedLoading, setDelayedLoading] = useState(loading)
 
-  const {isTableMetric, mapYValue, chartTitle} = widgetConfig
+  const { isTableMetric, mapYValue, chartTitle } = widgetConfig
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -180,7 +181,6 @@ export const Graph = ({
       ? mapYValue(Math.floor(data[1][data[1].length - 1] as number))
       : undefined
 
-
   return (
     <Root ref={graphRootRef}>
       <Header>
@@ -188,17 +188,17 @@ export const Graph = ({
           <BeforeLabel>{beforeLabel}</BeforeLabel>
           <HeaderText>{chartTitle}</HeaderText>
           <IconWithTooltip
-            icon={<Information size="16px"/>}
+            icon={<Information size="16px" />}
             tooltip={widgetConfig.getDescription({
               lastValue,
-              sampleBySeconds: getSamplingRateForPeriod(from, to)
+              sampleBySeconds: getSamplingRateForPeriod(from, to),
             })}
             placement="bottom"
           />
-          {delayedLoading && <Loader size="18px" spin/>}
+          {delayedLoading && <Loader size="18px" spin />}
           {hasError && (
             <IconWithTooltip
-              icon={<ErrorIcon size="18px"/>}
+              icon={<ErrorIcon size="18px" />}
               tooltip="Error fetching latest data, try refreshing manually"
               placement="bottom"
             />
@@ -239,8 +239,8 @@ export const Graph = ({
           />
         </div>
         <Label>
-          <span ref={timeRef}/>
-          <LabelValue ref={valueRef}/>
+          <span ref={timeRef} />
+          <LabelValue ref={valueRef} />
         </Label>
       </GraphWrapper>
     </Root>

@@ -1,9 +1,9 @@
-import React, {useEffect, useState, useRef} from "react"
+import React, { useEffect, useState, useRef } from "react"
 import styled from "styled-components"
-import {Box, Input} from "@questdb/react-components"
-import {Table} from "@styled-icons/remix-line"
+import { Box, Input } from "@questdb/react-components"
+import { Table } from "@styled-icons/remix-line"
 import Highlighter from "react-highlight-words"
-import {useKeyPress} from "../../../components"
+import { useKeyPress } from "../../../components"
 
 type Option = {
   label: string
@@ -26,7 +26,7 @@ const Root = styled.div`
 `
 
 const TableIcon = styled(Table)`
-  color: ${({theme}: { theme: any }) => theme.color.gray2};
+  color: ${({ theme }: { theme: any }) => theme.color.gray2};
 `
 
 const StyledInput = styled(Input)`
@@ -34,7 +34,7 @@ const StyledInput = styled(Input)`
   background: transparent;
   font-weight: 600;
   font-size: 1.6rem;
-  color: ${({theme}: { theme: any }) => theme.color.yellow};
+  color: ${({ theme }: { theme: any }) => theme.color.yellow};
   text-transform: uppercase;
   width: 100%;
 
@@ -42,7 +42,7 @@ const StyledInput = styled(Input)`
   &:active,
   &:focus {
     background: transparent;
-    border-color: ${({theme}: { theme: any }) => theme.color.comment};
+    border-color: ${({ theme }: { theme: any }) => theme.color.comment};
   }
 `
 
@@ -64,8 +64,8 @@ const Wrapper = styled.div`
 
 const Options = styled.ul`
   list-style: none;
-  background: ${({theme}: { theme: any }) => theme.color.backgroundDarker};
-  box-shadow: 0 5px 5px 0 ${({theme}: { theme: any }) => theme.color.black40};
+  background: ${({ theme }: { theme: any }) => theme.color.backgroundDarker};
+  box-shadow: 0 5px 5px 0 ${({ theme }: { theme: any }) => theme.color.black40};
   margin: 0;
   padding: 0.5rem;
   border-radius: 0.4rem;
@@ -76,24 +76,25 @@ const Item = styled.li<{ active: boolean; disabled: boolean }>`
   align-items: center;
   height: 3rem;
   padding: 0 1rem;
-  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  ${({active, theme}: { active: boolean, theme: any }) => `
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  ${({ active, theme }: { active: boolean; theme: any }) => `
     background: ${active ? theme.color.selection : "transparent"};
   `}
 
-  ${({disabled, theme}: { disabled: boolean, theme: any }) => `
+  ${({ disabled, theme }: { disabled: boolean; theme: any }) => `
     color: ${disabled ? theme.color.gray1 : theme.color.foreground};
     cursor: ${disabled ? "not-allowed" : "pointer"};
   `}
 `
 export const TableSelector = ({
-                                tableId,
-                                defaultValue,
-                                options,
-                                onSelect,
-                                placeholder,
-                                loading,
-                              }: Props) => {
+  tableId,
+  defaultValue,
+  options,
+  onSelect,
+  placeholder,
+  loading,
+}: Props) => {
   const [hasFocus, setHasFocus] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const shadowInputRef = useRef<HTMLSpanElement | null>(null)
@@ -103,7 +104,7 @@ export const TableSelector = ({
   const upPress = useKeyPress("ArrowUp")
   const enterPress = useKeyPress("Enter")
   const wrapperRef = useRef<HTMLDivElement | null>(null)
-  const initialQuery = useRef<string | undefined>(undefined);
+  const initialQuery = useRef<string | undefined>(undefined)
 
   const filteredOptions = options
     .filter((option) =>
@@ -116,14 +117,14 @@ export const TableSelector = ({
 
     if (inputRef.current && shadowInputRef.current && !loading) {
       inputRef.current.style.width = `${shadowInputRef.current.offsetWidth}px`
-      const nextValue:string = defaultValue ?? ""
+      const nextValue: string = defaultValue ?? ""
 
       // As we refresh the edit quite frequently, this code is necessary
       // to allow user change table name. Unchecked table name is overwritten at the same
       // time as user edits it.
-      if ( initialQuery.current !== nextValue) {
-        setQuery(defaultValue ?? "");
-        initialQuery.current = defaultValue ?? "";
+      if (initialQuery.current !== nextValue) {
+        setQuery(defaultValue ?? "")
+        initialQuery.current = defaultValue ?? ""
       }
 
       if (defaultValue === "" && !tableId) {
@@ -180,7 +181,7 @@ export const TableSelector = ({
   return (
     <Root>
       <Box align="center" gap="0.5rem">
-        <TableIcon size="18px"/>
+        <TableIcon size="18px" />
         <StyledInput
           value={query}
           placeholder={defaultValue !== "" ? defaultValue : placeholder}
