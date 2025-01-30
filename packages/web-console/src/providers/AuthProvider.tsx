@@ -79,12 +79,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const setAuthToken = (tokenResponse: AuthPayload, settings: Settings) => {
     if (tokenResponse.access_token) {
-      tokenResponse.groups_encoded_in_token = settings["acl.oidc.groups.encoded.in.token"]
-      tokenResponse.expires_at = getTokenExpirationDate(tokenResponse.expires_in).toString() // convert from the sec offset
-      setValue(
-        StoreKey.AUTH_PAYLOAD,
-        JSON.stringify(tokenResponse),
-      )
+      tokenResponse.groups_encoded_in_token =
+        settings["acl.oidc.groups.encoded.in.token"]
+      tokenResponse.expires_at = getTokenExpirationDate(
+        tokenResponse.expires_in,
+      ).toString() // convert from the sec offset
+      setValue(StoreKey.AUTH_PAYLOAD, JSON.stringify(tokenResponse))
       // if the token payload does not contain refresh token, token refresh has been disabled in
       // the OAuth2 provider, and we need to clear the refresh token in local storage
       setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token ?? "")
@@ -194,7 +194,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               code,
               code_verifier,
               client_id: settings["acl.oidc.client.id"],
-              redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.origin + window.location.pathname,
+              redirect_uri:
+                settings["acl.oidc.redirect.uri"] ||
+                window.location.origin + window.location.pathname,
             })
             const tokenResponse = await response.json()
             setAuthToken(tokenResponse, settings)
@@ -226,9 +228,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const basicAuthLogin = async () => {
     // run a simple query to force basic auth by browser
-    const response = await fetch(
-      `exec?query=select 42`,
-    )
+    const response = await fetch(`exec?query=select 42`)
     if (response.status === 200) {
       dispatch({ view: View.ready })
     } else {

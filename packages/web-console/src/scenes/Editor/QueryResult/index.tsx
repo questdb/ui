@@ -94,7 +94,14 @@ const formatTiming = (nanos: number) => {
   return `${nanos}ns`
 }
 
-const QueryResult = ({ compiler, authentication, count, execute, fetch, rowCount }: Props) => {
+const QueryResult = ({
+  compiler,
+  authentication,
+  count,
+  execute,
+  fetch,
+  rowCount,
+}: Props) => {
   return (
     <Wrapper _height={95} duration={TransitionDuration.FAST}>
       <div>

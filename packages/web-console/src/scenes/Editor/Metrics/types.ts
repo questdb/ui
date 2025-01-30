@@ -1,6 +1,6 @@
 import uPlot from "uplot"
 import { MetricType } from "./utils"
-import React from "react";
+import React from "react"
 
 export type DateRange = {
   dateFrom: string
@@ -31,7 +31,13 @@ export type Widget = {
    * 100 - Custom
    */
   distribution: uPlot.Scale.Distr
-  getQuery: ({ tableId, sampleBySeconds, limit, from, to }: MethodArgs) => string
+  getQuery: ({
+    tableId,
+    sampleBySeconds,
+    limit,
+    from,
+    to,
+  }: MethodArgs) => string
   querySupportsRollingAppend: boolean
   alignData: (data: any) => uPlot.AlignedData
   mapYValue: (rawValue: number) => number | string
@@ -56,8 +62,8 @@ export type TableWriteAmplification = {
 }
 
 export type TableAverageTransactionSize = {
-    created: string
-    avg_rows: string
+  created: string
+  avg_rows: string
 }
 
 export type WalRowThroughput = {

@@ -41,7 +41,7 @@ import {
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import {color, ErrorResult, QueryRawResult} from "../../utils"
+import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
@@ -49,8 +49,8 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
-import {QueryInNotification} from "../Editor/Monaco/query-in-notification";
-import {NotificationType} from "../../store/Query/types";
+import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
+import { NotificationType } from "../../store/Query/types"
 
 const Root = styled.div`
   display: flex;
@@ -101,7 +101,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const dispatch = useDispatch()
-  
+
   useEffect(() => {
     const _grid = grid(
       document.getElementById("grid"),

@@ -83,7 +83,11 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
 
   const setupClient = async (sessionData: Partial<AuthPayload>) => {
     questClient.setCommonHeaders({
-      Authorization: `Bearer ${sessionData.groups_encoded_in_token ? sessionData.id_token : sessionData.access_token}`,
+      Authorization: `Bearer ${
+        sessionData.groups_encoded_in_token
+          ? sessionData.id_token
+          : sessionData.access_token
+      }`,
     })
 
     questClient.refreshTokenMethod = () => {
@@ -109,13 +113,13 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       })
       void finishAuthCheck()
     } else {
-        const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-        if (basicAuth) {
-            questClient.setCommonHeaders({
-                Authorization: basicAuth,
-            })
-            void finishAuthCheck()
-        }
+      const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
+      if (basicAuth) {
+        questClient.setCommonHeaders({
+          Authorization: basicAuth,
+        })
+        void finishAuthCheck()
+      }
     }
 
     // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
@@ -135,7 +139,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       dispatch(actions.telemetry.start())
     }
   }, [authCheckFinished])
-  
+
   if (!authCheckFinished) return null
 
   return (

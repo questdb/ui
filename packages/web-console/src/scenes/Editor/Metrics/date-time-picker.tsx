@@ -29,7 +29,7 @@ const Root = styled(Box).attrs({
   flexDirection: "column",
   align: "flex-start",
 })`
-  background: ${({ theme }: {theme: any}) => theme.color.backgroundDarker};
+  background: ${({ theme }: { theme: any }) => theme.color.backgroundDarker};
   width: 50rem;
   padding: 1rem 1rem 0 1rem;
 `
@@ -58,7 +58,7 @@ const MetricDurations = styled.ul`
   list-style: none;
   margin: 0;
   padding: 0 0 0 1rem;
-  border-left: 1px solid ${({ theme }: {theme: any}) => theme.color.selection};
+  border-left: 1px solid ${({ theme }: { theme: any }) => theme.color.selection};
 `
 
 const MetricDurationItem = styled.li<{ selected?: boolean }>`

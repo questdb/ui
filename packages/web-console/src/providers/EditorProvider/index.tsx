@@ -123,7 +123,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         }
       }
     } catch (e) {
-      console.warn('Error setting active buffer:', e)
+      console.warn("Error setting active buffer:", e)
     }
   }
 

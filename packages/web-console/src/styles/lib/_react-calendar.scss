@@ -15,7 +15,7 @@
   margin: -0.5em;
 }
 
-.react-calendar--doubleView .react-calendar__viewContainer>* {
+.react-calendar--doubleView .react-calendar__viewContainer > * {
   width: 50%;
   margin: 0.5em;
 }
@@ -101,7 +101,7 @@
 
 .react-calendar__tile--active,
 .react-calendar__tile--range,
- .react-calendar__tile--hasActive{
+.react-calendar__tile--hasActive {
   background: #b93d64;
   color: #fff;
 }

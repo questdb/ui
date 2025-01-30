@@ -27,7 +27,7 @@
   width: 100%;
   flex-direction: column;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-  "Courier New", monospace;
+    "Courier New", monospace;
   overflow: hidden;
 }
 
@@ -36,7 +36,8 @@ $drag-handle-z-index: 1;
 $panel-left-z-index: ($drag-handle-z-index + 1);
 $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 
-.qg-header-row, .qg-header-left-row {
+.qg-header-row,
+.qg-header-left-row {
   display: flex;
   overflow: hidden;
   min-height: $row-height;
@@ -123,7 +124,8 @@ $drag-handle-margin: 2px;
   right: 0;
 }
 
-.qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
+.qg-header-l .qg-header-name,
+.qg-header-l .qg-header-type {
   text-align: left;
 }
 
@@ -165,7 +167,8 @@ $drag-handle-margin: 2px;
   z-index: $col-resize-ghost-z-index;
 }
 
-.qg-header-name, .qg-header-type {
+.qg-header-name,
+.qg-header-type {
   display: block;
   margin-left: $visible-drag-handle-margin + 3;
   padding: 0;
@@ -259,9 +262,9 @@ $drag-handle-margin: 2px;
   overflow-x: hidden;
   overflow-y: auto;
   // hide scrollbar for IE, Edge and Firefox
-  -ms-overflow-style: none;  /* IE and Edge */
+  -ms-overflow-style: none; /* IE and Edge */
   //noinspection CssUnknownProperty
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: none; /* Firefox */
 }
 
 // chrome & safari
@@ -269,7 +272,7 @@ $drag-handle-margin: 2px;
   display: none;
 }
 
-$left-shadow: 10px 0 30px -4px rgba(0,0,0,0.75);
+$left-shadow: 10px 0 30px -4px rgba(0, 0, 0, 0.75);
 $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 
 .qg-panel-scrolled-left {
@@ -284,7 +287,10 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   box-shadow: $top-shadow;
 }
 
-.qg-panel-left-ghost, .qg-panel-left-hysteresis, .qg-panel-left-snap-ghost, .qg-panel-left-initial-hysteresis {
+.qg-panel-left-ghost,
+.qg-panel-left-hysteresis,
+.qg-panel-left-snap-ghost,
+.qg-panel-left-initial-hysteresis {
   position: absolute;
   top: 0;
   margin-top: 54px;
@@ -329,4 +335,3 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   margin-left: -2px;
   cursor: grab;
 }
-
