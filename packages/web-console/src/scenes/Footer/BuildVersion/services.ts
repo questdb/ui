@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import { compare } from "compare-versions"
-import { Versions } from "../../../providers/QuestProvider/types";
+import { Versions } from "../../../providers/QuestProvider/types"
 
 export const getCanUpgrade = (
   buildVersion: Versions,
