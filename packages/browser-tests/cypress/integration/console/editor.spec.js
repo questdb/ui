@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 const getTabDragHandleByTitle = (title) =>
@@ -475,6 +475,10 @@ describe("editor tabs", () => {
     );
     cy.getEditorTabs().first().should("contain", "SQL");
     cy.getEditorTabs().last().should("contain", "SQL 1");
+
+    // Test model disposal logic. It should dispose of prior models when switching active tabs
+    const editorModels = window.monaco.editor.getModels();
+    expect(editorModels.length).to.equal(1);
   });
 });
 
