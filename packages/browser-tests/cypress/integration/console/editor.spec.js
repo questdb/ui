@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 const getTabDragHandleByTitle = (title) =>
@@ -464,17 +464,29 @@ describe("editor tabs", () => {
   });
 
   it("should drag tabs", () => {
+    cy.typeQuery("-- query 1");
     cy.get(".new-tab-button").click();
+    cy.typeQuery("-- query 2");
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")
     );
+    // subsequent wait()x3: add an arbitrary waiting period to ensure models are updated
+    cy.wait(250);
     cy.getEditorTabs().first().should("contain", "SQL 1");
     cy.getEditorTabs().last().should("contain", "SQL");
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")
     );
+    cy.wait(250);
     cy.getEditorTabs().first().should("contain", "SQL");
     cy.getEditorTabs().last().should("contain", "SQL 1");
+    cy.wait(250);
+
+    // Test model disposal logic. It should dispose of prior models when switching active tabs
+    cy.window().then((window) => {
+      const editorModels = window.monaco.editor.getModels();
+      expect(editorModels.length).to.equal(1);
+    });
   });
 });
 

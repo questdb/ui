@@ -46,6 +46,7 @@ loader.config({
 const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
+  background: #2c2e3d;
 
   .monaco-editor .squiggly-error {
     background: none;
