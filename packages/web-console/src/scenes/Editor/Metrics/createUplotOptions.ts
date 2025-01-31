@@ -1,9 +1,9 @@
 import { utcToLocal } from "../../../utils"
-import React, { useContext } from "react"
-import { ThemeContext } from "styled-components"
+import React from "react"
 import uPlot from "uplot"
 import { DATETIME_FORMAT } from "./utils"
 import { Widget } from "./types"
+import { DefaultTheme } from "styled-components"
 
 type Params = {
   data: uPlot.AlignedData
@@ -16,7 +16,10 @@ type Params = {
   timeRef: React.RefObject<HTMLSpanElement>
   valueRef: React.RefObject<HTMLSpanElement>
   widgetConfig: Widget
+  theme: DefaultTheme
 }
+
+export type UplotOptions = Omit<uPlot.Options, "width" | "height">
 
 const valuePlugin = (
   timeRef: React.RefObject<HTMLSpanElement>,
@@ -49,7 +52,7 @@ const valuePlugin = (
   },
 })
 
-export const useGraphOptions = ({
+export const createUplotOptions = ({
   data,
   startTime,
   endTime,
@@ -59,8 +62,8 @@ export const useGraphOptions = ({
   timeRef,
   valueRef,
   widgetConfig,
-}: Params): Omit<uPlot.Options, "width" | "height"> => {
-  const theme = useContext(ThemeContext)
+  theme,
+}: Params): UplotOptions => {
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.gray2,
     labelFont: `600 12px ${theme.font}`,
