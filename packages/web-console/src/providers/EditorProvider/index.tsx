@@ -99,7 +99,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const setActiveBuffer = async (buffer: Buffer) => {
     try {
       monacoRef.current?.editor.getModels().forEach((model) => {
-        if (model.getValue() !== buffer.value) {
+        const value = model.getValue()
+        if (model.getValue() !== buffer.value || value === "") {
           model.dispose()
         }
       })
