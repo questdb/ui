@@ -125,19 +125,8 @@ export const Graph = ({
   const endTime = new Date(durationTokenToDate(dateTo)).getTime()
 
   const [delayedLoading, setDelayedLoading] = useState(loading)
-  const [uplotOptions, setUplotOptions] = useState<UplotOptions>(
-    createUplotOptions({
-      data,
-      startTime,
-      endTime,
-      colors,
-      timeRef,
-      valueRef,
-      mapXValue: (rawValue) => getXAxisFormat(rawValue, startTime, endTime),
-      mapYValue,
-      widgetConfig,
-      theme,
-    }),
+  const [uplotOptions, setUplotOptions] = useState<UplotOptions | undefined>(
+    undefined,
   )
 
   const resizeObserver = new ResizeObserver((entries) => {
