@@ -98,14 +98,17 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const setActiveBuffer = async (buffer: Buffer) => {
     try {
+      const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+
       monacoRef.current?.editor.getModels().forEach((model) => {
         const value = model.getValue()
-        if (model.getValue() !== buffer.value || value === "") {
+        if (
+          buffer.id !== currentActiveBufferId &&
+          (model.getValue() !== buffer.value || value === "")
+        ) {
           model.dispose()
         }
       })
-
-      const currentActiveBufferId = (await bufferStore.getActiveId())?.value
 
       if (currentActiveBufferId) {
         if (buffer.id === currentActiveBufferId) {
