@@ -470,6 +470,7 @@ describe("editor tabs", () => {
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")
     );
+    // subsequent wait()x3: add an arbitrary waiting period to ensure models are updated
     cy.wait(250);
     cy.getEditorTabs().first().should("contain", "SQL 1");
     cy.getEditorTabs().last().should("contain", "SQL");
