@@ -118,18 +118,27 @@ export const Graph = ({
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
-  const [startTime, setStartTime] = useState<number>(
-    new Date(durationTokenToDate(dateFrom)).getTime(),
-  )
-  const [endTime, setEndTime] = useState<number>(
-    new Date(durationTokenToDate(dateTo)).getTime(),
-  )
-  const [delayedLoading, setDelayedLoading] = useState(loading)
-  const [uplotOptions, setUplotOptions] = useState<UplotOptions | undefined>(
-    undefined,
-  )
 
   const { isTableMetric, mapYValue, chartTitle } = widgetConfig
+
+  const startTime = new Date(durationTokenToDate(dateFrom)).getTime()
+  const endTime = new Date(durationTokenToDate(dateTo)).getTime()
+
+  const [delayedLoading, setDelayedLoading] = useState(loading)
+  const [uplotOptions, setUplotOptions] = useState<UplotOptions>(
+    createUplotOptions({
+      data,
+      startTime,
+      endTime,
+      colors,
+      timeRef,
+      valueRef,
+      mapXValue: (rawValue) => getXAxisFormat(rawValue, startTime, endTime),
+      mapYValue,
+      widgetConfig,
+      theme,
+    }),
+  )
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -142,11 +151,6 @@ export const Graph = ({
   const to = durationTokenToDate(dateTo)
 
   useEffect(() => {
-    setStartTime(new Date(from).getTime())
-    setEndTime(new Date(to).getTime())
-  }, [data, dateFrom, dateTo])
-
-  useMemo(() => {
     setUplotOptions(
       createUplotOptions({
         data,
