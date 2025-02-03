@@ -27,7 +27,6 @@ const Metrics = styled.div`
 `
 
 const Metric = styled(Box).attrs({ flexDirection: "column", gap: "0" })`
-  /* background: ${({ theme }: { theme: any }) => theme.color.selectionDarker}; */
   border-radius: 0.4rem;
   cursor: pointer;
   border: 1px solid transparent;
