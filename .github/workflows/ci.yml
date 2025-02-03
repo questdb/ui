@@ -84,20 +84,20 @@ jobs:
         if: success() || failure()
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
 
-      - name: Publish @questdb/web-console to npm
-        if: github.ref == 'refs/heads/main'
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
-          check-version: true
-          package: ./packages/web-console/package.json
-
       - name: Publish @questdb/react-components to npm
-        if: github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main'
         uses: JS-DevTools/npm-publish@v1
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
           check-version: true
           package: ./packages/react-components/package.json
+
+      - name: Publish @questdb/web-console to npm
+        if: success() && github.ref == 'refs/heads/main'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          package: ./packages/web-console/package.json
