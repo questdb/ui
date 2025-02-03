@@ -10,15 +10,15 @@ type TokenPayload = Partial<{
 }>
 
 const getBaseURL = (settings: Settings) => {
-    // if there is no host in settings, no need to construct base URL at all
-    if (!settings["acl.oidc.host"]) {
-        return "";
-    }
+  // if there is no host in settings, no need to construct base URL at all
+  if (!settings["acl.oidc.host"]) {
+    return ""
+  }
 
-    // if there is host in settings, we are in legacy mode, and we should construct the base URL
-    return `${settings["acl.oidc.tls.enabled"] ? "https" : "http"}://${
-        settings["acl.oidc.host"]
-    }:${settings["acl.oidc.port"]}`
+  // if there is host in settings, we are in legacy mode, and we should construct the base URL
+  return `${settings["acl.oidc.tls.enabled"] ? "https" : "http"}://${
+    settings["acl.oidc.host"]
+  }:${settings["acl.oidc.port"]}`
 }
 
 export const getAuthorisationURL = ({
@@ -82,4 +82,4 @@ export const getAuthToken = async (
 }
 
 export const hasUIAuth = (settings: Settings) =>
-    settings["acl.enabled"] && !settings["acl.basic.auth.realm.enabled"]
+  settings["acl.enabled"] && !settings["acl.basic.auth.realm.enabled"]
