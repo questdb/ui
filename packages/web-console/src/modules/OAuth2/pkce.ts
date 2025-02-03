@@ -4,7 +4,15 @@ import { sha256 } from "js-sha256"
 import { Base64 } from "js-base64"
 import { Settings } from "../../providers/SettingsProvider/types"
 
+const STATE_LENGTH = 60
 const CODE_VERIFIER_LENGTH = 60
+
+export const generateState = (settings: Settings) => {
+    if (settings["acl.oidc.state.required"]) {
+        return doGenerateState()
+    }
+    return null
+}
 
 export const generateCodeVerifier = (settings: Settings) => {
   if (settings["acl.oidc.pkce.required"]) {
@@ -18,6 +26,14 @@ export const generateCodeChallenge = (code_verifier: string | null) => {
     return doGenerateCodeChallenge(code_verifier)
   }
   return null
+}
+
+const doGenerateState = () => {
+    const state_array = new Uint8Array(STATE_LENGTH)
+    crypto.getRandomValues(state_array)
+    const state = Base64.fromUint8Array(state_array, true)
+    setValue(StoreKey.OAUTH_STATE, state)
+    return state
 }
 
 const doGenerateCodeVerifier = () => {

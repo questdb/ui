@@ -16,6 +16,7 @@ import {
 import {
   generateCodeChallenge,
   generateCodeVerifier,
+  generateState,
 } from "../modules/OAuth2/pkce"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
@@ -187,6 +188,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         // User has just been redirected back from the OAuth2 provider and has the code
         if (code !== null) {
+          const state = getValue(StoreKey.OAUTH_STATE)
+          if (state) {
+            removeValue(StoreKey.OAUTH_STATE)
+            const stateParam = urlParams.get("state")
+            if (!stateParam || state !== stateParam) {
+              dispatch({ view: View.loggedOut })
+              return;
+            }
+          }
+
           try {
             const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
             const response = await getAuthToken(settings, {
@@ -249,11 +260,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const redirectToAuthorizationUrl = (login?: boolean) => {
+    const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
     window.location.href = getAuthorisationURL({
       settings,
       code_challenge,
+      state,
       login,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })
