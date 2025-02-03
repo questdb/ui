@@ -289,6 +289,7 @@ export function grid(rootElement, _paginationFn, id) {
           row.style.display = "flex"
           for (let i = colLo; i < colHi; i++) {
             setCellData(
+              columns[i],
               row.childNodes[i % visColumnCount],
               rowData[columnPositions[i]],
             )
@@ -510,6 +511,7 @@ export function grid(rootElement, _paginationFn, id) {
         case "STRING":
         case "SYMBOL":
         case "VARCHAR":
+        case "ARRAY":
           return true
         default:
           return false
@@ -928,7 +930,17 @@ export function grid(rootElement, _paginationFn, id) {
 
       const hType = document.createElement("span")
       addClass(hType, "qg-header-type")
-      hType.innerHTML = c.type.toLowerCase()
+      if (c.type !== "ARRAY") {
+        hType.innerHTML = c.type.toLowerCase()
+      } else {
+        hType.innerHTML =
+          c.type.toUpperCase() +
+          "(" +
+          c.elemType.toUpperCase() +
+          "," +
+          c.dim +
+          ")"
+      }
 
       const hName = document.createElement("span")
       addClass(hName, "qg-header-name")
@@ -1045,9 +1057,13 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function setCellData(cell, cellData) {
+  function setCellData(column, cell, cellData) {
     if (cellData !== null) {
-      cell.innerHTML = escapeHtml(cellData.toString())
+      if (Array.isArray(cellData)) {
+        cell.innerHTML = JSON.stringify(cellData, column.dim)
+      } else {
+        cell.innerHTML = escapeHtml(cellData.toString())
+      }
       cell.classList.remove("qg-null")
     } else {
       cell.innerHTML = "null"
@@ -1058,7 +1074,11 @@ export function grid(rootElement, _paginationFn, id) {
   function setCellDataAndAttributes(row, rowData, columnIndex) {
     const cell = row.childNodes[columnIndex % visColumnCount]
     configureCell(cell, columnIndex)
-    setCellData(cell, rowData[columnPositions[columnIndex]])
+    setCellData(
+      columns[columnIndex],
+      cell,
+      rowData[columnPositions[columnIndex]],
+    )
   }
 
   function getNonFrozenColLo(colLo) {
