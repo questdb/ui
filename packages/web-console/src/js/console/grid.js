@@ -748,6 +748,20 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
+  function getResultAsMarkdown() {
+    let lines = ["```"]
+    rows.forEach((row) => {
+      if (row.style.display === "flex") {
+        const col = row.querySelector(".qg-c")
+        if (col) {
+          lines.push(col.textContent)
+        }
+      }
+    })
+    lines.push("```")
+    return lines.join("\n")
+  }
+
   function colFreezeToggle() {
     if (freezeLeft > 0) {
       setFreezeLeft(0)
@@ -2094,6 +2108,10 @@ export function grid(rootElement, _paginationFn, id) {
 
     toggleFreezeLeft: function () {
       colFreezeToggle()
+    },
+
+    getResultAsMarkdown: function () {
+      return getResultAsMarkdown()
     },
 
     show: function () {
