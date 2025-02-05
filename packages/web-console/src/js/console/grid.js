@@ -749,17 +749,89 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function getResultAsMarkdown() {
-    let lines = ["```"]
-    rows.forEach((row) => {
-      if (row.style.display === "flex") {
-        const col = row.querySelector(".qg-c")
-        if (col) {
-          lines.push(col.textContent)
+    if (header.innerText === "QUERY PLAN\nstring") {
+      let lines = ["```"]
+      rows.forEach((row) => {
+        if (row.style.display === "flex") {
+          const col = row.querySelector(".qg-c")
+          if (col) {
+            lines.push(col.textContent)
+          }
+        }
+      })
+      lines.push("```")
+      return lines.join("\n")
+    } else {
+      // first, we get a starting width, based on the column header
+      // this is necessary to get a properly formatted, pipe-aligned table
+
+      // format is: title\ntype\ntitle2\ntype2
+      // therefore we need to skip alternate entries
+      let header_splits = header.innerText.split(/\n/).filter((elem, index) => {
+        return index % 2 === 0
+      })
+      let column_widths = Array(header_splits.length).fill(0)
+
+      for (const [i, header_split] of header_splits.entries()) {
+        // tslint:disable-next-line:no-bitwise
+        column_widths[i] = Math.max(column_widths[i], header_split.length)
+      }
+
+      // then we loop over our rows to check how wide it needs to be according to the data
+      for (const row of rows) {
+        let row_splits = row.innerText.split(/\n/)
+        if (column_widths === undefined) {
+          column_widths = Array(row_splits.length).fill(0)
+        }
+
+        for (const [i, row_split] of row_splits.entries()) {
+          column_widths[i] = Math.max(column_widths[i], row_split.length)
         }
       }
-    })
-    lines.push("```")
-    return lines.join("\n")
+
+      // now we know the widths, we need to construct the header row
+      let header_row_builder = ["|"]
+
+      for (const [i, header_split] of header_splits.entries()) {
+        header_row_builder.push(header_split.padEnd(column_widths[i]))
+        header_row_builder.push("|")
+      }
+
+      let header_row = header_row_builder.join(" ")
+
+      // now we need the pad row
+      let pad_row_builder = ["|"]
+      for (const [i, header_split] of header_splits.entries()) {
+        pad_row_builder.push("-".repeat(column_widths[i]))
+        pad_row_builder.push("|")
+      }
+
+      let pad_row = pad_row_builder.join(" ")
+
+      let data_rows_builder = []
+
+      for (const row of rows) {
+        let row_splits = row.innerText.split(/\n/)
+
+        // sometimes we get arrays like this: [""] in rows
+        // this usually happens at the end of the result set
+        // we don't want them...
+        if (row_splits.length === 1 && row_splits[0] === "") {
+          continue
+        }
+        let data_row_builder = ["|"]
+
+        for (const [i, row_split] of row_splits.entries()) {
+          data_row_builder.push(row_split.padEnd(column_widths[i]))
+          data_row_builder.push("|")
+        }
+        data_rows_builder.push(data_row_builder.join(" "))
+      }
+
+      let data_rows = data_rows_builder.join("\n")
+
+      return [header_row, pad_row, data_rows].join("\n")
+    }
   }
 
   function colFreezeToggle() {
