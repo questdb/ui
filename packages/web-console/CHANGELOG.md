@@ -16,6 +16,12 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.4 - 2025.02.05
+
+### Added
+
+- support for OAuth2 state parameter [#390](https://github.com/questdb/ui/pull/390)
+
 ## 0.7.3 - 2025.01.29
 
 ### Fixed
