@@ -180,7 +180,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             await refreshAuthToken(settings)
           } else {
             // if there is no refresh token, user has to re-authenticate to get fresh tokens
-            dispatch({ view: View.loggedOut })
+            logout()
           }
         } else {
           setSessionData(tokenResponse)
@@ -193,7 +193,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             removeValue(StoreKey.OAUTH_STATE)
             const stateParam = urlParams.get("state")
             if (!stateParam || state !== stateParam) {
-              dispatch({ view: View.loggedOut })
+              logout()
               return
             }
           }
