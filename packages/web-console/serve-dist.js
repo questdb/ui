@@ -32,6 +32,14 @@ const server = http.createServer((req, res) => {
     })
 
     req.pipe(proxyReq, { end: true })
+  } else if (
+    reqPathName.startsWith("/userinfo")
+  ) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      sub: "user1",
+      groups: ["group1", "group2"]
+    }))
   } else {
     // serve static files from /dist folder
     const filePath = path.join(

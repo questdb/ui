@@ -13,6 +13,7 @@ module.exports = defineConfig({
     screenshotOnRunFailure: false,
     video: false,
     baseUrl: baseUrl,
+    chromeWebSecurity: false,
     viewportWidth: 1280,
     viewportHeight: 720,
     specPattern: "cypress/integration/**/*.spec.js",
