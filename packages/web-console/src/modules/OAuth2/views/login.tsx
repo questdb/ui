@@ -308,7 +308,10 @@ export const Login = ({
             validationSchema={schema}
           >
             <Form.Item name="username" label="User name">
-              <Form.Input name="username" placeholder={"johndoe"} />
+              <Form.Input
+                name="username"
+                placeholder={"johndoe"}
+              />
             </Form.Item>
             <Form.Item name="password" label="Password">
               <Form.Input
