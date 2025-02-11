@@ -13,7 +13,7 @@ module.exports = defineConfig({
     screenshotOnRunFailure: false,
     video: false,
     baseUrl: baseUrl,
-    chromeWebSecurity: false,
+    chromeWebSecurity: false, //if it is true, cypress does not allow redirects
     viewportWidth: 1280,
     viewportHeight: 720,
     specPattern: "cypress/integration/**/*.spec.js",
