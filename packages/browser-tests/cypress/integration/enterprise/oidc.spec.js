@@ -26,8 +26,14 @@ const interceptTokenRequest = (payload) => {
   );
 };
 
-describe("Auth - PKCE enabled, No state param", () => {
-  it("should login via OIDC", () => {
+describe("OIDC authentication", () => {
+  before(() => {
+    // setup SSO group mappings
+    cy.loadConsoleAsAdminAndCreateSSOGroup("group1");
+  });
+
+  beforeEach(() => {
+    // load login page
     interceptSettings({
       "release.type": "EE",
       "release.version": "1.2.3",
@@ -47,7 +53,9 @@ describe("Auth - PKCE enabled, No state param", () => {
     cy.getByDataHook("auth-login").should("be.visible");
     cy.getByDataHook("button-sso-login").should("be.visible");
     cy.getEditor().should("not.exist");
+  });
 
+  it("should login via OIDC", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode");
@@ -60,7 +68,11 @@ describe("Auth - PKCE enabled, No state param", () => {
       "expires_in": 300
     });
     cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
 
-    //cy.getByDataHook("login-with-other-account").should("be.visible");
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "user1");
+    
+    cy.logout();
   });
 });
