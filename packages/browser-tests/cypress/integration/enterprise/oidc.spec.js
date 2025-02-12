@@ -72,7 +72,28 @@ describe("OIDC authentication", () => {
 
     cy.executeSQL("select current_user();");
     cy.getGridRow(0).should("contain", "user1");
-    
+
     cy.logout();
+  });
+
+  it("should force authentication if token expired, and there is no refresh token", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    interceptTokenRequest({
+      "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+      "token_type": "Bearer",
+      "expires_in": 0
+    });
+    cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
+
+    cy.reload();
+    cy.getByDataHook("button-log-in").should("be.visible");
+
+    cy.getByDataHook("button-log-in").click()
+    cy.getEditor().should("be.visible");
   });
 });
