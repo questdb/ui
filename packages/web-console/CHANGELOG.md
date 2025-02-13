@@ -16,6 +16,13 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.5 - 2025.02.13
+
+### Fixed
+
+- Fix floating-point regex capturing words beginning with 'E' [#394](https://github.com/questdb/ui/pull/394)
+- Prevent login loop when token expires without a valid refresh token [#395](https://github.com/questdb/ui/pull/395)
+
 ## 0.7.4 - 2025.02.05
 
 ### Added
