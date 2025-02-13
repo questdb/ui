@@ -265,6 +265,24 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   }
 });
 
+Cypress.Commands.add("loadConsoleAsAdminAndCreateSSOGroup", (group, externalGroup = undefined) => {
+  cy.loadConsoleWithAuth(true);
+  cy.executeSQL(`CREATE GROUP ${group} WITH EXTERNAL ALIAS ${externalGroup || group};`);
+  cy.executeSQL(`GRANT HTTP TO ${group};`);
+  cy.logout();
+});
+
+Cypress.Commands.add("logout", () => {
+  cy.getByDataHook("button-logout").click();
+  cy.getByDataHook("auth-login").should("be.visible");
+});
+
+Cypress.Commands.add("executeSQL", (sql) => {
+  cy.clearEditor();
+  cy.typeQuery(sql);
+  cy.clickRun();
+});
+
 Cypress.Commands.add("refreshSchema", () => {
   // toggle between auto-refresh modes to trigger a schema refresh
   cy.getByDataHook("schema-auto-refresh-button").click();
