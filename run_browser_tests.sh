@@ -43,11 +43,11 @@ yarn workspace browser-tests test:auth
 
 read -p "Press any key to continue... " -n1 -s
 
-# Switch authentication on
+# Switch OSS authentication on
 export QDB_HTTP_USER=admin
 export QDB_HTTP_PASSWORD=quest
 
-# Running tests which assume authentication is on
+# Running tests which assume that OSS authentication is on
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 yarn workspace browser-tests test
 ./tmp/questdb-*/bin/questdb.sh stop
