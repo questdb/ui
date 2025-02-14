@@ -183,7 +183,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
 
   const gridActions = [
     {
-      tooltipText: isCopied ? "Copied!" : "Copy result to Markdown",
+      tooltipText: "Copy result to Markdown",
       trigger: (
         <PrimaryToggleButton
           onClick={() => {
