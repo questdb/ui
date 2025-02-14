@@ -18,6 +18,8 @@ export interface IQuestDBGrid {
   toggleFreezeLeft(): void
 
   shuffleFocusedColumnToFront(): void
+
+  getResultAsMarkdown(): string
 }
 
 export function grid(
