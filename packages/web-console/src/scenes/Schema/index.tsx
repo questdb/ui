@@ -233,7 +233,7 @@ const Schema = ({
       selectedTables.map(async (table) => {
         try {
           const tableDDLResponse = await quest.query<{ ddl: string }>(
-            `SHOW CREATE TABLE ${table}`,
+            `SHOW CREATE TABLE '${table}'`,
           )
           if (tableDDLResponse && tableDDLResponse.type === QuestDB.Type.DQL) {
             return tableDDLResponse.data[0].ddl
