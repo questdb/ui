@@ -30,6 +30,8 @@ import { Download2, Refresh } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
+import { Markdown } from "@styled-icons/bootstrap/Markdown"
+import { Check } from "@styled-icons/bootstrap/Check"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
@@ -41,7 +43,7 @@ import {
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import {color, ErrorResult, QueryRawResult} from "../../utils"
+import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
@@ -49,8 +51,8 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
-import {QueryInNotification} from "../Editor/Monaco/query-in-notification";
-import {NotificationType} from "../../store/Query/types";
+import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
+import { NotificationType } from "../../store/Query/types"
 
 const Root = styled.div`
   display: flex;
@@ -101,7 +103,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const dispatch = useDispatch()
-  
+
   useEffect(() => {
     const _grid = grid(
       document.getElementById("grid"),
@@ -177,7 +179,26 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     gridRef?.current?.render()
   }, [activeSidebar])
 
+  const [isCopied, setIsCopied] = useState<boolean>(false)
+
   const gridActions = [
+    {
+      tooltipText: "Copy result to Markdown",
+      trigger: (
+        <PrimaryToggleButton
+          onClick={() => {
+            navigator.clipboard
+              .writeText(gridRef?.current?.getResultAsMarkdown() as string)
+              .then(() => {
+                setIsCopied(true)
+                setTimeout(() => setIsCopied(false), 1000)
+              })
+          }}
+        >
+          {isCopied ? <Check size="18px" /> : <Markdown size="18px" />}
+        </PrimaryToggleButton>
+      ),
+    },
     {
       tooltipText: "Freeze left column",
       trigger: (
