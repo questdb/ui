@@ -109,8 +109,7 @@ export const getRemoteConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
             "Content-Type": "application/json",
           },
           body: JSON.stringify(config),
-        }).catch( (error) => {
-          console.error(error)
+        }).catch( () => {
         })
       }
 
