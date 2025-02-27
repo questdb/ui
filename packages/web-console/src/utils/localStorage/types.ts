@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 export enum StoreKey {
+  RELEASE_TYPE = "RELEASE_TYPE",
   AUTH_PAYLOAD = "AUTH_PAYLOAD",
   AUTH_REFRESH_TOKEN = "AUTH_REFRESH_TOKEN",
   OAUTH_REDIRECT_COUNT = "oauth.redirect.count",
