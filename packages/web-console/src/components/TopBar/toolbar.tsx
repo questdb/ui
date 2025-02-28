@@ -132,12 +132,14 @@ export const Toolbar = () => {
             {serverDetails.instance_name}
           </Badge>
         )}
-        {settings["acl.enabled"] && serverDetails && serverDetails.current_user && (
-          <User>
-            <UserIcon size="18px" />
-            <Text color="foreground">{serverDetails.current_user}</Text>
-          </User>
-        )}
+        {settings["acl.enabled"] &&
+          serverDetails &&
+          serverDetails.current_user && (
+            <User>
+              <UserIcon size="18px" />
+              <Text color="foreground">{serverDetails.current_user}</Text>
+            </User>
+          )}
         {hasUIAuth(settings) && (
           <Button
             onClick={() => logout()}

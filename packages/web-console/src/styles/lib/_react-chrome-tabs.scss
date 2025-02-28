@@ -73,11 +73,7 @@
 }
 
 .chrome-tabs .chrome-tab-rename {
-  font-family: "Open Sans",
-    -apple-system,
-    BlinkMacSystemFont,
-    Helvetica,
-    Roboto,
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, Helvetica, Roboto,
     sans-serif;
 
   display: none;
@@ -150,12 +146,12 @@
   pointer-events: none;
 }
 
-.chrome-tabs .chrome-tab .chrome-tab-background>svg {
+.chrome-tabs .chrome-tab .chrome-tab-background > svg {
   width: 100%;
   height: 100%;
 }
 
-.chrome-tabs .chrome-tab .chrome-tab-background>svg .chrome-tab-geometry {
+.chrome-tabs .chrome-tab .chrome-tab-background > svg .chrome-tab-geometry {
   fill: #f4f5f6;
 }
 
@@ -163,22 +159,26 @@
   z-index: 5;
 }
 
-.chrome-tabs .chrome-tab[active] .chrome-tab-background>svg .chrome-tab-geometry {
+.chrome-tabs
+  .chrome-tab[active]
+  .chrome-tab-background
+  > svg
+  .chrome-tab-geometry {
   fill: #fff;
 }
 
 .chrome-tabs .chrome-tab:not([active]) .chrome-tab-background {
-    transition: opacity 0.2s ease;
-    opacity: 0;
-  } 
+  transition: opacity 0.2s ease;
+  opacity: 0;
+}
 @media (hover: hover) {
   .chrome-tabs .chrome-tab:not([active]):hover {
     z-index: 2;
   }
 
   .chrome-tabs .chrome-tab:not([active]):hover .chrome-tab-background {
-      opacity: 1;
-    } 
+    opacity: 1;
+  }
 }
 
 .chrome-tabs .chrome-tab.chrome-tab-was-just-added {
@@ -242,26 +242,30 @@
   height: 18px;
   line-height: 18px;
   color: #5f6368;
-  -webkit-mask-image: linear-gradient(90deg,
+  -webkit-mask-image: linear-gradient(
+    90deg,
     #000 0%,
     #000 calc(100% - 24px),
-    transparent);
-  mask-image: linear-gradient(90deg,
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
     #000 0%,
     #000 calc(100% - 24px),
-    transparent);
+    transparent
+  );
 }
 
 .chrome-tabs .chrome-tab[is-small] .chrome-tab-title {
   margin-left: 0;
 }
 
-.chrome-tabs .chrome-tab .chrome-tab-favicon+.chrome-tab-title,
-.chrome-tabs .chrome-tab[is-small] .chrome-tab-favicon+.chrome-tab-title {
+.chrome-tabs .chrome-tab .chrome-tab-favicon + .chrome-tab-title,
+.chrome-tabs .chrome-tab[is-small] .chrome-tab-favicon + .chrome-tab-title {
   margin-left: 8px;
 }
 
-.chrome-tabs .chrome-tab[is-smaller] .chrome-tab-favicon+.chrome-tab-title,
+.chrome-tabs .chrome-tab[is-smaller] .chrome-tab-favicon + .chrome-tab-title,
 .chrome-tabs .chrome-tab[is-mini] .chrome-tab-title {
   display: none;
 }
@@ -311,7 +315,9 @@
 }
 
 @media (hover: hover) {
-  .chrome-tabs .chrome-tab:not([active]) .chrome-tab-close:not(:hover):not(:active) {
+  .chrome-tabs
+    .chrome-tab:not([active])
+    .chrome-tab-close:not(:hover):not(:active) {
     opacity: 0.8;
   }
 }
@@ -354,7 +360,8 @@
 }
 
 .chrome-tabs.chrome-tabs-is-sorting .chrome-tab:not(.chrome-tab-is-dragging),
-.chrome-tabs:not(.chrome-tabs-is-sorting) .chrome-tab.chrome-tab-was-just-dragged {
+.chrome-tabs:not(.chrome-tabs-is-sorting)
+  .chrome-tab.chrome-tab-was-just-dragged {
   transition: transform 120ms ease-in-out;
 }
 
@@ -390,7 +397,9 @@
   color: rgba(200, 200, 200, 0.5);
 }
 
-.chrome-tabs.chrome-tabs-dark-theme .new-tab-button-wrapper .new-tab-button:hover {
+.chrome-tabs.chrome-tabs-dark-theme
+  .new-tab-button-wrapper
+  .new-tab-button:hover {
   background: rgba(154, 160, 166, 0.25);
 }
 
@@ -399,11 +408,19 @@
   background: #4a4d51;
 }
 
-.chrome-tabs.chrome-tabs-dark-theme .chrome-tab .chrome-tab-background>svg .chrome-tab-geometry {
+.chrome-tabs.chrome-tabs-dark-theme
+  .chrome-tab
+  .chrome-tab-background
+  > svg
+  .chrome-tab-geometry {
   fill: #292b2e;
 }
 
-.chrome-tabs.chrome-tabs-dark-theme .chrome-tab[active] .chrome-tab-background>svg .chrome-tab-geometry {
+.chrome-tabs.chrome-tabs-dark-theme
+  .chrome-tab[active]
+  .chrome-tab-background
+  > svg
+  .chrome-tab-geometry {
   fill: #44475a;
 }
 
@@ -416,13 +433,23 @@
 }
 
 // Metrics tabs styling
-.chrome-tabs.chrome-tabs-dark-theme .metrics-tab.chrome-tab .chrome-tab-background {
+.chrome-tabs.chrome-tabs-dark-theme
+  .metrics-tab.chrome-tab
+  .chrome-tab-background {
   opacity: 1;
 }
-.chrome-tabs.chrome-tabs-dark-theme .metrics-tab.chrome-tab .chrome-tab-background>svg .chrome-tab-geometry {
-  fill: #226A7B;
+.chrome-tabs.chrome-tabs-dark-theme
+  .metrics-tab.chrome-tab
+  .chrome-tab-background
+  > svg
+  .chrome-tab-geometry {
+  fill: #226a7b;
 }
-.chrome-tabs.chrome-tabs-dark-theme .metrics-tab.chrome-tab[active] .chrome-tab-background>svg .chrome-tab-geometry {
+.chrome-tabs.chrome-tabs-dark-theme
+  .metrics-tab.chrome-tab[active]
+  .chrome-tab-background
+  > svg
+  .chrome-tab-geometry {
   fill: #60c3da;
 }
 
@@ -430,7 +457,9 @@
   color: #8be9fd;
 }
 
-.chrome-tabs.chrome-tabs-dark-theme .metrics-tab.chrome-tab[active] .chrome-tab-title {
+.chrome-tabs.chrome-tabs-dark-theme
+  .metrics-tab.chrome-tab[active]
+  .chrome-tab-title {
   color: #24252f;
 }
 
@@ -452,7 +481,9 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path stroke='rgba(255, 255, 255, .9)' stroke-linecap='square' stroke-width='1.5' d='M0 0 L8 8 M8 0 L0 8'></path></svg>");
 }
 
-.chrome-tabs.chrome-tabs-dark-theme .metrics-tab.chrome-tab[active] .chrome-tab-close {
+.chrome-tabs.chrome-tabs-dark-theme
+  .metrics-tab.chrome-tab[active]
+  .chrome-tab-close {
   filter: invert(1) saturate(0);
 }
 
@@ -461,11 +492,11 @@
 }
 
 @media only screen and (-webkit-min-device-pixel-ratio: 2),
-only screen and (min--moz-device-pixel-ratio: 2),
-only screen and (-o-min-device-pixel-ratio: 2/1),
-only screen and (min-device-pixel-ratio: 2),
-only screen and (min-resolution: 192dpi),
-only screen and (min-resolution: 2dppx) {
+  only screen and (min--moz-device-pixel-ratio: 2),
+  only screen and (-o-min-device-pixel-ratio: 2/1),
+  only screen and (min-device-pixel-ratio: 2),
+  only screen and (min-resolution: 192dpi),
+  only screen and (min-resolution: 2dppx) {
   .chrome-tabs-optional-shadow-below-bottom-bar {
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='2' height='2' viewBox='0 0 2 2'><rect x='0' y='0' width='2' height='1' fill='rgba(0, 0, 0, .27)'></rect></svg>");
   }

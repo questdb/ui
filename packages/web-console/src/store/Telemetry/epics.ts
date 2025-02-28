@@ -61,21 +61,23 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
       const token = JSON.parse(authPayload) as AuthPayload
       if (token.access_token) {
         quest.setCommonHeaders({
-          Authorization: `Bearer ${token.groups_encoded_in_token ? token.id_token : token.access_token}`,
+          Authorization: `Bearer ${
+            token.groups_encoded_in_token ? token.id_token : token.access_token
+          }`,
         })
       } else {
         const restToken = getValue(StoreKey.REST_TOKEN)
         if (restToken) {
           quest.setCommonHeaders({
-            Authorization: `Bearer ${restToken}`
+            Authorization: `Bearer ${restToken}`,
           })
         } else {
-            const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-            if (basicAuth) {
-                quest.setCommonHeaders({
-                    Authorization: basicAuth,
-                })
-            }
+          const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
+          if (basicAuth) {
+            quest.setCommonHeaders({
+              Authorization: basicAuth,
+            })
+          }
         }
       }
       return from(

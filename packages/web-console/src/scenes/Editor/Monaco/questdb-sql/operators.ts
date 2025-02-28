@@ -33,5 +33,5 @@ export const operators = [
   "UNPIVOT",
   // Merging
   "MATCHED",
-  "EXPLAIN"  
+  "EXPLAIN",
 ]

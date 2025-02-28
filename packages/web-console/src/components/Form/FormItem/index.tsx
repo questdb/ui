@@ -1,19 +1,19 @@
-import React from "react";
-import styled from "styled-components";
-import { useFormContext } from "react-hook-form";
-import { Text } from "../../../components/Text";
+import React from "react"
+import styled from "styled-components"
+import { useFormContext } from "react-hook-form"
+import { Text } from "../../../components/Text"
 
 type Props = {
-  name: string;
-  label?: React.ReactNode;
-  afterLabel?: React.ReactNode;
-  helperText?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-  disabled?: boolean;
-  border?: boolean;
-  required?: boolean;
-};
+  name: string
+  label?: React.ReactNode
+  afterLabel?: React.ReactNode
+  helperText?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+  disabled?: boolean
+  border?: boolean
+  required?: boolean
+}
 
 const Root = styled.div<Pick<Props, "disabled" | "border">>`
   display: grid;
@@ -26,13 +26,13 @@ const Root = styled.div<Pick<Props, "disabled" | "border">>`
     `
     border-bottom: 1px ${theme.color.background} solid;
   `}
-`;
+`
 
 const Control = styled.div<Pick<Props, "disabled">>`
   display: grid;
   gap: 1rem;
   ${(props) => props.disabled && `opacity: 0.7;`}
-`;
+`
 
 const LabelWrapper = styled.div`
   display: flex;
@@ -40,15 +40,15 @@ const LabelWrapper = styled.div`
   justify-content: space-between;
   align-items: baseline;
   width: 100%;
-`;
+`
 
 const Label = styled.label<{ htmlFor: string }>`
   color: ${({ theme }) => theme.color.gray2};
-`;
+`
 
 const AfterLabel = styled.span`
   color: ${({ theme }) => theme.color.gray2};
-`;
+`
 
 export const FormItem = ({
   name,
@@ -63,7 +63,7 @@ export const FormItem = ({
 }: Props) => {
   const {
     formState: { errors },
-  } = useFormContext();
+  } = useFormContext()
 
   return (
     <Root className={className} disabled={disabled} border={border}>
@@ -93,5 +93,5 @@ export const FormItem = ({
         <Text color="red">{errors[name]?.message}</Text>
       )}
     </Root>
-  );
-};
+  )
+}
