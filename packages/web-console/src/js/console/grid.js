@@ -289,6 +289,7 @@ export function grid(rootElement, _paginationFn, id) {
           row.style.display = "flex"
           for (let i = colLo; i < colHi; i++) {
             setCellData(
+              columns[i],
               row.childNodes[i % visColumnCount],
               rowData[columnPositions[i]],
             )
@@ -510,6 +511,7 @@ export function grid(rootElement, _paginationFn, id) {
         case "STRING":
         case "SYMBOL":
         case "VARCHAR":
+        case "ARRAY":
           return true
         default:
           return false
@@ -928,7 +930,23 @@ export function grid(rootElement, _paginationFn, id) {
 
       const hType = document.createElement("span")
       addClass(hType, "qg-header-type")
-      hType.innerHTML = c.type.toLowerCase()
+      if (c.type !== "ARRAY") {
+        hType.innerHTML = c.type.toLowerCase()
+      } else if (c.dim > 2) {
+        hType.innerHTML =
+          c.type.toUpperCase() +
+          "(" +
+          c.elemType.toUpperCase() +
+          "," +
+          c.dim +
+          ")"
+      } else {
+        let html = c.elemType.toLowerCase() + "[]"
+        if (c.dim > 1) {
+          html += "[]"
+        }
+        hType.innerHTML = html
+      }
 
       const hName = document.createElement("span")
       addClass(hName, "qg-header-name")
@@ -1045,9 +1063,49 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function setCellData(cell, cellData) {
+  /**
+   * Computes the shape of a multi-dimensional array.
+   * For example:
+   *   - A 1D array [1, 2, 3] returns [3]
+   *   - A 2D array [[1,2,3], [4,5,6]] returns [2, 3]
+   *   - A 3D array returns [dim1, dim2, dim3]
+   *
+   * @param {Array} arr - The multi-dimensional array.
+   * @returns {number[]} - An array representing the shape.
+   */
+  function getArrayShape(arr) {
+    let shape = []
+
+    // Traverse into nested arrays while the current value is an array.
+    while (Array.isArray(arr)) {
+      shape.push(arr.length)
+      // If the array is empty, break out to avoid accessing arr[0] undefined.
+      if (arr.length === 0) {
+        break
+      }
+      arr = arr[0]
+    }
+
+    return shape
+  }
+
+  function setCellData(column, cell, cellData) {
     if (cellData !== null) {
-      cell.innerHTML = escapeHtml(cellData.toString())
+      if (Array.isArray(cellData)) {
+        const shape = getArrayShape(cellData)
+        let prefix = "<ul class='qg-arr-chip'>"
+        for (let i = 0; i < shape.length; i++) {
+          prefix += "<li><span>" + shape[i] + "</span></li>"
+        }
+        prefix += "</ul>"
+        cell.innerHTML =
+          prefix +
+          "<div class='qg-arr-val'>" +
+          JSON.stringify(cellData, column.dim) +
+          "</div>"
+      } else {
+        cell.innerHTML = escapeHtml(cellData.toString())
+      }
       cell.classList.remove("qg-null")
     } else {
       cell.innerHTML = "null"
@@ -1058,7 +1116,11 @@ export function grid(rootElement, _paginationFn, id) {
   function setCellDataAndAttributes(row, rowData, columnIndex) {
     const cell = row.childNodes[columnIndex % visColumnCount]
     configureCell(cell, columnIndex)
-    setCellData(cell, rowData[columnPositions[columnIndex]])
+    setCellData(
+      columns[columnIndex],
+      cell,
+      rowData[columnPositions[columnIndex]],
+    )
   }
 
   function getNonFrozenColLo(colLo) {
@@ -1636,7 +1698,10 @@ export function grid(rootElement, _paginationFn, id) {
         clearTimeout(activeCellPulseClearTimer)
       }
       addClass(focusedCell, "qg-c-active-pulse")
-      navigator.clipboard.writeText(focusedCell.innerHTML).then(undefined)
+      const arrayValue = focusedCell.querySelector("div.qg-arr-val")
+      navigator.clipboard
+        .writeText(arrayValue ? arrayValue.innerHTML : focusedCell.innerHTML)
+        .then(undefined)
 
       activeCellPulseClearTimer = setTimeout(() => {
         removeClass(focusedCell, "qg-c-active-pulse")
