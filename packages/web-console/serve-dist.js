@@ -6,6 +6,11 @@ const path = require("path")
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 
 const server = http.createServer((req, res) => {
+    if (path.normalize(decodeURI(req.url)) !== decodeURI(req.url)) {
+        res.statusCode = 403;
+        res.end();
+        return;
+    }
   const { method } = req
   const baseUrl =  "http://" + req.headers.host + contextPath;
   const reqUrl = new url.URL(req.url, baseUrl);
