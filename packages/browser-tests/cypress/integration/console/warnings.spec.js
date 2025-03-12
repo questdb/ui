@@ -1,7 +1,5 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
-
 describe("System configuration - no warnings", () => {
   before(() => {
     cy.loadConsoleWithAuth(true);

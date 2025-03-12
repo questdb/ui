@@ -55,6 +55,8 @@ type Props = {
   name: string
   schema: SchemaColumn[]
   partitionBy: string
+  ttlValue: number
+  ttlUnit: string
   timestamp: string
   trigger?: React.ReactNode
   tables?: QuestDB.Table[]
@@ -67,6 +69,8 @@ export const Dialog = ({
   schema,
   partitionBy,
   timestamp,
+  ttlValue,
+  ttlUnit,
   open,
   isEditLocked,
   hasWalSetting,
@@ -82,6 +86,8 @@ export const Dialog = ({
     schemaColumns: schema,
     partitionBy,
     timestamp,
+    ttlValue,
+    ttlUnit,
     walEnabled: hasWalSetting ? "false" : undefined,
   }
 
@@ -97,6 +103,8 @@ export const Dialog = ({
       schemaColumns: schema,
       partitionBy: partitionBy,
       timestamp: timestamp,
+      ttlValue: ttlValue,
+      ttlUnit: ttlUnit,
       walEnabled:
         hasWalSetting && walEnabled !== undefined
           ? walEnabled.toString()
@@ -113,7 +121,7 @@ export const Dialog = ({
         }
         if (
           action === "add" &&
-          tables?.find((table) => table.table_name === value)
+          tables?.find((table) => table.table_name.toLowerCase() === value.toLowerCase())
         ) {
           return helpers.error("string.uniqueTableName")
         }
@@ -136,6 +144,8 @@ export const Dialog = ({
         "string.timestampRequired":
           "Designated timestamp is required when partitioning is set to anything other than NONE",
       }),
+    ttlValue: Joi.number(),
+    ttlUnit: Joi.string(),
     walEnabled: Joi.any()
       .allow(...["true", "false"])
       .empty(),

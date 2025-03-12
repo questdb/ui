@@ -1,6 +1,7 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tables = [
   "btc_trades",
@@ -18,7 +19,6 @@ describe("questdb schema with working tables", () => {
     });
     cy.refreshSchema();
   });
-
   it("should show all the tables when there are no suspended", () => {
     tables.forEach((table) => {
       cy.getByDataHook("schema-table-title").should("contain", table);
@@ -123,6 +123,54 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
     cy.getByDataHook("schema-suspension-dialog-trigger").should("not.exist");
+  });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+    tables.forEach((table) => {
+      cy.dropTable(table);
+    });
+  });
+});
+
+describe("table select UI", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+
+    tables.forEach((table) => {
+      cy.createTable(table);
+    });
+    cy.refreshSchema();
+  });
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  it("should show select ui on click", () => {
+    cy.getByDataHook("schema-select-button").click();
+    cy.getByDataHook("schema-copy-to-clipboard-button").should("be.visible");
+    cy.getByDataHook("schema-copy-to-clipboard-button").should("be.disabled");
+    cy.getByDataHook("schema-select-all-button").should("be.visible");
+  });
+
+  it("should select and deselect tables", () => {
+    cy.getByDataHook("schema-select-button").click();
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-table-title")
+      .contains("chicago_weather_stations")
+      .click();
+    cy.getByDataHook("schema-copy-to-clipboard-button")
+      .should("not.be.disabled")
+      .click();
+    // Electron only!
+    if (Cypress.isBrowser("electron")) {
+      ["btc_trades", "chicago_weather_stations"].forEach((table) => {
+        cy.window()
+          .its("navigator.clipboard")
+          .then((clip) => clip.readText())
+          .should("contain", `CREATE TABLE '${table}'`);
+      });
+    }
   });
 
   after(() => {

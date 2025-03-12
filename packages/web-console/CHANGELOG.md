@@ -16,6 +16,154 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.6 - 2025.02.27
+
+### Added
+
+- Add button to copy query plans and result sets to clipboard in markdown format [#393](https://github.com/questdb/ui/pull/393)
+
+### Fixed
+
+- Escape table name for SHOW CREATE TABLE [#398](https://github.com/questdb/ui/pull/398)
+
+## 0.7.5 - 2025.02.13
+
+### Fixed
+
+- Fix floating-point regex capturing words beginning with 'E' [#394](https://github.com/questdb/ui/pull/394)
+- Prevent login loop when token expires without a valid refresh token [#395](https://github.com/questdb/ui/pull/395)
+
+## 0.7.4 - 2025.02.05
+
+### Added
+
+- support for OAuth2 state parameter [#390](https://github.com/questdb/ui/pull/390)
+
+## 0.7.3 - 2025.01.29
+
+### Fixed
+
+- another patch for 0.7.0 (charts)
+
+## 0.7.2 - 2025.01.28
+
+### Fixed
+
+- another patch for 0.7.0 (charts)
+
+## 0.7.1 - 2025.01.27
+
+### Fixed
+
+- fixed issues introduced by [#352](https://github.com/questdb/ui/pull/352) - https://github.com/questdb/ui/pull/378
+
+## 0.7.0 - 2025.01.21
+
+### Added
+
+- WAL Metrics for tables [#352](https://github.com/questdb/ui/pull/352)
+- Add TTL feature to tables [#365](https://github.com/questdb/ui/pull/365)
+- webpack dev server proxy to take context path from env variable
+  [#371](https://github.com/questdb/ui/pull/371)
+
+### Changed
+
+- use `SHOW CREATE TABLE` in `Copy schema to clipboard`
+  [#369](https://github.com/questdb/ui/pull/369)
+- Make autocomplete case insensitive
+  [#366](https://github.com/questdb/ui/pull/366)
+
+### Fixed
+
+- kick user out if access token expired and there is no refresh token
+  [#373](https://github.com/questdb/ui/pull/373)
+
+## 0.6.5 - 2024.12.02
+
+### Changed
+
+- use a new information_schema.questdb_columns() instead of
+  information_schema.columns() [#359](https://github.com/questdb/ui/pull/359)
+
+## 0.6.4 - 2024.11.25
+
+### Added
+
+- Support for ID token in Auth [#355](https://github.com/questdb/ui/pull/355)
+- News Image zoom [#350](https://github.com/questdb/ui/pull/350)
+
+### Changed
+
+- Highlight integer numbers that include `_` (underscore) separator
+  [#353](https://github.com/questdb/ui/pull/353)
+- Handle and display error received while scrolling the grid
+  [#348](https://github.com/questdb/ui/pull/348)
+
+## 0.6.3 - 2024.10.23
+
+### Added
+
+- Improvements for Tables UI section
+  [#340](https://github.com/questdb/ui/pull/340)
+
+### Changed
+
+- Change upload COPY info [#347](https://github.com/questdb/ui/pull/347)
+
+## 0.6.2 - 2024.10.15
+
+### Fixed
+
+- UX improvements around editor [#338](https://github.com/questdb/ui/pull/338)
+- Running query is not cancelled when Run button is clicked
+
+### Changed
+
+- Support for notice responses from server, such as empty SQL notice
+  [#334](https://github.com/questdb/ui/pull/334)
+
+## 0.6.1 - 2024.10.07
+
+### Fixed
+
+- Handle line comments in SQLs [#333](https://github.com/questdb/ui/pull/333)
+- Handle comments in SQL editor highlights
+  [#335](https://github.com/questdb/ui/pull/336)
+- Tab state update issues that lead to visual side effects
+  [#337](https://github.com/questdb/ui/pull/337)
+
+### Changed
+
+- Tab History UI updates [#335](https://github.com/questdb/ui/pull/335)
+
+## 0.6.0 - 2024.09.26
+
+### Added
+
+- Tabs in SQL Editor [#329](https://github.com/questdb/ui/pull/329)
+
+### Fixed
+
+- Display Copy action for suspended tables
+  [#332](https://github.com/questdb/ui/pull/332)
+- Fix the response to handle all case table names
+  [#328](https://github.com/questdb/ui/pull/328)
+
+## 0.5.2 - 2024.09.05
+
+### Added
+
+- Configurable Redirect URI and scope for OIDC integration
+  [#323](https://github.com/questdb/ui/pull/323)
+
+### Changed
+
+- Run Console tests with Auth [#310](https://github.com/questdb/ui/pull/310)
+
+### Fixed
+
+- Fix suspension lag count [#327](https://github.com/questdb/ui/pull/327)
+
 ## 0.5.1 - 2024.07.24
 
 ### Added

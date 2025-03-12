@@ -9,27 +9,35 @@ type TokenPayload = Partial<{
   refresh_token: string
 }>
 
-const getBaseURL = (config: Settings) => {
-  return `${config["acl.oidc.tls.enabled"] ? "https" : "http"}://${
-    config["acl.oidc.host"]
-  }:${config["acl.oidc.port"]}`
+const getBaseURL = (settings: Settings) => {
+  // if there is no host in settings, no need to construct base URL at all
+  if (!settings["acl.oidc.host"]) {
+    return ""
+  }
+
+  // if there is host in settings, we are in legacy mode, and we should construct the base URL
+  return `${settings["acl.oidc.tls.enabled"] ? "https" : "http"}://${
+    settings["acl.oidc.host"]
+  }:${settings["acl.oidc.port"]}`
 }
 
 export const getAuthorisationURL = ({
-  config,
+  settings,
   code_challenge = null,
+  state = null,
   login,
   redirect_uri,
 }: {
-  config: Settings
+  settings: Settings
   code_challenge: string | null
+  state: string | null
   login?: boolean
   redirect_uri: string
 }) => {
   const params = {
-    client_id: config["acl.oidc.client.id"] || "",
+    client_id: settings["acl.oidc.client.id"] || "",
     response_type: "code",
-    scope: config["acl.oidc.scope"] || "openid",
+    scope: settings["acl.oidc.scope"] || "openid",
     redirect_uri,
   }
 
@@ -38,13 +46,16 @@ export const getAuthorisationURL = ({
     urlParams.append("code_challenge", code_challenge)
     urlParams.append("code_challenge_method", "S256")
   }
+  if (state) {
+    urlParams.append("state", state)
+  }
   if (login) {
     urlParams.append("prompt", "login")
   }
 
   return (
-    getBaseURL(config) +
-    config["acl.oidc.authorization.endpoint"] +
+    getBaseURL(settings) +
+    settings["acl.oidc.authorization.endpoint"] +
     "?" +
     urlParams
   )
@@ -70,5 +81,5 @@ export const getAuthToken = async (
   )
 }
 
-export const hasUIAuth = (config: Settings) =>
-  config["acl.enabled"] && !config["acl.basic.auth.realm.enabled"]
+export const hasUIAuth = (settings: Settings) =>
+  settings["acl.enabled"] && !settings["acl.basic.auth.realm.enabled"]

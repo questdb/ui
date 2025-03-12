@@ -3,6 +3,8 @@ const url = require("url")
 const fs = require("fs")
 const path = require("path")
 
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+
 const server = http.createServer((req, res) => {
     if (path.normalize(decodeURI(req.url)) !== decodeURI(req.url)) {
         res.statusCode = 403;
@@ -10,18 +12,21 @@ const server = http.createServer((req, res) => {
         return;
     }
   const { method } = req
-  const urlData = url.parse(req.url)
+  const baseUrl =  "http://" + req.headers.host + contextPath;
+  const reqUrl = new url.URL(req.url, baseUrl);
+  const reqPath = reqUrl.pathname + reqUrl.search;
+  const reqPathName = reqUrl.pathname;
 
   if (
-    urlData.pathname.startsWith("/exec") ||
-    urlData.pathname.startsWith("/settings") ||
-    urlData.pathname.startsWith("/warnings")
+    reqPathName.startsWith("/exec") ||
+    reqPathName.startsWith("/settings") ||
+    reqPathName.startsWith("/warnings")
   ) {
     // proxy /exec requests to localhost:9000
     const options = {
       hostname: "localhost",
       port: 9000,
-      path: urlData.path,
+      path: contextPath + reqPath,
       method,
       headers: req.headers,
     }
@@ -32,6 +37,16 @@ const server = http.createServer((req, res) => {
     })
 
     req.pipe(proxyReq, { end: true })
+  } else if (
+    reqPathName.startsWith("/userinfo")
+  ) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    // TODO: should be able to set the response from the test
+    //  add something like /setUserInfo?info={sub: "user2", groups: "bla"}
+    res.end(JSON.stringify({
+      sub: "user1",
+      groups: ["group1", "group2"]
+    }))
   } else {
     // serve static files from /dist folder
     const filePath = path.join(
@@ -39,16 +54,16 @@ const server = http.createServer((req, res) => {
       "packages",
       "web-console",
       "dist",
-      ["", "/"].some((p) => urlData.pathname === p)
+      ["", "/"].some((p) => reqPathName === p)
         ? "index.html"
-        : urlData.pathname,
+        : reqPathName,
     )
     const fileStream = fs.createReadStream(filePath)
 
     fileStream.on("error", (err) => {
       if (err.code === "ENOENT") {
         res.statusCode = 404
-        res.end(`File not found: ${urlData}`)
+        res.end(`File not found: ${reqPath}`)
       } else {
         res.statusCode = 500
         res.end(`Server error: ${err}`)

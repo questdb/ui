@@ -7,38 +7,59 @@ Yarn@3 and Webpack.
 
 ## Local development setup
 
-In order to run this package locally, you need to do the following steps:
-
-1. Clone and bootstrap repository (by following instructions on [`local-development-setup.md`](../../docs/local-development-setup.md)) 
-2. Start development server
-3. Run QuestDB in the background
-4. Hack!
+In order to run this package locally, follow the steps below.
 
 ### 1. Clone and bootstrap repository
 
-Consult instructions on [`local-development-setup.md`](../../docs/local-development-setup.md) document.
+Follow the instructions described
+in [`local-development-setup.md`](../../docs/local-development-setup.md) document.\
+After the local development environment setup, you are ready to work on the packages of this project,
+including the web console.
 
-### 2. Build the production version of `@questdb/react-components`, which this repository uses:
+### 2. Build the production version of `@questdb/react-components`
+
+The web console uses the `@questdb/react-components` package, so build this dependency first.
 ```
 yarn workspace @questdb/react-components build
 ```
 
 ### 3. Start development server
 
+Now we can start the web console.
 ```
 yarn workspace @questdb/web-console start
 ```
 
-[localhost:9999](http://localhost:9999) should show web console
+By default, [localhost:9999](http://localhost:9999) should display the web console.
+
+If the server has a context path configured with the `http.context.path` option, we need to make sure that
+the dev server is aware of it, and it proxies requests accordingly.\
+We can set the context path with the following environment variable before starting dev server:
+```
+QDB_HTTP_CONTEXT_WEB_CONSOLE=/instance2
+export QDB_HTTP_CONTEXT_WEB_CONSOLE
+yarn workspace @questdb/web-console start
+```
+
+After the above the web console is available on [localhost:9999/instance2/](http://localhost:9999/instance2/)
+
+If the context path is removed from the server configuration, we also need to clear the environment variable,
+and restart the dev server:
+```
+unset QDB_HTTP_CONTEXT_WEB_CONSOLE
+yarn workspace @questdb/web-console start
+```
 
 ### 4. Run QuestDB in the background
 
-This package (`web-console`) is a only GUI for QuestDB, it does not include QuestDB itself.\
-GUI will work without it, but because it's a tool to interact with QuestDB, you will need QuestDB as well.
+This package (`web-console`) is a GUI for QuestDB, it does not include QuestDB itself.\
+The web console will load from the dev server without the database, but because it is a tool
+to interact with QuestDB, you need to run the database as well to be able to work with it
+properly.
 
-Check [readme.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.
+Check [README.md](https://github.com/questdb/questdb#install-questdb) of QuestDB to learn how to install it.
 
-If you have [`docker`](https://docs.docker.com/get-docker/), then it's simply:
+If you have [`docker`](https://docs.docker.com/get-docker/), then it is simply:
 
 ```
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
@@ -46,7 +67,8 @@ docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 
 ### 5. Hack!
 
-Do your code changes and browser will automatically refresh [localhost:9999](http://localhost:9999).
+You can start changing the code, and the web console will automatically refresh
+on [localhost:9999](http://localhost:9999).
 
 Happy hacking!
 

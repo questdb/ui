@@ -1,6 +1,10 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
+
+const getTabDragHandleByTitle = (title) =>
+  `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
 
 describe("appendQuery", () => {
   const consoleConfiguration = {
@@ -15,6 +19,9 @@ describe("appendQuery", () => {
   };
 
   const queries = consoleConfiguration.savedQueries.map((query) => query.value);
+
+  const getTabDragHandleByTitle = (title) =>
+    `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
 
   before(() => {
     cy.intercept(
@@ -199,6 +206,21 @@ describe("autocomplete", () => {
     cy.matchImageSnapshot();
   });
 
+  it("should be case insensitive", () => {
+    const assertFrom = () =>
+      cy.getAutocomplete().within(() => {
+        cy.getMonacoListRow()
+          .should("have.length", 3)
+          .eq(0)
+          .should("contain", "FROM");
+      });
+    cy.typeQuery("select * from");
+    assertFrom();
+    cy.clearEditor();
+    cy.typeQuery("SELECT * FROM");
+    assertFrom();
+  });
+
   it("should suggest the existing tables on 'from' clause", () => {
     cy.typeQuery("select * from ");
     cy.getAutocomplete()
@@ -219,6 +241,15 @@ describe("autocomplete", () => {
       // list the tables containing `secret` column
       .should("contain", "my_secrets, my_secrets2")
       .clearEditor();
+  });
+
+  it("should suggest columns on SELECT only when applicable", () => {
+    cy.typeQuery("select secret");
+    cy.getAutocomplete().should("contain", "secret").eq(0).click();
+    cy.typeQuery(", public");
+    cy.getAutocomplete().should("contain", "public").eq(0).click();
+    cy.typeQuery(" ");
+    cy.getAutocomplete().should("not.be.visible");
   });
 
   it("should suggest correct columns on 'where' filter", () => {
@@ -271,6 +302,32 @@ describe("errors", () => {
 
     cy.getCollapsedNotifications().should("contain", "Invalid date");
   });
+
+  const operators = [
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    ">",
+    "<",
+    "=",
+    "!",
+    "&",
+    "|",
+    "^",
+    "~",
+  ];
+
+  operators.forEach((char) => {
+    it(`should mark operator '${char}' as error`, () => {
+      const query = `select x FROM long_sequence(100 ${char} "string");`;
+      cy.typeQuery(query);
+      cy.runLine();
+      cy.matchErrorMarkerPosition({ left: 270, width: 8 });
+      cy.clearEditor();
+    });
+  });
 });
 
 describe("running query with F9", () => {
@@ -315,5 +372,166 @@ describe("running query with F9", () => {
     cy.F9();
     cy.getGridRows().should("have.length", 2);
     cy.getCursorQueryDecoration().should("have.length", 1);
+  });
+});
+
+describe("editor tabs", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should open the new single tab with empty editor", () => {
+    cy.getEditorContent().should("have.value", "");
+    cy.getEditorTabs().should("have.length", 1);
+    cy.getEditorTabByTitle("SQL").should("be.visible");
+    cy.getEditorTabByTitle("SQL").should("not.contain", ".chrome-tab-close");
+  });
+
+  it("should open the second empty tab on plus icon click", () => {
+    cy.get(".new-tab-button").click();
+    cy.getEditorTabs().should("have.length", 2);
+    ["SQL", "SQL 1"].forEach((title) => {
+      cy.getEditorTabByTitle(title).should("be.visible");
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").should("be.visible");
+      });
+    });
+  });
+
+  it("should rename a tab", () => {
+    cy.getEditorTabByTitle("SQL").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").should("be.visible").type("New name{enter}");
+    });
+    cy.getEditorTabByTitle("New name")
+      .should("be.visible")
+      .within(() => {
+        cy.get(".chrome-tab-drag-handle").dblclick();
+        cy.get(".chrome-tab-rename").type("Cancelled new name{esc}");
+        cy.get(".chrome-tab-rename").should("not.be.visible");
+      });
+    cy.getEditorTabByTitle("Cancelled new name").should("not.exist");
+    cy.getEditorTabByTitle("New name").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").type("{selectall}{esc}{enter}");
+      // empty tab name is not allowed, should not proceed
+      cy.get(".chrome-tab-rename").should("be.visible");
+    });
+    // Changing the name and clicking away from the input should save the state
+    cy.getEditorHitbox().click();
+    cy.getEditorTabByTitle("New name").within(() => {
+      cy.get(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab-rename").type("New updated name");
+    });
+    cy.getEditorHitbox().click();
+    cy.getEditorTabByTitle("New updated name").should("be.visible");
+  });
+
+  it("should close and archive tabs", () => {
+    cy.getEditorContent().should("be.visible");
+    cy.typeQuery("--1");
+    cy.get(".new-tab-button").click();
+    cy.get(".new-tab-button").click();
+    ["SQL 1", "SQL 2"].forEach((title, index) => {
+      cy.get(getTabDragHandleByTitle(title)).click();
+      cy.getEditorContent().should("be.visible");
+      cy.typeQuery(`-- ${index + 1}`);
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").click();
+      });
+      cy.getEditorTabByTitle(title).should("not.exist");
+    });
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-item")
+      .should("have.length", 2)
+      .should("contain", "SQL 1");
+    // Restore closed tabs. "SQL 2" should be first, as it was closed last
+    cy.getByDataHook("editor-tabs-history-item").first().click();
+    cy.getEditorTabByTitle("SQL 2").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1);
+    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2");
+    // Clear history
+    cy.getByDataHook("editor-tabs-history-clear").click();
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("not.exist");
+  });
+
+  it("should drag tabs", () => {
+    cy.get(".new-tab-button").click();
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL 1");
+    cy.getEditorTabs().last().should("contain", "SQL");
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL");
+    cy.getEditorTabs().last().should("contain", "SQL 1");
+  });
+});
+
+describe("handling comments", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+  });
+
+  beforeEach(() => {
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should highlight and execute sql with line comments in front", () => {
+    cy.typeQuery("-- comment\n-- comment\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 3);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with empty line comment in front", () => {
+    cy.typeQuery("--\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with block comments", () => {
+    cy.typeQuery("/* comment */\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+
+    cy.clearEditor();
+    cy.typeQuery("/*\ncomment\n*/\nselect x from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 4);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with line comments inside", () => {
+    cy.typeQuery("select\n\nx\n-- y\n-- z\n from long_sequence(1);");
+    cy.getCursorQueryDecoration().should("have.length", 5);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should highlight and execute sql with line comment at the end", () => {
+    cy.typeQuery("select x from long_sequence(1); -- comment");
+    cy.getCursorQueryDecoration().should("have.length", 1);
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.runLine();
+    cy.getGridRow(0).should("contain", "1");
   });
 });

@@ -31,11 +31,8 @@ import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
 import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 
 import {
-  ErrorButton,
   PaneMenu,
   PopperToggle,
-  SecondaryButton,
-  SuccessButton,
   TransitionDuration,
   TransparentButton,
   useKeyPress,
@@ -49,6 +46,7 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { DocSearch } from "@docsearch/react"
 import { useSettings } from "../../../providers"
+import { Button } from "@questdb/react-components"
 
 import "@docsearch/css"
 
@@ -68,15 +66,15 @@ const Separator = styled.div`
   flex: 1;
 `
 
-const QueryPickerButton = styled(SecondaryButton)<{
-  firstTimeVisitor: boolean
+const QueryPickerButton = styled(Button)<{
+  $firstTimeVisitor: boolean
 }>`
   position: relative;
   margin: 0 1rem;
   flex: 0 0 auto;
 
-  ${({ firstTimeVisitor }) =>
-    firstTimeVisitor &&
+  ${({ $firstTimeVisitor }) =>
+    $firstTimeVisitor &&
     `&:after {
     border-radius: 50%;
     content: "";
@@ -187,7 +185,10 @@ const Menu = () => {
           active={queriesPopperActive}
           onToggle={handleQueriesToggle}
           trigger={
-            <QueryPickerButton firstTimeVisitor={!exampleQueriesVisited}>
+            <QueryPickerButton
+              skin="secondary"
+              $firstTimeVisitor={!exampleQueriesVisited}
+            >
               <Add size="18px" />
               <span>Example queries</span>
             </QueryPickerButton>
@@ -203,23 +204,30 @@ const Menu = () => {
       <Separator />
 
       {running.value && (
-        <ErrorButton onClick={handleClick}>
-          <Stop size="18px" />
-          <span>Cancel</span>
-        </ErrorButton>
+        <Button
+          skin="error"
+          onClick={handleClick}
+          prefixIcon={<Stop size="18px" />}
+        >
+          Cancel
+        </Button>
       )}
 
       {!running.value && (
-        <SuccessButton title="Ctrl+Enter" onClick={handleClick}>
-          <Play size="18px" />
-          <span>Run</span>
+        <Button
+          skin="success"
+          title="Ctrl+Enter"
+          onClick={handleClick}
+          prefixIcon={<Play size="18px" />}
+        >
+          Run
           <RunShortcut>
             <Key>{ctrlCmd}</Key>
             <Key>
               <CornerDownLeft size="16px" />
             </Key>
           </RunShortcut>
-        </SuccessButton>
+        </Button>
       )}
 
       <MenuItems>

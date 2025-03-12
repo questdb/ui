@@ -4,6 +4,8 @@ const {
 
 require("cypress-real-events");
 
+require("@4tw/cypress-drag-drop");
+
 addMatchImageSnapshotCommand({
   failureThreshold: 0.3,
   blackout: [".notifications", 'button[class*="BuildVersion"'],
@@ -11,7 +13,8 @@ addMatchImageSnapshotCommand({
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
-const baseUrl = "http://localhost:9999";
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tableSchemas = {
   btc_trades:
@@ -148,15 +151,23 @@ Cypress.Commands.add("getEditorContent", () =>
   cy.get(".monaco-editor textarea")
 );
 
+Cypress.Commands.add("getEditorHitbox", () =>
+  cy.get(".monaco-editor .view-lines")
+);
+
 Cypress.Commands.add("getAutocomplete", () =>
   cy.get('[widgetid="editor.widget.suggestWidget"]')
 );
+
+Cypress.Commands.add("getMonacoListRow", () => cy.get(".monaco-list-row"));
 
 Cypress.Commands.add("getErrorMarker", () => cy.get(".squiggly-error"));
 
 Cypress.Commands.add("getCursorQueryDecoration", () =>
   cy.get(".cursorQueryDecoration")
 );
+
+Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
 
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
@@ -254,7 +265,34 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   }
 });
 
+Cypress.Commands.add("loadConsoleAsAdminAndCreateSSOGroup", (group, externalGroup = undefined) => {
+  cy.loadConsoleWithAuth(true);
+  cy.executeSQL(`CREATE GROUP ${group} WITH EXTERNAL ALIAS ${externalGroup || group};`);
+  cy.executeSQL(`GRANT HTTP TO ${group};`);
+  cy.logout();
+});
+
+Cypress.Commands.add("logout", () => {
+  cy.getByDataHook("button-logout").click();
+  cy.getByDataHook("auth-login").should("be.visible");
+});
+
+Cypress.Commands.add("executeSQL", (sql) => {
+  cy.clearEditor();
+  cy.typeQuery(sql);
+  cy.clickRun();
+});
+
 Cypress.Commands.add("refreshSchema", () => {
-  cy.getByDataHook("schema-settings-button").click();
-  cy.getByDataHook("schema-refresh").click();
+  // toggle between auto-refresh modes to trigger a schema refresh
+  cy.getByDataHook("schema-auto-refresh-button").click();
+  cy.getByDataHook("schema-auto-refresh-button").click();
+});
+
+Cypress.Commands.add("getEditorTabs", () => {
+  return cy.get(".chrome-tab");
+});
+
+Cypress.Commands.add("getEditorTabByTitle", (title) => {
+  return cy.get(`.chrome-tab[data-tab-title="${title}"]`);
 });

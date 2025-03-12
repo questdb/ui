@@ -16,6 +16,7 @@ import {
 import {
   generateCodeChallenge,
   generateCodeVerifier,
+  generateState,
 } from "../modules/OAuth2/pkce"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
@@ -47,7 +48,7 @@ const initialState: { view: View; errorMessage?: string } = {
   view: View.loading,
 }
 
-const defaultValues = {
+const defaultValues: ContextProps = {
   sessionData: undefined,
   logout: () => {},
   refreshAuthToken: async () => ({} as AuthPayload),
@@ -77,19 +78,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   )
   const [state, dispatch] = useReducer(reducer, initialState)
 
-  const setAuthToken = (tokenResponse: AuthPayload) => {
+  const setAuthToken = (tokenResponse: AuthPayload, settings: Settings) => {
     if (tokenResponse.access_token) {
-      setValue(
-        StoreKey.AUTH_PAYLOAD,
-        JSON.stringify({
-          ...tokenResponse,
-          expires_at: getTokenExpirationDate(tokenResponse.expires_in), // convert from the sec offset
-        }),
-      )
-      // if the token payload does not contain the rolling refresh token, we'll keep the old one
-      if (tokenResponse.refresh_token) {
-        setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token)
-      }
+      tokenResponse.groups_encoded_in_token =
+        settings["acl.oidc.groups.encoded.in.token"]
+      tokenResponse.expires_at = getTokenExpirationDate(
+        tokenResponse.expires_in,
+      ).toString() // convert from the sec offset
+      setValue(StoreKey.AUTH_PAYLOAD, JSON.stringify(tokenResponse))
+      // if the token payload does not contain refresh token, token refresh has been disabled in
+      // the OAuth2 provider, and we need to clear the refresh token in local storage
+      setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token ?? "")
       setSessionData(tokenResponse)
       // Remove the code from the URL
       history.replaceState &&
@@ -97,7 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           null,
           "",
           location.pathname +
-            location.search.replace(/[\?&]code=[^&]+/, "").replace(/^&/, "?"),
+            location.search.replace(/[?&]code=[^&]+/, "").replace(/^&/, "?"),
         )
     } else {
       const error = tokenResponse as unknown as OAuth2Error
@@ -111,15 +110,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const refreshAuthToken = async (settings: Settings) => {
-    const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
     const response = await getAuthToken(settings, {
       grant_type: "refresh_token",
       refresh_token: getValue(StoreKey.AUTH_REFRESH_TOKEN),
-      code_verifier,
       client_id: settings["acl.oidc.client.id"],
     })
     const tokenResponse = await response.json()
-    setAuthToken(tokenResponse)
+    setAuthToken(tokenResponse, settings)
     return tokenResponse
   }
 
@@ -175,19 +172,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       // User is authenticated already
       if (authPayload !== "") {
-        const token = JSON.parse(authPayload)
+        const tokenResponse = JSON.parse(authPayload)
         // Check if the token expired or is about to in 30 seconds
-        if (
-          new Date(token.expires_at).getTime() - Date.now() < 30000 &&
-          getValue(StoreKey.AUTH_REFRESH_TOKEN) !== ""
-        ) {
-          await refreshAuthToken(settings)
+        if (new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000) {
+          if (getValue(StoreKey.AUTH_REFRESH_TOKEN) !== "") {
+            // if there is a refresh token, go to OAuth2 provider to get fresh tokens
+            await refreshAuthToken(settings)
+          } else {
+            // if there is no refresh token, user has to re-authenticate to get fresh tokens
+            logout(true)
+          }
         } else {
-          setSessionData(token)
+          setSessionData(tokenResponse)
         }
       } else {
         // User has just been redirected back from the OAuth2 provider and has the code
         if (code !== null) {
+          const state = getValue(StoreKey.OAUTH_STATE)
+          if (state) {
+            removeValue(StoreKey.OAUTH_STATE)
+            const stateParam = urlParams.get("state")
+            if (!stateParam || state !== stateParam) {
+              logout(true)
+              return
+            }
+          }
+
           try {
             const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
             const response = await getAuthToken(settings, {
@@ -195,10 +205,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               code,
               code_verifier,
               client_id: settings["acl.oidc.client.id"],
-              redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.origin + window.location.pathname,
+              redirect_uri:
+                settings["acl.oidc.redirect.uri"] ||
+                window.location.origin + window.location.pathname,
             })
             const tokenResponse = await response.json()
-            setAuthToken(tokenResponse)
+            setAuthToken(tokenResponse, settings)
           } catch (e) {
             throw e
           }
@@ -227,9 +239,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const basicAuthLogin = async () => {
     // run a simple query to force basic auth by browser
-    const response = await fetch(
-      `exec?query=select 42`,
-    )
+    const response = await fetch(`exec?query=select 42`)
     if (response.status === 200) {
       dispatch({ view: View.ready })
     } else {
@@ -250,11 +260,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const redirectToAuthorizationUrl = (login?: boolean) => {
+    const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
     window.location.href = getAuthorisationURL({
-      config: settings,
+      settings,
       code_challenge,
+      state,
       login,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })

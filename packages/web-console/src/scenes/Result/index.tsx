@@ -24,23 +24,26 @@
 
 import $ from "jquery"
 import React, { useContext, useEffect, useRef, useState } from "react"
-import { useSelector } from "react-redux"
+import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
+import { Markdown } from "@styled-icons/bootstrap/Markdown"
+import { Check } from "@styled-icons/bootstrap/Check"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PrimaryToggleButton,
   Text,
   Tooltip,
 } from "../../components"
-import { selectors } from "../../store"
-import { color, QueryRawResult } from "../../utils"
+import { actions, selectors } from "../../store"
+import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import { Button } from "@questdb/react-components"
@@ -48,6 +51,8 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
+import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
+import { NotificationType } from "../../store/Query/types"
 
 const Root = styled.div`
   display: flex;
@@ -73,11 +78,10 @@ const Actions = styled.div`
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
-  gap: 1rem;
+  gap: 0;
   align-items: center;
   justify-content: flex-end;
   padding: 0 1rem;
-
   width: 100%;
   height: 4.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
@@ -98,17 +102,29 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const dispatch = useDispatch()
 
   useEffect(() => {
     const _grid = grid(
       document.getElementById("grid"),
       async function (sql, lo, hi, rendererFn: (data: QueryRawResult) => void) {
-        const result = await quest.queryRaw(sql, {
-          limit: `${lo},${hi}`,
-          nm: true,
-        })
-        if (result.type === QuestDB.Type.DQL) {
-          rendererFn(result)
+        try {
+          const result = await quest.queryRaw(sql, {
+            limit: `${lo},${hi}`,
+            nm: true,
+          })
+          if (result.type === QuestDB.Type.DQL) {
+            rendererFn(result)
+          }
+        } catch (err) {
+          dispatch(actions.query.stopRunning())
+          dispatch(
+            actions.query.addNotification({
+              content: <Text color="red">{(err as ErrorResult).error}</Text>,
+              sideContent: <QueryInNotification query={sql} />,
+              type: NotificationType.ERROR,
+            }),
+          )
         }
       },
     )
@@ -163,26 +179,45 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     gridRef?.current?.render()
   }, [activeSidebar])
 
+  const [isCopied, setIsCopied] = useState<boolean>(false)
+
   const gridActions = [
+    {
+      tooltipText: "Copy result to Markdown",
+      trigger: (
+        <PrimaryToggleButton
+          onClick={() => {
+            navigator.clipboard
+              .writeText(gridRef?.current?.getResultAsMarkdown() as string)
+              .then(() => {
+                setIsCopied(true)
+                setTimeout(() => setIsCopied(false), 1000)
+              })
+          }}
+        >
+          {isCopied ? <Check size="18px" /> : <Markdown size="18px" />}
+        </PrimaryToggleButton>
+      ),
+    },
     {
       tooltipText: "Freeze left column",
       trigger: (
-        <Button
-          skin={gridFreezeLeftState > 0 ? "success" : "secondary"}
+        <PrimaryToggleButton
           onClick={() => {
             gridRef?.current?.toggleFreezeLeft()
             gridRef?.current?.focus()
           }}
+          selected={gridFreezeLeftState > 0}
         >
           <TableFreezeColumnIcon size="18px" />
-        </Button>
+        </PrimaryToggleButton>
       ),
     },
     {
       tooltipText: "Move selected column to the front",
       trigger: (
         <Button
-          skin="secondary"
+          skin="transparent"
           onClick={gridRef?.current?.shuffleFocusedColumnToFront}
         >
           <HandPointLeft size="18px" />
@@ -192,7 +227,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Reset grid layout",
       trigger: (
-        <Button skin="secondary" onClick={gridRef?.current?.clearCustomLayout}>
+        <Button
+          skin="transparent"
+          onClick={gridRef?.current?.clearCustomLayout}
+        >
           <Reset size="18px" />
         </Button>
       ),
@@ -201,7 +239,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Refresh",
       trigger: (
         <Button
-          skin="secondary"
+          skin="transparent"
           onClick={() => {
             const sql = gridRef?.current?.getSQL()
             if (sql) {
@@ -247,7 +285,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             placement="bottom"
             trigger={
               <Button
-                skin="secondary"
+                skin="transparent"
                 onClick={() => {
                   const sql = gridRef?.current?.getSQL()
                   if (sql) {

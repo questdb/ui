@@ -4,6 +4,7 @@ export type Settings = Partial<{
   "release.version": string
   "acl.enabled": boolean
   "acl.basic.auth.realm.enabled": boolean
+  "acl.oidc.groups.encoded.in.token": boolean
   "acl.oidc.enabled": boolean
   "acl.oidc.client.id": string
   "acl.oidc.redirect.uri": string
@@ -14,6 +15,7 @@ export type Settings = Partial<{
   "acl.oidc.authorization.endpoint": string
   "acl.oidc.token.endpoint": string
   "acl.oidc.pkce.required": boolean
+  "acl.oidc.state.required": boolean
   "posthog.enabled": boolean
   "posthog.api.key": string
 }>

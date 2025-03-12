@@ -61,7 +61,7 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
       const token = JSON.parse(authPayload) as AuthPayload
       if (token.access_token) {
         quest.setCommonHeaders({
-          Authorization: `Bearer ${token.access_token}`,
+          Authorization: `Bearer ${token.groups_encoded_in_token ? token.id_token : token.access_token}`,
         })
       } else {
         const restToken = getValue(StoreKey.REST_TOKEN)
@@ -100,6 +100,19 @@ export const getRemoteConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
     withLatestFrom(state$),
     switchMap(([_, state]) => {
       const config = selectors.telemetry.getConfig(state)
+
+      const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
+      if (isEE) {
+        fetch(`${API}/add-ent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(config),
+        }).catch( () => {
+        })
+      }
+
       if (config?.enabled) {
         return fromFetch<Partial<TelemetryRemoteConfigShape>>(
           `${API}/config`,

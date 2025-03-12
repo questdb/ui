@@ -1,7 +1,5 @@
 /// <reference types="cypress" />
 
-const baseUrl = "http://localhost:9999";
-
 const rowHeight = 30;
 
 const assertRowCount = () => {
@@ -57,6 +55,19 @@ describe("questdb grid", () => {
     }
 
     cy.getGridViewport().scrollTo("bottom");
+  });
+
+  it("multiple scrolls till the bottom with error", () => {
+    const rows = 1200;
+    cy.typeQuery(`select simulate_crash('P') from long_sequence(${rows})`);
+    cy.runLine();
+
+    cy.getGridViewport().scrollTo(0, 999 * rowHeight);
+    cy.getCollapsedNotifications().should("contain", "1,200 rows in");
+
+    cy.getGridViewport().scrollTo("bottom");
+    cy.wait(100);
+    cy.getCollapsedNotifications().should("contain", "HTTP 400 (Bad request)");
   });
 
   it("copy cell into the clipboard", () => {

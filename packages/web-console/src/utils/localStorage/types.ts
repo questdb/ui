@@ -23,9 +23,11 @@
  ******************************************************************************/
 
 export enum StoreKey {
+  RELEASE_TYPE = "RELEASE_TYPE",
   AUTH_PAYLOAD = "AUTH_PAYLOAD",
   AUTH_REFRESH_TOKEN = "AUTH_REFRESH_TOKEN",
   OAUTH_REDIRECT_COUNT = "oauth.redirect.count",
+  OAUTH_STATE = "oauth.state",
   PKCE_CODE_VERIFIER = "pkce.code.verifier",
   QUERY_TEXT = "query.text",
   EDITOR_LINE = "editor.line",
@@ -35,4 +37,5 @@ export enum StoreKey {
   RESULTS_SPLITTER_BASIS = "splitter.results.basis",
   REST_TOKEN = "rest.token",
   BASIC_AUTH_HEADER = "basic.auth.header",
+  AUTO_REFRESH_TABLES = "auto.refresh.tables",
 }

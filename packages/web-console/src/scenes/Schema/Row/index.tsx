@@ -28,18 +28,18 @@ import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { FileCopy, Information } from "@styled-icons/remix-line"
+import { Information } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 import { Button, Box } from "@questdb/react-components"
-
 import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { Checkbox } from "../checkbox"
 
 type Props = Readonly<{
   className?: string
@@ -48,6 +48,7 @@ type Props = Readonly<{
   expanded?: boolean
   indexed?: boolean
   kind: TreeNodeKind
+  table_id?: number
   name: string
   onClick?: (event: MouseEvent) => void
   partitionBy?: QuestDB.PartitionBy
@@ -56,6 +57,9 @@ type Props = Readonly<{
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
+  selectOpen?: boolean
+  selected?: boolean
+  onSelectToggle?: (table_name: string) => void
 }>
 
 const Type = styled(Text)`
@@ -74,11 +78,13 @@ const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   }
 `
 
-const CopyButton = styled(Button)<Pick<Props, "tooltip">>`
+const CopyButton = styled(Button)<
+  Pick<Props, "tooltip"> & { suspended?: boolean }
+>`
   && {
     position: absolute;
-    z-index: 1;
-    right: 1rem;
+    z-index: 2;
+    right: ${({ suspended }) => (suspended ? "13rem" : "1rem")};
     opacity: 0;
     background: ${({ theme }) => theme.color.backgroundLighter};
     padding-top: 1.2rem;
@@ -124,12 +130,14 @@ const StyledTitle = styled(Title)`
 const TableActions = styled.span`
   z-index: 1;
   position: relative;
-  margin-right: 1rem;
 `
 
-const FlexRow = styled.div`
+const FlexRow = styled.div<{ $selectOpen?: boolean }>`
   display: flex;
   align-items: center;
+  width: 100%;
+  transform: translateX(${({ $selectOpen }) => ($selectOpen ? "26px" : "0")});
+  transition: transform 275ms ease-in-out;
 `
 
 const Spacer = styled.span`
@@ -172,6 +180,11 @@ const InfoIconWrapper = styled.div`
   justify-content: center;
 `
 
+const MetricsButton = styled(Button)`
+  position: absolute;
+  right: 0;
+`
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -179,6 +192,7 @@ const Row = ({
   expanded,
   kind,
   indexed,
+  table_id,
   name,
   partitionBy,
   walEnabled,
@@ -187,107 +201,118 @@ const Row = ({
   suffix,
   tooltip,
   type,
+  selectOpen,
+  selected,
+  onSelectToggle,
 }: Props) => {
   const { query } = useContext(SchemaContext)
 
   return (
     <Wrapper
+      data-hook="schema-row"
       className={className}
       expanded={expanded}
       suspended={walTableData?.suspended && kind === "table"}
-      onClick={onClick}
+      onClick={(e) => {
+        if (kind === "table" && selectOpen && onSelectToggle) {
+          onSelectToggle(name)
+        } else {
+          onClick?.(e)
+        }
+      }}
     >
-      <FlexRow>
+      <Box
+        align="center"
+        justifyContent="flex-start"
+        gap="2rem"
+        style={{ width: "100%", position: "relative" }}
+      >
         {kind === "table" && (
-          <TableIcon
-            partitionBy={partitionBy}
-            walEnabled={walEnabled}
-            suspended={walTableData?.suspended}
-          />
+          <div style={{ position: "absolute" }}>
+            <Checkbox
+              visible={selectOpen && onSelectToggle !== undefined}
+              checked={selected}
+            />
+          </div>
         )}
+        <FlexRow $selectOpen={selectOpen}>
+          {kind === "table" && (
+            <>
+              <TableIcon
+                partitionBy={partitionBy}
+                walEnabled={walEnabled}
+                suspended={walTableData?.suspended}
+              />
+            </>
+          )}
 
-        {kind === "column" && indexed && (
-          <IconWithTooltip
-            icon={<RocketIcon size="13px" />}
-            placement="top"
-            tooltip="Indexed"
-          />
-        )}
+          {kind === "column" && indexed && (
+            <IconWithTooltip
+              icon={<RocketIcon size="13px" />}
+              placement="top"
+              tooltip="Indexed"
+            />
+          )}
 
-        {kind === "folder" && expanded && <DownArrowIcon size="14px" />}
+          {kind === "folder" && expanded && <DownArrowIcon size="14px" />}
 
-        {kind === "folder" && !expanded && <RightArrowIcon size="14px" />}
+          {kind === "folder" && !expanded && <RightArrowIcon size="14px" />}
 
-        {kind === "column" && !indexed && name === designatedTimestamp && (
-          <IconWithTooltip
-            icon={<SortDownIcon size="14px" />}
-            placement="top"
-            tooltip="Designated timestamp"
-          />
-        )}
+          {kind === "column" && !indexed && name === designatedTimestamp && (
+            <IconWithTooltip
+              icon={<SortDownIcon size="14px" />}
+              placement="top"
+              tooltip="Designated timestamp"
+            />
+          )}
 
-        {kind === "column" && !indexed && name !== designatedTimestamp && (
-          <DotIcon size="12px" />
-        )}
+          {kind === "column" && !indexed && name !== designatedTimestamp && (
+            <DotIcon size="12px" />
+          )}
 
-        {["column", "table"].includes(kind) && !walTableData?.suspended && (
-          <CopyButton
-            skin="secondary"
-            size="sm"
-            tooltip={tooltip}
-            prefixIcon={<FileCopy size="16px" />}
-            onClick={(e) => {
-              navigator.clipboard.writeText(name)
-              e.stopPropagation()
-            }}
+          <StyledTitle
+            color="foreground"
+            ellipsis
+            kind={kind}
+            data-hook={`schema-${kind}-title`}
           >
-            Copy
-          </CopyButton>
-        )}
+            <Highlighter
+              highlightClassName="highlight"
+              searchWords={[query ?? ""]}
+              textToHighlight={name}
+            />
+          </StyledTitle>
 
-        <StyledTitle
-          color="foreground"
-          ellipsis
-          kind={kind}
-          data-hook={`schema-${kind}-title`}
-        >
-          <Highlighter
-            highlightClassName="highlight"
-            searchWords={[query ?? ""]}
-            textToHighlight={name}
-          />
-        </StyledTitle>
+          {suffix}
 
-        {suffix}
+          <Spacer />
 
-        <Spacer />
+          {type && (
+            <Type _style="italic" color="pinkLighter" transform="lowercase">
+              {type}
+            </Type>
+          )}
 
-        {type && (
-          <Type _style="italic" color="pinkLighter" transform="lowercase">
-            {type}
-          </Type>
-        )}
+          {walTableData?.suspended && kind === "table" && (
+            <TableActions>
+              <SuspensionDialog walTableData={walTableData} />
+            </TableActions>
+          )}
 
-        {walTableData?.suspended && kind === "table" && (
-          <TableActions>
-            <SuspensionDialog walTableData={walTableData} />
-          </TableActions>
-        )}
-
-        {tooltip && description && (
-          <IconWithTooltip
-            icon={
-              <InfoIconWrapper>
-                <InfoIcon size="10px" />
-              </InfoIconWrapper>
-            }
-            placement="right"
-            tooltip={description}
-          />
-        )}
-      </FlexRow>
-
-      {!tooltip && <Text color="comment">{description}</Text>}
+          {tooltip && description && (
+            <IconWithTooltip
+              icon={
+                <InfoIconWrapper>
+                  <InfoIcon size="10px" />
+                </InfoIconWrapper>
+              }
+              placement="right"
+              tooltip={description}
+            />
+          )}
+        </FlexRow>
+        {!tooltip && <Text color="comment">{description}</Text>}
+      </Box>
     </Wrapper>
   )
 }

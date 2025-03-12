@@ -22,6 +22,7 @@ export type Color = {
   white: string;
   inherit: string;
   tooltipBackground: string;
+  offWhite: string;
 };
 
 export const color: Color = {
@@ -48,4 +49,5 @@ export const color: Color = {
   white: "#fafafa",
   inherit: "inherit",
   tooltipBackground: "#6272a4",
+  offWhite: "#bdbdbd",
 };

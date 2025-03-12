@@ -1,3 +1,4 @@
+import { RefreshRate } from "../scenes/Editor/Metrics/utils"
 /*******************************************************************************
  *     ___                  _   ____  ____
  *    / _ \ _   _  ___  ___| |_|  _ \| __ )
@@ -24,13 +25,44 @@
 
 import { db } from "./db"
 import type { editor } from "monaco-editor"
+import {
+  MetricType,
+  MetricViewMode,
+  SampleBy,
+} from "scenes/Editor/Metrics/utils"
+
+export enum BufferType {
+  SQL = "SQL",
+  METRICS = "Metrics",
+}
+
+export type Metric = {
+  tableId?: number
+  metricType: MetricType
+  position: number
+  color: string
+  removed: boolean
+}
+
+export type MetricsViewState = {
+  dateFrom?: string
+  dateTo?: string
+  refreshRate?: RefreshRate
+  sampleBy?: SampleBy
+  viewMode?: MetricViewMode
+  metrics?: Metric[]
+}
 
 export type Buffer = {
   /** auto incremented number by Dexie */
   id?: number
   label: string
   value: string
+  position: number
+  archived?: boolean
+  archivedAt?: number
   editorViewState?: editor.ICodeEditorViewState
+  metricsViewState?: MetricsViewState
 }
 
 const defaultEditorViewState: editor.ICodeEditorViewState = {
@@ -71,17 +103,39 @@ export const makeBuffer = ({
   label,
   value,
   editorViewState = defaultEditorViewState,
+  metricsViewState,
+  position,
+  archived,
+  archivedAt,
 }: {
   label: string
   value?: string
   editorViewState?: editor.ICodeEditorViewState
+  metricsViewState?: MetricsViewState
+  position: number
+  archived?: boolean
+  archivedAt?: number
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
-  editorViewState,
+  editorViewState: metricsViewState ? undefined : editorViewState,
+  metricsViewState,
+  position,
+  archived,
+  archivedAt,
 })
 
-export const fallbackBuffer = { id: 1, ...makeBuffer({ label: "SQL" }) }
+export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {
+  return {
+    id: 1,
+    ...makeBuffer({ label: bufferType, position: 0 }),
+  }
+}
+
+export const fallbackBuffer = {
+  id: 1,
+  ...makeBuffer({ label: "SQL", position: 0 }),
+}
 
 export const bufferStore = {
   getAll: () => db.buffers.toArray(),
@@ -101,4 +155,6 @@ export const bufferStore = {
     db.buffers.update(id, buffer),
 
   delete: (id: number) => db.buffers.delete(id),
+
+  deleteAll: () => db.buffers.clear(),
 }

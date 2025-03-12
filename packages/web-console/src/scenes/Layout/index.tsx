@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React from "react"
+import React, { useCallback, useEffect } from "react"
 import styled from "styled-components"
 import Footer from "../Footer"
 import Console from "../Console"
@@ -36,8 +36,12 @@ import { CreateTableDialog } from "../../components/CreateTableDialog"
 import { EditorProvider } from "../../providers"
 import { Help } from "./help"
 import { Warnings } from "./warning"
+import { ImageZoom } from "../News/image-zoom"
 
 import "allotment/dist/style.css"
+
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const Page = styled.div`
   display: flex;
@@ -62,6 +66,7 @@ const Root = styled.div`
 `
 
 const Main = styled.div<{ sideOpened: boolean }>`
+  position: relative;
   flex: 1;
   display: flex;
   width: ${({ sideOpened }) =>
@@ -75,12 +80,31 @@ const Drawer = styled.div`
 const Layout = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
+  const focusListener = useCallback(() => {
+    eventBus.publish(EventType.TAB_FOCUS)
+  }, [])
+
+  const blurListener = useCallback(() => {
+    eventBus.publish(EventType.TAB_BLUR)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener("focus", focusListener)
+    window.addEventListener("blur", blurListener)
+
+    return () => {
+      window.removeEventListener("focus", focusListener)
+      window.removeEventListener("blur", blurListener)
+    }
+  }, [])
+
   return (
     <EditorProvider>
       <TopBar />
       <Warnings />
       <Root>
         <Main sideOpened={activeSidebar !== undefined}>
+          <ImageZoom />
           <Page>
             <Console />
           </Page>

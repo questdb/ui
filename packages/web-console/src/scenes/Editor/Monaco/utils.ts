@@ -34,6 +34,18 @@ export type Request = Readonly<{
   column: number
 }>
 
+export const stripSQLComments = (text: string): string =>
+  text.replace(/(?<!["'`])(--\s?.*$)/gm, (match, group) => {
+    if (group) {
+      const groupLines = group.split("\n")
+      if (group.startsWith("--") && groupLines.length > 1) {
+        return "\n" + stripSQLComments(groupLines[1])
+      }
+      return ""
+    }
+    return match
+  })
+
 export const getSelectedText = (
   editor: IStandaloneCodeEditor,
 ): string | undefined => {
@@ -45,11 +57,9 @@ export const getSelectedText = (
 export const getQueryFromCursor = (
   editor: IStandaloneCodeEditor,
 ): Request | undefined => {
-  const text = editor
-    .getValue({ preserveBOM: false, lineEnding: "\n" })
-    .replace(/"[^"]*"|'[^']*'|`[^`]*`|(--\s?.*$)/gm, (match, group) => {
-      return group ? "" : match
-    })
+  const text = stripSQLComments(
+    editor.getValue({ preserveBOM: false, lineEnding: "\n" }),
+  )
   const position = editor.getPosition()
 
   let row = 0
