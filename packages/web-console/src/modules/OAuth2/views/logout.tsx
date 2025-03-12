@@ -8,6 +8,7 @@ export const Logout = ({ onLogout }: { onLogout: () => void }) => (
     <Box gap="1rem">
       <Text color="foreground">You have been logged out.</Text>
       <Button
+        data-hook="button-log-in"
         prefixIcon={<LoginCircle size={18} />}
         skin="secondary"
         onClick={onLogout}

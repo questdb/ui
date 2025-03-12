@@ -145,6 +145,7 @@ export const Toolbar = () => {
             onClick={() => logout()}
             prefixIcon={<LogoutCircle size="18px" />}
             skin="secondary"
+            data-hook="button-logout"
           >
             Log out
           </Button>

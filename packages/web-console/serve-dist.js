@@ -6,6 +6,11 @@ const path = require("path")
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 
 const server = http.createServer((req, res) => {
+    if (path.normalize(decodeURI(req.url)) !== decodeURI(req.url)) {
+        res.statusCode = 403;
+        res.end();
+        return;
+    }
   const { method } = req
   const baseUrl =  "http://" + req.headers.host + contextPath;
   const reqUrl = new url.URL(req.url, baseUrl);
@@ -32,6 +37,16 @@ const server = http.createServer((req, res) => {
     })
 
     req.pipe(proxyReq, { end: true })
+  } else if (
+    reqPathName.startsWith("/userinfo")
+  ) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    // TODO: should be able to set the response from the test
+    //  add something like /setUserInfo?info={sub: "user2", groups: "bla"}
+    res.end(JSON.stringify({
+      sub: "user1",
+      groups: ["group1", "group2"]
+    }))
   } else {
     // serve static files from /dist folder
     const filePath = path.join(

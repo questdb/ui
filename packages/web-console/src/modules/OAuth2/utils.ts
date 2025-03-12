@@ -24,11 +24,13 @@ const getBaseURL = (settings: Settings) => {
 export const getAuthorisationURL = ({
   settings,
   code_challenge = null,
+  state = null,
   login,
   redirect_uri,
 }: {
   settings: Settings
   code_challenge: string | null
+  state: string | null
   login?: boolean
   redirect_uri: string
 }) => {
@@ -43,6 +45,9 @@ export const getAuthorisationURL = ({
   if (code_challenge) {
     urlParams.append("code_challenge", code_challenge)
     urlParams.append("code_challenge_method", "S256")
+  }
+  if (state) {
+    urlParams.append("state", state)
   }
   if (login) {
     urlParams.append("prompt", "login")

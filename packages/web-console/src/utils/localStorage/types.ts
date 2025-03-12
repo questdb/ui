@@ -23,9 +23,11 @@
  ******************************************************************************/
 
 export enum StoreKey {
+  RELEASE_TYPE = "RELEASE_TYPE",
   AUTH_PAYLOAD = "AUTH_PAYLOAD",
   AUTH_REFRESH_TOKEN = "AUTH_REFRESH_TOKEN",
   OAUTH_REDIRECT_COUNT = "oauth.redirect.count",
+  OAUTH_STATE = "oauth.state",
   PKCE_CODE_VERIFIER = "pkce.code.verifier",
   QUERY_TEXT = "query.text",
   EDITOR_LINE = "editor.line",

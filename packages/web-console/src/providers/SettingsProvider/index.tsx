@@ -9,6 +9,8 @@ import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout } from "../../components"
 import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
+import {setValue} from "../../utils/localStorage";
+import {StoreKey} from "../../utils/localStorage/types";
 
 enum View {
   loading = 0,
@@ -109,10 +111,10 @@ export const SettingsProvider = ({
       )
       if (settings) {
         setSettings(settings)
+        setValue(StoreKey.RELEASE_TYPE, settings["release.type"])
       }
       if (warnings) {
         setWarnings(warnings)
-        // setWarnings(warningMock)
       }
       if (consoleConfig) {
         setConsoleConfig(consoleConfig)

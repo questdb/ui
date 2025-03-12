@@ -18,6 +18,7 @@ export const Error = ({
         <Text color="foreground">{errorMessage}</Text>
         {!basicAuthEnabled && (
           <Button
+            data-hook="button-login-with-other-account"
             skin="secondary"
             prefixIcon={<User size="18px" />}
             onClick={() => onLogout()}

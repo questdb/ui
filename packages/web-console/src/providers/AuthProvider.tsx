@@ -16,6 +16,7 @@ import {
 import {
   generateCodeChallenge,
   generateCodeVerifier,
+  generateState,
 } from "../modules/OAuth2/pkce"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
@@ -47,7 +48,7 @@ const initialState: { view: View; errorMessage?: string } = {
   view: View.loading,
 }
 
-const defaultValues = {
+const defaultValues: ContextProps = {
   sessionData: undefined,
   logout: () => {},
   refreshAuthToken: async () => ({} as AuthPayload),
@@ -95,7 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           null,
           "",
           location.pathname +
-            location.search.replace(/[\?&]code=[^&]+/, "").replace(/^&/, "?"),
+            location.search.replace(/[?&]code=[^&]+/, "").replace(/^&/, "?"),
         )
     } else {
       const error = tokenResponse as unknown as OAuth2Error
@@ -179,7 +180,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             await refreshAuthToken(settings)
           } else {
             // if there is no refresh token, user has to re-authenticate to get fresh tokens
-            dispatch({ view: View.loggedOut })
+            logout(true)
           }
         } else {
           setSessionData(tokenResponse)
@@ -187,6 +188,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         // User has just been redirected back from the OAuth2 provider and has the code
         if (code !== null) {
+          const state = getValue(StoreKey.OAUTH_STATE)
+          if (state) {
+            removeValue(StoreKey.OAUTH_STATE)
+            const stateParam = urlParams.get("state")
+            if (!stateParam || state !== stateParam) {
+              logout(true)
+              return
+            }
+          }
+
           try {
             const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
             const response = await getAuthToken(settings, {
@@ -249,11 +260,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const redirectToAuthorizationUrl = (login?: boolean) => {
+    const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
     window.location.href = getAuthorisationURL({
       settings,
       code_challenge,
+      state,
       login,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })

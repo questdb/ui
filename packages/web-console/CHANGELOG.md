@@ -16,6 +16,29 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.6 - 2025.02.27
+
+### Added
+
+- Add button to copy query plans and result sets to clipboard in markdown format [#393](https://github.com/questdb/ui/pull/393)
+
+### Fixed
+
+- Escape table name for SHOW CREATE TABLE [#398](https://github.com/questdb/ui/pull/398)
+
+## 0.7.5 - 2025.02.13
+
+### Fixed
+
+- Fix floating-point regex capturing words beginning with 'E' [#394](https://github.com/questdb/ui/pull/394)
+- Prevent login loop when token expires without a valid refresh token [#395](https://github.com/questdb/ui/pull/395)
+
+## 0.7.4 - 2025.02.05
+
+### Added
+
+- support for OAuth2 state parameter [#390](https://github.com/questdb/ui/pull/390)
+
 ## 0.7.3 - 2025.01.29
 
 ### Fixed
