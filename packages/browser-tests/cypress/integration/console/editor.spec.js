@@ -498,6 +498,21 @@ describe("editor tabs history", () => {
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history-item").should("not.exist");
   });
+
+  it("should drag tabs", () => {
+    cy.get(".new-tab-button").click();
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL 1");
+    cy.getEditorTabs().last().should("contain", "SQL");
+    cy.wait(1000);
+    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
+      getTabDragHandleByTitle("SQL")
+    );
+    cy.getEditorTabs().first().should("contain", "SQL");
+    cy.getEditorTabs().last().should("contain", "SQL 1");
+  });
 });
 
 describe("handling comments", () => {
