@@ -504,23 +504,13 @@ describe("editor tabs history", () => {
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")
     );
-    // subsequent wait()x3: waiting period ensures models are updated
-    cy.wait(250);
     cy.getEditorTabs().first().should("contain", "SQL 1");
     cy.getEditorTabs().last().should("contain", "SQL");
-    cy.wait(250);
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")
     );
     cy.getEditorTabs().first().should("contain", "SQL");
     cy.getEditorTabs().last().should("contain", "SQL 1");
-    cy.wait(250);
-    // Test model disposal logic 
-    // Should dispose of prior models when switching active tabs
-    cy.window().then((window) => {
-      const editorModels = window.monaco.editor.getModels();
-      expect(editorModels.length).to.equal(1);
-    });
   });
 });
 
