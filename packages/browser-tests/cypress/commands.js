@@ -290,10 +290,9 @@ Cypress.Commands.add("refreshSchema", () => {
 });
 
 Cypress.Commands.add("expandTables", () => {
-  // Only try to click if the expand button exists
-  cy.getByDataHook("expand-tables", { exist: false }).then(($el) => {
-    if ($el.length > 0) {
-      cy.wrap($el).click();
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="expand-tables"]').length > 0) {
+      cy.get('[data-hook="expand-tables"]').click();
     }
   });
 });
