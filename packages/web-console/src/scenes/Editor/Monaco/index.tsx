@@ -1,10 +1,28 @@
+import Editor, { loader, Monaco } from "@monaco-editor/react"
+import { Box, Button } from "@questdb/react-components"
+import { Stop } from "@styled-icons/remix-line"
+import type { editor, IDisposable, IRange } from "monaco-editor"
 import type { BaseSyntheticEvent } from "react"
 import React, { useContext, useEffect, useRef, useState } from "react"
-import Editor, { loader, Monaco } from "@monaco-editor/react"
-import dracula from "./dracula"
-import type { editor, IDisposable, IRange } from "monaco-editor"
-import { theme } from "../../../theme"
+import { useDispatch, useSelector } from "react-redux"
+import styled from "styled-components"
+import { PaneContent, Text } from "../../../components"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
+import { actions, selectors } from "../../../store"
+import { theme } from "../../../theme"
+import { NotificationType } from "../../../types"
+import type { ErrorResult } from "../../../utils"
+import { color } from "../../../utils"
+import * as QuestDB from "../../../utils/questdb"
+import Loader from "../Loader"
+import QueryResult from "../QueryResult"
+import dracula from "./dracula"
+import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
+import { registerLegacyEventBusEvents } from "./legacy-event-bus"
+import { QueryInNotification } from "./query-in-notification"
+import { createSchemaCompletionProvider } from "./questdb-sql"
 import type { Request } from "./utils"
 import {
   appendQuery,
@@ -18,24 +36,6 @@ import {
   setErrorMarker,
   stripSQLComments,
 } from "./utils"
-import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
-import { registerLegacyEventBusEvents } from "./legacy-event-bus"
-import { PaneContent, Text } from "../../../components"
-import { useDispatch, useSelector } from "react-redux"
-import { actions, selectors } from "../../../store"
-import type { ErrorResult } from "../../../utils"
-import * as QuestDB from "../../../utils/questdb"
-import { NotificationType } from "../../../types"
-import QueryResult from "../QueryResult"
-import Loader from "../Loader"
-import styled from "styled-components"
-import { createSchemaCompletionProvider } from "./questdb-sql"
-import { color } from "../../../utils"
-import { eventBus } from "../../../modules/EventBus"
-import { EventType } from "../../../modules/EventBus/types"
-import { QueryInNotification } from "./query-in-notification"
-import { Box, Button } from "@questdb/react-components"
-import { Stop } from "@styled-icons/remix-line"
 
 loader.config({
   paths: {
@@ -46,6 +46,7 @@ loader.config({
 const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
+  background: #2c2e3d;
 
   .monaco-editor .squiggly-error {
     background: none;
@@ -144,8 +145,8 @@ const MonacoEditor = () => {
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
     DEFAULT_LINE_CHARS +
-      activeBuffer.value.split("\n").length.toString().length -
-      1,
+    activeBuffer.value.split("\n").length.toString().length -
+    1,
   )
 
   const toggleRunning = (isRefresh: boolean = false) => {
@@ -201,7 +202,7 @@ const MonacoEditor = () => {
         const hasError =
           errorRefs.current &&
           errorRefs.current[activeBufferId]?.error?.query ===
-            queryAtCursor.query
+          queryAtCursor.query
         const errorRange =
           errorRefs.current && errorRefs.current[activeBufferId]?.range
         const cursorMatch = matches.find(
@@ -219,9 +220,8 @@ const MonacoEditor = () => {
               ),
               options: {
                 isWholeLine: true,
-                linesDecorationsClassName: `cursorQueryDecoration ${
-                  hasError ? "hasError" : ""
-                }`,
+                linesDecorationsClassName: `cursorQueryDecoration ${hasError ? "hasError" : ""
+                  }`,
               },
             },
             {
@@ -235,32 +235,32 @@ const MonacoEditor = () => {
                 isWholeLine: false,
                 glyphMarginClassName:
                   runningValueRef.current &&
-                  requestRef.current?.row &&
-                  requestRef.current?.row + 1 ===
+                    requestRef.current?.row &&
+                    requestRef.current?.row + 1 ===
                     cursorMatch.range.startLineNumber
                     ? "cancelQueryGlyph"
                     : runningValueRef.current
-                    ? ""
-                    : "cursorQueryGlyph",
+                      ? ""
+                      : "cursorQueryGlyph",
               },
             },
             ...(hasError &&
-            errorRange &&
-            cursorMatch.range.startLineNumber !== errorRange.startLineNumber
+              errorRange &&
+              cursorMatch.range.startLineNumber !== errorRange.startLineNumber
               ? [
-                  {
-                    range: new monaco.Range(
-                      errorRange.startLineNumber,
-                      0,
-                      errorRange.startLineNumber,
-                      0,
-                    ),
-                    options: {
-                      isWholeLine: false,
-                      glyphMarginClassName: "errorGlyph",
-                    },
+                {
+                  range: new monaco.Range(
+                    errorRange.startLineNumber,
+                    0,
+                    errorRange.startLineNumber,
+                    0,
+                  ),
+                  options: {
+                    isWholeLine: false,
+                    glyphMarginClassName: "errorGlyph",
                   },
-                ]
+                },
+              ]
               : []),
           ])
         }

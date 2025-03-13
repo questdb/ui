@@ -1,21 +1,19 @@
-import React, { useEffect, useRef, useState } from "react"
-import styled from "styled-components"
-import type { Widget } from "./types"
-import {
-  hasData,
-  getXAxisFormat,
-  durationTokenToDate,
-  getSamplingRateForPeriod,
-} from "./utils"
-import { useGraphOptions } from "./useGraphOptions"
+import { Box, Button, Loader } from "@questdb/react-components"
+import { Error } from "@styled-icons/boxicons-regular"
+import { Information } from "@styled-icons/remix-line"
+import React, { useContext, useEffect, useRef, useState } from "react"
+import styled, { ThemeContext } from "styled-components"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import { Box, Button, Loader } from "@questdb/react-components"
-import { Text } from "../../../components"
-import { IconWithTooltip } from "../../../components"
-import { Information } from "@styled-icons/remix-line"
-import { Error } from "@styled-icons/boxicons-regular"
-import type { DateRange } from "./types"
+import { IconWithTooltip, Text } from "../../../components"
+import { createUplotOptions, UplotOptions } from "./createUplotOptions"
+import type { DateRange, Widget } from "./types"
+import {
+  durationTokenToDate,
+  getSamplingRateForPeriod,
+  getXAxisFormat,
+  hasData,
+} from "./utils"
 
 const Actions = styled.div`
   margin-right: 0;
@@ -114,18 +112,20 @@ export const Graph = ({
   widgetConfig,
   hasError,
 }: Props) => {
+  const theme = useContext(ThemeContext)
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
-  const [startTime, setStartTime] = useState<number>(
-    new Date(durationTokenToDate(dateFrom)).getTime(),
-  )
-  const [endTime, setEndTime] = useState<number>(
-    new Date(durationTokenToDate(dateTo)).getTime(),
-  )
-  const [delayedLoading, setDelayedLoading] = useState(loading)
 
   const { isTableMetric, mapYValue, chartTitle } = widgetConfig
+
+  const startTime = new Date(durationTokenToDate(dateFrom)).getTime()
+  const endTime = new Date(durationTokenToDate(dateTo)).getTime()
+
+  const [delayedLoading, setDelayedLoading] = useState(loading)
+  const [uplotOptions, setUplotOptions] = useState<UplotOptions | undefined>(
+    undefined,
+  )
 
   const resizeObserver = new ResizeObserver((entries) => {
     uPlotRef.current?.setSize({
@@ -138,21 +138,21 @@ export const Graph = ({
   const to = durationTokenToDate(dateTo)
 
   useEffect(() => {
-    setStartTime(new Date(from).getTime())
-    setEndTime(new Date(to).getTime())
-  }, [data, dateFrom, dateTo])
-
-  const graphOptions = useGraphOptions({
-    data,
-    startTime,
-    endTime,
-    colors,
-    timeRef,
-    valueRef,
-    mapXValue: (rawValue) => getXAxisFormat(rawValue, startTime, endTime),
-    mapYValue,
-    widgetConfig,
-  })
+    setUplotOptions(
+      createUplotOptions({
+        data,
+        startTime,
+        endTime,
+        colors,
+        timeRef,
+        valueRef,
+        mapXValue: (rawValue) => getXAxisFormat(rawValue, startTime, endTime),
+        mapYValue,
+        widgetConfig,
+        theme,
+      }),
+    )
+  }, [data])
 
   const graphRootRef = useRef<HTMLDivElement>(null)
 
@@ -226,17 +226,19 @@ export const Graph = ({
           </GraphOverlay>
         )}
         <div ref={graphRootRef}>
-          <UplotReact
-            options={{
-              ...graphOptions,
-              height: 200,
-              width: graphRootRef.current?.clientWidth ?? 0,
-            }}
-            data={data}
-            onCreate={(uplot: any) => {
-              uPlotRef.current = uplot
-            }}
-          />
+          {uplotOptions && (
+            <UplotReact
+              options={{
+                ...uplotOptions,
+                height: 200,
+                width: graphRootRef.current?.clientWidth ?? 0,
+              }}
+              data={data}
+              onCreate={(uplot: any) => {
+                uPlotRef.current = uplot
+              }}
+            />
+          )}
         </div>
         <Label>
           <span ref={timeRef} />
