@@ -10,6 +10,8 @@ const tables = [
   "gitlog",
 ];
 
+const materializedViews = ["btc_trades_mv"];
+
 describe("questdb schema with working tables", () => {
   before(() => {
     cy.loadConsoleWithAuth();
@@ -209,5 +211,59 @@ describe("questdb schema in read-only mode", () => {
 
     cy.getByDataHook("create-table-panel-button").click();
     cy.getByDataHook("create-table-panel").should("not.exist");
+  });
+});
+
+describe("materialized views", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+
+    tables.forEach((table) => {
+      cy.createTable(table);
+    });
+    materializedViews.forEach((mv) => {
+      cy.createMaterializedView(mv);
+    });
+    cy.refreshSchema();
+  });
+
+  it("should create materialized views", () => {
+    cy.getByDataHook("expand-tables").contains(`Tables (${tables.length})`);
+    cy.getByDataHook("expand-materialized-views").contains(
+      `Materialized Views (${materializedViews.length})`
+    );
+
+    cy.expandTables();
+    cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
+    cy.expandMatViews();
+    cy.getByDataHook("schema-table-title").should("contain", "btc_trades_mv");
+  });
+
+  it("should show the base table and copy DDL for a materialized view", () => {
+    cy.collapseTables();
+    cy.getByDataHook("schema-table-title").contains("btc_trades_mv").click();
+    cy.getByDataHook("schema-info-title").contains("DDL").should("exist");
+    cy.getByDataHook("copyable-value").should("exist").and("be.visible");
+    cy.getByDataHook("copy-value").should("exist").click({ force: true });
+
+    cy.window()
+      .its("navigator.clipboard")
+      .invoke("readText")
+      .should(
+        "match",
+        /^CREATE MATERIALIZED VIEW.*'btc_trades_mv' WITH BASE 'btc_trades'/
+      );
+  });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+
+    materializedViews.forEach((mv) => {
+      cy.dropMaterializedView(mv);
+    });
+
+    tables.forEach((table) => {
+      cy.dropTable(table);
+    });
   });
 });

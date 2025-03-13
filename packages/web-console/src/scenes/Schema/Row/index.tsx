@@ -338,12 +338,13 @@ const Row = ({
               <ValueWrapper>
                 <PopperHover
                   placement="top"
-                  trigger={<TruncatedBox>{value}</TruncatedBox>}
+                  trigger={<TruncatedBox data-hook="copyable-value">{value}</TruncatedBox>}
                 >
                   <Tooltip>{value}</Tooltip>
                 </PopperHover>
                 <CopyValueButton
                   skin="transparent"
+                  data-hook="copy-value"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleCopy(value)

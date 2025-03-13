@@ -30,6 +30,12 @@ const tableSchemas = {
   my_secrets2: "CREATE TABLE IF NOT EXISTS 'my_secrets2' (secret STRING);",
 };
 
+const materializedViewSchemas = {
+  btc_trades_mv:
+    "CREATE MATERIALIZED VIEW IF NOT EXISTS btc_trades_mv WITH BASE btc_trades as (" +
+    "SELECT timestamp, avg(amount) FROM btc_trades SAMPLE BY 1m) PARTITION BY week;",
+};
+
 before(() => {
   Cypress.on("uncaught:exception", (err) => {
     // this error can be safely ignored
@@ -218,11 +224,37 @@ Cypress.Commands.add("createTable", (name) => {
   });
 });
 
+Cypress.Commands.add("createMaterializedView", (name) => {
+  const authHeader = localStorage.getItem("basic.auth.header");
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec?query=${encodeURIComponent(
+      materializedViewSchemas[name]
+    )};`,
+    headers: {
+      Authorization: authHeader,
+    },
+  });
+});
+
 Cypress.Commands.add("dropTable", (name) => {
   const authHeader = localStorage.getItem("basic.auth.header");
   cy.request({
     method: "GET",
     url: `${baseUrl}/exec?query=${encodeURIComponent(`DROP TABLE ${name};`)}`,
+    headers: {
+      Authorization: authHeader,
+    },
+  });
+});
+
+Cypress.Commands.add("dropMaterializedView", (name) => {
+  const authHeader = localStorage.getItem("basic.auth.header");
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec?query=${encodeURIComponent(
+      `DROP MATERIALIZED VIEW ${name};`
+    )}`,
     headers: {
       Authorization: authHeader,
     },
@@ -293,6 +325,22 @@ Cypress.Commands.add("expandTables", () => {
   cy.get("body").then((body) => {
     if (body.find('[data-hook="expand-tables"]').length > 0) {
       cy.get('[data-hook="expand-tables"]').click();
+    }
+  });
+});
+
+Cypress.Commands.add("collapseTables", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="collapse-tables"]').length > 0) {
+      cy.get('[data-hook="collapse-tables"]').click();
+    }
+  });
+});
+
+Cypress.Commands.add("expandMatViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="expand-materialized-views"]').length > 0) {
+      cy.get('[data-hook="expand-materialized-views"]').click();
     }
   });
 });
