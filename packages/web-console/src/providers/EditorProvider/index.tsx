@@ -1,3 +1,5 @@
+import { Monaco } from "@monaco-editor/react"
+import type { editor } from "monaco-editor"
 import React, {
   createContext,
   MutableRefObject,
@@ -7,24 +9,22 @@ import React, {
   useRef,
   useState,
 } from "react"
-import type { editor } from "monaco-editor"
-import { Monaco } from "@monaco-editor/react"
 import {
-  AppendQueryOptions,
-  insertTextAtCursor,
   appendQuery,
-  QuestDBLanguageName,
+  AppendQueryOptions,
   clearModelMarkers,
+  insertTextAtCursor,
+  QuestDBLanguageName,
 } from "../../scenes/Editor/Monaco/utils"
+import type { Buffer } from "../../store/buffers"
 import {
+  bufferStore,
+  BufferType,
   fallbackBuffer,
   makeBuffer,
-  bufferStore,
   makeFallbackBuffer,
-  BufferType,
 } from "../../store/buffers"
 import { db } from "../../store/db"
-import type { Buffer } from "../../store/buffers"
 
 import { useLiveQuery } from "dexie-react-hooks"
 
@@ -99,6 +99,17 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const setActiveBuffer = async (buffer: Buffer) => {
     try {
       const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+
+      monacoRef.current?.editor.getModels().forEach((model: editor.ITextModel) => {
+        const value = model.getValue()
+        if (
+          buffer.id !== currentActiveBufferId &&
+          (model.getValue() !== buffer.value || value === "")
+        ) {
+          model.dispose()
+        }
+      })
+
       if (currentActiveBufferId) {
         if (buffer.id === currentActiveBufferId) {
           return
@@ -123,7 +134,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         }
       }
     } catch (e) {
-      console.warn('Error setting active buffer:', e)
+      console.warn("Error setting active buffer:", e)
     }
   }
 
@@ -139,7 +150,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       await db.buffers
         .filter((buffer) =>
           buffer.label.startsWith(fallbackBuffer.label) &&
-          newBuffer?.metricsViewState
+            newBuffer?.metricsViewState
             ? buffer.metricsViewState !== undefined
             : true,
         )
