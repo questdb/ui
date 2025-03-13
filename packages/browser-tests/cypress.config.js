@@ -4,6 +4,7 @@ const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 module.exports = defineConfig({
+  projectId: "8vtikv",
   defaultCommandTimeout: 10000,
   e2e: {
     defaultCommandTimeout: 30000,
