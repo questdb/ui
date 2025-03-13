@@ -55,6 +55,8 @@ jobs:
 
       - name: Run browser-tests test - auth
         run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test:auth
+        env:
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
 
       - name: Stop QuestDB
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
@@ -68,6 +70,8 @@ jobs:
 
       - name: Run browser-tests test
         run: yarn workspace browser-tests test
+        env:
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
 
       - name: Print Log Files
         if: success() || failure()
