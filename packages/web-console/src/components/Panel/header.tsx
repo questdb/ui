@@ -59,12 +59,12 @@ export const Header = ({
   afterTitle,
   shadow,
 }: {
-  title: React.ReactNode
+  title?: React.ReactNode
   afterTitle?: React.ReactNode
   shadow?: boolean
 }) => (
   <Root shadow={shadow}>
-    <Title color="foreground">{title}</Title>
+    {title && <Title color="foreground">{title}</Title>}
     {afterTitle}
   </Root>
 )

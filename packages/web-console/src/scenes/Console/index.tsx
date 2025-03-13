@@ -149,7 +149,7 @@ const Console = () => {
                   }
                 >
                   <Tooltip>
-                    {resultsSplitterBasis === 0 ? "Show" : "Hide"} tables
+                    {editorSplitterBasis === 0 ? "Show" : "Hide"} data sources
                   </Tooltip>
                 </PopperHover>
               )}

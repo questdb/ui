@@ -17,6 +17,7 @@ describe("questdb schema with working tables", () => {
     tables.forEach((table) => {
       cy.createTable(table);
     });
+    cy.expandTables();
     cy.refreshSchema();
   });
   it("should show all the tables when there are no suspended", () => {
@@ -29,6 +30,7 @@ describe("questdb schema with working tables", () => {
 
   it("should filter the table with input field", () => {
     // Table name search
+    cy.expandTables();
     cy.get('input[name="table_filter"]').type("btc_trades");
     cy.getByDataHook("schema-search-clear-button").should("exist");
     cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
@@ -60,6 +62,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     tables.forEach((table) => {
       cy.createTable(table);
     });
+    cy.expandTables();
     cy.refreshSchema();
     cy.typeQuery(
       "ALTER TABLE btc_trades SUSPEND WAL WITH 24, 'Too many open files';"
@@ -75,9 +78,10 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
+    cy.expandTables();
   });
 
-  it("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
+  it.only("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
     cy.getByDataHook("schema-filter-suspended-button").should(
       "not.be.disabled"
     );
@@ -140,10 +144,12 @@ describe("table select UI", () => {
     tables.forEach((table) => {
       cy.createTable(table);
     });
+    cy.expandTables();
     cy.refreshSchema();
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
+    cy.expandTables();
   });
 
   it("should show select ui on click", () => {

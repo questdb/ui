@@ -3217,10 +3217,10 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@questdb/sql-grammar@npm:1.2.2":
-  version: 1.2.2
-  resolution: "@questdb/sql-grammar@npm:1.2.2"
-  checksum: 10/01c41caa874f9e16e1f7243c9718d481fd98b198f516e03c740c56f09e8017ad6bd251de555db52b189d7cdd3465f11314d20d48387eaffff926559aa602464a
+"@questdb/sql-grammar@npm:1.2.3":
+  version: 1.2.3
+  resolution: "@questdb/sql-grammar@npm:1.2.3"
+  checksum: 10/7cc8f894564ee208c567b72da911942fc14d0cdc5a8ac783180ebafaf11177633462b3349a92805dd0e4aa9107af8a94051ebb171add4fe3a4aa5721b80593de
   languageName: node
   linkType: hard
 
@@ -3241,7 +3241,7 @@ __metadata:
     "@pmmmwh/react-refresh-webpack-plugin": "npm:^0.5.11"
     "@popperjs/core": "npm:2.4.2"
     "@questdb/react-components": "workspace:^"
-    "@questdb/sql-grammar": "npm:1.2.2"
+    "@questdb/sql-grammar": "npm:1.2.3"
     "@radix-ui/react-dialog": "npm:^1.0.3"
     "@styled-icons/bootstrap": "npm:10.47.0"
     "@styled-icons/boxicons-logos": "npm:10.47.0"

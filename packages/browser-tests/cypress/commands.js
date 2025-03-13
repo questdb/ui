@@ -289,6 +289,15 @@ Cypress.Commands.add("refreshSchema", () => {
   cy.getByDataHook("schema-auto-refresh-button").click();
 });
 
+Cypress.Commands.add("expandTables", () => {
+  // Only try to click if the expand button exists
+  cy.getByDataHook("expand-tables", { exist: false }).then(($el) => {
+    if ($el.length > 0) {
+      cy.wrap($el).click();
+    }
+  });
+});
+
 Cypress.Commands.add("getEditorTabs", () => {
   return cy.get(".chrome-tab");
 });

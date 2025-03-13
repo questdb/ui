@@ -23,12 +23,12 @@
  ******************************************************************************/
 
 import React, { MouseEvent, ReactNode, useContext } from "react"
+import { useDispatch } from "react-redux"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
-import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { Information } from "@styled-icons/remix-line"
+import { CheckboxBlankCircle, FileCopy, Information } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
@@ -40,6 +40,10 @@ import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { Checkbox } from "../checkbox"
+import { copyToClipboard } from "../../../utils"
+import { actions } from "../../../store"
+import { PopperHover } from "../../../components/PopperHover"
+import { Tooltip } from "../../../components/Tooltip"
 
 type Props = Readonly<{
   className?: string
@@ -57,9 +61,11 @@ type Props = Readonly<{
   suffix?: ReactNode
   tooltip?: boolean
   type?: string
+  value?: string
   selectOpen?: boolean
   selected?: boolean
   onSelectToggle?: (table_name: string) => void
+  copyable?: boolean
 }>
 
 const Type = styled(Text)`
@@ -98,7 +104,7 @@ const CopyButton = styled(Button)<
   }
 `
 
-const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
+const Wrapper = styled.div<Pick<Props, "expanded" | "kind"> & { suspended?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -119,12 +125,13 @@ const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
   }
 
   &:hover ${/* sc-selector */ Type} {
-    opacity: 0;
+    opacity: ${({ kind }) => (kind === "column" || kind === "info" ? 1 : 0)};
   }
 `
 
 const StyledTitle = styled(Title)`
   z-index: 1;
+  flex-shrink: 0;
 `
 
 const TableActions = styled.span`
@@ -180,9 +187,29 @@ const InfoIconWrapper = styled.div`
   justify-content: center;
 `
 
-const MetricsButton = styled(Button)`
-  position: absolute;
-  right: 0;
+const ValueWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 200px;
+  flex: 1;
+`
+
+const CopyValueButton = styled(Button)`
+  && {
+    padding: 0.3rem;
+    background: ${({ theme }) => theme.color.backgroundLighter};
+  }
+`
+
+const TruncatedBox = styled(Box)`
+  display: inline;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: default;
+  font-style: italic;
+  color: ${color("gray2")};
 `
 
 const Row = ({
@@ -201,14 +228,27 @@ const Row = ({
   suffix,
   tooltip,
   type,
+  value,
   selectOpen,
   selected,
   onSelectToggle,
+  copyable,
 }: Props) => {
   const { query } = useContext(SchemaContext)
+  const dispatch = useDispatch()
+
+  const handleCopy = (text: string) => {
+    copyToClipboard(text)
+    dispatch(
+      actions.query.addNotification({
+        content: <Text color="foreground">Copied to clipboard</Text>,
+      }),
+    )
+  }
 
   return (
     <Wrapper
+      kind={kind}
       data-hook="schema-row"
       className={className}
       expanded={expanded}
@@ -291,6 +331,32 @@ const Row = ({
             <Type _style="italic" color="pinkLighter" transform="lowercase">
               {type}
             </Type>
+          )}
+
+          {kind === 'info' && value && (
+            copyable ? (
+              <ValueWrapper>
+                <PopperHover
+                  placement="top"
+                  trigger={<TruncatedBox>{value}</TruncatedBox>}
+                >
+                  <Tooltip>{value}</Tooltip>
+                </PopperHover>
+                <CopyValueButton
+                  skin="transparent"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCopy(value)
+                  }}
+                >
+                  <FileCopy size="14px" />
+                </CopyValueButton>
+              </ValueWrapper>
+            ) : (
+              <Type _style="italic" color="gray2">
+                {value}
+              </Type>
+            )
           )}
 
           {walTableData?.suspended && kind === "table" && (

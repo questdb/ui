@@ -27,7 +27,7 @@ import Row from "../../scenes/Schema/Row"
 import styled from "styled-components"
 import { WrapWithIf } from "../"
 
-export type TreeNodeKind = "column" | "table" | "folder"
+export type TreeNodeKind = "column" | "table" | "folder" | "info"
 
 export type TreeNodeRenderParams = {
   toggleOpen: ToggleOpen

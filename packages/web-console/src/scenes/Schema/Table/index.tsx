@@ -40,17 +40,17 @@ type Props = QuestDB.Table &
   Readonly<{
     designatedTimestamp: string
     description?: string
-    isScrolling: boolean
     id: number
     table_name: string
     partitionBy: string
     expanded?: boolean
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
+    matViewData?: QuestDB.MaterializedView
     selected: boolean
     selectOpen: boolean
     onSelectToggle: (table_name: string) => void
-  }>
+}>
 
 const Wrapper = styled.div`
   position: relative;
@@ -121,7 +121,6 @@ const columnRender =
 
 const Table = ({
   description,
-  isScrolling,
   designatedTimestamp,
   id,
   table_name,
@@ -131,11 +130,13 @@ const Table = ({
   expanded = false,
   walEnabled,
   walTableData,
+  matViewData,
   onChange,
   dedup,
   selected,
   selectOpen,
   onSelectToggle,
+  matView,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
@@ -160,6 +161,24 @@ const Table = ({
     }
   }
 
+  const showMatViewDDL = async (name: string) => {
+    try {
+      const response = await quest.showMatViewDDL(name)
+      if (response && response.type === QuestDB.Type.DQL) {
+        return response
+      }
+    } catch (error: any) {
+      dispatch(
+        actions.query.addNotification({
+          content: (
+            <Text color="red">Cannot show DDL for materialized view '{name}'</Text>
+          ),
+          type: NotificationType.ERROR,
+        }),
+      )
+    }
+  }
+
   useEffect(() => {
     const fetchColumns = async () => {
       if (tables && expanded && table_name) {
@@ -177,8 +196,8 @@ const Table = ({
       name: table_name,
       kind: "table",
       initiallyOpen: expanded,
-      children: [
-        {
+      async onOpen({ setChildren }) {
+        const columns: TreeNode = {
           name: "Columns",
           initiallyOpen: true,
           wrapper: Columns,
@@ -208,7 +227,6 @@ const Table = ({
               ])
             }
           },
-
           render({ toggleOpen, isOpen, isLoading }) {
             return (
               <Row
@@ -221,9 +239,40 @@ const Table = ({
               />
             )
           },
-        },
-      ],
+        }
+        const children: TreeNode[] = []
 
+        if (matView && matViewData) {
+          children.push({
+            name: "Base Table",
+            render: () => (
+              <Row
+                table_id={id}
+                kind="info"
+                name="Base Table"
+                value={matViewData?.base_table_name}
+              />
+            )
+          })
+
+          const response = await showMatViewDDL(table_name)
+          if (response && response.data && response.data.length > 0) {
+            children.push({
+              name: "DDL",
+              render: () => (
+                <Row
+                  table_id={id}
+                  kind="info"
+                  name="DDL"
+                  value={response.data[0].ddl}
+                  copyable={true}
+                />
+              )
+            })
+          }
+        }
+        setChildren([...children, columns])
+      },
       render({ toggleOpen, isLoading }) {
         return (
           // @ts-ignore
