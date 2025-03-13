@@ -7,12 +7,11 @@ const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 module.exports = defineConfig({
-  projectId: "8vtikv",
   defaultCommandTimeout: 10000,
   e2e: {
     defaultCommandTimeout: 30000,
     screenshotOnRunFailure: false,
-    video: true,
+    video: false,
     baseUrl: baseUrl,
     chromeWebSecurity: false, //if it is true, cypress does not allow redirects
     viewportWidth: 1280,
