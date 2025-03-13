@@ -109,7 +109,7 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().click().type(query)
+  cy.getEditor().realClick().type(query)
 );
 
 Cypress.Commands.add("typeQueryDirectly", (query) => {
@@ -276,7 +276,6 @@ Cypress.Commands.add("loginWithUserAndPassword", () => {
 Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
   indexedDB.deleteDatabase("web-console");
-  cy.wait(1000);
   cy.visit(baseUrl);
   cy.loginWithUserAndPassword();
   cy.wait(1000);
