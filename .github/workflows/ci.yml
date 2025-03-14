@@ -65,6 +65,7 @@ jobs:
           QDB_DEV_MODE_ENABLED: "true"
           QDB_HTTP_USER: "admin"
           QDB_HTTP_PASSWORD: "quest"
+          QDB_CAIRO_MAT_VIEW_ENABLED: "true"
 
       - name: Run browser-tests test
         run: yarn workspace browser-tests test

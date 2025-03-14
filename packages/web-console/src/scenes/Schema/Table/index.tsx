@@ -24,8 +24,7 @@
 
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { Loader4 } from "@styled-icons/remix-line"
-import { Tree, collapseTransition, spinAnimation } from "../../../components"
+import { Tree, collapseTransition } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
 import { ContextMenuTrigger } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
@@ -40,17 +39,17 @@ type Props = QuestDB.Table &
   Readonly<{
     designatedTimestamp: string
     description?: string
-    isScrolling: boolean
     id: number
     table_name: string
     partitionBy: string
     expanded?: boolean
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
+    matViewData?: QuestDB.MaterializedView
     selected: boolean
     selectOpen: boolean
     onSelectToggle: (table_name: string) => void
-  }>
+}>
 
 const Wrapper = styled.div`
   position: relative;
@@ -91,12 +90,6 @@ const Columns = styled.div`
   }
 `
 
-const Loader = styled(Loader4)`
-  margin-left: 1rem;
-  color: ${color("orange")};
-  ${spinAnimation};
-`
-
 const columnRender =
   ({
     table_id,
@@ -121,7 +114,6 @@ const columnRender =
 
 const Table = ({
   description,
-  isScrolling,
   designatedTimestamp,
   id,
   table_name,
@@ -131,11 +123,13 @@ const Table = ({
   expanded = false,
   walEnabled,
   walTableData,
+  matViewData,
   onChange,
   dedup,
   selected,
   selectOpen,
   onSelectToggle,
+  matView,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
@@ -160,6 +154,24 @@ const Table = ({
     }
   }
 
+  const showMatViewDDL = async (name: string) => {
+    try {
+      const response = await quest.showMatViewDDL(name)
+      if (response && response.type === QuestDB.Type.DQL) {
+        return response
+      }
+    } catch (error: any) {
+      dispatch(
+        actions.query.addNotification({
+          content: (
+            <Text color="red">Cannot show DDL for materialized view '{name}'</Text>
+          ),
+          type: NotificationType.ERROR,
+        }),
+      )
+    }
+  }
+
   useEffect(() => {
     const fetchColumns = async () => {
       if (tables && expanded && table_name) {
@@ -177,8 +189,8 @@ const Table = ({
       name: table_name,
       kind: "table",
       initiallyOpen: expanded,
-      children: [
-        {
+      async onOpen({ setChildren }) {
+        const columns: TreeNode = {
           name: "Columns",
           initiallyOpen: true,
           wrapper: Columns,
@@ -208,7 +220,6 @@ const Table = ({
               ])
             }
           },
-
           render({ toggleOpen, isOpen, isLoading }) {
             return (
               <Row
@@ -217,13 +228,44 @@ const Table = ({
                 table_id={id}
                 name="Columns"
                 onClick={() => toggleOpen()}
-                suffix={isLoading && <Loader size="18px" />}
+                isLoading={isLoading}
               />
             )
           },
-        },
-      ],
+        }
+        const children: TreeNode[] = []
 
+        if (matView && matViewData) {
+          children.push({
+            name: "Base table",
+            render: () => (
+              <Row
+                table_id={id}
+                kind="info"
+                name="Base table"
+                value={matViewData?.base_table_name}
+              />
+            )
+          })
+
+          const response = await showMatViewDDL(table_name)
+          if (response && response.data && response.data.length > 0) {
+            children.push({
+              name: "DDL",
+              render: () => (
+                <Row
+                  table_id={id}
+                  kind="info"
+                  name="Query"
+                  value={response.data[0].ddl}
+                  copyable={true}
+                />
+              )
+            })
+          }
+        }
+        setChildren([...children, columns])
+      },
       render({ toggleOpen, isLoading }) {
         return (
           // @ts-ignore
@@ -240,7 +282,7 @@ const Table = ({
               partitionBy={partitionBy}
               walEnabled={walEnabled}
               walTableData={walTableData}
-              suffix={isLoading && <Loader size="18px" />}
+              isLoading={isLoading}
               tooltip={!!description}
               selectOpen={selectOpen}
               selected={selected}

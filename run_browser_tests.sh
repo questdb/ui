@@ -36,6 +36,9 @@ echo "Proxy started, PID=$PID1"
 # Switch dev mode on
 export QDB_DEV_MODE_ENABLED=true
 
+# Enable Materialized Views
+export QDB_CAIRO_MAT_VIEW_ENABLED=true
+
 # Running tests which assume authentication is off
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 yarn workspace browser-tests test:auth

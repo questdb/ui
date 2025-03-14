@@ -2,7 +2,6 @@ import React, { useState } from "react"
 import styled from "styled-components"
 import { Button } from "@questdb/react-components"
 import { FileCopy } from "@styled-icons/remix-line"
-import { Text } from "../../components"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 
 const StyledButton = styled(Button)`

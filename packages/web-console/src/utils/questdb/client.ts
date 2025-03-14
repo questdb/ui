@@ -323,6 +323,10 @@ export class Client {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
   }
 
+  async showMatViewDDL(table: string): Promise<QueryResult<{ddl: string}>> {
+    return await this.query<{ddl: string}>(`SHOW CREATE MATERIALIZED VIEW '${table}';`)
+  }
+
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
     try {
       const response: Response = await fetch(

@@ -4,6 +4,7 @@ import { Box } from "../Box"
 export const Sidebar = styled(Box).attrs({ flexDirection: "column" })<{
   align?: "top" | "bottom"
 }>`
+  padding-top: ${({ align }) => align === "top" ? "0.5rem" : "0"};
   width: 4.5rem;
   height: 100%;
   background: ${({ theme }) => theme.color.backgroundDarker};

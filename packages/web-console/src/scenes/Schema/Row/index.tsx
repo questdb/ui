@@ -22,24 +22,26 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, ReactNode, useContext } from "react"
+import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
-import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { Information } from "@styled-icons/remix-line"
+import { CheckboxBlankCircle, Information, Loader4 } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
-import { Button, Box } from "@questdb/react-components"
-import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
+import { Box } from "@questdb/react-components"
+import { CopyButton } from '../../../components/CopyButton'
+import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { Checkbox } from "../checkbox"
+import { PopperHover } from "../../../components/PopperHover"
+import { Tooltip } from "../../../components/Tooltip"
 
 type Props = Readonly<{
   className?: string
@@ -54,12 +56,14 @@ type Props = Readonly<{
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
   walTableData?: QuestDB.WalTable
-  suffix?: ReactNode
+  isLoading?: boolean
   tooltip?: boolean
   type?: string
+  value?: string
   selectOpen?: boolean
   selected?: boolean
   onSelectToggle?: (table_name: string) => void
+  copyable?: boolean
 }>
 
 const Type = styled(Text)`
@@ -78,32 +82,13 @@ const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   }
 `
 
-const CopyButton = styled(Button)<
-  Pick<Props, "tooltip"> & { suspended?: boolean }
->`
-  && {
-    position: absolute;
-    z-index: 2;
-    right: ${({ suspended }) => (suspended ? "13rem" : "1rem")};
-    opacity: 0;
-    background: ${({ theme }) => theme.color.backgroundLighter};
-    padding-top: 1.2rem;
-    padding-bottom: 1.2rem;
-    font-size: 1.3rem;
-
-    .highlight {
-      background-color: #7c804f;
-      color: ${({ theme }) => theme.color.foreground};
-    }
-  }
-`
-
-const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
+const Wrapper = styled.div<Pick<Props, "expanded" | "kind"> & { suspended?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
   padding: ${({ suspended }) => (suspended ? "0" : "0.5rem 0")};
   padding-left: 1rem;
+  padding-right: 1rem;
   transition: background ${TransitionDuration.REG}ms;
 
   &:hover,
@@ -111,20 +96,14 @@ const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
     background: ${color("selection")};
   }
 
-  &:hover
-    ${/* sc-selector */ CopyButton},
-    &:active
-    ${/* sc-selector */ CopyButton} {
-    opacity: 1;
-  }
-
   &:hover ${/* sc-selector */ Type} {
-    opacity: 0;
+    opacity: ${({ kind }) => (kind === "column" || kind === "info" ? 1 : 0)};
   }
 `
 
 const StyledTitle = styled(Title)`
   z-index: 1;
+  flex-shrink: 0;
 `
 
 const TableActions = styled.span`
@@ -180,9 +159,44 @@ const InfoIconWrapper = styled.div`
   justify-content: center;
 `
 
-const MetricsButton = styled(Button)`
-  position: absolute;
-  right: 0;
+const ValueWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 200px;
+  flex: 1;
+`
+
+const CopyButtonWrapper = styled.div`
+  flex: 1;
+  display: flex;
+
+  button {
+    border: 0;
+    flex: 1;
+    height: 100%;
+    padding: 0.3rem 0.3rem;
+
+    svg {
+      height: 1.3rem;
+    }
+  }
+`
+
+const TruncatedBox = styled(Box)`
+  display: inline;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: default;
+  font-style: italic;
+  color: ${color("gray2")};
+`
+
+const Loader = styled(Loader4)`
+  margin-left: 1rem;
+  color: ${color("orange")};
+  ${spinAnimation};
 `
 
 const Row = ({
@@ -198,17 +212,39 @@ const Row = ({
   walEnabled,
   walTableData,
   onClick,
-  suffix,
+  isLoading,
   tooltip,
   type,
+  value,
   selectOpen,
   selected,
   onSelectToggle,
+  copyable,
 }: Props) => {
   const { query } = useContext(SchemaContext)
+  const [showLoader, setShowLoader] = useState(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (isLoading) {
+      timeoutRef.current = setTimeout(() => {
+        setShowLoader(true)
+      }, 500)
+    } else {
+      setShowLoader(false)
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [isLoading])
 
   return (
     <Wrapper
+      kind={kind}
       data-hook="schema-row"
       className={className}
       expanded={expanded}
@@ -283,7 +319,7 @@ const Row = ({
             />
           </StyledTitle>
 
-          {suffix}
+          {showLoader && <Loader size="18px" />}
 
           <Spacer />
 
@@ -291,6 +327,26 @@ const Row = ({
             <Type _style="italic" color="pinkLighter" transform="lowercase">
               {type}
             </Type>
+          )}
+
+          {kind === 'info' && value && (
+            copyable ? (
+              <ValueWrapper>
+                <PopperHover
+                  placement="top"
+                  trigger={<TruncatedBox data-hook="copyable-value">{value}</TruncatedBox>}
+                >
+                  <Tooltip>{value}</Tooltip>
+                </PopperHover>
+                <CopyButtonWrapper>
+                  <CopyButton text={value} iconOnly={true} />
+                </CopyButtonWrapper>
+              </ValueWrapper>
+            ) : (
+              <Type _style="italic" color="gray2">
+                {value}
+              </Type>
+            )
           )}
 
           {walTableData?.suspended && kind === "table" && (
@@ -311,7 +367,7 @@ const Row = ({
             />
           )}
         </FlexRow>
-        {!tooltip && <Text color="comment">{description}</Text>}
+        {!tooltip && !copyable && <Text color="comment">{description}</Text>}
       </Box>
     </Wrapper>
   )
