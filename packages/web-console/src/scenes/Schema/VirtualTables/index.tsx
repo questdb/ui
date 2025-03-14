@@ -105,7 +105,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
     return {
       groups: [
         { name: 'Tables', count: regularTables.length, expanded: tablesExpanded },
-        { name: 'Materialized Views', count: matViewTables.length, expanded: matViewsExpanded }
+        { name: 'Materialized views', count: matViewTables.length, expanded: matViewsExpanded }
       ],
       groupCounts: [
         tablesExpanded ? regularTables.length : 0,
