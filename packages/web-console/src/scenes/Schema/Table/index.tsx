@@ -249,7 +249,7 @@ const Table = ({
               <Row
                 table_id={id}
                 kind="info"
-                name="Base Table"
+                name="Base table"
                 value={matViewData?.base_table_name}
               />
             )
