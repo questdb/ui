@@ -237,7 +237,7 @@ const Table = ({
 
         if (matView && matViewData) {
           children.push({
-            name: "Base Table",
+            name: "Base table",
             render: () => (
               <Row
                 table_id={id}
