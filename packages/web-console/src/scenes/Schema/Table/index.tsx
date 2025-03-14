@@ -256,7 +256,7 @@ const Table = ({
                 <Row
                   table_id={id}
                   kind="info"
-                  name="DDL"
+                  name="Query"
                   value={response.data[0].ddl}
                   copyable={true}
                 />
