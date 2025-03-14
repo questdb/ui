@@ -24,8 +24,7 @@
 
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { Loader4 } from "@styled-icons/remix-line"
-import { Tree, collapseTransition, spinAnimation } from "../../../components"
+import { Tree, collapseTransition } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
 import { ContextMenuTrigger } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
@@ -89,12 +88,6 @@ const Columns = styled.div`
     content: "";
     background: ${color("gray1")};
   }
-`
-
-const Loader = styled(Loader4)`
-  margin-left: 1rem;
-  color: ${color("orange")};
-  ${spinAnimation};
 `
 
 const columnRender =
@@ -235,7 +228,7 @@ const Table = ({
                 table_id={id}
                 name="Columns"
                 onClick={() => toggleOpen()}
-                suffix={isLoading && <Loader size="18px" />}
+                isLoading={isLoading}
               />
             )
           },
@@ -289,7 +282,7 @@ const Table = ({
               partitionBy={partitionBy}
               walEnabled={walEnabled}
               walTableData={walTableData}
-              suffix={isLoading && <Loader size="18px" />}
+              isLoading={isLoading}
               tooltip={!!description}
               selectOpen={selectOpen}
               selected={selected}
