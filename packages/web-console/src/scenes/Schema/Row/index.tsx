@@ -33,7 +33,6 @@ import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
-import { CopyButton } from '../../../components/CopyButton'
 import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
@@ -64,9 +63,12 @@ type Props = Readonly<{
   selected?: boolean
   onSelectToggle?: (table_name: string) => void
   copyable?: boolean
+  suffix?: React.ReactNode
 }>
 
 const Type = styled(Text)`
+  display: flex;
+  align-items: center;
   margin-right: 1rem;
   flex: 0;
   transition: opacity ${TransitionDuration.REG}ms;
@@ -165,22 +167,8 @@ const ValueWrapper = styled.div`
   gap: 0.5rem;
   max-width: 200px;
   flex: 1;
-`
-
-const CopyButtonWrapper = styled.div`
-  flex: 1;
-  display: flex;
-
-  button {
-    border: 0;
-    flex: 1;
-    height: 100%;
-    padding: 0.3rem 0.3rem;
-
-    svg {
-      height: 1.3rem;
-    }
-  }
+  justify-content: flex-end;
+  width: 100%;
 `
 
 const TruncatedBox = styled(Box)`
@@ -191,12 +179,22 @@ const TruncatedBox = styled(Box)`
   cursor: default;
   font-style: italic;
   color: ${color("gray2")};
+  text-align: right;
 `
 
 const Loader = styled(Loader4)`
   margin-left: 1rem;
   color: ${color("orange")};
   ${spinAnimation};
+`
+
+const ValueText = styled(Text)`
+  font-style: italic;
+  color: ${color("gray2")};
+  flex: 1;
+  text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
 `
 
 const Row = ({
@@ -220,6 +218,7 @@ const Row = ({
   selected,
   onSelectToggle,
   copyable,
+  suffix,
 }: Props) => {
   const { query } = useContext(SchemaContext)
   const [showLoader, setShowLoader] = useState(false)
@@ -330,23 +329,19 @@ const Row = ({
           )}
 
           {kind === 'info' && value && (
-            copyable ? (
-              <ValueWrapper>
+            <ValueWrapper>
+              {copyable ? (
                 <PopperHover
                   placement="top"
                   trigger={<TruncatedBox data-hook="copyable-value">{value}</TruncatedBox>}
                 >
                   <Tooltip>{value}</Tooltip>
                 </PopperHover>
-                <CopyButtonWrapper>
-                  <CopyButton text={value} iconOnly={true} />
-                </CopyButtonWrapper>
-              </ValueWrapper>
-            ) : (
-              <Type _style="italic" color="gray2">
-                {value}
-              </Type>
-            )
+              ) : (
+                <ValueText>{value}</ValueText>
+              )}
+              {suffix}
+            </ValueWrapper>
           )}
 
           {walTableData?.suspended && kind === "table" && (
@@ -367,7 +362,7 @@ const Row = ({
             />
           )}
         </FlexRow>
-        {!tooltip && !copyable && <Text color="comment">{description}</Text>}
+        {!tooltip && kind !== 'info' && <Text color="comment">{description}</Text>}
       </Box>
     </Wrapper>
   )

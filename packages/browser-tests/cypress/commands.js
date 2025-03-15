@@ -248,6 +248,19 @@ Cypress.Commands.add("dropTable", (name) => {
   });
 });
 
+Cypress.Commands.add("dropTableIfExists", (name) => {
+  const authHeader = localStorage.getItem("basic.auth.header");
+  cy.request({
+    method: "GET",
+    url: `${baseUrl}/exec?query=${encodeURIComponent(
+      `DROP TABLE IF EXISTS ${name};`
+    )}`,
+    headers: {
+      Authorization: authHeader,
+    },
+  });
+});
+
 Cypress.Commands.add("dropMaterializedView", (name) => {
   const authHeader = localStorage.getItem("basic.auth.header");
   cy.request({
@@ -341,6 +354,14 @@ Cypress.Commands.add("expandMatViews", () => {
   cy.get("body").then((body) => {
     if (body.find('[data-hook="expand-materialized-views"]').length > 0) {
       cy.get('[data-hook="expand-materialized-views"]').click();
+    }
+  });
+});
+
+Cypress.Commands.add("collapseMatViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="collapse-materialized-views"]').length > 0) {
+      cy.get('[data-hook="collapse-materialized-views"]').click();
     }
   });
 });

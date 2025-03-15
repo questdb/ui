@@ -24,6 +24,7 @@
 
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
+import { ErrorWarning } from '@styled-icons/remix-line'
 import { Tree, collapseTransition } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
 import { ContextMenuTrigger } from "../../../components/ContextMenu"
@@ -34,6 +35,8 @@ import { useSelector, useDispatch } from "react-redux"
 import { actions, selectors } from "../../../store"
 import { QuestContext } from "../../../providers"
 import { NotificationType } from "../../../types"
+import { CopyButton } from '../../../components/CopyButton'
+import { IconWithTooltip } from '../../../components'
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -46,6 +49,7 @@ type Props = QuestDB.Table &
     onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
     matViewData?: QuestDB.MaterializedView
+    baseTableExists?: boolean
     selected: boolean
     selectOpen: boolean
     onSelectToggle: (table_name: string) => void
@@ -55,6 +59,7 @@ const Wrapper = styled.div`
   position: relative;
   display: flex;
   margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
   align-items: stretch;
   flex-direction: column;
   overflow: hidden;
@@ -88,6 +93,27 @@ const Columns = styled.div`
     content: "";
     background: ${color("gray1")};
   }
+`
+
+const SuffixWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  button {
+    border: 0;
+    height: 100%;
+    padding: 0.3rem 0.3rem;
+
+    svg {
+      height: 1.3rem;
+    }
+  }
+`
+
+const WarningIcon = styled(ErrorWarning)`
+  color: ${color("orange")};
+  height: 1.9rem;
 `
 
 const columnRender =
@@ -130,6 +156,7 @@ const Table = ({
   selectOpen,
   onSelectToggle,
   matView,
+  baseTableExists,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [columns, setColumns] = useState<QuestDB.Column[]>()
@@ -244,6 +271,15 @@ const Table = ({
                 kind="info"
                 name="Base table"
                 value={matViewData?.base_table_name}
+                suffix={!baseTableExists && (
+                  <SuffixWrapper data-hook="base-table-warning">
+                    <IconWithTooltip
+                      icon={<WarningIcon />}
+                      placement="top"
+                      tooltip="Base table has been dropped"
+                    />
+                  </SuffixWrapper>
+                )}
               />
             )
           })
@@ -259,6 +295,11 @@ const Table = ({
                   name="Query"
                   value={response.data[0].ddl}
                   copyable={true}
+                  suffix={
+                    <SuffixWrapper>
+                      <CopyButton text={response.data[0].ddl} iconOnly={true} />
+                    </SuffixWrapper>
+                  }
                 />
               )
             })

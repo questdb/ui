@@ -227,10 +227,15 @@ describe("materialized views", () => {
     cy.refreshSchema();
   });
 
+  afterEach(() => {
+    cy.collapseTables();
+    cy.collapseMatViews();
+  });
+
   it("should create materialized views", () => {
     cy.getByDataHook("expand-tables").contains(`Tables (${tables.length})`);
     cy.getByDataHook("expand-materialized-views").contains(
-      `Materialized Views (${materializedViews.length})`
+      `Materialized views (${materializedViews.length})`
     );
 
     cy.expandTables();
@@ -240,19 +245,39 @@ describe("materialized views", () => {
   });
 
   it("should show the base table and copy DDL for a materialized view", () => {
-    cy.collapseTables();
+    cy.expandMatViews();
     cy.getByDataHook("schema-table-title").contains("btc_trades_mv").click();
-    cy.getByDataHook("schema-info-title").contains("DDL").should("exist");
+    cy.getByDataHook("schema-info-title").contains("Query").should("exist");
     cy.getByDataHook("copyable-value").should("exist").and("be.visible");
     cy.getByDataHook("copy-value").should("exist").click({ force: true });
 
-    cy.window()
-      .its("navigator.clipboard")
-      .invoke("readText")
-      .should(
-        "match",
-        /^CREATE MATERIALIZED VIEW.*'btc_trades_mv' WITH BASE 'btc_trades'/
-      );
+    if (Cypress.isBrowser("electron")) {
+      cy.window()
+        .its("navigator.clipboard")
+        .invoke("readText")
+        .should(
+          "match",
+          /^CREATE MATERIALIZED VIEW.*'btc_trades_mv' WITH BASE 'btc_trades'/
+        );
+    }
+  });
+
+  it("should show a warning icon when base table is dropped", () => {
+    cy.dropTable("btc_trades");
+    cy.wait(1000);
+    cy.refreshSchema();
+
+    cy.expandMatViews();
+    cy.getByDataHook("schema-table-title").contains("btc_trades_mv").click();
+
+    cy.get('[data-hook="base-table-warning"]')
+      .should("exist")
+      .trigger("mouseover");
+
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "Base table has been dropped"
+    );
   });
 
   after(() => {
@@ -263,7 +288,7 @@ describe("materialized views", () => {
     });
 
     tables.forEach((table) => {
-      cy.dropTable(table);
+      cy.dropTableIfExists(table);
     });
   });
 });

@@ -26,7 +26,7 @@ type VirtualTablesProps = {
 const SectionHeader = styled.div`
   padding: 1rem;
   font-weight: bold;
-  background: ${color("backgroundDarker")};
+  background: ${color("selectionDarker")};
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -163,10 +163,17 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
           return null
         }
         const table = allTables[index]
-        
+        const matViewData = materializedViews?.find(
+          (mv) => mv.view_name === table.table_name,
+        )
+        const baseTableExists = table.matView && matViewData
+          ? tables.some(t => t.table_name === matViewData.base_table_name)
+          : false
+
         return (
           <Table
             matView={table.matView}
+            baseTableExists={baseTableExists}
             designatedTimestamp={table.designatedTimestamp}
             expanded={table.table_name === opened}
             key={table.table_name}
@@ -180,9 +187,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             walTableData={walTables?.find(
               (wt) => wt.name === table.table_name,
             )}
-            matViewData={materializedViews?.find(
-              (mv) => mv.view_name === table.table_name,
-            )}
+            matViewData={matViewData}
             dedup={table.dedup}
             selectOpen={selectOpen}
             selected={selectedTables.includes(table.table_name)}
