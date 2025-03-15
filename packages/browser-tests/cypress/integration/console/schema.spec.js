@@ -263,6 +263,7 @@ describe("materialized views", () => {
   });
 
   it("should show a warning icon when base table is dropped", () => {
+    cy.loadConsoleWithAuth();
     cy.dropTable("btc_trades");
     cy.wait(1000);
     cy.refreshSchema();
