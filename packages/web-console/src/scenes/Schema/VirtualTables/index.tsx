@@ -23,17 +23,18 @@ type VirtualTablesProps = {
   loadingError: ErrorResult | null
 }
 
-const SectionHeader = styled.div`
+const SectionHeader = styled.div<{ disabled: boolean }>`
   padding: 1rem;
   font-weight: bold;
   background: ${color("selectionDarker")};
   display: flex;
   justify-content: space-between;
   align-items: center;
-  cursor: pointer;
-
+  cursor: ${({ disabled }) => disabled ? 'not-allowed' : 'pointer'};
+  pointer-events: ${({ disabled }) => disabled ? 'none' : 'auto'};
+    
   &:hover {
-    background: ${color("selection")};
+    background: ${({ disabled }) => disabled ? color("selectionDarker") : color("selection")};
   }
 `
 
@@ -142,6 +143,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
         
         return (
           <SectionHeader
+            disabled={group.count === 0}
             data-hook={(() => {
               if (index === 0) {
                 return `${tablesExpanded ? 'collapse' : 'expand'}-tables`
@@ -154,7 +156,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             }}
           >
             <span>{group.name} ({group.count})</span>
-            <ArrowIcon size="14px" $expanded={group.expanded} />
+            {group.count > 0 && <ArrowIcon size="14px" $expanded={group.expanded} />}
           </SectionHeader>
         )
       }}
