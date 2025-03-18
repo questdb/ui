@@ -166,7 +166,7 @@ export type MaterializedView = {
   view_sql: string
   view_table_dir_name: string
   invalidation_reason: string
-  view_status: string
+  view_status: "valid" | "invalid"
   base_table_txn: number
   applied_base_table_txn: number
 }

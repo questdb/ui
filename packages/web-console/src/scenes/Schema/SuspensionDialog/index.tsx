@@ -26,14 +26,6 @@ import { Text, Link } from "../../../components"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
 
-const ErrorButton = styled(Button)`
-  background: #3e1b1b;
-  border: 1px #723131 solid;
-  color: #f47474;
-  padding: 3px 10px;
-  font-size: 1.3rem;
-`
-
 const StyledDialogContent = styled(Dialog.Content)`
   border-color: #723131;
 `
@@ -78,12 +70,17 @@ type FormValues = {
 
 const GENERIC_ERROR_TEXT = "Error restarting transaction"
 
+type Props = {
+  walTableData: QuestDB.WalTable
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
 export const SuspensionDialog = ({
   walTableData,
-}: {
-  walTableData: QuestDB.WalTable
-}) => {
-  const [active, setActive] = useState(false)
+  open,
+  onOpenChange,
+}: Props) => {
   const { quest } = useContext(QuestContext)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
@@ -117,36 +114,22 @@ export const SuspensionDialog = ({
   }
 
   useEffect(() => {
-    if (active) {
+    if (open) {
       setError(undefined)
       setIsSubmitted(false)
     }
-  }, [active])
+  }, [open])
 
   return (
     <Dialog.Root
-      open={active}
-      onOpenChange={(open) => {
-        if (!open) {
+      open={open}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) {
           eventBus.publish(EventType.MSG_QUERY_SCHEMA)
         }
+        onOpenChange(newOpen)
       }}
     >
-      <Dialog.Trigger asChild>
-        <ForwardRef>
-          <ErrorButton
-            prefixIcon={<ErrorIcon size="18px" />}
-            data-hook="schema-suspension-dialog-trigger"
-            onClick={(e: any) => {
-              setActive(true)
-              e.stopPropagation()
-            }}
-          >
-            Suspended
-          </ErrorButton>
-        </ForwardRef>
-      </Dialog.Trigger>
-
       <Dialog.Portal>
         <ForwardRef>
           <Overlay primitive={Dialog.Overlay} />
@@ -158,8 +141,8 @@ export const SuspensionDialog = ({
           onClick={(e: React.MouseEvent<HTMLDivElement>) => {
             e.stopPropagation()
           }}
-          onEscapeKeyDown={() => setActive(false)}
-          onPointerDownOutside={() => setActive(false)}
+          onEscapeKeyDown={() => onOpenChange(false)}
+          onPointerDownOutside={() => onOpenChange(false)}
         >
           <Dialog.Title>
             <Box>
@@ -320,7 +303,7 @@ export const SuspensionDialog = ({
                 prefixIcon={<Undo size={18} />}
                 skin="secondary"
                 data-hook="schema-suspension-dialog-dismiss"
-                onClick={() => setActive(false)}
+                onClick={() => onOpenChange(false)}
               >
                 Dismiss
               </Button>

@@ -29,28 +29,18 @@ import { color } from "../../utils"
 
 const StyledMenuItem = styled(ReactMenuItem)`
   color: ${color("foreground")};
+  padding: 0.5rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
   cursor: pointer;
-  padding: 0.5rem 1rem;
 
   &:hover {
     background: ${color("selection")};
   }
 `
 
-const StyledDivider = styled(ReactMenuItem)`
-  background: ${color("foreground")};
-  height: 1px;
-  width: 100%;
-  margin: 0.5rem 0;
-  padding: 0 1rem;
-`
-
-type Props = {} & MenuItemProps
-
-const MenuItem = ({ children, divider, ...rest }: PropsWithChildren<Props>) => {
-  const Component = divider ? StyledDivider : StyledMenuItem
-
-  return <Component {...rest}>{children}</Component>
-}
+const MenuItem = ({ children, ...rest }: PropsWithChildren<MenuItemProps>) => (
+  <StyledMenuItem {...rest}>{children}</StyledMenuItem>
+)
 
 export default MenuItem

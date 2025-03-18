@@ -9,32 +9,28 @@ import * as QuestDB from "../../../utils/questdb";
 import { State, View } from "../../Schema";
 import Table from "../Table";
 import LoadingError from "../LoadingError"
+import Row from "../Row";
+import { TreeNodeKind } from "../../../components/Tree";
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
   walTables?: QuestDB.WalTable[]
   materializedViews?: QuestDB.MaterializedView[]
   selectOpen: boolean
-  selectedTables: string[]
-  handleSelectToggle: (table_name: string) => void
+  selectedTables: {name: string, type: TreeNodeKind}[]
+  handleSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
   filterSuspendedOnly: boolean
   query: string
   state: State
   loadingError: ErrorResult | null
 }
 
-const SectionHeader = styled.div<{ disabled: boolean }>`
-  padding: 1rem;
-  font-weight: bold;
-  background: ${color("selectionDarker")};
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: ${({ disabled }) => disabled ? 'not-allowed' : 'pointer'};
-  pointer-events: ${({ disabled }) => disabled ? 'none' : 'auto'};
+const SectionHeader = styled(Row)<{ $disabled: boolean }>`
+  cursor: ${({ $disabled }) => $disabled ? 'not-allowed' : 'pointer'};
+  pointer-events: ${({ $disabled }) => $disabled ? 'none' : 'auto'};
     
   &:hover {
-    background: ${({ disabled }) => disabled ? color("selectionDarker") : color("selection")};
+    background: ${({ $disabled }) => $disabled ? color("selectionDarker") : color("selection")};
   }
 `
 
@@ -77,7 +73,6 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   state,
   loadingError
 }) => {
-  const [opened, setOpened] = useState<string>()
   const [tablesExpanded, setTablesExpanded] = useState(false)
   const [matViewsExpanded, setMatViewsExpanded] = useState(false)
 
@@ -119,10 +114,6 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
     }
   }, [tables, query, filterSuspendedOnly, walTables, tablesExpanded, matViewsExpanded])
 
-  const handleChange = (name: string) => {
-    setOpened(name === opened ? undefined : name)
-  }
-
   if (state.view === View.loading) {
     return <Loading />
   }
@@ -138,12 +129,16 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   return (
     <GroupedVirtuoso
       groupCounts={groupCounts}
+      components={{ TopItemList: React.Fragment }}
       groupContent={index => {
         const group = groups[index]
         
         return (
           <SectionHeader
-            disabled={group.count === 0}
+            $disabled={group.count === 0}
+            name={`${group.name} (${group.count})`}
+            kind="folder"
+            expanded={index === 0 ? tablesExpanded : matViewsExpanded}
             data-hook={(() => {
               if (index === 0) {
                 return `${tablesExpanded ? 'collapse' : 'expand'}-tables`
@@ -154,10 +149,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
               if (index === 0) setTablesExpanded(!tablesExpanded)
               else setMatViewsExpanded(!matViewsExpanded)
             }}
-          >
-            <span>{group.name} ({group.count})</span>
-            {group.count > 0 && <ArrowIcon size="14px" $expanded={group.expanded} />}
-          </SectionHeader>
+          />
         )
       }}
       itemContent={(index) => {
@@ -168,20 +160,18 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
         const matViewData = materializedViews?.find(
           (mv) => mv.view_name === table.table_name,
         )
-        const baseTableExists = table.matView && matViewData
-          ? tables.some(t => t.table_name === matViewData.base_table_name)
-          : false
+        const selected = !!(selectedTables.find((t) =>
+          t.name === table.table_name
+          && t.type === (table.matView ? "matview" : "table")
+        ))
 
         return (
           <Table
             matView={table.matView}
-            baseTableExists={baseTableExists}
             designatedTimestamp={table.designatedTimestamp}
-            expanded={table.table_name === opened}
             key={table.table_name}
             id={table.id}
             table_name={table.table_name}
-            onChange={handleChange}
             partitionBy={table.partitionBy}
             ttlValue={table.ttlValue}
             ttlUnit={table.ttlUnit}
@@ -192,7 +182,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             matViewData={matViewData}
             dedup={table.dedup}
             selectOpen={selectOpen}
-            selected={selectedTables.includes(table.table_name)}
+            selected={selected}
             onSelectToggle={handleSelectToggle}
           />
         )

@@ -32,6 +32,7 @@ import React, {
   useContext,
   useReducer,
   useCallback,
+  useMemo,
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
@@ -73,6 +74,7 @@ import {
   RefreshRate,
 } from "../../scenes/Editor/Metrics/utils"
 import type { Duration } from "../../scenes/Editor/Metrics/types"
+import { TreeNodeKind } from "../../components/Tree"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -138,7 +140,10 @@ const Schema = ({
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
-  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [selectedTables, setSelectedTables] = useState<{name: string, type: TreeNodeKind}[]>([])
+  const selectedTablesMap = useMemo(() => new Map(
+    selectedTables.map(table => [`${table.name}-${table.type}`, table])
+  ), [selectedTables])
   const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
   const { addBuffer } = useEditor()
@@ -213,13 +218,13 @@ const Schema = ({
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
-    let tablesWithError: string[] = []
+    let tablesWithError: {name: string, type: TreeNodeKind}[] = []
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          const tableDDLResponse = await quest.query<{ ddl: string }>(
-            `SHOW CREATE TABLE '${table}'`,
-          )
+          const tableDDLResponse = table.type === 'table'
+            ? await quest.showTableDDL(table.name)
+            : await quest.showMatViewDDL(table.name)
           if (tableDDLResponse && tableDDLResponse.type === QuestDB.Type.DQL) {
             return tableDDLResponse.data[0].ddl
           }
@@ -250,11 +255,12 @@ const Schema = ({
     }
   }
 
-  const handleSelectToggle = (table_name: string) => {
-    if (selectedTables.includes(table_name)) {
-      setSelectedTables(selectedTables.filter((t) => t !== table_name))
+  const handleSelectToggle = ({name, type}: {name: string, type: TreeNodeKind}) => {
+    const key = `${name}-${type}`
+    if (selectedTablesMap.has(key)) {
+      setSelectedTables(selectedTables.filter(t => `${t.name}-${t.type}` !== key))
     } else {
-      setSelectedTables([...selectedTables, table_name])
+      setSelectedTables([...selectedTables, {name, type}])
     }
   }
 
@@ -319,6 +325,21 @@ const Schema = ({
     }
   }, [autoRefreshTables])
 
+  const allSelectableTables = useMemo(() => {
+    if (!tables) return []
+    
+    const regularTables = tables
+      .filter(t => !materializedViews?.find(v => v.view_name === t.table_name))
+      .map(t => ({name: t.table_name, type: "table" as TreeNodeKind}))
+    
+    const matViews = materializedViews?.map(t => ({
+      name: t.view_name, 
+      type: "matview" as TreeNodeKind
+    })) ?? []
+    
+    return [...regularTables, ...matViews]
+  }, [tables, materializedViews])
+
   return (
     <SchemaContext.Provider value={{ query, setQuery }}>
       <Wrapper ref={innerRef} {...rest}>
@@ -362,22 +383,20 @@ const Schema = ({
                           skin="transparent"
                           data-hook="schema-select-all-button"
                           onClick={() => {
-                            selectedTables.length === tables?.length
+                            selectedTables.length === allSelectableTables.length
                               ? setSelectedTables([])
-                              : setSelectedTables(
-                                  tables?.map((t) => t.table_name) ?? [],
-                                )
+                              : setSelectedTables(allSelectableTables)
                           }}
                         >
                           <Checkbox
                             visible={true}
-                            checked={selectedTables.length === tables?.length}
+                            checked={selectedTables.length === allSelectableTables.length}
                           />
                         </Button>
                       }
                     >
                       <Tooltip>
-                        {selectedTables.length === tables?.length
+                        {selectedTables.length === allSelectableTables.length
                           ? "Deselect"
                           : "Select"}{" "}
                         all

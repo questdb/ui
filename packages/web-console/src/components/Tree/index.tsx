@@ -27,7 +27,7 @@ import Row from "../../scenes/Schema/Row"
 import styled from "styled-components"
 import { WrapWithIf } from "../"
 
-export type TreeNodeKind = "column" | "table" | "folder" | "info"
+export type TreeNodeKind = "column" | "table" | "matview" | "folder"
 
 export type TreeNodeRenderParams = {
   toggleOpen: ToggleOpen
@@ -65,7 +65,7 @@ const Ul = styled.ul`
 
 const Li = styled.li`
   list-style: none;
-  padding: 0 1rem;
+  padding-left: 1rem;
 `
 
 const Leaf = (leaf: TreeNode) => {

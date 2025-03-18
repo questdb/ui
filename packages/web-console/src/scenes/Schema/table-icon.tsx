@@ -8,23 +8,20 @@ import { Box } from "@questdb/react-components"
 type Props = {
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
-  suspended?: boolean
 }
 
-const RED = "#ff5555"
 const WHITE = "#f8f8f2"
 
 const WIDTH = "2.2rem"
 const HEIGHT = "1.8rem"
 
-const Root = styled.div<{ $suspended?: boolean }>`
+const Root = styled.div`
   display: flex;
   align-items: center;
   width: ${WIDTH};
   height: ${HEIGHT};
   position: relative;
-  color: ${({ $suspended }) => ($suspended ? RED : WHITE)};
-  margin-right: 1rem;
+  color: ${WHITE};
   flex-shrink: 0;
 `
 
@@ -36,11 +33,11 @@ const PartitionLetter = styled.span`
   line-height: ${HEIGHT};
 `
 
-const Icon = styled.div<{ $suspended?: boolean }>`
+const Icon = styled.div`
   position: absolute;
   width: ${WIDTH};
   height: ${HEIGHT};
-  border: 1px ${({ $suspended }) => ($suspended ? RED : WHITE)} solid;
+  border: 1px ${WHITE} solid;
   border-radius: 2px;
 `
 
@@ -81,11 +78,10 @@ const IconComponent = ({
   isPartitioned,
   partitionBy,
   walEnabled,
-  suspended,
 }: Props & { isPartitioned: boolean }) => (
-  <Root $suspended={suspended}>
+  <Root>
     {!walEnabled && <Asterisk>*</Asterisk>}
-    <Icon $suspended={suspended}>
+    <Icon>
       {!isPartitioned && (
         <>
           <HLine />
@@ -100,7 +96,7 @@ const IconComponent = ({
   </Root>
 )
 
-export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
+export const TableIcon = ({ partitionBy, walEnabled }: Props) => {
   const isPartitioned = (partitionBy && partitionBy !== "NONE") || false
   let tooltipLines = []
   if (isPartitioned && partitionBy) {
@@ -128,7 +124,6 @@ export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
             isPartitioned={isPartitioned}
             partitionBy={partitionBy}
             walEnabled={walEnabled}
-            suspended={suspended}
           />
         </span>
       }
@@ -142,7 +137,6 @@ export const TableIcon = ({ partitionBy, walEnabled, suspended }: Props) => {
       isPartitioned={isPartitioned}
       partitionBy={partitionBy}
       walEnabled={walEnabled}
-      suspended={suspended}
     />
   )
 }

@@ -22,56 +22,38 @@
  *
  ******************************************************************************/
 
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useState } from "react"
 import styled from "styled-components"
-import { ErrorWarning } from '@styled-icons/remix-line'
-import { Tree, collapseTransition } from "../../../components"
+import { Tree } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
-import { ContextMenuTrigger } from "../../../components/ContextMenu"
+import { ContextMenu, ContextMenuTrigger, MenuItem } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
-import { useSelector, useDispatch } from "react-redux"
-import { actions, selectors } from "../../../store"
+import { useDispatch } from "react-redux"
+import { actions } from "../../../store"
 import { QuestContext } from "../../../providers"
 import { NotificationType } from "../../../types"
-import { CopyButton } from '../../../components/CopyButton'
-import { IconWithTooltip } from '../../../components'
+import { TreeNodeKind } from "../../../components/Tree"
+import { SuspensionDialog } from '../SuspensionDialog'
+import { FileCopy, Restart } from "@styled-icons/remix-line"
 
 type Props = QuestDB.Table &
   Readonly<{
     designatedTimestamp: string
-    description?: string
     id: number
     table_name: string
     partitionBy: string
-    expanded?: boolean
-    onChange: (name: string) => void
     walTableData?: QuestDB.WalTable
     matViewData?: QuestDB.MaterializedView
-    baseTableExists?: boolean
     selected: boolean
     selectOpen: boolean
-    onSelectToggle: (table_name: string) => void
+    onSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
 }>
-
-const Wrapper = styled.div`
-  position: relative;
-  display: flex;
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-  align-items: stretch;
-  flex-direction: column;
-  overflow: hidden;
-  font-family: ${({ theme }) => theme.fontMonospace};
-
-  ${collapseTransition};
-`
 
 const Title = styled(Row)`
   display: flex;
   align-items: stretch;
-  font-weight: ${({ expanded }) => (expanded ? 800 : 400)};
 
   &:hover {
     cursor: pointer;
@@ -95,25 +77,21 @@ const Columns = styled.div`
   }
 `
 
-const SuffixWrapper = styled.div`
+const MenuItemIcon = styled.span`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-
-  button {
-    border: 0;
-    height: 100%;
-    padding: 0.3rem 0.3rem;
-
-    svg {
-      height: 1.3rem;
-    }
+  margin-right: 1rem;
+  
+  svg {
+    width: 18px;
+    height: 18px;
   }
 `
 
-const WarningIcon = styled(ErrorWarning)`
-  color: ${color("orange")};
-  height: 1.9rem;
+const MenuItemContent = styled.span`
+  display: flex;
+  align-items: center;
+  margin-right: auto;
 `
 
 const columnRender =
@@ -139,29 +117,24 @@ const columnRender =
     )
 
 const Table = ({
-  description,
   designatedTimestamp,
   id,
   table_name,
   partitionBy,
   ttlValue,
   ttlUnit,
-  expanded = false,
   walEnabled,
   walTableData,
   matViewData,
-  onChange,
   dedup,
   selected,
   selectOpen,
   onSelectToggle,
   matView,
-  baseTableExists,
 }: Props) => {
   const { quest } = useContext(QuestContext)
-  const [columns, setColumns] = useState<QuestDB.Column[]>()
-  const tables = useSelector(selectors.query.getTables)
   const dispatch = useDispatch()
+  const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false)
 
   const showColumns = async (name: string) => {
     try {
@@ -181,53 +154,71 @@ const Table = ({
     }
   }
 
-  const showMatViewDDL = async (name: string) => {
+  const handleCopyQuery = async () => {
     try {
-      const response = await quest.showMatViewDDL(name)
-      if (response && response.type === QuestDB.Type.DQL) {
-        return response
+      let response
+      if (matView) {
+        response = await quest.showMatViewDDL(table_name)
+      } else {
+        response = await quest.showTableDDL(table_name)
+      }
+
+      if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
+        navigator.clipboard.writeText(response.data[0].ddl)
+        dispatch(
+          actions.query.addNotification({
+            content: <Text color="foreground">Schema copied to clipboard</Text>,
+            type: NotificationType.SUCCESS,
+          })
+        )
       }
     } catch (error: any) {
       dispatch(
         actions.query.addNotification({
           content: (
-            <Text color="red">Cannot show DDL for materialized view '{name}'</Text>
+            <Text color="red">Cannot copy schema for {matView ? 'materialized view' : 'table'} '{table_name}'</Text>
           ),
           type: NotificationType.ERROR,
-        }),
+        })
       )
     }
   }
 
-  useEffect(() => {
-    const fetchColumns = async () => {
-      if (tables && expanded && table_name) {
-        const response = await showColumns(table_name)
-        if (response && response.data) {
-          setColumns(response.data)
-        }
-      }
-    }
-    fetchColumns()
-  }, [tables, table_name])
-
   const tree: TreeNode[] = [
     {
       name: table_name,
-      kind: "table",
-      initiallyOpen: expanded,
+      kind: matView ? 'matview' : 'table',
+      render: ({ toggleOpen, isOpen, isLoading }) => (
+        <ContextMenuTrigger id={`table-context-menu-${id}`}>
+          <Title
+            expanded={isOpen && !isLoading}
+            kind={matView ? 'matview' : 'table'}
+            table_id={id}
+            name={table_name}
+            baseTable={matViewData?.base_table_name}
+            onClick={() => toggleOpen()}
+            isLoading={isLoading}
+            selectOpen={selectOpen}
+            selected={selected}
+            onSelectToggle={onSelectToggle}
+            partitionBy={partitionBy}
+            walEnabled={walEnabled}
+            errors={[
+              ...(matViewData?.view_status === 'invalid' ? [`Materialized view is invalid${matViewData?.invalidation_reason && `: ${matViewData?.invalidation_reason}`}`] : []),
+              ...(walTableData?.suspended ? [`Suspended`] : []),
+            ]}
+          />
+        </ContextMenuTrigger>
+      ),
       async onOpen({ setChildren }) {
         const columns: TreeNode = {
           name: "Columns",
           initiallyOpen: true,
           wrapper: Columns,
           async onOpen({ setChildren }) {
-            onChange(table_name)
             const response = await showColumns(table_name)
 
             if (response && response.data && response.data.length > 0) {
-              setColumns(response.data)
-
               setChildren(
                 response.data.map((column) => ({
                   name: column.column,
@@ -260,85 +251,43 @@ const Table = ({
             )
           },
         }
-        const children: TreeNode[] = []
 
-        if (matView && matViewData) {
-          children.push({
-            name: "Base table",
-            render: () => (
-              <Row
-                table_id={id}
-                kind="info"
-                name="Base table"
-                value={matViewData?.base_table_name}
-                suffix={!baseTableExists && (
-                  <SuffixWrapper data-hook="base-table-warning">
-                    <IconWithTooltip
-                      icon={<WarningIcon />}
-                      placement="top"
-                      tooltip="Base table has been dropped"
-                    />
-                  </SuffixWrapper>
-                )}
-              />
-            )
-          })
-
-          const response = await showMatViewDDL(table_name)
-          if (response && response.data && response.data.length > 0) {
-            children.push({
-              name: "DDL",
-              render: () => (
-                <Row
-                  table_id={id}
-                  kind="info"
-                  name="Query"
-                  value={response.data[0].ddl}
-                  copyable={true}
-                  suffix={
-                    <SuffixWrapper>
-                      <CopyButton text={response.data[0].ddl} iconOnly={true} />
-                    </SuffixWrapper>
-                  }
-                />
-              )
-            })
-          }
-        }
-        setChildren([...children, columns])
-      },
-      render({ toggleOpen, isLoading }) {
-        return (
-          // @ts-ignore
-          <ContextMenuTrigger id={table_name}>
-            <Title
-              description={description}
-              kind="table"
-              table_id={id}
-              name={table_name}
-              onClick={() => {
-                toggleOpen()
-                onChange(table_name)
-              }}
-              partitionBy={partitionBy}
-              walEnabled={walEnabled}
-              walTableData={walTableData}
-              isLoading={isLoading}
-              tooltip={!!description}
-              selectOpen={selectOpen}
-              selected={selected}
-              onSelectToggle={onSelectToggle}
-            />
-          </ContextMenuTrigger>
-        )
+        setChildren([columns])
       },
     },
   ]
 
   return (
-    <Wrapper _height={columns ? columns.length * 30 : 0}>
+    <>
       <Tree root={tree} />
-    </Wrapper>
+      <ContextMenu id={`table-context-menu-${id}`}>
+        <MenuItem onClick={handleCopyQuery}>
+          <MenuItemContent data-hook="table-context-menu-copy-schema">
+            <MenuItemIcon>
+              <FileCopy />
+            </MenuItemIcon>
+            Copy schema
+          </MenuItemContent>
+        </MenuItem>
+        {walTableData?.suspended && (
+          <MenuItem onClick={() => setSuspensionDialogOpen(true)}>
+            <MenuItemContent data-hook="table-context-menu-resume-wal">
+              <MenuItemIcon>
+                <Restart />
+              </MenuItemIcon>
+              Resume WAL
+            </MenuItemContent>
+          </MenuItem>
+        )}
+      </ContextMenu>
+      {walTableData?.suspended && (
+        <SuspensionDialog 
+          walTableData={walTableData}
+          open={suspensionDialogOpen}
+          onOpenChange={setSuspensionDialogOpen}
+        />
+      )}
+    </>
   )
 }
 

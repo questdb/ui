@@ -27,7 +27,8 @@ import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { RightArrow } from "@styled-icons/boxicons-regular"
-import { CheckboxBlankCircle, Information, Loader4 } from "@styled-icons/remix-line"
+import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
+import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
@@ -37,7 +38,6 @@ import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../
 import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
-import { SuspensionDialog } from "../SuspensionDialog"
 import { Checkbox } from "../checkbox"
 import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
@@ -45,38 +45,34 @@ import { Tooltip } from "../../../components/Tooltip"
 type Props = Readonly<{
   className?: string
   designatedTimestamp?: string
-  description?: string
   expanded?: boolean
   indexed?: boolean
   kind: TreeNodeKind
   table_id?: number
   name: string
   onClick?: (event: MouseEvent) => void
+  "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
-  walTableData?: QuestDB.WalTable
   isLoading?: boolean
-  tooltip?: boolean
   type?: string
-  value?: string
   selectOpen?: boolean
   selected?: boolean
-  onSelectToggle?: (table_name: string) => void
-  copyable?: boolean
-  suffix?: React.ReactNode
+  onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
+  baseTable?: string
+  errors?: string[]
 }>
 
 const Type = styled(Text)`
   display: flex;
   align-items: center;
-  margin-right: 1rem;
   flex: 0;
   transition: opacity ${TransitionDuration.REG}ms;
 `
 
 const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
-  cursor: ${({ kind }) =>
-    ["folder", "table"].includes(kind) ? "pointer" : "initial"};
+  cursor: ${({ kind }) => 
+    ["folder", "table", "matview"].includes(kind) ? "pointer" : "initial"};
 
   .highlight {
     background-color: #7c804f;
@@ -84,11 +80,11 @@ const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
   }
 `
 
-const Wrapper = styled.div<Pick<Props, "expanded" | "kind"> & { suspended?: boolean }>`
+const Wrapper = styled.div`
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: ${({ suspended }) => (suspended ? "0" : "0.5rem 0")};
+  padding: 0.5rem 0;
   padding-left: 1rem;
   padding-right: 1rem;
   transition: background ${TransitionDuration.REG}ms;
@@ -97,15 +93,15 @@ const Wrapper = styled.div<Pick<Props, "expanded" | "kind"> & { suspended?: bool
   &:active {
     background: ${color("selection")};
   }
-
-  &:hover ${/* sc-selector */ Type} {
-    opacity: ${({ kind }) => (kind === "column" || kind === "info" ? 1 : 0)};
-  }
 `
 
 const StyledTitle = styled(Title)`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   z-index: 1;
   flex-shrink: 0;
+  margin-right: 1rem;
 `
 
 const TableActions = styled.span`
@@ -125,10 +121,6 @@ const Spacer = styled.span`
   flex: 1;
 `
 
-const InfoIcon = styled(Information)`
-  color: ${color("purple")};
-`
-
 const RocketIcon = styled(Rocket)`
   color: ${color("orange")};
   margin-right: 1rem;
@@ -143,6 +135,7 @@ const RightArrowIcon = styled(RightArrow)`
   color: ${color("gray2")};
   margin-right: 0.8rem;
   cursor: pointer;
+  flex-shrink: 0;
 `
 
 const DownArrowIcon = styled(RightArrowIcon)`
@@ -152,23 +145,6 @@ const DownArrowIcon = styled(RightArrowIcon)`
 const DotIcon = styled(CheckboxBlankCircle)`
   color: ${color("gray2")};
   margin-right: 1rem;
-`
-
-const InfoIconWrapper = styled.div`
-  display: flex;
-  padding: 0 1rem;
-  align-items: center;
-  justify-content: center;
-`
-
-const ValueWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  max-width: 200px;
-  flex: 1;
-  justify-content: flex-end;
-  width: 100%;
 `
 
 const TruncatedBox = styled(Box)`
@@ -188,19 +164,24 @@ const Loader = styled(Loader4)`
   ${spinAnimation};
 `
 
-const ValueText = styled(Text)`
-  font-style: italic;
-  color: ${color("gray2")};
-  flex: 1;
-  text-align: right;
-  overflow: hidden;
-  white-space: nowrap;
+const ErrorIconWrapper = styled.div`
+  display: inline;
+  align-self: center;
+
+  svg {
+    color: #f47474;
+  }
+`
+
+const ErrorItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `
 
 const Row = ({
   className,
   designatedTimestamp,
-  description,
   expanded,
   kind,
   indexed,
@@ -208,21 +189,21 @@ const Row = ({
   name,
   partitionBy,
   walEnabled,
-  walTableData,
   onClick,
+  "data-hook": dataHook,
   isLoading,
-  tooltip,
   type,
-  value,
   selectOpen,
   selected,
   onSelectToggle,
-  copyable,
-  suffix,
+  baseTable,
+  errors,
 }: Props) => {
   const { query } = useContext(SchemaContext)
   const [showLoader, setShowLoader] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isExpandable = ["folder", "table", "matview"].includes(kind)
+  const isTableKind = ["table", "matview"].includes(kind)
 
   useEffect(() => {
     if (isLoading) {
@@ -243,14 +224,11 @@ const Row = ({
 
   return (
     <Wrapper
-      kind={kind}
-      data-hook="schema-row"
+      data-hook={dataHook ?? "schema-row"}
       className={className}
-      expanded={expanded}
-      suspended={walTableData?.suspended && kind === "table"}
       onClick={(e) => {
-        if (kind === "table" && selectOpen && onSelectToggle) {
-          onSelectToggle(name)
+        if (isTableKind && selectOpen && onSelectToggle) {
+          onSelectToggle({name, type: kind})
         } else {
           onClick?.(e)
         }
@@ -262,7 +240,7 @@ const Row = ({
         gap="2rem"
         style={{ width: "100%", position: "relative" }}
       >
-        {kind === "table" && (
+        {isTableKind && (
           <div style={{ position: "absolute" }}>
             <Checkbox
               visible={selectOpen && onSelectToggle !== undefined}
@@ -271,15 +249,8 @@ const Row = ({
           </div>
         )}
         <FlexRow $selectOpen={selectOpen}>
-          {kind === "table" && (
-            <>
-              <TableIcon
-                partitionBy={partitionBy}
-                walEnabled={walEnabled}
-                suspended={walTableData?.suspended}
-              />
-            </>
-          )}
+          {isExpandable && expanded && <DownArrowIcon size="14px" />}
+          {isExpandable && !expanded && <RightArrowIcon size="14px" />}
 
           {kind === "column" && indexed && (
             <IconWithTooltip
@@ -288,10 +259,6 @@ const Row = ({
               tooltip="Indexed"
             />
           )}
-
-          {kind === "folder" && expanded && <DownArrowIcon size="14px" />}
-
-          {kind === "folder" && !expanded && <RightArrowIcon size="14px" />}
 
           {kind === "column" && !indexed && name === designatedTimestamp && (
             <IconWithTooltip
@@ -316,7 +283,23 @@ const Row = ({
               searchWords={[query ?? ""]}
               textToHighlight={name}
             />
+            {isTableKind && (
+              <TableIcon
+                partitionBy={partitionBy}
+                walEnabled={walEnabled}
+              />
+            )}
           </StyledTitle>
+
+          {kind === "matview" && baseTable && (
+            <>
+              <Text weight={600} color="foreground">[Base:&nbsp;</Text>
+              <TruncatedBox data-hook="base-table-name">
+                <Text color="gray2" _style="normal">{baseTable}</Text>
+              </TruncatedBox>
+              <Text weight={600} color="foreground">]</Text>
+            </>
+          )}
 
           {showLoader && <Loader size="18px" />}
 
@@ -328,41 +311,32 @@ const Row = ({
             </Type>
           )}
 
-          {kind === 'info' && value && (
-            <ValueWrapper>
-              {copyable ? (
-                <PopperHover
-                  placement="top"
-                  trigger={<TruncatedBox data-hook="copyable-value">{value}</TruncatedBox>}
-                >
-                  <Tooltip>{value}</Tooltip>
-                </PopperHover>
-              ) : (
-                <ValueText>{value}</ValueText>
-              )}
-              {suffix}
-            </ValueWrapper>
-          )}
-
-          {walTableData?.suspended && kind === "table" && (
+          {errors && errors.length > 0 && (
             <TableActions>
-              <SuspensionDialog walTableData={walTableData} />
+              <PopperHover
+                placement="top"
+                trigger={
+                  <ErrorIconWrapper data-hook="schema-row-error-icon">
+                    <ErrorIcon size="18px" />
+                  </ErrorIconWrapper>
+                }
+              >
+                <Tooltip>
+                  {errors.length > 1 ? errors.map((error) => (
+                    <ErrorItem key={error}>
+                      <ErrorIconWrapper>
+                        <ErrorIcon size="18px" />
+                      </ErrorIconWrapper>
+                      <Text color="foreground">{error}</Text>
+                    </ErrorItem>
+                  )) : (
+                    <Text color="foreground">{errors[0]}</Text>
+                  )}
+                </Tooltip>
+              </PopperHover>
             </TableActions>
           )}
-
-          {tooltip && description && (
-            <IconWithTooltip
-              icon={
-                <InfoIconWrapper>
-                  <InfoIcon size="10px" />
-                </InfoIconWrapper>
-              }
-              placement="right"
-              tooltip={description}
-            />
-          )}
         </FlexRow>
-        {!tooltip && kind !== 'info' && <Text color="comment">{description}</Text>}
       </Box>
     </Wrapper>
   )
