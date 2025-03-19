@@ -154,7 +154,12 @@ Cypress.Commands.add("getMountedEditor", () =>
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));
 
 Cypress.Commands.add("getEditorContent", () =>
-  cy.get(".monaco-editor textarea")
+  cy
+    .get(".monaco-editor")
+    .should("be.visible")
+    .find("textarea")
+    .should("exist")
+    .should("be.visible")
 );
 
 Cypress.Commands.add("getEditorHitbox", () =>
