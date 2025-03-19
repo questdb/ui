@@ -12,8 +12,8 @@ type Props = {
 
 const WHITE = "#f8f8f2"
 
-const WIDTH = "2.2rem"
-const HEIGHT = "1.8rem"
+const WIDTH = "1.5rem"
+const HEIGHT = "1.5rem"
 
 const Root = styled.div`
   display: flex;
@@ -29,7 +29,7 @@ const PartitionLetter = styled.span`
   width: 100%;
   height: 100%;
   text-align: center;
-  font-size: 1.4rem;
+  font-size: 1rem;
   line-height: ${HEIGHT};
 `
 
@@ -43,9 +43,9 @@ const Icon = styled.div`
 
 const Asterisk = styled.span`
   position: absolute;
-  top: -9px;
+  top: -0.6rem;
   right: -0.5rem;
-  font-size: 1.8rem;
+  font-size: 1rem;
   line-height: 1.8rem;
   color: #f1fa8c;
 `

@@ -26,7 +26,7 @@ import React, { MouseEvent, useContext, useState, useEffect, useRef } from "reac
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
-import { RightArrow } from "@styled-icons/boxicons-regular"
+import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
 import type { TreeNodeKind } from "../../../components/Tree"
@@ -102,6 +102,11 @@ const StyledTitle = styled(Title)`
   z-index: 1;
   flex-shrink: 0;
   margin-right: 1rem;
+
+  mark {
+    background-color: #45475a !important;
+    color: ${({ theme }) => theme.color.foreground};
+  }
 `
 
 const TableActions = styled.span`
@@ -131,14 +136,15 @@ const SortDownIcon = styled(SortDown)`
   margin-right: 0.8rem;
 `
 
-const RightArrowIcon = styled(RightArrow)`
+const ChevronRightIcon = styled(ChevronRight)`
   color: ${color("gray2")};
   margin-right: 0.8rem;
   cursor: pointer;
   flex-shrink: 0;
+  width: 1.5rem;
 `
 
-const DownArrowIcon = styled(RightArrowIcon)`
+const ChevronDownIcon = styled(ChevronRightIcon)`
   transform: rotateZ(90deg);
 `
 
@@ -249,8 +255,8 @@ const Row = ({
           </div>
         )}
         <FlexRow $selectOpen={selectOpen}>
-          {isExpandable && expanded && <DownArrowIcon size="14px" />}
-          {isExpandable && !expanded && <RightArrowIcon size="14px" />}
+          {isExpandable && expanded && <ChevronDownIcon size="14px" />}
+          {isExpandable && !expanded && <ChevronRightIcon size="14px" />}
 
           {kind === "column" && indexed && (
             <IconWithTooltip
@@ -278,17 +284,17 @@ const Row = ({
             kind={kind}
             data-hook={`schema-${kind}-title`}
           >
-            <Highlighter
-              highlightClassName="highlight"
-              searchWords={[query ?? ""]}
-              textToHighlight={name}
-            />
             {isTableKind && (
               <TableIcon
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
               />
             )}
+            <Highlighter
+              highlightClassName="highlight"
+              searchWords={[query ?? ""]}
+              textToHighlight={name}
+            />
           </StyledTitle>
 
           {kind === "matview" && baseTable && (
@@ -301,15 +307,15 @@ const Row = ({
             </>
           )}
 
+          {type && (
+            <Type _style="italic" color="gray2" transform="lowercase">
+              ({type})
+            </Type>
+          )}
+
           {showLoader && <Loader size="18px" />}
 
           <Spacer />
-
-          {type && (
-            <Type _style="italic" color="pinkLighter" transform="lowercase">
-              {type}
-            </Type>
-          )}
 
           {errors && errors.length > 0 && (
             <TableActions>

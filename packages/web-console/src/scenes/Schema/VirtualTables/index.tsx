@@ -1,7 +1,6 @@
 import React, { FC, useEffect, useMemo, useState } from 'react';
 import { GroupedVirtuoso } from 'react-virtuoso';
 import styled from 'styled-components';
-import { RightArrow } from "@styled-icons/boxicons-regular";
 import { Loader3 } from '@styled-icons/remix-line';
 import { spinAnimation } from '../../../components';
 import { color, ErrorResult } from '../../../utils';
@@ -32,11 +31,10 @@ const SectionHeader = styled(Row)<{ $disabled: boolean }>`
   &:hover {
     background: ${({ $disabled }) => $disabled ? color("selectionDarker") : color("selection")};
   }
-`
 
-const ArrowIcon = styled(RightArrow)<{ $expanded: boolean }>`
-  color: ${color("gray2")};
-  transform: ${({ $expanded }) => $expanded ? 'rotateZ(90deg)' : 'none'};
+  ${({ $disabled }) => $disabled && `
+    opacity: 0.5;
+  `}
 `
 
 const FlexSpacer = styled.div`
@@ -138,7 +136,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             $disabled={group.count === 0}
             name={`${group.name} (${group.count})`}
             kind="folder"
-            expanded={index === 0 ? tablesExpanded : matViewsExpanded}
+            expanded={group.count === 0 ? false : index === 0 ? tablesExpanded : matViewsExpanded}
             data-hook={(() => {
               if (index === 0) {
                 return `${tablesExpanded ? 'collapse' : 'expand'}-tables`
