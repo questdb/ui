@@ -158,7 +158,6 @@ Cypress.Commands.add("getEditorContent", () =>
     .get(".monaco-editor")
     .should("be.visible")
     .find("textarea")
-    .should("exist")
     .should("be.visible")
 );
 
@@ -305,7 +304,7 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   cy.clearLocalStorage();
   indexedDB.deleteDatabase("web-console");
   cy.visit(baseUrl);
-  cy.loginWithUserAndPassword();
+  //cy.loginWithUserAndPassword();
   cy.getEditorContent().should("be.visible");
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
