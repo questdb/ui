@@ -20,9 +20,6 @@ describe("appendQuery", () => {
 
   const queries = consoleConfiguration.savedQueries.map((query) => query.value);
 
-  const getTabDragHandleByTitle = (title) =>
-    `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
-
   before(() => {
     cy.intercept(
       {
@@ -291,7 +288,7 @@ describe("errors", () => {
     cy.typeQuery(query);
     cy.runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
-    cy.matchImageSnapshot();
+    cy.getCollapsedNotifications().should("contain", "bad integer");
   });
 
   it("should mark date position as error", () => {
@@ -465,16 +462,31 @@ describe("editor tabs", () => {
 
   it("should drag tabs", () => {
     cy.get(".new-tab-button").click();
-    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
-      getTabDragHandleByTitle("SQL")
-    );
-    cy.getEditorTabs().first().should("contain", "SQL 1");
-    cy.getEditorTabs().last().should("contain", "SQL");
-    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
-      getTabDragHandleByTitle("SQL")
-    );
-    cy.getEditorTabs().first().should("contain", "SQL");
-    cy.getEditorTabs().last().should("contain", "SQL 1");
+
+    cy.getEditorTabByTitle("SQL").should("be.visible");
+    cy.getEditorTabByTitle("SQL 1").should("be.visible");
+
+    cy.get(getTabDragHandleByTitle("SQL 1"))
+      .should("be.visible")
+      .drag(getTabDragHandleByTitle("SQL"));
+
+    cy.wait(100);
+
+    cy.getEditorTabs().should(($tabs) => {
+      expect($tabs.first()).to.contain("SQL 1");
+      expect($tabs.last()).to.contain("SQL");
+    });
+
+    cy.get(getTabDragHandleByTitle("SQL 1"))
+      .should("be.visible")
+      .drag(getTabDragHandleByTitle("SQL"));
+
+    cy.wait(100);
+
+    cy.getEditorTabs().should(($tabs) => {
+      expect($tabs.first()).to.contain("SQL");
+      expect($tabs.last()).to.contain("SQL 1");
+    });
   });
 });
 
