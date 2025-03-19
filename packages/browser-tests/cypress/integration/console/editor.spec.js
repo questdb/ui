@@ -288,7 +288,7 @@ describe("errors", () => {
     cy.typeQuery(query);
     cy.runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
-    cy.matchImageSnapshot();
+    cy.getCollapsedNotifications().should("contain", "bad integer");
   });
 
   it("should mark date position as error", () => {
