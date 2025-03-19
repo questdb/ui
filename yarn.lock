@@ -3242,6 +3242,7 @@ __metadata:
     "@popperjs/core": "npm:2.4.2"
     "@questdb/react-components": "workspace:^"
     "@questdb/sql-grammar": "npm:1.2.3"
+    "@radix-ui/react-context-menu": "npm:2.1.5"
     "@radix-ui/react-dialog": "npm:^1.0.3"
     "@styled-icons/bootstrap": "npm:10.47.0"
     "@styled-icons/boxicons-logos": "npm:10.47.0"
@@ -3326,7 +3327,6 @@ __metadata:
     ramda: "npm:0.27.1"
     react: "npm:17.0.2"
     react-calendar: "npm:^4.0.0"
-    react-contextmenu: "npm:2.14.0"
     react-dom: "npm:17.0.2"
     react-highlight-words: "npm:^0.20.0"
     react-hook-form: "npm:7.22.3"
@@ -3499,6 +3499,31 @@ __metadata:
     "@types/react":
       optional: true
   checksum: 10/2b9a613b6db5bff8865588b6bf4065f73021b3d16c0a90b2d4c23deceeb63612f1f15de188227ebdc5f88222cab031be617a9dd025874c0487b303be3e5cc2a8
+  languageName: node
+  linkType: hard
+
+"@radix-ui/react-context-menu@npm:2.1.5":
+  version: 2.1.5
+  resolution: "@radix-ui/react-context-menu@npm:2.1.5"
+  dependencies:
+    "@babel/runtime": "npm:^7.13.10"
+    "@radix-ui/primitive": "npm:1.0.1"
+    "@radix-ui/react-context": "npm:1.0.1"
+    "@radix-ui/react-menu": "npm:2.0.6"
+    "@radix-ui/react-primitive": "npm:1.0.3"
+    "@radix-ui/react-use-callback-ref": "npm:1.0.1"
+    "@radix-ui/react-use-controllable-state": "npm:1.0.1"
+  peerDependencies:
+    "@types/react": "*"
+    "@types/react-dom": "*"
+    react: ^16.8 || ^17.0 || ^18.0
+    react-dom: ^16.8 || ^17.0 || ^18.0
+  peerDependenciesMeta:
+    "@types/react":
+      optional: true
+    "@types/react-dom":
+      optional: true
+  checksum: 10/45400126a39aeae340fbdf768d2bdcb545ff8676a8c619e5910f286ec1fac124b6a36510dc49224204d18e4ff20e011bc7f1827d25472b9cdfc8cc067513fd36
   languageName: node
   linkType: hard
 
@@ -8882,7 +8907,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"classnames@npm:^2.2.5, classnames@npm:^2.3.0":
+"classnames@npm:^2.3.0":
   version: 2.3.2
   resolution: "classnames@npm:2.3.2"
   checksum: 10/ba3151c12e8b6a84c64b340ab4259ad0408947652009314462d828e94631505989c6a7d7e796bec1d309be9295d3111b498ad18a9d533fe3e6f859e51e574cbb
@@ -16800,7 +16825,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"object-assign@npm:^4.0.1, object-assign@npm:^4.1.0, object-assign@npm:^4.1.1":
+"object-assign@npm:^4.0.1, object-assign@npm:^4.1.1":
   version: 4.1.1
   resolution: "object-assign@npm:4.1.1"
   checksum: 10/fcc6e4ea8c7fe48abfbb552578b1c53e0d194086e2e6bbbf59e0a536381a292f39943c6e9628af05b5528aa5e3318bb30d6b2e53cadaf5b8fe9e12c4b69af23f
@@ -18211,20 +18236,6 @@ __metadata:
     "@types/react":
       optional: true
   checksum: 10/26a58d9bbe9b1bbe1201612628d0f6bdeec0355ed3730013d066b9e87adbbee4b6f3f1c83352978c0e2f317d8d32ac31ac2cbb3c6f83833bef0ba047c5bb6907
-  languageName: node
-  linkType: hard
-
-"react-contextmenu@npm:2.14.0":
-  version: 2.14.0
-  resolution: "react-contextmenu@npm:2.14.0"
-  dependencies:
-    classnames: "npm:^2.2.5"
-    object-assign: "npm:^4.1.0"
-  peerDependencies:
-    prop-types: ^15.0.0
-    react: ^0.14.0 || ^15.0.0 || ^16.0.1
-    react-dom: ^0.14.0 || ^15.0.0 || ^16.0.1
-  checksum: 10/9824f5f143ffe5cc7d88748c41214ddc95ba36d3689dc1b6ab5eedf958f046c0df29e43abd148629f3ec5320855d1ba8f0e423615f07e38e6cf6e5e6722a685d
   languageName: node
   linkType: hard
 

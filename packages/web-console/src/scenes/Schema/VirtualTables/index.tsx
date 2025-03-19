@@ -127,7 +127,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   return (
     <GroupedVirtuoso
       groupCounts={groupCounts}
-      components={{ TopItemList: React.Fragment }}
+      components={{ TopItemList: ({...props}) => <div {...props} style={{ position: 'unset' }} /> }}
       groupContent={index => {
         const group = groups[index]
         

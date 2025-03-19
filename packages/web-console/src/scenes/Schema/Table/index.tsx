@@ -26,7 +26,7 @@ import React, { useContext, useState } from "react"
 import styled from "styled-components"
 import { Tree } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
-import { ContextMenu, ContextMenuTrigger, MenuItem } from "../../../components/ContextMenu"
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
 import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
@@ -188,28 +188,46 @@ const Table = ({
     {
       name: table_name,
       kind: matView ? 'matview' : 'table',
-      render: ({ toggleOpen, isOpen, isLoading }) => (
-        <ContextMenuTrigger id={`table-context-menu-${id}`}>
-          <Title
-            expanded={isOpen && !isLoading}
-            kind={matView ? 'matview' : 'table'}
-            table_id={id}
-            name={table_name}
-            baseTable={matViewData?.base_table_name}
-            onClick={() => toggleOpen()}
-            isLoading={isLoading}
-            selectOpen={selectOpen}
-            selected={selected}
-            onSelectToggle={onSelectToggle}
-            partitionBy={partitionBy}
-            walEnabled={walEnabled}
-            errors={[
-              ...(matViewData?.view_status === 'invalid' ? [`Materialized view is invalid${matViewData?.invalidation_reason && `: ${matViewData?.invalidation_reason}`}`] : []),
-              ...(walTableData?.suspended ? [`Suspended`] : []),
-            ]}
-          />
-        </ContextMenuTrigger>
-      ),
+      render: ({ toggleOpen, isOpen, isLoading }) => {
+        return (
+          <ContextMenu>
+            <ContextMenuTrigger>
+              <Title
+                expanded={isOpen && !isLoading}
+                kind={matView ? 'matview' : 'table'}
+                table_id={id}
+                name={table_name}
+                baseTable={matViewData?.base_table_name}
+                onClick={toggleOpen}
+                isLoading={isLoading}
+                selectOpen={selectOpen}
+                selected={selected}
+                onSelectToggle={onSelectToggle}
+                partitionBy={partitionBy}
+                walEnabled={walEnabled}
+                errors={[
+                  ...(matViewData?.view_status === 'invalid' ? [`Materialized view is invalid${matViewData?.invalidation_reason && `: ${matViewData?.invalidation_reason}`}`] : []),
+                  ...(walTableData?.suspended ? [`Suspended`] : []),
+                ]}
+              />
+            </ContextMenuTrigger>
+
+            <ContextMenuContent>
+              <MenuItem onClick={handleCopyQuery} icon={<FileCopy size={14} />}>
+                Copy schema
+              </MenuItem>
+              {walTableData?.suspended && (
+                <MenuItem 
+                  onClick={() => setSuspensionDialogOpen(true)}
+                  icon={<Restart size={14} />}
+                >
+                  Resume WAL
+                </MenuItem>
+              )}
+            </ContextMenuContent>
+          </ContextMenu>
+        )
+      },
       async onOpen({ setChildren }) {
         const columns: TreeNode = {
           name: "Columns",
@@ -260,26 +278,6 @@ const Table = ({
   return (
     <>
       <Tree root={tree} />
-      <ContextMenu id={`table-context-menu-${id}`}>
-        <MenuItem onClick={handleCopyQuery}>
-          <MenuItemContent data-hook="table-context-menu-copy-schema">
-            <MenuItemIcon>
-              <FileCopy />
-            </MenuItemIcon>
-            Copy schema
-          </MenuItemContent>
-        </MenuItem>
-        {walTableData?.suspended && (
-          <MenuItem onClick={() => setSuspensionDialogOpen(true)}>
-            <MenuItemContent data-hook="table-context-menu-resume-wal">
-              <MenuItemIcon>
-                <Restart />
-              </MenuItemIcon>
-              Resume WAL
-            </MenuItemContent>
-          </MenuItem>
-        )}
-      </ContextMenu>
       {walTableData?.suspended && (
         <SuspensionDialog 
           walTableData={walTableData}
