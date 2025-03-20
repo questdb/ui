@@ -213,11 +213,15 @@ const Table = ({
             </ContextMenuTrigger>
 
             <ContextMenuContent>
-              <MenuItem onClick={handleCopyQuery} icon={<FileCopy size={14} />}>
+              <MenuItem
+                data-hook="table-context-menu-copy-schema"
+                onClick={handleCopyQuery} icon={<FileCopy size={14} />}
+              >
                 Copy schema
               </MenuItem>
               {walTableData?.suspended && (
                 <MenuItem 
+                  data-hook="table-context-menu-resume-wal"
                   onClick={() => setSuspensionDialogOpen(true)}
                   icon={<Restart size={14} />}
                 >
