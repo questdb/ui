@@ -6,7 +6,7 @@ import {
   Overlay,
   Input,
 } from "@questdb/react-components"
-import { Error as ErrorIcon, Undo } from "@styled-icons/boxicons-regular"
+import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import {

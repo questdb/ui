@@ -222,7 +222,8 @@ const Table = ({
               {walTableData?.suspended && (
                 <MenuItem 
                   data-hook="table-context-menu-resume-wal"
-                  onClick={() => setSuspensionDialogOpen(true)}
+                  // Suspension dialog & context menu modifies pointer events -- to prevent a race condition
+                  onClick={() => setTimeout(() => setSuspensionDialogOpen(true))}
                   icon={<Restart size={14} />}
                 >
                   Resume WAL
@@ -286,7 +287,10 @@ const Table = ({
         <SuspensionDialog 
           walTableData={walTableData}
           open={suspensionDialogOpen}
-          onOpenChange={setSuspensionDialogOpen}
+          onOpenChange={(isOpen) => {
+            setSuspensionDialogOpen(isOpen)
+            setTimeout(() => document.body.style.pointerEvents = '')
+          }}
         />
       )}
     </>
