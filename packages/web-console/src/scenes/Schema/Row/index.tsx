@@ -25,17 +25,18 @@
 import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
-import { SortDown } from "@styled-icons/boxicons-regular"
+import { SortDown, Font } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
+import type { StyledIcon } from '@styled-icons/styled-icon'
+import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon } from '@styled-icons/bootstrap'
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
 import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
-import type { TextProps } from "../../../components"
 import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
@@ -186,6 +187,87 @@ const ErrorItem = styled.div`
   gap: 0.5rem;
 `
 
+const TypeIcon = styled.div`
+  margin-right: 0.8rem;
+  display: flex;
+  align-items: center;
+`
+
+const TYPE_ICONS = {
+  number: {
+    types: ["boolean", "byte", "short", "int", "long", "long256", "double", "float", "binary", "uuid"],
+    icon: OneHundredTwentyThree
+  },
+  date: {
+    types: ["date"],
+    icon: CalendarMinus
+  },
+  text: {
+    types: ["char", "symbol", "varchar", "string"],
+    icon: CharIcon
+  },
+  time: {
+    types: ["timestamp", "interval"],
+    icon: SortDown
+  },
+  network: {
+    types: ["ipv4"],
+    icon: Globe
+  },
+  geo: {
+    types: ["geohash"],
+    icon: GeoAlt
+  }
+} as const
+
+const IconWrapper = ({ icon: Icon, size = "14px" }: { icon: StyledIcon; size?: string }) => (
+  <TypeIcon>
+    <Icon size={size} />
+  </TypeIcon>
+)
+
+const getIcon = (type: string) => {
+  const iconConfig = Object.values(TYPE_ICONS).find(
+    ({ types }) => types.some((t) => t === type.toLowerCase())
+  )
+  
+  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
+}
+
+const ColumnIcon = ({ 
+  indexed, 
+  isDesignatedTimestamp, 
+  type 
+}: { 
+  indexed?: boolean; 
+  isDesignatedTimestamp: boolean;
+  type?: string;
+}) => {
+  if (!type) return null
+
+  if (indexed) {
+    return (
+      <IconWithTooltip
+        icon={<RocketIcon size="13px" />}
+        placement="top"
+        tooltip="Indexed"
+      />
+    )
+  }
+
+  if (isDesignatedTimestamp) {
+    return (
+      <IconWithTooltip
+        icon={<SortDownIcon size="14px" />}
+        placement="top"
+        tooltip="Designated timestamp"
+      />
+    )
+  }
+
+  return getIcon(type)
+}
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -260,24 +342,12 @@ const Row = ({
           {isExpandable && expanded && <ChevronDownIcon size="14px" />}
           {isExpandable && !expanded && <ChevronRightIcon size="14px" />}
 
-          {kind === "column" && indexed && (
-            <IconWithTooltip
-              icon={<RocketIcon size="13px" />}
-              placement="top"
-              tooltip="Indexed"
+          {kind === "column" && (
+            <ColumnIcon 
+              indexed={indexed} 
+              isDesignatedTimestamp={Boolean(!indexed && name === designatedTimestamp)}
+              type={type}
             />
-          )}
-
-          {kind === "column" && !indexed && name === designatedTimestamp && (
-            <IconWithTooltip
-              icon={<SortDownIcon size="14px" />}
-              placement="top"
-              tooltip="Designated timestamp"
-            />
-          )}
-
-          {kind === "column" && !indexed && name !== designatedTimestamp && (
-            <DotIcon size="12px" />
           )}
 
           <StyledTitle
