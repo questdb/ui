@@ -70,17 +70,14 @@ const Type = styled(Text)`
   transition: opacity ${TransitionDuration.REG}ms;
 `
 
-const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
-  cursor: ${({ kind }) => 
-    ["folder", "table", "matview"].includes(kind) ? "pointer" : "initial"};
-
+const Title = styled(Text)`
   .highlight {
     background-color: #7c804f;
     color: ${({ theme }) => theme.color.foreground};
   }
 `
 
-const Wrapper = styled.div`
+const Wrapper = styled.div<{ $isExpandable: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -88,6 +85,10 @@ const Wrapper = styled.div`
   padding-left: 1rem;
   padding-right: 1rem;
   transition: background ${TransitionDuration.REG}ms;
+  user-select: none;
+  ${({ $isExpandable }) => $isExpandable && `
+    cursor: pointer;
+  `}
 
   &:hover,
   &:active {
@@ -103,8 +104,8 @@ const StyledTitle = styled(Title)`
   flex-shrink: 0;
   margin-right: 1rem;
 
-  mark {
-    background-color: #45475a !important;
+  .highlight {
+    background-color: #45475a;
     color: ${({ theme }) => theme.color.foreground};
   }
 `
@@ -230,6 +231,7 @@ const Row = ({
 
   return (
     <Wrapper
+      $isExpandable={isExpandable}
       data-hook={dataHook ?? "schema-row"}
       className={className}
       onClick={(e) => {
@@ -281,7 +283,6 @@ const Row = ({
           <StyledTitle
             color="foreground"
             ellipsis
-            kind={kind}
             data-hook={`schema-${kind}-title`}
           >
             {isTableKind && (
