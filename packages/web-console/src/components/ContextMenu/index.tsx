@@ -1,29 +1,58 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
+import React from 'react'
+import styled from 'styled-components'
+import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
 
-import ContextMenu from "./ContextMenu"
-import MenuItem from "./MenuItem"
-import { ContextMenuTrigger } from "react-contextmenu"
+const StyledContent = styled(ContextMenuPrimitive.Content)`
+  background-color: #343846; /* vscode-menu-background */
+  border-radius: 0.5rem;
+  padding: 0.4rem;
+  box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36); /* vscode-widget-shadow */
+  z-index: 9999;
+  min-width: 160px;
+`
 
-export { ContextMenu, ContextMenuTrigger, MenuItem }
+const StyledItem = styled(ContextMenuPrimitive.Item)`
+  font-size: 1.3rem;
+  height: 2.6rem;
+  font-family: "system-ui", sans-serif;
+  cursor: pointer;
+  color: rgb(248, 248, 242); /* vscode-menu-foreground */
+  display: flex;
+  align-items: center;
+  padding: 0 1.2rem;
+  border-radius: 0.4rem;
+
+  &[data-highlighted] {
+    background-color: #45475a;
+    color: rgb(240, 240, 240);
+  }
+`
+
+const IconWrapper = styled.span`
+  margin-right: 10px;
+`
+
+export const ContextMenu = ContextMenuPrimitive.Root
+export const ContextMenuTrigger = ContextMenuPrimitive.Trigger
+
+export const ContextMenuContent = React.forwardRef<
+  HTMLDivElement,
+  ContextMenuPrimitive.ContextMenuContentProps
+>((props, forwardedRef) => (
+  <ContextMenuPrimitive.Portal data-test="emre">
+    <StyledContent {...props} ref={forwardedRef} />
+  </ContextMenuPrimitive.Portal>
+))
+
+type MenuItemProps = ContextMenuPrimitive.ContextMenuItemProps & {
+  icon?: React.ReactNode
+}
+
+export const MenuItem = React.forwardRef<HTMLDivElement, MenuItemProps>(
+  ({ children, icon, ...props }, forwardedRef) => (
+    <StyledItem {...props} ref={forwardedRef}>
+      {icon && <IconWrapper>{icon}</IconWrapper>}
+      {children}
+    </StyledItem>
+  )
+)

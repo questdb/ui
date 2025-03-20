@@ -106,7 +106,10 @@ module.exports = {
   mode: config.isProduction ? "production" : "development",
 
   resolve: {
-    extensions: [".ts", ".tsx", ".js"],
+    alias: {
+      'react/jsx-runtime': require.resolve('react/jsx-runtime.js'),
+    },
+    extensions: ['.tsx', '.ts', '.js'],
     symlinks: false,
   },
 

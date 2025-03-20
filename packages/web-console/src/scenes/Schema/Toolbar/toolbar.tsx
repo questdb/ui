@@ -12,8 +12,7 @@ const Root = styled(Box).attrs({
   alignItems: "center",
 })`
   width: 100%;
-  padding: 0 2rem;
-  margin-bottom: 1rem;
+  padding-right: 2rem;
 `
 
 const Filter = styled.div`

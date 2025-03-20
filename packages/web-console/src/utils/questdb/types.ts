@@ -121,6 +121,7 @@ export type Table = {
   dedup: boolean
   ttlValue: number
   ttlUnit: string
+  matView: boolean
 }
 
 export type Partition = {
@@ -155,6 +156,19 @@ export type WalTable = {
   sequencerTxn: string
   errorTag?: ErrorTag
   errorMessage?: string
+}
+
+export type MaterializedView = {
+  view_name: string
+  refresh_type: string
+  base_table_name: string
+  last_refresh_timestamp: string
+  view_sql: string
+  view_table_dir_name: string
+  invalidation_reason: string
+  view_status: "valid" | "invalid"
+  base_table_txn: number
+  applied_base_table_txn: number
 }
 
 export type Column = {

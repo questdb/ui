@@ -2,7 +2,6 @@ import React, { useState } from "react"
 import styled from "styled-components"
 import { Button } from "@questdb/react-components"
 import { FileCopy } from "@styled-icons/remix-line"
-import { Text } from "../../components"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 
 const StyledButton = styled(Button)`
@@ -27,6 +26,7 @@ export const CopyButton = ({
   return (
     <StyledButton
       skin="secondary"
+      data-hook="copy-value"
       onClick={(e) => {
         navigator.clipboard.writeText(text)
         e.stopPropagation()

@@ -10,6 +10,8 @@ const tables = [
   "gitlog",
 ];
 
+const materializedViews = ["btc_trades_mv"];
+
 describe("questdb schema with working tables", () => {
   before(() => {
     cy.loadConsoleWithAuth();
@@ -17,6 +19,7 @@ describe("questdb schema with working tables", () => {
     tables.forEach((table) => {
       cy.createTable(table);
     });
+    cy.expandTables();
     cy.refreshSchema();
   });
   it("should show all the tables when there are no suspended", () => {
@@ -24,7 +27,7 @@ describe("questdb schema with working tables", () => {
       cy.getByDataHook("schema-table-title").should("contain", table);
     });
     cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
-    cy.getByDataHook("schema-suspension-popover-trigger").should("not.exist");
+    cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });
 
   it("should filter the table with input field", () => {
@@ -75,6 +78,7 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
+    cy.expandTables();
   });
 
   it("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
@@ -97,9 +101,11 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.getByDataHook("schema-filter-suspended-button").click();
   });
 
-  it("should show the suspension dialog on click with details for btc_trades", () => {
-    cy.get('input[name="table_filter"]').click().type("btc_trades");
-    cy.getByDataHook("schema-suspension-dialog-trigger").click();
+  it("should show the suspension dialog on context menu click with details for btc_trades", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").rightclick();
+    cy.getByDataHook("table-context-menu-resume-wal")
+      .filter(":visible")
+      .click();
     cy.getByDataHook("schema-suspension-dialog").should(
       "have.attr",
       "data-table-name",
@@ -117,8 +123,10 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
 
   it("should resume WAL for btc_trades from the suspension popover", () => {
-    cy.get('input[name="table_filter"]').click().type("btc_trades");
-    cy.contains("Suspended").click();
+    cy.getByDataHook("schema-table-title").contains("btc_trades").rightclick();
+    cy.getByDataHook("table-context-menu-resume-wal")
+      .filter(":visible")
+      .click();
     cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
     cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
@@ -144,6 +152,7 @@ describe("table select UI", () => {
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
+    cy.expandTables();
   });
 
   it("should show select ui on click", () => {
@@ -206,5 +215,97 @@ describe("questdb schema in read-only mode", () => {
 
     cy.getByDataHook("create-table-panel-button").click();
     cy.getByDataHook("create-table-panel").should("not.exist");
+  });
+});
+
+describe("materialized views", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+
+    tables.forEach((table) => {
+      cy.createTable(table);
+    });
+    materializedViews.forEach((mv) => {
+      cy.createMaterializedView(mv);
+    });
+    cy.refreshSchema();
+  });
+
+  afterEach(() => {
+    cy.collapseTables();
+    cy.collapseMatViews();
+  });
+
+  it("should create materialized views", () => {
+    cy.getByDataHook("expand-tables").contains(`Tables (${tables.length})`);
+    cy.getByDataHook("expand-materialized-views").contains(
+      `Materialized views (${materializedViews.length})`
+    );
+
+    cy.expandTables();
+    cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
+    cy.expandMatViews();
+    cy.getByDataHook("schema-matview-title").should("contain", "btc_trades_mv");
+  });
+
+  it("should show the base table and copy DDL for a materialized view", () => {
+    cy.expandMatViews();
+    cy.getByDataHook("schema-matview-title").contains("btc_trades_mv").click();
+    cy.getByDataHook("base-table-name").contains("btc_trades").should("exist");
+    cy.getByDataHook("schema-matview-title")
+      .contains("btc_trades_mv")
+      .rightclick();
+    cy.getByDataHook("table-context-menu-copy-schema")
+      .filter(":visible")
+      .click();
+
+    if (Cypress.isBrowser("electron")) {
+      cy.window()
+        .its("navigator.clipboard")
+        .invoke("readText")
+        .should(
+          "match",
+          /^CREATE MATERIALIZED VIEW.*'btc_trades_mv' WITH BASE 'btc_trades'/
+        );
+    }
+  });
+
+  it("should show a warning icon and tooltip when the view is invalidated", () => {
+    cy.intercept({
+        method: "GET",
+        pathname: "/exec",
+        query: {
+          query: "materialized_views()",
+        },
+      },
+      (req) => {
+        req.continue((res) => {
+          // [view_name, refresh_type, base_table_name, last_refresh_timestamp, view_sql, view_table_dir_name, invalidation_reason, view_status, base_table_txn, applied_base_table_txn]
+          res.body.dataset[0][6] = "this is an invalidation reason";
+          res.body.dataset[0][7] = "invalid";
+          return res;
+        });
+      }
+    );
+    cy.refreshSchema();
+    cy.expandMatViews();
+    cy.getByDataHook("schema-row-error-icon").trigger("mouseover");
+
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "Materialized view is invalid: this is an invalidation reason"
+    );
+  });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+
+    materializedViews.forEach((mv) => {
+      cy.dropMaterializedView(mv);
+    });
+
+    tables.forEach((table) => {
+      cy.dropTableIfExists(table);
+    });
   });
 });
