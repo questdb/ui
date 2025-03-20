@@ -309,7 +309,7 @@ const Row = ({
           )}
 
           {type && (
-            <Type _style="italic" color="gray2" transform="lowercase">
+            <Type color="gray2" transform="lowercase">
               ({type})
             </Type>
           )}
