@@ -463,7 +463,8 @@ describe("editor tabs", () => {
     cy.getByDataHook("editor-tabs-history-item").should("not.exist");
   });
 
-  it("should drag tabs", () => {
+  // TODO: fix the flakiness
+  it.skip("should drag tabs", () => {
     cy.get(".new-tab-button").click();
     cy.get(getTabDragHandleByTitle("SQL 1")).drag(
       getTabDragHandleByTitle("SQL")

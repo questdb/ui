@@ -32,6 +32,7 @@ import React, {
   useContext,
   useReducer,
   useCallback,
+  useMemo,
 } from "react"
 import { useDispatch } from "react-redux"
 import styled, { css } from "styled-components"
@@ -39,7 +40,6 @@ import {
   CheckboxCircle,
   Close,
   FileCopy,
-  Loader3,
   Refresh,
 } from "@styled-icons/remix-line"
 import {
@@ -47,15 +47,12 @@ import {
   PaneWrapper,
   PopperHover,
   PrimaryToggleButton,
-  spinAnimation,
   Text,
   Tooltip,
 } from "../../components"
 import { actions } from "../../store"
-import { color, copyToClipboard, ErrorResult } from "../../utils"
+import { copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import Table from "./Table"
-import LoadingError from "./LoadingError"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
@@ -64,6 +61,7 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { Toolbar } from "./Toolbar/toolbar"
 import { SchemaContext } from "./SchemaContext"
+import { VirtualTables } from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { NotificationType } from "../../types"
@@ -76,6 +74,7 @@ import {
   RefreshRate,
 } from "../../scenes/Editor/Metrics/utils"
 import type { Duration } from "../../scenes/Editor/Metrics/types"
+import { TreeNodeKind } from "../../components/Tree"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -95,20 +94,10 @@ const Wrapper = styled(PaneWrapper)`
 const Content = styled(PaneContent)<{
   _loading: boolean
 }>`
-  display: block;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   ${({ _loading }) => _loading && loadingStyles};
-`
-
-const Loader = styled(Loader3)`
-  margin-left: 1rem;
-  align-self: center;
-  color: ${color("foreground")};
-  ${spinAnimation};
-`
-
-const FlexSpacer = styled.div`
-  flex: 1;
 `
 
 const ToolbarToggleButton = styled(PrimaryToggleButton)`
@@ -119,24 +108,13 @@ const ToolbarToggleButton = styled(PrimaryToggleButton)`
   }
 `
 
-const Loading = () => {
-  const [loaderShown, setLoaderShown] = useState(false)
-  // Show the loader only for delayed fetching process
-  useEffect(() => {
-    const timeout = setTimeout(() => setLoaderShown(true), 1000)
-    return () => clearTimeout(timeout)
-  }, [])
-
-  return loaderShown ? <Loader size="22px" /> : null
-}
-
-enum View {
+export enum View {
   loading,
   error,
   ready,
 }
 
-type State = { view: View; loadingError?: ErrorResult }
+export type State = { view: View; loadingError?: ErrorResult }
 
 const initialState: State = {
   view: View.loading,
@@ -154,8 +132,7 @@ const Schema = ({
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
-  const [opened, setOpened] = useState<string>()
-  const [isScrolling, setIsScrolling] = useState(false)
+  const [materializedViews, setMaterializedViews] = useState<QuestDB.MaterializedView[]>()
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -163,14 +140,13 @@ const Schema = ({
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
-  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [selectedTables, setSelectedTables] = useState<{name: string, type: TreeNodeKind}[]>([])
+  const selectedTablesMap = useMemo(() => new Map(
+    selectedTables.map(table => [`${table.name}-${table.type}`, table])
+  ), [selectedTables])
   const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
   const { addBuffer } = useEditor()
-
-  const handleChange = (name: string) => {
-    setOpened(name === opened ? undefined : name)
-  }
 
   const fetchTables = async () => {
     try {
@@ -191,6 +167,7 @@ const Schema = ({
             ),
           )
         }
+        void fetchMaterializedViews()
         dispatchState({ view: View.ready })
       } else {
         dispatchState({ view: View.error })
@@ -199,6 +176,19 @@ const Schema = ({
       dispatchState({
         view: View.error,
       })
+    }
+  }
+
+  const fetchMaterializedViews = async () => {
+    try {
+      const matViewsResponse = await quest.query<QuestDB.MaterializedView>(
+        "materialized_views()",
+      )
+      if (matViewsResponse && matViewsResponse.type === QuestDB.Type.DQL) {
+        setMaterializedViews(matViewsResponse.data)
+      }
+    } catch (error) {
+      // Fail silently
     }
   }
 
@@ -228,13 +218,13 @@ const Schema = ({
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
-    let tablesWithError: string[] = []
+    let tablesWithError: {name: string, type: TreeNodeKind}[] = []
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          const tableDDLResponse = await quest.query<{ ddl: string }>(
-            `SHOW CREATE TABLE '${table}'`,
-          )
+          const tableDDLResponse = table.type === 'table'
+            ? await quest.showTableDDL(table.name)
+            : await quest.showMatViewDDL(table.name)
           if (tableDDLResponse && tableDDLResponse.type === QuestDB.Type.DQL) {
             return tableDDLResponse.data[0].ddl
           }
@@ -265,11 +255,12 @@ const Schema = ({
     }
   }
 
-  const handleSelectToggle = (table_name: string) => {
-    if (selectedTables.includes(table_name)) {
-      setSelectedTables(selectedTables.filter((t) => t !== table_name))
+  const handleSelectToggle = ({name, type}: {name: string, type: TreeNodeKind}) => {
+    const key = `${name}-${type}`
+    if (selectedTablesMap.has(key)) {
+      setSelectedTables(selectedTables.filter(t => `${t.name}-${t.type}` !== key))
     } else {
-      setSelectedTables([...selectedTables, table_name])
+      setSelectedTables([...selectedTables, {name, type}])
     }
   }
 
@@ -334,73 +325,34 @@ const Schema = ({
     }
   }, [autoRefreshTables])
 
-  const views: { [key in View]: () => React.ReactNode } = {
-    [View.loading]: () => <Loading />,
-    [View.error]: () =>
-      loadingError ? <LoadingError error={loadingError} /> : <FlexSpacer />,
-    [View.ready]: () => (
-      <>
-        {tables && tables.length > 0 && (
-          <Toolbar
-            suspendedTablesCount={
-              walTables?.filter((t) => t.suspended).length ?? 0
-            }
-            filterSuspendedOnly={filterSuspendedOnly}
-            setFilterSuspendedOnly={setFilterSuspendedOnly}
-          />
-        )}
-        {tables &&
-          tables
-            .filter((table: QuestDB.Table) => {
-              const normalizedTableName = table.table_name.toLowerCase()
-              const normalizedQuery = query.toLowerCase()
-              return (
-                normalizedTableName.includes(normalizedQuery) &&
-                (filterSuspendedOnly
-                  ? table.walEnabled &&
-                    walTables?.find((t) => t.name === table.table_name)
-                      ?.suspended
-                  : true)
-              )
-            })
-            .sort((a, b) =>
-              a.table_name
-                .toLowerCase()
-                .localeCompare(b.table_name.toLowerCase()),
-            )
-            .map((table: QuestDB.Table) => (
-              <Table
-                designatedTimestamp={table.designatedTimestamp}
-                expanded={table.table_name === opened}
-                isScrolling={isScrolling}
-                key={table.table_name}
-                id={table.id}
-                table_name={table.table_name}
-                onChange={handleChange}
-                partitionBy={table.partitionBy}
-                ttlValue={table.ttlValue}
-                ttlUnit={table.ttlUnit}
-                walEnabled={table.walEnabled}
-                walTableData={walTables?.find(
-                  (wt) => wt.name === table.table_name,
-                )}
-                dedup={table.dedup}
-                selectOpen={selectOpen}
-                selected={selectedTables.includes(table.table_name)}
-                onSelectToggle={handleSelectToggle}
-              />
-            ))}
-      </>
-    ),
-  }
+  const allSelectableTables = useMemo(() => {
+    if (!tables) return []
+    
+    const regularTables = tables
+      .filter(t => !materializedViews?.find(v => v.view_name === t.table_name))
+      .map(t => ({name: t.table_name, type: "table" as TreeNodeKind}))
+    
+    const matViews = materializedViews?.map(t => ({
+      name: t.view_name, 
+      type: "matview" as TreeNodeKind
+    })) ?? []
+    
+    return [...regularTables, ...matViews]
+  }, [tables, materializedViews])
 
   return (
     <SchemaContext.Provider value={{ query, setQuery }}>
       <Wrapper ref={innerRef} {...rest}>
         <Panel.Header
-          title="Tables"
           afterTitle={
-            <div style={{ display: "flex", marginRight: "1rem" }}>
+            <div style={{ display: "flex", marginRight: "1rem", justifyContent: "space-between", flex: 1 }}>
+                <Toolbar
+                  suspendedTablesCount={
+                    walTables?.filter((t) => t.suspended).length ?? 0
+                  }
+                  filterSuspendedOnly={filterSuspendedOnly}
+                  setFilterSuspendedOnly={setFilterSuspendedOnly}
+                />
               {tables && (
                 <Box align="center" gap="0">
                   {selectOpen && (
@@ -431,22 +383,20 @@ const Schema = ({
                           skin="transparent"
                           data-hook="schema-select-all-button"
                           onClick={() => {
-                            selectedTables.length === tables?.length
+                            selectedTables.length === allSelectableTables.length
                               ? setSelectedTables([])
-                              : setSelectedTables(
-                                  tables?.map((t) => t.table_name) ?? [],
-                                )
+                              : setSelectedTables(allSelectableTables)
                           }}
                         >
                           <Checkbox
                             visible={true}
-                            checked={selectedTables.length === tables?.length}
+                            checked={selectedTables.length === allSelectableTables.length}
                           />
                         </Button>
                       }
                     >
                       <Tooltip>
-                        {selectedTables.length === tables?.length
+                        {selectedTables.length === allSelectableTables.length
                           ? "Deselect"
                           : "Select"}{" "}
                         all
@@ -556,7 +506,18 @@ const Schema = ({
           ref={scrollerRef}
           onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
         >
-          {views[state.view]()}
+          <VirtualTables
+            tables={tables ?? []}
+            walTables={walTables}
+            materializedViews={materializedViews}
+            selectOpen={selectOpen}
+            selectedTables={selectedTables}
+            handleSelectToggle={handleSelectToggle}
+            filterSuspendedOnly={filterSuspendedOnly}
+            query={query}
+            state={state}
+            loadingError={loadingError}
+          />
         </Content>
       </Wrapper>
     </SchemaContext.Provider>

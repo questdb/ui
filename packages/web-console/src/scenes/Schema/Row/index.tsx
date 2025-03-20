@@ -22,109 +22,93 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, ReactNode, useContext } from "react"
+import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
-import { SortDown } from "@styled-icons/boxicons-regular"
-import { RightArrow } from "@styled-icons/boxicons-regular"
-import { CheckboxBlankCircle } from "@styled-icons/remix-line"
-import { Information } from "@styled-icons/remix-line"
+import { SortDown, Font } from "@styled-icons/boxicons-regular"
+import { ChevronRight } from "@styled-icons/boxicons-solid"
+import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
+import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
+import type { StyledIcon } from '@styled-icons/styled-icon'
+import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon } from '@styled-icons/bootstrap'
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
-import { Button, Box } from "@questdb/react-components"
-import { Text, TransitionDuration, IconWithTooltip } from "../../../components"
-import type { TextProps } from "../../../components"
+import { Box } from "@questdb/react-components"
+import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
 import { SchemaContext } from "../SchemaContext"
-import { SuspensionDialog } from "../SuspensionDialog"
 import { Checkbox } from "../checkbox"
+import { PopperHover } from "../../../components/PopperHover"
+import { Tooltip } from "../../../components/Tooltip"
 
 type Props = Readonly<{
   className?: string
   designatedTimestamp?: string
-  description?: string
   expanded?: boolean
   indexed?: boolean
   kind: TreeNodeKind
   table_id?: number
   name: string
   onClick?: (event: MouseEvent) => void
+  "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
-  walTableData?: QuestDB.WalTable
-  suffix?: ReactNode
-  tooltip?: boolean
+  isLoading?: boolean
   type?: string
   selectOpen?: boolean
   selected?: boolean
-  onSelectToggle?: (table_name: string) => void
+  onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
+  baseTable?: string
+  errors?: string[]
 }>
 
 const Type = styled(Text)`
-  margin-right: 1rem;
+  display: flex;
+  align-items: center;
   flex: 0;
   transition: opacity ${TransitionDuration.REG}ms;
 `
 
-const Title = styled(Text)<TextProps & { kind: TreeNodeKind }>`
-  cursor: ${({ kind }) =>
-    ["folder", "table"].includes(kind) ? "pointer" : "initial"};
-
+const Title = styled(Text)`
   .highlight {
     background-color: #7c804f;
     color: ${({ theme }) => theme.color.foreground};
   }
 `
 
-const CopyButton = styled(Button)<
-  Pick<Props, "tooltip"> & { suspended?: boolean }
->`
-  && {
-    position: absolute;
-    z-index: 2;
-    right: ${({ suspended }) => (suspended ? "13rem" : "1rem")};
-    opacity: 0;
-    background: ${({ theme }) => theme.color.backgroundLighter};
-    padding-top: 1.2rem;
-    padding-bottom: 1.2rem;
-    font-size: 1.3rem;
-
-    .highlight {
-      background-color: #7c804f;
-      color: ${({ theme }) => theme.color.foreground};
-    }
-  }
-`
-
-const Wrapper = styled.div<Pick<Props, "expanded"> & { suspended?: boolean }>`
+const Wrapper = styled.div<{ $isExpandable: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: ${({ suspended }) => (suspended ? "0" : "0.5rem 0")};
+  padding: 0.5rem 0;
   padding-left: 1rem;
+  padding-right: 1rem;
   transition: background ${TransitionDuration.REG}ms;
+  user-select: none;
+  ${({ $isExpandable }) => $isExpandable && `
+    cursor: pointer;
+  `}
 
   &:hover,
   &:active {
     background: ${color("selection")};
   }
-
-  &:hover
-    ${/* sc-selector */ CopyButton},
-    &:active
-    ${/* sc-selector */ CopyButton} {
-    opacity: 1;
-  }
-
-  &:hover ${/* sc-selector */ Type} {
-    opacity: 0;
-  }
 `
 
 const StyledTitle = styled(Title)`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   z-index: 1;
+  flex-shrink: 0;
+  margin-right: 1rem;
+
+  .highlight {
+    background-color: #45475a;
+    color: ${({ theme }) => theme.color.foreground};
+  }
 `
 
 const TableActions = styled.span`
@@ -144,10 +128,6 @@ const Spacer = styled.span`
   flex: 1;
 `
 
-const InfoIcon = styled(Information)`
-  color: ${color("purple")};
-`
-
 const RocketIcon = styled(Rocket)`
   color: ${color("orange")};
   margin-right: 1rem;
@@ -158,13 +138,15 @@ const SortDownIcon = styled(SortDown)`
   margin-right: 0.8rem;
 `
 
-const RightArrowIcon = styled(RightArrow)`
+const ChevronRightIcon = styled(ChevronRight)`
   color: ${color("gray2")};
   margin-right: 0.8rem;
   cursor: pointer;
+  flex-shrink: 0;
+  width: 1.5rem;
 `
 
-const DownArrowIcon = styled(RightArrowIcon)`
+const ChevronDownIcon = styled(ChevronRightIcon)`
   transform: rotateZ(90deg);
 `
 
@@ -173,22 +155,122 @@ const DotIcon = styled(CheckboxBlankCircle)`
   margin-right: 1rem;
 `
 
-const InfoIconWrapper = styled.div`
-  display: flex;
-  padding: 0 1rem;
-  align-items: center;
-  justify-content: center;
+const TruncatedBox = styled(Box)`
+  display: inline;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: default;
+  font-style: italic;
+  color: ${color("gray2")};
+  text-align: right;
 `
 
-const MetricsButton = styled(Button)`
-  position: absolute;
-  right: 0;
+const Loader = styled(Loader4)`
+  margin-left: 1rem;
+  color: ${color("orange")};
+  ${spinAnimation};
 `
+
+const ErrorIconWrapper = styled.div`
+  display: inline;
+  align-self: center;
+
+  svg {
+    color: #f47474;
+  }
+`
+
+const ErrorItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`
+
+const TypeIcon = styled.div`
+  margin-right: 0.8rem;
+  display: flex;
+  align-items: center;
+`
+
+const TYPE_ICONS = {
+  number: {
+    types: ["boolean", "byte", "short", "int", "long", "long256", "double", "float", "binary", "uuid"],
+    icon: OneHundredTwentyThree
+  },
+  date: {
+    types: ["date"],
+    icon: CalendarMinus
+  },
+  text: {
+    types: ["char", "symbol", "varchar", "string"],
+    icon: CharIcon
+  },
+  time: {
+    types: ["timestamp", "interval"],
+    icon: SortDown
+  },
+  network: {
+    types: ["ipv4"],
+    icon: Globe
+  },
+  geo: {
+    types: ["geohash"],
+    icon: GeoAlt
+  }
+} as const
+
+const IconWrapper = ({ icon: Icon, size = "14px" }: { icon: StyledIcon; size?: string }) => (
+  <TypeIcon>
+    <Icon size={size} />
+  </TypeIcon>
+)
+
+const getIcon = (type: string) => {
+  const iconConfig = Object.values(TYPE_ICONS).find(
+    ({ types }) => types.some((t) => t === type.toLowerCase())
+  )
+  
+  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
+}
+
+const ColumnIcon = ({ 
+  indexed, 
+  isDesignatedTimestamp, 
+  type 
+}: { 
+  indexed?: boolean; 
+  isDesignatedTimestamp: boolean;
+  type?: string;
+}) => {
+  if (!type) return null
+
+  if (indexed) {
+    return (
+      <IconWithTooltip
+        icon={<RocketIcon size="13px" />}
+        placement="top"
+        tooltip="Indexed"
+      />
+    )
+  }
+
+  if (isDesignatedTimestamp) {
+    return (
+      <IconWithTooltip
+        icon={<SortDownIcon size="14px" />}
+        placement="top"
+        tooltip="Designated timestamp"
+      />
+    )
+  }
+
+  return getIcon(type)
+}
 
 const Row = ({
   className,
   designatedTimestamp,
-  description,
   expanded,
   kind,
   indexed,
@@ -196,26 +278,47 @@ const Row = ({
   name,
   partitionBy,
   walEnabled,
-  walTableData,
   onClick,
-  suffix,
-  tooltip,
+  "data-hook": dataHook,
+  isLoading,
   type,
   selectOpen,
   selected,
   onSelectToggle,
+  baseTable,
+  errors,
 }: Props) => {
   const { query } = useContext(SchemaContext)
+  const [showLoader, setShowLoader] = useState(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isExpandable = ["folder", "table", "matview"].includes(kind)
+  const isTableKind = ["table", "matview"].includes(kind)
+
+  useEffect(() => {
+    if (isLoading) {
+      timeoutRef.current = setTimeout(() => {
+        setShowLoader(true)
+      }, 500)
+    } else {
+      setShowLoader(false)
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [isLoading])
 
   return (
     <Wrapper
-      data-hook="schema-row"
+      $isExpandable={isExpandable}
+      data-hook={dataHook ?? "schema-row"}
       className={className}
-      expanded={expanded}
-      suspended={walTableData?.suspended && kind === "table"}
       onClick={(e) => {
-        if (kind === "table" && selectOpen && onSelectToggle) {
-          onSelectToggle(name)
+        if (isTableKind && selectOpen && onSelectToggle) {
+          onSelectToggle({name, type: kind})
         } else {
           onClick?.(e)
         }
@@ -227,7 +330,7 @@ const Row = ({
         gap="2rem"
         style={{ width: "100%", position: "relative" }}
       >
-        {kind === "table" && (
+        {isTableKind && (
           <div style={{ position: "absolute" }}>
             <Checkbox
               visible={selectOpen && onSelectToggle !== undefined}
@@ -236,46 +339,28 @@ const Row = ({
           </div>
         )}
         <FlexRow $selectOpen={selectOpen}>
-          {kind === "table" && (
-            <>
-              <TableIcon
-                partitionBy={partitionBy}
-                walEnabled={walEnabled}
-                suspended={walTableData?.suspended}
-              />
-            </>
-          )}
+          {isExpandable && expanded && <ChevronDownIcon size="14px" />}
+          {isExpandable && !expanded && <ChevronRightIcon size="14px" />}
 
-          {kind === "column" && indexed && (
-            <IconWithTooltip
-              icon={<RocketIcon size="13px" />}
-              placement="top"
-              tooltip="Indexed"
+          {kind === "column" && (
+            <ColumnIcon 
+              indexed={indexed} 
+              isDesignatedTimestamp={Boolean(!indexed && name === designatedTimestamp)}
+              type={type}
             />
-          )}
-
-          {kind === "folder" && expanded && <DownArrowIcon size="14px" />}
-
-          {kind === "folder" && !expanded && <RightArrowIcon size="14px" />}
-
-          {kind === "column" && !indexed && name === designatedTimestamp && (
-            <IconWithTooltip
-              icon={<SortDownIcon size="14px" />}
-              placement="top"
-              tooltip="Designated timestamp"
-            />
-          )}
-
-          {kind === "column" && !indexed && name !== designatedTimestamp && (
-            <DotIcon size="12px" />
           )}
 
           <StyledTitle
             color="foreground"
             ellipsis
-            kind={kind}
             data-hook={`schema-${kind}-title`}
           >
+            {isTableKind && (
+              <TableIcon
+                partitionBy={partitionBy}
+                walEnabled={walEnabled}
+              />
+            )}
             <Highlighter
               highlightClassName="highlight"
               searchWords={[query ?? ""]}
@@ -283,35 +368,52 @@ const Row = ({
             />
           </StyledTitle>
 
-          {suffix}
-
-          <Spacer />
+          {kind === "matview" && baseTable && (
+            <>
+              <Text weight={600} color="foreground">[Base:&nbsp;</Text>
+              <TruncatedBox data-hook="base-table-name">
+                <Text color="gray2" _style="normal">{baseTable}</Text>
+              </TruncatedBox>
+              <Text weight={600} color="foreground">]</Text>
+            </>
+          )}
 
           {type && (
-            <Type _style="italic" color="pinkLighter" transform="lowercase">
-              {type}
+            <Type color="gray2" transform="lowercase">
+              ({type})
             </Type>
           )}
 
-          {walTableData?.suspended && kind === "table" && (
+          {showLoader && <Loader size="18px" />}
+
+          <Spacer />
+
+          {errors && errors.length > 0 && (
             <TableActions>
-              <SuspensionDialog walTableData={walTableData} />
+              <PopperHover
+                placement="top"
+                trigger={
+                  <ErrorIconWrapper data-hook="schema-row-error-icon">
+                    <ErrorIcon size="18px" />
+                  </ErrorIconWrapper>
+                }
+              >
+                <Tooltip>
+                  {errors.length > 1 ? errors.map((error) => (
+                    <ErrorItem key={error}>
+                      <ErrorIconWrapper>
+                        <ErrorIcon size="18px" />
+                      </ErrorIconWrapper>
+                      <Text color="foreground">{error}</Text>
+                    </ErrorItem>
+                  )) : (
+                    <Text color="foreground">{errors[0]}</Text>
+                  )}
+                </Tooltip>
+              </PopperHover>
             </TableActions>
           )}
-
-          {tooltip && description && (
-            <IconWithTooltip
-              icon={
-                <InfoIconWrapper>
-                  <InfoIcon size="10px" />
-                </InfoIconWrapper>
-              }
-              placement="right"
-              tooltip={description}
-            />
-          )}
         </FlexRow>
-        {!tooltip && <Text color="comment">{description}</Text>}
       </Box>
     </Wrapper>
   )
