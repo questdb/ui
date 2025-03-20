@@ -16,6 +16,15 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+## 0.7.7 - 2025.03.20
+### Added
+
+- Add materialized views support [#405](https://github.com/questdb/ui/pull/405)
+
+### Fixed
+
+- fixing a Path Traversal Vulnerability [#321](https://github.com/questdb/ui/pull/321)
+
 ## 0.7.6 - 2025.02.27
 
 ### Added
