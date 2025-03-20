@@ -71,7 +71,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   state,
   loadingError
 }) => {
-  const [tablesExpanded, setTablesExpanded] = useState(false)
+  const [tablesExpanded, setTablesExpanded] = useState(true)
   const [matViewsExpanded, setMatViewsExpanded] = useState(false)
 
   const { groups, groupCounts, allTables } = useMemo(() => {
