@@ -25,7 +25,7 @@
 import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
 import styled from "styled-components"
 import { Rocket } from "@styled-icons/boxicons-regular"
-import { SortDown, Font } from "@styled-icons/boxicons-regular"
+import { SortDown } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
@@ -34,7 +34,7 @@ import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon }
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
-import { TableIcon } from "../table-icon"
+import { TableIcon, MaterializedViewIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
 import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
@@ -42,6 +42,7 @@ import { SchemaContext } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
+import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
 
 type Props = Readonly<{
   className?: string
@@ -62,6 +63,7 @@ type Props = Readonly<{
   onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
   baseTable?: string
   errors?: string[]
+  value?: string
 }>
 
 const Type = styled(Text)`
@@ -100,7 +102,7 @@ const Wrapper = styled.div<{ $isExpandable: boolean }>`
 const StyledTitle = styled(Title)`
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.8rem;
   z-index: 1;
   flex-shrink: 0;
   margin-right: 1rem;
@@ -191,31 +193,32 @@ const TypeIcon = styled.div`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
+  color: ${color("cyan")};
 `
 
 const TYPE_ICONS = {
   number: {
-    types: ["boolean", "byte", "short", "int", "long", "long256", "double", "float", "binary", "uuid"],
+    types: ["BOOLEAN", "BYTE", "SHORT", "INT", "LONG", "LONG256", "DOUBLE", "FLOAT", "BINARY", "UUID"],
     icon: OneHundredTwentyThree
   },
   date: {
-    types: ["date"],
+    types: ["DATE"],
     icon: CalendarMinus
   },
   text: {
-    types: ["char", "symbol", "varchar", "string"],
+    types: ["CHAR", "SYMBOL", "VARCHAR", "STRING"],
     icon: CharIcon
   },
   time: {
-    types: ["timestamp", "interval"],
+    types: ["TIMESTAMP", "INTERVAL"],
     icon: SortDown
   },
   network: {
-    types: ["ipv4"],
+    types: ["IPV4"],
     icon: Globe
   },
   geo: {
-    types: ["geohash"],
+    types: ["GEOHASH"],
     icon: GeoAlt
   }
 } as const
@@ -228,7 +231,7 @@ const IconWrapper = ({ icon: Icon, size = "14px" }: { icon: StyledIcon; size?: s
 
 const getIcon = (type: string) => {
   const iconConfig = Object.values(TYPE_ICONS).find(
-    ({ types }) => types.some((t) => t === type.toLowerCase())
+    ({ types }) => types.some((t) => t === mapColumnTypeToUI(type))
   )
   
   return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
@@ -287,6 +290,7 @@ const Row = ({
   onSelectToggle,
   baseTable,
   errors,
+  value
 }: Props) => {
   const { query } = useContext(SchemaContext)
   const [showLoader, setShowLoader] = useState(false)
@@ -357,8 +361,9 @@ const Row = ({
           >
             {isTableKind && (
               <TableIcon
-                partitionBy={partitionBy}
+                isPartitioned={partitionBy && partitionBy !== "NONE"}
                 walEnabled={walEnabled}
+                isMaterializedView={kind === "matview"}
               />
             )}
             <Highlighter
@@ -368,20 +373,16 @@ const Row = ({
             />
           </StyledTitle>
 
-          {kind === "matview" && baseTable && (
-            <>
-              <Text weight={600} color="foreground">[Base:&nbsp;</Text>
-              <TruncatedBox data-hook="base-table-name">
-                <Text color="gray2" _style="normal">{baseTable}</Text>
-              </TruncatedBox>
-              <Text weight={600} color="foreground">]</Text>
-            </>
-          )}
-
           {type && (
             <Type color="gray2" transform="lowercase">
               ({type})
             </Type>
+          )}
+
+          {kind === "detail" && (
+            <Text color="gray2" transform="lowercase">
+              {value}
+            </Text>
           )}
 
           {showLoader && <Loader size="18px" />}

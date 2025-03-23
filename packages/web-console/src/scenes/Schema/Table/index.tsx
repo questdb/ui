@@ -60,40 +60,6 @@ const Title = styled(Row)`
   }
 `
 
-const Columns = styled.div`
-  position: relative;
-  display: flex;
-  margin-left: 2rem;
-  flex-direction: column;
-
-  &:before {
-    position: absolute;
-    height: 100%;
-    width: 2px;
-    left: -0.4rem;
-    top: 0;
-    content: "";
-    background: ${color("gray1")};
-  }
-`
-
-const MenuItemIcon = styled.span`
-  display: flex;
-  align-items: center;
-  margin-right: 1rem;
-  
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-`
-
-const MenuItemContent = styled.span`
-  display: flex;
-  align-items: center;
-  margin-right: auto;
-`
-
 const columnRender =
   ({
     table_id,
@@ -115,6 +81,16 @@ const columnRender =
         onClick={() => toggleOpen()}
       />
     )
+
+const detailRender = ({ name, value }: { name: string, value: string }) => 
+  ({ toggleOpen }: TreeNodeRenderParams) => (
+    <Row
+      kind="detail"
+      name={`${name}:`}
+      value={value}
+      onClick={() => toggleOpen()}
+    />
+  )
 
 const Table = ({
   designatedTimestamp,
@@ -237,7 +213,6 @@ const Table = ({
         const columns: TreeNode = {
           name: "Columns",
           initiallyOpen: true,
-          wrapper: Columns,
           async onOpen({ setChildren }) {
             const response = await showColumns(table_name)
 
@@ -275,7 +250,63 @@ const Table = ({
           },
         }
 
-        setChildren([columns])
+        const storageDetails: TreeNode = {
+          name: 'Storage Details',
+          kind: 'folder',
+          async onOpen({ setChildren }) {
+            const details = [
+              {
+                name: 'WAL Enabled',
+                value: walEnabled ? 'Yes' : 'No',
+              },
+              {
+                name: 'Partitioning',
+                value: partitionBy && partitionBy !== 'NONE' ? `By ${partitionBy.toLowerCase()}` : 'None',
+              },
+            ]
+            setChildren(details.map((detail) => ({
+              name: detail.name,
+              render: detailRender(detail),
+            })))
+          },
+          render: ({ toggleOpen, isOpen, isLoading }) => {
+            return (
+              <Row
+                kind="folder"
+                expanded={isOpen && !isLoading}
+                table_id={id}
+                name="Storage details"
+                onClick={() => toggleOpen()}
+                isLoading={isLoading}
+              />
+            )
+          }
+        }
+
+        const baseTables: TreeNode[] = matViewData ? [{
+          name: 'Base tables',
+          kind: 'folder',
+          async onOpen({ setChildren }) {   
+            setChildren([{
+              name: matViewData.base_table_name,
+              kind: 'detail',
+            }])
+          },
+          render: ({ toggleOpen, isOpen, isLoading }) => {
+            return (
+              <Row
+                kind="folder"
+                expanded={isOpen && !isLoading}
+                table_id={id}
+                name="Base tables"
+                onClick={() => toggleOpen()}
+                isLoading={isLoading}
+              />
+            )
+          }
+        }] : []
+
+        setChildren([columns, storageDetails, ...baseTables])
       },
     },
   ]

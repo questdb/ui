@@ -26,8 +26,34 @@ import React, { useState, useCallback, useEffect, useRef } from "react"
 import Row from "../../scenes/Schema/Row"
 import styled from "styled-components"
 import { WrapWithIf } from "../"
+import { color } from "../../utils/"
 
-export type TreeNodeKind = "column" | "table" | "matview" | "folder"
+const LeafWrapper = styled.div`
+  position: relative;
+  display: flex;
+  margin-left: 2rem;
+  flex-direction: column;
+
+  &:hover {
+    &:before {
+      opacity: 1;
+    }
+  }
+
+  &:before {
+    position: absolute;
+    height: 100%;
+    width: 2px;
+    left: -0.4rem;
+    top: 0;
+    opacity: 0;
+    transition: .2s;
+    content: "";
+    background: ${color("gray1")};
+  }
+`
+
+export type TreeNodeKind = "column" | "table" | "matview" | "folder" | "detail"
 
 export type TreeNodeRenderParams = {
   toggleOpen: ToggleOpen
@@ -77,7 +103,7 @@ const Leaf = (leaf: TreeNode) => {
     onOpen,
     render,
     children: initialChildren = [],
-    wrapper,
+    wrapper = LeafWrapper,
   } = leaf
   const [open, setOpen] = useState(initiallyOpen ?? false)
   const [loading, setLoading] = useState(false)

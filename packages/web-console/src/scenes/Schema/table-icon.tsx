@@ -1,19 +1,16 @@
-import { IconWithTooltip } from "../../components"
-import React from "react"
+import React, { FC } from "react"
 import styled from "styled-components"
-import * as QuestDB from "../../utils/questdb"
 import { Table } from "@styled-icons/remix-line"
-import { Box } from "@questdb/react-components"
+import { color } from '../../utils'
 
-type Props = {
-  partitionBy?: QuestDB.PartitionBy
+type TableIconProps = {
   walEnabled?: boolean
+  isPartitioned?: boolean
+  isMaterializedView?: boolean
 }
 
-const WHITE = "#f8f8f2"
-
-const WIDTH = "1.5rem"
-const HEIGHT = "1.5rem"
+const WIDTH = "1.4rem"
+const HEIGHT = "1.4rem"
 
 const Root = styled.div`
   display: flex;
@@ -21,122 +18,56 @@ const Root = styled.div`
   width: ${WIDTH};
   height: ${HEIGHT};
   position: relative;
-  color: ${WHITE};
   flex-shrink: 0;
-`
-
-const PartitionLetter = styled.span`
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  font-size: 1rem;
-  line-height: ${HEIGHT};
-`
-
-const Icon = styled.div`
-  position: absolute;
-  width: ${WIDTH};
-  height: ${HEIGHT};
-  border: 1px ${WHITE} solid;
-  border-radius: 2px;
+  svg {
+    color: ${color("cyan")};
+  }
 `
 
 const Asterisk = styled.span`
   position: absolute;
   top: -0.6rem;
-  right: -0.5rem;
+  right: -0.3rem;
   font-size: 1rem;
   line-height: 1.8rem;
-  color: #f1fa8c;
+  color: ${color("orange")};
 `
 
-const HLine = styled.div`
-  position: absolute;
-  width: 100%;
-  height: 0.1rem;
-  background: WHITE;
-  top: 0.4rem;
-`
+const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
+  <svg viewBox="0 0 24 24" height={height} width={width} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM4 8h16V5H4v3zM4 10h16v9H4v-9z" fill-rule="evenodd" clip-rule="evenodd"/>
+  </svg>
+)
 
-const VLine = styled.div`
-  position: absolute;
-  width: 0.1rem;
-  height: calc(${HEIGHT} - 0.5rem);
-  background: WHITE;
-  top: 0.4rem;
-`
+export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
+  <svg
+    viewBox="0 0 28 28"
+    height={height}
+    width={width}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <g stroke="currentColor" strokeWidth="2" fill="none" transform="translate(-2, -2)">
+      <line x1="3" y1="4" x2="22" y2="4" />
+      <line x1="4" y1="4" x2="4" y2="22" />
+      <line x1="21" y1="4" x2="21" y2="11" />
+      <line x1="4" y1="21" x2="11" y2="21" />
+    </g>
+    <g transform="translate(6,6)" fill="currentColor">
+      <path fill="none" d="M0 0h24v24H0z" />
+      <path d="M4 8h16V5H4v3zm10 11v-9h-4v9h4zm2 0h4v-9h-4v9zm-8 0v-9H4v9h4zM3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    </g>
+  </svg>
+)
 
-const VLine1 = styled(VLine)`
-  left: 0.6rem;
-`
-
-const VLine2 = styled(VLine)`
-  left: 1.3rem;
-`
-
-const IconComponent = ({
-  isPartitioned,
-  partitionBy,
-  walEnabled,
-}: Props & { isPartitioned: boolean }) => (
+export const TableIcon: FC<TableIconProps> = ({ walEnabled, isPartitioned, isMaterializedView }) => (
   <Root>
-    {!walEnabled && <Asterisk>*</Asterisk>}
-    <Icon>
-      {!isPartitioned && (
-        <>
-          <HLine />
-          <VLine1 />
-          <VLine2 />
-        </>
-      )}
-    </Icon>
-    {isPartitioned && partitionBy && (
-      <PartitionLetter>{partitionBy.substr(0, 1)}</PartitionLetter>
+    {isMaterializedView ? (
+      <MaterializedViewIcon height="14px" width="14px" />
+    ) : (
+      <>
+        {!walEnabled && <Asterisk>*</Asterisk>}
+        {isPartitioned ? <Table size="14px" /> : <NonPartitionedTableIcon height="14px" />}
+      </>
     )}
   </Root>
 )
-
-export const TableIcon = ({ partitionBy, walEnabled }: Props) => {
-  const isPartitioned = (partitionBy && partitionBy !== "NONE") || false
-  let tooltipLines = []
-  if (isPartitioned && partitionBy) {
-    tooltipLines.push(
-      `${partitionBy.substr(0, 1)}: Partitioned by ${partitionBy}`,
-    )
-  } else {
-    tooltipLines.push(
-      <Box align="center" gap="0">
-        <Table size="14px" />
-        <span>: Not partitioned</span>
-      </Box>,
-    )
-  }
-
-  if (!walEnabled) {
-    tooltipLines.push("*: non-WAL (Legacy)")
-  }
-
-  return isPartitioned || !walEnabled ? (
-    <IconWithTooltip
-      icon={
-        <span>
-          <IconComponent
-            isPartitioned={isPartitioned}
-            partitionBy={partitionBy}
-            walEnabled={walEnabled}
-          />
-        </span>
-      }
-      tooltip={tooltipLines.map((line, i) => (
-        <div key={i}>{line}</div>
-      ))}
-      placement="bottom"
-    />
-  ) : (
-    <IconComponent
-      isPartitioned={isPartitioned}
-      partitionBy={partitionBy}
-      walEnabled={walEnabled}
-    />
-  )
-}
