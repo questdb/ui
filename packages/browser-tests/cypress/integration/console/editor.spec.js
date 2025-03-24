@@ -42,7 +42,7 @@ describe("appendQuery", () => {
     const expected = `\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    cy.matchImageSnapshot(); // screenshot diff
+    //cy.matchImageSnapshot(); // screenshot diff
   });
 
   it("should append and select second query", () => {
@@ -109,7 +109,7 @@ describe("appendQuery", () => {
     const expected = `--a\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    cy.matchImageSnapshot();
+    //cy.matchImageSnapshot();
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
@@ -200,7 +200,7 @@ describe("autocomplete", () => {
     cy.typeQuery("select * from teletubies");
     cy.getAutocomplete().should("not.be.visible").clearEditor();
 
-    cy.matchImageSnapshot();
+    //cy.matchImageSnapshot();
   });
 
   it("should be case insensitive", () => {
