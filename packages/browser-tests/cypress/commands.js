@@ -6,9 +6,13 @@ require("cypress-real-events");
 
 require("@4tw/cypress-drag-drop");
 
+const failOnSnapshotDiff = Cypress.env("failOnSnapshotDiff") !== "false";
+
 addMatchImageSnapshotCommand({
   failureThreshold: 0.3,
   blackout: [".notifications", 'button[class*="BuildVersion"'],
+  updateSnapshots: Cypress.env("updateSnapshots") === "true",
+  failOnSnapshotDiff,
 });
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");

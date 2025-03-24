@@ -18,8 +18,8 @@ module.exports = defineConfig({
     viewportHeight: 720,
     specPattern: "cypress/integration/**/*.spec.js",
     supportFile: "cypress/commands.js",
-    setupNodeEvents(on) {
-      addMatchImageSnapshotPlugin(on);
+    setupNodeEvents(on, config) {
+      addMatchImageSnapshotPlugin(on, config);
 
       on("before:browser:launch", (browser = {}, launchOptions) => {
         if (browser.family === "chromium" && browser.name !== "electron") {
