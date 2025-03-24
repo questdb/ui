@@ -24,7 +24,7 @@
 
 import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
 import styled from "styled-components"
-import { Rocket } from "@styled-icons/boxicons-regular"
+import { Rocket, InfoCircle } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
@@ -34,7 +34,7 @@ import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon }
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
-import { TableIcon, MaterializedViewIcon } from "../table-icon"
+import { TableIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
 import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
@@ -111,6 +111,10 @@ const StyledTitle = styled(Title)`
     background-color: #45475a;
     color: ${({ theme }) => theme.color.foreground};
   }
+
+  svg {
+    color: ${color("cyan")};
+  }
 `
 
 const TableActions = styled.span`
@@ -133,11 +137,13 @@ const Spacer = styled.span`
 const RocketIcon = styled(Rocket)`
   color: ${color("orange")};
   margin-right: 1rem;
+  flex-shrink: 0;
 `
 
 const SortDownIcon = styled(SortDown)`
   color: ${color("green")};
   margin-right: 0.8rem;
+  flex-shrink: 0;
 `
 
 const ChevronRightIcon = styled(ChevronRight)`
@@ -155,17 +161,6 @@ const ChevronDownIcon = styled(ChevronRightIcon)`
 const DotIcon = styled(CheckboxBlankCircle)`
   color: ${color("gray2")};
   margin-right: 1rem;
-`
-
-const TruncatedBox = styled(Box)`
-  display: inline;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  cursor: default;
-  font-style: italic;
-  color: ${color("gray2")};
-  text-align: right;
 `
 
 const Loader = styled(Loader4)`
@@ -366,6 +361,9 @@ const Row = ({
                 isMaterializedView={kind === "matview"}
               />
             )}
+            {kind === "detail" && (
+              <InfoCircle size="14px" />
+            )}
             <Highlighter
               highlightClassName="highlight"
               searchWords={[query ?? ""]}
@@ -380,7 +378,7 @@ const Row = ({
           )}
 
           {kind === "detail" && (
-            <Text color="gray2" transform="lowercase">
+            <Text color="gray2">
               {value}
             </Text>
           )}

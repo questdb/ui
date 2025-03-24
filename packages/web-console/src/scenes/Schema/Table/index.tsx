@@ -27,7 +27,6 @@ import styled from "styled-components"
 import { Tree } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
-import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
 import { useDispatch } from "react-redux"
@@ -37,6 +36,7 @@ import { NotificationType } from "../../../types"
 import { TreeNodeKind } from "../../../components/Tree"
 import { SuspensionDialog } from '../SuspensionDialog'
 import { FileCopy, Restart } from "@styled-icons/remix-line"
+import { getTableExpanded, setMatViewExpanded, setTableExpanded, getFolderExpanded, setFolderExpanded } from "../localStorageUtils"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -47,8 +47,11 @@ type Props = QuestDB.Table &
     walTableData?: QuestDB.WalTable
     matViewData?: QuestDB.MaterializedView
     selected: boolean
+    onSelectToggle:  ({name, type}: {name: string, type: TreeNodeKind}) => void
     selectOpen: boolean
-    onSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
+    cachedColumns?: QuestDB.Column[]
+    onCacheColumns?: (columns: QuestDB.Column[]) => void
+    onClearColumnsCache?: (tableName: string) => void
 }>
 
 const Title = styled(Row)`
@@ -104,9 +107,12 @@ const Table = ({
   matViewData,
   dedup,
   selected,
-  selectOpen,
   onSelectToggle,
+  selectOpen,
   matView,
+  cachedColumns,
+  onCacheColumns,
+  onClearColumnsCache,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const dispatch = useDispatch()
@@ -114,8 +120,16 @@ const Table = ({
 
   const showColumns = async (name: string) => {
     try {
+      if (cachedColumns) {
+        return {
+          type: QuestDB.Type.DQL,
+          data: cachedColumns
+        };
+      }
+
       const response = await quest.showColumns(name)
       if (response && response.type === QuestDB.Type.DQL) {
+        onCacheColumns?.(response.data);
         return response
       }
     } catch (error: any) {
@@ -164,6 +178,7 @@ const Table = ({
     {
       name: table_name,
       kind: matView ? 'matview' : 'table',
+      initiallyOpen: getTableExpanded(table_name),
       render: ({ toggleOpen, isOpen, isLoading }) => {
         return (
           <ContextMenu>
@@ -174,7 +189,15 @@ const Table = ({
                 table_id={id}
                 name={table_name}
                 baseTable={matViewData?.base_table_name}
-                onClick={toggleOpen}
+                onClick={() => {
+                  toggleOpen()
+                  if (matView) {
+                    setMatViewExpanded(table_name, !isOpen)
+                  } else {
+                    setTableExpanded(table_name, !isOpen)
+                  }
+                  onClearColumnsCache?.(table_name);
+                }}
                 isLoading={isLoading}
                 selectOpen={selectOpen}
                 selected={selected}
@@ -198,7 +221,6 @@ const Table = ({
               {walTableData?.suspended && (
                 <MenuItem 
                   data-hook="table-context-menu-resume-wal"
-                  // Suspension dialog & context menu modifies pointer events -- to prevent a race condition
                   onClick={() => setTimeout(() => setSuspensionDialogOpen(true))}
                   icon={<Restart size={14} />}
                 >
@@ -212,7 +234,7 @@ const Table = ({
       async onOpen({ setChildren }) {
         const columns: TreeNode = {
           name: "Columns",
-          initiallyOpen: true,
+          initiallyOpen: getFolderExpanded(matView ? 'matview' : 'table', table_name, "Columns"),
           async onOpen({ setChildren }) {
             const response = await showColumns(table_name)
 
@@ -243,7 +265,11 @@ const Table = ({
                 kind="folder"
                 table_id={id}
                 name="Columns"
-                onClick={() => toggleOpen()}
+                onClick={() => {
+                  setFolderExpanded(matView ? 'matview' : 'table', table_name, "Columns", isOpen ? false : true);
+                  onClearColumnsCache?.(table_name);
+                  toggleOpen();
+                }}
                 isLoading={isLoading}
               />
             )
@@ -251,13 +277,14 @@ const Table = ({
         }
 
         const storageDetails: TreeNode = {
-          name: 'Storage Details',
+          name: 'Storage details',
           kind: 'folder',
+          initiallyOpen: getFolderExpanded(matView ? 'matview' : 'table', table_name, "Storage details"),
           async onOpen({ setChildren }) {
             const details = [
               {
-                name: 'WAL Enabled',
-                value: walEnabled ? 'Yes' : 'No',
+                name: 'WAL',
+                value: walEnabled ? 'Enabled' : 'Disabled',
               },
               {
                 name: 'Partitioning',
@@ -276,7 +303,10 @@ const Table = ({
                 expanded={isOpen && !isLoading}
                 table_id={id}
                 name="Storage details"
-                onClick={() => toggleOpen()}
+                onClick={() => {
+                  setFolderExpanded(matView ? 'matview' : 'table', table_name, "Storage details", isOpen ? false : true);
+                  toggleOpen();
+                }}
                 isLoading={isLoading}
               />
             )
@@ -286,6 +316,7 @@ const Table = ({
         const baseTables: TreeNode[] = matViewData ? [{
           name: 'Base tables',
           kind: 'folder',
+          initiallyOpen: getFolderExpanded("matview", table_name, "Base tables"),
           async onOpen({ setChildren }) {   
             setChildren([{
               name: matViewData.base_table_name,
@@ -299,7 +330,10 @@ const Table = ({
                 expanded={isOpen && !isLoading}
                 table_id={id}
                 name="Base tables"
-                onClick={() => toggleOpen()}
+                onClick={() => {
+                  setFolderExpanded("matview", table_name, "Base tables", isOpen ? false : true);
+                  toggleOpen();
+                }}
                 isLoading={isLoading}
               />
             )

@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { GroupedVirtuoso } from 'react-virtuoso';
 import styled from 'styled-components';
 import { Loader3 } from '@styled-icons/remix-line';
@@ -7,9 +7,10 @@ import { color, ErrorResult } from '../../../utils';
 import * as QuestDB from "../../../utils/questdb";
 import { State, View } from "../../Schema";
 import Table from "../Table";
-import LoadingError from "../LoadingError"
+import LoadingError from "../LoadingError";
 import Row from "../Row";
 import { TreeNodeKind } from "../../../components/Tree";
+import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -23,6 +24,10 @@ type VirtualTablesProps = {
   state: State
   loadingError: ErrorResult | null
 }
+
+type ColumnsCache = {
+  [tableName: string]: QuestDB.Column[];
+};
 
 const SectionHeader = styled(Row)<{ $disabled: boolean }>`
   cursor: ${({ $disabled }) => $disabled ? 'not-allowed' : 'pointer'};
@@ -71,8 +76,16 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   state,
   loadingError
 }) => {
-  const [tablesExpanded, setTablesExpanded] = useState(true)
-  const [matViewsExpanded, setMatViewsExpanded] = useState(false)
+  const columnsCache = useRef<ColumnsCache>({});
+  
+  const [, setToggle] = useState(false);
+  const forceUpdate = () => setToggle(toggle => !toggle);
+  const tablesExpanded = getSectionExpanded(TABLES_GROUP_KEY)
+  const matViewsExpanded = getSectionExpanded(MATVIEWS_GROUP_KEY)
+
+  const clearColumnsCache = useCallback((tableName: string) => {
+    delete columnsCache.current[tableName];
+  }, []);
 
   const { groups, groupCounts, allTables } = useMemo(() => {
     const filtered = tables.filter((table: QuestDB.Table) => {
@@ -128,6 +141,9 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
     <GroupedVirtuoso
       groupCounts={groupCounts}
       components={{ TopItemList: React.Fragment }}
+      overscan={200}
+      defaultItemHeight={60}
+      increaseViewportBy={{ top: 300, bottom: 300 }}
       groupContent={index => {
         const group = groups[index]
         
@@ -144,8 +160,8 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
               return `${matViewsExpanded ? 'collapse' : 'expand'}-materialized-views`
             })()}
             onClick={() => {
-              if (index === 0) setTablesExpanded(!tablesExpanded)
-              else setMatViewsExpanded(!matViewsExpanded)
+              setSectionExpanded(index === 0 ? TABLES_GROUP_KEY : MATVIEWS_GROUP_KEY, !group.expanded);
+              forceUpdate();
             }}
           />
         )
@@ -162,7 +178,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
           t.name === table.table_name
           && t.type === (table.matView ? "matview" : "table")
         ))
-
+        
         return (
           <Table
             matView={table.matView}
@@ -182,6 +198,9 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             selectOpen={selectOpen}
             selected={selected}
             onSelectToggle={handleSelectToggle}
+            cachedColumns={columnsCache.current[table.table_name]}
+            onCacheColumns={(columns) => columnsCache.current[table.table_name] = columns}
+            onClearColumnsCache={clearColumnsCache}
           />
         )
       }}

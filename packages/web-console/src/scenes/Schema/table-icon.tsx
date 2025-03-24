@@ -35,7 +35,7 @@ const Asterisk = styled.span`
 
 const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
   <svg viewBox="0 0 24 24" height={height} width={width} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM4 8h16V5H4v3zM4 10h16v9H4v-9z" fill-rule="evenodd" clip-rule="evenodd"/>
+    <path d="M3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM4 8h16V5H4v3zM4 10h16v9H4v-9z" fillRule="evenodd" clipRule="evenodd"/>
   </svg>
 )
 
