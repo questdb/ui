@@ -3,7 +3,7 @@
   "packageManager": "yarn@3.1.1",
   "private": true,
   "scripts": {
-    "test": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/console/editor.spec.js'",
+    "test": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/console/*.spec.js'",
     "test:auth": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/auth/*.spec.js'",
     "test:enterprise": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/enterprise/*.spec.js'",
     "test:update": "yarn run test --env updateSnapshots=true"
