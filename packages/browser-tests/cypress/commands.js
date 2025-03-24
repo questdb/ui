@@ -119,7 +119,7 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().realClick().type(query)
+  cy.getEditor().click({ force: true }).type(query)
 );
 
 Cypress.Commands.add("runLine", () => {
@@ -151,7 +151,7 @@ Cypress.Commands.add("getMountedEditor", () =>
   cy.get(".monaco-scrollable-element")
 );
 
-Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));
+Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code']"));
 
 Cypress.Commands.add("getEditorContent", () =>
   cy
