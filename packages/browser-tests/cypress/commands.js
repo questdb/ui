@@ -6,13 +6,9 @@ require("cypress-real-events");
 
 require("@4tw/cypress-drag-drop");
 
-const failOnSnapshotDiff = Cypress.env("failOnSnapshotDiff") !== "false";
-
 addMatchImageSnapshotCommand({
   failureThreshold: 0.3,
   blackout: [".notifications", 'button[class*="BuildVersion"'],
-  updateSnapshots: Cypress.env("updateSnapshots") === "true",
-  failOnSnapshotDiff,
 });
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
@@ -123,8 +119,15 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().click({ force: true }).type(query)
+  cy.getEditor().realClick().type(query)
 );
+
+Cypress.Commands.add("typeQueryDirectly", (query) => {
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.setValue(query);
+  });
+});
 
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
