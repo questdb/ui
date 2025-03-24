@@ -125,6 +125,13 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
     }
   }, [tables, query, filterSuspendedOnly, walTables, tablesExpanded, matViewsExpanded])
 
+  useEffect(() => {
+    if (!tablesExpanded) {
+      setSectionExpanded(TABLES_GROUP_KEY, true)
+      forceUpdate()
+    }
+  }, [])
+
   if (state.view === View.loading) {
     return <Loading />
   }

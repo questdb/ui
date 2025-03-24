@@ -19,7 +19,6 @@ describe("questdb schema with working tables", () => {
     tables.forEach((table) => {
       cy.createTable(table);
     });
-    cy.expandTables();
     cy.refreshSchema();
   });
   it("should show all the tables when there are no suspended", () => {
@@ -33,6 +32,7 @@ describe("questdb schema with working tables", () => {
   it("should filter the table with input field", () => {
     // Table name search
     cy.get('input[name="table_filter"]').type("btc_trades");
+    cy.expandTables();
     cy.getByDataHook("schema-search-clear-button").should("exist");
     cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
     cy.getByDataHook("schema-table-title").should("not.contain", "ź");
@@ -255,7 +255,10 @@ describe("materialized views", () => {
   it("should show the base table and copy DDL for a materialized view", () => {
     cy.expandMatViews();
     cy.getByDataHook("schema-matview-title").contains("btc_trades_mv").click();
-    cy.getByDataHook("base-table-name").contains("btc_trades").should("exist");
+    cy.getByDataHook("schema-row").contains("Base tables").click();
+    cy.getByDataHook("schema-detail-title")
+      .contains("btc_trades")
+      .should("exist");
     cy.getByDataHook("schema-matview-title")
       .contains("btc_trades_mv")
       .rightclick();
@@ -284,9 +287,11 @@ describe("materialized views", () => {
       },
       (req) => {
         req.continue((res) => {
-          // [view_name, refresh_type, base_table_name, last_refresh_timestamp, view_sql, view_table_dir_name, invalidation_reason, view_status, base_table_txn, applied_base_table_txn]
-          res.body.dataset[0][6] = "this is an invalidation reason";
-          res.body.dataset[0][7] = "invalid";
+          if (res.body && res.body.dataset && res.body.dataset.length > 0) {
+            // [view_name, refresh_type, base_table_name, last_refresh_timestamp, view_sql, view_table_dir_name, invalidation_reason, view_status, base_table_txn, applied_base_table_txn]
+            res.body.dataset[0][6] = "this is an invalidation reason";
+            res.body.dataset[0][7] = "invalid";
+          }
           return res;
         });
       }
