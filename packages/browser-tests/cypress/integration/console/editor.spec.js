@@ -42,7 +42,6 @@ describe("appendQuery", () => {
     const expected = `\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    //cy.matchImageSnapshot(); // screenshot diff
   });
 
   it("should append and select second query", () => {
@@ -109,7 +108,6 @@ describe("appendQuery", () => {
     const expected = `--a\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    //cy.matchImageSnapshot();
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
@@ -199,8 +197,6 @@ describe("autocomplete", () => {
   it("should work when provided table name doesn't exist", () => {
     cy.typeQuery("select * from teletubies");
     cy.getAutocomplete().should("not.be.visible").clearEditor();
-
-    //cy.matchImageSnapshot();
   });
 
   it("should be case insensitive", () => {
@@ -431,13 +427,13 @@ describe("editor tabs", () => {
 
   it("should close and archive tabs", () => {
     cy.getEditorContent().should("be.visible");
-    cy.typeQuery("--1");
+    cy.typeQueryDirectly("--1");
     cy.get(".new-tab-button").click();
     cy.get(".new-tab-button").click();
     ["SQL 1", "SQL 2"].forEach((title, index) => {
       cy.get(getTabDragHandleByTitle(title)).click();
       cy.getEditorContent().should("be.visible");
-      cy.typeQuery(`-- ${index + 1}`);
+      cy.typeQueryDirectly(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });

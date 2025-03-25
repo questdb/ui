@@ -1,7 +1,4 @@
 const { defineConfig } = require("cypress");
-const {
-  addMatchImageSnapshotPlugin,
-} = require("@simonsmith/cypress-image-snapshot/plugin");
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
@@ -18,9 +15,7 @@ module.exports = defineConfig({
     viewportHeight: 720,
     specPattern: "cypress/integration/**/*.spec.js",
     supportFile: "cypress/commands.js",
-    setupNodeEvents(on, config) {
-      addMatchImageSnapshotPlugin(on, config);
-
+    setupNodeEvents(on) {
       on("before:browser:launch", (browser = {}, launchOptions) => {
         if (browser.family === "chromium" && browser.name !== "electron") {
           launchOptions.args.push(

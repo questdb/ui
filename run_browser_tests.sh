@@ -7,7 +7,6 @@
 # ./run_browser_tests.sh -skipQuestDBBuild
 
 # Cleanup
-rm -rf packages/browser-tests/cypress/snapshots/*
 rm -rf tmp/dbroot
 rm -rf tmp/questdb-*
 
@@ -66,9 +65,6 @@ sleep 1
 node packages/web-console/serve-dist.js &
 PID2="$!"
 echo "Proxy started, PID=$PID2"
-
-# Cleanup snapshots for second run
-rm -rf packages/browser-tests/cypress/snapshots/*
 
 # Running tests with context path
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot

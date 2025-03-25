@@ -1,15 +1,6 @@
-const {
-  addMatchImageSnapshotCommand,
-} = require("@simonsmith/cypress-image-snapshot/command");
-
 require("cypress-real-events");
 
 require("@4tw/cypress-drag-drop");
-
-addMatchImageSnapshotCommand({
-  failureThreshold: 0.3,
-  blackout: [".notifications", 'button[class*="BuildVersion"'],
-});
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
