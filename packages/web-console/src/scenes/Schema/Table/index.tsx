@@ -36,7 +36,7 @@ import { NotificationType } from "../../../types"
 import { TreeNodeKind } from "../../../components/Tree"
 import { SuspensionDialog } from '../SuspensionDialog'
 import { FileCopy, Restart } from "@styled-icons/remix-line"
-import { getTableExpanded, setMatViewExpanded, setTableExpanded, getFolderExpanded, setFolderExpanded } from "../localStorageUtils"
+import { TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -52,7 +52,8 @@ type Props = QuestDB.Table &
     cachedColumns?: QuestDB.Column[]
     onCacheColumns?: (columns: QuestDB.Column[]) => void
     onClearColumnsCache?: (tableName: string) => void
-}>
+    path: string
+  }>
 
 const Title = styled(Row)`
   display: flex;
@@ -68,22 +69,74 @@ const columnRender =
     table_id,
     column,
     designatedTimestamp,
+    includesSymbol,
   }: {
     table_id: number
     column: QuestDB.Column
     designatedTimestamp: string
+    includesSymbol: boolean
   }) =>
-  ({ toggleOpen }: TreeNodeRenderParams) =>
-    (
-      <Row
-        {...column}
-        designatedTimestamp={designatedTimestamp}
-        table_id={table_id}
-        kind="column"
-        name={column.column}
-        onClick={() => toggleOpen()}
-      />
-    )
+  ({ toggleOpen, isOpen }: TreeNodeRenderParams) => (
+    <Row
+      {...column}
+      includesSymbol={includesSymbol}
+      expanded={isOpen}
+      designatedTimestamp={designatedTimestamp}
+      table_id={table_id}
+      kind="column"
+      name={column.column}
+      onClick={() => toggleOpen()}
+    />
+  )
+
+const columnNode = ({
+  table_id,
+  column,
+  designatedTimestamp,
+  includesSymbol,
+}: {
+  table_id: number
+  column: QuestDB.Column
+  designatedTimestamp: string
+  includesSymbol: boolean
+}): TreeNode => ({
+  name: column.column,
+  kind: "column",
+  children: [
+    ...(column.type === "SYMBOL" ? [
+      {
+        name: "Indexed",
+        kind: "detail",
+        render: detailRender({
+          name: "Indexed",
+          value: column.indexed ? "Yes" : "No"
+        })
+      },
+      {
+        name: "Symbol capacity",
+        kind: "detail",
+        render: detailRender({
+          name: "Symbol capacity",
+          value: column.symbolCapacity.toString()
+        })
+      },
+      {
+        name: "Cached",
+        kind: "detail",
+        render: detailRender({
+          name: "Cached",
+          value: column.symbolCached ? "Yes" : "No"
+        })
+      }
+    ] as TreeNode[] : [])
+  ],
+  render: columnRender({
+    table_id,
+    column,
+    designatedTimestamp,
+    includesSymbol,
+  })
+})
 
 const detailRender = ({ name, value }: { name: string, value: string }) => 
   ({ toggleOpen }: TreeNodeRenderParams) => (
@@ -178,7 +231,6 @@ const Table = ({
     {
       name: table_name,
       kind: matView ? 'matview' : 'table',
-      initiallyOpen: getTableExpanded(table_name),
       render: ({ toggleOpen, isOpen, isLoading }) => {
         return (
           <ContextMenu>
@@ -189,15 +241,7 @@ const Table = ({
                 table_id={id}
                 name={table_name}
                 baseTable={matViewData?.base_table_name}
-                onClick={() => {
-                  toggleOpen()
-                  if (matView) {
-                    setMatViewExpanded(table_name, !isOpen)
-                  } else {
-                    setTableExpanded(table_name, !isOpen)
-                  }
-                  onClearColumnsCache?.(table_name);
-                }}
+                onClick={toggleOpen}
                 isLoading={isLoading}
                 selectOpen={selectOpen}
                 selected={selected}
@@ -234,19 +278,18 @@ const Table = ({
       async onOpen({ setChildren }) {
         const columns: TreeNode = {
           name: "Columns",
-          initiallyOpen: getFolderExpanded(matView ? 'matview' : 'table', table_name, "Columns"),
+          kind: "folder",
           async onOpen({ setChildren }) {
             const response = await showColumns(table_name)
 
             if (response && response.data && response.data.length > 0) {
+              const includesSymbol = response.data.some((column) => column.type === "SYMBOL")
               setChildren(
-                response.data.map((column) => ({
-                  name: column.column,
-                  render: columnRender({
-                    column,
-                    designatedTimestamp,
-                    table_id: id,
-                  }),
+                response.data.map((column) => columnNode({
+                  column,
+                  designatedTimestamp,
+                  table_id: id,
+                  includesSymbol,
                 })),
               )
             } else {
@@ -266,7 +309,6 @@ const Table = ({
                 table_id={id}
                 name="Columns"
                 onClick={() => {
-                  setFolderExpanded(matView ? 'matview' : 'table', table_name, "Columns", isOpen ? false : true);
                   onClearColumnsCache?.(table_name);
                   toggleOpen();
                 }}
@@ -279,7 +321,6 @@ const Table = ({
         const storageDetails: TreeNode = {
           name: 'Storage details',
           kind: 'folder',
-          initiallyOpen: getFolderExpanded(matView ? 'matview' : 'table', table_name, "Storage details"),
           async onOpen({ setChildren }) {
             const details = [
               {
@@ -303,10 +344,7 @@ const Table = ({
                 expanded={isOpen && !isLoading}
                 table_id={id}
                 name="Storage details"
-                onClick={() => {
-                  setFolderExpanded(matView ? 'matview' : 'table', table_name, "Storage details", isOpen ? false : true);
-                  toggleOpen();
-                }}
+                onClick={toggleOpen}
                 isLoading={isLoading}
               />
             )
@@ -316,7 +354,6 @@ const Table = ({
         const baseTables: TreeNode[] = matViewData ? [{
           name: 'Base tables',
           kind: 'folder',
-          initiallyOpen: getFolderExpanded("matview", table_name, "Base tables"),
           async onOpen({ setChildren }) {   
             setChildren([{
               name: matViewData.base_table_name,
@@ -330,10 +367,7 @@ const Table = ({
                 expanded={isOpen && !isLoading}
                 table_id={id}
                 name="Base tables"
-                onClick={() => {
-                  setFolderExpanded("matview", table_name, "Base tables", isOpen ? false : true);
-                  toggleOpen();
-                }}
+                onClick={toggleOpen}
                 isLoading={isLoading}
               />
             )
@@ -347,7 +381,7 @@ const Table = ({
 
   return (
     <>
-      <Tree root={tree} />
+      <Tree root={tree} parentPath={`${matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}`} />
       {walTableData?.suspended && (
         <SuspensionDialog 
           walTableData={walTableData}

@@ -208,6 +208,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             cachedColumns={columnsCache.current[table.table_name]}
             onCacheColumns={(columns) => columnsCache.current[table.table_name] = columns}
             onClearColumnsCache={clearColumnsCache}
+            path={`${table.matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}:${table.table_name}`}
           />
         )
       }}

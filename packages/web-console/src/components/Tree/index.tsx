@@ -27,6 +27,7 @@ import Row from "../../scenes/Schema/Row"
 import styled from "styled-components"
 import { WrapWithIf } from "../"
 import { color } from "../../utils/"
+import { getItemFromStorage, setItemToStorage } from "../../scenes/Schema/localStorageUtils"
 
 const LeafWrapper = styled.div`
   position: relative;
@@ -43,7 +44,7 @@ const LeafWrapper = styled.div`
   &:before {
     position: absolute;
     height: 100%;
-    width: 2px;
+    width: 1px;
     left: -0.4rem;
     top: 0;
     opacity: 0;
@@ -94,7 +95,7 @@ const Li = styled.li`
   padding-left: 1rem;
 `
 
-const Leaf = (leaf: TreeNode) => {
+const Leaf = (leaf: TreeNode & { parentPath?: string }) => {
   const {
     table_id,
     name,
@@ -104,8 +105,11 @@ const Leaf = (leaf: TreeNode) => {
     render,
     children: initialChildren = [],
     wrapper = LeafWrapper,
+    parentPath = ''
   } = leaf
-  const [open, setOpen] = useState(initiallyOpen ?? false)
+
+  const path = parentPath ? `${parentPath}:${name}` : name
+  const [open, setOpen] = useState(initiallyOpen ?? getItemFromStorage(path))
   const [loading, setLoading] = useState(false)
   const [children, setChildren] = useState<TreeNode[]>(initialChildren)
   const isMounted = useRef(true)
@@ -136,7 +140,8 @@ const Leaf = (leaf: TreeNode) => {
       await loadNewContent()
     }
     setOpen(!open)
-  }, [open, loading, loadNewContent])
+    setItemToStorage(path, !open)
+  }, [open, loading, loadNewContent, path])
 
   useEffect(() => {
     const loadInitialContent: () => void = async () => {
@@ -160,8 +165,8 @@ const Leaf = (leaf: TreeNode) => {
   }, [])
 
   useEffect(() => {
-    setOpen(initiallyOpen ?? false)
-  }, [initiallyOpen])
+    setOpen(initiallyOpen ?? getItemFromStorage(path))
+  }, [initiallyOpen, path])
 
   return (
     <Li>
@@ -172,7 +177,7 @@ const Leaf = (leaf: TreeNode) => {
           kind={kind ?? "folder"}
           name={name}
           table_id={table_id}
-          onClick={() => setOpen(!open)}
+          onClick={toggleOpen}
         />
       )}
 
@@ -183,7 +188,7 @@ const Leaf = (leaf: TreeNode) => {
             React.createElement(wrapper ?? React.Fragment, {}, children)
           }
         >
-          <Tree root={children} />
+          <Tree root={children} parentPath={path} />
         </WrapWithIf>
       )}
     </Li>
@@ -192,10 +197,11 @@ const Leaf = (leaf: TreeNode) => {
 
 export const Tree: React.FunctionComponent<{
   root: TreeNode[]
-}> = ({ root }) => (
+  parentPath?: string
+}> = ({ root, parentPath }) => (
   <Ul>
     {root.map((leaf: TreeNode) => (
-      <Leaf key={leaf.name} {...leaf} />
+      <Leaf key={leaf.name} {...leaf} parentPath={parentPath} />
     ))}
   </Ul>
 )

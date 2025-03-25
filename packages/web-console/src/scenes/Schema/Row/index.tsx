@@ -30,7 +30,7 @@ import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
 import type { StyledIcon } from '@styled-icons/styled-icon'
-import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon } from '@styled-icons/bootstrap'
+import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon, Tag } from '@styled-icons/bootstrap'
 import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
@@ -48,7 +48,6 @@ type Props = Readonly<{
   className?: string
   designatedTimestamp?: string
   expanded?: boolean
-  indexed?: boolean
   kind: TreeNodeKind
   table_id?: number
   name: string
@@ -64,6 +63,7 @@ type Props = Readonly<{
   baseTable?: string
   errors?: string[]
   value?: string
+  includesSymbol?: boolean
 }>
 
 const Type = styled(Text)`
@@ -80,7 +80,7 @@ const Title = styled(Text)`
   }
 `
 
-const Wrapper = styled.div<{ $isExpandable: boolean }>`
+const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -91,6 +91,10 @@ const Wrapper = styled.div<{ $isExpandable: boolean }>`
   user-select: none;
   ${({ $isExpandable }) => $isExpandable && `
     cursor: pointer;
+  `}
+
+  ${({ $includesSymbol, $isExpandable }) => $includesSymbol && !$isExpandable && `
+    padding-left: 3.3rem;
   `}
 
   &:hover,
@@ -132,12 +136,6 @@ const FlexRow = styled.div<{ $selectOpen?: boolean }>`
 
 const Spacer = styled.span`
   flex: 1;
-`
-
-const RocketIcon = styled(Rocket)`
-  color: ${color("orange")};
-  margin-right: 1rem;
-  flex-shrink: 0;
 `
 
 const SortDownIcon = styled(SortDown)`
@@ -184,11 +182,15 @@ const ErrorItem = styled.div`
   gap: 0.5rem;
 `
 
-const TypeIcon = styled.div`
+const TypeIcon = styled.div<{ $type?: string }>`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
   color: ${color("cyan")};
+
+  svg {
+    color: ${({ $type }) => $type === 'SYMBOL' ? color("yellow") : color("cyan")};
+  }
 `
 
 const TYPE_ICONS = {
@@ -201,8 +203,12 @@ const TYPE_ICONS = {
     icon: CalendarMinus
   },
   text: {
-    types: ["CHAR", "SYMBOL", "VARCHAR", "STRING"],
+    types: ["CHAR", "VARCHAR", "STRING"],
     icon: CharIcon
+  },
+  symbol: {
+    types: ["SYMBOL"],
+    icon: Tag
   },
   time: {
     types: ["TIMESTAMP", "INTERVAL"],
@@ -218,8 +224,8 @@ const TYPE_ICONS = {
   }
 } as const
 
-const IconWrapper = ({ icon: Icon, size = "14px" }: { icon: StyledIcon; size?: string }) => (
-  <TypeIcon>
+const IconWrapper = ({ icon: Icon, size = "14px", type }: { icon: StyledIcon; size?: string; type?: string }) => (
+  <TypeIcon $type={type}>
     <Icon size={size} />
   </TypeIcon>
 )
@@ -228,30 +234,18 @@ const getIcon = (type: string) => {
   const iconConfig = Object.values(TYPE_ICONS).find(
     ({ types }) => types.some((t) => t === mapColumnTypeToUI(type))
   )
-  
-  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
+
+  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} type={type} />
 }
 
 const ColumnIcon = ({ 
-  indexed, 
   isDesignatedTimestamp, 
   type 
 }: { 
-  indexed?: boolean; 
   isDesignatedTimestamp: boolean;
   type?: string;
 }) => {
   if (!type) return null
-
-  if (indexed) {
-    return (
-      <IconWithTooltip
-        icon={<RocketIcon size="13px" />}
-        placement="top"
-        tooltip="Indexed"
-      />
-    )
-  }
 
   if (isDesignatedTimestamp) {
     return (
@@ -271,7 +265,6 @@ const Row = ({
   designatedTimestamp,
   expanded,
   kind,
-  indexed,
   table_id,
   name,
   partitionBy,
@@ -285,12 +278,13 @@ const Row = ({
   onSelectToggle,
   baseTable,
   errors,
-  value
+  value,
+  includesSymbol
 }: Props) => {
   const { query } = useContext(SchemaContext)
   const [showLoader, setShowLoader] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const isExpandable = ["folder", "table", "matview"].includes(kind)
+  const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
 
   useEffect(() => {
@@ -313,6 +307,7 @@ const Row = ({
   return (
     <Wrapper
       $isExpandable={isExpandable}
+      $includesSymbol={includesSymbol}
       data-hook={dataHook ?? "schema-row"}
       className={className}
       onClick={(e) => {
@@ -343,8 +338,7 @@ const Row = ({
 
           {kind === "column" && (
             <ColumnIcon 
-              indexed={indexed} 
-              isDesignatedTimestamp={Boolean(!indexed && name === designatedTimestamp)}
+              isDesignatedTimestamp={name === designatedTimestamp}
               type={type}
             />
           )}

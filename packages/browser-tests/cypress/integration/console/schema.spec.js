@@ -29,6 +29,48 @@ describe("questdb schema with working tables", () => {
     cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });
 
+  it("should show the symbol column details", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-folder-title").contains("Columns").click();
+    cy.getByDataHook("schema-column-title").contains("symbol").click();
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Indexed:");
+      expect($el.text()).to.include("No");
+    });
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Symbol capacity:");
+      expect($el.text()).to.include("256");
+    });
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Cached:");
+      expect($el.text()).to.include("Yes");
+    });
+
+    // collapse table
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+  });
+
+  it("should show the storage details", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-row").contains("Storage details").click();
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("WAL:");
+      expect($el.text()).to.include("Enabled");
+    });
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Partitioning:");
+      expect($el.text()).to.include("By day");
+    });
+
+    // collapse table
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+  });
+
   it("should filter the table with input field", () => {
     // Table name search
     cy.get('input[name="table_filter"]').type("btc_trades");
@@ -78,7 +120,6 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
-    cy.expandTables();
   });
 
   it("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
@@ -152,7 +193,6 @@ describe("table select UI", () => {
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
-    cy.expandTables();
   });
 
   it("should show select ui on click", () => {
