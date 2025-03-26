@@ -370,10 +370,8 @@ describe("running query with F9", () => {
 
 describe("editor tabs", () => {
   beforeEach(() => {
-    cy.loadConsoleWithAuth();
-  });
-
-  beforeEach(() => {
+    cy.loadConsoleWithAuth(true);
+    cy.clearEditor();
     cy.getEditorContent().should("be.visible");
     cy.getEditorTabs().should("be.visible");
   });
