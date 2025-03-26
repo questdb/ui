@@ -438,15 +438,16 @@ describe("editor tabs", () => {
       const dragHandle = getTabDragHandleByTitle(title);
       cy.get(dragHandle).click();
       cy.getEditorContent().should("be.visible");
-      cy.typeQueryDirectly(`-- ${index + 1}`);
+      cy.typeQuery(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });
+      // should be archived to indexedDB
+      cy.wait(1000);
       cy.getEditorTabByTitle(title).should("not.exist");
     });
 
-    // wait for the history to be properly updated
-    cy.wait(1000);
+    cy.get(".chrome-tab").should("have.length", 1);
 
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history").should("be.visible");
