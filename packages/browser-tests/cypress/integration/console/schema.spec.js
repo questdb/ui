@@ -21,6 +21,13 @@ describe("questdb schema with working tables", () => {
     });
     cy.refreshSchema();
   });
+
+  afterEach(() => {
+    cy.collapseTables();
+    cy.refreshSchema();
+    cy.expandTables();
+  });
+
   it("should show all the tables when there are no suspended", () => {
     tables.forEach((table) => {
       cy.getByDataHook("schema-table-title").should("contain", table);
@@ -48,9 +55,6 @@ describe("questdb schema with working tables", () => {
       expect($el.text()).to.include("Cached:");
       expect($el.text()).to.include("Yes");
     });
-
-    // collapse table
-    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
   });
 
   it("should show the storage details", () => {
@@ -66,9 +70,6 @@ describe("questdb schema with working tables", () => {
       expect($el.text()).to.include("Partitioning:");
       expect($el.text()).to.include("By day");
     });
-
-    // collapse table
-    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
   });
 
   it("should filter the table with input field", () => {
@@ -292,7 +293,7 @@ describe("materialized views", () => {
     cy.getByDataHook("schema-matview-title").should("contain", "btc_trades_mv");
   });
 
-  it("should show the base table and copy DDL for a materialized view", () => {
+  it("should show the base table and copy schema for a materialized view", () => {
     cy.expandMatViews();
     cy.getByDataHook("schema-matview-title").contains("btc_trades_mv").click();
     cy.getByDataHook("schema-row").contains("Base tables").click();
