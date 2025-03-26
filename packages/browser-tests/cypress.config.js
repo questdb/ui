@@ -36,6 +36,6 @@ module.exports = defineConfig({
     },
   },
   retries: {
-    runMode: 0,
+    runMode: 1,
   },
 });

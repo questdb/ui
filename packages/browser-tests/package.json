@@ -3,7 +3,7 @@
   "packageManager": "yarn@3.1.1",
   "private": true,
   "scripts": {
-    "test": "cypress run --spec 'cypress/integration/console/editor.spec.js'",
+    "test": "cypress run --spec 'cypress/integration/console/*.spec.js'",
     "test:auth": "cypress run --spec 'cypress/integration/auth/*.spec.js'",
     "test:enterprise": "cypress run --spec 'cypress/integration/enterprise/*.spec.js'"
   },
