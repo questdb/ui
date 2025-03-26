@@ -445,6 +445,9 @@ describe("editor tabs", () => {
       cy.getEditorTabByTitle(title).should("not.exist");
     });
 
+    // wait for the history to be properly updated
+    cy.wait(1000);
+
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history").should("be.visible");
     cy.getByDataHook("editor-tabs-history-item")
