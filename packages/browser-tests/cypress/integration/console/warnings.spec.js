@@ -28,6 +28,9 @@ describe("System configuration - 3 warnings", () => {
     ].forEach((query) => {
       cy.typeQueryDirectly(query).runLine().clearEditor();
     });
+  });
+
+  beforeEach(() => {
     cy.loadConsoleWithAuth();
   });
 
