@@ -131,9 +131,12 @@ Cypress.Commands.add("clickRun", () => {
   return cy.get("button").contains("Run").click().wait("@exec");
 });
 
-Cypress.Commands.add("clearEditor", () =>
-  cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
-);
+Cypress.Commands.add("clearEditor", () => {
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.setValue("");
+  });
+});
 
 Cypress.Commands.add("selectQuery", (n) =>
   cy
