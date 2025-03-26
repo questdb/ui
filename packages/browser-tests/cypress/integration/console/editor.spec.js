@@ -427,12 +427,16 @@ describe("editor tabs", () => {
   it("should close and archive tabs", () => {
     cy.getEditorContent().should("be.visible");
     cy.typeQueryDirectly("--1");
-    cy.get(".new-tab-button").click();
-    cy.get(".chrome-tab-was-just-added").should("not.exist");
-    cy.get(".new-tab-button").click();
-    cy.get(".chrome-tab-was-just-added").should("not.exist");
+
+    ["SQL 1", "SQL 2"].forEach((title) => {
+      cy.get(".new-tab-button").click();
+      const dragHandle = getTabDragHandleByTitle(title);
+      cy.get(dragHandle).should("be.visible");
+    });
+
     ["SQL 1", "SQL 2"].forEach((title, index) => {
-      cy.get(getTabDragHandleByTitle(title)).click();
+      const dragHandle = getTabDragHandleByTitle(title);
+      cy.get(dragHandle).click();
       cy.getEditorContent().should("be.visible");
       cy.typeQueryDirectly(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
@@ -440,6 +444,7 @@ describe("editor tabs", () => {
       });
       cy.getEditorTabByTitle(title).should("not.exist");
     });
+
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history").should("be.visible");
     cy.getByDataHook("editor-tabs-history-item")
