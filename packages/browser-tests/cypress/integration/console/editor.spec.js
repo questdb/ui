@@ -192,6 +192,7 @@ describe("autocomplete", () => {
 
   beforeEach(() => {
     cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
   });
 
   it("should work when provided table name doesn't exist", () => {
@@ -456,8 +457,7 @@ describe("editor tabs", () => {
     cy.getByDataHook("editor-tabs-history-item").should("not.exist");
   });
 
-  // TODO: fix the flakiness
-  it.skip("should drag tabs", () => {
+  it("should drag tabs", () => {
     cy.get(".new-tab-button").click();
 
     cy.getEditorTabByTitle("SQL").should("be.visible");
@@ -467,7 +467,7 @@ describe("editor tabs", () => {
       .should("be.visible")
       .drag(getTabDragHandleByTitle("SQL"));
 
-    cy.wait(100);
+    cy.wait(1000);
 
     cy.getEditorTabs().should(($tabs) => {
       expect($tabs.first()).to.contain("SQL 1");
@@ -478,7 +478,7 @@ describe("editor tabs", () => {
       .should("be.visible")
       .drag(getTabDragHandleByTitle("SQL"));
 
-    cy.wait(100);
+    cy.wait(1000);
 
     cy.getEditorTabs().should(($tabs) => {
       expect($tabs.first()).to.contain("SQL");
