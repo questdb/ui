@@ -12,7 +12,9 @@ describe("System configuration - no warnings", () => {
 
 describe("System configuration - 3 warnings", () => {
   after(() => {
-    cy.typeQueryDirectly("select simulate_warnings('', '');").runLine().clearEditor();
+    cy.typeQueryDirectly("select simulate_warnings('', '');")
+      .runLine()
+      .clearEditor();
   });
 
   before(() => {

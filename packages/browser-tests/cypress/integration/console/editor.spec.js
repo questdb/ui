@@ -387,6 +387,7 @@ describe("editor tabs", () => {
 
   it("should open the second empty tab on plus icon click", () => {
     cy.get(".new-tab-button").click();
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
     cy.getEditorTabs().should("have.length", 2);
     ["SQL", "SQL 1"].forEach((title) => {
       cy.getEditorTabByTitle(title).should("be.visible");
@@ -429,7 +430,9 @@ describe("editor tabs", () => {
     cy.getEditorContent().should("be.visible");
     cy.typeQueryDirectly("--1");
     cy.get(".new-tab-button").click();
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
     cy.get(".new-tab-button").click();
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
     ["SQL 1", "SQL 2"].forEach((title, index) => {
       cy.get(getTabDragHandleByTitle(title)).click();
       cy.getEditorContent().should("be.visible");
@@ -458,7 +461,7 @@ describe("editor tabs", () => {
 
   it("should drag tabs", () => {
     cy.get(".new-tab-button").click();
-
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
     cy.getEditorTabByTitle("SQL").should("be.visible");
     cy.getEditorTabByTitle("SQL 1").should("be.visible");
 
