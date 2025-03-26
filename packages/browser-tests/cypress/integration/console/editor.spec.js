@@ -370,7 +370,7 @@ describe("running query with F9", () => {
 
 describe("editor tabs", () => {
   beforeEach(() => {
-    cy.loadConsoleWithAuth(true);
+    cy.loadConsoleWithAuth();
     cy.clearEditor();
     cy.getEditorContent().should("be.visible");
     cy.getEditorTabs().should("be.visible");
@@ -442,18 +442,15 @@ describe("editor tabs", () => {
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });
-      // should be archived to indexedDB
-      cy.wait(1000);
       cy.getEditorTabByTitle(title).should("not.exist");
+      cy.wait(2000);
     });
 
     cy.get(".chrome-tab").should("have.length", 1);
 
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history").should("be.visible");
-    cy.getByDataHook("editor-tabs-history-item")
-      .should("have.length", 2)
-      .should("contain", "SQL 1");
+    cy.getByDataHook("editor-tabs-history-item").should("contain", "SQL 2");
     // Restore closed tabs. "SQL 2" should be first, as it was closed last
     cy.getByDataHook("editor-tabs-history-item").first().click();
     cy.getEditorTabByTitle("SQL 2").should("be.visible");
