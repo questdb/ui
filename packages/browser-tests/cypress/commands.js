@@ -110,7 +110,7 @@ Cypress.Commands.add("getGridCol", (n) =>
 Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"));
 
 Cypress.Commands.add("typeQuery", (query) =>
-  cy.getEditor().realClick().focused().type(query)
+  cy.getEditor().realClick().type(query)
 );
 
 Cypress.Commands.add("typeQueryDirectly", (query) => {
@@ -135,6 +135,7 @@ Cypress.Commands.add("clearEditor", () => {
   cy.window().then((win) => {
     const monacoEditor = win.monaco.editor.getEditors()[0];
     monacoEditor.setValue("");
+    monacoEditor.focus();
   });
 });
 
