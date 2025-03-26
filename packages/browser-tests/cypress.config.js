@@ -7,7 +7,7 @@ module.exports = defineConfig({
   defaultCommandTimeout: 10000,
   e2e: {
     defaultCommandTimeout: 30000,
-    screenshotOnRunFailure: false,
+    screenshotOnRunFailure: true,
     video: false,
     baseUrl: baseUrl,
     chromeWebSecurity: false, //if it is true, cypress does not allow redirects

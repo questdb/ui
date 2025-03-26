@@ -54,6 +54,15 @@ jobs:
             
             echo "=== Completed iteration $i ==="
           done
+
       - name: Stop QuestDB
         if: success() || failure()
         run: docker stop questdb || true
+
+      - name: Upload Cypress Screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: packages/browser-tests/cypress/screenshots
+          if-no-files-found: ignore
