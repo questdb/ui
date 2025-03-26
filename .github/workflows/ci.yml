@@ -43,6 +43,7 @@ jobs:
               -e QDB_HTTP_USER=admin \
               -e QDB_HTTP_PASSWORD=quest \
               -e QDB_DEV_MODE_ENABLED=true \
+              -e QDB_CAIRO_MAT_VIEW_ENABLED=true \
               questdb/questdb:nightly
             
             # Wait for QuestDB to be ready
