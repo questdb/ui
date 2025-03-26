@@ -191,7 +191,6 @@ describe("autocomplete", () => {
   });
 
   beforeEach(() => {
-    cy.loadConsoleWithAuth();
     cy.getEditorContent().should("be.visible");
   });
 

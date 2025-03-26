@@ -153,7 +153,7 @@ Cypress.Commands.add("getMountedEditor", () =>
 );
 
 Cypress.Commands.add("getEditor", () => {
-  cy.get(".monaco-editor[role='code']");
+  cy.get(".monaco-editor.vs-dark");
 });
 
 Cypress.Commands.add("getEditorContent", () =>
