@@ -49,9 +49,7 @@ type Props = QuestDB.Table &
     selected: boolean
     onSelectToggle:  ({name, type}: {name: string, type: TreeNodeKind}) => void
     selectOpen: boolean
-    cachedColumns?: QuestDB.Column[]
-    onCacheColumns?: (columns: QuestDB.Column[]) => void
-    onClearColumnsCache?: (tableName: string) => void
+    columnsCache: React.RefObject<{[tableName: string]: QuestDB.Column[]}>
     path: string
   }>
 
@@ -163,9 +161,7 @@ const Table = ({
   onSelectToggle,
   selectOpen,
   matView,
-  cachedColumns,
-  onCacheColumns,
-  onClearColumnsCache,
+  columnsCache,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const dispatch = useDispatch()
@@ -173,16 +169,18 @@ const Table = ({
 
   const showColumns = async (name: string) => {
     try {
-      if (cachedColumns) {
+      if (columnsCache.current && columnsCache.current[name]) {
         return {
           type: QuestDB.Type.DQL,
-          data: cachedColumns
+          data: columnsCache.current[name]
         };
       }
 
       const response = await quest.showColumns(name)
       if (response && response.type === QuestDB.Type.DQL) {
-        onCacheColumns?.(response.data);
+        if (columnsCache.current) {
+          columnsCache.current[name] = response.data;
+        }
         return response
       }
     } catch (error: any) {
@@ -309,7 +307,9 @@ const Table = ({
                 table_id={id}
                 name="Columns"
                 onClick={() => {
-                  onClearColumnsCache?.(table_name);
+                  if (columnsCache.current) {
+                    delete columnsCache.current[table_name];
+                  }
                   toggleOpen();
                 }}
                 isLoading={isLoading}

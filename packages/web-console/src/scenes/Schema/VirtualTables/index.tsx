@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { FC, useEffect, useMemo, useState, useRef } from 'react';
 import { GroupedVirtuoso } from 'react-virtuoso';
 import styled from 'styled-components';
 import { Loader3 } from '@styled-icons/remix-line';
@@ -82,10 +82,6 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   const forceUpdate = () => setToggle(toggle => !toggle);
   const tablesExpanded = getSectionExpanded(TABLES_GROUP_KEY)
   const matViewsExpanded = getSectionExpanded(MATVIEWS_GROUP_KEY)
-
-  const clearColumnsCache = useCallback((tableName: string) => {
-    delete columnsCache.current[tableName];
-  }, []);
 
   const { groups, groupCounts, allTables } = useMemo(() => {
     const filtered = tables.filter((table: QuestDB.Table) => {
@@ -205,9 +201,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
             selectOpen={selectOpen}
             selected={selected}
             onSelectToggle={handleSelectToggle}
-            cachedColumns={columnsCache.current[table.table_name]}
-            onCacheColumns={(columns) => columnsCache.current[table.table_name] = columns}
-            onClearColumnsCache={clearColumnsCache}
+            columnsCache={columnsCache}
             path={`${table.matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}:${table.table_name}`}
           />
         )
