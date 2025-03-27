@@ -438,7 +438,7 @@ describe("editor tabs", () => {
       const dragHandle = getTabDragHandleByTitle(title);
       cy.get(dragHandle).click();
       cy.getEditorContent().should("be.visible");
-      cy.typeQuery(`-- ${index + 1}`);
+      cy.typeQueryDirectly(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });
