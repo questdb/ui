@@ -4,7 +4,6 @@
 # ./run_ent_browser_tests.sh
 
 # Cleanup
-rm -rf packages/browser-tests/cypress/snapshots/*
 rm -rf tmp/dbroot
 rm -rf tmp/questdb-*
 

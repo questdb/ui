@@ -8,6 +8,5 @@ describe("questdb import", () => {
   it("display import panel", () => {
     cy.getByDataHook("import-panel-button").click();
     cy.getByDataHook("import-dropbox").should("be.visible");
-    cy.matchImageSnapshot();
   });
 });

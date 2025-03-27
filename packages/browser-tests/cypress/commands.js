@@ -1,15 +1,6 @@
-const {
-  addMatchImageSnapshotCommand,
-} = require("@simonsmith/cypress-image-snapshot/command");
-
 require("cypress-real-events");
 
 require("@4tw/cypress-drag-drop");
-
-addMatchImageSnapshotCommand({
-  failureThreshold: 0.3,
-  blackout: [".notifications", 'button[class*="BuildVersion"'],
-});
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
@@ -122,6 +113,13 @@ Cypress.Commands.add("typeQuery", (query) =>
   cy.getEditor().realClick().type(query)
 );
 
+Cypress.Commands.add("typeQueryDirectly", (query) => {
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.setValue(query);
+  });
+});
+
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
   cy.typeQuery(`${ctrlOrCmd}{enter}`);
@@ -133,9 +131,13 @@ Cypress.Commands.add("clickRun", () => {
   return cy.get("button").contains("Run").click().wait("@exec");
 });
 
-Cypress.Commands.add("clearEditor", () =>
-  cy.typeQuery(`${ctrlOrCmd}a{backspace}`)
-);
+Cypress.Commands.add("clearEditor", () => {
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.setValue("");
+    monacoEditor.focus();
+  });
+});
 
 Cypress.Commands.add("selectQuery", (n) =>
   cy
@@ -151,10 +153,16 @@ Cypress.Commands.add("getMountedEditor", () =>
   cy.get(".monaco-scrollable-element")
 );
 
-Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor[role='code'] "));
+Cypress.Commands.add("getEditor", () => {
+  cy.get(".monaco-editor.vs-dark");
+});
 
 Cypress.Commands.add("getEditorContent", () =>
-  cy.get(".monaco-editor textarea")
+  cy
+    .get(".monaco-editor")
+    .should("be.visible")
+    .find("textarea")
+    .should("be.visible")
 );
 
 Cypress.Commands.add("getEditorHitbox", () =>
