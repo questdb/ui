@@ -5,11 +5,33 @@ on:
 
 jobs:
   CI:
-    name: Editor Tests Flakiness Check
+    name: Monorepo CI flow
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build QuestDB
+        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
+
+      - name: Extract QuestDB
+        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
+
+      - name: Create DB Root
+        run: mkdir tmp/dbroot
+
+      - name: Start QuestDB
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
 
       - uses: actions/setup-node@v4
         with:
@@ -25,44 +47,66 @@ jobs:
       - name: Build @questdb/web-console
         run: yarn workspace @questdb/web-console run build
 
-      - name: Start web console server
-        run: node packages/web-console/serve-dist.js &
+      - name: Run bundle watcher on @questdb/web-console
+        run: yarn workspace @questdb/web-console bundlewatch
 
-      - name: Run editor tests 10 times
-        run: |
-          for i in {1..10}; do
-            echo "=== Running editor tests iteration $i ==="
-            
-            # Stop and remove any existing container
-            docker stop questdb || true
-            docker rm questdb || true
-            
-            # Start QuestDB with auth
-            docker run -d --name questdb \
-              -p 9000:9000 -p 9009:9009 \
-              -e QDB_HTTP_USER=admin \
-              -e QDB_HTTP_PASSWORD=quest \
-              -e QDB_DEV_MODE_ENABLED=true \
-              -e QDB_CAIRO_MAT_VIEW_ENABLED=true \
-              questdb/questdb:nightly
-            
-            # Wait for QuestDB to be ready
-            sleep 10
-            
-            # Run the editor tests
-            yarn workspace browser-tests test
-            
-            echo "=== Completed iteration $i ==="
-          done
+      - name: Run @questdb/web-console unit tests
+        run: yarn workspace @questdb/web-console run test:prod
+
+      - name: Run browser-tests test - auth
+        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test:auth
 
       - name: Stop QuestDB
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
+
+      - name: Start QuestDB, set auth credentials
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
+          QDB_HTTP_USER: "admin"
+          QDB_HTTP_PASSWORD: "quest"
+          QDB_CAIRO_MAT_VIEW_ENABLED: "true"
+
+      - name: Run browser-tests test
+        run: yarn workspace browser-tests test
+
+      - name: Print Log Files
         if: success() || failure()
-        run: docker stop questdb || true
+        run: cat tmp/dbroot/log/*
+
+      - name: Save QuestDB log on test failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: questdb-log
+          path: tmp/dbroot/log/*
 
       - name: Upload Cypress Screenshots
-        if: failure()
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-screenshots
           path: packages/browser-tests/cypress/screenshots
           if-no-files-found: ignore
+
+      - name: Stop QuestDB
+        if: success() || failure()
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
+
+      - name: Publish @questdb/react-components to npm
+        if: success() && github.ref == 'refs/heads/main'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          package: ./packages/react-components/package.json
+
+      - name: Publish @questdb/web-console to npm
+        if: success() && github.ref == 'refs/heads/main'
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          package: ./packages/web-console/package.json
