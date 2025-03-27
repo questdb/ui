@@ -237,8 +237,12 @@ describe("materialized views", () => {
   });
 
   it("should create materialized views", () => {
-    cy.getByDataHook("expand-tables").contains(`Tables (${tables.length})`);
-    cy.getByDataHook("expand-materialized-views").contains(
+    cy.getByDataHook("schema-folder-title").should(
+      "contain",
+      `Tables (${tables.length})`
+    );
+    cy.getByDataHook("schema-folder-title").should(
+      "contain",
       `Materialized views (${materializedViews.length})`
     );
 

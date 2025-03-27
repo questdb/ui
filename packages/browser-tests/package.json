@@ -3,14 +3,12 @@
   "packageManager": "yarn@3.1.1",
   "private": true,
   "scripts": {
-    "test": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/console/*.spec.js'",
-    "test:auth": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/auth/*.spec.js'",
-    "test:enterprise": "cypress run --env failOnSnapshotDiff=false --env requireSnapshots=false --spec 'cypress/integration/enterprise/*.spec.js'",
-    "test:update": "yarn run test --env updateSnapshots=true"
+    "test": "cypress run --spec 'cypress/integration/console/*.spec.js'",
+    "test:auth": "cypress run --spec 'cypress/integration/auth/*.spec.js'",
+    "test:enterprise": "cypress run --spec 'cypress/integration/enterprise/*.spec.js'"
   },
   "devDependencies": {
     "@4tw/cypress-drag-drop": "^2.2.5",
-    "@simonsmith/cypress-image-snapshot": "^8.0.1",
     "cypress": "^10.11.0"
   },
   "dependencies": {

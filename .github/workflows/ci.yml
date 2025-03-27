@@ -81,6 +81,14 @@ jobs:
           name: questdb-log
           path: tmp/dbroot/log/*
 
+      - name: Upload Cypress Screenshots
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: packages/browser-tests/cypress/screenshots
+          if-no-files-found: ignore
+
       - name: Stop QuestDB
         if: success() || failure()
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop

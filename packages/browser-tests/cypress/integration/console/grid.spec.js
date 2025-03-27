@@ -37,7 +37,6 @@ describe("questdb grid", () => {
       cy.getGridRows().should("have.length", totalRows);
       cy.getGridRow(totalRows - 1).should("contain", "100");
     });
-    cy.matchImageSnapshot();
   });
 
   it("multiple scrolls till the bottom", () => {

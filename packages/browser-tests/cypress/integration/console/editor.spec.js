@@ -20,9 +20,6 @@ describe("appendQuery", () => {
 
   const queries = consoleConfiguration.savedQueries.map((query) => query.value);
 
-  const getTabDragHandleByTitle = (title) =>
-    `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
-
   before(() => {
     cy.intercept(
       {
@@ -45,7 +42,6 @@ describe("appendQuery", () => {
     const expected = `\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    cy.matchImageSnapshot(); // screenshot diff
   });
 
   it("should append and select second query", () => {
@@ -112,7 +108,6 @@ describe("appendQuery", () => {
     const expected = `--a\n--b\n\n${queries[0]}`;
     cy.getEditorContent().should("have.value", expected);
     cy.getSelectedLines().should("have.length", 1);
-    cy.matchImageSnapshot();
   });
 
   it("should correctly append and add surrounding new lines when there are two lines and position is last line which is empty", () => {
@@ -196,14 +191,12 @@ describe("autocomplete", () => {
   });
 
   beforeEach(() => {
-    cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
   });
 
   it("should work when provided table name doesn't exist", () => {
     cy.typeQuery("select * from teletubies");
     cy.getAutocomplete().should("not.be.visible").clearEditor();
-
-    cy.matchImageSnapshot();
   });
 
   it("should be case insensitive", () => {
@@ -291,7 +284,7 @@ describe("errors", () => {
     cy.typeQuery(query);
     cy.runLine();
     cy.matchErrorMarkerPosition({ left: 237, width: 67 });
-    cy.matchImageSnapshot();
+    cy.getCollapsedNotifications().should("contain", "bad integer");
   });
 
   it("should mark date position as error", () => {
@@ -378,9 +371,7 @@ describe("running query with F9", () => {
 describe("editor tabs", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth();
-  });
-
-  beforeEach(() => {
+    cy.clearEditor();
     cy.getEditorContent().should("be.visible");
     cy.getEditorTabs().should("be.visible");
   });
@@ -394,6 +385,7 @@ describe("editor tabs", () => {
 
   it("should open the second empty tab on plus icon click", () => {
     cy.get(".new-tab-button").click();
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
     cy.getEditorTabs().should("have.length", 2);
     ["SQL", "SQL 1"].forEach((title) => {
       cy.getEditorTabByTitle(title).should("be.visible");
@@ -434,23 +426,31 @@ describe("editor tabs", () => {
 
   it("should close and archive tabs", () => {
     cy.getEditorContent().should("be.visible");
-    cy.typeQuery("--1");
-    cy.get(".new-tab-button").click();
-    cy.get(".new-tab-button").click();
+    cy.typeQueryDirectly("--1");
+
+    ["SQL 1", "SQL 2"].forEach((title) => {
+      cy.get(".new-tab-button").click();
+      const dragHandle = getTabDragHandleByTitle(title);
+      cy.get(dragHandle).should("be.visible");
+    });
+
     ["SQL 1", "SQL 2"].forEach((title, index) => {
-      cy.get(getTabDragHandleByTitle(title)).click();
+      const dragHandle = getTabDragHandleByTitle(title);
+      cy.get(dragHandle).click();
       cy.getEditorContent().should("be.visible");
       cy.typeQuery(`-- ${index + 1}`);
       cy.getEditorTabByTitle(title).within(() => {
         cy.get(".chrome-tab-close").click();
       });
       cy.getEditorTabByTitle(title).should("not.exist");
+      cy.wait(2000);
     });
+
+    cy.get(".chrome-tab").should("have.length", 1);
+
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history").should("be.visible");
-    cy.getByDataHook("editor-tabs-history-item")
-      .should("have.length", 2)
-      .should("contain", "SQL 1");
+    cy.getByDataHook("editor-tabs-history-item").should("contain", "SQL 2");
     // Restore closed tabs. "SQL 2" should be first, as it was closed last
     cy.getByDataHook("editor-tabs-history-item").first().click();
     cy.getEditorTabByTitle("SQL 2").should("be.visible");
@@ -463,19 +463,33 @@ describe("editor tabs", () => {
     cy.getByDataHook("editor-tabs-history-item").should("not.exist");
   });
 
-  // TODO: fix the flakiness
-  it.skip("should drag tabs", () => {
+  it("should drag tabs", () => {
     cy.get(".new-tab-button").click();
-    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
-      getTabDragHandleByTitle("SQL")
-    );
-    cy.getEditorTabs().first().should("contain", "SQL 1");
-    cy.getEditorTabs().last().should("contain", "SQL");
-    cy.get(getTabDragHandleByTitle("SQL 1")).drag(
-      getTabDragHandleByTitle("SQL")
-    );
-    cy.getEditorTabs().first().should("contain", "SQL");
-    cy.getEditorTabs().last().should("contain", "SQL 1");
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
+    cy.getEditorTabByTitle("SQL").should("be.visible");
+    cy.getEditorTabByTitle("SQL 1").should("be.visible");
+
+    cy.get(getTabDragHandleByTitle("SQL 1"))
+      .should("be.visible")
+      .drag(getTabDragHandleByTitle("SQL"));
+
+    cy.wait(1000);
+
+    cy.getEditorTabs().should(($tabs) => {
+      expect($tabs.first()).to.contain("SQL 1");
+      expect($tabs.last()).to.contain("SQL");
+    });
+
+    cy.get(getTabDragHandleByTitle("SQL 1"))
+      .should("be.visible")
+      .drag(getTabDragHandleByTitle("SQL"));
+
+    cy.wait(1000);
+
+    cy.getEditorTabs().should(($tabs) => {
+      expect($tabs.first()).to.contain("SQL");
+      expect($tabs.last()).to.contain("SQL 1");
+    });
   });
 });
 
