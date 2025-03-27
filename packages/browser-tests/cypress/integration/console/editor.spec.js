@@ -424,45 +424,6 @@ describe("editor tabs", () => {
     cy.getEditorTabByTitle("New updated name").should("be.visible");
   });
 
-  it("should close and archive tabs", () => {
-    cy.getEditorContent().should("be.visible");
-    cy.typeQueryDirectly("--1");
-
-    ["SQL 1", "SQL 2"].forEach((title) => {
-      cy.get(".new-tab-button").click();
-      const dragHandle = getTabDragHandleByTitle(title);
-      cy.get(dragHandle).should("be.visible");
-    });
-
-    ["SQL 1", "SQL 2"].forEach((title, index) => {
-      const dragHandle = getTabDragHandleByTitle(title);
-      cy.get(dragHandle).click();
-      cy.getEditorContent().should("be.visible");
-      cy.typeQueryDirectly(`-- ${index + 1}`);
-      cy.getEditorTabByTitle(title).within(() => {
-        cy.get(".chrome-tab-close").click();
-      });
-      cy.getEditorTabByTitle(title).should("not.exist");
-      cy.wait(2000);
-    });
-
-    cy.get(".chrome-tab").should("have.length", 1);
-
-    cy.getByDataHook("editor-tabs-history-button").click();
-    cy.getByDataHook("editor-tabs-history").should("be.visible");
-    cy.getByDataHook("editor-tabs-history-item").should("contain", "SQL 2");
-    // Restore closed tabs. "SQL 2" should be first, as it was closed last
-    cy.getByDataHook("editor-tabs-history-item").first().click();
-    cy.getEditorTabByTitle("SQL 2").should("be.visible");
-    cy.getByDataHook("editor-tabs-history-button").click();
-    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1);
-    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2");
-    // Clear history
-    cy.getByDataHook("editor-tabs-history-clear").click();
-    cy.getByDataHook("editor-tabs-history-button").click();
-    cy.getByDataHook("editor-tabs-history-item").should("not.exist");
-  });
-
   it("should drag tabs", () => {
     cy.get(".new-tab-button").click();
     cy.get(".chrome-tab-was-just-added").should("not.exist");
@@ -490,6 +451,52 @@ describe("editor tabs", () => {
       expect($tabs.first()).to.contain("SQL");
       expect($tabs.last()).to.contain("SQL 1");
     });
+  });
+});
+
+describe("editor tabs history", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should close and archive tabs", () => {
+    cy.typeQuery("--1");
+
+    ["SQL 1", "SQL 2"].forEach((title) => {
+      cy.get(".new-tab-button").click();
+      const dragHandle = getTabDragHandleByTitle(title);
+      cy.get(dragHandle).should("be.visible");
+    });
+
+    ["SQL 1", "SQL 2"].forEach((title, index) => {
+      const dragHandle = getTabDragHandleByTitle(title);
+      cy.get(dragHandle).click();
+      cy.getEditorContent().should("be.visible");
+      cy.typeQuery(`-- ${index + 1}`);
+      cy.getEditorTabByTitle(title).within(() => {
+        cy.get(".chrome-tab-close").click();
+      });
+      cy.getEditorTabByTitle(title).should("not.exist");
+      cy.wait(2000);
+    });
+
+    cy.get(".chrome-tab").should("have.length", 1);
+
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-item").should("contain", "SQL 2");
+    // Restore closed tabs. "SQL 2" should be first, as it was closed last
+    cy.getByDataHook("editor-tabs-history-item").first().click();
+    cy.getEditorTabByTitle("SQL 2").should("be.visible");
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("have.length", 1);
+    cy.getByDataHook("editor-tabs-history-item").should("not.contain", "SQL 2");
+    // Clear history
+    cy.getByDataHook("editor-tabs-history-clear").click();
+    cy.getByDataHook("editor-tabs-history-button").click();
+    cy.getByDataHook("editor-tabs-history-item").should("not.exist");
   });
 });
 
