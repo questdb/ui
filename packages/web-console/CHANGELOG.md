@@ -16,6 +16,16 @@ and this project adheres to
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+
+## 0.7.8 - 2025.03.28
+### Added
+
+- add storage details, persistent expand states, symbol details [#409](https://github.com/questdb/ui/pull/409)
+
+### Fixed
+
+- flakiness improvements for CI [#407](https://github.com/questdb/ui/pull/407)
+
 ## 0.7.7 - 2025.03.20
 ### Added
 
