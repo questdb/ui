@@ -346,13 +346,13 @@ const Schema = ({
         <Panel.Header
           afterTitle={
             <div style={{ display: "flex", marginRight: "1rem", justifyContent: "space-between", flex: 1 }}>
-                <Toolbar
-                  suspendedTablesCount={
-                    walTables?.filter((t) => t.suspended).length ?? 0
-                  }
-                  filterSuspendedOnly={filterSuspendedOnly}
-                  setFilterSuspendedOnly={setFilterSuspendedOnly}
-                />
+              <Toolbar
+                suspendedTablesCount={
+                  walTables?.filter((t) => t.suspended).length ?? 0
+                }
+                filterSuspendedOnly={filterSuspendedOnly}
+                setFilterSuspendedOnly={setFilterSuspendedOnly}
+              />
               {tables && (
                 <Box align="center" gap="0">
                   {selectOpen && (

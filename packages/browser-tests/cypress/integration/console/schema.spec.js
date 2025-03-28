@@ -19,9 +19,15 @@ describe("questdb schema with working tables", () => {
     tables.forEach((table) => {
       cy.createTable(table);
     });
-    cy.expandTables();
     cy.refreshSchema();
   });
+
+  afterEach(() => {
+    cy.collapseTables();
+    cy.refreshSchema();
+    cy.expandTables();
+  });
+
   it("should show all the tables when there are no suspended", () => {
     tables.forEach((table) => {
       cy.getByDataHook("schema-table-title").should("contain", table);
@@ -30,9 +36,46 @@ describe("questdb schema with working tables", () => {
     cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });
 
+  it("should show the symbol column details", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-folder-title").contains("Columns").click();
+    cy.getByDataHook("schema-column-title").contains("symbol").click();
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Indexed:");
+      expect($el.text()).to.include("No");
+    });
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Symbol capacity:");
+      expect($el.text()).to.include("256");
+    });
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Cached:");
+      expect($el.text()).to.include("Yes");
+    });
+  });
+
+  it("should show the storage details", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-row").contains("Storage details").click();
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("WAL:");
+      expect($el.text()).to.include("Enabled");
+    });
+
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Partitioning:");
+      expect($el.text()).to.include("By day");
+    });
+  });
+
   it("should filter the table with input field", () => {
     // Table name search
     cy.get('input[name="table_filter"]').type("btc_trades");
+    cy.expandTables();
     cy.getByDataHook("schema-search-clear-button").should("exist");
     cy.getByDataHook("schema-table-title").should("contain", "btc_trades");
     cy.getByDataHook("schema-table-title").should("not.contain", "ź");
@@ -78,7 +121,6 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
-    cy.expandTables();
   });
 
   it("should work with 2 suspended tables, btc_trades and ecommerce_stats", () => {
@@ -152,7 +194,6 @@ describe("table select UI", () => {
   });
   beforeEach(() => {
     cy.loadConsoleWithAuth();
-    cy.expandTables();
   });
 
   it("should show select ui on click", () => {
@@ -252,10 +293,13 @@ describe("materialized views", () => {
     cy.getByDataHook("schema-matview-title").should("contain", "btc_trades_mv");
   });
 
-  it("should show the base table and copy DDL for a materialized view", () => {
+  it("should show the base table and copy schema for a materialized view", () => {
     cy.expandMatViews();
     cy.getByDataHook("schema-matview-title").contains("btc_trades_mv").click();
-    cy.getByDataHook("base-table-name").contains("btc_trades").should("exist");
+    cy.getByDataHook("schema-row").contains("Base tables").click();
+    cy.getByDataHook("schema-detail-title")
+      .contains("btc_trades")
+      .should("exist");
     cy.getByDataHook("schema-matview-title")
       .contains("btc_trades_mv")
       .rightclick();
@@ -284,9 +328,11 @@ describe("materialized views", () => {
       },
       (req) => {
         req.continue((res) => {
-          // [view_name, refresh_type, base_table_name, last_refresh_timestamp, view_sql, view_table_dir_name, invalidation_reason, view_status, base_table_txn, applied_base_table_txn]
-          res.body.dataset[0][6] = "this is an invalidation reason";
-          res.body.dataset[0][7] = "invalid";
+          if (res.body && res.body.dataset && res.body.dataset.length > 0) {
+            // [view_name, refresh_type, base_table_name, last_refresh_timestamp, view_sql, view_table_dir_name, invalidation_reason, view_status, base_table_txn, applied_base_table_txn]
+            res.body.dataset[0][6] = "this is an invalidation reason";
+            res.body.dataset[0][7] = "invalid";
+          }
           return res;
         });
       }

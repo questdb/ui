@@ -424,9 +424,45 @@ describe("editor tabs", () => {
     cy.getEditorTabByTitle("New updated name").should("be.visible");
   });
 
-  it("should close and archive tabs", () => {
+  it("should drag tabs", () => {
+    cy.get(".new-tab-button").click();
+    cy.get(".chrome-tab-was-just-added").should("not.exist");
+    cy.getEditorTabByTitle("SQL").should("be.visible");
+    cy.getEditorTabByTitle("SQL 1").should("be.visible");
+
+    cy.get(getTabDragHandleByTitle("SQL 1"))
+      .should("be.visible")
+      .drag(getTabDragHandleByTitle("SQL"));
+
+    cy.wait(1000);
+
+    cy.getEditorTabs().should(($tabs) => {
+      expect($tabs.first()).to.contain("SQL 1");
+      expect($tabs.last()).to.contain("SQL");
+    });
+
+    cy.get(getTabDragHandleByTitle("SQL 1"))
+      .should("be.visible")
+      .drag(getTabDragHandleByTitle("SQL"));
+
+    cy.wait(1000);
+
+    cy.getEditorTabs().should(($tabs) => {
+      expect($tabs.first()).to.contain("SQL");
+      expect($tabs.last()).to.contain("SQL 1");
+    });
+  });
+});
+
+describe("editor tabs history", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
     cy.getEditorContent().should("be.visible");
-    cy.typeQueryDirectly("--1");
+    cy.getEditorTabs().should("be.visible");
+  });
+
+  it("should close and archive tabs", () => {
+    cy.typeQuery("--1");
 
     ["SQL 1", "SQL 2"].forEach((title) => {
       cy.get(".new-tab-button").click();
@@ -461,35 +497,6 @@ describe("editor tabs", () => {
     cy.getByDataHook("editor-tabs-history-clear").click();
     cy.getByDataHook("editor-tabs-history-button").click();
     cy.getByDataHook("editor-tabs-history-item").should("not.exist");
-  });
-
-  it("should drag tabs", () => {
-    cy.get(".new-tab-button").click();
-    cy.get(".chrome-tab-was-just-added").should("not.exist");
-    cy.getEditorTabByTitle("SQL").should("be.visible");
-    cy.getEditorTabByTitle("SQL 1").should("be.visible");
-
-    cy.get(getTabDragHandleByTitle("SQL 1"))
-      .should("be.visible")
-      .drag(getTabDragHandleByTitle("SQL"));
-
-    cy.wait(1000);
-
-    cy.getEditorTabs().should(($tabs) => {
-      expect($tabs.first()).to.contain("SQL 1");
-      expect($tabs.last()).to.contain("SQL");
-    });
-
-    cy.get(getTabDragHandleByTitle("SQL 1"))
-      .should("be.visible")
-      .drag(getTabDragHandleByTitle("SQL"));
-
-    cy.wait(1000);
-
-    cy.getEditorTabs().should(($tabs) => {
-      expect($tabs.first()).to.contain("SQL");
-      expect($tabs.last()).to.contain("SQL 1");
-    });
   });
 });
 
