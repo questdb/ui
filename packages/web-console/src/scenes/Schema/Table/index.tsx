@@ -27,7 +27,6 @@ import styled from "styled-components"
 import { Tree } from "../../../components"
 import { TreeNode, TreeNodeRenderParams, Text } from "../../../components"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
-import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Row from "../Row"
 import { useDispatch } from "react-redux"
@@ -37,6 +36,7 @@ import { NotificationType } from "../../../types"
 import { TreeNodeKind } from "../../../components/Tree"
 import { SuspensionDialog } from '../SuspensionDialog'
 import { FileCopy, Restart } from "@styled-icons/remix-line"
+import { TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -47,9 +47,11 @@ type Props = QuestDB.Table &
     walTableData?: QuestDB.WalTable
     matViewData?: QuestDB.MaterializedView
     selected: boolean
+    onSelectToggle:  ({name, type}: {name: string, type: TreeNodeKind}) => void
     selectOpen: boolean
-    onSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
-}>
+    columnsCache: React.RefObject<{[tableName: string]: QuestDB.Column[]}>
+    path: string
+  }>
 
 const Title = styled(Row)`
   display: flex;
@@ -60,61 +62,89 @@ const Title = styled(Row)`
   }
 `
 
-const Columns = styled.div`
-  position: relative;
-  display: flex;
-  margin-left: 2rem;
-  flex-direction: column;
-
-  &:before {
-    position: absolute;
-    height: 100%;
-    width: 2px;
-    left: -0.4rem;
-    top: 0;
-    content: "";
-    background: ${color("gray1")};
-  }
-`
-
-const MenuItemIcon = styled.span`
-  display: flex;
-  align-items: center;
-  margin-right: 1rem;
-  
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-`
-
-const MenuItemContent = styled.span`
-  display: flex;
-  align-items: center;
-  margin-right: auto;
-`
-
 const columnRender =
   ({
     table_id,
     column,
     designatedTimestamp,
+    includesSymbol,
   }: {
     table_id: number
     column: QuestDB.Column
     designatedTimestamp: string
+    includesSymbol: boolean
   }) =>
-  ({ toggleOpen }: TreeNodeRenderParams) =>
-    (
-      <Row
-        {...column}
-        designatedTimestamp={designatedTimestamp}
-        table_id={table_id}
-        kind="column"
-        name={column.column}
-        onClick={() => toggleOpen()}
-      />
-    )
+  ({ toggleOpen, isOpen }: TreeNodeRenderParams) => (
+    <Row
+      {...column}
+      includesSymbol={includesSymbol}
+      expanded={isOpen}
+      designatedTimestamp={designatedTimestamp}
+      table_id={table_id}
+      kind="column"
+      name={column.column}
+      onClick={() => toggleOpen()}
+    />
+  )
+
+const columnNode = ({
+  table_id,
+  column,
+  designatedTimestamp,
+  includesSymbol,
+}: {
+  table_id: number
+  column: QuestDB.Column
+  designatedTimestamp: string
+  includesSymbol: boolean
+}): TreeNode => ({
+  name: column.column,
+  kind: "column",
+  children: [
+    ...(column.type === "SYMBOL" ? [
+      {
+        name: "Indexed",
+        kind: "detail",
+        render: detailRender({
+          name: "Indexed",
+          value: column.indexed ? "Yes" : "No"
+        })
+      },
+      {
+        name: "Symbol capacity",
+        kind: "detail",
+        render: detailRender({
+          name: "Symbol capacity",
+          value: column.symbolCapacity.toString()
+        })
+      },
+      {
+        name: "Cached",
+        kind: "detail",
+        render: detailRender({
+          name: "Cached",
+          value: column.symbolCached ? "Yes" : "No"
+        })
+      }
+    ] as TreeNode[] : [])
+  ],
+  render: columnRender({
+    table_id,
+    column,
+    designatedTimestamp,
+    includesSymbol,
+  })
+})
+
+const detailRender = ({ name, value }: { name: string, value: string }) => 
+  ({ toggleOpen }: TreeNodeRenderParams) => (
+    <Row
+      kind="detail"
+      name={`${name}:`}
+      value={value}
+      onClick={() => toggleOpen()}
+    />
+  )
 
 const Table = ({
   designatedTimestamp,
@@ -128,9 +158,10 @@ const Table = ({
   matViewData,
   dedup,
   selected,
-  selectOpen,
   onSelectToggle,
+  selectOpen,
   matView,
+  columnsCache,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const dispatch = useDispatch()
@@ -138,8 +169,18 @@ const Table = ({
 
   const showColumns = async (name: string) => {
     try {
+      if (columnsCache.current && columnsCache.current[name]) {
+        return {
+          type: QuestDB.Type.DQL,
+          data: columnsCache.current[name]
+        };
+      }
+
       const response = await quest.showColumns(name)
       if (response && response.type === QuestDB.Type.DQL) {
+        if (columnsCache.current) {
+          columnsCache.current[name] = response.data;
+        }
         return response
       }
     } catch (error: any) {
@@ -222,7 +263,6 @@ const Table = ({
               {walTableData?.suspended && (
                 <MenuItem 
                   data-hook="table-context-menu-resume-wal"
-                  // Suspension dialog & context menu modifies pointer events -- to prevent a race condition
                   onClick={() => setTimeout(() => setSuspensionDialogOpen(true))}
                   icon={<Restart size={14} />}
                 >
@@ -236,20 +276,18 @@ const Table = ({
       async onOpen({ setChildren }) {
         const columns: TreeNode = {
           name: "Columns",
-          initiallyOpen: true,
-          wrapper: Columns,
+          kind: "folder",
           async onOpen({ setChildren }) {
             const response = await showColumns(table_name)
 
             if (response && response.data && response.data.length > 0) {
+              const includesSymbol = response.data.some((column) => column.type === "SYMBOL")
               setChildren(
-                response.data.map((column) => ({
-                  name: column.column,
-                  render: columnRender({
-                    column,
-                    designatedTimestamp,
-                    table_id: id,
-                  }),
+                response.data.map((column) => columnNode({
+                  column,
+                  designatedTimestamp,
+                  table_id: id,
+                  includesSymbol,
                 })),
               )
             } else {
@@ -268,21 +306,82 @@ const Table = ({
                 kind="folder"
                 table_id={id}
                 name="Columns"
-                onClick={() => toggleOpen()}
+                onClick={() => {
+                  if (columnsCache.current) {
+                    delete columnsCache.current[table_name];
+                  }
+                  toggleOpen();
+                }}
                 isLoading={isLoading}
               />
             )
           },
         }
 
-        setChildren([columns])
+        const storageDetails: TreeNode = {
+          name: 'Storage details',
+          kind: 'folder',
+          async onOpen({ setChildren }) {
+            const details = [
+              {
+                name: 'WAL',
+                value: walEnabled ? 'Enabled' : 'Disabled',
+              },
+              {
+                name: 'Partitioning',
+                value: partitionBy && partitionBy !== 'NONE' ? `By ${partitionBy.toLowerCase()}` : 'None',
+              },
+            ]
+            setChildren(details.map((detail) => ({
+              name: detail.name,
+              render: detailRender(detail),
+            })))
+          },
+          render: ({ toggleOpen, isOpen, isLoading }) => {
+            return (
+              <Row
+                kind="folder"
+                expanded={isOpen && !isLoading}
+                table_id={id}
+                name="Storage details"
+                onClick={toggleOpen}
+                isLoading={isLoading}
+              />
+            )
+          }
+        }
+
+        const baseTables: TreeNode[] = matViewData ? [{
+          name: 'Base tables',
+          kind: 'folder',
+          async onOpen({ setChildren }) {   
+            setChildren([{
+              name: matViewData.base_table_name,
+              kind: 'detail',
+            }])
+          },
+          render: ({ toggleOpen, isOpen, isLoading }) => {
+            return (
+              <Row
+                kind="folder"
+                expanded={isOpen && !isLoading}
+                table_id={id}
+                name="Base tables"
+                onClick={toggleOpen}
+                isLoading={isLoading}
+              />
+            )
+          }
+        }] : []
+
+        setChildren([columns, storageDetails, ...baseTables])
       },
     },
   ]
 
   return (
     <>
-      <Tree root={tree} />
+      <Tree root={tree} parentPath={`${matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}`} />
       {walTableData?.suspended && (
         <SuspensionDialog 
           walTableData={walTableData}
