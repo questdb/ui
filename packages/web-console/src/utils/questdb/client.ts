@@ -214,7 +214,15 @@ export class Client {
       (response.ok && response.status === 403)
     ) {
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
-      const data = (await response.json()) as RawResult
+      let data;
+      try {
+        data = (await response.json()) as RawResult
+      } catch (error) {
+        return Promise.reject({
+          error: `Invalid JSON response from the server: ${error}`,
+          type: Type.ERROR,
+        })
+      }
 
       eventBus.publish(EventType.MSG_CONNECTION_OK)
 

@@ -126,6 +126,12 @@ Cypress.Commands.add("runLine", () => {
   cy.wait("@exec");
 });
 
+Cypress.Commands.add("runLineWithResponse", (response) => {
+  cy.intercept("/exec*", response).as("exec");
+  cy.typeQuery(`${ctrlOrCmd}{enter}`);
+  cy.wait("@exec");
+});
+
 Cypress.Commands.add("clickRun", () => {
   cy.intercept("/exec*").as("exec");
   return cy.get("button").contains("Run").click().wait("@exec");
