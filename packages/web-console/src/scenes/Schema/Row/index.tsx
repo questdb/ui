@@ -70,7 +70,6 @@ const Type = styled(Text)`
   display: flex;
   align-items: center;
   flex: 0;
-  transition: opacity ${TransitionDuration.REG}ms;
 `
 
 const Title = styled(Text)`
@@ -87,7 +86,6 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }
   padding: 0.5rem 0;
   padding-left: 1rem;
   padding-right: 1rem;
-  transition: background ${TransitionDuration.REG}ms;
   user-select: none;
   ${({ $isExpandable }) => $isExpandable && `
     cursor: pointer;
