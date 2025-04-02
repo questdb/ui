@@ -23,7 +23,7 @@ export const Error = ({
             prefixIcon={<User size="18px" />}
             onClick={() => onLogout()}
           >
-            Login with other account
+            Login
           </Button>
         )}
       </Box>

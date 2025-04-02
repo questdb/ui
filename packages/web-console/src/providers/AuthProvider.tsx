@@ -21,17 +21,16 @@ import {
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { ErrorResult } from "../utils"
-import { Logout } from "../modules/OAuth2/views/logout"
 import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
 
 type ContextProps = {
-  sessionData?: Partial<AuthPayload>
-  logout: () => void
-  refreshAuthToken: (settings: Settings) => Promise<AuthPayload>
-  switchToOAuth: () => void
+  sessionData?: Partial<AuthPayload>,
+  logout: (promptForLogin?: boolean) => void,
+  refreshAuthToken: (settings: Settings) => Promise<AuthPayload>,
+  redirectToAuthorizationUrl: () => void,
 }
 
 enum View {
@@ -39,7 +38,6 @@ enum View {
   loading,
   error,
   login,
-  loggedOut,
 }
 
 type State = { view: View; errorMessage?: string }
@@ -52,7 +50,7 @@ const defaultValues: ContextProps = {
   sessionData: undefined,
   logout: () => {},
   refreshAuthToken: async () => ({} as AuthPayload),
-  switchToOAuth: () => {},
+  redirectToAuthorizationUrl: () => {},
 }
 
 class OAuth2Error {
@@ -75,6 +73,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useState<ContextProps["sessionData"]>(undefined)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
     undefined,
+  )
+  const [promptForLogin, setPromptForLogin] = useState<boolean>(
+    false,
   )
   const [state, dispatch] = useReducer(reducer, initialState)
 
@@ -193,6 +194,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             removeValue(StoreKey.OAUTH_STATE)
             const stateParam = urlParams.get("state")
             if (!stateParam || state !== stateParam) {
+              // state is missing or there is a mismatch, send user to authenticate again
               logout(true)
               return
             }
@@ -272,19 +274,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })
   }
 
-  const logout = (noRedirect?: boolean) => {
+  const logout = (promptForLogin?: boolean) => {
     removeValue(StoreKey.AUTH_PAYLOAD)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
-    if (noRedirect) {
-      dispatch({ view: View.loggedOut })
-    } else {
-      window.location.reload()
+    if (promptForLogin) {
+      setPromptForLogin(true)
     }
-  }
-
-  const switchToOAuth = () => {
-    redirectToAuthorizationUrl(true)
+    dispatch({ view: View.login })
   }
 
   useEffect(() => {
@@ -322,7 +319,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           sessionData,
           logout,
           refreshAuthToken,
-          switchToOAuth,
+          redirectToAuthorizationUrl,
         }}
       >
         {children}
@@ -337,17 +334,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ),
     [View.login]: () => (
       <Login
-        onOAuthLogin={switchToOAuth}
+        onOAuthLogin={() => {
+          removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
+          redirectToAuthorizationUrl(promptForLogin)
+        }}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })
-        }}
-      />
-    ),
-    [View.loggedOut]: () => (
-      <Logout
-        onLogout={() => {
-          removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-          redirectToAuthorizationUrl(true)
         }}
       />
     ),
