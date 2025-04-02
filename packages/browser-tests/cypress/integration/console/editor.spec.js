@@ -321,6 +321,21 @@ describe("errors", () => {
       cy.clearEditor();
     });
   });
+
+  it("should show error in notifications when response is not valid JSON", () => {
+    const response = {
+      statusCode: 200,
+      body: "This is not valid JSON {invalid json content",
+    };
+
+    cy.typeQuery("long_sequence(100);");
+    cy.runLineWithResponse(response);
+
+    cy.getCollapsedNotifications().should(
+      "contain",
+      "Invalid JSON response from the server"
+    );
+  });
 });
 
 describe("running query with F9", () => {

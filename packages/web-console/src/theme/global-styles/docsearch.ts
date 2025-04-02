@@ -32,9 +32,9 @@ export const DocSearchStyles = css`
       0 2px 2px 0 rgba(3, 4, 9, 0.3);
 
     // Allotment styling
-    --focus-border: ${({ theme }) => theme.color.purple};
+    --focus-border: ${({ theme }) => theme.color.comment};
     --separator-border: ${({ theme }) => theme.color.backgroundDarker};
-    --sash-size: 1rem !important;
+    --sash-size: 1.5rem !important;
     --sash-hover-size: 0.5rem;
     .allotment-module_splitView__L-yRc.allotment-module_separatorBorder__x-rDS.allotment-module_vertical__WSwwa
       > .allotment-module_splitViewContainer__rQnVa
@@ -45,6 +45,11 @@ export const DocSearchStyles = css`
       > .allotment-module_splitViewContainer__rQnVa
       > .allotment-module_splitViewView__MGZ6O:not(:first-child)::before {
       width: 2px;
+    }
+  }
+  .sash {
+    ::before {
+      transition: none;
     }
   }
 
