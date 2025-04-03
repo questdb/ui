@@ -1063,49 +1063,12 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  /**
-   * Computes the shape of a multi-dimensional array.
-   * For example:
-   *   - A 1D array [1, 2, 3] returns [3]
-   *   - A 2D array [[1,2,3], [4,5,6]] returns [2, 3]
-   *   - A 3D array returns [dim1, dim2, dim3]
-   *
-   * @param {Array} arr - The multi-dimensional array.
-   * @returns {number[]} - An array representing the shape.
-   */
-  function getArrayShape(arr) {
-    let shape = []
-
-    // Traverse into nested arrays while the current value is an array.
-    while (Array.isArray(arr)) {
-      shape.push(arr.length)
-      // If the array is empty, break out to avoid accessing arr[0] undefined.
-      if (arr.length === 0) {
-        break
-      }
-      arr = arr[0]
-    }
-
-    return shape
-  }
-
   function setCellData(column, cell, cellData) {
     if (cellData !== null) {
-      if (Array.isArray(cellData)) {
-        const shape = getArrayShape(cellData)
-        let prefix = "<ul class='qg-arr-chip'>"
-        for (let i = 0; i < shape.length; i++) {
-          prefix += "<li><span>" + shape[i] + "</span></li>"
-        }
-        prefix += "</ul>"
-        cell.innerHTML =
-          prefix +
-          "<div class='qg-arr-val'>" +
-          JSON.stringify(cellData, column.dim) +
-          "</div>"
-      } else {
-        cell.innerHTML = escapeHtml(cellData.toString())
-      }
+      cell.innerHTML = Array.isArray(cellData)
+        ? `<div class="qg-arr-val${column.elemType ? ` ${column.elemType.toLowerCase()}-arr` : ""}">` + JSON.stringify(cellData) + '</div>'
+        : escapeHtml(cellData.toString())
+
       cell.classList.remove("qg-null")
     } else {
       cell.innerHTML = "null"
@@ -1692,6 +1655,32 @@ export function grid(rootElement, _paginationFn, id) {
     delete downKey["which" in e ? e.which : e.keyCode]
   }
 
+  function getArrayTextToCopy(arrayValue) {
+    const containsPrecision = arrayValue.classList.contains("double-arr")
+    let textToCopy
+    try {
+      const parsedValue = JSON.parse(arrayValue.innerHTML)
+      textToCopy = JSON.stringify(
+        parsedValue,
+        // add precision to copied value if it's an integer
+        (_, val) => {
+          if (Number.isInteger(val) && containsPrecision) {
+            return val.toString() + ".0"
+          }
+          return val
+        },
+        2
+      )
+      // remove all quotes we added for precision
+      if (containsPrecision) {
+        textToCopy = textToCopy.replace(/"/g, "")
+      }
+    } catch (e) {
+      textToCopy = arrayValue.innerHTML
+    }
+    return `ARRAY${textToCopy}`
+  }
+
   function copyActiveCellToClipboard() {
     if (focusedCell) {
       if (activeCellPulseClearTimer) {
@@ -1699,8 +1688,9 @@ export function grid(rootElement, _paginationFn, id) {
       }
       addClass(focusedCell, "qg-c-active-pulse")
       const arrayValue = focusedCell.querySelector("div.qg-arr-val")
+      const textToCopy = !!arrayValue ? getArrayTextToCopy(arrayValue) : focusedCell.innerHTML
       navigator.clipboard
-        .writeText(arrayValue ? arrayValue.innerHTML : focusedCell.innerHTML)
+        .writeText(textToCopy)
         .then(undefined)
 
       activeCellPulseClearTimer = setTimeout(() => {
