@@ -334,10 +334,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ),
     [View.login]: () => (
       <Login
-        onOAuthLogin={() => {
-          removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-          redirectToAuthorizationUrl(promptForLogin)
-        }}
+        onOAuthLogin={() => redirectToAuthorizationUrl(promptForLogin)}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })
         }}
