@@ -329,36 +329,3 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   margin-left: -2px;
   cursor: grab;
 }
-
-.qg-arr-chip {
-  list-style: none; /* Remove default bullet points */
-  padding: 0;
-  margin: 0;
-  display: inline-flex; /* Align items in a row */
-  align-items: center;
-}
-
-/* Style the numbers in each list item */
-.qg-arr-chip li {
-}
-
-.qg-arr-chip li span {
-  background-color: #50fa7b;
-  border: 1px solid #000000;
-  border-radius: 7px;
-  padding: 0 5px;
-  color: black;
-}
-
-/* Insert and style the "x" separator after each <li> except the last one */
-.qg-arr-chip li:not(:last-child)::after {
-  content: "x";
-  margin: 0 4px;
-}
-
-.qg-arr-val {
-  display: inline;
-  color: #a6a4a4;
-  padding-left: 8px;
-}
-
