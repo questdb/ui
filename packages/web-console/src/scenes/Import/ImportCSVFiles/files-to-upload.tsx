@@ -78,6 +78,7 @@ type Props = {
   onFilesDropped: (files: File[]) => void
   onViewData: (result: UploadResult) => void
   dialogOpen: boolean
+  ownedByList: string[]
 }
 
 export const FilesToUpload = ({
@@ -89,6 +90,7 @@ export const FilesToUpload = ({
   onFilesDropped,
   onViewData,
   dialogOpen,
+  ownedByList,
 }: Props) => {
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const [renameDialogOpen, setRenameDialogOpen] = React.useState<
@@ -224,7 +226,7 @@ export const FilesToUpload = ({
               {
                 header: "Table name",
                 align: "flex-end",
-                width: "200px",
+                width: "180px",
                 render: ({ data }) => {
                   return (
                     <RenameTableDialog
@@ -239,6 +241,40 @@ export const FilesToUpload = ({
                     />
                   )
                 },
+              },
+              {
+                header: (
+                  <PopperHover
+                    placement="top"
+                    trigger={
+                      <Box align="center" gap="0.5rem">
+                        Table owner
+                        <Information size="16px" />
+                      </Box>
+                    }
+                  >
+                    <Tooltip>
+                      Required for external (non-database) users.
+                    </Tooltip>
+                  </PopperHover>
+                ),
+                align: "center",
+                width: "150px",
+                render: ({ data }) => (
+                  <Select
+                    name="table_owner"
+                    defaultValue={ownedByList[0] ?? ""}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      onFilePropertyChange(data.id, {
+                        table_owner: e.target.value,
+                      })
+                    }
+                    options={Object.values(ownedByList).map((entity) => ({
+                      label: entity,
+                      value: entity,
+                    }))}
+                  />
+                ),
               },
               {
                 header: (
