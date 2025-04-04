@@ -85,7 +85,8 @@ beforeEach(() => {
 });
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
-  cy.execQuery("select simulate_warnings('', '');");
+  cy.typeQuery("select simulate_warnings('', '');");
+  cy.clickRun();
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -278,13 +279,11 @@ Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
   indexedDB.deleteDatabase("web-console");
   cy.visit(baseUrl);
   cy.loginWithUserAndPassword();
-  cy.wait(1000);
   cy.getEditorContent().should("be.visible");
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
     indexedDB.deleteDatabase("web-console");
     cy.visit(baseUrl);
-    cy.wait(1000);
     cy.getEditorContent().should("be.visible");
   }
 });
