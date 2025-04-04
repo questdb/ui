@@ -265,6 +265,7 @@ export type InformationSchemaColumn = {
 export type UploadOptions = {
   file: File
   name: string
+  owner: string
   settings?: UploadModeSettings
   schema?: SchemaColumn[]
   partitionBy?: string

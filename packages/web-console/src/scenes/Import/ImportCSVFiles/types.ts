@@ -6,6 +6,7 @@ export type ProcessedFile = {
   fileObject: File
   status: string
   table_name: string
+  table_owner: string
   settings: UploadModeSettings
   schema: SchemaColumn[]
   partitionBy: string
@@ -19,8 +20,6 @@ export type ProcessedFile = {
   error?: string
   exists: boolean
 }
-
-export type WriteMode = "append" | "overwrite"
 
 // TODO: Refactor @questdb/react-components/Badge to ditch enum as prop value
 export enum BadgeType {
