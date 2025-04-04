@@ -3,6 +3,7 @@ import uPlot from "uplot"
 import { utcToLocal } from "../../../utils"
 import { Widget } from "./types"
 import { DATETIME_FORMAT } from "./utils"
+import { DefaultTheme } from "styled-components"
 
 type Params = {
   data: uPlot.AlignedData
