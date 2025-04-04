@@ -1063,13 +1063,38 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
+  function getDisplayedCellValue(column, cellData) {
+    const isArray = Array.isArray(cellData)
+    const precisionTypes = ["FLOAT", "DOUBLE"]
+    const containsPrecision = isArray
+      ? precisionTypes.includes(column.elemType)
+      : precisionTypes.includes(column.type)
+
+    if (!containsPrecision) {
+      return isArray ? JSON.stringify(cellData) : escapeHtml(cellData.toString())
+    }
+
+    if (!isArray) {
+      return Number.isInteger(cellData) ? cellData.toString() + ".0" : cellData.toString()
+    }
+
+    return "ARRAY" + JSON.stringify(cellData, (_, val) => {
+      if (Number.isInteger(val)) {
+        return val.toString() + ".0"
+      }
+      return val
+    }).replace(/"/g, "")
+  }
+
   function setCellData(column, cell, cellData) {
     if (cellData !== null) {
-      cell.innerHTML = Array.isArray(cellData)
-        ? `<div class="qg-arr-val${column.elemType ? ` ${column.elemType.toLowerCase()}-arr` : ""}">` + JSON.stringify(cellData) + '</div>'
-        : escapeHtml(cellData.toString())
+      cell.innerHTML = getDisplayedCellValue(column, cellData)
 
       cell.classList.remove("qg-null")
+
+      if (column.type === "ARRAY" && column.dim > 1) {
+        cell.classList.add("qg-arr-multidim")
+      }
     } else {
       cell.innerHTML = "null"
       cell.classList.add("qg-null")
@@ -1655,40 +1680,29 @@ export function grid(rootElement, _paginationFn, id) {
     delete downKey["which" in e ? e.which : e.keyCode]
   }
 
-  function getArrayTextToCopy(arrayValue) {
-    const containsPrecision = arrayValue.classList.contains("double-arr")
-    let textToCopy
-    try {
-      const parsedValue = JSON.parse(arrayValue.innerHTML)
-      textToCopy = JSON.stringify(
-        parsedValue,
-        // add precision to copied value if it's an integer
-        (_, val) => {
-          if (Number.isInteger(val) && containsPrecision) {
-            return val.toString() + ".0"
-          }
-          return val
-        },
-        2
-      )
-      // remove all quotes we added for precision
-      if (containsPrecision) {
-        textToCopy = textToCopy.replace(/"/g, "")
-      }
-    } catch (e) {
-      textToCopy = arrayValue.innerHTML
-    }
-    return `ARRAY${textToCopy}`
-  }
-
   function copyActiveCellToClipboard() {
     if (focusedCell) {
       if (activeCellPulseClearTimer) {
         clearTimeout(activeCellPulseClearTimer)
       }
       addClass(focusedCell, "qg-c-active-pulse")
-      const arrayValue = focusedCell.querySelector("div.qg-arr-val")
-      const textToCopy = !!arrayValue ? getArrayTextToCopy(arrayValue) : focusedCell.innerHTML
+
+      let textToCopy
+      if (focusedCell.classList.contains("qg-arr-multidim")) {
+        try {
+          textToCopy = "ARRAY" + JSON.stringify(JSON.parse(focusedCell.innerHTML.slice(5)), (_, val) => {
+            if (Number.isInteger(val)) {
+              return val.toString() + ".0"
+            }
+            return val
+          }, 2).replace(/"/g, "")
+        } catch (e) {
+          textToCopy = focusedCell.innerHTML
+        }
+      } else {
+        textToCopy = focusedCell.innerHTML
+      }
+      
       navigator.clipboard
         .writeText(textToCopy)
         .then(undefined)
