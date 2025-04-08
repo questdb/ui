@@ -76,13 +76,13 @@ export const walRowThroughput: Widget = {
   querySupportsRollingAppend: true,
   getQuery: ({ tableId, sampleBySeconds, from, to }) => {
     return `
-      select
-          created time,
-          sum(rowCount) numOfRowsApplied,
+      select created time,
+          sum(rowCount) numOfRowsApplied
       from ${TelemetryTable.WAL}
       where ${tableId ? `tableId = ${tableId} and ` : ""}
-      event = 105
-      sample by ${sampleBySeconds}s FROM timestamp_floor('${sampleBySeconds}s', '${from}') TO timestamp_floor('${sampleBySeconds}s', '${to}') fill(0)
+        event = 105
+        sample by 1s
+      FROM timestamp_floor('${sampleBySeconds}s', '${from}') TO timestamp_floor('${sampleBySeconds}s', '${to}') fill(0)
     `
   },
   alignData: (data: WalRowThroughput[]): uPlot.AlignedData => [
