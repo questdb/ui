@@ -29,7 +29,7 @@
     "@monaco-editor/react": "^4.6.0",
     "@popperjs/core": "2.4.2",
     "@questdb/react-components": "workspace:^",
-    "@questdb/sql-grammar": "1.2.3",
+    "@questdb/sql-grammar": "1.2.4",
     "@radix-ui/react-context-menu": "2.1.5",
     "@radix-ui/react-dialog": "^1.0.3",
     "@styled-icons/bootstrap": "10.47.0",
