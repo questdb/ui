@@ -84,7 +84,8 @@ const Actions = styled.div`
   padding: 0 1rem;
   width: 100%;
   height: 4.5rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  border-bottom: 2px solid ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.backgroundLighter};
 `
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`

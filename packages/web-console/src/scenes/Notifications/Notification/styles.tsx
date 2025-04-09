@@ -34,6 +34,7 @@ export const Wrapper = styled.div<{
   align-items: center;
   border-right: none;
   width: 100%;
+  overflow: hidden;
   height: ${({ isMinimized }) => (isMinimized ? "auto" : "4.5rem")};
   ${({ isMinimized }) => !isMinimized && `
     border-bottom: 1px ${color("backgroundDarker")} solid;

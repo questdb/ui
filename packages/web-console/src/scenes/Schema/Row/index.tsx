@@ -67,9 +67,8 @@ type Props = Readonly<{
 }>
 
 const Type = styled(Text)`
-  display: flex;
   align-items: center;
-  flex: 0;
+  display: inline-block;
 `
 
 const Title = styled(Text)`
@@ -364,7 +363,7 @@ const Row = ({
           </StyledTitle>
 
           {type && (
-            <Type color="gray2" transform="lowercase">
+            <Type color="gray2" transform="lowercase" ellipsis>
               ({type})
             </Type>
           )}
