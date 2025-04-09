@@ -151,6 +151,9 @@ export const bufferStore = {
       .equals("activeBufferId")
       .modify({ value: id }),
 
+  getBufferTypeById: (id: number) =>
+    db.buffers.get(id).then((buffer) => buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL),
+
   update: (id: number, buffer: Partial<Buffer>) =>
     db.buffers.update(id, buffer),
 

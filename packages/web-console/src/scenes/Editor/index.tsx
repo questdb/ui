@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { CSSProperties, forwardRef, Ref } from "react"
+import React, { CSSProperties, forwardRef, Ref, useEffect } from "react"
 import styled from "styled-components"
 
 import { PaneWrapper } from "../../components"
@@ -46,7 +46,15 @@ const Editor = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
-  const { activeBuffer } = useEditor()
+  const { activeBuffer, addBuffer, setActiveBuffer } = useEditor()
+  
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const query = params.get("query")
+    if (query && activeBuffer.metricsViewState) {
+      addBuffer({ label: "Query" }).then(setActiveBuffer)
+    }
+  }, [])
 
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
