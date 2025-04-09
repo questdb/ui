@@ -101,7 +101,7 @@ $active-row-background: #44475a;
 }
 
 .qg-header {
-  padding: 10px 5px 10px 5px;
+  padding: 10px 5px;
   cursor: pointer;
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-user-select: none; /* Safari */
@@ -119,7 +119,7 @@ $drag-handle-margin: 2px;
   position: absolute;
   margin-top: 10px;
   height: 25px;
-  border-left: thin dashed #cac30f;
+  border-left: thin dashed #6272a4;
   right: 0;
 }
 
@@ -146,7 +146,7 @@ $drag-handle-margin: 2px;
 }
 
 .qg-col-resize-hysteresis-enter {
-  background-color: yellow;
+  background-color: #6272a4;
   width: 5px;
   margin-top: 10px;
   margin-left: 8px;
@@ -157,7 +157,7 @@ $drag-handle-margin: 2px;
 .qg-col-resize-ghost {
   position: absolute;
   width: $drag-handle-margin;
-  background-color: yellow;
+  background-color: #6272a4;
   height: 0;
   top: 0;
   left: 0;
@@ -175,15 +175,13 @@ $drag-handle-margin: 2px;
 }
 
 .qg-header-name {
-  font-weight: 700;
-  color: #f1fa8c !important;
+  color: #8be9fd !important;
   font-size: medium;
 }
 
 .qg-header-type {
-  color: #ff79c6;
+  color: #bbbbbb;
   font-size: x-small;
-  font-style: italic;
 }
 
 .qg-header-l {
@@ -259,9 +257,9 @@ $drag-handle-margin: 2px;
   overflow-x: hidden;
   overflow-y: auto;
   // hide scrollbar for IE, Edge and Firefox
-  -ms-overflow-style: none;  /* IE and Edge */
+  -ms-overflow-style: none; /* IE and Edge */
   //noinspection CssUnknownProperty
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: none; /* Firefox */
 }
 
 // chrome & safari
@@ -269,7 +267,7 @@ $drag-handle-margin: 2px;
   display: none;
 }
 
-$left-shadow: 10px 0 30px -4px rgba(0,0,0,0.75);
+$left-shadow: 10px 0 30px -4px rgba(0, 0, 0, 0.75);
 $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 
 .qg-panel-scrolled-left {
@@ -299,7 +297,7 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 }
 
 .qg-panel-left-snap-ghost {
-  background-color: yellow;
+  background-color: #6272a4;
   width: 2px;
   display: none;
 }
@@ -324,9 +322,8 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   left: 0;
   width: 6px;
   height: 30px;
-  background-color: yellow;
+  background-color: #6272a4;
   border-radius: 3px;
   margin-left: -2px;
   cursor: grab;
 }
-

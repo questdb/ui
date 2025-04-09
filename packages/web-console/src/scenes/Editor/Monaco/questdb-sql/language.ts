@@ -67,6 +67,7 @@ export const language: monaco.languages.IMonarchLanguage = {
       { include: "@strings" },
       { include: "@complexIdentifiers" },
       { include: "@scopes" },
+      { include: "@array" },
       [/[;,.]/, "delimiter"],
       [/[()]/, "@brackets"],
       [
@@ -146,6 +147,18 @@ export const language: monaco.languages.IMonarchLanguage = {
       [/END\b/i, { token: "keyword.block" }],
       [/WHEN\b/i, { token: "keyword.choice" }],
       [/THEN\b/i, { token: "keyword.choice" }],
+    ],
+    array: [
+      [/ARRAY\s*\[/, { token: "keyword", next: "@arrayArguments" }],
+    ],
+    arrayArguments: [
+      { include: "@comments" },
+      { include: "@whitespace" },
+      { include: "@numbers" },
+      { include: "@strings" },
+      [/\[/, { token: "delimiter.square", next: "@arrayArguments" }],
+      [/\]/, { token: "delimiter.square", next: "@pop" }],
+      [/,/, "delimiter"],
     ],
   },
 }
