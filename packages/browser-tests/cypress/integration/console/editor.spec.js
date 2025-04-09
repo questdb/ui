@@ -176,6 +176,24 @@ describe("&query URL param", () => {
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
   });
+
+  it("should open a new editor tab when the last active buffer is a metrics buffer", () => {
+    // when
+    cy.getByDataHook("schema-add-metrics-button").click();
+    // then
+    cy.getByDataHook("metrics-root").should("be.visible");
+
+    // when
+    cy.visit(`${baseUrl}?query=${encodeURIComponent("select x from long_sequence(1)")}`);
+
+    // then
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("have.length", 3);
+    cy.getEditorTabByTitle("Metrics 1").should("be.visible");
+    cy.getEditorTabByTitle("Query")
+      .should("be.visible")
+      .should("have.attr", "active");
+  });
 });
 
 describe("autocomplete", () => {
