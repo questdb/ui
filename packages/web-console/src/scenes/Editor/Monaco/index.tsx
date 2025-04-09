@@ -317,6 +317,8 @@ const MonacoEditor = () => {
         // otherwise, append the query
       } else {
         appendQuery(editor, query, { appendAt: "end" })
+        const newValue = editor.getValue()
+        updateBuffer(activeBuffer.id as number, { value: newValue })
       }
     }
 

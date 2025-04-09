@@ -89,6 +89,39 @@ const GlobalInfo = styled(Box).attrs({
   }
 `
 
+const MetricsUnavailable = () => {
+  return (
+    <GlobalInfo>
+      <Box gap="1.5rem" flexDirection="column">
+        <Header>Metrics unavailable</Header>
+        <Text color="foreground">
+        Enable Telemetry to access WAL table metrics.
+      </Text>
+      <Text color="foreground">
+        Set <code>telemetry.enabled=true</code> in your server.conf file
+        and restart the server.
+      </Text>
+      <Text color="foreground">
+        Alternatively, set <code>QDB_TELEMETRY_ENABLED=true</code> ENV var
+        for the same effect.
+      </Text>
+      <Link
+        color="cyan"
+        hoverColor="cyan"
+        href="https://questdb.io/docs/configuration/#telemetry"
+        rel="noreferrer"
+        target="_blank"
+      >
+        <Box align="center" gap="0.25rem">
+          <ExternalLink size="16px" />
+          Documentation
+        </Box>
+        </Link>
+      </Box>
+    </GlobalInfo>
+  )
+}
+
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers } = useEditor()
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
@@ -100,6 +133,7 @@ export const Metrics = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
+  const telemetryEnabled = telemetryConfig && telemetryConfig.enabled
 
   const tabInFocusRef = React.useRef<boolean>(true)
   const refreshRateRef = React.useRef<RefreshRate>()
@@ -300,156 +334,127 @@ export const Metrics = () => {
     }
   }, [])
 
-  if (telemetryConfig && !telemetryConfig.enabled) {
-    return (
-      <Root>
-        <GlobalInfo>
-          <Box gap="1.5rem" flexDirection="column">
-            <Header>Metrics unavailable</Header>
-            <Text color="foreground">
-              Enable Telemetry to access WAL table metrics.
-            </Text>
-            <Text color="foreground">
-              Set <code>telemetry.enabled=true</code> in your server.conf file
-              and restart the server.
-            </Text>
-            <Text color="foreground">
-              Alternatively, set <code>QDB_TELEMETRY_ENABLED=true</code> ENV var
-              for the same effect.
-            </Text>
-            <Link
-              color="cyan"
-              hoverColor="cyan"
-              href="https://questdb.io/docs/configuration/#telemetry"
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Box align="center" gap="0.25rem">
-                <ExternalLink size="16px" />
-                Documentation
-              </Box>
-            </Link>
-          </Box>
-        </GlobalInfo>
-      </Root>
-    )
-  }
-
   return (
-    <Root ref={elementRef}>
-      <Toolbar>
-        <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-        <Box align="center" gap="1rem">
-          <Box gap="0.5rem" style={{ flexShrink: 0 }}>
-            <IconWithTooltip
-              icon={
-                <Button skin="secondary" onClick={handleFullRefresh}>
-                  <Refresh size="20px" />
-                </Button>
-              }
-              tooltip="Refresh all widgets"
-              placement="bottom"
-            />
-            <IconWithTooltip
-              icon={
-                <Select
-                  name="refresh_rate"
-                  value={refreshRate}
-                  options={Object.values(RefreshRate).map((rate) => ({
-                    label: `Refresh: ${rate}`,
-                    value: rate,
-                  }))}
-                  onChange={(e: any) =>
-                    setRefreshRate(e.target.value as RefreshRate)
+    <Root data-hook="metrics-root" {...(telemetryEnabled ? {} : { ref: elementRef })}>
+      {!telemetryEnabled ? (
+        <MetricsUnavailable />
+      ) : (
+        <>
+          <Toolbar>
+            <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+            <Box align="center" gap="1rem">
+              <Box gap="0.5rem" style={{ flexShrink: 0 }}>
+                <IconWithTooltip
+                  icon={
+                    <Button skin="secondary" onClick={handleFullRefresh}>
+                      <Refresh size="20px" />
+                    </Button>
                   }
+                  tooltip="Refresh all widgets"
+                  placement="bottom"
                 />
-              }
-              tooltip="Widget refresh rate"
-              placement="bottom"
-            />
-          </Box>
-          <IconWithTooltip
-            icon={
-              <ForwardRef>
-                <DateTimePicker
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  onDateFromToChange={handleDateFromToChange}
+                <IconWithTooltip
+                  icon={
+                    <Select
+                      name="refresh_rate"
+                      value={refreshRate}
+                      options={Object.values(RefreshRate).map((rate) => ({
+                        label: `Refresh: ${rate}`,
+                        value: rate,
+                      }))}
+                      onChange={(e: any) =>
+                        setRefreshRate(e.target.value as RefreshRate)
+                      }
+                    />
+                  }
+                  tooltip="Widget refresh rate"
+                  placement="bottom"
                 />
-              </ForwardRef>
-            }
-            tooltip="Time duration"
-            placement="bottom"
-          />
-          <IconWithTooltip
-            icon={
-              <Button
-                skin="secondary"
-                onClick={() =>
-                  setMetricViewMode(
-                    metricViewMode === MetricViewMode.GRID
-                      ? MetricViewMode.LIST
-                      : MetricViewMode.GRID,
-                  )
+              </Box>
+              <IconWithTooltip
+                icon={
+                  <ForwardRef>
+                    <DateTimePicker
+                      dateFrom={dateFrom}
+                      dateTo={dateTo}
+                      onDateFromToChange={handleDateFromToChange}
+                    />
+                  </ForwardRef>
                 }
-              >
-                {metricViewMode === MetricViewMode.LIST ? (
-                  <GridAlt size="18px" />
-                ) : (
-                  <Menu size="18px" />
-                )}
-              </Button>
-            }
-            tooltip={
-              <>
-                Toggle view mode
-                <br />
-                to {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
-              </>
-            }
-            placement="bottom"
-            textAlign="center"
-          />
-        </Box>
-      </Toolbar>
-      <Charts noMetrics={metrics.length === 0} viewMode={metricViewMode}>
-        {metrics.length === 0 && (
-          <GlobalInfo>
-            <Box gap="1.5rem" flexDirection="column">
-              <Header>Add your first widget to see metrics</Header>
-              <Button
-                skin="secondary"
-                onClick={() => setDialogOpen(true)}
-                prefixIcon={<AddChart size="18px" />}
-              >
-                Add widget
-              </Button>
+                tooltip="Time duration"
+                placement="bottom"
+              />
+              <IconWithTooltip
+                icon={
+                  <Button
+                    skin="secondary"
+                    onClick={() =>
+                      setMetricViewMode(
+                        metricViewMode === MetricViewMode.GRID
+                          ? MetricViewMode.LIST
+                          : MetricViewMode.GRID,
+                      )
+                    }
+                  >
+                    {metricViewMode === MetricViewMode.LIST ? (
+                      <GridAlt size="18px" />
+                    ) : (
+                      <Menu size="18px" />
+                    )}
+                  </Button>
+                }
+                tooltip={
+                  <>
+                    Toggle view mode
+                    <br />
+                    to {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
+                  </>
+                }
+                placement="bottom"
+                textAlign="center"
+              />
             </Box>
-          </GlobalInfo>
-        )}
-        {metrics &&
-          metrics
-            .sort((a: Metric, b: Metric) => a.position - b.position)
-            .filter(
-              (metric: Metric) => widgets[metric.metricType] && !metric.removed,
-            )
-            .map((metric: Metric, index: number) => {
-              return (
-                <MetricComponent
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  // key is not used by the metric component, but
-                  // is required to comply with React requirements for
-                  // components that are being added to a list
-                  key={index}
-                  metric={metric}
-                  onRemove={handleRemoveMetric}
-                  onTableChange={handleTableChange}
-                  onColorChange={handleColorChange}
-                />
-              )
-            })}
-      </Charts>
+          </Toolbar>
+          <Charts noMetrics={metrics.length === 0} viewMode={metricViewMode}>
+            {metrics.length === 0 && (
+              <GlobalInfo>
+                <Box gap="1.5rem" flexDirection="column">
+                  <Header>Add your first widget to see metrics</Header>
+                  <Button
+                    skin="secondary"
+                    onClick={() => setDialogOpen(true)}
+                    prefixIcon={<AddChart size="18px" />}
+                  >
+                    Add widget
+                  </Button>
+                </Box>
+              </GlobalInfo>
+            )}
+            {metrics &&
+              metrics
+                .sort((a: Metric, b: Metric) => a.position - b.position)
+                .filter(
+                  (metric: Metric) => widgets[metric.metricType] && !metric.removed,
+                )
+                .map((metric: Metric, index: number) => {
+                  return (
+                    <MetricComponent
+                      dateFrom={dateFrom}
+                      dateTo={dateTo}
+                      // key is not used by the metric component, but
+                      // is required to comply with React requirements for
+                      // components that are being added to a list
+                      key={index}
+                      metric={metric}
+                      onRemove={handleRemoveMetric}
+                      onTableChange={handleTableChange}
+                      onColorChange={handleColorChange}
+                    />
+                  )
+                })}
+          </Charts>
+        </>
+      )}
     </Root>
   )
 }
