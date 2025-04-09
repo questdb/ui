@@ -1925,7 +1925,14 @@ export function grid(rootElement, _paginationFn, id) {
           for (let j = 0; j < dataPageLen; j++) {
             columnOffsets[i] = offset
             const value = dataPage[j][i]
-            const str = value !== null ? value.toString() : "null"
+            let str
+            if (value === null) {
+              str = "null"
+            } else if (getColumn(i).type === "ARRAY") {
+              str = "ARRAY" + JSON.stringify(value)
+            } else {
+              str = value.toString()
+            }
             w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
           }
         } else {
