@@ -48,13 +48,24 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
   overflow: auto;
   max-height: 35rem;
-  ${({ theme }) => `border-top: 2px ${theme.color.backgroundDarker} solid;`}
   background: ${({ theme }) => theme.color.backgroundLighter};
 `
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;
   overflow: hidden;
+  border: 0;
+
+  ::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    cursor: text;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: ${({ theme }) => theme.color.backgroundDarker};
+  }
 `
 
 const Content = styled(PaneContent)<{ minimized: boolean }>`
@@ -72,6 +83,10 @@ const Header = styled(Text)`
 const LatestNotification = styled.div`
   margin-left: 1rem;
   flex: 1;
+  height: 100%;
+  display: flex;
+  cursor: text;
+  align-items: stretch;
   width: calc(100% - 10rem);
 `
 
