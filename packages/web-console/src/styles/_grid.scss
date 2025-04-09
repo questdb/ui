@@ -259,9 +259,9 @@ $drag-handle-margin: 2px;
   overflow-x: hidden;
   overflow-y: auto;
   // hide scrollbar for IE, Edge and Firefox
-  -ms-overflow-style: none;  /* IE and Edge */
+  -ms-overflow-style: none; /* IE and Edge */
   //noinspection CssUnknownProperty
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: none; /* Firefox */
 }
 
 // chrome & safari
@@ -269,7 +269,7 @@ $drag-handle-margin: 2px;
   display: none;
 }
 
-$left-shadow: 10px 0 30px -4px rgba(0,0,0,0.75);
+$left-shadow: 10px 0 30px -4px rgba(0, 0, 0, 0.75);
 $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 
 .qg-panel-scrolled-left {
@@ -329,4 +329,3 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   margin-left: -2px;
   cursor: grab;
 }
-
