@@ -8,7 +8,7 @@ import { Text } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { useSettings } from "../../../providers"
-
+import { getSSOUserNameWithClientID } from "../utils"
 const Header = styled.div`
   position: absolute;
   width: 100%;
@@ -53,16 +53,16 @@ const Container = styled.div`
   font-size: 16px;
   transition: height 10s ease;
 `
-const Title = styled.h1`
+const Title = styled.h2`
   color: white;
-  text-align: center;
+  text-align: start;
+  font-weight: 600;
 `
 
 const SSOCard = styled.div`
   button {
     padding-top: 2rem;
     padding-bottom: 2rem;
-    border-radius: 0 5px 5px 0;
     width: 100%;
     margin-bottom: 10px;
   }
@@ -199,12 +199,15 @@ export const Login = ({
   onOAuthLogin,
   onBasicAuthSuccess,
 }: {
-  onOAuthLogin: () => void
+  onOAuthLogin: (loginWithDifferentAccount?: boolean) => void
   onBasicAuthSuccess: () => void
 }) => {
   const { settings } = useSettings()
   const isEE = settings["release.type"] === "EE"
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
+  const ssoUsername = settings["acl.oidc.enabled"] && settings["acl.oidc.client.id"]
+    ? getSSOUserNameWithClientID(settings["acl.oidc.client.id"])
+    : ""
 
   const httpBasicAuthStrategy = isEE
     ? {
@@ -284,22 +287,35 @@ export const Login = ({
           is absent, we should display generic text as the title contributes to
           the page layout.
           */}
-        <Title>Please Sign In</Title>
         {settings["acl.oidc.enabled"] && (
-          <SSOCard>
-            <StyledButton
-              data-hook="button-sso-login"
-              skin="secondary"
-              prefixIcon={<User size="18px" />}
-              onClick={() => onOAuthLogin()}
-            >
-              Continue with SSO
-            </StyledButton>
-            <Line>
-              <LineText color="gray2">or</LineText>
-            </Line>
-          </SSOCard>
+          <>
+            <Title style={{ marginBottom: '4rem' }}>Single Sign-On</Title>
+            <SSOCard>
+              {!!ssoUsername && (
+                <StyledButton
+                  data-hook="button-sso-continue"
+                  skin="primary"
+                  prefixIcon={<User size="18px" />}
+                  onClick={() => onOAuthLogin(false)}
+                >
+                  Continue as {ssoUsername}
+                </StyledButton>
+              )}
+              <StyledButton
+                data-hook="button-sso-login"
+                skin={!!ssoUsername ? "transparent" : "primary"}
+                prefixIcon={!!ssoUsername ? undefined : <User size="18px" />}
+                onClick={() => onOAuthLogin(true)}
+              >
+                {!!ssoUsername ? "Choose a different account" : "Continue with SSO"}
+              </StyledButton>
+              <Line style={{ marginBottom: '4rem', marginTop: '2rem' }}>
+                <LineText color="gray2">or</LineText>
+              </Line>
+            </SSOCard>
+          </>
         )}
+        <Title>Sign In</Title>       
         <Card hasError={errorMessage}>
           <Form<FormValues>
             name="login"

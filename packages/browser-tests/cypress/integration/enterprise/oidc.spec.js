@@ -33,6 +33,8 @@ describe("OIDC authentication", () => {
   });
 
   beforeEach(() => {
+    cy.clearLocalStorage();
+
     // load login page
     interceptSettings({
       "release.type": "EE",
@@ -76,7 +78,7 @@ describe("OIDC authentication", () => {
     cy.logout();
   });
 
-  it("should force authentication if token expired, and there is no refresh token", () => {
+  it("should force SSO authentication if token expired, and there is no refresh token", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode");
@@ -91,9 +93,65 @@ describe("OIDC authentication", () => {
     cy.getEditor().should("be.visible");
 
     cy.reload();
-    cy.getByDataHook("button-log-in").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
 
-    cy.getByDataHook("button-log-in").click()
+    cy.getByDataHook("button-sso-login").click();
     cy.getEditor().should("be.visible");
+  });
+
+  it("should not force SSO re-authentication with continue button", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    interceptTokenRequest({
+      "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+      "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+      "token_type": "Bearer",
+      "expires_in": 300
+    });
+    cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
+
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "user1");
+
+    cy.logout();
+
+    cy.getByDataHook("button-sso-continue").click();
+    cy.wait("@authorizationCode").then((interception) => {
+      expect(interception.request.url).to.include("/authorization");
+      const url = new URL(interception.request.url);
+      expect(url.searchParams.get("prompt")).to.equal(null);
+    });
+  });
+
+  it("should force SSO re-authentication with choose a different account button", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    interceptTokenRequest({
+      "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+      "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+      "token_type": "Bearer",
+      "expires_in": 300
+    });
+    cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
+
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "user1");
+
+    cy.logout();
+
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode").then((interception) => {
+      expect(interception.request.url).to.include("/authorization");
+      const url = new URL(interception.request.url);
+      expect(url.searchParams.get("prompt")).to.equal("login");
+    });
   });
 });
