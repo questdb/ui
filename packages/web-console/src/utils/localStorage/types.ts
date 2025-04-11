@@ -38,4 +38,5 @@ export enum StoreKey {
   REST_TOKEN = "rest.token",
   BASIC_AUTH_HEADER = "basic.auth.header",
   AUTO_REFRESH_TABLES = "auto.refresh.tables",
+  SSO_USERNAME = "sso.username",
 }

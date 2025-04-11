@@ -1,4 +1,5 @@
 import { Settings } from "../../providers/SettingsProvider/types"
+import { StoreKey } from "../../utils/localStorage/types"
 
 type TokenPayload = Partial<{
   grant_type: string
@@ -83,3 +84,15 @@ export const getAuthToken = async (
 
 export const hasUIAuth = (settings: Settings) =>
   settings["acl.enabled"] && !settings["acl.basic.auth.realm.enabled"]
+
+export const getSSOUserNameWithClientID = (clientId: string) => {
+  return localStorage.getItem(`${StoreKey.SSO_USERNAME}.${clientId}`) ?? ""
+}
+
+export const setSSOUserNameWithClientID = (clientId: string, value: string) => {
+  localStorage.setItem(`${StoreKey.SSO_USERNAME}.${clientId}`, value)
+}
+
+export const removeSSOUserNameWithClientID = (clientId: string) => {
+  localStorage.removeItem(`${StoreKey.SSO_USERNAME}.${clientId}`)
+}

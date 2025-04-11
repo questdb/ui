@@ -12,6 +12,7 @@ import {
   getAuthorisationURL,
   getAuthToken,
   getTokenExpirationDate,
+  removeSSOUserNameWithClientID,
 } from "../modules/OAuth2/utils"
 import {
   generateCodeChallenge,
@@ -29,9 +30,8 @@ import { useSettings } from "./SettingsProvider"
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>
-  logout: () => void
+  logout: (removeSSOUsername?: boolean) => void
   refreshAuthToken: (settings: Settings) => Promise<AuthPayload>
-  switchToOAuth: () => void
 }
 
 enum View {
@@ -39,7 +39,6 @@ enum View {
   loading,
   error,
   login,
-  loggedOut,
 }
 
 type State = { view: View; errorMessage?: string }
@@ -52,7 +51,6 @@ const defaultValues: ContextProps = {
   sessionData: undefined,
   logout: () => {},
   refreshAuthToken: async () => ({} as AuthPayload),
-  switchToOAuth: () => {},
 }
 
 class OAuth2Error {
@@ -259,7 +257,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const redirectToAuthorizationUrl = (login?: boolean) => {
+  const redirectToAuthorizationUrl = (loginWithDifferentAccount?: boolean) => {
     const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
@@ -267,24 +265,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       settings,
       code_challenge,
       state,
-      login,
+      login: loginWithDifferentAccount,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })
   }
 
-  const logout = (noRedirect?: boolean) => {
+  const logout = (removeSSOUsername?: boolean) => {
     removeValue(StoreKey.AUTH_PAYLOAD)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
-    if (noRedirect) {
-      dispatch({ view: View.loggedOut })
-    } else {
-      window.location.reload()
+    if (removeSSOUsername && settings["acl.oidc.client.id"]) {
+      removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
-  }
-
-  const switchToOAuth = () => {
-    redirectToAuthorizationUrl(true)
+    dispatch({ view: View.login })
   }
 
   useEffect(() => {
@@ -322,7 +315,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           sessionData,
           logout,
           refreshAuthToken,
-          switchToOAuth,
         }}
       >
         {children}
@@ -337,17 +329,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ),
     [View.login]: () => (
       <Login
-        onOAuthLogin={switchToOAuth}
+        onOAuthLogin={redirectToAuthorizationUrl}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })
-        }}
-      />
-    ),
-    [View.loggedOut]: () => (
-      <Logout
-        onLogout={() => {
-          removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-          redirectToAuthorizationUrl(true)
         }}
       />
     ),
