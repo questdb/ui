@@ -53,6 +53,7 @@ import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
+import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const Root = styled.div`
   display: flex;
@@ -188,8 +189,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <PrimaryToggleButton
           onClick={() => {
-            navigator.clipboard
-              .writeText(gridRef?.current?.getResultAsMarkdown() as string)
+            copyToClipboard(gridRef?.current?.getResultAsMarkdown() as string)
               .then(() => {
                 setIsCopied(true)
                 setTimeout(() => setIsCopied(false), 1000)

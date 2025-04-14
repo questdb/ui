@@ -37,6 +37,7 @@ import { TreeNodeKind } from "../../../components/Tree"
 import { SuspensionDialog } from '../SuspensionDialog'
 import { FileCopy, Restart } from "@styled-icons/remix-line"
 import { TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils"
+import { copyToClipboard } from "../../../utils/copyToClipboard"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -205,7 +206,7 @@ const Table = ({
       }
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
-        navigator.clipboard.writeText(response.data[0].ddl)
+        copyToClipboard(response.data[0].ddl)
         dispatch(
           actions.query.addNotification({
             content: <Text color="foreground">Schema copied to clipboard</Text>,
