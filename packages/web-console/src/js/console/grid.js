@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const hashString = (str) => {
   let hash = 0
@@ -1703,8 +1704,7 @@ export function grid(rootElement, _paginationFn, id) {
         textToCopy = focusedCell.innerHTML
       }
       
-      navigator.clipboard
-        .writeText(textToCopy)
+      copyToClipboard(textToCopy)
         .then(undefined)
 
       activeCellPulseClearTimer = setTimeout(() => {
