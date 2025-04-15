@@ -1,6 +1,8 @@
 export const copyToClipboard = (textToCopy: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (navigator.clipboard && window.isSecureContext) {
+        // Safari needs Transient Activation for writing to clipboard, pushing the write to callback queue
+        // as a workaround
         setTimeout(() => {
           navigator.clipboard.writeText(textToCopy)
             .then(resolve)
