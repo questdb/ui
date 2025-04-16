@@ -60,7 +60,6 @@ import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { Toolbar } from "./Toolbar/toolbar"
-import { SchemaContext } from "./SchemaContext"
 import { VirtualTables } from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -75,6 +74,7 @@ import {
 } from "../../scenes/Editor/Metrics/utils"
 import type { Duration } from "../../scenes/Editor/Metrics/types"
 import { TreeNodeKind } from "../../components/Tree"
+import { SchemaProvider } from "./SchemaContext"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -341,7 +341,7 @@ const Schema = ({
   }, [tables, materializedViews])
 
   return (
-    <SchemaContext.Provider value={{ query, setQuery }}>
+    <SchemaProvider>
       <Wrapper ref={innerRef} {...rest}>
         <Panel.Header
           afterTitle={
@@ -520,7 +520,7 @@ const Schema = ({
           />
         </Content>
       </Wrapper>
-    </SchemaContext.Provider>
+    </SchemaProvider>
   )
 }
 

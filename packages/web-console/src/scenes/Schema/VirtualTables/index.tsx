@@ -1,5 +1,5 @@
-import React, { FC, useEffect, useMemo, useState, useRef } from 'react';
-import { GroupedVirtuoso } from 'react-virtuoso';
+import React, { FC, useCallback, useEffect, useMemo, useState, useRef, useContext } from 'react';
+import { GroupedVirtuoso, GroupedVirtuosoHandle } from 'react-virtuoso';
 import styled from 'styled-components';
 import { Loader3 } from '@styled-icons/remix-line';
 import { spinAnimation } from '../../../components';
@@ -8,9 +8,10 @@ import * as QuestDB from "../../../utils/questdb";
 import { State, View } from "../../Schema";
 import Table from "../Table";
 import LoadingError from "../LoadingError";
-import Row from "../Row";
+import Row, { isElementVisible, computeFocusableElements } from "../Row";
 import { TreeNodeKind } from "../../../components/Tree";
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
+import { useSchema } from "../SchemaContext";
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -76,10 +77,13 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   state,
   loadingError
 }) => {
+  const { scrollerRef, setScrollerRef } = useSchema()
+  const isScrollingRef = useRef(false)
   const columnsCache = useRef<ColumnsCache>({});
-  
+  const virtuosoRef = useRef<GroupedVirtuosoHandle>(null)
+
   const [, setToggle] = useState(false);
-  const forceUpdate = () => setToggle(toggle => !toggle);
+  const forceUpdate = () => setToggle(toggle => !toggle)
   const tablesExpanded = getSectionExpanded(TABLES_GROUP_KEY)
   const matViewsExpanded = getSectionExpanded(MATVIEWS_GROUP_KEY)
 
@@ -121,6 +125,44 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
     }
   }, [tables, query, filterSuspendedOnly, walTables, tablesExpanded, matViewsExpanded])
 
+  const handleScrollerRef = useCallback((scroller: HTMLElement | Window | null) => {
+    const handleKeyDown = () => {
+      if (!scrollerRef.current) return
+      const focusedElement = document.querySelector(`[data-path].focused`) as HTMLElement
+
+      if (focusedElement && !isElementVisible(focusedElement, scrollerRef.current)) {
+        const elementRect = focusedElement.getBoundingClientRect()
+        const scrollerRect = scrollerRef.current.getBoundingClientRect()
+        
+        const scrollTop = scrollerRef.current.scrollTop
+        const elementTop = elementRect.top - scrollerRect.top + scrollTop
+        const elementBottom = elementRect.bottom - scrollerRect.top + scrollTop
+   
+        if (elementTop < scrollTop) {
+          scrollerRef.current.scrollTo({ top: elementTop })
+        } else if (elementBottom > scrollTop + scrollerRect.height) {
+          scrollerRef.current.scrollTo({ top: elementBottom - scrollerRect.height })
+        }
+      }
+    }
+    scrollerRef.current?.removeEventListener('keydown', handleKeyDown as EventListener)
+    setScrollerRef(scroller as HTMLElement)
+
+    if (scrollerRef.current) {
+      scrollerRef.current.addEventListener('keydown', handleKeyDown as EventListener)
+    }
+  }, [])
+
+  const handleScrolling = (isScrolling: boolean) => {
+    const focusedElement = document.querySelector(`[data-path].focused`) as HTMLElement
+
+    if (isScrollingRef.current && !isScrolling && !focusedElement && scrollerRef.current) {
+      const focusableElement = computeFocusableElements(scrollerRef.current)[0] as HTMLElement
+      focusableElement?.focus();
+    }
+    isScrollingRef.current = isScrolling
+  }
+
   useEffect(() => {
     if (!tablesExpanded) {
       setSectionExpanded(TABLES_GROUP_KEY, true)
@@ -142,11 +184,12 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
 
   return (
     <GroupedVirtuoso
+      ref={virtuosoRef}
+      isScrolling={handleScrolling}
       groupCounts={groupCounts}
+      increaseViewportBy={{ top: 1000, bottom: 1000 }}
+      scrollerRef={handleScrollerRef}
       components={{ TopItemList: React.Fragment }}
-      overscan={200}
-      defaultItemHeight={60}
-      increaseViewportBy={{ top: 300, bottom: 300 }}
       groupContent={index => {
         const group = groups[index]
         
@@ -166,6 +209,8 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
               setSectionExpanded(index === 0 ? TABLES_GROUP_KEY : MATVIEWS_GROUP_KEY, !group.expanded);
               forceUpdate();
             }}
+            tabIndex={index === 0 ? 100 : 200}
+            path={index === 0 ? TABLES_GROUP_KEY : MATVIEWS_GROUP_KEY}
           />
         )
       }}

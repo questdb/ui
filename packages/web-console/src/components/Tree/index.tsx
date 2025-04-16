@@ -45,7 +45,7 @@ const LeafWrapper = styled.div`
     position: absolute;
     height: 100%;
     width: 1px;
-    left: -0.4rem;
+    left: -0.2rem;
     top: 0;
     opacity: 0;
     transition: .2s;
@@ -60,12 +60,14 @@ export type TreeNodeRenderParams = {
   toggleOpen: ToggleOpen
   isOpen: boolean
   isLoading: boolean
+  path: string
 }
 
 export type TreeNodeRender = ({
   toggleOpen,
   isOpen,
   isLoading,
+  path
 }: TreeNodeRenderParams) => React.ReactElement
 
 type ToggleOpen = () => void
@@ -171,13 +173,14 @@ const Leaf = (leaf: TreeNode & { parentPath?: string }) => {
   return (
     <Li>
       {typeof render === "function" ? (
-        render({ toggleOpen, isOpen: open, isLoading: loading })
+        render({ toggleOpen, isOpen: open, isLoading: loading, path })
       ) : (
         <Row
           kind={kind ?? "folder"}
           name={name}
           table_id={table_id}
           onClick={toggleOpen}
+          path={path}
         />
       )}
 

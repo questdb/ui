@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
+import React, { MouseEvent, useState, useEffect, useRef } from "react"
 import styled from "styled-components"
 import { Rocket, InfoCircle } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
@@ -38,11 +38,12 @@ import { TableIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
 import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
-import { SchemaContext } from "../SchemaContext"
+import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
+import { MATVIEWS_GROUP_KEY } from "../localStorageUtils"
 
 type Props = Readonly<{
   className?: string
@@ -60,10 +61,11 @@ type Props = Readonly<{
   selectOpen?: boolean
   selected?: boolean
   onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
-  baseTable?: string
   errors?: string[]
   value?: string
   includesSymbol?: boolean
+  path?: string
+  tabIndex?: number
 }>
 
 const Type = styled(Text)`
@@ -86,6 +88,8 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }
   padding-left: 1rem;
   padding-right: 1rem;
   user-select: none;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
   ${({ $isExpandable }) => $isExpandable && `
     cursor: pointer;
   `}
@@ -97,6 +101,12 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }
   &:hover,
   &:active {
     background: ${color("selection")};
+  }
+
+  &:focus-visible, &.focused {
+    outline: none;
+    background: ${color("selection")};
+    border: 1px solid ${color("comment")};
   }
 `
 
@@ -121,6 +131,8 @@ const StyledTitle = styled(Title)`
 const TableActions = styled.span`
   z-index: 1;
   position: relative;
+  display: inline-flex;
+  align-items: center;
 `
 
 const FlexRow = styled.div<{ $selectOpen?: boolean }>`
@@ -165,7 +177,8 @@ const Loader = styled(Loader4)`
 `
 
 const ErrorIconWrapper = styled.div`
-  display: inline;
+  display: inline-flex;
+  align-items: center;
   align-self: center;
 
   svg {
@@ -257,6 +270,43 @@ const ColumnIcon = ({
   return getIcon(type)
 }
 
+export const isElementVisible = (element: HTMLElement | undefined, container: HTMLElement | null) => {
+  if (!element || !container) return false
+  const elementRect = element.getBoundingClientRect()
+  const containerRect = container instanceof Window 
+    ? { top: 0, bottom: window.innerHeight }
+    : container.getBoundingClientRect()
+
+  const visibleTop = Math.max(elementRect.top, containerRect.top)
+  const visibleBottom = Math.min(elementRect.bottom, containerRect.bottom)
+  const visibleHeight = Math.max(0, visibleBottom - visibleTop)
+  
+  const totalHeight = elementRect.bottom - elementRect.top
+  
+  return visibleHeight >= totalHeight * 0.5
+}
+
+export const computeFocusableElements = (scrollerRef: HTMLElement) => {
+  const allElements = Array.from(document.querySelectorAll('[tabindex="100"], [tabindex="101"], [tabindex="200"], [tabindex="201"]'))
+
+  const focusableElements = allElements
+    .filter(element => isElementVisible(element as HTMLElement, scrollerRef))
+    .sort((a, b) => {
+      const tabIndexA = parseInt(a.getAttribute('tabindex') || '0')
+      const tabIndexB = parseInt(b.getAttribute('tabindex') || '0')
+      
+      if (tabIndexA !== tabIndexB) {
+        return tabIndexA - tabIndexB
+      }
+      
+      const positionA = allElements.indexOf(a)
+      const positionB = allElements.indexOf(b)
+      return positionA - positionB
+    })
+
+  return focusableElements
+}
+
 const Row = ({
   className,
   designatedTimestamp,
@@ -273,12 +323,13 @@ const Row = ({
   selectOpen,
   selected,
   onSelectToggle,
-  baseTable,
   errors,
   value,
-  includesSymbol
+  includesSymbol,
+  path,
+  tabIndex,
 }: Props) => {
-  const { query } = useContext(SchemaContext)
+  const { query, scrollBy, scrollerRef } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
@@ -301,17 +352,89 @@ const Row = ({
     }
   }, [isLoading])
 
+  const getTabIndex = () => { 
+    if (tabIndex) {
+      return tabIndex
+    }
+    if (path?.startsWith(MATVIEWS_GROUP_KEY)) {
+      return 201
+    }
+    return 101
+  }
+
   return (
     <Wrapper
       $isExpandable={isExpandable}
       $includesSymbol={includesSymbol}
       data-hook={dataHook ?? "schema-row"}
+      data-kind={kind}
+      data-path={path}
       className={className}
+      tabIndex={getTabIndex()}
+      onFocus={(e) => {
+        ;(e.target as HTMLElement).classList.add('focused')
+      }}
+      onBlur={(e) => {
+        ;(e.target as HTMLElement).classList.remove('focused')
+      }}
       onClick={(e) => {
+        const target = e.target as HTMLElement
+        target.focus();
         if (isTableKind && selectOpen && onSelectToggle) {
           onSelectToggle({name, type: kind})
         } else {
           onClick?.(e)
+        }
+      }}
+      onKeyDown={(e) => {
+        if (!path) return
+        if (!scrollerRef.current || !isElementVisible(document.activeElement as HTMLElement, scrollerRef.current)) return
+        if (isExpandable) {
+          if (
+              e.key === "Enter"
+              || (e.key === "ArrowRight" && !expanded)
+              || (e.key === "ArrowLeft" && expanded)
+          ) {
+            // @ts-ignore
+            onClick?.()
+          }
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault()
+          const currentElement = document.activeElement as HTMLElement
+          if (!currentElement || !scrollerRef.current) return
+          let focusableElements = computeFocusableElements(scrollerRef.current)
+          let currentIndex = focusableElements.indexOf(currentElement)
+
+          if (currentIndex === focusableElements.length - 1) {
+            scrollBy(32)
+          }
+          focusableElements = computeFocusableElements(scrollerRef.current)
+          currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
+
+          if (currentIndex < focusableElements.length - 1) {
+            const nextElement = focusableElements[currentIndex + 1] as HTMLElement
+            nextElement.focus()
+          }
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault()
+          if (!document.activeElement || !scrollerRef.current) return
+          let focusableElements = computeFocusableElements(scrollerRef.current)
+          let currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
+
+          if (currentIndex === 0) {
+            scrollBy(-32)
+          }
+          setTimeout(() => {
+            focusableElements = computeFocusableElements(scrollerRef.current!)
+            currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
+            if (currentIndex > 0) {
+              const previousElement = focusableElements[currentIndex - 1] as HTMLElement
+              previousElement.focus()
+            }
+          }, 0)
+
         }
       }}
     >
