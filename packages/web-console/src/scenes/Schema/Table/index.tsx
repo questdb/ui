@@ -75,7 +75,7 @@ const columnRender =
     designatedTimestamp: string
     includesSymbol: boolean
   }) =>
-  ({ toggleOpen, isOpen }: TreeNodeRenderParams) => (
+  ({ toggleOpen, isOpen, path }: TreeNodeRenderParams) => (
     <Row
       {...column}
       includesSymbol={includesSymbol}
@@ -85,6 +85,7 @@ const columnRender =
       kind="column"
       name={column.column}
       onClick={() => toggleOpen()}
+      path={path}
     />
   )
 
@@ -138,12 +139,13 @@ const columnNode = ({
 })
 
 const detailRender = ({ name, value }: { name: string, value: string }) => 
-  ({ toggleOpen }: TreeNodeRenderParams) => (
+  ({ toggleOpen, path }: TreeNodeRenderParams) => (
     <Row
       kind="detail"
       name={`${name}:`}
       value={value}
       onClick={() => toggleOpen()}
+      path={path}
     />
   )
 
@@ -230,7 +232,7 @@ const Table = ({
     {
       name: table_name,
       kind: matView ? 'matview' : 'table',
-      render: ({ toggleOpen, isOpen, isLoading }) => {
+      render: ({ toggleOpen, isOpen, isLoading, path }) => {
         return (
           <ContextMenu>
             <ContextMenuTrigger>
@@ -239,7 +241,6 @@ const Table = ({
                 kind={matView ? 'matview' : 'table'}
                 table_id={id}
                 name={table_name}
-                baseTable={matViewData?.base_table_name}
                 onClick={toggleOpen}
                 isLoading={isLoading}
                 selectOpen={selectOpen}
@@ -247,6 +248,7 @@ const Table = ({
                 onSelectToggle={onSelectToggle}
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
+                path={path}
                 errors={[
                   ...(matViewData?.view_status === 'invalid' ? [`Materialized view is invalid${matViewData?.invalidation_reason && `: ${matViewData?.invalidation_reason}`}`] : []),
                   ...(walTableData?.suspended ? [`Suspended`] : []),
@@ -295,12 +297,13 @@ const Table = ({
               setChildren([
                 {
                   name: "error",
+                  kind: "detail",
                   render: () => <Text color="gray2">No columns found</Text>,
                 },
               ])
             }
           },
-          render({ toggleOpen, isOpen, isLoading }) {
+          render({ toggleOpen, isOpen, isLoading, path }) {
             return (
               <Row
                 expanded={isOpen && !isLoading}
@@ -314,6 +317,7 @@ const Table = ({
                   toggleOpen();
                 }}
                 isLoading={isLoading}
+                path={path}
               />
             )
           },
@@ -335,10 +339,11 @@ const Table = ({
             ]
             setChildren(details.map((detail) => ({
               name: detail.name,
+              kind: 'detail',
               render: detailRender(detail),
             })))
           },
-          render: ({ toggleOpen, isOpen, isLoading }) => {
+          render: ({ toggleOpen, isOpen, isLoading, path }) => {
             return (
               <Row
                 kind="folder"
@@ -347,6 +352,7 @@ const Table = ({
                 name="Storage details"
                 onClick={toggleOpen}
                 isLoading={isLoading}
+                path={path}
               />
             )
           }
@@ -361,7 +367,7 @@ const Table = ({
               kind: 'detail',
             }])
           },
-          render: ({ toggleOpen, isOpen, isLoading }) => {
+          render: ({ toggleOpen, isOpen, isLoading, path }) => {
             return (
               <Row
                 kind="folder"
@@ -370,6 +376,7 @@ const Table = ({
                 name="Base tables"
                 onClick={toggleOpen}
                 isLoading={isLoading}
+                path={path}
               />
             )
           }
