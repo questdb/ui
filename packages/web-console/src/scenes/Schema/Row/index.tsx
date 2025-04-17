@@ -52,7 +52,7 @@ type Props = Readonly<{
   kind: TreeNodeKind
   table_id?: number
   name: string
-  onClick?: (event: MouseEvent) => void
+  onClick: () => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
@@ -383,7 +383,7 @@ const Row = ({
         if (isTableKind && selectOpen && onSelectToggle) {
           onSelectToggle({name, type: kind})
         } else {
-          onClick?.(e)
+          onClick()
         }
       }}
       onKeyDown={(e) => {
@@ -395,8 +395,7 @@ const Row = ({
               || (e.key === "ArrowRight" && !expanded)
               || (e.key === "ArrowLeft" && expanded)
           ) {
-            // @ts-ignore
-            onClick?.()
+            onClick()
           }
         }
         if (e.key === "ArrowDown") {
