@@ -105,8 +105,7 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }
 
   &:focus-visible, &.focused {
     outline: none;
-    background: ${color("selection")};
-    border: 1px solid ${color("comment")};
+    border: 1px solid ${color("cyan")};
   }
 `
 
@@ -287,7 +286,7 @@ export const isElementVisible = (element: HTMLElement | undefined, container: HT
 }
 
 export const computeFocusableElements = (scrollerRef: HTMLElement) => {
-  const allElements = Array.from(document.querySelectorAll('[tabindex="100"], [tabindex="101"], [tabindex="200"], [tabindex="201"]'))
+  const allElements = Array.from(document.querySelectorAll('[data-path][tabindex="100"], [data-path][tabindex="101"], [data-path][tabindex="200"], [data-path][tabindex="201"]'))
 
   const focusableElements = allElements
     .filter(element => isElementVisible(element as HTMLElement, scrollerRef))

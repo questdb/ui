@@ -26,7 +26,7 @@
   height: 100%;
   width: 100%;
   flex-direction: column;
-  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+  font-family: "Open Sans", Menlo, Monaco, Consolas, "Liberation Mono",
   "Courier New", monospace;
   overflow: hidden;
 }
@@ -215,8 +215,8 @@ $drag-handle-margin: 2px;
 }
 
 .qg-c-active {
-  box-shadow: inset 0 0 0 2px #f1fa8c;
-  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #8be9fd;
+  border-radius: 0.4rem;
 }
 
 .qg-c-active-pulse {
@@ -225,7 +225,7 @@ $drag-handle-margin: 2px;
 
 @keyframes pulse {
   0% {
-    box-shadow: #f1fa8c 0 0 0 2px;
+    box-shadow: #8be9fd 0 0 0 1px;
   }
   75% {
     box-shadow: #f1fa8c00 0 0 0 16px;
@@ -234,7 +234,8 @@ $drag-handle-margin: 2px;
 
 .qg-r-active:hover .qg-c-active,
 .qg-r-active:hover .qg-c-active:hover {
-  box-shadow: inset 0 0 0 2px #f1fa8c;
+  box-shadow: inset 0 0 0 1px #8be9fd;
+  background: "#44475a";
 }
 
 .qg-panel-left {

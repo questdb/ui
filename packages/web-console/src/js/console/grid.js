@@ -2027,6 +2027,7 @@ export function grid(rootElement, _paginationFn, id) {
     // Rendering might set focused cell to arbitrary value. We have to position focus on the first cell explicitly
     // we can assume that viewport already rendered top left corner of the data set
     focusTopLeftCell()
+    setBothRowsActive()
   }
 
   function showPanelLeft() {
@@ -2156,6 +2157,15 @@ export function grid(rootElement, _paginationFn, id) {
     // we're using jQuery here to handle key bindings
     canvas.onkeydown = onKeyDown
     canvas.onkeyup = onKeyUp
+
+    document.addEventListener("click", (e) => {
+      if (!grid.contains(e.target)) {
+        unfocusCell()
+        setBothRowsInactive()
+        focusedRowIndex = -1
+        focusedColumnIndex = -1
+      }
+    })
 
     columnResizeGhost = document.createElement("div")
     columnResizeGhost.className = "qg-col-resize-ghost"
