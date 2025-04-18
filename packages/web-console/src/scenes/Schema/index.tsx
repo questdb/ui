@@ -60,7 +60,6 @@ import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { Toolbar } from "./Toolbar/toolbar"
-import { SchemaContext } from "./SchemaContext"
 import { VirtualTables } from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -75,6 +74,7 @@ import {
 } from "../../scenes/Editor/Metrics/utils"
 import type { Duration } from "../../scenes/Editor/Metrics/types"
 import { TreeNodeKind } from "../../components/Tree"
+import { SchemaProvider } from "./SchemaContext"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -136,7 +136,6 @@ const Schema = ({
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
@@ -341,7 +340,7 @@ const Schema = ({
   }, [tables, materializedViews])
 
   return (
-    <SchemaContext.Provider value={{ query, setQuery }}>
+    <SchemaProvider>
       <Wrapper ref={innerRef} {...rest}>
         <Panel.Header
           afterTitle={
@@ -514,13 +513,12 @@ const Schema = ({
             selectedTables={selectedTables}
             handleSelectToggle={handleSelectToggle}
             filterSuspendedOnly={filterSuspendedOnly}
-            query={query}
             state={state}
             loadingError={loadingError}
           />
         </Content>
       </Wrapper>
-    </SchemaContext.Provider>
+    </SchemaProvider>
   )
 }
 
