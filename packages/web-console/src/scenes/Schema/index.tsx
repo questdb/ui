@@ -136,7 +136,6 @@ const Schema = ({
   const dispatch = useDispatch()
   const [scrollAtTop, setScrollAtTop] = useState(true)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [query, setQuery] = useState("")
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [selectOpen, setSelectOpen] = useState(false)
@@ -514,7 +513,6 @@ const Schema = ({
             selectedTables={selectedTables}
             handleSelectToggle={handleSelectToggle}
             filterSuspendedOnly={filterSuspendedOnly}
-            query={query}
             state={state}
             loadingError={loadingError}
           />

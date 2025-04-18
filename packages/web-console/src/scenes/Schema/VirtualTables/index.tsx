@@ -21,7 +21,6 @@ type VirtualTablesProps = {
   selectedTables: {name: string, type: TreeNodeKind}[]
   handleSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
   filterSuspendedOnly: boolean
-  query: string
   state: State
   loadingError: ErrorResult | null
 }
@@ -73,11 +72,10 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   selectedTables,
   handleSelectToggle,
   filterSuspendedOnly,
-  query,
   state,
   loadingError
 }) => {
-  const { scrollerRef, setScrollerRef } = useSchema()
+  const { scrollerRef, setScrollerRef, query } = useSchema()
   const isScrollingRef = useRef(false)
   const columnsCache = useRef<ColumnsCache>({});
   const virtuosoRef = useRef<GroupedVirtuosoHandle>(null)
