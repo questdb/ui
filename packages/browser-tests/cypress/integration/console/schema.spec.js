@@ -99,6 +99,122 @@ describe("questdb schema with working tables", () => {
   });
 });
 
+describe("keyboard navigation", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+    tables.forEach((table) => {
+      cy.createTable(table);
+    });
+    materializedViews.forEach((mv) => {
+      cy.createMaterializedView(mv);
+    });
+    cy.refreshSchema();
+  });
+
+  beforeEach(() => {
+    cy.clearEditor();
+    cy.collapseMatViews();
+  });
+
+  it("should expand and collapse folders using keyboard", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-folder-title").should("contain", "Columns");
+    // go to the columns folder
+    cy.realPress("ArrowDown");
+
+    // expand the columns folder
+    cy.realPress("ArrowRight");
+    cy.getByDataHook("schema-row").should("contain", "symbol");
+
+    // go to the symbol column
+    cy.realPress("ArrowDown");
+
+    // expand the symbol column
+    cy.realPress("ArrowRight");
+    cy.getByDataHook("schema-row").should("contain", "Indexed:");
+
+    // collapse the symbol column
+    cy.realPress("ArrowLeft");
+    cy.contains("Indexed:").should("not.exist");
+
+    // go to the columns folder
+    cy.realPress("ArrowUp");
+
+    // collapse the columns folder
+    cy.realPress("ArrowLeft");
+    cy.contains("symbol").should("not.exist");
+
+    // go to the table
+    cy.realPress("ArrowUp");
+
+    // collapse the table
+    cy.realPress("ArrowLeft");
+    cy.contains("Columns").should("not.exist");
+
+    // go to the tables folder
+    cy.realPress("ArrowUp");
+
+    // collapse the tables folder
+    cy.realPress("ArrowLeft");
+    cy.contains("btc_trades").should("not.exist");
+
+    // go to the materialized views folder
+    cy.realPress("ArrowDown");
+
+    // expand the materialized views folder
+    cy.realPress("ArrowRight");
+    cy.getByDataHook("schema-row").should("contain", "btc_trades_mv");
+
+    // go to the materialized view
+    cy.realPress("ArrowDown");
+
+    // expand the materialized view
+    cy.realPress("ArrowRight");
+    cy.getByDataHook("schema-row").should("contain", "Base tables");
+
+    cy.getByDataHook("schema-row").contains("Base tables").click();
+    cy.getByDataHook("schema-detail-title").should("contain", "btc_trades");
+
+    // collapse base tables
+    cy.realPress("ArrowLeft");
+    cy.contains('[data-hook="schema-detail-title"]', "btc_trades").should(
+      "not.exist"
+    );
+
+    // collapse the materialized view
+    cy.getByDataHook("schema-row").contains("btc_trades_mv").click();
+    cy.contains("Base tables").should("not.exist");
+
+    // go to materialized views folder
+    cy.realPress("ArrowUp");
+
+    // collapse the materialized views folder
+    cy.realPress("ArrowLeft");
+    cy.contains("btc_trades_mv").should("not.exist");
+  });
+
+  it("should switch the focus between grid and schema", () => {
+    cy.getEditorContent().should("be.visible");
+    cy.typeQuery("SELECT 123123;");
+    cy.runLine();
+    cy.focused().should("contain", "123123");
+
+    cy.expandMatViews();
+    cy.focused().should(
+      "contain",
+      `Materialized views (${materializedViews.length})`
+    );
+    cy.contains(".qg-c-active", "123123").should("not.exist");
+
+    cy.contains(".qg-c", "123123").click();
+    cy.focused().should("contain", "123123");
+    cy.getByDataHook("collapse-materialized-views").should(
+      "not.have.class",
+      "focused"
+    );
+  });
+});
+
 describe("questdb schema with suspended tables with Linux OS error codes", () => {
   before(() => {
     cy.loadConsoleWithAuth();
