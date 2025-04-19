@@ -103,6 +103,10 @@ Cypress.Commands.add("getGridRow", (n) =>
   cy.get(".qg-r").filter(":visible").eq(n)
 );
 
+Cypress.Commands.add("getColumnName", (n) => {
+  cy.get(".qg-header-name").filter(":visible").eq(n);
+})
+
 Cypress.Commands.add("getGridCol", (n) =>
   cy.get(".qg-c").filter(":visible").eq(n)
 );
@@ -130,6 +134,12 @@ Cypress.Commands.add("runLineWithResponse", (response) => {
   cy.intercept("/exec*", response).as("exec");
   cy.typeQuery(`${ctrlOrCmd}{enter}`);
   cy.wait("@exec");
+});
+
+Cypress.Commands.add("clickLine", (n) => {
+  cy.get(".monaco-editor .view-line")
+    .eq(n - 1)
+    .click();
 });
 
 Cypress.Commands.add("clickRun", () => {
