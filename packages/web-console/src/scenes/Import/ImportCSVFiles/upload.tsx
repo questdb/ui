@@ -42,7 +42,7 @@ const CopySQLLink = () => (
     target="_blank"
     rel="noopener noreferrer"
   >
-    here
+    COPY
   </a>
 )
 
