@@ -38,6 +38,7 @@ import { SuspensionDialog } from '../SuspensionDialog'
 import { FileCopy, Restart } from "@styled-icons/remix-line"
 import { TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
+import { color } from "../../../utils"
 
 type Props = QuestDB.Table &
   Readonly<{
@@ -54,9 +55,10 @@ type Props = QuestDB.Table &
     path: string
   }>
 
-const Title = styled(Row)`
+const Title = styled(Row)<{ $contextMenuOpen: boolean }>`
   display: flex;
   align-items: stretch;
+  background: ${({ $contextMenuOpen }) => $contextMenuOpen ? color("selection") : "transparent"};
 
   &:hover {
     cursor: pointer;
@@ -68,17 +70,14 @@ const columnRender =
     table_id,
     column,
     designatedTimestamp,
-    includesSymbol,
   }: {
     table_id: number
     column: QuestDB.Column
     designatedTimestamp: string
-    includesSymbol: boolean
   }) =>
   ({ toggleOpen, isOpen, path }: TreeNodeRenderParams) => (
     <Row
       {...column}
-      includesSymbol={includesSymbol}
       expanded={isOpen}
       designatedTimestamp={designatedTimestamp}
       table_id={table_id}
@@ -93,12 +92,10 @@ const columnNode = ({
   table_id,
   column,
   designatedTimestamp,
-  includesSymbol,
 }: {
   table_id: number
   column: QuestDB.Column
   designatedTimestamp: string
-  includesSymbol: boolean
 }): TreeNode => ({
   name: column.column,
   kind: "column",
@@ -134,7 +131,6 @@ const columnNode = ({
     table_id,
     column,
     designatedTimestamp,
-    includesSymbol,
   })
 })
 
@@ -154,12 +150,9 @@ const Table = ({
   id,
   table_name,
   partitionBy,
-  ttlValue,
-  ttlUnit,
   walEnabled,
   walTableData,
   matViewData,
-  dedup,
   selected,
   onSelectToggle,
   selectOpen,
@@ -169,6 +162,7 @@ const Table = ({
   const { quest } = useContext(QuestContext)
   const dispatch = useDispatch()
   const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false)
+  const [contextMenuOpen, setContextMenuOpen] = useState(false)
 
   const showColumns = async (name: string) => {
     try {
@@ -234,7 +228,7 @@ const Table = ({
       kind: matView ? 'matview' : 'table',
       render: ({ toggleOpen, isOpen, isLoading, path }) => {
         return (
-          <ContextMenu>
+          <ContextMenu onOpenChange={setContextMenuOpen}>
             <ContextMenuTrigger>
               <Title
                 expanded={isOpen && !isLoading}
@@ -249,6 +243,7 @@ const Table = ({
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
                 path={path}
+                $contextMenuOpen={contextMenuOpen}
                 errors={[
                   ...(matViewData?.view_status === 'invalid' ? [`Materialized view is invalid${matViewData?.invalidation_reason && `: ${matViewData?.invalidation_reason}`}`] : []),
                   ...(walTableData?.suspended ? [`Suspended`] : []),
@@ -256,7 +251,7 @@ const Table = ({
               />
             </ContextMenuTrigger>
 
-            <ContextMenuContent>
+            <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
               <MenuItem
                 data-hook="table-context-menu-copy-schema"
                 onClick={handleCopyQuery} icon={<FileCopy size={14} />}
@@ -284,13 +279,11 @@ const Table = ({
             const response = await showColumns(table_name)
 
             if (response && response.data && response.data.length > 0) {
-              const includesSymbol = response.data.some((column) => column.type === "SYMBOL")
               setChildren(
                 response.data.map((column) => columnNode({
                   column,
                   designatedTimestamp,
                   table_id: id,
-                  includesSymbol,
                 })),
               )
             } else {
@@ -312,9 +305,9 @@ const Table = ({
                 name="Columns"
                 onClick={() => {
                   if (columnsCache.current) {
-                    delete columnsCache.current[table_name];
+                    delete columnsCache.current[table_name]
                   }
-                  toggleOpen();
+                  toggleOpen()
                 }}
                 isLoading={isLoading}
                 path={path}

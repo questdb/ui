@@ -137,24 +137,18 @@ describe("keyboard navigation", () => {
     cy.realPress("ArrowLeft");
     cy.contains("Indexed:").should("not.exist");
 
-    // go to the columns folder
-    cy.realPress("ArrowUp");
-
     // collapse the columns folder
+    cy.focused().should("contain", "Columns");
     cy.realPress("ArrowLeft");
     cy.contains("symbol").should("not.exist");
 
-    // go to the table
-    cy.realPress("ArrowUp");
-
     // collapse the table
+    cy.focused().should("contain", "btc_trades");
     cy.realPress("ArrowLeft");
     cy.contains("Columns").should("not.exist");
 
-    // go to the tables folder
-    cy.realPress("ArrowUp");
-
     // collapse the tables folder
+    cy.focused().should("contain", "Tables");
     cy.realPress("ArrowLeft");
     cy.contains("btc_trades").should("not.exist");
 

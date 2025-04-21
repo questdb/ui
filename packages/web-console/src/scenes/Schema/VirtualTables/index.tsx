@@ -76,11 +76,9 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   loadingError
 }) => {
   const { scrollerRef, setScrollerRef, query } = useSchema()
-  const isScrollingRef = useRef(false)
-  const columnsCache = useRef<ColumnsCache>({});
-  const virtuosoRef = useRef<GroupedVirtuosoHandle>(null)
+  const columnsCache = useRef<ColumnsCache>({})
 
-  const [, setToggle] = useState(false);
+  const [, setToggle] = useState(false)
   const forceUpdate = () => setToggle(toggle => !toggle)
   const tablesExpanded = getSectionExpanded(TABLES_GROUP_KEY)
   const matViewsExpanded = getSectionExpanded(MATVIEWS_GROUP_KEY)
@@ -124,9 +122,13 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   }, [tables, query, filterSuspendedOnly, walTables, tablesExpanded, matViewsExpanded])
 
   const handleScrollerRef = useCallback((scroller: HTMLElement | Window | null) => {
-    const handleKeyDown = () => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (!scrollerRef.current) return
       const focusedElement = document.querySelector(`[data-path].focused`) as HTMLElement
+      if (focusedElement && (e.key === "PageDown" || e.key === "PageUp")) {
+        focusedElement.blur()
+        return
+      }
 
       if (focusedElement && !isElementVisible(focusedElement, scrollerRef.current)) {
         const elementRect = focusedElement.getBoundingClientRect()
@@ -143,23 +145,13 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
         }
       }
     }
-    scrollerRef.current?.removeEventListener('keydown', handleKeyDown as EventListener)
+    scrollerRef.current?.removeEventListener('keydown', handleKeyDown)
     setScrollerRef(scroller as HTMLElement)
 
     if (scrollerRef.current) {
-      scrollerRef.current.addEventListener('keydown', handleKeyDown as EventListener)
+      scrollerRef.current.addEventListener('keydown', handleKeyDown)
     }
   }, [])
-
-  const handleScrolling = (isScrolling: boolean) => {
-    const focusedElement = document.querySelector(`[data-path].focused`) as HTMLElement
-
-    if (isScrollingRef.current && !isScrolling && !focusedElement && scrollerRef.current) {
-      const focusableElement = computeFocusableElements(scrollerRef.current)[0] as HTMLElement
-      focusableElement?.focus();
-    }
-    isScrollingRef.current = isScrolling
-  }
 
   useEffect(() => {
     if (!tablesExpanded) {
@@ -182,10 +174,8 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
 
   return (
     <GroupedVirtuoso
-      ref={virtuosoRef}
-      isScrolling={handleScrolling}
       groupCounts={groupCounts}
-      increaseViewportBy={{ top: 1000, bottom: 1000 }}
+      overscan={{ main: 1000, reverse: 1000 }}
       scrollerRef={handleScrollerRef}
       components={{ TopItemList: React.Fragment }}
       groupContent={index => {

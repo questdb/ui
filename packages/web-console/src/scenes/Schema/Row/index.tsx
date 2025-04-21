@@ -22,9 +22,9 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import styled from "styled-components"
-import { Rocket, InfoCircle } from "@styled-icons/boxicons-regular"
+import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
@@ -36,7 +36,7 @@ import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
-import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
+import { Text, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
@@ -63,7 +63,6 @@ type Props = Readonly<{
   onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
   errors?: string[]
   value?: string
-  includesSymbol?: boolean
   path?: string
   tabIndex?: number
 }>
@@ -80,12 +79,11 @@ const Title = styled(Text)`
   }
 `
 
-const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }>`
+const Wrapper = styled.div<{ $isExpandable: boolean, $level?: number }>`
   position: relative;
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0;
-  padding-left: 1rem;
   padding-right: 1rem;
   user-select: none;
   border: 1px solid transparent;
@@ -94,17 +92,17 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }
     cursor: pointer;
   `}
 
-  ${({ $includesSymbol, $isExpandable }) => $includesSymbol && !$isExpandable && `
-    padding-left: 3.3rem;
+  ${({ $level }) => $level && `
+    padding-left: ${$level * 1.5 + 1}rem;
   `}
 
-  &:hover,
-  &:active {
-    background: ${color("selection")};
+  &:active, &:hover {
+    background: ${color("selectionDarker")};
   }
 
   &:focus-visible, &.focused {
     outline: none;
+    background: ${color("selection")};
     border: 1px solid ${color("cyan")};
   }
 `
@@ -324,7 +322,6 @@ const Row = ({
   onSelectToggle,
   errors,
   value,
-  includesSymbol,
   path,
   tabIndex,
 }: Props) => {
@@ -333,6 +330,55 @@ const Row = ({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
+
+  const handleExpandCollapse = async () => {
+    if (!isExpandable) {
+      onClick()
+      return
+    }
+
+    let savedPosition = 0
+    
+    if (expanded && scrollerRef.current && path) {
+      const element = document.querySelector(`[data-path="${path}"]`)
+      if (element) {
+        const rect = element.getBoundingClientRect()
+        const scrollerRect = scrollerRef.current.getBoundingClientRect()
+        savedPosition = rect.top - scrollerRect.top + scrollerRef.current.scrollTop
+      }
+    }
+    
+    onClick()
+    
+    if (scrollerRef.current && path) {
+      // If the contents of element is large, the element sometimes disappears from the DOM because
+      // of virtualization. This is a workaround to ensure the element is still visible after a collapse.
+      setTimeout(() => {
+        let element = document.querySelector(`[data-path="${path}"]`)
+        if (!element) {
+          scrollerRef.current?.scrollTo({ top: savedPosition })
+          setTimeout(() => {
+            element = document.querySelector(`[data-path="${path}"]`)
+            if (element && !element.classList.contains('focused')) {
+              (element as HTMLElement).focus()
+            }
+          })
+        }
+      }, 50)
+    }
+  }
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    target.focus();
+    
+    if (isTableKind && selectOpen && onSelectToggle) {
+      onSelectToggle({ name, type: kind })
+      return
+    }
+
+    handleExpandCollapse()
+  }
 
   useEffect(() => {
     if (isLoading) {
@@ -364,37 +410,40 @@ const Row = ({
   return (
     <Wrapper
       $isExpandable={isExpandable}
-      $includesSymbol={includesSymbol}
       data-hook={dataHook ?? "schema-row"}
       data-kind={kind}
       data-path={path}
       className={className}
       tabIndex={getTabIndex()}
+      $level={path ? path.split(":").length - 2 : 0}
       onFocus={(e) => {
         ;(e.target as HTMLElement).classList.add('focused')
       }}
       onBlur={(e) => {
         ;(e.target as HTMLElement).classList.remove('focused')
       }}
-      onClick={(e) => {
-        const target = e.target as HTMLElement
-        target.focus();
-        if (isTableKind && selectOpen && onSelectToggle) {
-          onSelectToggle({name, type: kind})
-        } else {
-          onClick()
-        }
-      }}
+      onClick={handleClick}
       onKeyDown={(e) => {
         if (!path) return
         if (!scrollerRef.current || !isElementVisible(document.activeElement as HTMLElement, scrollerRef.current)) return
         if (isExpandable) {
-          if (
-              e.key === "Enter"
-              || (e.key === "ArrowRight" && !expanded)
-              || (e.key === "ArrowLeft" && expanded)
-          ) {
-            onClick()
+          const isClosing = (e.key === "ArrowLeft" || e.key === "Enter") && expanded
+          const isOpening = (e.key === "ArrowRight" || e.key === "Enter") && !expanded
+          if (isOpening || isClosing) {
+            handleExpandCollapse()
+          }
+          if (isClosing) {
+            // This should wait for collapse logic in handleExpandCollapse for scrolling to the right place
+            // where we can focus the parent
+            setTimeout(() => {
+              const pathSegments = path.split(":")
+              pathSegments.pop()
+              const parentPath = pathSegments.join(":")
+              const parentElement = document.querySelector(`[data-path="${parentPath}"]`) as HTMLElement
+              if (parentElement) {
+                parentElement.focus()
+              }
+            }, 100)
           }
         }
         if (e.key === "ArrowDown") {
@@ -431,8 +480,7 @@ const Row = ({
               const previousElement = focusableElements[currentIndex - 1] as HTMLElement
               previousElement.focus()
             }
-          }, 0)
-
+          })
         }
       }}
     >
@@ -451,8 +499,8 @@ const Row = ({
           </div>
         )}
         <FlexRow $selectOpen={selectOpen}>
-          {isExpandable && expanded && <ChevronDownIcon size="14px" />}
-          {isExpandable && !expanded && <ChevronRightIcon size="14px" />}
+          {isExpandable && expanded && <ChevronDownIcon size="15px" style={{ position: "absolute", left: "-2rem" }} />}
+          {isExpandable && !expanded && <ChevronRightIcon size="15px" style={{ position: "absolute", left: "-2rem" }} />}
 
           {kind === "column" && (
             <ColumnIcon 

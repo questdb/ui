@@ -25,33 +25,12 @@
 import React, { useState, useCallback, useEffect, useRef } from "react"
 import Row from "../../scenes/Schema/Row"
 import styled from "styled-components"
-import { WrapWithIf } from "../"
-import { color } from "../../utils/"
 import { getItemFromStorage, setItemToStorage } from "../../scenes/Schema/localStorageUtils"
 
 const LeafWrapper = styled.div`
   position: relative;
   display: flex;
-  margin-left: 2rem;
   flex-direction: column;
-
-  &:hover {
-    &:before {
-      opacity: 1;
-    }
-  }
-
-  &:before {
-    position: absolute;
-    height: 100%;
-    width: 1px;
-    left: -0.2rem;
-    top: 0;
-    opacity: 0;
-    transition: .2s;
-    content: "";
-    background: ${color("gray1")};
-  }
 `
 
 export type TreeNodeKind = "column" | "table" | "matview" | "folder" | "detail"
@@ -94,7 +73,6 @@ const Ul = styled.ul`
 
 const Li = styled.li`
   list-style: none;
-  padding-left: 1rem;
 `
 
 const Leaf = (leaf: TreeNode & { parentPath?: string }) => {
@@ -106,7 +84,6 @@ const Leaf = (leaf: TreeNode & { parentPath?: string }) => {
     onOpen,
     render,
     children: initialChildren = [],
-    wrapper = LeafWrapper,
     parentPath = ''
   } = leaf
 
@@ -185,14 +162,9 @@ const Leaf = (leaf: TreeNode & { parentPath?: string }) => {
       )}
 
       {open && (
-        <WrapWithIf
-          condition={Boolean(wrapper)}
-          wrapper={(children) =>
-            React.createElement(wrapper ?? React.Fragment, {}, children)
-          }
-        >
+        <LeafWrapper>
           <Tree root={children} parentPath={path} />
-        </WrapWithIf>
+        </LeafWrapper>
       )}
     </Li>
   )
