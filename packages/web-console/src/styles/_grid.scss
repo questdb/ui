@@ -70,9 +70,11 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 }
 
 $active-row-background: #44475a;
+$row-hover-background: #333544;
+$table-selection-background: #043c5c;
 
 .qg-r-hover {
-  background-color: $active-row-background;
+  background-color: $row-hover-background;
 }
 
 .qg-r:focus {
@@ -216,6 +218,7 @@ $drag-handle-margin: 2px;
 
 .qg-c-active {
   box-shadow: inset 0 0 0 1px #8be9fd;
+  background: $table-selection-background;
   border-radius: 0.4rem;
 }
 
@@ -230,12 +233,6 @@ $drag-handle-margin: 2px;
   75% {
     box-shadow: #f1fa8c00 0 0 0 16px;
   }
-}
-
-.qg-r-active:hover .qg-c-active,
-.qg-r-active:hover .qg-c-active:hover {
-  box-shadow: inset 0 0 0 1px #8be9fd;
-  background: "#44475a";
 }
 
 .qg-panel-left {

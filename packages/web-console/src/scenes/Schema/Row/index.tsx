@@ -102,7 +102,7 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $level?: number }>`
 
   &:focus-visible, &.focused {
     outline: none;
-    background: ${color("selection")};
+    background: ${color("tableSelection")};
     border: 1px solid ${color("cyan")};
   }
 `
@@ -416,6 +416,11 @@ const Row = ({
       className={className}
       tabIndex={getTabIndex()}
       $level={path ? path.split(":").length - 2 : 0}
+      onContextMenu={(e) => {
+        if (!isTableKind) {
+          e.preventDefault()
+        }
+      }}
       onFocus={(e) => {
         ;(e.target as HTMLElement).classList.add('focused')
       }}

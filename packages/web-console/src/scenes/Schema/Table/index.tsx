@@ -58,7 +58,8 @@ type Props = QuestDB.Table &
 const Title = styled(Row)<{ $contextMenuOpen: boolean }>`
   display: flex;
   align-items: stretch;
-  background: ${({ $contextMenuOpen }) => $contextMenuOpen ? color("selection") : "transparent"};
+  background: ${({ $contextMenuOpen }) => $contextMenuOpen ? color("tableSelection") : "transparent"};
+  border: 1px solid ${({ $contextMenuOpen }) => $contextMenuOpen ? color("cyan") : "transparent"};
 
   &:hover {
     cursor: pointer;
@@ -251,7 +252,7 @@ const Table = ({
               />
             </ContextMenuTrigger>
 
-            <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+            <ContextMenuContent>
               <MenuItem
                 data-hook="table-context-menu-copy-schema"
                 onClick={handleCopyQuery} icon={<FileCopy size={14} />}

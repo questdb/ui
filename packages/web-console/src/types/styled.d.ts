@@ -52,6 +52,7 @@ export type ColorShape = {
   white: string
   inherit: string
   tooltipBackground: string
+  tableSelection: string
   graphLegend: string
   offWhite: string
 }
