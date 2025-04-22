@@ -70,13 +70,15 @@ export const getQueryFromCursor = (
   let startRow = 0
   let startCol = 0
   let startPos = -1
-  let sql = null
+  let nextSql = null
   let inQuote = false
 
   if (!position) return
 
-  for (let i = 0; i < text.length; i++) {
-    if (sql !== null) {
+  let i = 0;
+
+  for (; i < text.length; i++) {
+    if (nextSql !== null) {
       break
     }
 
@@ -97,6 +99,8 @@ export const getQueryFromCursor = (
             row: startRow,
             col: startCol,
             position: startPos,
+            endRow: row,
+            endCol: column,
             limit: i,
           })
           startRow = row
@@ -105,7 +109,14 @@ export const getQueryFromCursor = (
           column++
         } else {
           // empty queries, aka ;; , make sql.length === 0
-          sql = text.substring(startPos === -1 ? 0 : startPos, i)
+          nextSql = {
+            row: startRow,
+            col: startCol,
+            position: startPos,
+            endRow: row,
+            endCol: column,
+            limit: i,
+          }
         }
         break
       }
@@ -130,7 +141,6 @@ export const getQueryFromCursor = (
           startRow = row
           startCol = column
           startPos = i + 1
-          column++
         }
         break
       }
@@ -148,28 +158,63 @@ export const getQueryFromCursor = (
     }
   }
 
-  if (sql === null) {
-    sql = startPos === -1 ? text : text.substring(startPos)
-  }
+  // lastStackItem is the last query that is completed before the current cursor position.
+  // nextSql is the next query that is not completed before the current cursor position, or started after the current cursor position.
+  const normalizedCurrentRow = position.lineNumber - 1
+  const lastStackItem = sqlTextStack.length > 0 ? sqlTextStack[sqlTextStack.length - 1] : null
 
-  if (sql.length === 0) {
-    const prev = sqlTextStack.pop()
-
-    if (prev) {
-      return {
-        column: prev.col,
-        query: text.substring(prev.position, prev.limit),
-        row: prev.row,
+  if (!nextSql) {
+    const sqlText = startPos === - 1 ? text : text.substring(startPos)
+    if (sqlText.length > 0) {
+      nextSql = {
+        row: startRow,
+        col: startCol,
+        position: startPos === -1 ? 0 : startPos,
+        endRow: row,
+        endCol: column,
+        limit: i,
       }
     }
-
-    return
   }
 
-  return {
-    column: startCol,
-    query: sql,
-    row: startRow,
+  const lastStackItemRowRange = lastStackItem ? {
+    start: lastStackItem.row,
+    end: lastStackItem.endRow,
+  } : null
+  const nextSqlRowRange = nextSql ? {
+    start: nextSql.row,
+    end: nextSql.endRow,
+  } : null
+  const isInLastStackItemRowRange = lastStackItemRowRange && normalizedCurrentRow >= lastStackItemRowRange.start && normalizedCurrentRow <= lastStackItemRowRange.end
+  const isInNextSqlRowRange = nextSqlRowRange && normalizedCurrentRow >= nextSqlRowRange.start && normalizedCurrentRow <= nextSqlRowRange.end
+
+  if (isInLastStackItemRowRange && !isInNextSqlRowRange) {
+    return {
+      query: text.substring(lastStackItem!.position, lastStackItem!.limit),
+      row: lastStackItem!.row,
+      column: lastStackItem!.col,
+    }
+  } else if (isInNextSqlRowRange && !isInLastStackItemRowRange) {
+    return {
+      query: text.substring(nextSql!.position, nextSql!.limit),
+      row: nextSql!.row,
+      column: nextSql!.col,
+    }
+  } else if (isInLastStackItemRowRange && isInNextSqlRowRange) {
+    const lastStackItemEndCol = lastStackItem!.endCol
+    const normalizedCurrentCol = position.column - 1
+    if (normalizedCurrentCol > lastStackItemEndCol + 1) {
+      return {
+        query: text.substring(nextSql!.position, nextSql!.limit),
+        row: nextSql!.row,
+        column: nextSql!.col,
+      }
+    }
+    return {
+      query: text.substring(lastStackItem!.position, lastStackItem!.limit),
+      row: lastStackItem!.row,
+      column: lastStackItem!.col,
+    }
   }
 }
 
