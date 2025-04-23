@@ -156,7 +156,7 @@ const Leaf = (leaf: TreeNode & { parentPath?: string }) => {
           kind={kind ?? "folder"}
           name={name}
           table_id={table_id}
-          onClick={toggleOpen}
+          onExpandCollapse={toggleOpen}
           path={path}
         />
       )}

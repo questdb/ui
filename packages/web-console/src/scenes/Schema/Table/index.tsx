@@ -33,14 +33,13 @@ import { useDispatch } from "react-redux"
 import { actions } from "../../../store"
 import { QuestContext } from "../../../providers"
 import { NotificationType } from "../../../types"
-import { TreeNodeKind } from "../../../components/Tree"
 import { SuspensionDialog } from '../SuspensionDialog'
 import { FileCopy, Restart } from "@styled-icons/remix-line"
 import { TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { color } from "../../../utils"
 
-type Props = QuestDB.Table &
+type Props = Omit<QuestDB.Table, "dedup"> &
   Readonly<{
     designatedTimestamp: string
     id: number
@@ -48,11 +47,8 @@ type Props = QuestDB.Table &
     partitionBy: string
     walTableData?: QuestDB.WalTable
     matViewData?: QuestDB.MaterializedView
-    selected: boolean
-    onSelectToggle:  ({name, type}: {name: string, type: TreeNodeKind}) => void
-    selectOpen: boolean
+    matView: boolean
     columnsCache: React.RefObject<{[tableName: string]: QuestDB.Column[]}>
-    path: string
   }>
 
 const Title = styled(Row)<{ $contextMenuOpen: boolean }>`
@@ -60,10 +56,6 @@ const Title = styled(Row)<{ $contextMenuOpen: boolean }>`
   align-items: stretch;
   background: ${({ $contextMenuOpen }) => $contextMenuOpen ? color("tableSelection") : "transparent"};
   border: 1px solid ${({ $contextMenuOpen }) => $contextMenuOpen ? color("cyan") : "transparent"};
-
-  &:hover {
-    cursor: pointer;
-  }
 `
 
 const columnRender =
@@ -84,7 +76,7 @@ const columnRender =
       table_id={table_id}
       kind="column"
       name={column.column}
-      onClick={() => toggleOpen()}
+      onExpandCollapse={toggleOpen}
       path={path}
     />
   )
@@ -141,7 +133,7 @@ const detailRender = ({ name, value }: { name: string, value: string }) =>
       kind="detail"
       name={`${name}:`}
       value={value}
-      onClick={() => toggleOpen()}
+      onExpandCollapse={toggleOpen}
       path={path}
     />
   )
@@ -154,9 +146,6 @@ const Table = ({
   walEnabled,
   walTableData,
   matViewData,
-  selected,
-  onSelectToggle,
-  selectOpen,
   matView,
   columnsCache,
 }: Props) => {
@@ -236,11 +225,8 @@ const Table = ({
                 kind={matView ? 'matview' : 'table'}
                 table_id={id}
                 name={table_name}
-                onClick={toggleOpen}
+                onExpandCollapse={toggleOpen}
                 isLoading={isLoading}
-                selectOpen={selectOpen}
-                selected={selected}
-                onSelectToggle={onSelectToggle}
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
                 path={path}
@@ -304,7 +290,7 @@ const Table = ({
                 kind="folder"
                 table_id={id}
                 name="Columns"
-                onClick={() => {
+                onExpandCollapse={() => {
                   if (columnsCache.current) {
                     delete columnsCache.current[table_name]
                   }
@@ -344,7 +330,7 @@ const Table = ({
                 expanded={isOpen && !isLoading}
                 table_id={id}
                 name="Storage details"
-                onClick={toggleOpen}
+                onExpandCollapse={toggleOpen}
                 isLoading={isLoading}
                 path={path}
               />
@@ -368,7 +354,7 @@ const Table = ({
                 expanded={isOpen && !isLoading}
                 table_id={id}
                 name="Base tables"
-                onClick={toggleOpen}
+                onExpandCollapse={toggleOpen}
                 isLoading={isLoading}
                 path={path}
               />

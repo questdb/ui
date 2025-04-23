@@ -43,7 +43,7 @@ import { Checkbox } from "../checkbox"
 import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
-import { MATVIEWS_GROUP_KEY } from "../localStorageUtils"
+import { MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY } from "../localStorageUtils"
 
 type Props = Readonly<{
   className?: string
@@ -52,15 +52,12 @@ type Props = Readonly<{
   kind: TreeNodeKind
   table_id?: number
   name: string
-  onClick: () => void
+  onExpandCollapse: () => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
   isLoading?: boolean
   type?: string
-  selectOpen?: boolean
-  selected?: boolean
-  onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
   errors?: string[]
   value?: string
   path?: string
@@ -79,7 +76,7 @@ const Title = styled(Text)`
   }
 `
 
-const Wrapper = styled.div<{ $isExpandable: boolean, $level?: number }>`
+const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -88,17 +85,15 @@ const Wrapper = styled.div<{ $isExpandable: boolean, $level?: number }>`
   user-select: none;
   border: 1px solid transparent;
   border-radius: 0.4rem;
-  ${({ $isExpandable }) => $isExpandable && `
-    cursor: pointer;
-  `}
+
+  cursor: ${({ $selectOpen }) => $selectOpen ? "pointer" : "default"};
+  &:hover {
+    background: ${({ $selectOpen }) => $selectOpen ? color("selectionDarker") : "transparent"};
+  }
 
   ${({ $level }) => $level && `
     padding-left: ${$level * 1.5 + 1}rem;
   `}
-
-  &:active, &:hover {
-    background: ${color("selectionDarker")};
-  }
 
   &:focus-visible, &.focused {
     outline: none;
@@ -132,11 +127,11 @@ const TableActions = styled.span`
   align-items: center;
 `
 
-const FlexRow = styled.div<{ $selectOpen?: boolean }>`
+const FlexRow = styled.div<{ $selectOpen?: boolean, $isTableKind?: boolean }>`
   display: flex;
   align-items: center;
   width: 100%;
-  transform: translateX(${({ $selectOpen }) => ($selectOpen ? "26px" : "0")});
+  transform: translateX(${({ $selectOpen, $isTableKind }) => $selectOpen && $isTableKind ? "1rem" : "0"});
   transition: transform 275ms ease-in-out;
 `
 
@@ -150,16 +145,15 @@ const SortDownIcon = styled(SortDown)`
   flex-shrink: 0;
 `
 
-const ChevronRightIcon = styled(ChevronRight)`
+const ChevronRightIcon = styled(ChevronRight)<{ $expanded?: boolean }>`
   color: ${color("gray2")};
-  margin-right: 0.8rem;
+  margin-right: 1.5rem;
   cursor: pointer;
   flex-shrink: 0;
   width: 1.5rem;
-`
-
-const ChevronDownIcon = styled(ChevronRightIcon)`
-  transform: rotateZ(90deg);
+  transform: rotateZ(${({ $expanded }) => $expanded ? "90deg" : "0deg"});
+  position: absolute;
+  left: -2rem;
 `
 
 const DotIcon = styled(CheckboxBlankCircle)`
@@ -313,27 +307,29 @@ const Row = ({
   name,
   partitionBy,
   walEnabled,
-  onClick,
+  onExpandCollapse,
   "data-hook": dataHook,
   isLoading,
   type,
-  selectOpen,
-  selected,
-  onSelectToggle,
   errors,
   value,
   path,
   tabIndex,
 }: Props) => {
-  const { query, scrollBy, scrollerRef } = useSchema()
+  const { query, scrollBy, scrollerRef, selectOpen, selectedTables, handleSelectToggle } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
+  const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(path ?? "")
 
-  const handleExpandCollapse = async () => {
+  const selected = !!(selectedTables.find((t: {name: string, type: TreeNodeKind}) =>
+    t.name === name
+    && t.type === kind
+  ))
+
+  const handleExpandCollapse = () => {
     if (!isExpandable) {
-      onClick()
       return
     }
 
@@ -348,11 +344,11 @@ const Row = ({
       }
     }
     
-    onClick()
+    onExpandCollapse()
     
     if (scrollerRef.current && path) {
       // If the contents of element is large, the element sometimes disappears from the DOM because
-      // of virtualization. This is a workaround to ensure the element is still visible after a collapse.
+      // of virtualization. This is a workaround to ensure the element is still visible and focused after a collapse.
       setTimeout(() => {
         let element = document.querySelector(`[data-path="${path}"]`)
         if (!element) {
@@ -362,22 +358,72 @@ const Row = ({
             if (element && !element.classList.contains('focused')) {
               (element as HTMLElement).focus()
             }
-          })
+          }, 50)
         }
       }, 50)
     }
   }
 
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement
-    target.focus();
-    
-    if (isTableKind && selectOpen && onSelectToggle) {
-      onSelectToggle({ name, type: kind })
-      return
+  const handleClick = () => {
+    if (isTableKind && selectOpen && handleSelectToggle) {
+      handleSelectToggle({ name, type: kind })
     }
+  }
 
-    handleExpandCollapse()
+  const handleGoToParent = () => {
+    const pathSegments = path!.split(":")
+    pathSegments.pop()
+    const parentPath = pathSegments.join(":")
+    const parentElement = document.querySelector(`[data-path="${parentPath}"]`) as HTMLElement
+    if (parentElement) {
+      parentElement.focus()
+    }
+  }
+
+  const handleGoToNextSibling = () => {
+    const currentElement = document.activeElement as HTMLElement
+    if (!currentElement || !scrollerRef.current) return
+    let focusableElements = computeFocusableElements(scrollerRef.current)
+    let currentIndex = focusableElements.indexOf(currentElement)
+
+    if (currentIndex === focusableElements.length - 1) {
+      scrollBy(32)
+    }
+    focusableElements = computeFocusableElements(scrollerRef.current)
+    currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
+
+    if (currentIndex < focusableElements.length - 1) {
+      const nextElement = focusableElements[currentIndex + 1] as HTMLElement
+      nextElement.focus()
+    }
+  }
+
+  const handleGoToPreviousSibling = () => {
+    if (!document.activeElement || !scrollerRef.current) return
+    let focusableElements = computeFocusableElements(scrollerRef.current)
+    let currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
+
+    if (currentIndex === 0) {
+      scrollBy(-32)
+    }
+    setTimeout(() => {
+      focusableElements = computeFocusableElements(scrollerRef.current!)
+      currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
+      if (currentIndex > 0) {
+        const previousElement = focusableElements[currentIndex - 1] as HTMLElement
+        previousElement.focus()
+      }
+    })
+  }
+
+  const getTabIndex = () => { 
+    if (tabIndex) {
+      return tabIndex
+    }
+    if (path?.startsWith(MATVIEWS_GROUP_KEY)) {
+      return 201
+    }
+    return 101
   }
 
   useEffect(() => {
@@ -397,95 +443,62 @@ const Row = ({
     }
   }, [isLoading])
 
-  const getTabIndex = () => { 
-    if (tabIndex) {
-      return tabIndex
-    }
-    if (path?.startsWith(MATVIEWS_GROUP_KEY)) {
-      return 201
-    }
-    return 101
+  if (selectOpen && !isTableKind && !isRootFolder) {
+    return null
   }
 
   return (
     <Wrapper
-      $isExpandable={isExpandable}
+      $level={path ? path.split(":").length - 2 : 0}
+      $selectOpen={selectOpen}
       data-hook={dataHook ?? "schema-row"}
       data-kind={kind}
       data-path={path}
       className={className}
       tabIndex={getTabIndex()}
-      $level={path ? path.split(":").length - 2 : 0}
       onContextMenu={(e) => {
         if (!isTableKind) {
           e.preventDefault()
         }
       }}
       onFocus={(e) => {
-        ;(e.target as HTMLElement).classList.add('focused')
+        if (!selectOpen || isRootFolder) {
+          (e.target as HTMLElement).classList.add('focused')
+        }
       }}
       onBlur={(e) => {
         ;(e.target as HTMLElement).classList.remove('focused')
       }}
+      onDoubleClick={handleExpandCollapse}
       onClick={handleClick}
       onKeyDown={(e) => {
+        if (e.key === "PageUp" || e.key === "PageDown" || e.key === "Home" || e.key === "End") {
+          return
+        }
+        e.preventDefault()
         if (!path) return
         if (!scrollerRef.current || !isElementVisible(document.activeElement as HTMLElement, scrollerRef.current)) return
-        if (isExpandable) {
-          const isClosing = (e.key === "ArrowLeft" || e.key === "Enter") && expanded
-          const isOpening = (e.key === "ArrowRight" || e.key === "Enter") && !expanded
-          if (isOpening || isClosing) {
-            handleExpandCollapse()
-          }
-          if (isClosing) {
-            // This should wait for collapse logic in handleExpandCollapse for scrolling to the right place
-            // where we can focus the parent
-            setTimeout(() => {
-              const pathSegments = path.split(":")
-              pathSegments.pop()
-              const parentPath = pathSegments.join(":")
-              const parentElement = document.querySelector(`[data-path="${parentPath}"]`) as HTMLElement
-              if (parentElement) {
-                parentElement.focus()
-              }
-            }, 100)
-          }
-        }
-        if (e.key === "ArrowDown") {
-          e.preventDefault()
-          const currentElement = document.activeElement as HTMLElement
-          if (!currentElement || !scrollerRef.current) return
-          let focusableElements = computeFocusableElements(scrollerRef.current)
-          let currentIndex = focusableElements.indexOf(currentElement)
 
-          if (currentIndex === focusableElements.length - 1) {
-            scrollBy(32)
-          }
-          focusableElements = computeFocusableElements(scrollerRef.current)
-          currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
-
-          if (currentIndex < focusableElements.length - 1) {
-            const nextElement = focusableElements[currentIndex + 1] as HTMLElement
-            nextElement.focus()
-          }
+        if (isExpandable && (
+          e.key === "Enter"
+          || (e.key === "ArrowRight" && !expanded)
+          || (e.key === "ArrowLeft" && expanded)
+        )) {
+          handleExpandCollapse()
         }
+
+        const shouldGoToParent = (!isExpandable || !expanded) && e.key === "ArrowLeft"
+        const shouldGoToNextSibling = ((!isExpandable || expanded) && e.key === "ArrowRight") || e.key === "ArrowDown"
+        
+        if (shouldGoToParent) {
+          handleGoToParent()
+        }
+        if (shouldGoToNextSibling) {
+          handleGoToNextSibling()
+        }
+
         if (e.key === "ArrowUp") {
-          e.preventDefault()
-          if (!document.activeElement || !scrollerRef.current) return
-          let focusableElements = computeFocusableElements(scrollerRef.current)
-          let currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
-
-          if (currentIndex === 0) {
-            scrollBy(-32)
-          }
-          setTimeout(() => {
-            focusableElements = computeFocusableElements(scrollerRef.current!)
-            currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
-            if (currentIndex > 0) {
-              const previousElement = focusableElements[currentIndex - 1] as HTMLElement
-              previousElement.focus()
-            }
-          })
+          handleGoToPreviousSibling()
         }
       }}
     >
@@ -496,16 +509,15 @@ const Row = ({
         style={{ width: "100%", position: "relative" }}
       >
         {isTableKind && (
-          <div style={{ position: "absolute" }}>
+          <div style={{ position: "absolute", left: "-2rem" }}>
             <Checkbox
-              visible={selectOpen && onSelectToggle !== undefined}
+              visible={selectOpen}
               checked={selected}
             />
           </div>
         )}
-        <FlexRow $selectOpen={selectOpen}>
-          {isExpandable && expanded && <ChevronDownIcon size="15px" style={{ position: "absolute", left: "-2rem" }} />}
-          {isExpandable && !expanded && <ChevronRightIcon size="15px" style={{ position: "absolute", left: "-2rem" }} />}
+        <FlexRow $selectOpen={selectOpen} $isTableKind={isTableKind}>
+          {isExpandable && (!selectOpen || !isTableKind) && <ChevronRightIcon size="15px" $expanded={expanded} onClick={handleExpandCollapse} />}
 
           {kind === "column" && (
             <ColumnIcon 

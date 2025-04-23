@@ -8,8 +8,7 @@ import * as QuestDB from "../../../utils/questdb";
 import { State, View } from "../../Schema";
 import Table from "../Table";
 import LoadingError from "../LoadingError";
-import Row, { isElementVisible, computeFocusableElements } from "../Row";
-import { TreeNodeKind } from "../../../components/Tree";
+import Row, { isElementVisible } from "../Row";
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 import { useSchema } from "../SchemaContext";
 
@@ -17,9 +16,6 @@ type VirtualTablesProps = {
   tables: QuestDB.Table[]
   walTables?: QuestDB.WalTable[]
   materializedViews?: QuestDB.MaterializedView[]
-  selectOpen: boolean
-  selectedTables: {name: string, type: TreeNodeKind}[]
-  handleSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
   filterSuspendedOnly: boolean
   state: State
   loadingError: ErrorResult | null
@@ -30,12 +26,8 @@ type ColumnsCache = {
 };
 
 const SectionHeader = styled(Row)<{ $disabled: boolean }>`
-  cursor: ${({ $disabled }) => $disabled ? 'not-allowed' : 'pointer'};
+  cursor: ${({ $disabled }) => $disabled ? 'not-allowed' : 'default'};
   pointer-events: ${({ $disabled }) => $disabled ? 'none' : 'auto'};
-    
-  &:hover {
-    background: ${({ $disabled }) => $disabled ? color("selectionDarker") : color("selection")};
-  }
 
   ${({ $disabled }) => $disabled && `
     opacity: 0.5;
@@ -68,9 +60,6 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
   tables,
   walTables,
   materializedViews,
-  selectOpen,
-  selectedTables,
-  handleSelectToggle,
   filterSuspendedOnly,
   state,
   loadingError
@@ -193,7 +182,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
               }
               return `${matViewsExpanded ? 'collapse' : 'expand'}-materialized-views`
             })()}
-            onClick={() => {
+            onExpandCollapse={() => {
               setSectionExpanded(index === 0 ? TABLES_GROUP_KEY : MATVIEWS_GROUP_KEY, !group.expanded);
               forceUpdate();
             }}
@@ -210,10 +199,6 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
         const matViewData = materializedViews?.find(
           (mv) => mv.view_name === table.table_name,
         )
-        const selected = !!(selectedTables.find((t) =>
-          t.name === table.table_name
-          && t.type === (table.matView ? "matview" : "table")
-        ))
         
         return (
           <Table
@@ -230,12 +215,7 @@ export const VirtualTables: FC<VirtualTablesProps> = ({
               (wt) => wt.name === table.table_name,
             )}
             matViewData={matViewData}
-            dedup={table.dedup}
-            selectOpen={selectOpen}
-            selected={selected}
-            onSelectToggle={handleSelectToggle}
             columnsCache={columnsCache}
-            path={`${table.matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}:${table.table_name}`}
           />
         )
       }}

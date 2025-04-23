@@ -37,9 +37,9 @@ describe("questdb schema with working tables", () => {
   });
 
   it("should show the symbol column details", () => {
-    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
-    cy.getByDataHook("schema-folder-title").contains("Columns").click();
-    cy.getByDataHook("schema-column-title").contains("symbol").click();
+    cy.getByDataHook("schema-table-title").contains("btc_trades").dblclick();
+    cy.getByDataHook("schema-folder-title").contains("Columns").dblclick();
+    cy.getByDataHook("schema-column-title").contains("symbol").dblclick();
 
     cy.getByDataHook("schema-row").should(($el) => {
       expect($el.text()).to.include("Indexed:");
@@ -58,8 +58,8 @@ describe("questdb schema with working tables", () => {
   });
 
   it("should show the storage details", () => {
-    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
-    cy.getByDataHook("schema-row").contains("Storage details").click();
+    cy.getByDataHook("schema-table-title").contains("btc_trades").dblclick();
+    cy.getByDataHook("schema-row").contains("Storage details").dblclick();
 
     cy.getByDataHook("schema-row").should(($el) => {
       expect($el.text()).to.include("WAL:");
@@ -117,7 +117,7 @@ describe("keyboard navigation", () => {
   });
 
   it("should expand and collapse folders using keyboard", () => {
-    cy.getByDataHook("schema-table-title").contains("btc_trades").click();
+    cy.getByDataHook("schema-table-title").contains("btc_trades").dblclick();
     cy.getByDataHook("schema-folder-title").should("contain", "Columns");
     // go to the columns folder
     cy.realPress("ArrowDown");
@@ -137,15 +137,27 @@ describe("keyboard navigation", () => {
     cy.realPress("ArrowLeft");
     cy.contains("Indexed:").should("not.exist");
 
+    // go to columns folder
+    cy.realPress("ArrowLeft");
+    cy.focused().should("contain", "Columns");
+
     // collapse the columns folder
     cy.focused().should("contain", "Columns");
     cy.realPress("ArrowLeft");
     cy.contains("symbol").should("not.exist");
 
+    // go to the btc_trades table
+    cy.realPress("ArrowLeft");
+    cy.focused().should("contain", "btc_trades");
+
     // collapse the table
     cy.focused().should("contain", "btc_trades");
     cy.realPress("ArrowLeft");
     cy.contains("Columns").should("not.exist");
+
+    // go to the tables folder
+    cy.realPress("ArrowLeft");
+    cy.focused().should("contain", `Tables (${tables.length})`);
 
     // collapse the tables folder
     cy.focused().should("contain", "Tables");
@@ -166,7 +178,7 @@ describe("keyboard navigation", () => {
     cy.realPress("ArrowRight");
     cy.getByDataHook("schema-row").should("contain", "Base tables");
 
-    cy.getByDataHook("schema-row").contains("Base tables").click();
+    cy.getByDataHook("schema-row").contains("Base tables").dblclick();
     cy.getByDataHook("schema-detail-title").should("contain", "btc_trades");
 
     // collapse base tables
@@ -176,7 +188,7 @@ describe("keyboard navigation", () => {
     );
 
     // collapse the materialized view
-    cy.getByDataHook("schema-row").contains("btc_trades_mv").click();
+    cy.getByDataHook("schema-row").contains("btc_trades_mv").dblclick();
     cy.contains("Base tables").should("not.exist");
 
     // go to materialized views folder
@@ -405,8 +417,10 @@ describe("materialized views", () => {
 
   it("should show the base table and copy schema for a materialized view", () => {
     cy.expandMatViews();
-    cy.getByDataHook("schema-matview-title").contains("btc_trades_mv").click();
-    cy.getByDataHook("schema-row").contains("Base tables").click();
+    cy.getByDataHook("schema-matview-title")
+      .contains("btc_trades_mv")
+      .dblclick();
+    cy.getByDataHook("schema-row").contains("Base tables").dblclick();
     cy.getByDataHook("schema-detail-title")
       .contains("btc_trades")
       .should("exist");
