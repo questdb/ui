@@ -85,7 +85,8 @@ module.exports = {
       {
         context: [
           config.contextPath + "/imp", config.contextPath + "/exp", config.contextPath + "/exec",
-          config.contextPath + "/chk", config.contextPath + "/settings", config.contextPath + "/warnings"
+          config.contextPath + "/chk", config.contextPath + "/settings", config.contextPath + "/warnings",
+          config.contextPath + "/config"
         ],
         target: config.backendUrl,
       },

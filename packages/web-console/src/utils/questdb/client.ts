@@ -416,6 +416,36 @@ export class Client {
     })
   }
 
+  async saveConfig(config: any): Promise<any> {
+    const formData = new FormData()
+    formData.append("config", JSON.stringify(config))
+
+    return new Promise((resolve, reject) => {
+      let request = new XMLHttpRequest()
+      request.open("POST", "config")
+      Object.keys(this.commonHeaders).forEach((key) => {
+        request.setRequestHeader(key, this.commonHeaders[key])
+      })
+      request.onload = (_e) => {
+        if (request.status === 200) {
+          resolve(JSON.parse(request.response))
+        } else {
+          reject({
+            status: request.status,
+            statusText: request.statusText,
+          })
+        }
+      }
+      request.onerror = () => {
+        reject({
+          status: request.status,
+          statusText: request.statusText,
+        })
+      }
+      request.send(formData)
+    })
+  }
+
   async exportQueryToCsv(query: string) {
     try {
       const response: Response = await fetch(

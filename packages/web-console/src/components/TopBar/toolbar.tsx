@@ -128,7 +128,12 @@ export const Toolbar = () => {
       </Box>
       <Box gap="0.5rem">
         {serverDetails && serverDetails.instance_name && (
-          <Badge instance_rgb={serverDetails.instance_rgb}>
+          <Badge instance_rgb={serverDetails.instance_rgb}
+                 onClick={() => quest.saveConfig({
+                   "instance_name": "db1",
+                   "instance_rgb": ""
+                 })}
+          >
             {serverDetails.instance_name}
           </Badge>
         )}
