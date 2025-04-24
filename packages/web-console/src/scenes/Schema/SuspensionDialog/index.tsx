@@ -25,6 +25,7 @@ import { ErrorResult } from "../../../utils"
 import { Text, Link } from "../../../components"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
+import { copyToClipboard } from "../../../utils/copyToClipboard"
 
 const StyledDialogContent = styled(Dialog.Content)`
   border-color: #723131;
@@ -229,7 +230,7 @@ export const SuspensionDialog = ({
                     <Button
                       skin="secondary"
                       onClick={() => {
-                        navigator.clipboard.writeText(
+                        copyToClipboard(
                           walTableData.errorMessage ?? "",
                         )
                       }}

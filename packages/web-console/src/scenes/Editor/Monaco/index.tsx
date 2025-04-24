@@ -185,6 +185,12 @@ const MonacoEditor = () => {
     editor: editor.IStandaloneCodeEditor,
   ) => {
     const queryAtCursor = getQueryFromCursor(editor)
+    
+    if (!queryAtCursor) {
+      decorationsRef.current?.clear()
+      return
+    }
+    
     const model = editor.getModel()
     if (queryAtCursor && model !== null) {
       const activeBufferId = activeBufferRef.current.id as number
@@ -317,6 +323,8 @@ const MonacoEditor = () => {
         // otherwise, append the query
       } else {
         appendQuery(editor, query, { appendAt: "end" })
+        const newValue = editor.getValue()
+        updateBuffer(activeBuffer.id as number, { value: newValue })
       }
     }
 

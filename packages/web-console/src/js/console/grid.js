@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const hashString = (str) => {
   let hash = 0
@@ -289,6 +290,7 @@ export function grid(rootElement, _paginationFn, id) {
           row.style.display = "flex"
           for (let i = colLo; i < colHi; i++) {
             setCellData(
+              columns[i],
               row.childNodes[i % visColumnCount],
               rowData[columnPositions[i]],
             )
@@ -510,6 +512,7 @@ export function grid(rootElement, _paginationFn, id) {
         case "STRING":
         case "SYMBOL":
         case "VARCHAR":
+        case "ARRAY":
           return true
         default:
           return false
@@ -928,7 +931,23 @@ export function grid(rootElement, _paginationFn, id) {
 
       const hType = document.createElement("span")
       addClass(hType, "qg-header-type")
-      hType.innerHTML = c.type.toLowerCase()
+      if (c.type !== "ARRAY") {
+        hType.innerHTML = c.type.toLowerCase()
+      } else if (c.dim > 2) {
+        hType.innerHTML =
+          c.type.toUpperCase() +
+          "(" +
+          c.elemType.toUpperCase() +
+          "," +
+          c.dim +
+          ")"
+      } else {
+        let html = c.elemType.toLowerCase() + "[]"
+        if (c.dim > 1) {
+          html += "[]"
+        }
+        hType.innerHTML = html
+      }
 
       const hName = document.createElement("span")
       addClass(hName, "qg-header-name")
@@ -1045,10 +1064,38 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function setCellData(cell, cellData) {
+  function getDisplayedCellValue(column, cellData) {
+    const isArray = Array.isArray(cellData)
+    const precisionTypes = ["FLOAT", "DOUBLE"]
+    const containsPrecision = isArray
+      ? precisionTypes.includes(column.elemType)
+      : precisionTypes.includes(column.type)
+
+    if (!containsPrecision) {
+      return isArray ? JSON.stringify(cellData) : escapeHtml(cellData.toString())
+    }
+
+    if (!isArray) {
+      return Number.isInteger(cellData) ? cellData.toString() + ".0" : cellData.toString()
+    }
+
+    return "ARRAY" + JSON.stringify(cellData, (_, val) => {
+      if (Number.isInteger(val)) {
+        return val.toString() + ".0"
+      }
+      return val
+    }).replace(/"/g, "")
+  }
+
+  function setCellData(column, cell, cellData) {
     if (cellData !== null) {
-      cell.innerHTML = escapeHtml(cellData.toString())
+      cell.innerHTML = getDisplayedCellValue(column, cellData)
+
       cell.classList.remove("qg-null")
+
+      if (column.type === "ARRAY" && column.dim > 1) {
+        cell.classList.add("qg-arr-multidim")
+      }
     } else {
       cell.innerHTML = "null"
       cell.classList.add("qg-null")
@@ -1058,7 +1105,11 @@ export function grid(rootElement, _paginationFn, id) {
   function setCellDataAndAttributes(row, rowData, columnIndex) {
     const cell = row.childNodes[columnIndex % visColumnCount]
     configureCell(cell, columnIndex)
-    setCellData(cell, rowData[columnPositions[columnIndex]])
+    setCellData(
+      columns[columnIndex],
+      cell,
+      rowData[columnPositions[columnIndex]],
+    )
   }
 
   function getNonFrozenColLo(colLo) {
@@ -1636,7 +1687,25 @@ export function grid(rootElement, _paginationFn, id) {
         clearTimeout(activeCellPulseClearTimer)
       }
       addClass(focusedCell, "qg-c-active-pulse")
-      navigator.clipboard.writeText(focusedCell.innerHTML).then(undefined)
+
+      let textToCopy
+      if (focusedCell.classList.contains("qg-arr-multidim")) {
+        try {
+          textToCopy = "ARRAY" + JSON.stringify(JSON.parse(focusedCell.innerHTML.slice(5)), (_, val) => {
+            if (Number.isInteger(val)) {
+              return val.toString() + ".0"
+            }
+            return val
+          }, 2).replace(/"/g, "")
+        } catch (e) {
+          textToCopy = focusedCell.innerHTML
+        }
+      } else {
+        textToCopy = focusedCell.innerHTML
+      }
+      
+      copyToClipboard(textToCopy)
+        .then(undefined)
 
       activeCellPulseClearTimer = setTimeout(() => {
         removeClass(focusedCell, "qg-c-active-pulse")
@@ -1856,7 +1925,14 @@ export function grid(rootElement, _paginationFn, id) {
           for (let j = 0; j < dataPageLen; j++) {
             columnOffsets[i] = offset
             const value = dataPage[j][i]
-            const str = value !== null ? value.toString() : "null"
+            let str
+            if (value === null) {
+              str = "null"
+            } else if (getColumn(i).type === "ARRAY") {
+              str = "ARRAY" + JSON.stringify(value)
+            } else {
+              str = value.toString()
+            }
             w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
           }
         } else {
