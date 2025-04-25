@@ -45,8 +45,14 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const [ownedByList, setOwnedByList] = useState<string[]>([])
 
   const getOwnedByList = async () => {
-    let ownedByNames: string[] = []
+    const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
+    if (!isEE) {
+      // OSS does not have to set owner
+      return
+    }
+
     try {
+      let ownedByNames: string[] = []
       const userResult = await quest.query<Parameter>(
         `select current_user()`,
       )

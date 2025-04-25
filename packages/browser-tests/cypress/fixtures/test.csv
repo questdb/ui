@@ -1,0 +1,3 @@
+date,underlying,name,exchange,symbol,fut_expiration_date,bid,ask,open,high,low,close,volume,open_interest,strike_multiplier,option_price_multiplier
+2005-12-01T00:00:00.000000Z,AC,Denatured Fuel Ethanol Futures,CBOT,AC/05Z.CB,1134518400000,0.000000,0.000000,1.900000,1.900000,1.900000,1.900000,2,64,1.000000,1.000000
+2005-12-01T00:00:00.000000Z,AC,Denatured Fuel Ethanol Futures,CBOT,AC/06F.CB,1137110400000,0.000000,0.000000,0.000000,1.865000,1.865000,1.865000,0,83,1.000000,1.000000

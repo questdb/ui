@@ -104,6 +104,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
               }}
               prefixIcon={<Search2 size="18px" />}
               skin="secondary"
+              data-hook="import-browse-from-disk"
             >
               Browse from disk
             </Button>
