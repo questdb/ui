@@ -96,4 +96,32 @@ describe("OIDC authentication", () => {
     cy.getByDataHook("button-log-in").click()
     cy.getEditor().should("be.visible");
   });
+
+  it("display import panel", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    interceptTokenRequest({
+      "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+      "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+      "token_type": "Bearer",
+      "expires_in": 300
+    });
+    cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
+
+    cy.getByDataHook("import-panel-button").click();
+    cy.getByDataHook("import-dropbox").should("be.visible");
+    cy.getByDataHook("import-browse-from-disk").should("be.visible");
+
+    cy.get('input[type="file"]').selectFile("cypress/fixtures/test.csv", { force: true });
+    cy.getByDataHook("import-table-column-schema").should("be.visible");
+    cy.getByDataHook("import-table-column-owner").should("be.visible");
+    cy.contains("option", "user1").should("not.exist");
+    cy.contains("option", "group1").should("exist");
+
+    cy.logout();
+  });
 });
