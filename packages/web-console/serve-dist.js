@@ -20,7 +20,8 @@ const server = http.createServer((req, res) => {
   if (
     reqPathName.startsWith("/exec") ||
     reqPathName.startsWith("/settings") ||
-    reqPathName.startsWith("/warnings")
+    reqPathName.startsWith("/warnings") ||
+    reqPathName.startsWith("/chk")
   ) {
     // proxy /exec requests to localhost:9000
     const options = {
