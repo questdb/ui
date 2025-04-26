@@ -1,34 +1,28 @@
-import React, { createContext, useContext, useRef, useState, useMemo } from "react"
-import { TreeNodeKind } from "../../components/Tree"
-
-export const ScrollDefaults = {
-  scrollerRef: { current: null },
-  scrollBy: () => {},
-  setScrollerRef: () => {},
-}
+import React, { createContext, useContext, useState, useMemo } from "react"
+import { TreeNodeKind } from "./Row"
 
 export const SchemaContext = createContext<{
   query: string
   setQuery: (query: string) => void
-  scrollerRef: React.MutableRefObject<HTMLElement | null>,
-  scrollBy: (amount: number) => void,
-  setScrollerRef: (element: HTMLElement | null) => void,
   selectOpen: boolean
   setSelectOpen: (open: boolean) => void
   selectedTables: {name: string, type: TreeNodeKind}[]
   setSelectedTables: (tables: {name: string, type: TreeNodeKind}[]) => void
   handleSelectToggle: ({name, type}: {name: string, type: TreeNodeKind}) => void
   selectedTablesMap: Map<string, {name: string, type: TreeNodeKind}>
+  focusedIndex: number | null
+  setFocusedIndex: (index: number | null) => void
 }>({
   query: "",
   setQuery: () => {},
-  ...ScrollDefaults,
   selectOpen: false,
   setSelectOpen: () => {},
   selectedTables: [],
   setSelectedTables: () => {},
   handleSelectToggle: () => {},
   selectedTablesMap: new Map(),
+  focusedIndex: null,
+  setFocusedIndex: () => {},
 })
 
 export const useSchema = () => {
@@ -41,15 +35,15 @@ export const useSchema = () => {
 
 export const SchemaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [query, setQuery] = useState("")
-  const scrollerRef = useRef<HTMLElement | null>(null)
   const [selectOpen, _setSelectOpen] = useState(false)
   const [selectedTables, setSelectedTables] = useState<{name: string, type: TreeNodeKind}[]>([])
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
 
   const selectedTablesMap = useMemo(() => new Map(
     selectedTables.map(table => [`${table.name}-${table.type}`, table])
   ), [selectedTables])
 
-  const handleSelectToggle = ({name, type}: {name: string, type: TreeNodeKind}) => {
+  const handleSelectToggle = ({ name, type }: { name: string, type: TreeNodeKind }) => {
     const key = `${name}-${type}`
     if (selectedTablesMap.has(key)) {
       setSelectedTables(selectedTables.filter(t => `${t.name}-${t.type}` !== key))
@@ -66,29 +60,18 @@ export const SchemaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }
 
-  const scrollBy = (amount: number) => {
-    if (scrollerRef.current) {
-      scrollerRef.current.scrollBy({ top: amount })
-    }
-  }
-
-  const setScrollerRef = (element: HTMLElement | null) => {
-    scrollerRef.current = element
-  }
-
   return (
     <SchemaContext.Provider value={{
       query,
       setQuery,
-      scrollerRef,
-      scrollBy,
-      setScrollerRef,
       selectOpen,
       setSelectOpen,
       selectedTables,
       setSelectedTables,
       handleSelectToggle,
       selectedTablesMap,
+      focusedIndex,
+      setFocusedIndex,
     }}>
       {children}
     </SchemaContext.Provider>

@@ -60,7 +60,7 @@ import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { Toolbar } from "./Toolbar/toolbar"
-import { VirtualTables } from "./VirtualTables"
+import VirtualTables from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { NotificationType } from "../../types"
@@ -73,9 +73,9 @@ import {
   RefreshRate,
 } from "../../scenes/Editor/Metrics/utils"
 import type { Duration } from "../../scenes/Editor/Metrics/types"
-import { TreeNodeKind } from "../../components/Tree"
 import { useSchema } from "./SchemaContext"
 import { SchemaProvider } from "./SchemaContext"
+import { TreeNodeKind } from "./Row"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -135,8 +135,6 @@ const Schema = ({
   const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
   const [materializedViews, setMaterializedViews] = useState<QuestDB.MaterializedView[]>()
   const dispatch = useDispatch()
-  const [scrollAtTop, setScrollAtTop] = useState(true)
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [focusListenerActive, setFocusListenerActive] = useState(false)
@@ -328,15 +326,21 @@ const Schema = ({
     return [...regularTables, ...matViews]
   }, [tables, materializedViews])
 
+  const suspendedTablesCount = useMemo(() => walTables?.filter((t) => t.suspended).length ?? 0, [walTables])
+
+  useEffect(() => {
+    if (suspendedTablesCount === 0 && filterSuspendedOnly) {
+      setFilterSuspendedOnly(false)
+    }
+  }, [suspendedTablesCount, filterSuspendedOnly])
+
   return (
     <Wrapper ref={innerRef} {...rest}>
       <Panel.Header
         afterTitle={
           <div style={{ display: "flex", marginRight: "1rem", justifyContent: "space-between", flex: 1 }}>
             <Toolbar
-              suspendedTablesCount={
-                walTables?.filter((t) => t.suspended).length ?? 0
-              }
+              suspendedTablesCount={suspendedTablesCount}
               filterSuspendedOnly={filterSuspendedOnly}
               setFilterSuspendedOnly={setFilterSuspendedOnly}
             />
@@ -485,14 +489,9 @@ const Schema = ({
             )}
           </div>
         }
-        shadow={!scrollAtTop}
       />
 
-      <Content
-        _loading={state.view === View.loading}
-        ref={scrollerRef}
-        onScroll={() => setScrollAtTop(scrollerRef?.current?.scrollTop === 0)}
-      >
+      <Content _loading={state.view === View.loading}>
         <VirtualTables
           tables={tables ?? []}
           walTables={walTables}

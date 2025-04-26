@@ -23,6 +23,7 @@ describe("questdb schema with working tables", () => {
   });
 
   afterEach(() => {
+    cy.realPress("Home");
     cy.collapseTables();
     cy.refreshSchema();
     cy.expandTables();
@@ -113,7 +114,9 @@ describe("keyboard navigation", () => {
 
   beforeEach(() => {
     cy.clearEditor();
+    cy.collapseTables();
     cy.collapseMatViews();
+    cy.expandTables();
   });
 
   it("should expand and collapse folders using keyboard", () => {
@@ -127,7 +130,7 @@ describe("keyboard navigation", () => {
     cy.getByDataHook("schema-row").should("contain", "symbol");
 
     // go to the symbol column
-    cy.realPress("ArrowDown");
+    cy.realPress("ArrowRight");
 
     // expand the symbol column
     cy.realPress("ArrowRight");
@@ -172,7 +175,7 @@ describe("keyboard navigation", () => {
     cy.getByDataHook("schema-row").should("contain", "btc_trades_mv");
 
     // go to the materialized view
-    cy.realPress("ArrowDown");
+    cy.realPress("ArrowRight");
 
     // expand the materialized view
     cy.realPress("ArrowRight");
@@ -218,6 +221,15 @@ describe("keyboard navigation", () => {
       "not.have.class",
       "focused"
     );
+  });
+
+  it("should go to the last item with End, and first item with Home", () => {
+    cy.expandMatViews();
+    cy.realPress("Home");
+    cy.focused().should("contain", `Tables (${tables.length})`);
+    cy.realPress("End");
+    const lastMatView = materializedViews[materializedViews.length - 1];
+    cy.focused().should("contain", lastMatView);
   });
 });
 

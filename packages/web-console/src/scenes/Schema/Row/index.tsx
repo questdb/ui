@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import styled from "styled-components"
 import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
@@ -31,7 +31,6 @@ import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
 import type { StyledIcon } from '@styled-icons/styled-icon'
 import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon, Tag } from '@styled-icons/bootstrap'
-import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
@@ -44,15 +43,20 @@ import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
 import { MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY } from "../localStorageUtils"
+import { TreeNavigationOptions } from "../VirtualTables"
+
+export type TreeNodeKind = "column" | "table" | "matview" | "folder" | "detail"
 
 type Props = Readonly<{
+  id: string
+  index: number
+  kind: TreeNodeKind
+  name: string
   className?: string
   designatedTimestamp?: string
   expanded?: boolean
-  kind: TreeNodeKind
-  table_id?: number
-  name: string
-  onExpandCollapse: () => void
+  onExpandCollapse: () => void | Promise<void>
+  navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
@@ -60,8 +64,6 @@ type Props = Readonly<{
   type?: string
   errors?: string[]
   value?: string
-  path?: string
-  tabIndex?: number
 }>
 
 const Type = styled(Text)`
@@ -76,30 +78,27 @@ const Title = styled(Text)`
   }
 `
 
-const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean }>`
+const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean, $focused?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0;
-  padding-right: 1rem;
   user-select: none;
   border: 1px solid transparent;
   border-radius: 0.4rem;
+  width: 100%;
 
   cursor: ${({ $selectOpen }) => $selectOpen ? "pointer" : "default"};
-  &:hover {
-    background: ${({ $selectOpen }) => $selectOpen ? color("selectionDarker") : "transparent"};
-  }
 
   ${({ $level }) => $level && `
     padding-left: ${$level * 1.5 + 1}rem;
   `}
 
-  &:focus-visible, &.focused {
+  ${({ $focused, theme }) => $focused && `
     outline: none;
-    background: ${color("tableSelection")};
-    border: 1px solid ${color("cyan")};
-  }
+    background: ${theme.color.tableSelection};
+    border: 1px solid ${theme.color.cyan};
+  `}
 `
 
 const StyledTitle = styled(Title)`
@@ -131,6 +130,7 @@ const FlexRow = styled.div<{ $selectOpen?: boolean, $isTableKind?: boolean }>`
   display: flex;
   align-items: center;
   width: 100%;
+  padding-right: 1rem;
   transform: translateX(${({ $selectOpen, $isTableKind }) => $selectOpen && $isTableKind ? "1rem" : "0"});
   transition: transform 275ms ease-in-out;
 `
@@ -261,67 +261,31 @@ const ColumnIcon = ({
   return getIcon(type)
 }
 
-export const isElementVisible = (element: HTMLElement | undefined, container: HTMLElement | null) => {
-  if (!element || !container) return false
-  const elementRect = element.getBoundingClientRect()
-  const containerRect = container instanceof Window 
-    ? { top: 0, bottom: window.innerHeight }
-    : container.getBoundingClientRect()
-
-  const visibleTop = Math.max(elementRect.top, containerRect.top)
-  const visibleBottom = Math.min(elementRect.bottom, containerRect.bottom)
-  const visibleHeight = Math.max(0, visibleBottom - visibleTop)
-  
-  const totalHeight = elementRect.bottom - elementRect.top
-  
-  return visibleHeight >= totalHeight * 0.5
-}
-
-export const computeFocusableElements = (scrollerRef: HTMLElement) => {
-  const allElements = Array.from(document.querySelectorAll('[data-path][tabindex="100"], [data-path][tabindex="101"], [data-path][tabindex="200"], [data-path][tabindex="201"]'))
-
-  const focusableElements = allElements
-    .filter(element => isElementVisible(element as HTMLElement, scrollerRef))
-    .sort((a, b) => {
-      const tabIndexA = parseInt(a.getAttribute('tabindex') || '0')
-      const tabIndexB = parseInt(b.getAttribute('tabindex') || '0')
-      
-      if (tabIndexA !== tabIndexB) {
-        return tabIndexA - tabIndexB
-      }
-      
-      const positionA = allElements.indexOf(a)
-      const positionB = allElements.indexOf(b)
-      return positionA - positionB
-    })
-
-  return focusableElements
-}
-
 const Row = ({
   className,
   designatedTimestamp,
   expanded,
   kind,
-  table_id,
   name,
   partitionBy,
   walEnabled,
   onExpandCollapse,
+  navigateInTree,
   "data-hook": dataHook,
   isLoading,
   type,
   errors,
   value,
-  path,
-  tabIndex,
+  id,
+  index,
 }: Props) => {
-  const { query, scrollBy, scrollerRef, selectOpen, selectedTables, handleSelectToggle } = useSchema()
+  const { query, selectOpen, selectedTables, handleSelectToggle, focusedIndex, setFocusedIndex } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
-  const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(path ?? "")
+  const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(id ?? "")
 
   const selected = !!(selectedTables.find((t: {name: string, type: TreeNodeKind}) =>
     t.name === name
@@ -332,98 +296,18 @@ const Row = ({
     if (!isExpandable) {
       return
     }
-
-    let savedPosition = 0
-    
-    if (expanded && scrollerRef.current && path) {
-      const element = document.querySelector(`[data-path="${path}"]`)
-      if (element) {
-        const rect = element.getBoundingClientRect()
-        const scrollerRect = scrollerRef.current.getBoundingClientRect()
-        savedPosition = rect.top - scrollerRect.top + scrollerRef.current.scrollTop
-      }
-    }
     
     onExpandCollapse()
-    
-    if (scrollerRef.current && path) {
-      // If the contents of element is large, the element sometimes disappears from the DOM because
-      // of virtualization. This is a workaround to ensure the element is still visible and focused after a collapse.
-      setTimeout(() => {
-        let element = document.querySelector(`[data-path="${path}"]`)
-        if (!element) {
-          scrollerRef.current?.scrollTo({ top: savedPosition })
-          setTimeout(() => {
-            element = document.querySelector(`[data-path="${path}"]`)
-            if (element && !element.classList.contains('focused')) {
-              (element as HTMLElement).focus()
-            }
-          }, 50)
-        }
-      }, 50)
-    }
   }
 
   const handleClick = () => {
     if (isTableKind && selectOpen && handleSelectToggle) {
       handleSelectToggle({ name, type: kind })
     }
-  }
 
-  const handleGoToParent = () => {
-    const pathSegments = path!.split(":")
-    pathSegments.pop()
-    const parentPath = pathSegments.join(":")
-    const parentElement = document.querySelector(`[data-path="${parentPath}"]`) as HTMLElement
-    if (parentElement) {
-      parentElement.focus()
+    if ((!selectOpen || isRootFolder) && focusedIndex !== index) {
+      setFocusedIndex(index)
     }
-  }
-
-  const handleGoToNextSibling = () => {
-    const currentElement = document.activeElement as HTMLElement
-    if (!currentElement || !scrollerRef.current) return
-    let focusableElements = computeFocusableElements(scrollerRef.current)
-    let currentIndex = focusableElements.indexOf(currentElement)
-
-    if (currentIndex === focusableElements.length - 1) {
-      scrollBy(32)
-    }
-    focusableElements = computeFocusableElements(scrollerRef.current)
-    currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
-
-    if (currentIndex < focusableElements.length - 1) {
-      const nextElement = focusableElements[currentIndex + 1] as HTMLElement
-      nextElement.focus()
-    }
-  }
-
-  const handleGoToPreviousSibling = () => {
-    if (!document.activeElement || !scrollerRef.current) return
-    let focusableElements = computeFocusableElements(scrollerRef.current)
-    let currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
-
-    if (currentIndex === 0) {
-      scrollBy(-32)
-    }
-    setTimeout(() => {
-      focusableElements = computeFocusableElements(scrollerRef.current!)
-      currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement)
-      if (currentIndex > 0) {
-        const previousElement = focusableElements[currentIndex - 1] as HTMLElement
-        previousElement.focus()
-      }
-    })
-  }
-
-  const getTabIndex = () => { 
-    if (tabIndex) {
-      return tabIndex
-    }
-    if (path?.startsWith(MATVIEWS_GROUP_KEY)) {
-      return 201
-    }
-    return 101
   }
 
   useEffect(() => {
@@ -443,41 +327,42 @@ const Row = ({
     }
   }, [isLoading])
 
+  useLayoutEffect(() => {
+    if (focusedIndex === index) {
+      wrapperRef.current?.focus()
+    }
+  }, [focusedIndex])
+
   if (selectOpen && !isTableKind && !isRootFolder) {
     return null
   }
 
   return (
     <Wrapper
-      $level={path ? path.split(":").length - 2 : 0}
+      $level={id ? id.split(":").length - 2 : 0}
       $selectOpen={selectOpen}
+      $focused={focusedIndex === index}
+      ref={wrapperRef}
       data-hook={dataHook ?? "schema-row"}
       data-kind={kind}
-      data-path={path}
+      data-index={index}
+      data-id={id}
       className={className}
-      tabIndex={getTabIndex()}
+      tabIndex={100}
+      onBlur={() => {
+        if (focusedIndex === index) {
+          setFocusedIndex(null)
+        }
+      }}
       onContextMenu={(e) => {
         if (!isTableKind) {
           e.preventDefault()
         }
       }}
-      onFocus={(e) => {
-        if (!selectOpen || isRootFolder) {
-          (e.target as HTMLElement).classList.add('focused')
-        }
-      }}
-      onBlur={(e) => {
-        ;(e.target as HTMLElement).classList.remove('focused')
-      }}
       onDoubleClick={handleExpandCollapse}
       onClick={handleClick}
       onKeyDown={(e) => {
-        if (e.key === "PageUp" || e.key === "PageDown" || e.key === "Home" || e.key === "End") {
-          return
-        }
         e.preventDefault()
-        if (!path) return
-        if (!scrollerRef.current || !isElementVisible(document.activeElement as HTMLElement, scrollerRef.current)) return
 
         if (isExpandable && (
           e.key === "Enter"
@@ -488,17 +373,30 @@ const Row = ({
         }
 
         const shouldGoToParent = (!isExpandable || !expanded) && e.key === "ArrowLeft"
-        const shouldGoToNextSibling = ((!isExpandable || expanded) && e.key === "ArrowRight") || e.key === "ArrowDown"
+        const shouldGoToNextSibling = ((!isExpandable || expanded) && e.key === "ArrowRight")
+          || e.key === "ArrowDown"
+          || e.key === "Tab"
         
         if (shouldGoToParent) {
-          handleGoToParent()
+          navigateInTree({ to: "parent", id })
         }
         if (shouldGoToNextSibling) {
-          handleGoToNextSibling()
+          navigateInTree({ to: "next", id })
         }
-
-        if (e.key === "ArrowUp") {
-          handleGoToPreviousSibling()
+        if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
+          navigateInTree({ to: "previous", id })
+        }
+        if (e.key === "Home") {
+          navigateInTree({ to: "start" })
+        }
+        if (e.key === "End") {
+          navigateInTree({ to: "end" })
+        }
+        if (e.key === "PageUp") {
+          navigateInTree({ to: "pageUp" })
+        }
+        if (e.key === "PageDown") {
+          navigateInTree({ to: "pageDown" })
         }
       }}
     >
@@ -506,7 +404,7 @@ const Row = ({
         align="center"
         justifyContent="flex-start"
         gap="2rem"
-        style={{ width: "100%", position: "relative" }}
+        style={{ width: "100%", position: "relative", minWidth: "fit-content" }}
       >
         {isTableKind && (
           <div style={{ position: "absolute", left: "-2rem" }}>
