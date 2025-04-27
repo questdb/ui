@@ -320,6 +320,7 @@ export function grid(rootElement, _paginationFn, id) {
     const colLo = Math.max(visColumnLo, freezeLeft)
     const colHi = Math.min(colLo + visColumnCount, columnCount)
     renderCells(rows, colLo, colHi, visColumnLo)
+    scroll()
   }
 
   function purgeOutlierPages() {
@@ -1047,7 +1048,11 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function renderFocusedCell() {
-    addClass(focusedCell, ACTIVE_CELL_CLASS)
+    if (focusedCell && focusedCell.parentElement && focusedCell.parentElement.rowIndex === focusedRowIndex) {
+      addClass(focusedCell, ACTIVE_CELL_CLASS)
+    } else if (focusedCell) {
+      removeClass(focusedCell, ACTIVE_CELL_CLASS)
+    }
   }
 
   function setFocusedCell(cell) {
@@ -1243,7 +1248,11 @@ export function grid(rootElement, _paginationFn, id) {
 
   function setRowActive(rows) {
     const row = rows[focusedRowIndex & dcn]
-    row.className = "qg-r qg-r-active"
+    if (row && row.rowIndex === focusedRowIndex) {
+      row.className = "qg-r qg-r-active"
+    } else if (row) {
+      row.className = "qg-r"
+    }
     return row
   }
 
