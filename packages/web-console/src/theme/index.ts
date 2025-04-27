@@ -54,6 +54,7 @@ const color: ColorShape = {
   white: "#fafafa",
   inherit: "inherit",
   tooltipBackground: "#6272a4",
+  tableSelection: "#043c5c",
   graphLegend: "#6e7078",
   offWhite: "#bdbdbd",
 }

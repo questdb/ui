@@ -57,7 +57,7 @@ const ChromeTabsWrapper = forwardRef<
     <div
       ref={ref}
       className={classList.join(" ")}
-      style={{ "--tab-content-margin": "9px" } as CSSProperties}
+      style={{ "--tab-content-margin": "9px", "paddingBottom": "3px" } as CSSProperties}
     >
       <div className="chrome-tabs-content"></div>
     </div>
