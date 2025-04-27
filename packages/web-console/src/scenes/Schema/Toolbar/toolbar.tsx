@@ -1,10 +1,10 @@
-import React, { useContext } from "react"
+import React from "react"
 import styled from "styled-components"
 import { Button, Box, Input } from "@questdb/react-components"
 import { Close, Filter3 } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { PopperHover, Tooltip } from "../../../components"
-import { SchemaContext } from "../SchemaContext"
+import { useSchema } from "../SchemaContext"
 
 const Root = styled(Box).attrs({
   justifyContent: "space-between",
@@ -73,7 +73,7 @@ export const Toolbar = ({
   filterSuspendedOnly: boolean
   setFilterSuspendedOnly: (filter: boolean) => void
 }) => {
-  const { setQuery } = useContext(SchemaContext)
+  const { setQuery } = useSchema()
   const queryRef = React.useRef<HTMLInputElement>(null)
 
   return (
