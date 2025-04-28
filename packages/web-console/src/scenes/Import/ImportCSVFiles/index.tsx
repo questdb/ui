@@ -6,7 +6,7 @@ import { ProcessedFile } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
-import { pick, UploadResult, FileCheckStatus } from "../../../utils"
+import { pick, UploadResult, FileCheckStatus, Parameter } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
@@ -20,6 +20,8 @@ import {
   uuid,
 } from "./utils"
 import { Upload } from "./upload"
+import {getValue} from "../../../utils/localStorage";
+import {StoreKey} from "../../../utils/localStorage/types";
 
 type State = "upload" | "list"
 
@@ -40,6 +42,51 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const isVisible = useIsVisible(rootRef)
   const [state, setState] = useState<State>("upload")
+  const [ownedByList, setOwnedByList] = useState<string[]>([])
+
+  const getOwnedByList = async () => {
+    const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
+    if (!isEE) {
+      // OSS does not have to set owner
+      return
+    }
+
+    try {
+      let ownedByNames: string[] = []
+      const userResult = await quest.query<Parameter>(
+        `select current_user()`,
+      )
+      if (userResult.type === "dql" && userResult.count > 0) {
+        const username = Object.values(userResult.data[0])[0] as string
+        if (username) {
+          const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
+          if (!authPayload) {
+            // no OAuth2 payload in local storage
+            // non-SSO users can set themselves as owner
+            ownedByNames.push(username)
+          }
+
+          const result = await quest.query<Parameter>(
+            `show groups ${username}`,
+          )
+          if (result.type === "dql" && result.count > 0) {
+            const groups = result.data.map(row => Object.values(row)[0] as string)
+            ownedByNames = ownedByNames.concat(groups)
+          }
+        }
+      }
+
+      setOwnedByList(
+        ownedByNames,
+      )
+    } catch (ex) {
+      return
+    }
+  }
+
+  useEffect(() => {
+    getOwnedByList()
+  }, [])
 
   const setFileProperties = (id: string, file: Partial<ProcessedFile>) => {
     setFilesDropped((files) =>
@@ -122,6 +169,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           id: uuid(),
           fileObject: file,
           table_name: file.name,
+          table_owner: ownedByList[0],
           status: result.status,
           exists: result.status === FileCheckStatus.EXISTS,
           schema,
@@ -188,6 +236,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onViewData={onViewData}
           onFilesDropped={handleDrop}
           onDialogToggle={setDialogOpen}
+          ownedByList={ownedByList}
           onFileUpload={async (id) => {
             const file = filesDropped.find((f) => f.id === id) as ProcessedFile
 
@@ -199,6 +248,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
               const response = await quest.uploadCSVFile({
                 file: file.fileObject,
                 name: file.table_name,
+                owner: file.table_owner,
                 settings: file.settings,
                 schema: file.schema.map(mapColumnTypeToQuestDB),
                 partitionBy: file.partitionBy,
