@@ -316,11 +316,6 @@ Cypress.Commands.add("logout", () => {
   cy.getByDataHook("auth-login").should("be.visible");
 });
 
-Cypress.Commands.add("ssoLogout", () => {
-  cy.getByDataHook("button-sso-logout").click();
-  cy.getByDataHook("auth-login").should("be.visible");
-});
-
 Cypress.Commands.add("executeSQL", (sql) => {
   cy.clearEditor();
   cy.typeQuery(sql);

@@ -8,7 +8,9 @@ import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
-import { hasUIAuth } from "../../modules/OAuth2/utils"
+import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
+import { getValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
 
 type ServerDetails = {
   instance_name: string | null
@@ -93,11 +95,18 @@ export const Toolbar = () => {
         },
       )
       if (response.type === QuestDB.Type.DQL && response.count === 1) {
+        const currentUser = response.data[0].current_user
         setServerDetails({
           instance_name: response.data[0].instance_name,
           instance_rgb: response.data[0].instance_rgb,
-          current_user: response.data[0].current_user,
+          current_user: currentUser,
         })
+
+        // an SSO user is logged in, update the SSO username
+        const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
+        if (authPayload && currentUser && settings["acl.oidc.client.id"]) {
+          setSSOUserNameWithClientID(settings["acl.oidc.client.id"], currentUser)
+        }
       }
     } catch (e) {
       return
@@ -146,16 +155,6 @@ export const Toolbar = () => {
             data-hook="button-logout"
           >
             Logout
-          </Button>
-        )}
-        {hasUIAuth(settings) && (
-          <Button
-            onClick={() => logout(true)}
-            prefixIcon={<LogoutCircle size="18px" />}
-            skin="secondary"
-            data-hook="button-sso-logout"
-          >
-            SSO Logout
           </Button>
         )}
       </Box>

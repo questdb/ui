@@ -12,6 +12,7 @@ import {
   getAuthorisationURL,
   getAuthToken,
   getTokenExpirationDate,
+  removeSSOUserNameWithClientID,
 } from "../modules/OAuth2/utils"
 import {
   generateCodeChallenge,
@@ -73,9 +74,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useState<ContextProps["sessionData"]>(undefined)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(
     undefined,
-  )
-  const [promptForLogin, setPromptForLogin] = useState<boolean>(
-    false,
   )
   const [state, dispatch] = useReducer(reducer, initialState)
 
@@ -180,8 +178,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             // if there is a refresh token, go to OAuth2 provider to get fresh tokens
             await refreshAuthToken(settings)
           } else {
-            // if there is no refresh token, user has to re-authenticate to get fresh tokens
-            logout(true)
+            // if there is no refresh token, send the user to the login screen
+            logout()
           }
         } else {
           setSessionData(tokenResponse)
@@ -261,7 +259,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const redirectToAuthorizationUrl = (login?: boolean) => {
+  const redirectToAuthorizationUrl = (loginWithDifferentAccount?: boolean) => {
     const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
@@ -269,7 +267,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       settings,
       code_challenge,
       state,
-      login,
+      loginWithDifferentAccount,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })
   }
@@ -278,8 +276,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     removeValue(StoreKey.AUTH_PAYLOAD)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
-    if (promptForLogin) {
-      setPromptForLogin(true)
+    if (promptForLogin && settings["acl.oidc.client.id"]) {
+      removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
     dispatch({ view: View.login })
   }
@@ -334,7 +332,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ),
     [View.login]: () => (
       <Login
-        onOAuthLogin={() => redirectToAuthorizationUrl(promptForLogin)}
+        onOAuthLogin={redirectToAuthorizationUrl}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })
         }}

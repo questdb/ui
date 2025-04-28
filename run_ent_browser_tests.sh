@@ -43,7 +43,7 @@ export QDB_ACL_OIDC_HOST=localhost
 export QDB_ACL_OIDC_PORT=9999
 export QDB_ACL_OIDC_USERINFO_ENDPOINT=/userinfo
 
-# Running tests which assume authentication is off
+# Running enterprise tests
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 yarn workspace browser-tests test:enterprise
 ./tmp/questdb-*/bin/questdb.sh stop

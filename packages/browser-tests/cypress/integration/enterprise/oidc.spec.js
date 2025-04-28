@@ -14,9 +14,12 @@ const interceptSettings = (payload) => {
   );
 };
 
-const interceptAuthorizationCodeRequest = (redirectUrl) => {
+const interceptAuthorizationCodeRequest = (redirectUrl, stateError) => {
   cy.intercept("GET", `${oidcAuthorizationCodeUrl}?**`, (req) => {
-    req.redirect(redirectUrl);
+    const url = new URL(req.url);
+    const state = url.searchParams.get('state');
+
+    req.redirect(redirectUrl + (state && !stateError ? `&state=${state}` : ""));
   }).as('authorizationCode');
 };
 
@@ -78,7 +81,7 @@ describe("OIDC authentication", () => {
     cy.logout();
   });
 
-  it("should force SSO authentication if token expired, and there is no refresh token", () => {
+  it("should go to Login page if token expired, and there is no refresh token", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode");
@@ -93,13 +96,15 @@ describe("OIDC authentication", () => {
     cy.getEditor().should("be.visible");
 
     cy.reload();
+    cy.getByDataHook("button-sso-continue").should("be.visible");
     cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Choose a different account");
 
-    cy.getByDataHook("button-sso-login").click()
+    cy.getByDataHook("button-sso-continue").click()
     cy.getEditor().should("be.visible");
   });
 
-  it("should not force SSO re-authentication with basic logout", () => {
+  it("should not force SSO re-authentication with 'Continue as <username>' button", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode");
@@ -118,8 +123,11 @@ describe("OIDC authentication", () => {
     cy.getGridRow(0).should("contain", "user1");
 
     cy.logout();
+    cy.getByDataHook("button-sso-continue").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Choose a different account");
 
-    cy.getByDataHook("button-sso-login").click();
+    cy.getByDataHook("button-sso-continue").click();
     cy.wait("@authorizationCode").then((interception) => {
       expect(interception.request.url).to.include("/authorization");
       const url = new URL(interception.request.url);
@@ -127,7 +135,7 @@ describe("OIDC authentication", () => {
     });
   });
 
-  it("should force SSO re-authentication with SSO logout", () => {
+  it("should force SSO re-authentication with 'Choose a different account' button", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode");
@@ -145,7 +153,10 @@ describe("OIDC authentication", () => {
     cy.executeSQL("select current_user();");
     cy.getGridRow(0).should("contain", "user1");
 
-    cy.ssoLogout();
+    cy.logout();
+    cy.getByDataHook("button-sso-continue").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Choose a different account");
 
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode").then((interception) => {
@@ -181,5 +192,84 @@ describe("OIDC authentication", () => {
     cy.contains("option", "group1").should("exist");
 
     cy.logout();
+  });
+});
+
+describe("OIDC authentication - with state", () => {
+  before(() => {
+    // setup SSO group mappings
+    cy.loadConsoleAsAdminAndCreateSSOGroup("group1");
+  });
+
+  beforeEach(() => {
+    cy.clearLocalStorage();
+
+    // load login page
+    interceptSettings({
+      "release.type": "EE",
+      "release.version": "1.2.3",
+      "acl.enabled": true,
+      "acl.basic.auth.realm.enabled": false,
+      "acl.oidc.enabled": true,
+      "acl.oidc.client.id": "client1",
+      "acl.oidc.authorization.endpoint": oidcAuthorizationCodeUrl,
+      "acl.oidc.token.endpoint": oidcTokenUrl,
+      "acl.oidc.pkce.required": true,
+      "acl.oidc.state.required": true,
+      "acl.oidc.groups.encoded.in.token": false,
+    });
+    cy.visit(baseUrl);
+
+    cy.wait("@settings");
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.getByDataHook("button-sso-continue").should("not.exist");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Continue with SSO");
+    cy.getEditor().should("not.exist");
+  });
+
+  it("should login via OIDC with state required", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    interceptTokenRequest({
+      "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+      "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+      "token_type": "Bearer",
+      "expires_in": 300
+    });
+    cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
+
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "user1");
+
+    cy.logout();
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.getByDataHook("button-sso-continue").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Choose a different account");
+    cy.getEditor().should("not.exist");
+  });
+
+  it("should force SSO re-authentication with state error", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`, true);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.getByDataHook("button-sso-continue").should("not.exist");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Continue with SSO");
+    cy.getEditor().should("not.exist");
+
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode").then((interception) => {
+      expect(interception.request.url).to.include("/authorization");
+      const url = new URL(interception.request.url);
+      expect(url.searchParams.get("prompt")).to.equal("login");
+    });
   });
 });

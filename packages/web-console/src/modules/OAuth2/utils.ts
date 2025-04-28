@@ -1,4 +1,5 @@
 import { Settings } from "../../providers/SettingsProvider/types"
+import { StoreKey } from "../../utils/localStorage/types"
 
 type TokenPayload = Partial<{
   grant_type: string
@@ -25,13 +26,13 @@ export const getAuthorisationURL = ({
   settings,
   code_challenge = null,
   state = null,
-  login,
+  loginWithDifferentAccount,
   redirect_uri,
 }: {
   settings: Settings
   code_challenge: string | null
   state: string | null
-  login?: boolean
+  loginWithDifferentAccount?: boolean
   redirect_uri: string
 }) => {
   const params = {
@@ -49,7 +50,7 @@ export const getAuthorisationURL = ({
   if (state) {
     urlParams.append("state", state)
   }
-  if (login) {
+  if (loginWithDifferentAccount) {
     urlParams.append("prompt", "login")
   }
 
@@ -83,3 +84,15 @@ export const getAuthToken = async (
 
 export const hasUIAuth = (settings: Settings) =>
   settings["acl.enabled"] && !settings["acl.basic.auth.realm.enabled"]
+
+export const getSSOUserNameWithClientID = (clientId: string) => {
+    return localStorage.getItem(`${StoreKey.SSO_USERNAME}.${clientId}`) ?? ""
+}
+
+export const setSSOUserNameWithClientID = (clientId: string, value: string) => {
+    localStorage.setItem(`${StoreKey.SSO_USERNAME}.${clientId}`, value)
+}
+
+export const removeSSOUserNameWithClientID = (clientId: string) => {
+    localStorage.removeItem(`${StoreKey.SSO_USERNAME}.${clientId}`)
+}
