@@ -17,6 +17,17 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 0.7.10 - 2025.04.28
+### Added
+- owner setting for tables created during CSV import [#413](https://github.com/questdb/ui/pull/413)
+- keyboard navigation for table listing [#420](https://github.com/questdb/ui/pull/420)
+
+### Fixed
+- correct wording for copy sql command link [#422](https://github.com/questdb/ui/pull/422)
+- update query extracting logic from cursor [#421](https://github.com/questdb/ui/pull/421)
+- fix grid unresponsiveness after scroll [#425](https://github.com/questdb/ui/pull/425)
+
+
 ## 0.7.9 - 2025.04.16
 ### Added
 - array type support [#391](https://github.com/questdb/ui/pull/391)
