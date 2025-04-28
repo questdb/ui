@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-describe("questdb import", () => {
+describe("CSV import in enterprise", () => {
   before(() => {
     cy.loadConsoleWithAuth();
   });
@@ -12,6 +12,7 @@ describe("questdb import", () => {
 
     cy.get('input[type="file"]').selectFile("cypress/fixtures/test.csv", { force: true });
     cy.getByDataHook("import-table-column-schema").should("be.visible");
-    cy.getByDataHook("import-table-column-owner").should("not.exist");
+    cy.getByDataHook("import-table-column-owner").should("be.visible");
+    cy.contains("option", "admin").should("exist");
   });
 });
