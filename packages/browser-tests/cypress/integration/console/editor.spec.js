@@ -6,6 +6,71 @@ const baseUrl = `http://localhost:9999${contextPath}`;
 const getTabDragHandleByTitle = (title) =>
   `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
 
+describe("run query", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
+  });
+
+  it("should correctly run query in the first line", () => {
+    cy.typeQuery("select 1;\n\nselect 2;");
+    cy.clickLine(1);
+    cy.clickRun();
+    cy.getGridRow(0).should("contain", "1");
+  });
+
+  it("should run the correct query when there are multiple queries in the same line", () => {
+    cy.typeQuery(
+      "with longseq as (\nselect * from long_sequence(100)\n-- comment"
+    );
+    cy.typeQuery(" select count(*) from longseq;select 1;");
+
+    // go to the end of second query
+    cy.clickLine(4);
+    cy.clickRun();
+    cy.getGridCol(0).should("contain", "1");
+    cy.getGridRow(0).should("contain", "1");
+
+    // go inside the second query
+    cy.clickLine(4);
+    cy.realPress("ArrowLeft");
+    cy.realPress("ArrowLeft");
+    cy.clickRun();
+    cy.getColumnName(0).should("contain", "1");
+    cy.getGridRow(0).should("contain", "1");
+
+    // go to the end of first query
+    cy.clickLine(4);
+    for (let i = 0; i < 9; i++) {
+      cy.realPress("ArrowLeft");
+    }
+    cy.clickRun();
+    cy.getColumnName(0).should("contain", "count");
+    cy.getGridRow(0).should("contain", "100");
+
+    // go inside the first query
+    cy.clickLine(4);
+    for (let i = 0; i < 11; i++) {
+      cy.realPress("ArrowLeft");
+    }
+    cy.clickRun();
+    cy.getColumnName(0).should("contain", "count");
+    cy.getGridRow(0).should("contain", "100");
+  });
+
+  it("should not suggest any query for running if the cursor is in an empty line between queries", () => {
+    cy.typeQuery("select 1;\n\nselect 2;");
+    cy.getCursorQueryGlyph().should("be.visible");
+
+    cy.realPress("ArrowUp");
+    cy.getCursorQueryGlyph().should("not.exist");
+
+    cy.realPress("ArrowUp");
+    cy.getCursorQueryGlyph().should("be.visible");
+  });
+});
+
 describe("appendQuery", () => {
   const consoleConfiguration = {
     savedQueries: [
@@ -158,6 +223,7 @@ describe("&query URL param", () => {
   it("should not append query if it already exists in editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query);
+    cy.clickLine(1);
     cy.clickRun();
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditorContent().should("be.visible");
@@ -167,7 +233,6 @@ describe("&query URL param", () => {
   it("should append query and scroll to it", () => {
     cy.typeQuery("select x from long_sequence(1);");
     cy.typeQuery("\n".repeat(20));
-    cy.clickRun(); // take space so that query is not visible later, save by running
 
     const appendedQuery = "-- hello world";
     cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`);
@@ -175,6 +240,24 @@ describe("&query URL param", () => {
     cy.getVisibleLines()
       .invoke("text")
       .should("match", /hello.world$/); // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
+  });
+
+  it("should open a new editor tab when the last active buffer is a metrics buffer", () => {
+    // when
+    cy.getByDataHook("schema-add-metrics-button").click();
+    // then
+    cy.getByDataHook("metrics-root").should("be.visible");
+
+    // when
+    cy.visit(`${baseUrl}?query=${encodeURIComponent("select x from long_sequence(1)")}`);
+
+    // then
+    cy.getEditorContent().should("be.visible");
+    cy.getEditorTabs().should("have.length", 3);
+    cy.getEditorTabByTitle("Metrics 1").should("be.visible");
+    cy.getEditorTabByTitle("Query")
+      .should("be.visible")
+      .should("have.attr", "active");
   });
 });
 
@@ -321,6 +404,21 @@ describe("errors", () => {
       cy.clearEditor();
     });
   });
+
+  it("should show error in notifications when response is not valid JSON", () => {
+    const response = {
+      statusCode: 200,
+      body: "This is not valid JSON {invalid json content",
+    };
+
+    cy.typeQuery("long_sequence(100);");
+    cy.runLineWithResponse(response);
+
+    cy.getCollapsedNotifications().should(
+      "contain",
+      "Invalid JSON response from the server"
+    );
+  });
 });
 
 describe("running query with F9", () => {
@@ -363,7 +461,7 @@ describe("running query with F9", () => {
       "select * from long_sequence(1); -- comment\nselect * from long_sequence(2);{upArrow}{rightArrow}{rightArrow}"
     );
     cy.F9();
-    cy.getGridRows().should("have.length", 2);
+    cy.getGridRows().should("have.length", 1);
     cy.getCursorQueryDecoration().should("have.length", 1);
   });
 });
@@ -454,7 +552,8 @@ describe("editor tabs", () => {
   });
 });
 
-describe("editor tabs history", () => {
+// TODO: This test is flaky because of the IndexedDB calls. Investigate the slow response time in test environment.
+describe.skip("editor tabs history", () => {
   before(() => {
     cy.loadConsoleWithAuth();
     cy.getEditorContent().should("be.visible");

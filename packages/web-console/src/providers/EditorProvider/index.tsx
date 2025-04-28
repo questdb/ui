@@ -205,9 +205,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const updateBuffer: EditorContext["updateBuffer"] = async (id, payload) => {
     const editorViewState = editorRef.current?.saveViewState()
+    const bufferType = await bufferStore.getBufferTypeById(id)
+
     await bufferStore.update(id, {
       ...payload,
-      ...(editorViewState && !payload?.metricsViewState
+      ...(editorViewState && bufferType === BufferType.SQL
         ? { editorViewState }
         : {}),
     })

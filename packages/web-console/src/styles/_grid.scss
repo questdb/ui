@@ -26,7 +26,7 @@
   height: 100%;
   width: 100%;
   flex-direction: column;
-  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+  font-family: "Open Sans", Menlo, Monaco, Consolas, "Liberation Mono",
   "Courier New", monospace;
   overflow: hidden;
 }
@@ -70,9 +70,11 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 }
 
 $active-row-background: #44475a;
+$row-hover-background: #333544;
+$table-selection-background: #043c5c;
 
 .qg-r-hover {
-  background-color: $active-row-background;
+  background-color: $row-hover-background;
 }
 
 .qg-r:focus {
@@ -101,7 +103,7 @@ $active-row-background: #44475a;
 }
 
 .qg-header {
-  padding: 10px 5px 10px 5px;
+  padding: 10px 5px;
   cursor: pointer;
   -webkit-touch-callout: none; /* iOS Safari */
   -webkit-user-select: none; /* Safari */
@@ -119,7 +121,7 @@ $drag-handle-margin: 2px;
   position: absolute;
   margin-top: 10px;
   height: 25px;
-  border-left: thin dashed #cac30f;
+  border-left: thin dashed #6272a4;
   right: 0;
 }
 
@@ -146,7 +148,7 @@ $drag-handle-margin: 2px;
 }
 
 .qg-col-resize-hysteresis-enter {
-  background-color: yellow;
+  background-color: #6272a4;
   width: 5px;
   margin-top: 10px;
   margin-left: 8px;
@@ -157,7 +159,7 @@ $drag-handle-margin: 2px;
 .qg-col-resize-ghost {
   position: absolute;
   width: $drag-handle-margin;
-  background-color: yellow;
+  background-color: #6272a4;
   height: 0;
   top: 0;
   left: 0;
@@ -175,15 +177,13 @@ $drag-handle-margin: 2px;
 }
 
 .qg-header-name {
-  font-weight: 700;
-  color: #f1fa8c !important;
+  color: #8be9fd !important;
   font-size: medium;
 }
 
 .qg-header-type {
-  color: #ff79c6;
+  color: #bbbbbb;
   font-size: x-small;
-  font-style: italic;
 }
 
 .qg-header-l {
@@ -217,8 +217,9 @@ $drag-handle-margin: 2px;
 }
 
 .qg-c-active {
-  box-shadow: inset 0 0 0 2px #f1fa8c;
-  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #8be9fd;
+  background: $table-selection-background;
+  border-radius: 0.4rem;
 }
 
 .qg-c-active-pulse {
@@ -227,16 +228,11 @@ $drag-handle-margin: 2px;
 
 @keyframes pulse {
   0% {
-    box-shadow: #f1fa8c 0 0 0 2px;
+    box-shadow: #8be9fd 0 0 0 1px;
   }
   75% {
     box-shadow: #f1fa8c00 0 0 0 16px;
   }
-}
-
-.qg-r-active:hover .qg-c-active,
-.qg-r-active:hover .qg-c-active:hover {
-  box-shadow: inset 0 0 0 2px #f1fa8c;
 }
 
 .qg-panel-left {
@@ -259,9 +255,9 @@ $drag-handle-margin: 2px;
   overflow-x: hidden;
   overflow-y: auto;
   // hide scrollbar for IE, Edge and Firefox
-  -ms-overflow-style: none;  /* IE and Edge */
+  -ms-overflow-style: none; /* IE and Edge */
   //noinspection CssUnknownProperty
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: none; /* Firefox */
 }
 
 // chrome & safari
@@ -269,7 +265,7 @@ $drag-handle-margin: 2px;
   display: none;
 }
 
-$left-shadow: 10px 0 30px -4px rgba(0,0,0,0.75);
+$left-shadow: 10px 0 30px -4px rgba(0, 0, 0, 0.75);
 $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 
 .qg-panel-scrolled-left {
@@ -299,7 +295,7 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 }
 
 .qg-panel-left-snap-ghost {
-  background-color: yellow;
+  background-color: #6272a4;
   width: 2px;
   display: none;
 }
@@ -324,9 +320,8 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   left: 0;
   width: 6px;
   height: 30px;
-  background-color: yellow;
+  background-color: #6272a4;
   border-radius: 3px;
   margin-left: -2px;
   cursor: grab;
 }
-

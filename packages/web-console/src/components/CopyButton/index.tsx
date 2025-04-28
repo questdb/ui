@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { Button } from "@questdb/react-components"
 import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const StyledButton = styled(Button)`
   padding: 1.2rem 0.6rem;
@@ -28,7 +29,7 @@ export const CopyButton = ({
       skin="secondary"
       data-hook="copy-value"
       onClick={(e) => {
-        navigator.clipboard.writeText(text)
+        copyToClipboard(text)
         e.stopPropagation()
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)

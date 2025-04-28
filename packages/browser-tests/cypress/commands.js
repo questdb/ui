@@ -103,6 +103,10 @@ Cypress.Commands.add("getGridRow", (n) =>
   cy.get(".qg-r").filter(":visible").eq(n)
 );
 
+Cypress.Commands.add("getColumnName", (n) => {
+  cy.get(".qg-header-name").filter(":visible").eq(n);
+})
+
 Cypress.Commands.add("getGridCol", (n) =>
   cy.get(".qg-c").filter(":visible").eq(n)
 );
@@ -124,6 +128,18 @@ Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec");
   cy.typeQuery(`${ctrlOrCmd}{enter}`);
   cy.wait("@exec");
+});
+
+Cypress.Commands.add("runLineWithResponse", (response) => {
+  cy.intercept("/exec*", response).as("exec");
+  cy.typeQuery(`${ctrlOrCmd}{enter}`);
+  cy.wait("@exec");
+});
+
+Cypress.Commands.add("clickLine", (n) => {
+  cy.get(".monaco-editor .view-line")
+    .eq(n - 1)
+    .click();
 });
 
 Cypress.Commands.add("clickRun", () => {
@@ -320,7 +336,7 @@ Cypress.Commands.add("refreshSchema", () => {
 Cypress.Commands.add("expandTables", () => {
   cy.get("body").then((body) => {
     if (body.find('[data-hook="expand-tables"]').length > 0) {
-      cy.get('[data-hook="expand-tables"]').click({ force: true });
+      cy.get('[data-hook="expand-tables"]').dblclick({ force: true });
     }
   });
 });
@@ -328,7 +344,7 @@ Cypress.Commands.add("expandTables", () => {
 Cypress.Commands.add("collapseTables", () => {
   cy.get("body").then((body) => {
     if (body.find('[data-hook="collapse-tables"]').length > 0) {
-      cy.get('[data-hook="collapse-tables"]').click({ force: true });
+      cy.get('[data-hook="collapse-tables"]').dblclick({ force: true });
     }
   });
 });
@@ -336,7 +352,9 @@ Cypress.Commands.add("collapseTables", () => {
 Cypress.Commands.add("expandMatViews", () => {
   cy.get("body").then((body) => {
     if (body.find('[data-hook="expand-materialized-views"]').length > 0) {
-      cy.get('[data-hook="expand-materialized-views"]').click({ force: true });
+      cy.get('[data-hook="expand-materialized-views"]').dblclick({
+        force: true,
+      });
     }
   });
 });
@@ -344,7 +362,7 @@ Cypress.Commands.add("expandMatViews", () => {
 Cypress.Commands.add("collapseMatViews", () => {
   cy.get("body").then((body) => {
     if (body.find('[data-hook="collapse-materialized-views"]').length > 0) {
-      cy.get('[data-hook="collapse-materialized-views"]').click({
+      cy.get('[data-hook="collapse-materialized-views"]').dblclick({
         force: true,
       });
     }

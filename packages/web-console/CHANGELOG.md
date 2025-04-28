@@ -17,6 +17,30 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 0.7.10 - 2025.04.28
+### Added
+- owner setting for tables created during CSV import [#413](https://github.com/questdb/ui/pull/413)
+- keyboard navigation for table listing [#420](https://github.com/questdb/ui/pull/420)
+
+### Fixed
+- correct wording for copy sql command link [#422](https://github.com/questdb/ui/pull/422)
+- update query extracting logic from cursor [#421](https://github.com/questdb/ui/pull/421)
+- fix grid unresponsiveness after scroll [#425](https://github.com/questdb/ui/pull/425)
+
+
+## 0.7.9 - 2025.04.16
+### Added
+- array type support [#391](https://github.com/questdb/ui/pull/391)
+
+### Fixed
+- minor improvements to tests and performance [#406](https://github.com/questdb/ui/pull/406)
+- show JSON parsing error in case of an invalid query result [#411](https://github.com/questdb/ui/pull/411)
+- open a new tab when query param exists and metrics tab is open [#415](https://github.com/questdb/ui/pull/415)
+- fix incorrect unit normalisation for wal row throughput [#414](https://github.com/questdb/ui/pull/414)
+- don't use navigator.clipboard in insecure context [#417](https://github.com/questdb/ui/pull/417)
+- workaround for broken safari copy schema mechanism [#418](https://github.com/questdb/ui/pull/418)
+
+
 ## 0.7.8 - 2025.03.28
 ### Added
 
