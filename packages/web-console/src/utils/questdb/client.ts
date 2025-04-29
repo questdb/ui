@@ -22,6 +22,7 @@ import {
   UploadOptions,
   UploadResult,
   Value,
+  Config,
 } from "./types"
 
 export class Client {
@@ -416,7 +417,23 @@ export class Client {
     })
   }
 
-  async saveConfig(config: any): Promise<any> {
+  async getConfig(): Promise<any> {
+    return Promise.resolve({
+      instance_name: "test instance",
+      instance_description: "Test instance description",
+    })
+    // try {
+    //   const response: Response = await fetch(
+    //     `config`,
+    //     { headers: this.commonHeaders },
+    //   )
+    //   return await response.json()
+    // } catch (error) {
+    //   throw error
+    // }
+  }
+
+  async saveConfig(config: Config): Promise<Config> {
     const formData = new FormData()
     formData.append("config", JSON.stringify(config))
 

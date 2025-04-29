@@ -1,14 +1,17 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useState, useCallback } from "react"
 import styled from "styled-components"
 import { QuestContext, useAuth, useSettings } from "../../providers"
 import { Box, Button } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
-import { User as UserIcon, LogoutCircle } from "@styled-icons/remix-line"
+import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
+import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth } from "../../modules/OAuth2/utils"
+import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
+import { Config } from "../../utils/questdb/types"
 
 type ServerDetails = {
   instance_name: string | null
@@ -23,38 +26,88 @@ const Root = styled(Box).attrs({ align: "center" })`
   white-space: nowrap;
 `
 
-const Tag = styled(Box).attrs({ align: "center" })`
-  height: 2.8rem;
-  border-radius: 0.8rem;
+const Badge = styled(Box)<{ instance_rgb: ServerDetails["instance_rgb"], instance_name: ServerDetails["instance_name"] }>`
+  background: ${({ theme }) => theme.color.backgroundLighter};
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   padding: 0 1rem;
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.6rem;
-  font-weight: 600;
-`
+  height: 3rem;
+  border-radius: 0.4rem;
 
-const Badge = styled(Tag)<{ instance_rgb: ServerDetails["instance_rgb"] }>`
-  color: #191a21;
-  background: #bbbbbb;
+  .instance-name {
+    font-size: 1.6rem;
+    color: ${({ theme }) => theme.color.gray2};
+    flex: 1;
+    display: inline-flex;
+    line-height: 1.6rem;
+    align-items: center;
+  }
+
+  .edit-icon {
+    cursor: pointer;
+    display: none;
+    color: inherit;
+    padding: 0.1rem;
+    background: inherit;
+    border-radius: 0.4rem;
+
+    &:hover {
+      color: ${({ theme }) => theme.color.backgroundLighter};
+      background: ${({ theme }) => theme.color.gray2};
+    }
+  }
+
+  &:hover {
+    .edit-icon {
+      display: inline;
+      width: 2.2rem;
+    }
+  }
 
   ${({ theme, instance_rgb }) =>
     instance_rgb === "r" &&
     `
-    color: ${theme.color.foreground};
     background: #c7072d;
+
+    .instance-name {
+      color: ${theme.color.foreground};
+    }
+
+    .edit-icon:hover {
+      background: ${theme.color.foreground};
+      color: #c7072d;
+    }
   `}
 
   ${({ theme, instance_rgb }) =>
     instance_rgb === "g" &&
     `
-    color: ${theme.color.foreground};
     background: #00aa3b;
+
+    .instance-name {
+      color: ${theme.color.foreground};
+    }
+
+    .edit-icon:hover {
+      background: ${theme.color.foreground};
+      color: #00aa3b;
+    }
   `}
 
   ${({ theme, instance_rgb }) =>
     instance_rgb === "b" &&
     `
-    color: ${theme.color.foreground};
     background: #007aff;
+
+    .instance-name {
+      color: ${theme.color.foreground};
+    }
+
+    .edit-icon:hover {
+      background: ${theme.color.foreground};
+      color: #007aff;
+    }
   `}
 `
 
@@ -82,37 +135,58 @@ export const Toolbar = () => {
   const { settings } = useSettings()
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
-  const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
+  const [currentUser, setCurrentUser] = useState<string | null>(null)
+  const [settingsPopperActive, setSettingsPopperActive] = useState(false)
+  const [configValues, setConfigValues] = useState<Config | null>(null)
+  const [previewValues, setPreviewValues] = useState<Config | null>(null)
 
   const fetchServerDetails = async () => {
     try {
       const response = await quest.query<ServerDetails>(
-        "SELECT instance_name, instance_rgb, current_user",
+        "SELECT current_user",
         {
           limit: "0,1",
         },
       )
       if (response.type === QuestDB.Type.DQL && response.count === 1) {
-        setServerDetails({
-          instance_name: response.data[0].instance_name,
-          instance_rgb: response.data[0].instance_rgb,
-          current_user: response.data[0].current_user,
-        })
+        setCurrentUser(response.data[0].current_user)
       }
     } catch (e) {
       return
     }
   }
 
+  const fetchConfig = async () => {
+    const config = await quest.getConfig()
+    setConfigValues(config)
+  }
+
   useEffect(() => {
     fetchServerDetails()
+    fetchConfig()
   }, [])
 
   useEffect(() => {
     if (result && result.type === QuestDB.Type.DDL) {
       fetchServerDetails()
+      fetchConfig()
     }
   }, [result])
+
+  const handleSaveSettings = async (values: Config) => {
+    try {
+      const config = await quest.saveConfig(values)
+      setConfigValues(config)
+    } catch (e) {
+      // Handle error
+      fetchConfig()
+    }
+  }
+
+  const handleToggle = useCallback((active: boolean) => {
+    setSettingsPopperActive(active)
+    setPreviewValues(active ? configValues : null)
+  }, [configValues])
 
   return (
     <Root>
@@ -127,20 +201,35 @@ export const Toolbar = () => {
         )}
       </Box>
       <Box gap="0.5rem">
-        {serverDetails && serverDetails.instance_name && (
-          <Badge instance_rgb={serverDetails.instance_rgb}
-                 onClick={() => quest.saveConfig({
-                   "instance_name": "db1",
-                   "instance_rgb": ""
-                 })}
+        {configValues && (
+          <Badge
+            instance_rgb={previewValues?.instance_rgb ?? configValues?.instance_rgb ?? null}
+            instance_name={previewValues?.instance_name ?? configValues?.instance_name ?? null}
           >
-            {serverDetails.instance_name}
+            {(previewValues?.instance_description || configValues?.instance_description) ? (
+              <IconWithTooltip
+                icon={<InfoCircle size="18px" />}
+                tooltip={previewValues?.instance_description ?? configValues?.instance_description}
+                placement="bottom"
+              />
+            ) : (
+              <InfoCircle size="18px" />
+            )}
+            <Text className="instance-name">{previewValues?.instance_name ?? configValues?.instance_name ?? "Unnamed instance"}</Text>
+            <Edit size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
+            <InstanceSettingsPopper
+              active={settingsPopperActive}
+              onToggle={handleToggle}
+              values={previewValues ?? configValues}
+              onSave={handleSaveSettings}
+              onValuesChange={setPreviewValues}
+            />
           </Badge>
         )}
-        {settings["acl.enabled"] && serverDetails && serverDetails.current_user && (
+        {settings["acl.enabled"] && currentUser && (
           <User>
             <UserIcon size="18px" />
-            <Text color="foreground">{serverDetails.current_user}</Text>
+            <Text color="foreground">{currentUser}</Text>
           </User>
         )}
         {hasUIAuth(settings) && (
