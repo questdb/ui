@@ -22,48 +22,48 @@
  *
  ******************************************************************************/
 
-import React, { MouseEvent, useContext, useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import styled from "styled-components"
-import { Rocket, InfoCircle } from "@styled-icons/boxicons-regular"
+import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { SortDown } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
 import type { StyledIcon } from '@styled-icons/styled-icon'
 import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon, Tag } from '@styled-icons/bootstrap'
-import type { TreeNodeKind } from "../../../components/Tree"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
 import { Box } from "@questdb/react-components"
-import { Text, TransitionDuration, IconWithTooltip, spinAnimation } from "../../../components"
+import { Text, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
-import { SchemaContext } from "../SchemaContext"
+import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
+import { MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY } from "../localStorageUtils"
+import { TreeNavigationOptions } from "../VirtualTables"
+
+export type TreeNodeKind = "column" | "table" | "matview" | "folder" | "detail"
 
 type Props = Readonly<{
+  id: string
+  index: number
+  kind: TreeNodeKind
+  name: string
   className?: string
   designatedTimestamp?: string
   expanded?: boolean
-  kind: TreeNodeKind
-  table_id?: number
-  name: string
-  onClick?: (event: MouseEvent) => void
+  onExpandCollapse: () => void | Promise<void>
+  navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
   walEnabled?: boolean
   isLoading?: boolean
   type?: string
-  selectOpen?: boolean
-  selected?: boolean
-  onSelectToggle?: ({name, type}: {name: string, type: TreeNodeKind}) => void
-  baseTable?: string
   errors?: string[]
   value?: string
-  includesSymbol?: boolean
 }>
 
 const Type = styled(Text)`
@@ -78,26 +78,27 @@ const Title = styled(Text)`
   }
 `
 
-const Wrapper = styled.div<{ $isExpandable: boolean, $includesSymbol?: boolean }>`
+const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean, $focused?: boolean }>`
   position: relative;
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0;
-  padding-left: 1rem;
-  padding-right: 1rem;
   user-select: none;
-  ${({ $isExpandable }) => $isExpandable && `
-    cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  width: 100%;
+
+  cursor: ${({ $selectOpen }) => $selectOpen ? "pointer" : "default"};
+
+  ${({ $level }) => $level && `
+    padding-left: ${$level * 1.5 + 1}rem;
   `}
 
-  ${({ $includesSymbol, $isExpandable }) => $includesSymbol && !$isExpandable && `
-    padding-left: 3.3rem;
+  ${({ $focused, theme }) => $focused && `
+    outline: none;
+    background: ${theme.color.tableSelection};
+    border: 1px solid ${theme.color.cyan};
   `}
-
-  &:hover,
-  &:active {
-    background: ${color("selection")};
-  }
 `
 
 const StyledTitle = styled(Title)`
@@ -121,13 +122,16 @@ const StyledTitle = styled(Title)`
 const TableActions = styled.span`
   z-index: 1;
   position: relative;
+  display: inline-flex;
+  align-items: center;
 `
 
-const FlexRow = styled.div<{ $selectOpen?: boolean }>`
+const FlexRow = styled.div<{ $selectOpen?: boolean, $isTableKind?: boolean }>`
   display: flex;
   align-items: center;
   width: 100%;
-  transform: translateX(${({ $selectOpen }) => ($selectOpen ? "26px" : "0")});
+  padding-right: 1rem;
+  transform: translateX(${({ $selectOpen, $isTableKind }) => $selectOpen && $isTableKind ? "1rem" : "0"});
   transition: transform 275ms ease-in-out;
 `
 
@@ -141,16 +145,15 @@ const SortDownIcon = styled(SortDown)`
   flex-shrink: 0;
 `
 
-const ChevronRightIcon = styled(ChevronRight)`
+const ChevronRightIcon = styled(ChevronRight)<{ $expanded?: boolean }>`
   color: ${color("gray2")};
-  margin-right: 0.8rem;
+  margin-right: 1.5rem;
   cursor: pointer;
   flex-shrink: 0;
   width: 1.5rem;
-`
-
-const ChevronDownIcon = styled(ChevronRightIcon)`
-  transform: rotateZ(90deg);
+  transform: rotateZ(${({ $expanded }) => $expanded ? "90deg" : "0deg"});
+  position: absolute;
+  left: -2rem;
 `
 
 const DotIcon = styled(CheckboxBlankCircle)`
@@ -165,7 +168,8 @@ const Loader = styled(Loader4)`
 `
 
 const ErrorIconWrapper = styled.div`
-  display: inline;
+  display: inline-flex;
+  align-items: center;
   align-self: center;
 
   svg {
@@ -262,27 +266,49 @@ const Row = ({
   designatedTimestamp,
   expanded,
   kind,
-  table_id,
   name,
   partitionBy,
   walEnabled,
-  onClick,
+  onExpandCollapse,
+  navigateInTree,
   "data-hook": dataHook,
   isLoading,
   type,
-  selectOpen,
-  selected,
-  onSelectToggle,
-  baseTable,
   errors,
   value,
-  includesSymbol
+  id,
+  index,
 }: Props) => {
-  const { query } = useContext(SchemaContext)
+  const { query, selectOpen, selectedTables, handleSelectToggle, focusedIndex, setFocusedIndex } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
+  const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(id ?? "")
+
+  const selected = !!(selectedTables.find((t: {name: string, type: TreeNodeKind}) =>
+    t.name === name
+    && t.type === kind
+  ))
+
+  const handleExpandCollapse = () => {
+    if (!isExpandable) {
+      return
+    }
+    
+    onExpandCollapse()
+  }
+
+  const handleClick = () => {
+    if (isTableKind && selectOpen && handleSelectToggle) {
+      handleSelectToggle({ name, type: kind })
+    }
+
+    if ((!selectOpen || isRootFolder) && focusedIndex !== index) {
+      setFocusedIndex(index)
+    }
+  }
 
   useEffect(() => {
     if (isLoading) {
@@ -301,17 +327,76 @@ const Row = ({
     }
   }, [isLoading])
 
+  useLayoutEffect(() => {
+    if (focusedIndex === index) {
+      wrapperRef.current?.focus()
+    }
+  }, [focusedIndex])
+
+  if (selectOpen && !isTableKind && !isRootFolder) {
+    return null
+  }
+
   return (
     <Wrapper
-      $isExpandable={isExpandable}
-      $includesSymbol={includesSymbol}
+      $level={id ? id.split(":").length - 2 : 0}
+      $selectOpen={selectOpen}
+      $focused={focusedIndex === index}
+      ref={wrapperRef}
       data-hook={dataHook ?? "schema-row"}
+      data-kind={kind}
+      data-index={index}
+      data-id={id}
       className={className}
-      onClick={(e) => {
-        if (isTableKind && selectOpen && onSelectToggle) {
-          onSelectToggle({name, type: kind})
-        } else {
-          onClick?.(e)
+      tabIndex={100}
+      onBlur={() => {
+        if (focusedIndex === index) {
+          setFocusedIndex(null)
+        }
+      }}
+      onContextMenu={(e) => {
+        if (!isTableKind) {
+          e.preventDefault()
+        }
+      }}
+      onDoubleClick={handleExpandCollapse}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        e.preventDefault()
+
+        if (isExpandable && (
+          e.key === "Enter"
+          || (e.key === "ArrowRight" && !expanded)
+          || (e.key === "ArrowLeft" && expanded)
+        )) {
+          handleExpandCollapse()
+        }
+
+        const shouldGoToParent = (!isExpandable || !expanded) && e.key === "ArrowLeft"
+        const shouldGoToNextSibling = ((!isExpandable || expanded) && e.key === "ArrowRight")
+          || e.key === "ArrowDown"
+          || e.key === "Tab"
+        
+        if (shouldGoToParent) {
+          navigateInTree({ to: "parent", id })
+        }
+        if (shouldGoToNextSibling) {
+          navigateInTree({ to: "next", id })
+        }
+        if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
+          navigateInTree({ to: "previous", id })
+        }
+        if (e.key === "Home") {
+          navigateInTree({ to: "start" })
+        }
+        if (e.key === "End") {
+          navigateInTree({ to: "end" })
+        }
+        if (e.key === "PageUp") {
+          navigateInTree({ to: "pageUp" })
+        }
+        if (e.key === "PageDown") {
+          navigateInTree({ to: "pageDown" })
         }
       }}
     >
@@ -319,19 +404,18 @@ const Row = ({
         align="center"
         justifyContent="flex-start"
         gap="2rem"
-        style={{ width: "100%", position: "relative" }}
+        style={{ width: "100%", position: "relative", minWidth: "fit-content" }}
       >
         {isTableKind && (
-          <div style={{ position: "absolute" }}>
+          <div style={{ position: "absolute", left: "-2rem" }}>
             <Checkbox
-              visible={selectOpen && onSelectToggle !== undefined}
+              visible={selectOpen}
               checked={selected}
             />
           </div>
         )}
-        <FlexRow $selectOpen={selectOpen}>
-          {isExpandable && expanded && <ChevronDownIcon size="14px" />}
-          {isExpandable && !expanded && <ChevronRightIcon size="14px" />}
+        <FlexRow $selectOpen={selectOpen} $isTableKind={isTableKind}>
+          {isExpandable && (!selectOpen || !isTableKind) && <ChevronRightIcon size="15px" $expanded={expanded} onClick={handleExpandCollapse} />}
 
           {kind === "column" && (
             <ColumnIcon 

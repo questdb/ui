@@ -359,6 +359,7 @@ export class Client {
   async uploadCSVFile({
     file,
     name,
+    owner,
     settings,
     schema,
     partitionBy,
@@ -382,6 +383,7 @@ export class Client {
     const params = {
       fmt: "json",
       name,
+      owner,
       ...(partitionBy ? { partitionBy } : {}),
       ...(timestamp ? { timestamp } : {}),
       ...serializedSettings,

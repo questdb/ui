@@ -9,7 +9,9 @@ import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
-import { hasUIAuth } from "../../modules/OAuth2/utils"
+import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
+import { getValue } from "../../utils/localStorage"
+import { StoreKey } from "../../utils/localStorage/types"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { Preferences } from "../../utils"
 
@@ -149,7 +151,14 @@ export const Toolbar = () => {
         },
       )
       if (response.type === QuestDB.Type.DQL && response.count === 1) {
-        setCurrentUser(response.data[0].current_user)
+        const currentUser = response.data[0].current_user
+        setCurrentUser(currentUser)
+
+        // an SSO user is logged in, update the SSO username
+        const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
+        if (authPayload && currentUser && settings["acl.oidc.client.id"]) {
+          setSSOUserNameWithClientID(settings["acl.oidc.client.id"], currentUser)
+        }
       }
     } catch (e) {
       return
@@ -238,7 +247,7 @@ export const Toolbar = () => {
             skin="secondary"
             data-hook="button-logout"
           >
-            Log out
+            Logout
           </Button>
         )}
       </Box>
