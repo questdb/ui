@@ -1,9 +1,9 @@
-import React, { useState, useRef } from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
 import { Box, Button, Input } from "@questdb/react-components"
 import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
-import { Config } from "../../utils/questdb/types"
+import { Preferences } from "../../utils"
 
 const Wrapper = styled.div`
   position: absolute;
@@ -109,9 +109,9 @@ const ErrorText = styled(Text)`
 type Props = {
   active: boolean
   onToggle: (active: boolean) => void
-  values: Config
-  onSave: (values: Config) => Promise<void>
-  onValuesChange: (values: Config) => void
+  values: Preferences
+  onSave: (values: Preferences) => Promise<void>
+  onValuesChange: (values: Preferences) => void
 }
 
 export const InstanceSettingsPopper = ({ 

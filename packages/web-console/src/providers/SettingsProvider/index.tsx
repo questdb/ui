@@ -110,7 +110,7 @@ export const SettingsProvider = ({
         consoleConfigError,
       )
       if (settings) {
-        setSettings(settings)
+        setSettings(settings.config)
         setValue(StoreKey.RELEASE_TYPE, settings["release.type"])
       }
       if (warnings) {

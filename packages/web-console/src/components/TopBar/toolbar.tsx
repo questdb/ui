@@ -11,7 +11,7 @@ import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth } from "../../modules/OAuth2/utils"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
-import { Config } from "../../utils/questdb/types"
+import { Preferences } from "../../utils"
 
 type ServerDetails = {
   instance_name: string | null
@@ -137,8 +137,8 @@ export const Toolbar = () => {
   const result = useSelector(selectors.query.getResult)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [settingsPopperActive, setSettingsPopperActive] = useState(false)
-  const [configValues, setConfigValues] = useState<Config | null>(null)
-  const [previewValues, setPreviewValues] = useState<Config | null>(null)
+  const [preferencesValues, setPreferencesValues] = useState<Preferences | null>(null)
+  const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
 
   const fetchServerDetails = async () => {
     try {
@@ -156,37 +156,36 @@ export const Toolbar = () => {
     }
   }
 
-  const fetchConfig = async () => {
-    const config = await quest.getConfig()
-    setConfigValues(config)
+  const fetchPreferences = async () => {
+    const preferences = await quest.getPreferences()
+    setPreferencesValues(preferences)
   }
 
   useEffect(() => {
     fetchServerDetails()
-    fetchConfig()
+    fetchPreferences()
   }, [])
 
   useEffect(() => {
     if (result && result.type === QuestDB.Type.DDL) {
       fetchServerDetails()
-      fetchConfig()
+      fetchPreferences()
     }
   }, [result])
 
-  const handleSaveSettings = async (values: Config) => {
+  const handleSaveSettings = async (values: Preferences) => {
     try {
-      const config = await quest.saveConfig(values)
-      setConfigValues(config)
+      await quest.savePreferences(values, "overwrite")
     } catch (e) {
       // Handle error
-      fetchConfig()
     }
+    fetchPreferences()
   }
 
   const handleToggle = useCallback((active: boolean) => {
     setSettingsPopperActive(active)
-    setPreviewValues(active ? configValues : null)
-  }, [configValues])
+    setPreviewValues(active ? preferencesValues : null)
+  }, [preferencesValues])
 
   return (
     <Root>
@@ -201,26 +200,26 @@ export const Toolbar = () => {
         )}
       </Box>
       <Box gap="0.5rem">
-        {configValues && (
+        {preferencesValues && (
           <Badge
-            instance_rgb={previewValues?.instance_rgb ?? configValues?.instance_rgb ?? null}
-            instance_name={previewValues?.instance_name ?? configValues?.instance_name ?? null}
+            instance_rgb={previewValues?.instance_rgb ?? preferencesValues?.instance_rgb ?? null}
+            instance_name={previewValues?.instance_name ?? preferencesValues?.instance_name ?? null}
           >
-            {(previewValues?.instance_description || configValues?.instance_description) ? (
+            {(previewValues?.instance_description || preferencesValues?.instance_description) ? (
               <IconWithTooltip
                 icon={<InfoCircle size="18px" />}
-                tooltip={previewValues?.instance_description ?? configValues?.instance_description}
+                tooltip={previewValues?.instance_description ?? preferencesValues?.instance_description}
                 placement="bottom"
               />
             ) : (
               <InfoCircle size="18px" />
             )}
-            <Text className="instance-name">{previewValues?.instance_name ?? configValues?.instance_name ?? "Unnamed instance"}</Text>
+            <Text className="instance-name">{previewValues?.instance_name ?? preferencesValues?.instance_name ?? "Unnamed instance"}</Text>
             <Edit size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
             <InstanceSettingsPopper
               active={settingsPopperActive}
               onToggle={handleToggle}
-              values={previewValues ?? configValues}
+              values={previewValues ?? preferencesValues}
               onSave={handleSaveSettings}
               onValuesChange={setPreviewValues}
             />

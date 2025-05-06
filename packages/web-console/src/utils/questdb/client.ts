@@ -22,7 +22,7 @@ import {
   UploadOptions,
   UploadResult,
   Value,
-  Config,
+  Preferences,
 } from "./types"
 
 export class Client {
@@ -417,50 +417,33 @@ export class Client {
     })
   }
 
-  async getConfig(): Promise<any> {
-    return Promise.resolve({
-      instance_name: "test instance",
-      instance_description: "Test instance description",
-    })
-    // try {
-    //   const response: Response = await fetch(
-    //     `config`,
-    //     { headers: this.commonHeaders },
-    //   )
-    //   return await response.json()
-    // } catch (error) {
-    //   throw error
-    // }
+  async getPreferences(): Promise<any> {
+    try {
+      const response: Response = await fetch(
+        `settings`,
+        { headers: this.commonHeaders },
+      )
+      const settings = await response.json()
+      return { version: settings["preferences.version"], ...settings.preferences }
+    } catch (error) {
+      throw error
+    }
   }
 
-  async saveConfig(config: Config): Promise<Config> {
-    const formData = new FormData()
-    formData.append("config", JSON.stringify(config))
-
-    return new Promise((resolve, reject) => {
-      let request = new XMLHttpRequest()
-      request.open("POST", "config")
-      Object.keys(this.commonHeaders).forEach((key) => {
-        request.setRequestHeader(key, this.commonHeaders[key])
-      })
-      request.onload = (_e) => {
-        if (request.status === 200) {
-          resolve(JSON.parse(request.response))
-        } else {
-          reject({
-            status: request.status,
-            statusText: request.statusText,
-          })
-        }
-      }
-      request.onerror = () => {
-        reject({
-          status: request.status,
-          statusText: request.statusText,
-        })
-      }
-      request.send(formData)
-    })
+  async savePreferences(preferences: Preferences, mode: string): Promise<void> {
+    const { version, ...prefs } = preferences;
+    const response: Response = await fetch(
+      `preferences?mode=${mode}&version=${version}`,
+      {
+        method: "POST",
+        headers: this.commonHeaders,
+        body: JSON.stringify(prefs),
+      },
+    )
+    await response.json()
+    if (!response.ok) {
+      throw new Error(`Status code: ${response.status}`);
+    }
   }
 
   async exportQueryToCsv(query: string) {
