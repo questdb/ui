@@ -23,9 +23,10 @@ type ServerDetails = {
 
 const Root = styled(Box).attrs({ align: "center" })`
   gap: 1.5rem;
-  flex-shrink: 0;
   padding-left: 1.5rem;
   white-space: nowrap;
+  display: flex;
+  overflow: hidden;
 `
 
 const Badge = styled(Box)<{ instance_rgb: ServerDetails["instance_rgb"], instance_name: ServerDetails["instance_name"] }>`
@@ -36,14 +37,21 @@ const Badge = styled(Box)<{ instance_rgb: ServerDetails["instance_rgb"], instanc
   padding: 0 1rem;
   height: 3rem;
   border-radius: 0.4rem;
+  flex-shrink: 1;
+  min-width: 0;
 
   .instance-name {
     font-size: 1.6rem;
     color: ${({ theme }) => theme.color.gray2};
-    flex: 1;
-    display: inline-flex;
+    display: inline;
+    height: 1.6rem;
     line-height: 1.6rem;
-    align-items: center;
+    vertical-align: middle;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
   }
 
   .edit-icon {
@@ -53,6 +61,7 @@ const Badge = styled(Box)<{ instance_rgb: ServerDetails["instance_rgb"], instanc
     padding: 0.1rem;
     background: inherit;
     border-radius: 0.4rem;
+    flex-shrink: 0;
 
     &:hover {
       color: ${({ theme }) => theme.color.backgroundLighter};
@@ -141,10 +150,11 @@ export const Toolbar = () => {
   const [settingsPopperActive, setSettingsPopperActive] = useState(false)
   const [preferencesValues, setPreferencesValues] = useState<Preferences | null>(null)
   const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
+  const shownValues = settingsPopperActive ? previewValues : preferencesValues
 
   const fetchServerDetails = async () => {
     try {
-      const response = await quest.query<ServerDetails>(
+      const response = await quest.query<{ current_user: string }>(
         "SELECT current_user",
         {
           limit: "0,1",
@@ -188,7 +198,7 @@ export const Toolbar = () => {
     } catch (e) {
       // Handle error
     }
-    fetchPreferences()
+    await fetchPreferences()
   }
 
   const handleToggle = useCallback((active: boolean) => {
@@ -208,32 +218,34 @@ export const Toolbar = () => {
           />
         )}
       </Box>
-      <Box gap="0.5rem">
-        {preferencesValues && (
-          <Badge
-            instance_rgb={previewValues?.instance_rgb ?? preferencesValues?.instance_rgb ?? null}
-            instance_name={previewValues?.instance_name ?? preferencesValues?.instance_name ?? null}
-          >
-            {(previewValues?.instance_description || preferencesValues?.instance_description) ? (
+      {preferencesValues && (
+        <Badge
+          instance_rgb={shownValues?.instance_rgb ?? null}
+          instance_name={shownValues?.instance_name ?? null}
+        >
+          <Box>
+            {(shownValues?.instance_description) ? (
               <IconWithTooltip
                 icon={<InfoCircle size="18px" />}
-                tooltip={previewValues?.instance_description ?? preferencesValues?.instance_description}
+                tooltip={shownValues?.instance_description}
                 placement="bottom"
               />
             ) : (
               <InfoCircle size="18px" />
             )}
-            <Text className="instance-name">{previewValues?.instance_name ?? preferencesValues?.instance_name ?? "Unnamed instance"}</Text>
-            <Edit size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
-            <InstanceSettingsPopper
-              active={settingsPopperActive}
-              onToggle={handleToggle}
-              values={previewValues ?? preferencesValues}
-              onSave={handleSaveSettings}
-              onValuesChange={setPreviewValues}
-            />
-          </Badge>
-        )}
+          </Box>
+          <Text className="instance-name">{shownValues?.instance_name ?? "Unnamed instance"}</Text>
+          <Edit size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
+          <InstanceSettingsPopper
+            active={settingsPopperActive}
+            onToggle={handleToggle}
+            values={previewValues ?? preferencesValues}
+            onSave={handleSaveSettings}
+            onValuesChange={setPreviewValues}
+          />
+        </Badge>
+      )}
+      <Box gap="0.5rem">
         {settings["acl.enabled"] && currentUser && (
           <User>
             <UserIcon size="18px" />

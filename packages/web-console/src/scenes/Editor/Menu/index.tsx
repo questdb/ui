@@ -51,10 +51,10 @@ import { Button } from "@questdb/react-components"
 import "@docsearch/css"
 
 const Wrapper = styled(PaneMenu)<{ _display: string }>`
-  width: 100%;
   background: transparent;
   z-index: 15;
   padding-right: 1rem;
+  flex-shrink: 0;
 
   .algolia-autocomplete {
     display: ${({ _display }) => _display} !important;

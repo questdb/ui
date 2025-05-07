@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import { Box, Button, Input } from "@questdb/react-components"
+import { Box, Button, Input, Loader } from "@questdb/react-components"
 import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
 import { Preferences } from "../../utils"
@@ -122,6 +122,7 @@ export const InstanceSettingsPopper = ({
   onValuesChange,
 }: Props) => {
   const [error, setError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const handleSave = async () => {
     if (!values?.instance_name?.trim()) {
@@ -129,7 +130,9 @@ export const InstanceSettingsPopper = ({
       return
     }
     setError(null)
+    setIsSaving(true)
     await onSave(values)
+    setIsSaving(false)
     onToggle(false)
   }
 
@@ -188,7 +191,7 @@ export const InstanceSettingsPopper = ({
             <Button onClick={() => onToggle(false)} skin="secondary">
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save</Button>
+            <Button prefixIcon={isSaving ? <Loader /> : undefined} onClick={handleSave}>Save</Button>
           </Buttons>
         </Box>
       </Wrapper>
