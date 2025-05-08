@@ -222,8 +222,9 @@ export const Toolbar = () => {
         <Badge
           instance_rgb={shownValues?.instance_rgb ?? null}
           instance_name={shownValues?.instance_name ?? null}
+          data-hook="topbar-instance-badge"
         >
-          <Box>
+          <Box data-hook="topbar-instance-info">
             {(shownValues?.instance_description) ? (
               <IconWithTooltip
                 icon={<InfoCircle size="18px" />}
@@ -234,8 +235,8 @@ export const Toolbar = () => {
               <InfoCircle size="18px" />
             )}
           </Box>
-          <Text className="instance-name">{shownValues?.instance_name ?? "Unnamed instance"}</Text>
-          <Edit size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
+          <Text data-hook="topbar-instance-name" className="instance-name">{shownValues?.instance_name ?? "Unnamed instance"}</Text>
+          <Edit data-hook="topbar-instance-edit-icon" size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
           <InstanceSettingsPopper
             active={settingsPopperActive}
             onToggle={handleToggle}

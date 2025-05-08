@@ -155,6 +155,7 @@ export const InstanceSettingsPopper = ({
           <FormGroup>
             <FormLabel color="foreground">Instance Name</FormLabel>
             <StyledInput
+              data-hook="topbar-instance-name-input"
               value={values.instance_name}
               onChange={handleNameChange}
               placeholder="Enter instance name"
@@ -164,6 +165,7 @@ export const InstanceSettingsPopper = ({
           <FormGroup>
             <FormLabel color="foreground">Description</FormLabel>
             <TextArea
+              data-hook="topbar-instance-description-input"
               value={values.instance_description}
               onChange={(e) => onValuesChange({ ...values, instance_description: e.target.value })}
               placeholder="Enter instance description"
@@ -176,6 +178,7 @@ export const InstanceSettingsPopper = ({
                 color="default"
                 selected={values.instance_rgb === undefined}
                 onClick={() => onValuesChange({ ...values, instance_rgb: undefined })}
+                data-hook="topbar-instance-color-option-default"
               />
               {["r", "g", "b"].map((color) => (
                 <ColorOption
@@ -183,15 +186,16 @@ export const InstanceSettingsPopper = ({
                   color={color}
                   selected={values.instance_rgb === color}
                   onClick={() => onValuesChange({ ...values, instance_rgb: color })}
+                  data-hook={`topbar-instance-color-option-${color}`}
                 />
               ))}
             </ColorSelector>
           </FormGroup>
           <Buttons>
-            <Button onClick={() => onToggle(false)} skin="secondary">
+            <Button onClick={() => onToggle(false)} skin="secondary" data-hook="topbar-instance-cancel-button">
               Cancel
             </Button>
-            <Button prefixIcon={isSaving ? <Loader /> : undefined} onClick={handleSave}>Save</Button>
+            <Button prefixIcon={isSaving ? <Loader /> : undefined} onClick={handleSave} data-hook="topbar-instance-save-button">Save</Button>
           </Buttons>
         </Box>
       </Wrapper>
