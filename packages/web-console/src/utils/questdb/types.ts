@@ -11,6 +11,13 @@ export enum Type {
   NOTICE = "notice",
 }
 
+export type Preferences = Partial<{
+  version: number
+  instance_name: string
+  instance_rgb: string
+  instance_description: string
+}>
+
 export type Timings = {
   compiler: number
   authentication: number
