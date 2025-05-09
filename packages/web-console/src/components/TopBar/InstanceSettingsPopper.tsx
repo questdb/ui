@@ -1,14 +1,12 @@
-import React, { useState } from "react"
+import React, { useState, FormEvent, ReactNode, useRef, useEffect } from "react"
 import styled from "styled-components"
 import { Box, Button, Input, Loader } from "@questdb/react-components"
 import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
-import { Preferences } from "../../utils"
+import { Preferences } from "../../utils/questdb/types"
 
 const Wrapper = styled.div`
   position: absolute;
-  left: 13.5rem;
-  top: 4.5rem;
   margin-top: 0.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
   border: 1px solid ${({ theme }) => theme.color.gray1};
@@ -21,15 +19,20 @@ const Wrapper = styled.div`
 const ColorSelector = styled.div`
   display: flex;
   gap: 1rem;
+  flex-wrap: wrap;
 `
 
-const ColorOption = styled.div<{ color: string; selected: boolean }>`
+const ColorOption = styled.button<{ colorValue: string; selected: boolean; customColor?: string }>`
   width: 3rem;
   height: 3rem;
   border-radius: 0.4rem;
   cursor: pointer;
-  background: ${({ color, theme }) => {
-    switch (color) {
+  border: 2px solid ${({ theme, selected }) => (selected ? theme.color.foreground : "transparent")};
+  padding: 0;
+  background: ${({ colorValue, theme, customColor }) => {
+    if (customColor) return customColor;
+    
+    switch (colorValue) {
       case "r":
         return "#c7072d"
       case "g":
@@ -42,13 +45,128 @@ const ColorOption = styled.div<{ color: string; selected: boolean }>`
         return "transparent"
     }
   }};
-  border: 2px solid ${({ theme, selected }) => (selected ? theme.color.foreground : "transparent")};
+  
+  &:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.cyan};
+  }
+`
+
+const ColorWheelOption = styled.button<{ selected: boolean }>`
+  position: relative;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  border: ${({ selected, theme }) => selected ? `2px solid ${theme.color.foreground}` : "0"};
+  padding: 0;
+  overflow: hidden;
+
+  &:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.cyan};
+  }
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: conic-gradient(
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+    );
+  }
+`
+
+const ColorPickerContainer = styled.div`
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`
+
+const ColorInputRow = styled.div`
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+`
+
+const ColorSlider = styled.input.attrs({ type: 'range', min: 0, max: 255 })`
+  flex: 1;
+  height: 1rem;
+  appearance: none;
+  background: linear-gradient(to right, rgb(0,0,0), rgb(255,0,0));
+  border-radius: 0.5rem;
+  
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    border: 1px solid ${({ theme }) => theme.color.gray1};
+  }
+  
+  &.red {
+    background: linear-gradient(to right, rgb(0,0,0), rgb(255,0,0));
+  }
+  
+  &.green {
+    background: linear-gradient(to right, rgb(0,0,0), rgb(0,255,0));
+  }
+  
+  &.blue {
+    background: linear-gradient(to right, rgb(0,0,0), rgb(0,0,255));
+  }
+`
+
+const ColorValueInput = styled.input.attrs({ type: 'number', min: 0, max: 255 })`
+  width: 6rem;
+  padding: 0.5rem;
+  background: ${({ theme }) => theme.color.selection};
+  border: 1px solid ${({ theme }) => theme.color.gray1};
+  border-radius: 0.4rem;
+  color: ${({ theme }) => theme.color.foreground};
+  
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.color.cyan};
+  }
+`
+
+const ColorPreview = styled.div<{ color: string }>`
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.4rem;
+  background: ${({ color }) => color};
+  border: 1px solid ${({ theme }) => theme.color.gray1};
+`
+
+const StyledForm = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+`
+
+const StyledButton = styled(Button)`
+  font-size: 1.6rem;
+  &:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.color.cyan};
+  }
 `
 
 const Buttons = styled(Box)`
   margin-top: 1.5rem;
   gap: 1rem;
   justify-content: flex-end;
+  flex-direction: row-reverse;
 `
 
 const FormGroup = styled(Box).attrs({ flexDirection: "column", gap: "0.5rem" })`
@@ -64,7 +182,7 @@ const StyledInput = styled(Input)`
 
   &:focus {
     outline: none;
-    border-color: ${({ theme }) => theme.color.foreground};
+    border-color: ${({ theme }) => theme.color.cyan};
   }
 
   &::placeholder {
@@ -87,7 +205,7 @@ const TextArea = styled.textarea`
 
   &:focus {
     outline: none;
-    border-color: ${({ theme }) => theme.color.foreground};
+    border-color: ${({ theme }) => theme.color.cyan};
   }
 
   &::placeholder {
@@ -95,9 +213,10 @@ const TextArea = styled.textarea`
   }
 `
 
-const FormLabel = styled(Text)<{ align?: 'left' | 'center' }>`
+const FormLabel = styled.label<{ align?: 'left' | 'center' }>`
   text-align: ${props => props.align || 'left'};
   width: 100%;
+  font-size: 1.6rem;
 `
 
 const ErrorText = styled(Text)`
@@ -112,6 +231,7 @@ type Props = {
   values: Preferences
   onSave: (values: Preferences) => Promise<void>
   onValuesChange: (values: Preferences) => void
+  trigger: ReactNode
 }
 
 export const InstanceSettingsPopper = ({ 
@@ -120,20 +240,48 @@ export const InstanceSettingsPopper = ({
   values, 
   onSave, 
   onValuesChange,
+  trigger,
 }: Props) => {
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [showCustomColor, setShowCustomColor] = useState(false)
+  const [rgbValues, setRgbValues] = useState({ r: 0, g: 0, b: 0 })
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleSave = async () => {
+  // Parse RGB values when component mounts or values change
+  useEffect(() => {
+    if (values.instance_rgb && values.instance_rgb.startsWith('rgb')) {
+      setShowCustomColor(true)
+      const matches = values.instance_rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+      if (matches) {
+        setRgbValues({
+          r: parseInt(matches[1], 10),
+          g: parseInt(matches[2], 10),
+          b: parseInt(matches[3], 10)
+        })
+      }
+    } else {
+      setShowCustomColor(false)
+    }
+  }, [values.instance_rgb])
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    
     if (!values?.instance_name?.trim()) {
       setError("Instance name is required")
       return
     }
+    
     setError(null)
     setIsSaving(true)
-    await onSave(values)
-    setIsSaving(false)
-    onToggle(false)
+    
+    try {
+      await onSave(values)
+      onToggle(false)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,27 +292,65 @@ export const InstanceSettingsPopper = ({
     }
   }
 
+  const handleColorSelect = (color: string | undefined) => {
+    onValuesChange({ ...values, instance_rgb: color })
+    if (color !== 'custom') {
+      setShowCustomColor(false)
+    }
+  }
+
+  const handleCustomColorSelect = () => {
+    setShowCustomColor(true)
+    onValuesChange({ ...values, instance_rgb: rgbColorString })
+  }
+
+  const handleRgbChange = (component: 'r' | 'g' | 'b', value: number) => {
+    const newValues = { ...rgbValues, [component]: value }
+    setRgbValues(newValues)
+    const newRgbColor = `rgb(${newValues.r}, ${newValues.g}, ${newValues.b})`
+    onValuesChange({ ...values, instance_rgb: newRgbColor })
+  }
+
+  useEffect(() => {
+    if (active) {
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+    }
+  }, [active])
+
+  // Generate the current RGB color string
+  const rgbColorString = `rgb(${rgbValues.r}, ${rgbValues.g}, ${rgbValues.b})`
+
+  const wheelSelected = Boolean(values.instance_rgb?.startsWith('rgb'))
+  console.log(wheelSelected)
+
   return (
     <PopperToggle 
       active={active} 
       onToggle={onToggle} 
+      trigger={trigger}
       placement="bottom-start"
     >
       <Wrapper>
-        <Box gap="1.5rem" flexDirection="column">
+        <StyledForm onSubmit={handleSubmit}>
           <FormGroup>
-            <FormLabel color="foreground">Instance Name</FormLabel>
+            <FormLabel htmlFor="instance-name-input">Instance Name</FormLabel>
             <StyledInput
+              id="instance-name-input"
               data-hook="topbar-instance-name-input"
               value={values.instance_name}
               onChange={handleNameChange}
               placeholder="Enter instance name"
+              ref={inputRef}
             />
             {error && <ErrorText>{error}</ErrorText>}
           </FormGroup>
+          
           <FormGroup>
-            <FormLabel color="foreground">Description</FormLabel>
+            <FormLabel htmlFor="instance-description-input">Description</FormLabel>
             <TextArea
+              id="instance-description-input"
               data-hook="topbar-instance-description-input"
               value={values.instance_description}
               onChange={(e) => onValuesChange({ ...values, instance_description: e.target.value })}
@@ -172,32 +358,110 @@ export const InstanceSettingsPopper = ({
             />
           </FormGroup>
           <FormGroup>
-            <FormLabel color="foreground" align="center">Color</FormLabel>
+            <FormLabel color="foreground">Color</FormLabel>
             <ColorSelector>
               <ColorOption
-                color="default"
-                selected={values.instance_rgb === undefined}
-                onClick={() => onValuesChange({ ...values, instance_rgb: undefined })}
+                type="button"
+                colorValue="default"
+                selected={!values.instance_rgb || values.instance_rgb === ''}
+                onClick={() => handleColorSelect('')}
                 data-hook="topbar-instance-color-option-default"
               />
-              {["r", "g", "b"].map((color) => (
-                <ColorOption
-                  key={color}
-                  color={color}
-                  selected={values.instance_rgb === color}
-                  onClick={() => onValuesChange({ ...values, instance_rgb: color })}
-                  data-hook={`topbar-instance-color-option-${color}`}
-                />
-              ))}
+              <ColorOption
+                type="button"
+                colorValue="r"
+                selected={values.instance_rgb === "r"}
+                onClick={() => handleColorSelect("r")}
+                data-hook="topbar-instance-color-option-r"
+              />
+              <ColorOption
+                type="button"
+                colorValue="g"
+                selected={values.instance_rgb === "g"}
+                onClick={() => handleColorSelect("g")}
+                data-hook="topbar-instance-color-option-g"
+              />
+              <ColorOption
+                type="button"
+                colorValue="b"
+                selected={values.instance_rgb === "b"}
+                onClick={() => handleColorSelect("b")}
+                data-hook="topbar-instance-color-option-b"
+              />
+              <ColorWheelOption
+                type="button"
+                selected={Boolean(values.instance_rgb?.startsWith('rgb'))}
+                onClick={handleCustomColorSelect}
+                data-hook="topbar-instance-color-option-custom"
+              />
             </ColorSelector>
+            
+            {showCustomColor && (
+              <ColorPickerContainer>
+                <ColorInputRow>
+                  <Text color="foreground">R</Text>
+                  <ColorSlider 
+                    className="red"
+                    value={rgbValues.r} 
+                    onChange={(e) => handleRgbChange('r', parseInt(e.target.value, 10))}
+                    data-hook="topbar-instance-color-slider-r"
+                  />
+                  <ColorValueInput 
+                    value={rgbValues.r}
+                    onChange={(e) => handleRgbChange('r', parseInt(e.target.value, 10))}
+                    data-hook="topbar-instance-color-input-r"
+                  />
+                </ColorInputRow>
+                <ColorInputRow>
+                  <Text color="foreground">G</Text>
+                  <ColorSlider 
+                    className="green"
+                    value={rgbValues.g} 
+                    onChange={(e) => handleRgbChange('g', parseInt(e.target.value, 10))}
+                    data-hook="topbar-instance-color-slider-g"
+                  />
+                  <ColorValueInput 
+                    value={rgbValues.g}
+                    onChange={(e) => handleRgbChange('g', parseInt(e.target.value, 10))}
+                    data-hook="topbar-instance-color-input-g"
+                  />
+                </ColorInputRow>
+                <ColorInputRow>
+                  <Text color="foreground">B</Text>
+                  <ColorSlider 
+                    className="blue"
+                    value={rgbValues.b} 
+                    onChange={(e) => handleRgbChange('b', parseInt(e.target.value, 10))}
+                    data-hook="topbar-instance-color-slider-b"
+                  />
+                  <ColorValueInput 
+                    value={rgbValues.b}
+                    onChange={(e) => handleRgbChange('b', parseInt(e.target.value, 10))}
+                    data-hook="topbar-instance-color-input-b"
+                  />
+                </ColorInputRow>
+              </ColorPickerContainer>
+            )}
           </FormGroup>
+          
           <Buttons>
-            <Button onClick={() => onToggle(false)} skin="secondary" data-hook="topbar-instance-cancel-button">
+            <StyledButton 
+              type="submit"
+              prefixIcon={isSaving ? <Loader /> : undefined} 
+              data-hook="topbar-instance-save-button"
+            >
+              Save
+            </StyledButton>
+            <StyledButton 
+              type="button"
+              onClick={() => onToggle(false)} 
+              skin="secondary" 
+              data-hook="topbar-instance-cancel-button"
+            >
               Cancel
-            </Button>
-            <Button prefixIcon={isSaving ? <Loader /> : undefined} onClick={handleSave} data-hook="topbar-instance-save-button">Save</Button>
+            </StyledButton>
           </Buttons>
-        </Box>
+        </StyledForm>
       </Wrapper>
     </PopperToggle>
   )

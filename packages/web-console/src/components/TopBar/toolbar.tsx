@@ -13,12 +13,40 @@ import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/util
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
-import { Preferences } from "../../utils"
+import { Preferences } from "../../utils/questdb/types"
+import { PopperHover, Placement } from "../"
+import { useTheme } from "styled-components"
 
-type ServerDetails = {
-  instance_name: string | null
-  instance_rgb: string | null
-  current_user: string | null
+const getTextColor = (backgroundColor: string | null, theme?: any): string => {
+  if (!backgroundColor || !backgroundColor.startsWith('rgb')) {
+    return theme?.color.foreground || "inherit";
+  }
+  
+  const matches = backgroundColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+  if (matches) {
+    const r = parseInt(matches[1], 10) / 255
+    const g = parseInt(matches[2], 10) / 255
+    const b = parseInt(matches[3], 10) / 255
+    
+    // Convert RGB to sRGB for better perceptual accuracy
+    const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
+    const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
+    const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
+    
+    // Calculate relative luminance using WCAG formula
+    const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
+
+    if (luminance < 0.25) {
+      return theme?.color.foreground;
+    } else if (luminance < 0.50) {
+      return theme?.color.gray2;
+    } else if (luminance < 0.75) {
+      return theme?.color.gray1; 
+    } else {
+      return theme?.color.background;
+    }
+  }
+  return theme?.color.foreground || "inherit";
 }
 
 const Root = styled(Box).attrs({ align: "center" })`
@@ -29,35 +57,123 @@ const Root = styled(Box).attrs({ align: "center" })`
   overflow: hidden;
 `
 
-const Badge = styled(Box)<{ instance_rgb: ServerDetails["instance_rgb"], instance_name: ServerDetails["instance_name"] }>`
+const CustomTooltipWrapper = styled.div<{ instance_rgb?: string | null }>`
+  position: relative;
+  max-width: 460px;
+  padding: 0.4rem;
+  transform: translateY(-1rem);
+  background: ${({ theme }) => theme.color.backgroundDarker};
+  border: 1px solid ${({ theme }) => theme.color.gray1};
+  border-radius: 4px;
+  
+  ${({ instance_rgb, theme }) =>
+    instance_rgb === "r" &&
+    `
+    background: rgba(199, 7, 45, 0.95);
+    border-color: #c7072d;
+    color: ${getTextColor("r", theme)};
+  `}
+
+  ${({ instance_rgb, theme }) =>
+    instance_rgb === "g" &&
+    `
+    background: rgba(0, 170, 59, 0.95);
+    border-color: #00aa3b;
+    color: ${getTextColor("g", theme)};
+  `}
+
+  ${({ instance_rgb, theme }) =>
+    instance_rgb === "b" &&
+    `
+    background: rgba(0, 122, 255, 0.95);
+    border-color: #007aff;
+    color: ${getTextColor("b", theme)};
+  `}
+  
+  ${({ instance_rgb, theme }) =>
+    instance_rgb?.startsWith('rgb') &&
+    `
+    background: ${instance_rgb.replace('rgb', 'rgba').replace(')', ', 0.95)')};
+    border-color: ${instance_rgb};
+    color: ${getTextColor(instance_rgb, theme)};
+  `}
+`
+
+const CustomTooltipText = styled.div<{ instance_rgb?: string | null }>`
+  font-size: 1.4rem;
+  font-weight: 400;
+  color: ${({ theme, instance_rgb }) => instance_rgb ? getTextColor(instance_rgb, theme) : theme.color.foreground};
+`
+
+const CustomTooltip = ({ 
+  children, 
+  instance_rgb
+}: { 
+  children: React.ReactNode, 
+  instance_rgb?: string | null
+}) => (
+  <CustomTooltipWrapper instance_rgb={instance_rgb} data-hook="tooltip">
+    <CustomTooltipText instance_rgb={instance_rgb}>{children}</CustomTooltipText>
+  </CustomTooltipWrapper>
+)
+
+const CustomIconWithTooltip = ({ 
+  icon, 
+  tooltip, 
+  placement, 
+  instance_rgb
+}: { 
+  icon: React.ReactNode, 
+  tooltip: React.ReactNode, 
+  placement: Placement,
+  instance_rgb?: string | null
+}) => (
+  <PopperHover 
+    placement={placement} 
+    trigger={icon} 
+    modifiers={[
+      {
+        name: "offset",
+        options: { offset: [0, 12] },
+      }
+    ]}
+  >
+    <CustomTooltip instance_rgb={instance_rgb}>
+      {tooltip}
+    </CustomTooltip>
+  </PopperHover>
+)
+
+const Badge = styled(Box)<{ instance_rgb: Preferences["instance_rgb"] | null, $textColor: string }>`
   background: ${({ theme }) => theme.color.backgroundLighter};
   display: flex;
   align-items: center;
-  gap: 1rem;
   padding: 0 1rem;
+  padding-left: 0.3rem;
   height: 3rem;
   border-radius: 0.4rem;
   flex-shrink: 1;
   min-width: 0;
+  gap: 0;
 
   .instance-name {
     font-size: 1.6rem;
     color: ${({ theme }) => theme.color.gray2};
     display: inline;
-    height: 1.6rem;
-    line-height: 1.6rem;
     vertical-align: middle;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
     flex-shrink: 1;
     min-width: 0;
+    margin-left: 0.3rem;
   }
 
   .edit-icon {
     cursor: pointer;
-    display: none;
-    color: inherit;
+    display: inline;
+    width: 0;
+    color: $;
     padding: 0.1rem;
     background: inherit;
     border-radius: 0.4rem;
@@ -71,57 +187,65 @@ const Badge = styled(Box)<{ instance_rgb: ServerDetails["instance_rgb"], instanc
 
   &:hover {
     .edit-icon {
-      display: inline;
       width: 2.2rem;
+      margin-left: 1rem;
     }
   }
 
-  ${({ theme, instance_rgb }) =>
+  ${({ instance_rgb, $textColor }) => instance_rgb && `
+    .instance-name {
+      color: ${$textColor};
+    }
+
+    .edit-icon {
+      color: ${$textColor};
+    }
+
+    .edit-icon:hover {
+      background: ${$textColor};
+    }
+  `}
+
+  ${({ $textColor, instance_rgb }) =>
     instance_rgb === "r" &&
     `
     background: #c7072d;
 
-    .instance-name {
-      color: ${theme.color.foreground};
-    }
-
     .edit-icon:hover {
-      background: ${theme.color.foreground};
       color: #c7072d;
     }
   `}
 
-  ${({ theme, instance_rgb }) =>
+  ${({ $textColor, instance_rgb }) =>
     instance_rgb === "g" &&
     `
     background: #00aa3b;
 
-    .instance-name {
-      color: ${theme.color.foreground};
-    }
-
     .edit-icon:hover {
-      background: ${theme.color.foreground};
       color: #00aa3b;
     }
   `}
 
-  ${({ theme, instance_rgb }) =>
+  ${({ $textColor, instance_rgb }) =>
     instance_rgb === "b" &&
     `
     background: #007aff;
 
-    .instance-name {
-      color: ${theme.color.foreground};
-    }
-
     .edit-icon:hover {
-      background: ${theme.color.foreground};
       color: #007aff;
     }
   `}
-`
+  
+  ${({ theme, instance_rgb }) =>
+    instance_rgb?.startsWith('rgb') &&
+    `
+    background: ${instance_rgb};
 
+    .edit-icon:hover {
+      color: ${instance_rgb};
+    }
+  `}
+`
 const User = styled(Box).attrs({ gap: "0.5rem" })`
   background: ${({ theme }) => theme.color.backgroundLighter};
   border-radius: 0.4rem;
@@ -129,7 +253,6 @@ const User = styled(Box).attrs({ gap: "0.5rem" })`
   padding: 0 1rem;
   font-weight: 600;
 `
-
 const EnterpriseBadge = styled.span`
   padding: 0 4px;
   background: ${({ theme }) => theme.color.pinkDarker};
@@ -151,6 +274,8 @@ export const Toolbar = () => {
   const [preferencesValues, setPreferencesValues] = useState<Preferences | null>(null)
   const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
   const shownValues = settingsPopperActive ? previewValues : preferencesValues
+  const theme = useTheme()
+  const textColor = getTextColor(shownValues?.instance_rgb ?? null, theme)
 
   const fetchServerDetails = async () => {
     try {
@@ -220,29 +345,32 @@ export const Toolbar = () => {
       </Box>
       {preferencesValues && (
         <Badge
+          $textColor={textColor}
           instance_rgb={shownValues?.instance_rgb ?? null}
-          instance_name={shownValues?.instance_name ?? null}
           data-hook="topbar-instance-badge"
         >
           <Box data-hook="topbar-instance-info">
             {(shownValues?.instance_description) ? (
-              <IconWithTooltip
-                icon={<InfoCircle size="18px" />}
+              <CustomIconWithTooltip
+                icon={<div style={{ color: textColor, padding: '0.7rem' }}><InfoCircle size="18px" /></div>}
                 tooltip={shownValues?.instance_description}
                 placement="bottom"
+                instance_rgb={shownValues?.instance_rgb}
               />
             ) : (
-              <InfoCircle size="18px" />
+              <div style={{ color: textColor, padding: '0.7rem' }}>
+                <InfoCircle size="18px" color={textColor} />
+              </div>
             )}
           </Box>
           <Text data-hook="topbar-instance-name" className="instance-name">{shownValues?.instance_name ?? "Unnamed instance"}</Text>
-          <Edit data-hook="topbar-instance-edit-icon" size="18px" className="edit-icon" onClick={() => handleToggle(true)} />
           <InstanceSettingsPopper
             active={settingsPopperActive}
             onToggle={handleToggle}
             values={previewValues ?? preferencesValues}
             onSave={handleSaveSettings}
             onValuesChange={setPreviewValues}
+            trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className="edit-icon" />}
           />
         </Badge>
       )}

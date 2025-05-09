@@ -419,7 +419,7 @@ export class Client {
     })
   }
 
-  async getPreferences(): Promise<any> {
+  async getPreferences(): Promise<Preferences> {
     try {
       const response: Response = await fetch(
         `settings`,
