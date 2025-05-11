@@ -70,8 +70,7 @@ const Menu = styled(PaneMenu)`
 
 const Content = styled(PaneContent)<{ minimized: boolean }>`
   overflow: ${(props) => (props.minimized ? "hidden" : "auto")};
-  padding: ${(props) => (props.minimized ? "0" : "0 0 1rem")};
-  flex: initial;
+  overflow-x: hidden;
   height: ${(props) => (props.minimized ? "4rem" : "100%")};
 `
 
@@ -97,8 +96,12 @@ const TerminalBoxIcon = styled(TerminalBox)`
 const ClearAllNotifications = styled.div`
   display: flex;
   width: 100%;
+  height: 4.5rem;
   justify-content: center;
+  padding: 0.5rem 1rem;
   margin-top: auto;
+  align-items: center;
+  flex-shrink: 0;
 `
 
 const Notifications = () => {
@@ -152,7 +155,7 @@ const Notifications = () => {
             <Notification isMinimized={true} {...lastNotification} />
           )}
         </LatestNotification>
-        <Button skin="transparent" onClick={toggleMinimized}>
+        <Button skin={`${isMinimized ? "secondary" : "transparent"}`} onClick={toggleMinimized}>
           {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
         </Button>
       </Menu>

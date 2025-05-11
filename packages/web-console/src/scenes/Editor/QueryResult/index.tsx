@@ -41,7 +41,6 @@ type Props = Timings &
 const Wrapper = styled.div`
   display: flex;
   align-items: center;
-  margin-top: 0.2rem;
   overflow: hidden;
   ${collapseTransition};
 

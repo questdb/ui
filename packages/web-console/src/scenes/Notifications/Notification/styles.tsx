@@ -25,7 +25,6 @@
 import styled from "styled-components"
 import { NotificationShape } from "types"
 import { bezierTransition } from "../../../components"
-import { color } from "../../../utils"
 
 export const Wrapper = styled.div<{
   isMinimized: NotificationShape["isMinimized"]
@@ -33,14 +32,12 @@ export const Wrapper = styled.div<{
   display: flex;
   align-items: center;
   border-right: none;
-  width: 100%;
-  overflow: hidden;
   height: ${({ isMinimized }) => (isMinimized ? "auto" : "4.5rem")};
-  ${({ isMinimized }) => !isMinimized && `
-    border-bottom: 1px ${color("backgroundDarker")} solid;
-  `}
-  
+  border-bottom: ${({ isMinimized, theme }) => isMinimized ? "none" : `1px solid ${theme.color.backgroundDarker}`};
   padding: 0 1rem;
+  flex-shrink: 0;
+  width: 100%;
+  overflow-x: auto;
 
   ${bezierTransition};
 `
@@ -52,8 +49,6 @@ export const Content = styled.div`
 `
 
 export const SideContent = styled.div`
-  margin-left: auto;
   padding-left: 1rem;
-  overflow: hidden;
   text-overflow: ellipsis;
 `
