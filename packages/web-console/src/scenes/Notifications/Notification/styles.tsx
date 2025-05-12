@@ -38,6 +38,11 @@ export const Wrapper = styled.div<{
   flex-shrink: 0;
   width: 100%;
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none; 
+  &::-webkit-scrollbar {
+    display: none;
+  }
 
   ${bezierTransition};
 `
