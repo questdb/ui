@@ -13,7 +13,7 @@ import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/util
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
-import { Preferences } from "../../utils/questdb/types"
+import { Preferences } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
 
@@ -319,7 +319,7 @@ export const Toolbar = () => {
 
   const handleSaveSettings = async (values: Preferences) => {
     try {
-      await quest.savePreferences(values, "overwrite")
+      await quest.savePreferences(values)
     } catch (e) {
       // Handle error
     }

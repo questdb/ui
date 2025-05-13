@@ -432,12 +432,12 @@ export class Client {
     }
   }
 
-  async savePreferences(preferences: Preferences, mode: string): Promise<void> {
+  async savePreferences(preferences: Preferences): Promise<void> {
     const { version, ...prefs } = preferences;
     const response: Response = await fetch(
-      `preferences?mode=${mode}&version=${version}`,
+      `settings?version=${version}`,
       {
-        method: "POST",
+        method: "PUT",
         headers: this.commonHeaders,
         body: JSON.stringify(prefs),
       },
