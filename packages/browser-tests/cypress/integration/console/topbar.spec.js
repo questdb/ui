@@ -5,10 +5,10 @@ describe("TopBar", () => {
     cy.loadConsoleWithAuth();
   });
 
-  it("should show the default instance name and no description", () => {
+  it("should show the instance warning and no description", () => {
     cy.getByDataHook("topbar-instance-name").should(
       "have.text",
-      "Unnamed instance"
+      "Instance name is not set"
     );
     cy.getByDataHook("topbar-instance-badge").should(
       "have.css",
@@ -32,7 +32,7 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-cancel-button").click();
     cy.getByDataHook("topbar-instance-name").should(
       "have.text",
-      "Unnamed instance"
+      "Instance name is not set"
     );
     cy.getByDataHook("topbar-instance-badge").should(
       "have.css",
@@ -41,11 +41,12 @@ describe("TopBar", () => {
     );
   });
 
-  it("should change the instance name and description", () => {
+  it("should change the instance name, description, and type", () => {
     cy.getByDataHook("topbar-instance-badge").realHover();
     cy.getByDataHook("topbar-instance-edit-icon").should("be.visible");
     cy.getByDataHook("topbar-instance-edit-icon").click();
     cy.getByDataHook("topbar-instance-name-input").type("test-instance");
+    cy.getByDataHook("topbar-instance-type-select").select("production");
     cy.getByDataHook("topbar-instance-description-input").type(
       "test description of the test instance"
     );
@@ -56,7 +57,10 @@ describe("TopBar", () => {
       "have.text",
       "test-instance"
     );
-    cy.getByDataHook("topbar-instance-info").realHover();
+    cy.getByDataHook("topbar-instance-icon").realHover();
     cy.contains("test description of the test instance").should("be.visible");
+    cy.contains(
+      "You are connected to a QuestDB instance for production"
+    ).should("be.visible");
   });
 });

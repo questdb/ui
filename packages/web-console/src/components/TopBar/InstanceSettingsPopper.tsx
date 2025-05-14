@@ -1,9 +1,9 @@
 import React, { useState, FormEvent, ReactNode, useRef, useEffect } from "react"
 import styled from "styled-components"
-import { Box, Button, Input, Loader } from "@questdb/react-components"
+import { Box, Button, Input, Loader, Select } from "@questdb/react-components"
 import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
-import { Preferences } from "../../utils/questdb/types"
+import { Preferences, InstanceType } from "../../utils/questdb/types"
 
 const Wrapper = styled.div`
   position: absolute;
@@ -20,6 +20,7 @@ const ColorSelector = styled.div`
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+  align-self: center;
 `
 
 const ColorOption = styled.button<{ colorValue: string; selected: boolean; customColor?: string }>`
@@ -89,6 +90,7 @@ const ColorPickerContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  align-self: center;
 `
 
 const ColorInputRow = styled.div`
@@ -162,6 +164,12 @@ const StyledButton = styled(Button)`
   }
 `
 
+const StyledSelect = styled(Select)`
+  &:focus-visible {
+    border: 1px solid ${({ theme }) => theme.color.cyan};
+  }
+`
+
 const Buttons = styled(Box)`
   margin-top: 1.5rem;
   gap: 1rem;
@@ -171,6 +179,7 @@ const Buttons = styled(Box)`
 
 const FormGroup = styled(Box).attrs({ flexDirection: "column", gap: "0.5rem" })`
   width: 100%;
+  align-items: flex-start;
 `
 
 const StyledInput = styled(Input)`
@@ -312,6 +321,9 @@ export const InstanceSettingsPopper = ({
   }
 
   useEffect(() => {
+    if (!values.instance_type) {
+      onValuesChange({ ...values, instance_type: "development" })
+    }
     if (active) {
       setTimeout(() => {
         inputRef.current?.focus()
@@ -319,11 +331,7 @@ export const InstanceSettingsPopper = ({
     }
   }, [active])
 
-  // Generate the current RGB color string
   const rgbColorString = `rgb(${rgbValues.r}, ${rgbValues.g}, ${rgbValues.b})`
-
-  const wheelSelected = Boolean(values.instance_rgb?.startsWith('rgb'))
-  console.log(wheelSelected)
 
   return (
     <PopperToggle 
@@ -346,7 +354,22 @@ export const InstanceSettingsPopper = ({
             />
             {error && <ErrorText>{error}</ErrorText>}
           </FormGroup>
-          
+          <FormGroup>
+            <FormLabel htmlFor="instance-type-select">Instance Type</FormLabel>
+            <StyledSelect
+              id="instance-type-select"
+              data-hook="topbar-instance-type-select"
+              name="instance-type"
+              options={[
+                { label: "Development", value: "development" },
+                { label: "Production", value: "production" },
+                { label: "Testing", value: "testing" },
+              ]}
+              required
+              value={values.instance_type}
+              onChange={(e) => onValuesChange({ ...values, instance_type: e.target.value as InstanceType })}
+            />
+          </FormGroup>
           <FormGroup>
             <FormLabel htmlFor="instance-description-input">Description</FormLabel>
             <TextArea

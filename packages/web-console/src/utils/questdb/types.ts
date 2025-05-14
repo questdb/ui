@@ -11,11 +11,14 @@ export enum Type {
   NOTICE = "notice",
 }
 
+export type InstanceType = "development" | "production" | "testing"
+
 export type Preferences = Partial<{
   version: number
   instance_name: string
   instance_rgb: string
   instance_description: string
+  instance_type: InstanceType
 }>
 
 export type Timings = {
