@@ -95,6 +95,19 @@ export const PopperToggle = ({
     [container, onToggle, triggerElement],
   )
 
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === "Escape" && _active) {
+        setActive(false)
+        
+        if (onToggle) {
+          onToggle(false)
+        }
+      }
+    },
+    [_active, onToggle],
+  )
+
   usePopperStyles(container, styles.popper)
 
   useTransition(container, _active, transitionTimeoutId)
@@ -106,15 +119,17 @@ export const PopperToggle = ({
   useEffect(() => {
     document.addEventListener("mousedown", handleMouseDown)
     document.addEventListener("touchstart", handleMouseDown)
+    document.addEventListener("keydown", handleKeyDown)
 
     return () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
       clearTimeout(transitionTimeoutId.current)
       document.removeEventListener("mousedown", handleMouseDown)
       document.removeEventListener("touchstart", handleMouseDown)
+      document.removeEventListener("keydown", handleKeyDown)
       document.body.contains(container) && document.body.removeChild(container)
     }
-  }, [container, handleMouseDown])
+  }, [container, handleMouseDown, handleKeyDown])
 
   return (
     <>

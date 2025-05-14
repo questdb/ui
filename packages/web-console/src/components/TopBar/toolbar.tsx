@@ -1,9 +1,12 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useState, useCallback } from "react"
 import styled from "styled-components"
 import { QuestContext, useAuth, useSettings } from "../../providers"
 import { Box, Button } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
-import { User as UserIcon, LogoutCircle } from "@styled-icons/remix-line"
+import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
+import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
+import { RocketTakeoff, Tools } from "@styled-icons/bootstrap"
+import { Flask } from "@styled-icons/boxicons-solid"
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
@@ -11,55 +14,136 @@ import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
+import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
+import { Preferences, InstanceType } from "../../utils"
+import { PopperHover, Placement } from "../"
+import { useTheme } from "styled-components"
 
-type ServerDetails = {
-  instance_name: string | null
-  instance_rgb: string | null
-  current_user: string | null
-}
+const EnvIconWrapper = styled.div<{ $background?: string }>`
+  display: flex;
+  align-items: center;
+  padding: 0.3rem;
+  background: ${({ $background }) => $background ?? 'inherit'};
+  border-radius: 0.4rem;
+`
 
 const Root = styled(Box).attrs({ align: "center" })`
   gap: 1.5rem;
-  flex-shrink: 0;
   padding-left: 1.5rem;
   white-space: nowrap;
+  display: flex;
+  overflow: hidden;
 `
 
-const Tag = styled(Box).attrs({ align: "center" })`
-  height: 2.8rem;
+const CustomTooltipWrapper = styled.div<{ $badgeColors: { primary: string, secondary: string } }>`
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+  background: ${({ theme }) => theme.color.background};
+  font-size: 1.4rem;
   border-radius: 0.8rem;
+  border: 1px solid ${({ $badgeColors }) => $badgeColors.primary};
+`
+
+const FlexRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`
+
+const Title = styled.h4`
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid ${({ theme }) => theme.color.gray1};
+  padding: 0 1rem 1rem;
+  gap: 0.8rem;
+  font-size: 1.4rem;
+  margin-bottom: 0;
+`
+
+const FlexCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`
+
+const Info = styled.div`
+  display: flex;
+  flex-direction: column;
   padding: 0 1rem;
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.6rem;
-  font-weight: 600;
+  gap: 1rem;
 `
 
-const Badge = styled(Tag)<{ instance_rgb: ServerDetails["instance_rgb"] }>`
-  color: #191a21;
-  background: #bbbbbb;
+const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string } }>`
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  padding-left: 0.3rem;
+  height: 3rem;
+  border-radius: 0.4rem;
+  flex-shrink: 1;
+  min-width: 0;
+  gap: 0;
 
-  ${({ theme, instance_rgb }) =>
-    instance_rgb === "r" &&
-    `
-    color: ${theme.color.foreground};
-    background: #c7072d;
+  ${({ $badgeColors }) => `
+    background: ${$badgeColors.primary};
+
+    .instance-name {
+      color: ${$badgeColors.secondary};
+    }
+
+    .edit-icon {
+      color: ${$badgeColors.secondary};
+
+      &:hover {
+        color: ${$badgeColors.primary};
+        background: ${$badgeColors.secondary};
+      }
+    }
   `}
 
-  ${({ theme, instance_rgb }) =>
-    instance_rgb === "g" &&
-    `
-    color: ${theme.color.foreground};
-    background: #00aa3b;
-  `}
+  .instance-name {
+    font-size: 1.6rem;
+    display: inline;
+    vertical-align: middle;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    margin-left: 0.3rem;
 
-  ${({ theme, instance_rgb }) =>
-    instance_rgb === "b" &&
-    `
-    color: ${theme.color.foreground};
-    background: #007aff;
-  `}
+    &.placeholder {
+      color: ${({ theme }) => theme.color.orange};
+    }
+  }
+
+  .edit-icon {
+    cursor: pointer;
+    display: inline;
+    width: 0;
+    padding: 0.1rem;
+    background: inherit;
+    border-radius: 0.4rem;
+    flex-shrink: 0;
+
+    &.placeholder {
+      color: ${({ theme }) => theme.color.orange};
+
+      &:hover {
+        color: ${({ theme }) => theme.color.backgroundLighter};
+        background: ${({ theme }) => theme.color.orange};
+      }
+    }
+  }
+
+  &:hover {
+    .edit-icon {
+      width: 2.2rem;
+      margin-left: 1rem;
+    }
+  }
 `
-
 const User = styled(Box).attrs({ gap: "0.5rem" })`
   background: ${({ theme }) => theme.color.backgroundLighter};
   border-radius: 0.4rem;
@@ -67,7 +151,6 @@ const User = styled(Box).attrs({ gap: "0.5rem" })`
   padding: 0 1rem;
   font-weight: 600;
 `
-
 const EnterpriseBadge = styled.span`
   padding: 0 4px;
   background: ${({ theme }) => theme.color.pinkDarker};
@@ -79,28 +162,168 @@ const EnterpriseBadge = styled.span`
   }
 `
 
+const getSecondaryBadgeColor = (primaryColor: string | null, theme?: any): string => {
+  if (!primaryColor || !primaryColor.startsWith('rgb')) {
+    return theme?.color.foreground || "inherit";
+  }
+
+  const matches = primaryColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+  if (matches) {
+    const r = parseInt(matches[1], 10) / 255
+    const g = parseInt(matches[2], 10) / 255
+    const b = parseInt(matches[3], 10) / 255
+    
+    // Convert RGB to sRGB for better perceptual accuracy
+    const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
+    const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
+    const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
+    
+    // Calculate relative luminance using WCAG formula
+    const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
+
+    if (luminance < 0.25) {
+      return theme?.color.foreground;
+    } else if (luminance < 0.50) {
+      return theme?.color.gray2;
+    } else if (luminance < 0.75) {
+      return theme?.color.gray1; 
+    } else {
+      return theme?.color.background;
+    }
+  }
+  return theme?.color.foreground || "inherit";
+}
+
+const useBadgeColors = (instance_rgb: string | null) => {
+  const theme = useTheme()
+  if (!instance_rgb) {
+    return {
+      primary: theme.color.backgroundLighter,
+      secondary: theme.color.foreground,
+    }
+  }
+
+  if (instance_rgb.startsWith('rgb')) {
+    return {
+      primary: instance_rgb,
+      secondary: getSecondaryBadgeColor(instance_rgb, theme),
+    }
+  }
+
+  if (instance_rgb === 'r') {
+    return {
+      primary: 'rgb(199, 7, 45)',
+      secondary: theme.color.foreground,
+    }
+  }
+
+  if (instance_rgb === 'g') {
+    return {
+      primary: 'rgb(0, 170, 59)',
+      secondary: theme.color.foreground,
+    }
+  }
+
+  if (instance_rgb === 'b') {
+    return {
+      primary: 'rgb(0, 122, 255)',
+      secondary: theme.color.foreground,
+    }
+  }
+
+  return {
+    primary: theme.color.backgroundLighter,
+    secondary: theme.color.foreground,
+  }
+}
+
+const EnvironmentIcon = ({ instanceType, color, background }: { instanceType: InstanceType | undefined, color?: string, background?: string }) => {
+  const getIcon = () => {
+    switch (instanceType) {
+      case "development":
+        return <Tools size="18px" color={color} />
+      case "production":
+        return <RocketTakeoff size="18px" color={color} />
+      case "testing":
+        return <Flask size="18px" color={color} style={{ transform: 'scale(1.2)' }} />
+      default:
+        return <InfoCircle size="18px" style={{ transform: 'translateY(-0.2rem)'}} color={color} />
+    }
+  }
+
+  return (
+    <EnvIconWrapper $background={background}>
+      {getIcon()}
+    </EnvIconWrapper>
+  )
+};
+
+const CustomIconWithTooltip = ({ 
+  icon, 
+  placement, 
+  shownValues,
+}: { 
+  icon: React.ReactNode, 
+  placement: Placement,
+  shownValues: Preferences | null,
+}) => {
+  const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
+
+  return (
+    <PopperHover 
+      placement={placement} 
+      trigger={icon} 
+    >
+      <CustomTooltipWrapper $badgeColors={badgeColors}>
+        <FlexCol>
+          {shownValues?.instance_type && (
+            <Title>
+              <EnvironmentIcon color={badgeColors.secondary} background={badgeColors.primary} instanceType={shownValues?.instance_type} />
+              <Text color="foreground" weight={400}>You are connected to a QuestDB instance for {shownValues?.instance_type}</Text>
+            </Title>
+          )}
+          <Info>
+            <FlexRow>
+              <Text color="foreground" weight={600}>Instance Name:</Text>
+              <Text color="foreground" size="md">{shownValues?.instance_name}</Text>
+            </FlexRow>
+            {shownValues?.instance_description && (
+              <FlexRow>
+                <Text color="foreground" weight={600}>Description:</Text>
+                <Text color="foreground" size="md">{shownValues?.instance_description}</Text>
+              </FlexRow>
+            )}
+          </Info>
+        </FlexCol>
+      </CustomTooltipWrapper>
+    </PopperHover>
+  )
+}
+
 export const Toolbar = () => {
   const { quest } = useContext(QuestContext)
   const { settings } = useSettings()
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
-  const [serverDetails, setServerDetails] = useState<ServerDetails | null>(null)
+  const [currentUser, setCurrentUser] = useState<string | null>(null)
+  const [settingsPopperActive, setSettingsPopperActive] = useState(false)
+  const [preferencesValues, setPreferencesValues] = useState<Preferences | null>(null)
+  const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
+  const shownValues = settingsPopperActive ? previewValues : preferencesValues
+  const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
+  const theme = useTheme()
 
   const fetchServerDetails = async () => {
     try {
-      const response = await quest.query<ServerDetails>(
-        "SELECT instance_name, instance_rgb, current_user",
+      const response = await quest.query<{ current_user: string }>(
+        "SELECT current_user",
         {
           limit: "0,1",
         },
       )
       if (response.type === QuestDB.Type.DQL && response.count === 1) {
         const currentUser = response.data[0].current_user
-        setServerDetails({
-          instance_name: response.data[0].instance_name,
-          instance_rgb: response.data[0].instance_rgb,
-          current_user: currentUser,
-        })
+        setCurrentUser(currentUser)
 
         // an SSO user is logged in, update the SSO username
         const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
@@ -113,15 +336,36 @@ export const Toolbar = () => {
     }
   }
 
+  const fetchPreferences = async () => {
+    const preferences = await quest.getPreferences()
+    setPreferencesValues(preferences)
+  }
+
   useEffect(() => {
     fetchServerDetails()
+    fetchPreferences()
   }, [])
 
   useEffect(() => {
     if (result && result.type === QuestDB.Type.DDL) {
       fetchServerDetails()
+      fetchPreferences()
     }
   }, [result])
+
+  const handleSaveSettings = async (values: Preferences) => {
+    try {
+      await quest.savePreferences(values)
+    } catch (e) {
+      // Handle error
+    }
+    await fetchPreferences()
+  }
+
+  const handleToggle = useCallback((active: boolean) => {
+    setSettingsPopperActive(active)
+    setPreviewValues(active ? preferencesValues : null)
+  }, [preferencesValues])
 
   return (
     <Root>
@@ -135,16 +379,42 @@ export const Toolbar = () => {
           />
         )}
       </Box>
+      {preferencesValues && (
+        <Badge
+          $badgeColors={badgeColors}
+          data-hook="topbar-instance-badge"
+        >
+          <Box style={{ padding: '0.7rem' }}>
+            {(shownValues?.instance_type) ? (
+              <CustomIconWithTooltip
+                icon={<div data-hook="topbar-instance-icon"><EnvironmentIcon instanceType={shownValues?.instance_type} color={badgeColors.secondary} background={badgeColors.primary} /></div>}
+                placement="bottom"
+                shownValues={shownValues}
+              />
+            ) : (
+              <ErrorIcon size="18px" color={theme.color.orange} />
+            )}
+          </Box>
+          {shownValues?.instance_name
+            ? <Text data-hook="topbar-instance-name" className="instance-name">{shownValues?.instance_name}</Text>
+            : <Text data-hook="topbar-instance-name" className="instance-name placeholder">Instance name is not set</Text>
+          }
+          
+          <InstanceSettingsPopper
+            active={settingsPopperActive}
+            onToggle={handleToggle}
+            values={previewValues ?? preferencesValues}
+            onSave={handleSaveSettings}
+            onValuesChange={setPreviewValues}
+            trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className={`edit-icon ${shownValues?.instance_name ? '' : 'placeholder'}`} />}
+          />
+        </Badge>
+      )}
       <Box gap="0.5rem">
-        {serverDetails && serverDetails.instance_name && (
-          <Badge instance_rgb={serverDetails.instance_rgb}>
-            {serverDetails.instance_name}
-          </Badge>
-        )}
-        {settings["acl.enabled"] && serverDetails && serverDetails.current_user && (
+        {settings["acl.enabled"] && currentUser && (
           <User>
             <UserIcon size="18px" />
-            <Text color="foreground">{serverDetails.current_user}</Text>
+            <Text color="foreground">{currentUser}</Text>
           </User>
         )}
         {hasUIAuth(settings) && (

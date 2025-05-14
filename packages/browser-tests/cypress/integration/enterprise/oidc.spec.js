@@ -40,17 +40,19 @@ describe("OIDC authentication", () => {
 
     // load login page
     interceptSettings({
-      "release.type": "EE",
-      "release.version": "1.2.3",
-      "acl.enabled": true,
-      "acl.basic.auth.realm.enabled": false,
-      "acl.oidc.enabled": true,
-      "acl.oidc.client.id": "client1",
-      "acl.oidc.authorization.endpoint": oidcAuthorizationCodeUrl,
-      "acl.oidc.token.endpoint": oidcTokenUrl,
-      "acl.oidc.pkce.required": true,
-      "acl.oidc.state.required": false,
-      "acl.oidc.groups.encoded.in.token": false,
+      "config": {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": true,
+        "acl.oidc.client.id": "client1",
+        "acl.oidc.authorization.endpoint": oidcAuthorizationCodeUrl,
+        "acl.oidc.token.endpoint": oidcTokenUrl,
+        "acl.oidc.pkce.required": true,
+        "acl.oidc.state.required": false,
+        "acl.oidc.groups.encoded.in.token": false,
+      }
     });
     cy.visit(baseUrl);
 
