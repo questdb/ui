@@ -86,7 +86,9 @@ const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean, $focused?: 
   user-select: none;
   border: 1px solid transparent;
   border-radius: 0.4rem;
+  min-width: fit-content;
   width: 100%;
+  flex-grow: 1;
 
   cursor: ${({ $selectOpen }) => $selectOpen ? "pointer" : "default"};
 
@@ -129,7 +131,6 @@ const TableActions = styled.span`
 const FlexRow = styled.div<{ $selectOpen?: boolean, $isTableKind?: boolean }>`
   display: flex;
   align-items: center;
-  width: 100%;
   padding-right: 1rem;
   transform: translateX(${({ $selectOpen, $isTableKind }) => $selectOpen && $isTableKind ? "1rem" : "0"});
   transition: transform 275ms ease-in-out;
