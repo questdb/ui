@@ -419,19 +419,6 @@ export class Client {
     })
   }
 
-  async getPreferences(): Promise<Preferences> {
-    try {
-      const response: Response = await fetch(
-        `settings`,
-        { headers: this.commonHeaders },
-      )
-      const settings = await response.json()
-      return { version: settings["preferences.version"], ...settings.preferences }
-    } catch (error) {
-      throw error
-    }
-  }
-
   async savePreferences(preferences: Preferences): Promise<void> {
     const { version, ...prefs } = preferences;
     const response: Response = await fetch(

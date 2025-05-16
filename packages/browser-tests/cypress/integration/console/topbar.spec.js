@@ -55,7 +55,7 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-save-button").should("not.exist");
     cy.getByDataHook("topbar-instance-name").should(
       "have.text",
-      "test-instance"
+      "Production | test-instance"
     );
     cy.getByDataHook("topbar-instance-icon").realHover();
     cy.contains("test description of the test instance").should("be.visible");

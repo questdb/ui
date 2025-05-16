@@ -11,6 +11,7 @@ import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
 import {setValue} from "../../utils/localStorage";
 import {StoreKey} from "../../utils/localStorage/types";
+import { Preferences } from '../../utils/questdb'
 
 enum View {
   loading = 0,
@@ -26,9 +27,11 @@ const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
 
 const SettingContext = createContext<{
   settings: Settings
+  preferences: Preferences
   consoleConfig: ConsoleConfig
   warnings: Warning[]
-}>({ settings: {}, consoleConfig: {}, warnings: [] })
+  refreshSettingsAndPreferences: () => Promise<void>
+}>({ settings: {}, preferences: {}, consoleConfig: {}, warnings: [], refreshSettingsAndPreferences: () => Promise.resolve() })
 
 const connectionError = (
   <>
@@ -47,13 +50,14 @@ export const SettingsProvider = ({
 }) => {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [settings, setSettings] = useState<Settings>({})
+  const [preferences, _setPreferences] = useState<Preferences>({})
   const [warnings, setWarnings] = useState<Warning[]>([])
   const [consoleConfig, setConsoleConfig] = useState<ConsoleConfig>({})
 
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => null,
     [View.ready]: () => (
-      <SettingContext.Provider value={{ settings, consoleConfig, warnings }}>
+      <SettingContext.Provider value={{ settings, consoleConfig, warnings, preferences, refreshSettingsAndPreferences }}>
         {children}
       </SettingContext.Provider>
     ),
@@ -101,6 +105,25 @@ export const SettingsProvider = ({
     }
   }
 
+  const setPreferences = (preferences: Preferences) => {
+    if (preferences?.instance_name) {
+      const suffix = preferences?.instance_type ? `${preferences.instance_type.charAt(0).toUpperCase()}${preferences.instance_type.slice(1)}` : 'QuestDB'
+      const newTitle = `${preferences.instance_name} | ${suffix}`
+      if (document.title !== newTitle) {
+        document.title = newTitle
+      }
+    }
+    _setPreferences(preferences)
+  }
+
+  const refreshSettingsAndPreferences = async () => {
+    const result = await fetchEndpoint("settings", connectionError)
+    if (result) {
+      setSettings(result.config)
+      setPreferences({ version: result["preferences.version"], ...result.preferences })
+    }
+  }
+
   useEffect(() => {
     const fetchAll = async () => {
       const settings = await fetchEndpoint("settings", connectionError)
@@ -111,6 +134,7 @@ export const SettingsProvider = ({
       )
       if (settings) {
         setSettings(settings.config)
+        setPreferences({ version: settings["preferences.version"], ...settings.preferences })
         setValue(StoreKey.RELEASE_TYPE, settings["release.type"])
       }
       if (warnings) {

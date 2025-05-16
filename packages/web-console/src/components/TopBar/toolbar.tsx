@@ -302,14 +302,13 @@ const CustomIconWithTooltip = ({
 
 export const Toolbar = () => {
   const { quest } = useContext(QuestContext)
-  const { settings } = useSettings()
+  const { settings, preferences, refreshSettingsAndPreferences } = useSettings()
   const { logout } = useAuth()
   const result = useSelector(selectors.query.getResult)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [settingsPopperActive, setSettingsPopperActive] = useState(false)
-  const [preferencesValues, setPreferencesValues] = useState<Preferences | null>(null)
   const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
-  const shownValues = settingsPopperActive ? previewValues : preferencesValues
+  const shownValues = settingsPopperActive ? previewValues : preferences
   const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
   const theme = useTheme()
 
@@ -336,20 +335,15 @@ export const Toolbar = () => {
     }
   }
 
-  const fetchPreferences = async () => {
-    const preferences = await quest.getPreferences()
-    setPreferencesValues(preferences)
-  }
-
   useEffect(() => {
     fetchServerDetails()
-    fetchPreferences()
+    refreshSettingsAndPreferences()
   }, [])
 
   useEffect(() => {
     if (result && result.type === QuestDB.Type.DDL) {
       fetchServerDetails()
-      fetchPreferences()
+      refreshSettingsAndPreferences()
     }
   }, [result])
 
@@ -359,13 +353,13 @@ export const Toolbar = () => {
     } catch (e) {
       // Handle error
     }
-    await fetchPreferences()
+    await refreshSettingsAndPreferences()
   }
 
   const handleToggle = useCallback((active: boolean) => {
     setSettingsPopperActive(active)
-    setPreviewValues(active ? preferencesValues : null)
-  }, [preferencesValues])
+    setPreviewValues(active ? preferences : null)
+  }, [preferences])
 
   return (
     <Root>
@@ -379,7 +373,7 @@ export const Toolbar = () => {
           />
         )}
       </Box>
-      {preferencesValues && (
+      {preferences && (
         <Badge
           $badgeColors={badgeColors}
           data-hook="topbar-instance-badge"
@@ -396,14 +390,19 @@ export const Toolbar = () => {
             )}
           </Box>
           {shownValues?.instance_name
-            ? <Text data-hook="topbar-instance-name" className="instance-name">{shownValues?.instance_name}</Text>
+            ? <Text data-hook="topbar-instance-name" className="instance-name">
+                {shownValues?.instance_type
+                  ? `${shownValues?.instance_type.charAt(0).toUpperCase()}${shownValues?.instance_type.slice(1)} | `
+                  : ''}
+                {shownValues?.instance_name}
+              </Text>
             : <Text data-hook="topbar-instance-name" className="instance-name placeholder">Instance name is not set</Text>
           }
           
           <InstanceSettingsPopper
             active={settingsPopperActive}
             onToggle={handleToggle}
-            values={previewValues ?? preferencesValues}
+            values={previewValues ?? preferences}
             onSave={handleSaveSettings}
             onValuesChange={setPreviewValues}
             trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className={`edit-icon ${shownValues?.instance_name ? '' : 'placeholder'}`} />}
