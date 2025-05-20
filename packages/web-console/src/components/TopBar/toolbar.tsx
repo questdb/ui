@@ -347,7 +347,8 @@ export const Toolbar = () => {
   }
 
   const fetchEditSettingsPermission = async (currentUser: string | null) => {
-    if (!settings["acl.enabled"]) {
+    // RBAC is not enabled, everyone can edit the instance name
+    if (!settings["acl.enabled"] || settings['release.type'] === 'OSS') {
       setCanEditInstanceName(true)
       return
     }
