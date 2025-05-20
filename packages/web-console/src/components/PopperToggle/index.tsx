@@ -86,13 +86,14 @@ export const PopperToggle = ({
         return
       }
 
-      setActive(false)
-
-      if (onToggle) {
-        onToggle(false)
+      if (_active) {
+        setActive(false)
+        if (onToggle) {
+          onToggle(false)
+        }
       }
     },
-    [container, onToggle, triggerElement],
+    [container, onToggle, triggerElement, _active],
   )
 
   const handleKeyDown = useCallback(

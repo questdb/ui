@@ -437,7 +437,6 @@ export class Client {
     if (!response.ok) {
       throw new Error(response.statusText);
     }
-    await response.json()
   }
 
   async exportQueryToCsv(query: string) {

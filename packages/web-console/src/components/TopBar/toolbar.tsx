@@ -105,14 +105,29 @@ const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string }
   .instance-name {
     font-size: 1.6rem;
     display: inline-flex;
+    gap: 0;
     align-items: center;
     vertical-align: middle;
-    text-overflow: ellipsis;
     overflow: hidden;
-    white-space: nowrap;
     flex-shrink: 1;
-    min-width: 0;
     margin-left: 0.3rem;
+
+    &-text {
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+      flex-shrink: 1;
+      min-width: 0;
+      color: inherit;
+    }
+
+    &-type {
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+      flex-shrink: 0;
+      color: inherit;
+    }
 
     &.placeholder {
       color: ${({ theme }) => theme.color.orange};
@@ -165,6 +180,7 @@ const EnterpriseBadge = styled.span`
 
 const Separator = styled.span<{ $color: string }>`
   display: inline-block;
+  flex-shrink: 0;
   width: 0.15rem;
   margin: 0 1rem;
   height: 1.8rem;
@@ -389,18 +405,20 @@ export const Toolbar = () => {
     } catch (e) {
       console.error(e)
       setSaveError(`Failed to save instance settings: ${e instanceof Error ? e.message : e}`)
-    } finally { 
-      await refreshSettingsAndPreferences()
+      const { preferences: newPreferences } = await refreshSettingsAndPreferences()
+      setPreviewValues(newPreferences)
     }
   }
 
   const handleToggle = useCallback((active: boolean) => {
-    setSettingsPopperActive(active)
-    setPreviewValues(active ? preferences : null)
-    if (!active) {
-      setSaveError(null)
-    }
-  }, [preferences])
+    refreshSettingsAndPreferences().then(({ preferences: newPreferences }) => {
+      setSettingsPopperActive(active)
+      if (!active) {
+        setSaveError(null)
+      }
+      setPreviewValues(active ? newPreferences : null)
+    })
+  }, [])
 
   return (
     <Root>
@@ -431,11 +449,11 @@ export const Toolbar = () => {
             )}
           </Box>
           {shownValues?.instance_name
-            ? <Text data-hook="topbar-instance-name" className="instance-name">
-                {instanceTypeReadable}
+            ? <Box data-hook="topbar-instance-name" className="instance-name">
+                <Text className="instance-name-type">{instanceTypeReadable}</Text>
                 <Separator $color={badgeColors.secondary} />
-                {shownValues?.instance_name}
-              </Text>
+                <Text className="instance-name-text">{shownValues?.instance_name}</Text>
+              </Box>
             : <Text data-hook="topbar-instance-name" className="instance-name placeholder">Instance name is not set</Text>
           }
           {canEditInstanceName && (

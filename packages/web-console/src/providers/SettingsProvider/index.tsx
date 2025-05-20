@@ -30,8 +30,8 @@ const SettingContext = createContext<{
   preferences: Preferences
   consoleConfig: ConsoleConfig
   warnings: Warning[]
-  refreshSettingsAndPreferences: () => Promise<void>
-}>({ settings: {}, preferences: {}, consoleConfig: {}, warnings: [], refreshSettingsAndPreferences: () => Promise.resolve() })
+  refreshSettingsAndPreferences: () => Promise<{ settings: Settings, preferences: Preferences }>
+}>({ settings: {}, preferences: {}, consoleConfig: {}, warnings: [], refreshSettingsAndPreferences: () => Promise.resolve({ settings: {}, preferences: {} }) })
 
 const connectionError = (
   <>
@@ -118,9 +118,20 @@ export const SettingsProvider = ({
 
   const refreshSettingsAndPreferences = async () => {
     const result = await fetchEndpoint("settings", connectionError)
+    const settings = result.config
+    const preferences = { version: result["preferences.version"], ...result.preferences }
     if (result) {
-      setSettings(result.config)
-      setPreferences({ version: result["preferences.version"], ...result.preferences })
+      setSettings(settings)
+      setPreferences(preferences)
+      return {
+        settings,
+        preferences
+      }
+    }
+
+    return {
+      settings: {},
+      preferences: {}
     }
   }
 
