@@ -23,6 +23,7 @@ import {
   UploadResult,
   Value,
   Preferences,
+  Permission,
 } from "./types"
 
 export class Client {
@@ -328,6 +329,10 @@ export class Client {
     return response
   }
 
+  async showPermissions(user: string): Promise<QueryResult<Permission>> {
+    return await this.query<Permission>(`SHOW PERMISSIONS ${user};`)
+  }
+
   async showColumns(table: string): Promise<QueryResult<Column>> {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
   }
@@ -429,10 +434,10 @@ export class Client {
         body: JSON.stringify(prefs),
       },
     )
-    await response.json()
     if (!response.ok) {
-      throw new Error(`Status code: ${response.status}`);
+      throw new Error(response.statusText);
     }
+    await response.json()
   }
 
   async exportQueryToCsv(query: string) {

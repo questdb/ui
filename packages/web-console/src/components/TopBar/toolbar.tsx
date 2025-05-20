@@ -104,7 +104,8 @@ const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string }
 
   .instance-name {
     font-size: 1.6rem;
-    display: inline;
+    display: inline-flex;
+    align-items: center;
     vertical-align: middle;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -160,6 +161,15 @@ const EnterpriseBadge = styled.span`
   &:not(:last-child) {
     margin-right: 0.25rem;
   }
+`
+
+const Separator = styled.span<{ $color: string }>`
+  display: inline-block;
+  width: 0.15rem;
+  margin: 0 1rem;
+  height: 1.8rem;
+  background: ${({ $color }) => $color};
+
 `
 
 const getSecondaryBadgeColor = (primaryColor: string | null, theme?: any): string => {
@@ -237,25 +247,17 @@ const useBadgeColors = (instance_rgb: string | null) => {
   }
 }
 
-const EnvironmentIcon = ({ instanceType, color, background }: { instanceType: InstanceType | undefined, color?: string, background?: string }) => {
-  const getIcon = () => {
-    switch (instanceType) {
-      case "development":
-        return <Tools size="18px" color={color} />
-      case "production":
-        return <RocketTakeoff size="18px" color={color} />
-      case "testing":
-        return <Flask size="18px" color={color} style={{ transform: 'scale(1.2)' }} />
-      default:
-        return <InfoCircle size="18px" style={{ transform: 'translateY(-0.2rem)'}} color={color} />
-    }
+const EnvironmentIcon = ({ instanceType, color }: { instanceType: InstanceType | undefined, color?: string }) => {
+  switch (instanceType) {
+    case "development":
+      return <Tools size="18px" color={color} />
+    case "production":
+      return <RocketTakeoff size="18px" color={color} />
+    case "testing":
+      return <Flask size="18px" color={color} style={{ transform: 'scale(1.2)' }} />
+    default:
+      return <InfoCircle size="18px" style={{ transform: 'translateY(-0.2rem)'}} color={color} />
   }
-
-  return (
-    <EnvIconWrapper $background={background}>
-      {getIcon()}
-    </EnvIconWrapper>
-  )
 };
 
 const CustomIconWithTooltip = ({ 
@@ -278,7 +280,9 @@ const CustomIconWithTooltip = ({
         <FlexCol>
           {shownValues?.instance_type && (
             <Title>
-              <EnvironmentIcon color={badgeColors.secondary} background={badgeColors.primary} instanceType={shownValues?.instance_type} />
+              <EnvIconWrapper $background={badgeColors.primary}>
+                <EnvironmentIcon color={badgeColors.secondary} instanceType={shownValues?.instance_type} />
+              </EnvIconWrapper>
               <Text color="foreground" weight={400}>You are connected to a QuestDB instance for {shownValues?.instance_type}</Text>
             </Title>
           )}
@@ -308,7 +312,12 @@ export const Toolbar = () => {
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   const [settingsPopperActive, setSettingsPopperActive] = useState(false)
   const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
+  const [canEditInstanceName, setCanEditInstanceName] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const shownValues = settingsPopperActive ? previewValues : preferences
+  const instanceTypeReadable = shownValues?.instance_type
+    ? shownValues.instance_type.charAt(0).toUpperCase() + shownValues.instance_type.slice(1)
+    : ''
   const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
   const theme = useTheme()
 
@@ -329,14 +338,33 @@ export const Toolbar = () => {
         if (authPayload && currentUser && settings["acl.oidc.client.id"]) {
           setSSOUserNameWithClientID(settings["acl.oidc.client.id"], currentUser)
         }
+        return currentUser
       }
+      return null
     } catch (e) {
+      return null
+    }
+  }
+
+  const fetchEditSettingsPermission = async (currentUser: string | null) => {
+    if (!currentUser) {
+      setCanEditInstanceName(false)
       return
+    }
+
+    try {
+      const response = await quest.showPermissions(currentUser)
+      // Admin user has no permissions listed
+      const canEdit = response.type === QuestDB.Type.DQL
+        && (response.count === 0 || response.data.some(d => d.permission === 'SETTINGS'))
+      setCanEditInstanceName(canEdit)
+    } catch (e) {
+      setCanEditInstanceName(false)
     }
   }
 
   useEffect(() => {
-    fetchServerDetails()
+    fetchServerDetails().then(fetchEditSettingsPermission)
     refreshSettingsAndPreferences()
   }, [])
 
@@ -349,16 +377,23 @@ export const Toolbar = () => {
 
   const handleSaveSettings = async (values: Preferences) => {
     try {
+      setSaveError(null)
       await quest.savePreferences(values)
+      handleToggle(false)
     } catch (e) {
-      // Handle error
+      console.error(e)
+      setSaveError(`Failed to save instance settings: ${e instanceof Error ? e.message : e}`)
+    } finally { 
+      await refreshSettingsAndPreferences()
     }
-    await refreshSettingsAndPreferences()
   }
 
   const handleToggle = useCallback((active: boolean) => {
     setSettingsPopperActive(active)
     setPreviewValues(active ? preferences : null)
+    if (!active) {
+      setSaveError(null)
+    }
   }, [preferences])
 
   return (
@@ -378,10 +413,10 @@ export const Toolbar = () => {
           $badgeColors={badgeColors}
           data-hook="topbar-instance-badge"
         >
-          <Box style={{ padding: '0.7rem' }}>
+          <Box>
             {(shownValues?.instance_type) ? (
               <CustomIconWithTooltip
-                icon={<div data-hook="topbar-instance-icon"><EnvironmentIcon instanceType={shownValues?.instance_type} color={badgeColors.secondary} background={badgeColors.primary} /></div>}
+                icon={<div data-hook="topbar-instance-icon" style={{ padding: '0.7rem' }}><EnvironmentIcon instanceType={shownValues?.instance_type} color={badgeColors.secondary} /></div>}
                 placement="bottom"
                 shownValues={shownValues}
               />
@@ -391,22 +426,23 @@ export const Toolbar = () => {
           </Box>
           {shownValues?.instance_name
             ? <Text data-hook="topbar-instance-name" className="instance-name">
-                {shownValues?.instance_type
-                  ? `${shownValues?.instance_type.charAt(0).toUpperCase()}${shownValues?.instance_type.slice(1)} | `
-                  : ''}
+                {instanceTypeReadable}
+                <Separator $color={badgeColors.secondary} />
                 {shownValues?.instance_name}
               </Text>
             : <Text data-hook="topbar-instance-name" className="instance-name placeholder">Instance name is not set</Text>
           }
-          
-          <InstanceSettingsPopper
-            active={settingsPopperActive}
-            onToggle={handleToggle}
-            values={previewValues ?? preferences}
-            onSave={handleSaveSettings}
-            onValuesChange={setPreviewValues}
-            trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className={`edit-icon ${shownValues?.instance_name ? '' : 'placeholder'}`} />}
-          />
+          {canEditInstanceName && (
+            <InstanceSettingsPopper
+              active={settingsPopperActive}
+              onToggle={handleToggle}
+              values={previewValues ?? preferences}
+              onSave={handleSaveSettings}
+              onValuesChange={setPreviewValues}
+              error={saveError}
+              trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className={`edit-icon ${shownValues?.instance_name ? '' : 'placeholder'}`} />}
+            />
+          )}
         </Badge>
       )}
       <Box gap="0.5rem">

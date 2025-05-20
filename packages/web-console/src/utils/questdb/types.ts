@@ -21,6 +21,14 @@ export type Preferences = Partial<{
   instance_type: InstanceType
 }>
 
+export type Permission = {
+  grant_option: boolean
+  origin: string
+  permission: string
+  table_name: string | null
+  column_name: string | null
+}
+
 export type Timings = {
   compiler: number
   authentication: number

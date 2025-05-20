@@ -143,14 +143,6 @@ const ColorValueInput = styled.input.attrs({ type: 'number', min: 0, max: 255 })
   }
 `
 
-const ColorPreview = styled.div<{ color: string }>`
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.4rem;
-  background: ${({ color }) => color};
-  border: 1px solid ${({ theme }) => theme.color.gray1};
-`
-
 const StyledForm = styled.form`
   display: flex;
   flex-direction: column;
@@ -234,12 +226,19 @@ const ErrorText = styled(Text)`
   margin-top: 0.2rem;
 `
 
+const Footer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`
+
 type Props = {
   active: boolean
   onToggle: (active: boolean) => void
   values: Preferences
   onSave: (values: Preferences) => Promise<void>
   onValuesChange: (values: Preferences) => void
+  error: string | null
   trigger: ReactNode
 }
 
@@ -249,15 +248,15 @@ export const InstanceSettingsPopper = ({
   values, 
   onSave, 
   onValuesChange,
+  error,
   trigger,
 }: Props) => {
-  const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [instanceNameError, setInstanceNameError] = useState<string | null>(null)
   const [showCustomColor, setShowCustomColor] = useState(false)
   const [rgbValues, setRgbValues] = useState({ r: 0, g: 0, b: 0 })
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Parse RGB values when component mounts or values change
   useEffect(() => {
     if (values.instance_rgb && values.instance_rgb.startsWith('rgb')) {
       setShowCustomColor(true)
@@ -278,27 +277,19 @@ export const InstanceSettingsPopper = ({
     e.preventDefault()
     
     if (!values?.instance_name?.trim()) {
-      setError("Instance name is required")
+      setInstanceNameError("Instance name is required")
       return
     }
-    
-    setError(null)
+    setInstanceNameError(null)
+
     setIsSaving(true)
-    
-    try {
-      await onSave(values)
-      onToggle(false)
-    } finally {
-      setIsSaving(false)
-    }
+    await onSave(values) // Errors are handled in the parent component
+    setIsSaving(false)
   }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValues = { ...values, instance_name: e.target.value }
     onValuesChange(newValues)
-    if (error && e.target.value.trim()) {
-      setError(null)
-    }
   }
 
   const handleColorSelect = (color: string | undefined) => {
@@ -352,7 +343,7 @@ export const InstanceSettingsPopper = ({
               placeholder="Enter instance name"
               ref={inputRef}
             />
-            {error && <ErrorText>{error}</ErrorText>}
+            {instanceNameError && <ErrorText>{instanceNameError}</ErrorText>}
           </FormGroup>
           <FormGroup>
             <FormLabel htmlFor="instance-type-select">Instance Type</FormLabel>
@@ -466,24 +457,26 @@ export const InstanceSettingsPopper = ({
               </ColorPickerContainer>
             )}
           </FormGroup>
-          
-          <Buttons>
-            <StyledButton 
-              type="submit"
-              prefixIcon={isSaving ? <Loader /> : undefined} 
-              data-hook="topbar-instance-save-button"
-            >
-              Save
-            </StyledButton>
-            <StyledButton 
-              type="button"
-              onClick={() => onToggle(false)} 
-              skin="secondary" 
-              data-hook="topbar-instance-cancel-button"
-            >
-              Cancel
-            </StyledButton>
-          </Buttons>
+          <Footer>
+            {error && <ErrorText>{error}</ErrorText>}
+            <Buttons>
+              <StyledButton 
+                type="submit"
+                prefixIcon={isSaving ? <Loader /> : undefined} 
+                data-hook="topbar-instance-save-button"
+              >
+                Save
+              </StyledButton>
+              <StyledButton 
+                type="button"
+                onClick={() => onToggle(false)} 
+                skin="secondary" 
+                data-hook="topbar-instance-cancel-button"
+              >
+                Cancel
+              </StyledButton>
+            </Buttons>
+          </Footer>
         </StyledForm>
       </Wrapper>
     </PopperToggle>
