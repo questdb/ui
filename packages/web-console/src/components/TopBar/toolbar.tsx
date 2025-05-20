@@ -347,6 +347,11 @@ export const Toolbar = () => {
   }
 
   const fetchEditSettingsPermission = async (currentUser: string | null) => {
+    if (!settings["acl.enabled"]) {
+      setCanEditInstanceName(true)
+      return
+    }
+
     if (!currentUser) {
       setCanEditInstanceName(false)
       return

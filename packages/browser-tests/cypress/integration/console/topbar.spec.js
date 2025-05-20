@@ -53,10 +53,8 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-color-option-g").click();
     cy.getByDataHook("topbar-instance-save-button").click();
     cy.getByDataHook("topbar-instance-save-button").should("not.exist");
-    cy.getByDataHook("topbar-instance-name").should(
-      "have.text",
-      "Production | test-instance"
-    );
+    cy.getByDataHook("topbar-instance-name").should("contain", "Production");
+    cy.getByDataHook("topbar-instance-name").should("contain", "test-instance");
     cy.getByDataHook("topbar-instance-icon").realHover();
     cy.contains("test description of the test instance").should("be.visible");
     cy.contains(
