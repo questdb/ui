@@ -39,6 +39,7 @@ const CheckmarkOutlineIcon = styled(CheckmarkOutline)`
 
 const ZapIcon = styled(Zap)`
   color: ${color("yellow")};
+  flex-shrink: 0;
 `
 
 export const SuccessNotification = (props: NotificationShape) => {

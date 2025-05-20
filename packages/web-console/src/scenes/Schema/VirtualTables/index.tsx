@@ -319,7 +319,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         <Row
           kind="detail"
           index={index}
-          name={`${item.name}:`}
+          name={item.value ? `${item.name}:` : item.name}
           value={item.value}
           id={item.id}
           onExpandCollapse={() => {}}
@@ -490,7 +490,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
       fetchColumnsForExpandedTables()
     }
-  }, [state.view, regularTables, matViewTables]);
+  }, [state.view, regularTables, matViewTables, materializedViews]);
 
   if (state.view === View.loading || (state.view === View.ready && !columnsReady)) {
     return <Loading />

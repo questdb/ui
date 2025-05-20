@@ -66,7 +66,10 @@ describe("questdb grid", () => {
 
     cy.getGridViewport().scrollTo("bottom");
     cy.wait(100);
-    cy.getCollapsedNotifications().should("contain", "HTTP 400 (Bad request)");
+    cy.getCollapsedNotifications().should(
+      "contain",
+      "simulated cairo exception"
+    );
   });
 
   it("copy cell into the clipboard", () => {

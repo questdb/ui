@@ -465,9 +465,15 @@ describe("materialized views", () => {
       (req) => {
         req.continue((res) => {
           if (res.body && res.body.dataset && res.body.dataset.length > 0) {
-            // [view_name, refresh_type, base_table_name, last_refresh_timestamp, view_sql, view_table_dir_name, invalidation_reason, view_status, base_table_txn, applied_base_table_txn]
-            res.body.dataset[0][6] = "this is an invalidation reason";
-            res.body.dataset[0][7] = "invalid";
+            const viewStatusIndex = res.body.columns.findIndex(
+              (c) => c.name === "view_status"
+            );
+            const invalidationReasonIndex = res.body.columns.findIndex(
+              (c) => c.name === "invalidation_reason"
+            );
+            res.body.dataset[0][viewStatusIndex] = "invalid";
+            res.body.dataset[0][invalidationReasonIndex] =
+              "this is an invalidation reason";
           }
           return res;
         });
