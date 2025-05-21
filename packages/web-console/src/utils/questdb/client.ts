@@ -440,8 +440,7 @@ export class Client {
     if (!response.ok) {
       let errorMessage: string
       try {
-        const { error } = await response.json()
-        errorMessage = error
+        errorMessage = await extractErrorMessage(response)
       } catch (e) {
         errorMessage = response.statusText
       }
@@ -530,5 +529,15 @@ export class Client {
     } catch (error) {
       return Promise.reject(error)
     }
+  }
+}
+
+async function extractErrorMessage(response: Response) {
+  const contentType = response.headers.get('Content-Type')
+  if (contentType?.includes('application/json')) {
+    const { error } = await response.json()
+    return error
+  } else {
+    return response.text()
   }
 }
