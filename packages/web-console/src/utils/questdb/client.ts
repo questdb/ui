@@ -213,10 +213,19 @@ export class Client {
       response.status === 400 ||
       (response.ok && response.status === 403)
     ) {
+      let responseText
+      try {
+        responseText = await response.text()
+      } catch (error) {
+        return Promise.reject({
+          error: `Failed to read response: ${error}`,
+          type: Type.ERROR,
+        })
+      }
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
       let data;
       try {
-        data = (await response.json()) as RawResult
+        data = JSON.parse(responseText) as RawResult
       } catch (error) {
         return Promise.reject({
           error: `Invalid JSON response from the server: ${error}`,
