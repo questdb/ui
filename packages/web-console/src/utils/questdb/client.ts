@@ -434,8 +434,18 @@ export class Client {
         body: JSON.stringify(prefs),
       },
     )
+    if (response.status === 409) {
+      throw new Error("Instance information is changed since the last update. Please try again.")
+    }
     if (!response.ok) {
-      throw new Error(response.statusText);
+      let errorMessage: string
+      try {
+        const { error } = await response.json()
+        errorMessage = error
+      } catch (e) {
+        errorMessage = response.statusText
+      }
+      throw new Error(errorMessage)
     }
   }
 
