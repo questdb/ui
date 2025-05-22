@@ -7,6 +7,7 @@ import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
 import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { RocketTakeoff, Tools } from "@styled-icons/bootstrap"
 import { Flask } from "@styled-icons/boxicons-solid"
+import { toast } from '../'
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
@@ -84,6 +85,7 @@ const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string }
   flex-shrink: 1;
   min-width: 0;
   gap: 0;
+  transition: opacity 0.1s ease;
 
   ${({ $badgeColors }) => `
     background: ${$badgeColors.primary};
@@ -137,7 +139,8 @@ const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string }
   .edit-icon {
     cursor: pointer;
     display: inline;
-    width: 0;
+    width: 2.2rem;
+    margin-left: 1rem;
     padding: 0.1rem;
     background: inherit;
     border-radius: 0.4rem;
@@ -150,13 +153,6 @@ const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string }
         color: ${({ theme }) => theme.color.backgroundLighter};
         background: ${({ theme }) => theme.color.orange};
       }
-    }
-  }
-
-  &:hover {
-    .edit-icon {
-      width: 2.2rem;
-      margin-left: 1rem;
     }
   }
 `
@@ -320,6 +316,25 @@ const CustomIconWithTooltip = ({
   )
 }
 
+const animateBadgeUpdate = (badge: HTMLElement) => {
+  badge.style.opacity = "0"
+  setTimeout(() => {
+    badge.style.opacity = "1"
+  }, 200)
+  setTimeout(() => {
+    badge.style.opacity = "0"
+  }, 400)
+  setTimeout(() => {
+    badge.style.opacity = "1"
+  }, 600)
+  setTimeout(() => {
+    badge.style.opacity = "0"
+  }, 800)
+  setTimeout(() => {
+    badge.style.opacity = "1"
+  }, 1000)
+}
+
 export const Toolbar = () => {
   const { quest } = useContext(QuestContext)
   const { settings, preferences, refreshSettingsAndPreferences } = useSettings()
@@ -329,7 +344,6 @@ export const Toolbar = () => {
   const [settingsPopperActive, setSettingsPopperActive] = useState(false)
   const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
   const [canEditInstanceName, setCanEditInstanceName] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
   const shownValues = settingsPopperActive ? previewValues : preferences
   const instanceTypeReadable = shownValues?.instance_type
     ? shownValues.instance_type.charAt(0).toUpperCase() + shownValues.instance_type.slice(1)
@@ -399,26 +413,59 @@ export const Toolbar = () => {
 
   const handleSaveSettings = async (values: Preferences) => {
     try {
-      setSaveError(null)
-      await quest.savePreferences(values)
-      handleToggle(false)
-    } catch (e) {
-      console.error(e)
-      setSaveError(`Failed to save instance settings: ${e instanceof Error ? e.message : e}`)
+      const result = await quest.savePreferences(values)
+      if (result.success) {
+        handleToggle(false)
+        toast.success("Instance information updated successfully.")
+        return
+      }
+
       const { preferences: newPreferences } = await refreshSettingsAndPreferences()
       setPreviewValues(newPreferences)
+      if (result.status === 409) {
+        toast.error("Instance information is updated with the latest changes from the server. Please try updating it again.", { autoClose: 5000 })
+        return
+      }
+
+      throw new Error(result.message)
+    } catch (e) {
+      toast.error("Failed to update instance information: " + e)
     }
   }
 
-  const handleToggle = useCallback((active: boolean) => {
-    refreshSettingsAndPreferences().then(({ preferences: newPreferences }) => {
-      setSettingsPopperActive(active)
-      if (!active) {
-        setSaveError(null)
+  const handleUpdateInstanceInfo = useCallback(async (inform: boolean = true) => {
+    const currentVersion = preferences?.version
+    const { preferences: newPreferences } = await refreshSettingsAndPreferences()
+    if (currentVersion !== newPreferences.version && inform) {
+      toast.info("Instance information is updated with the latest changes from the server.")
+      const badge = document.querySelector('[data-hook="topbar-instance-badge"]')
+      if (badge) {
+        animateBadgeUpdate(badge as HTMLElement)
       }
-      setPreviewValues(active ? newPreferences : null)
-    })
-  }, [])
+    }
+    return newPreferences
+  }, [refreshSettingsAndPreferences, preferences])
+
+  const handleUpdateInstanceInfoWithInform = useCallback(async () => {
+    const newPreferences = await handleUpdateInstanceInfo(true)
+    if (settingsPopperActive && previewValues?.version !== newPreferences.version) {
+      setPreviewValues(newPreferences)
+    }
+  }, [handleUpdateInstanceInfo, settingsPopperActive, previewValues])
+
+  const handleToggle = useCallback(async (active: boolean) => {
+    const newPreferences = await handleUpdateInstanceInfo(active)
+    setPreviewValues(active ? newPreferences : null)
+    setSettingsPopperActive(active)
+  }, [handleUpdateInstanceInfo])
+
+  useEffect(() => {
+    window.addEventListener("focus", handleUpdateInstanceInfoWithInform)
+
+    return () => {
+      window.removeEventListener("focus", handleUpdateInstanceInfoWithInform)
+    }
+  }, [handleUpdateInstanceInfoWithInform])
 
   return (
     <Root>
@@ -463,7 +510,6 @@ export const Toolbar = () => {
               values={previewValues ?? preferences}
               onSave={handleSaveSettings}
               onValuesChange={setPreviewValues}
-              error={saveError}
               trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className={`edit-icon ${shownValues?.instance_name ? '' : 'placeholder'}`} />}
             />
           )}

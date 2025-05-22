@@ -114,8 +114,21 @@ export const PopperToggle = ({
   useTransition(container, _active, transitionTimeoutId)
 
   useEffect(() => {
-    setActive(typeof active === "undefined" ? _active || false : active)
-  }, [active, _active])
+    if (typeof active !== "undefined") {
+      setActive(active)
+    }
+  }, [active])
+
+  useEffect(() => {
+    document.body.appendChild(container)
+
+    return () => {
+      clearTimeout(transitionTimeoutId.current)
+      if (document.body.contains(container)) {
+        document.body.removeChild(container)
+      }
+    }
+  }, [container])
 
   useEffect(() => {
     document.addEventListener("mousedown", handleMouseDown)
@@ -123,14 +136,11 @@ export const PopperToggle = ({
     document.addEventListener("keydown", handleKeyDown)
 
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      clearTimeout(transitionTimeoutId.current)
       document.removeEventListener("mousedown", handleMouseDown)
       document.removeEventListener("touchstart", handleMouseDown)
       document.removeEventListener("keydown", handleKeyDown)
-      document.body.contains(container) && document.body.removeChild(container)
     }
-  }, [container, handleMouseDown, handleKeyDown])
+  }, [handleMouseDown, handleKeyDown])
 
   return (
     <>

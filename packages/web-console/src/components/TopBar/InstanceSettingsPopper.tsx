@@ -226,19 +226,12 @@ const ErrorText = styled(Text)`
   margin-top: 0.2rem;
 `
 
-const Footer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`
-
 type Props = {
   active: boolean
   onToggle: (active: boolean) => void
   values: Preferences
   onSave: (values: Preferences) => Promise<void>
   onValuesChange: (values: Preferences) => void
-  error: string | null
   trigger: ReactNode
 }
 
@@ -248,7 +241,6 @@ export const InstanceSettingsPopper = ({
   values, 
   onSave, 
   onValuesChange,
-  error,
   trigger,
 }: Props) => {
   const [isSaving, setIsSaving] = useState(false)
@@ -457,26 +449,23 @@ export const InstanceSettingsPopper = ({
               </ColorPickerContainer>
             )}
           </FormGroup>
-          <Footer>
-            {error && <ErrorText>{error}</ErrorText>}
-            <Buttons>
-              <StyledButton 
-                type="submit"
-                prefixIcon={isSaving ? <Loader /> : undefined} 
-                data-hook="topbar-instance-save-button"
-              >
-                Save
-              </StyledButton>
-              <StyledButton 
-                type="button"
-                onClick={() => onToggle(false)} 
-                skin="secondary" 
-                data-hook="topbar-instance-cancel-button"
-              >
-                Cancel
-              </StyledButton>
-            </Buttons>
-          </Footer>
+          <Buttons>
+            <StyledButton 
+              type="submit"
+              prefixIcon={isSaving ? <Loader /> : undefined} 
+              data-hook="topbar-instance-save-button"
+            >
+              Save
+            </StyledButton>
+            <StyledButton 
+              type="button"
+              onClick={() => onToggle(false)} 
+              skin="secondary" 
+              data-hook="topbar-instance-cancel-button"
+            >
+              Cancel
+            </StyledButton>
+          </Buttons>
         </StyledForm>
       </Wrapper>
     </PopperToggle>

@@ -118,14 +118,14 @@ export const SettingsProvider = ({
 
   const refreshSettingsAndPreferences = async () => {
     const result = await fetchEndpoint("settings", connectionError)
-    const settings = result.config
-    const preferences = { version: result["preferences.version"], ...result.preferences }
+    const newSettings = result.config
+    const newPreferences = { version: result["preferences.version"], ...result.preferences }
     if (result) {
-      setSettings(settings)
-      setPreferences(preferences)
+      setSettings(newSettings)
+      setPreferences(newPreferences)
       return {
-        settings,
-        preferences
+        settings: newSettings,
+        preferences: newPreferences
       }
     }
 

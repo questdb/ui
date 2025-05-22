@@ -424,7 +424,7 @@ export class Client {
     })
   }
 
-  async savePreferences(preferences: Preferences): Promise<void> {
+  async savePreferences(preferences: Preferences): Promise<{ status: number, message?: string, success: boolean }> {
     const { version, ...prefs } = preferences;
     const response: Response = await fetch(
       `settings?version=${version}`,
@@ -434,9 +434,6 @@ export class Client {
         body: JSON.stringify(prefs),
       },
     )
-    if (response.status === 409) {
-      throw new Error("Instance information is changed since the last update. Please try again.")
-    }
     if (!response.ok) {
       let errorMessage: string
       try {
@@ -444,8 +441,9 @@ export class Client {
       } catch (e) {
         errorMessage = response.statusText
       }
-      throw new Error(errorMessage)
+      return { status: response.status, message: errorMessage, success: false }
     }
+    return { status: response.status, success: true }
   }
 
   async exportQueryToCsv(query: string) {
