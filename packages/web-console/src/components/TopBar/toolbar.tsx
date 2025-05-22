@@ -429,7 +429,7 @@ export const Toolbar = () => {
 
       throw new Error(result.message)
     } catch (e) {
-      toast.error("Failed to update instance information: " + e)
+      toast.error("Failed to update instance information: " + e, { autoClose: 5000 })
     }
   }
 
@@ -437,7 +437,7 @@ export const Toolbar = () => {
     const currentVersion = preferences?.version
     const { preferences: newPreferences } = await refreshSettingsAndPreferences()
     if (currentVersion !== newPreferences.version && inform) {
-      toast.info("Instance information is updated with the latest changes from the server.")
+      toast.info("Instance information is updated with the latest changes from the server.", { autoClose: 5000 })
       const badge = document.querySelector('[data-hook="topbar-instance-badge"]')
       if (badge) {
         animateBadgeUpdate(badge as HTMLElement)
