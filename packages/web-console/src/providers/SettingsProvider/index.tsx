@@ -11,7 +11,7 @@ import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
 import {setValue} from "../../utils/localStorage";
 import {StoreKey} from "../../utils/localStorage/types";
-import { Preferences } from '../../utils/questdb'
+import { Preferences } from '../../utils'
 
 enum View {
   loading = 0,
@@ -146,7 +146,7 @@ export const SettingsProvider = ({
       if (settings) {
         setSettings(settings.config)
         setPreferences({ version: settings["preferences.version"], ...settings.preferences })
-        setValue(StoreKey.RELEASE_TYPE, settings["release.type"])
+        setValue(StoreKey.RELEASE_TYPE, settings.config["release.type"])
       }
       if (warnings) {
         setWarnings(warnings)
