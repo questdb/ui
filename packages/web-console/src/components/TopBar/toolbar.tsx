@@ -21,7 +21,7 @@ import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
 import { TelemetryTable } from "../../consts";
 import { TelemetryConfigShape } from "../../store/Telemetry/types";
-import { sendEntTelemetry } from "../../utils/telemetry";
+import { sendServerInfoTelemetry } from "../../utils/telemetry";
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;
@@ -423,8 +423,8 @@ export const Toolbar = () => {
 
         const response = await quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`)
         if (response.type === QuestDB.Type.DQL && response.count === 1) {
-          const config = response.data[0] as TelemetryConfigShape
-          sendEntTelemetry(config)
+          const serverInfo = response.data[0] as TelemetryConfigShape
+          sendServerInfoTelemetry(serverInfo)
         }
         return
       }
