@@ -19,6 +19,9 @@ import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { Preferences, InstanceType } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
+import { TelemetryTable } from "../../consts";
+import { TelemetryConfigShape } from "../../store/Telemetry/types";
+import { sendEntTelemetry } from "../../utils/telemetry";
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;
@@ -415,8 +418,14 @@ export const Toolbar = () => {
     try {
       const result = await quest.savePreferences(values)
       if (result.success) {
-        handleToggle(false)
+        await handleToggle(false)
         toast.success("Instance information updated successfully.")
+
+        const response = await quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`)
+        if (response.type === QuestDB.Type.DQL && response.count === 1) {
+          const config = response.data[0] as TelemetryConfigShape
+          sendEntTelemetry(config)
+        }
         return
       }
 
