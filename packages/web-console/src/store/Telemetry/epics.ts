@@ -101,14 +101,14 @@ export const getRemoteConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
     switchMap(([_, state]) => {
       const config = selectors.telemetry.getConfig(state)
 
-      const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
-      if (isEE) {
+      const releaseType = getValue(StoreKey.RELEASE_TYPE);
+      if (releaseType === "EE" || config?.enabled) {
         fetch(`${API}/add-ent`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(config),
+          body: JSON.stringify({ ...config, releaseType }),
         }).catch( () => {
         })
       }
