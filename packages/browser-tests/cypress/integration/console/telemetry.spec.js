@@ -22,7 +22,7 @@ describe("telemetry config", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
       const columnNames = response.body.columns.map((c) => c.name);
       expect(response.statusCode).to.equal(200);
-      ["id", "enabled", "version", "os", "package"].forEach((name) => {
+      ["id", "enabled", "version", "os", "package", "instance_name", "instance_type", "instance_desc"].forEach((name) => {
         expect(columnNames).to.include(name);
       });
       expect(response.body.dataset[0][0]).to.be.string;
@@ -34,6 +34,9 @@ describe("telemetry config", () => {
       expect(typeof response.body.dataset[0][4]).to.satisfy(
         (v) => v === null || typeof v === "string"
       );
+      expect(response.body.dataset[0][5]).to.be.string;
+      expect(response.body.dataset[0][6]).to.be.string;
+      expect(response.body.dataset[0][7]).to.be.string;
     });
   });
 });
@@ -62,7 +65,7 @@ describe("telemetry enabled", () => {
   it("should start telemetry when enabled", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
       cy.wait("@addTelemetry").then(({ request }) => {
-        const payload = JSON.parse(request.body);
+        const payload = request.body;
         expect(payload.id).to.equal(response.body.dataset[0][0]);
         expect(payload.version).to.equal(response.body.dataset[0][2]);
         expect(payload.os).to.equal(response.body.dataset[0][3]);

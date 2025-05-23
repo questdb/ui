@@ -12,8 +12,10 @@ const interceptSettings = (payload) => {
 describe("OSS", () => {
   before(() => {
     interceptSettings({
-      "release.type": "OSS",
-      "release.version": "1.2.3",
+      "config": {
+        "release.type": "OSS",
+        "release.version": "1.2.3",
+      }
     });
     cy.visit(baseUrl);
   });
@@ -27,16 +29,18 @@ describe("OSS", () => {
 describe("Auth - UI", () => {
   before(() => {
     interceptSettings({
-      "release.type": "EE",
-      "release.version": "1.2.3",
-      "acl.enabled": true,
-      "acl.basic.auth.realm.enabled": false,
-      "acl.oidc.enabled": false,
-      "acl.oidc.client.id": null,
-      "acl.oidc.authorization.endpoint": null,
-      "acl.oidc.token.endpoint": null,
-      "acl.oidc.pkce.required": null,
-      "acl.oidc.groups.encoded.in.token": false,
+      "config": {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": false,
+        "acl.oidc.client.id": null,
+        "acl.oidc.authorization.endpoint": null,
+        "acl.oidc.token.endpoint": null,
+        "acl.oidc.pkce.required": null,
+        "acl.oidc.groups.encoded.in.token": false,
+      }
     });
     cy.visit(baseUrl);
   });
@@ -52,16 +56,18 @@ describe("Auth - UI", () => {
 describe("Auth - OIDC", () => {
   before(() => {
     interceptSettings({
-      "release.type": "EE",
-      "release.version": "1.2.3",
-      "acl.enabled": true,
-      "acl.basic.auth.realm.enabled": false,
-      "acl.oidc.enabled": true,
-      "acl.oidc.client.id": "test",
-      "acl.oidc.authorization.endpoint": "https://host:9999/auth",
-      "acl.oidc.token.endpoint": "https://host:9999/token",
-      "acl.oidc.pkce.required": true,
-      "acl.oidc.groups.encoded.in.token": false,
+      "config": {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": true,
+        "acl.oidc.client.id": "test",
+        "acl.oidc.authorization.endpoint": "https://host:9999/auth",
+        "acl.oidc.token.endpoint": "https://host:9999/token",
+        "acl.oidc.pkce.required": true,
+        "acl.oidc.groups.encoded.in.token": false,
+      }
     });
     cy.visit(baseUrl);
   });
@@ -77,16 +83,18 @@ describe("Auth - OIDC", () => {
 describe("Auth - Basic", () => {
   before(() => {
     interceptSettings({
-      "release.type": "EE",
-      "release.version": "1.2.3",
-      "acl.enabled": true,
-      "acl.basic.auth.realm.enabled": true,
-      "acl.oidc.enabled": false,
-      "acl.oidc.client.id": null,
-      "acl.oidc.authorization.endpoint": null,
-      "acl.oidc.token.endpoint": null,
-      "acl.oidc.pkce.required": null,
-      "acl.oidc.groups.encoded.in.token": false,
+      "config": {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": true,
+        "acl.oidc.enabled": false,
+        "acl.oidc.client.id": null,
+        "acl.oidc.authorization.endpoint": null,
+        "acl.oidc.token.endpoint": null,
+        "acl.oidc.pkce.required": null,
+        "acl.oidc.groups.encoded.in.token": false,
+      }
     });
     cy.visit(baseUrl);
   });
@@ -100,16 +108,18 @@ describe("Auth - Basic", () => {
 describe("Auth - Disabled", () => {
   before(() => {
     interceptSettings({
-      "release.type": "EE",
-      "release.version": "1.2.3",
-      "acl.enabled": false,
-      "acl.basic.auth.realm.enabled": true,
-      "acl.oidc.enabled": false,
-      "acl.oidc.client.id": null,
-      "acl.oidc.authorization.endpoint": null,
-      "acl.oidc.token.endpoint": null,
-      "acl.oidc.pkce.required": null,
-      "acl.oidc.groups.encoded.in.token": false,
+      "config": {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": false,
+        "acl.basic.auth.realm.enabled": true,
+        "acl.oidc.enabled": false,
+        "acl.oidc.client.id": null,
+        "acl.oidc.authorization.endpoint": null,
+        "acl.oidc.token.endpoint": null,
+        "acl.oidc.pkce.required": null,
+        "acl.oidc.groups.encoded.in.token": false,
+      }
     });
     cy.visit(baseUrl);
   });
