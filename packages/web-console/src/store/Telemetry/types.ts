@@ -28,6 +28,9 @@ export type TelemetryConfigShape = Readonly<{
   version: string
   os: string
   package: string
+  instance_name: string
+  instance_type: string
+  instance_desc: string
 }>
 
 export type TelemetryRemoteConfigShape = Readonly<{
