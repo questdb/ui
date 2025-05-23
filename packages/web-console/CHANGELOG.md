@@ -17,6 +17,16 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 0.7.11 - 2025.05.23
+### Added
+- instance naming UI [#427](https://github.com/questdb/ui/pull/427)
+- make SSO re-authentication optional on logout [#412](https://github.com/questdb/ui/pull/412)
+
+### Fixed
+- wait for all body to be streamed before calculating network time [#429](https://github.com/questdb/ui/pull/429)
+- jit compiled icon shrink problem and notifications height [#428](https://github.com/questdb/ui/pull/428)
+
+
 ## 0.7.10 - 2025.04.28
 ### Added
 - owner setting for tables created during CSV import [#413](https://github.com/questdb/ui/pull/413)
