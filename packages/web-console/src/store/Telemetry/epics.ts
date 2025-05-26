@@ -36,7 +36,6 @@ import {
   TelemetryAction,
   TelemetryAT,
   TelemetryConfigShape,
-  TelemetryRemoteConfigShape,
 } from "../../types"
 
 import { fromFetch } from "../../utils"
@@ -44,10 +43,11 @@ import * as QuestDB from "../../utils/questdb"
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
+import { sendServerInfoTelemetry, getTelemetryTimestamp } from "../../utils/telemetry";
 
 const quest = new QuestDB.Client()
 
-export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
+export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
 ) =>
   action$.pipe(
@@ -91,7 +91,7 @@ export const getConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
     }),
   )
 
-export const getRemoteConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
+export const getLatestTelemetryTimestamp: Epic<StoreAction, TelemetryAction, StoreShape> = (
   action$,
   state$,
 ) =>
@@ -99,32 +99,11 @@ export const getRemoteConfig: Epic<StoreAction, TelemetryAction, StoreShape> = (
     ofType<StoreAction, SetTelemetryConfigAction>(TelemetryAT.SET_CONFIG),
     withLatestFrom(state$),
     switchMap(([_, state]) => {
-      const config = selectors.telemetry.getConfig(state)
-
-      const isEE = getValue(StoreKey.RELEASE_TYPE) === "EE"
-      if (isEE) {
-        fetch(`${API}/add-ent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(config),
-        }).catch( () => {
-        })
+      const serverInfo = selectors.telemetry.getConfig(state)
+      if (serverInfo) {
+          sendServerInfoTelemetry(serverInfo)
       }
-
-      if (config?.enabled) {
-        return fromFetch<Partial<TelemetryRemoteConfigShape>>(
-          `${API}/config`,
-          {
-            method: "POST",
-            body: JSON.stringify(config),
-          },
-          false,
-        )
-      }
-
-      return NEVER
+      return getTelemetryTimestamp(serverInfo)
     }),
     switchMap((response) => {
       if (response.error) {
@@ -232,4 +211,4 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
     }),
   )
 
-export default [getConfig, getRemoteConfig, startTelemetry]
+export default [getServerInfo, getLatestTelemetryTimestamp, startTelemetry]

@@ -22,6 +22,8 @@ import {
   UploadOptions,
   UploadResult,
   Value,
+  Preferences,
+  Permission,
 } from "./types"
 
 export class Client {
@@ -336,6 +338,10 @@ export class Client {
     return response
   }
 
+  async showPermissions(user: string): Promise<QueryResult<Permission>> {
+    return await this.query<Permission>(`SHOW PERMISSIONS ${user};`)
+  }
+
   async showColumns(table: string): Promise<QueryResult<Column>> {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
   }
@@ -427,6 +433,28 @@ export class Client {
     })
   }
 
+  async savePreferences(preferences: Preferences): Promise<{ status: number, message?: string, success: boolean }> {
+    const { version, ...prefs } = preferences;
+    const response: Response = await fetch(
+      `settings?version=${version}`,
+      {
+        method: "PUT",
+        headers: this.commonHeaders,
+        body: JSON.stringify(prefs),
+      },
+    )
+    if (!response.ok) {
+      let errorMessage: string
+      try {
+        errorMessage = await extractErrorMessage(response)
+      } catch (e) {
+        errorMessage = response.statusText
+      }
+      return { status: response.status, message: errorMessage, success: false }
+    }
+    return { status: response.status, success: true }
+  }
+
   async exportQueryToCsv(query: string) {
     try {
       const response: Response = await fetch(
@@ -508,5 +536,15 @@ export class Client {
     } catch (error) {
       return Promise.reject(error)
     }
+  }
+}
+
+async function extractErrorMessage(response: Response) {
+  const contentType = response.headers.get('Content-Type')
+  if (contentType?.includes('application/json')) {
+    const { error } = await response.json()
+    return error
+  } else {
+    return response.text()
   }
 }
