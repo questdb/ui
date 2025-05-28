@@ -267,6 +267,17 @@ export const getErrorRange = (
   request: Request,
   errorPosition: number,
 ): IRange | null => {
+  const isErrorAtEnd = errorPosition === request.query.length
+  if (isErrorAtEnd) {
+    const lastPosition = request.query.trimEnd().length
+    const position = toTextPosition(request, lastPosition)
+    return {
+      startColumn: position.column,
+      endColumn: position.column,
+      startLineNumber: position.lineNumber,
+      endLineNumber: position.lineNumber,
+    }
+  }
   const position = toTextPosition(request, errorPosition)
   const model = editor.getModel()
   if (model) {
