@@ -96,9 +96,13 @@
   box-sizing: content-box;
 }
 
-.chrome-tabs .chrome-tab-rename:focus {
+.chrome-tabs .chrome-tab-rename {
   border: 1px solid #8be9fd;
   padding: 0.2rem 0.4rem;
+}
+
+.chrome-tabs .chrome-tab-rename:focus {
+  outline: none;
 }
 
 .chrome-tabs .chrome-tab-rename::selection {
