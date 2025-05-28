@@ -5,7 +5,7 @@ import { Box, Button } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
 import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
 import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { RocketTakeoff, Tools } from "@styled-icons/bootstrap"
+import { Tools, ShieldCheck } from "@styled-icons/bootstrap"
 import { Flask } from "@styled-icons/boxicons-solid"
 import { toast } from '../'
 import { Text } from "../Text"
@@ -42,11 +42,12 @@ const Root = styled(Box).attrs({ align: "center" })`
 const CustomTooltipWrapper = styled.div<{ $badgeColors: { primary: string, secondary: string } }>`
   display: flex;
   flex-direction: column;
-  padding: 1rem 0;
+  padding: 1.5rem 0;
   background: ${({ theme }) => theme.color.background};
   font-size: 1.4rem;
   border-radius: 0.8rem;
   border: 1px solid ${({ $badgeColors }) => $badgeColors.primary};
+  box-shadow: ${({ theme }) => theme.color.background} 5px 5px 8px;
 `
 
 const FlexRow = styled.div`
@@ -59,7 +60,7 @@ const Title = styled.h4`
   display: flex;
   align-items: center;
   border-bottom: 1px solid ${({ theme }) => theme.color.gray1};
-  padding: 0 1rem 1rem;
+  padding: 0 1.5rem 1.5rem;
   gap: 0.8rem;
   font-size: 1.4rem;
   margin-bottom: 0;
@@ -68,13 +69,13 @@ const Title = styled.h4`
 const FlexCol = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
 `
 
 const Info = styled.div`
   display: flex;
   flex-direction: column;
-  padding: 0 1rem;
+  padding: 0 1.5rem;
   gap: 1rem;
 `
 
@@ -148,6 +149,7 @@ const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string }
     background: inherit;
     border-radius: 0.4rem;
     flex-shrink: 0;
+    user-select: none;
 
     &.placeholder {
       color: ${({ theme }) => theme.color.orange};
@@ -262,16 +264,16 @@ const useBadgeColors = (instance_rgb: string | null) => {
   }
 }
 
-const EnvironmentIcon = ({ instanceType, color }: { instanceType: InstanceType | undefined, color?: string }) => {
+const EnvironmentIcon = ({ instanceType, color, style }: { instanceType: InstanceType | undefined, color?: string, style?: React.CSSProperties }) => {
   switch (instanceType) {
     case "development":
-      return <Tools size="18px" color={color} />
+      return <Tools size="18px" color={color} style={{ ...style }} />
     case "production":
-      return <RocketTakeoff size="18px" color={color} />
+      return <ShieldCheck size="18px" color={color} style={{ ...style }} />
     case "testing":
-      return <Flask size="18px" color={color} style={{ transform: 'scale(1.2)' }} />
+      return <Flask size="18px" color={color} style={{ transform: 'scale(1.2)', ...style }} />
     default:
-      return <InfoCircle size="18px" style={{ transform: 'translateY(-0.2rem)'}} color={color} />
+      return <InfoCircle size="18px" style={{ transform: 'translateY(-0.2rem)', ...style }} color={color} />
   }
 };
 
@@ -496,12 +498,25 @@ export const Toolbar = () => {
           <Box>
             {(shownValues?.instance_type) ? (
               <CustomIconWithTooltip
-                icon={<div data-hook="topbar-instance-icon" style={{ padding: '0.7rem' }}><EnvironmentIcon instanceType={shownValues?.instance_type} color={badgeColors.secondary} /></div>}
+                icon={(
+                  <div
+                    data-hook="topbar-instance-icon"
+                    style={{ padding: '0.7rem' }}
+                  >
+                    <EnvironmentIcon
+                      instanceType={shownValues?.instance_type}
+                      color={badgeColors.secondary}
+                      style={shownValues?.instance_type === 'production' ? { transform: 'translateY(-0.1rem)' } : {}} 
+                    />
+                  </div>
+                )}
                 placement="bottom"
                 shownValues={shownValues}
               />
             ) : (
-              <ErrorIcon size="18px" color={theme.color.orange} />
+              <div style={{ padding: '0.7rem' }}>
+                <ErrorIcon size="18px" color={theme.color.orange} style={{ transform: 'scale(1.3) translateY(-0.1rem)' }} />
+              </div>
             )}
           </Box>
           {shownValues?.instance_name
