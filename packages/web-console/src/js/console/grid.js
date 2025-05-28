@@ -308,6 +308,7 @@ export function grid(rootElement, _paginationFn, id) {
         row.rowIndex = -1
       }
       row.style.top = rowIndex * rh - o + "px"
+      row.className = `qg-r${focusedRowIndex === rowIndex ? " qg-r-active" : ""}`
     }
   }
 
@@ -487,11 +488,13 @@ export function grid(rootElement, _paginationFn, id) {
     for (let i = t; i < b; i++) {
       const row = rows[i & dcn]
       if (row) {
+        const colLo = Math.min(columnCount, Math.max(visColumnLo, freezeLeft))
+        const colHi = Math.min(colLo + visColumnCount, columnCount)
         renderRow(
           row,
           i,
-          Math.min(columnCount, Math.max(visColumnLo, freezeLeft)),
-          visColumnCount,
+          colLo,
+          colHi,
         )
         renderRow(rowsLeft[i & dcn], i, 0, Math.min(freezeLeft, columnCount))
       }
@@ -1048,7 +1051,10 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function renderFocusedCell() {
-    if (focusedCell && focusedCell.parentElement && focusedCell.parentElement.rowIndex === focusedRowIndex) {
+    if (focusedCell
+        && focusedCell.parentElement
+        && focusedCell.parentElement.rowIndex === focusedRowIndex
+        && focusedCell.columnIndex === focusedColumnIndex) {
       addClass(focusedCell, ACTIVE_CELL_CLASS)
     } else if (focusedCell) {
       removeClass(focusedCell, ACTIVE_CELL_CLASS)
