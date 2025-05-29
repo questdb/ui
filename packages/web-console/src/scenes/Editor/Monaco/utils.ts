@@ -32,6 +32,8 @@ export type Request = Readonly<{
   query: string
   row: number
   column: number
+  endRow: number
+  endColumn: number
 }>
 
 export const stripSQLComments = (text: string): string =>
@@ -54,18 +56,29 @@ export const getSelectedText = (
   return model && selection ? model.getValueInRange(selection) : undefined
 }
 
-export const getQueryFromCursor = (
+type SqlTextItem = {
+  row: number
+  col: number
+  position: number
+  endRow: number
+  endCol: number
+  limit: number
+}
+
+export const getQueriesFromPosition = (
   editor: IStandaloneCodeEditor,
-): Request | undefined => {
+  editorPosition: IPosition
+): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
   const text = stripSQLComments(
     editor.getValue({ preserveBOM: false, lineEnding: "\n" }),
   )
-  const position = editor.getPosition()
-
+  const position = {
+    row: editorPosition.lineNumber - 1,
+    column: editorPosition.column,
+  }
+  
   let row = 0
-
   let column = 0
-
   const sqlTextStack = []
   let startRow = 0
   let startCol = 0
@@ -73,10 +86,7 @@ export const getQueryFromCursor = (
   let nextSql = null
   let inQuote = false
 
-  if (!position) return
-
-  let i = 0;
-
+  let i = 0
   for (; i < text.length; i++) {
     if (nextSql !== null) {
       break
@@ -92,8 +102,8 @@ export const getQueryFromCursor = (
         }
 
         if (
-          row < position.lineNumber - 1 ||
-          (row === position.lineNumber - 1 && column < position.column - 1)
+          row < position.row ||
+          (row === position.row && column < position.column)
         ) {
           sqlTextStack.push({
             row: startRow,
@@ -108,7 +118,6 @@ export const getQueryFromCursor = (
           startPos = i + 1
           column++
         } else {
-          // empty queries, aka ;; , make sql.length === 0
           nextSql = {
             row: startRow,
             col: startCol,
@@ -122,7 +131,6 @@ export const getQueryFromCursor = (
       }
 
       case " ": {
-        // ignore leading space
         if (startPos === i) {
           startRow = row
           startCol = column
@@ -160,11 +168,8 @@ export const getQueryFromCursor = (
 
   // lastStackItem is the last query that is completed before the current cursor position.
   // nextSql is the next query that is not completed before the current cursor position, or started after the current cursor position.
-  const normalizedCurrentRow = position.lineNumber - 1
-  const lastStackItem = sqlTextStack.length > 0 ? sqlTextStack[sqlTextStack.length - 1] : null
-
   if (!nextSql) {
-    const sqlText = startPos === - 1 ? text : text.substring(startPos)
+    const sqlText = startPos === -1 ? text : text.substring(startPos)
     if (sqlText.length > 0) {
       nextSql = {
         row: startRow,
@@ -176,6 +181,24 @@ export const getQueryFromCursor = (
       }
     }
   }
+
+  return { sqlTextStack, nextSql }
+}
+
+export const getQueryFromCursor = (
+  editor: IStandaloneCodeEditor,
+): Request | undefined => {
+  const position = editor.getPosition()
+  const text = stripSQLComments(
+    editor.getValue({ preserveBOM: false, lineEnding: "\n" }),
+  )
+
+  if (!position) return
+
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
+
+  const normalizedCurrentRow = position.lineNumber - 1
+  const lastStackItem = sqlTextStack.length > 0 ? sqlTextStack[sqlTextStack.length - 1] : null
 
   const lastStackItemRowRange = lastStackItem ? {
     start: lastStackItem.row,
@@ -193,12 +216,16 @@ export const getQueryFromCursor = (
       query: text.substring(lastStackItem!.position, lastStackItem!.limit),
       row: lastStackItem!.row,
       column: lastStackItem!.col,
+      endRow: lastStackItem!.endRow,
+      endColumn: lastStackItem!.endCol
     }
   } else if (isInNextSqlRowRange && !isInLastStackItemRowRange) {
     return {
       query: text.substring(nextSql!.position, nextSql!.limit),
       row: nextSql!.row,
       column: nextSql!.col,
+      endRow: nextSql!.endRow,
+      endColumn: nextSql!.endCol
     }
   } else if (isInLastStackItemRowRange && isInNextSqlRowRange) {
     const lastStackItemEndCol = lastStackItem!.endCol
@@ -208,14 +235,42 @@ export const getQueryFromCursor = (
         query: text.substring(nextSql!.position, nextSql!.limit),
         row: nextSql!.row,
         column: nextSql!.col,
+        endRow: nextSql!.endRow,
+        endColumn: nextSql!.endCol
       }
     }
     return {
       query: text.substring(lastStackItem!.position, lastStackItem!.limit),
       row: lastStackItem!.row,
       column: lastStackItem!.col,
+      endRow: lastStackItem!.endRow,
+      endColumn: lastStackItem!.endCol
     }
   }
+}
+
+export const getAllQueries = (editor: IStandaloneCodeEditor): Request[] => {
+  const position = getLastPosition(editor)
+  const text = stripSQLComments(
+    editor.getValue({ preserveBOM: false, lineEnding: "\n" }),
+  )
+  if (!position) return []
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
+  const stackQueries = sqlTextStack.map(item => ({
+    query: text.substring(item.position, item.limit),
+    row: item.row,
+    column: item.col,
+    endRow: item.endRow,
+    endColumn: item.endCol
+  }))
+  const nextSqlQuery = nextSql ? {
+    query: text.substring(nextSql.position, nextSql.limit),
+    row: nextSql.row,
+    column: nextSql.col,
+    endRow: nextSql.endRow,
+    endColumn: nextSql.endCol
+  } : null
+  return [...stackQueries, ...(nextSqlQuery ? [nextSqlQuery] : [])]
 }
 
 export const getQueryFromSelection = (
@@ -237,6 +292,8 @@ export const getQueryFromSelection = (
         query: selectedText.substr(0, n + 1),
         row: selection.startLineNumber - 1,
         column: selection.startColumn,
+        endRow: selection.endLineNumber - 1,
+        endColumn: selection.endColumn
       }
     }
   }
@@ -259,6 +316,8 @@ export const getQueryRequestFromLastExecutedQuery = (
     query,
     row: 0,
     column: 0,
+    endRow: 0,
+    endColumn: 0
   }
 }
 
@@ -626,3 +685,16 @@ export const findMatches = (model: editor.ITextModel, needle: string) =>
     null /* wordSeparators */,
     true /* captureMatches */,
   ) ?? null
+
+export const getLastPosition = (editor: IStandaloneCodeEditor): IPosition | undefined => {
+  const model = editor.getModel()
+  if (!model) return undefined
+
+  const lastLineNumber = model.getLineCount()
+  const lastLineContent = model.getLineContent(lastLineNumber)
+  
+  return {
+    lineNumber: lastLineNumber,
+    column: lastLineContent.length
+  }
+}
