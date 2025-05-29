@@ -2,7 +2,6 @@ import Editor, { loader, Monaco } from "@monaco-editor/react"
 import { Box, Button } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable, IRange } from "monaco-editor"
-import type { BaseSyntheticEvent } from "react"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
@@ -34,7 +33,7 @@ import {
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
   setErrorMarker,
-  stripSQLComments,
+  getAllQueries,
 } from "./utils"
 
 loader.config({
@@ -120,7 +119,6 @@ const MonacoEditor = () => {
     activeBuffer,
     updateBuffer,
     editorReadyTrigger,
-    addBuffer,
   } = editorContext
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -133,10 +131,13 @@ const MonacoEditor = () => {
   const columns = useSelector(selectors.query.getColumns)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
-  const decorationsRef = useRef<editor.IEditorDecorationsCollection>()
+  const lineMarkingDecorationIdsRef = useRef<string[]>([])
   const runningValueRef = useRef(running.value)
   const activeBufferRef = useRef(activeBuffer)
   const requestRef = useRef(request)
+  const contentJustChangedRef = useRef(false)
+  const cursorChangeTimeoutRef = useRef<number | null>(null)
+  const decorationCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null)
 
   const errorRefs = useRef<
     Record<string, { error?: ErrorResult; range?: IRange }>
@@ -170,108 +171,146 @@ const MonacoEditor = () => {
     }
   }
 
-  const handleEditorClick = (e: BaseSyntheticEvent) => {
+  const handleEditorClick = (e: React.MouseEvent) => {
     if (
-      e.target.classList.contains("cursorQueryGlyph") ||
-      e.target.classList.contains("cancelQueryGlyph")
+      e.target instanceof Element && 
+      (e.target.classList.contains("cursorQueryGlyph") ||
+      e.target.classList.contains("cancelQueryGlyph"))
     ) {
       editorRef?.current?.focus()
-      toggleRunning()
+      
+      if (e.target.classList.contains("cancelQueryGlyph")) {
+        toggleRunning()
+        return
+      }
+      
+      if (editorRef.current) {
+        const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY)
+        
+        if (target && target.position) {
+          editorRef.current.setPosition({
+            lineNumber: target.position.lineNumber,
+            column: 1
+          })
+        }
+        toggleRunning()
+      }
     }
   }
 
-  const renderLineMarkings = (
+  // Update only line marking when cursor position changes
+  const applyLineMarkings = (
     monaco: Monaco,
-    editor: editor.IStandaloneCodeEditor,
+    editor: editor.IStandaloneCodeEditor
   ) => {
     const queryAtCursor = getQueryFromCursor(editor)
+    const activeBufferId = activeBufferRef.current.id as number
     
-    if (!queryAtCursor) {
-      decorationsRef.current?.clear()
-      return
+    // Prepare line marking decorations
+    const lineMarkingDecorations: editor.IModelDeltaDecoration[] = []
+    
+    // Add new line marking for current cursor position if there is one
+    if (queryAtCursor) {
+      const hasError =
+        errorRefs.current &&
+        errorRefs.current[activeBufferId]?.error?.query === queryAtCursor.query
+      const startLineNumber = queryAtCursor.row + 1
+      const endLineNumber = queryAtCursor.endRow + 1
+      
+      lineMarkingDecorations.push({
+        range: new monaco.Range(
+          startLineNumber,
+          queryAtCursor.column + 2,
+          endLineNumber,
+          queryAtCursor.endColumn + 2
+        ),
+        options: {
+          linesDecorationsClassName: `cursorQueryDecoration ${hasError ? "hasError" : ""}`,
+          isWholeLine: false,
+        }
+      })
     }
+    
+    const newLineMarkingIds = editor.deltaDecorations(
+      lineMarkingDecorationIdsRef.current,
+      lineMarkingDecorations
+    )
+    
+    lineMarkingDecorationIdsRef.current = newLineMarkingIds
+  }
+
+  const applyGlyphsAndLineMarkings = (
+    monaco: Monaco,
+    editor: editor.IStandaloneCodeEditor
+  ) => {
+    const allQueries = getAllQueries(editor)
+    const activeBufferId = activeBufferRef.current.id as number
     
     const model = editor.getModel()
-    if (queryAtCursor && model !== null) {
-      const activeBufferId = activeBufferRef.current.id as number
+    if (model === null) {
+      return
+    }
 
-      const cleanedModel = monaco.editor.createModel(
-        stripSQLComments(model.getValue()),
-        QuestDBLanguageName,
-      )
-
-      const matches = findMatches(cleanedModel, queryAtCursor.query)
-
-      cleanedModel.dispose()
-
-      if (matches.length > 0) {
+    const allDecorations: editor.IModelDeltaDecoration[] = []
+    
+    if (allQueries.length > 0) {
+      allQueries.forEach(query => {
         const hasError =
           errorRefs.current &&
-          errorRefs.current[activeBufferId]?.error?.query ===
-          queryAtCursor.query
+          errorRefs.current[activeBufferId]?.error?.query === query.query
         const errorRange =
           errorRefs.current && errorRefs.current[activeBufferId]?.range
-        const cursorMatch = matches.find(
-          (m) => m.range.startLineNumber === queryAtCursor.row + 1,
-        )
-        if (cursorMatch) {
-          decorationsRef.current?.clear()
-          decorationsRef.current = editor.createDecorationsCollection([
-            {
-              range: new monaco.Range(
-                cursorMatch.range.startLineNumber,
-                1,
-                cursorMatch.range.endLineNumber,
-                1,
-              ),
-              options: {
-                isWholeLine: true,
-                linesDecorationsClassName: `cursorQueryDecoration ${hasError ? "hasError" : ""
-                  }`,
-              },
-            },
-            {
-              range: new monaco.Range(
-                cursorMatch.range.startLineNumber,
-                1,
-                cursorMatch.range.startLineNumber,
-                1,
-              ),
-              options: {
-                isWholeLine: false,
-                glyphMarginClassName:
-                  runningValueRef.current &&
-                    requestRef.current?.row &&
-                    requestRef.current?.row + 1 ===
-                    cursorMatch.range.startLineNumber
-                    ? "cancelQueryGlyph"
-                    : runningValueRef.current
-                      ? ""
-                      : "cursorQueryGlyph",
-              },
-            },
-            ...(hasError &&
-              errorRange &&
-              cursorMatch.range.startLineNumber !== errorRange.startLineNumber
-              ? [
-                {
-                  range: new monaco.Range(
-                    errorRange.startLineNumber,
-                    0,
-                    errorRange.startLineNumber,
-                    0,
-                  ),
-                  options: {
-                    isWholeLine: false,
-                    glyphMarginClassName: "errorGlyph",
-                  },
-                },
-              ]
-              : []),
-          ])
+        
+        // Convert 0-based row to 1-based line number for Monaco
+        const startLineNumber = query.row + 1
+        
+        allDecorations.push({
+          range: new monaco.Range(
+            startLineNumber,
+            1,
+            startLineNumber,
+            1
+          ),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName:
+              runningValueRef.current &&
+                requestRef.current?.row &&
+                requestRef.current?.row + 1 === startLineNumber
+                ? "cancelQueryGlyph"
+                : "cursorQueryGlyph",
+            glyphMarginHoverMessage: {
+              value: runningValueRef.current ? "Cancel query" : "Run query",
+            }
+          },
+        })
+        
+        if (hasError &&
+          errorRange &&
+          startLineNumber !== errorRange.startLineNumber) {
+          allDecorations.push({
+            range: new monaco.Range(
+              errorRange.startLineNumber,
+              0,
+              errorRange.startLineNumber,
+              0
+            ),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: "errorGlyph",
+            }
+          })
         }
-      }
+      })
     }
+    
+    if (decorationCollectionRef.current) {
+      decorationCollectionRef.current.clear();
+    }
+    
+    decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations);
+    
+    applyLineMarkings(monaco, editor)
   }
 
   const onMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
@@ -307,7 +346,35 @@ const MonacoEditor = () => {
           DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
         )
       }
-      renderLineMarkings(monaco, editor)
+      
+      if (contentJustChangedRef.current) {
+        return;
+      }
+      
+      if (cursorChangeTimeoutRef.current) {
+        window.clearTimeout(cursorChangeTimeoutRef.current);
+      }
+      
+      cursorChangeTimeoutRef.current = window.setTimeout(() => {
+        if (monacoRef.current && editorRef.current) {
+          applyLineMarkings(monaco, editor);
+        }
+        cursorChangeTimeoutRef.current = null;
+      }, 50);
+    })
+
+    editor.onDidChangeModelContent((e) => {
+      contentJustChangedRef.current = true;
+      
+      applyGlyphsAndLineMarkings(monaco, editor);
+      
+      setTimeout(() => {
+        contentJustChangedRef.current = false;
+      }, 100);
+    })
+
+    editor.onDidChangeModel(() => {
+      applyGlyphsAndLineMarkings(monaco, editor)
     })
 
     // Insert query, if one is found in the URL
@@ -332,6 +399,8 @@ const MonacoEditor = () => {
     if (executeQuery) {
       toggleRunning()
     }
+    
+    applyGlyphsAndLineMarkings(monaco, editor)
   }
 
   useEffect(() => {
@@ -363,7 +432,7 @@ const MonacoEditor = () => {
       }
 
       if (monacoRef?.current && editorRef?.current) {
-        renderLineMarkings(monacoRef.current, editorRef?.current)
+        applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
       }
 
       const request = running.isRefresh
@@ -492,7 +561,7 @@ const MonacoEditor = () => {
       }
     } else {
       if (monacoRef?.current && editorRef?.current) {
-        renderLineMarkings(monacoRef?.current, editorRef?.current)
+        applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
       }
     }
   }, [running])
@@ -500,7 +569,7 @@ const MonacoEditor = () => {
   useEffect(() => {
     requestRef.current = request
     if (monacoRef?.current && editorRef?.current) {
-      renderLineMarkings(monacoRef?.current, editorRef?.current)
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
   }, [request])
 
@@ -534,6 +603,18 @@ const MonacoEditor = () => {
     window.addEventListener("focus", setCompletionProvider)
     return () => window.removeEventListener("focus", setCompletionProvider)
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (cursorChangeTimeoutRef.current) {
+        window.clearTimeout(cursorChangeTimeoutRef.current);
+      }
+      
+      if (decorationCollectionRef.current) {
+        decorationCollectionRef.current.clear();
+      }
+    };
+  }, []);
 
   return (
     <Content onClick={handleEditorClick}>
