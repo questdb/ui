@@ -44,6 +44,7 @@ import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
 import { sendServerInfoTelemetry, getTelemetryTimestamp } from "../../utils/telemetry";
+import { authPayloadHolder } from "../../modules/OAuth2/authPayloadHolder";
 
 const quest = new QuestDB.Client()
 
@@ -54,11 +55,8 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
     ofType<StoreAction, TelemetryAction>(TelemetryAT.START),
     switchMap(() => {
       // Set an authorization header for the QuestDB client instance within the telemetry epic
-      const authPayload =
-        getValue(StoreKey.AUTH_PAYLOAD) !== ""
-          ? getValue(StoreKey.AUTH_PAYLOAD)
-          : "{}"
-      const token = JSON.parse(authPayload) as AuthPayload
+      const authPayload = authPayloadHolder.getAuthPayload()
+      const token = authPayload ?? {} as AuthPayload
       if (token.access_token) {
         quest.setCommonHeaders({
           Authorization: `Bearer ${token.groups_encoded_in_token ? token.id_token : token.access_token}`,

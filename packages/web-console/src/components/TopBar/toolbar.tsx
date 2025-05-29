@@ -13,8 +13,6 @@ import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
-import { getValue } from "../../utils/localStorage"
-import { StoreKey } from "../../utils/localStorage/types"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { Preferences, InstanceType } from "../../utils"
 import { PopperHover, Placement } from "../"
@@ -22,6 +20,7 @@ import { useTheme } from "styled-components"
 import { TelemetryTable } from "../../consts";
 import { TelemetryConfigShape } from "../../store/Telemetry/types";
 import { sendServerInfoTelemetry } from "../../utils/telemetry";
+import { authPayloadHolder } from "../../modules/OAuth2/authPayloadHolder";
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;
@@ -369,8 +368,8 @@ export const Toolbar = () => {
         setCurrentUser(currentUser)
 
         // an SSO user is logged in, update the SSO username
-        const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
-        if (authPayload && currentUser && settings["acl.oidc.client.id"]) {
+        const ssoAuthenticated = authPayloadHolder.isSSOAuthenticated()
+        if (ssoAuthenticated && currentUser && settings["acl.oidc.client.id"]) {
           setSSOUserNameWithClientID(settings["acl.oidc.client.id"], currentUser)
         }
         return currentUser
