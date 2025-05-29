@@ -17,6 +17,15 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 0.7.12 - 2025.05.29
+### Fixed
+- inline the logo in offline view [#435](https://github.com/questdb/ui/pull/435)
+- make tab renaming more visible [#434](https://github.com/questdb/ui/pull/434)
+- change the prod icon && tweaks on the tooltip [#433](https://github.com/questdb/ui/pull/433)
+- wrong updates due to grid virtualization issues [#432](https://github.com/questdb/ui/pull/432)
+- correct error highlighting if the error position at the end [#431](https://github.com/questdb/ui/pull/431)
+
+
 ## 0.7.11 - 2025.05.23
 ### Added
 - instance naming UI [#427](https://github.com/questdb/ui/pull/427)
