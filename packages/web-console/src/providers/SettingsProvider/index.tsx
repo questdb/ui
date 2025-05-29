@@ -12,6 +12,7 @@ import { Refresh } from "@styled-icons/remix-line"
 import {setValue} from "../../utils/localStorage";
 import {StoreKey} from "../../utils/localStorage/types";
 import { Preferences } from '../../utils'
+import QuestDBLogo from "./QuestDBLogo"
 
 enum View {
   loading = 0,
@@ -65,12 +66,7 @@ export const SettingsProvider = ({
       <CenteredLayout>
         <Box flexDirection="column" gap="2rem">
           <a href={"https://questdb.io"}>
-            <img
-              alt="QuestDB logotype"
-              width="95"
-              height="23"
-              src="assets/questdb-logotype.svg"
-            />
+            <QuestDBLogo />
           </a>
           <Text align="center" size="lg">
             Error connecting to the database.
