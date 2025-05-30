@@ -3,7 +3,6 @@ import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
-import { StoreKey } from "../localStorage/types"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -25,6 +24,7 @@ import {
   Preferences,
   Permission,
 } from "./types"
+import { authPayloadHolder } from "../../modules/OAuth2/authPayloadHolder";
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -36,14 +36,13 @@ export class Client {
   > => {
     return {}
   }
+
   private tokenNeedsRefresh() {
-    const authPayload = localStorage.getItem(StoreKey.AUTH_PAYLOAD)
-    const refreshToken = localStorage.getItem(StoreKey.AUTH_REFRESH_TOKEN)
+    const authPayload = authPayloadHolder.getAuthPayload()
     if (authPayload) {
-      const parsed = JSON.parse(authPayload)
       return (
-        new Date(parsed.expires_at).getTime() - new Date().getTime() < 30000 &&
-        refreshToken !== ""
+          authPayload.refresh_token
+        && new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
       )
     }
   }
