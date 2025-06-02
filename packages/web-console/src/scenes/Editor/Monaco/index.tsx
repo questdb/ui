@@ -158,7 +158,7 @@ const MonacoEditor = () => {
 
   // Buffer -> Query -> Error
   const errorRefs = useRef<
-    Record<string, Record<string, { error?: ErrorResult; range?: IRange }>>
+    Record<string, Record<string, { error?: ErrorResult }>>
   >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
@@ -641,8 +641,6 @@ const MonacoEditor = () => {
                 error.position,
               )
               if (errorRange) {
-                errorRefs.current[activeBufferId][request.query].range = errorRange
-                
                 applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
 
                 editorRef?.current.focus()

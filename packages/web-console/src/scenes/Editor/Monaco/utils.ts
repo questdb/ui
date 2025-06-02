@@ -712,7 +712,7 @@ export const clearModelMarkers = (
 export const setErrorMarkers = (
   monaco: Monaco,
   editor: IStandaloneCodeEditor,
-  bufferErrors: Record<string, { error?: ErrorResult; range?: IRange }>,
+  bufferErrors: Record<string, { error?: ErrorResult }>,
   queries: Request[]
 ) => {
   const model = editor.getModel()
