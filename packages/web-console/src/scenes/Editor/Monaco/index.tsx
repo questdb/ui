@@ -32,8 +32,9 @@ import {
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
-  setErrorMarker,
+  setErrorMarkers,
   getAllQueries,
+  getQueriesInRange,
 } from "./utils"
 
 loader.config({
@@ -83,6 +84,20 @@ const Content = styled(PaneContent)`
   .cursorQueryGlyph {
     &:after {
       background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
+    }
+  }
+
+  .cursorQueryGlyphError {
+    margin-left: 2rem;
+    z-index: 1;
+    cursor: pointer;
+
+    &:after {
+      display: block;
+      content: "";
+      width: 18px;
+      height: 18px;
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
     }
   }
 
@@ -138,9 +153,12 @@ const MonacoEditor = () => {
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const decorationCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null)
+  const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({ startLine: 1, endLine: 1 })
+  const scrollTimeoutRef = useRef<number | null>(null)
 
+  // Buffer -> Query -> Error
   const errorRefs = useRef<
-    Record<string, { error?: ErrorResult; range?: IRange }>
+    Record<string, Record<string, { error?: ErrorResult; range?: IRange }>>
   >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
@@ -175,6 +193,7 @@ const MonacoEditor = () => {
     if (
       e.target instanceof Element && 
       (e.target.classList.contains("cursorQueryGlyph") ||
+      e.target.classList.contains("cursorQueryGlyphError") ||
       e.target.classList.contains("cancelQueryGlyph"))
     ) {
       editorRef?.current?.focus()
@@ -193,40 +212,44 @@ const MonacoEditor = () => {
             column: 1
           })
         }
+          
         toggleRunning()
       }
     }
   }
 
-  // Update only line marking when cursor position changes
   const applyLineMarkings = (
     monaco: Monaco,
     editor: editor.IStandaloneCodeEditor
   ) => {
+    const model = editor.getModel()
+    const editorValue = editor.getValue()
+
+    if (!editorValue || !model) {
+      return
+    }
+    
     const queryAtCursor = getQueryFromCursor(editor)
     const activeBufferId = activeBufferRef.current.id as number
     
-    // Prepare line marking decorations
     const lineMarkingDecorations: editor.IModelDeltaDecoration[] = []
     
-    // Add new line marking for current cursor position if there is one
     if (queryAtCursor) {
-      const hasError =
-        errorRefs.current &&
-        errorRefs.current[activeBufferId]?.error?.query === queryAtCursor.query
+      const bufferErrors = errorRefs.current[activeBufferId] || {}
+      const hasError = bufferErrors[queryAtCursor.query]?.error !== undefined
       const startLineNumber = queryAtCursor.row + 1
       const endLineNumber = queryAtCursor.endRow + 1
       
       lineMarkingDecorations.push({
         range: new monaco.Range(
           startLineNumber,
-          queryAtCursor.column + 2,
+          queryAtCursor.column,
           endLineNumber,
-          queryAtCursor.endColumn + 2
+          queryAtCursor.endColumn,
         ),
         options: {
+          isWholeLine: true,
           linesDecorationsClassName: `cursorQueryDecoration ${hasError ? "hasError" : ""}`,
-          isWholeLine: false,
         }
       })
     }
@@ -243,27 +266,45 @@ const MonacoEditor = () => {
     monaco: Monaco,
     editor: editor.IStandaloneCodeEditor
   ) => {
-    const allQueries = getAllQueries(editor)
-    const activeBufferId = activeBufferRef.current.id as number
-    
     const model = editor.getModel()
-    if (model === null) {
+    const editorValue = editor.getValue()
+
+    if (!editorValue || !model) {
       return
     }
+    let queries: Request[] = []
+
+    const visibleLines = visibleLinesRef.current
+    
+    if (!visibleLines) {
+      queries = getAllQueries(editor)      
+    } else {
+      const totalLines = model.getLineCount()
+      const bufferSize = 500
+      
+      const startLine = Math.max(1, visibleLines.startLine - bufferSize)
+      const endLine = Math.min(totalLines, visibleLines.endLine + bufferSize)
+      
+      const startPosition = { lineNumber: startLine, column: 1 }
+      const endPosition = { lineNumber: endLine, column: 1 }
+      
+      queries = getQueriesInRange(editor, startPosition, endPosition)
+    }
+    
+    const activeBufferId = activeBufferRef.current.id as number
 
     const allDecorations: editor.IModelDeltaDecoration[] = []
     
-    if (allQueries.length > 0) {
-      allQueries.forEach(query => {
-        const hasError =
-          errorRefs.current &&
-          errorRefs.current[activeBufferId]?.error?.query === query.query
-        const errorRange =
-          errorRefs.current && errorRefs.current[activeBufferId]?.range
+    // Add decorations for queries in range
+    if (queries.length > 0) {
+      queries.forEach(query => {
+        const bufferErrors = errorRefs.current[activeBufferId] || {}
+        const hasError = bufferErrors[query.query]?.error !== undefined
         
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
         
+        // Add glyph for all queries
         allDecorations.push({
           range: new monaco.Range(
             startLineNumber,
@@ -278,29 +319,14 @@ const MonacoEditor = () => {
                 requestRef.current?.row &&
                 requestRef.current?.row + 1 === startLineNumber
                 ? "cancelQueryGlyph"
+                : hasError
+                ? "cursorQueryGlyphError"
                 : "cursorQueryGlyph",
             glyphMarginHoverMessage: {
               value: runningValueRef.current ? "Cancel query" : "Run query",
             }
           },
         })
-        
-        if (hasError &&
-          errorRange &&
-          startLineNumber !== errorRange.startLineNumber) {
-          allDecorations.push({
-            range: new monaco.Range(
-              errorRange.startLineNumber,
-              0,
-              errorRange.startLineNumber,
-              0
-            ),
-            options: {
-              isWholeLine: false,
-              glyphMarginClassName: "errorGlyph",
-            }
-          })
-        }
       })
     }
     
@@ -310,6 +336,8 @@ const MonacoEditor = () => {
     
     decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations);
     
+    const bufferErrors = errorRefs.current[activeBufferId] || {}
+    setErrorMarkers(monaco, editor, bufferErrors, queries)
     applyLineMarkings(monaco, editor)
   }
 
@@ -348,7 +376,7 @@ const MonacoEditor = () => {
       }
       
       if (contentJustChangedRef.current) {
-        return;
+        return
       }
       
       if (cursorChangeTimeoutRef.current) {
@@ -363,9 +391,27 @@ const MonacoEditor = () => {
       }, 50);
     })
 
-    editor.onDidChangeModelContent((e) => {
+    editor.onDidChangeModelContent(() => {
       contentJustChangedRef.current = true;
       
+      const activeBufferId = activeBufferRef.current.id as number
+      const bufferErrors = errorRefs.current[activeBufferId]
+      
+      if (bufferErrors) {
+        const currentQueries = getAllQueries(editor)
+        const currentQueryTexts = new Set(currentQueries.map(q => q.query))
+        
+        // Remove errors for queries that no longer exist
+        Object.keys(bufferErrors).forEach(queryText => {
+          if (!currentQueryTexts.has(queryText)) {
+            delete bufferErrors[queryText]
+          }
+        })
+        if (Object.keys(bufferErrors).length === 0) {
+          delete errorRefs.current[activeBufferId]
+        }
+      }
+
       applyGlyphsAndLineMarkings(monaco, editor);
       
       setTimeout(() => {
@@ -374,7 +420,43 @@ const MonacoEditor = () => {
     })
 
     editor.onDidChangeModel(() => {
-      applyGlyphsAndLineMarkings(monaco, editor)
+      setTimeout(() => {
+        if (monacoRef.current && editorRef.current) {
+          applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+        }
+      }, 10)
+    })
+
+    editor.onDidScrollChange((e) => {
+      if (scrollTimeoutRef.current) {
+        window.clearTimeout(scrollTimeoutRef.current)
+      }
+      
+      scrollTimeoutRef.current = window.setTimeout(() => {
+        const visibleRanges = editor.getVisibleRanges()
+        if (visibleRanges.length > 0) {
+          const firstRange = visibleRanges[0]
+          
+          const newVisibleLines = {
+            startLine: firstRange.startLineNumber,
+            endLine: firstRange.endLineNumber
+          }
+          
+          // Check if visible range has changed significantly (more than 100 lines)
+          const oldVisibleLines = visibleLinesRef.current
+          const startLineDiff = Math.abs(newVisibleLines.startLine - oldVisibleLines.startLine)
+          const endLineDiff = Math.abs(newVisibleLines.endLine - oldVisibleLines.endLine)
+          
+          visibleLinesRef.current = newVisibleLines
+          
+          if (startLineDiff > 100 || endLineDiff > 100) {
+            if (monacoRef.current && editorRef.current) {
+              applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+            }
+          }
+        }
+        scrollTimeoutRef.current = null
+      }, 200)
     })
 
     // Insert query, if one is found in the URL
@@ -400,6 +482,17 @@ const MonacoEditor = () => {
       toggleRunning()
     }
     
+    const initialVisibleRanges = editor.getVisibleRanges()
+    if (initialVisibleRanges.length > 0) {
+      const firstRange = initialVisibleRanges[0]
+      
+      visibleLinesRef.current = {
+        startLine: firstRange.startLineNumber,
+        endLine: firstRange.endLineNumber
+      }
+    }
+    
+    // Initial decoration setup
     applyGlyphsAndLineMarkings(monaco, editor)
   }
 
@@ -464,7 +557,15 @@ const MonacoEditor = () => {
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
             setRequest(undefined)
-            delete errorRefs.current[activeBuffer.id as number]
+            const activeBufferId = activeBuffer.id as number
+            
+            // Remove error for this specific query if it succeeded
+            if (errorRefs.current[activeBufferId]) {
+              delete errorRefs.current[activeBufferId][request.query]
+              if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
+                delete errorRefs.current[activeBufferId]
+              }
+            }
 
             dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
@@ -513,9 +614,16 @@ const MonacoEditor = () => {
             }
           })
           .catch((error: ErrorResult) => {
-            errorRefs.current[activeBuffer.id as number] = {
+            const activeBufferId = activeBuffer.id as number
+            
+            if (!errorRefs.current[activeBufferId]) {
+              errorRefs.current[activeBufferId] = {}
+            }
+            
+            errorRefs.current[activeBufferId][request.query] = {
               error,
             }
+            
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
             dispatch(
@@ -533,13 +641,9 @@ const MonacoEditor = () => {
                 error.position,
               )
               if (errorRange) {
-                errorRefs.current[activeBuffer.id as number].range = errorRange
-                setErrorMarker(
-                  monacoRef?.current,
-                  editorRef.current,
-                  errorRange,
-                  error.error,
-                )
+                errorRefs.current[activeBufferId][request.query].range = errorRange
+                
+                applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
 
                 editorRef?.current.focus()
 
@@ -596,6 +700,8 @@ const MonacoEditor = () => {
   useEffect(() => {
     if (monacoRef.current && editorRef.current) {
       clearModelMarkers(monacoRef.current, editorRef.current)
+      
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
   }, [activeBuffer])
 
@@ -608,6 +714,10 @@ const MonacoEditor = () => {
     return () => {
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current);
+      }
+      
+      if (scrollTimeoutRef.current) {
+        window.clearTimeout(scrollTimeoutRef.current);
       }
       
       if (decorationCollectionRef.current) {
