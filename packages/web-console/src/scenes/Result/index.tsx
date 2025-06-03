@@ -122,6 +122,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           dispatch(actions.query.stopRunning())
           dispatch(
             actions.query.addNotification({
+              query: sql,
               content: <Text color="red">{(err as ErrorResult).error}</Text>,
               sideContent: <QueryInNotification query={sql} />,
               type: NotificationType.ERROR,

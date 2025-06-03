@@ -39,6 +39,7 @@ export enum NotificationType {
 }
 
 export type NotificationShape = Readonly<{
+  query: string
   createdAt: Date
   content: ReactNode
   sideContent?: ReactNode
@@ -54,12 +55,13 @@ export type RunningShape = Readonly<{
 }>
 
 export type QueryStateShape = Readonly<{
-  notifications: NotificationShape[]
+  notifications: string[]
   tables: Table[]
   columns: InformationSchemaColumn[]
   result?: QueryRawResult
   running: RunningShape
-  maxNotifications: number
+  queryNotifications: Record<string, NotificationShape>
+  activeNotification: NotificationShape | null
 }>
 
 export enum QueryAT {
@@ -71,6 +73,7 @@ export enum QueryAT {
   TOGGLE_RUNNING = "QUERY/TOGGLE_RUNNING",
   SET_TABLES = "QUERY/SET_TABLES",
   SET_COLUMNS = "QUERY/SET_COLUMNS",
+  SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
 }
 
 type AddNotificationAction = Readonly<{
@@ -83,7 +86,7 @@ type CleanupNotificationsAction = Readonly<{
 }>
 
 type RemoveNotificationAction = Readonly<{
-  payload: Date
+  payload: string
   type: QueryAT.REMOVE_NOTIFICATION
 }>
 
@@ -117,6 +120,11 @@ type SetColumnsActions = Readonly<{
   }>
 }>
 
+type SetActiveNotificationAction = Readonly<{
+  type: QueryAT.SET_ACTIVE_NOTIFICATION
+  payload: NotificationShape | null
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -126,3 +134,4 @@ export type QueryAction =
   | ToggleRunningAction
   | SetTablesAction
   | SetColumnsActions
+  | SetActiveNotificationAction

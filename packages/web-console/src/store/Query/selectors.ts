@@ -30,7 +30,13 @@ import type {
 } from "utils/questdb"
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
-  store.query.notifications
+  store.query.notifications.map((query) => store.query.queryNotifications[query])
+
+const getQueryNotifications: (store: StoreShape) => Record<string, NotificationShape> = (store) =>
+  store.query.queryNotifications
+
+const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>
+  store.query.activeNotification
 
 const getResult: (store: StoreShape) => undefined | QueryRawResult = (store) =>
   store.query.result
@@ -45,6 +51,8 @@ const getColumns: (store: StoreShape) => InformationSchemaColumn[] = (store) =>
 
 export default {
   getNotifications,
+  getQueryNotifications,
+  getActiveNotification,
   getResult,
   getRunning,
   getTables,

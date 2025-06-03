@@ -32,21 +32,18 @@ export const initialState: QueryStateShape = {
     value: false,
     isRefresh: false,
   },
-  maxNotifications: 20,
+  queryNotifications: {},
+  activeNotification: null,
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
     case QueryAT.ADD_NOTIFICATION: {
-      const notifications = [...state.notifications, action.payload]
-
-      while (notifications.length === state.maxNotifications) {
-        notifications.shift()
-      }
-
       return {
         ...state,
-        notifications,
+        notifications: [...state.notifications, action.payload.query],
+        queryNotifications: { ...state.queryNotifications, [action.payload.query]: action.payload },
+        activeNotification: action.payload,
       }
     }
 
@@ -54,6 +51,15 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         notifications: [],
+        queryNotifications: {},
+        activeNotification: null,
+      }
+    }
+
+    case QueryAT.SET_ACTIVE_NOTIFICATION: {
+      return {
+        ...state,
+        activeNotification: action.payload,
       }
     }
 
@@ -61,7 +67,10 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         notifications: state.notifications.filter(
-          ({ createdAt }) => createdAt !== action.payload,
+          (query) => query !== action.payload,
+        ),
+        queryNotifications: Object.fromEntries(
+          Object.entries(state.queryNotifications).filter(([key]) => key !== action.payload),
         ),
       }
     }

@@ -52,7 +52,7 @@ const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
 })
 
 const addNotification = (
-  payload: Partial<NotificationShape> & { content: ReactNode },
+  payload: Partial<NotificationShape> & { content: ReactNode, query: string },
 ): QueryAction => ({
   payload: {
     createdAt: new Date(),
@@ -66,7 +66,7 @@ const cleanupNotifications = (): QueryAction => ({
   type: QueryAT.CLEANUP_NOTIFICATIONS,
 })
 
-const removeNotification = (payload: Date): QueryAction => ({
+const removeNotification = (payload: string): QueryAction => ({
   payload,
   type: QueryAT.REMOVE_NOTIFICATION,
 })
@@ -87,6 +87,11 @@ const toggleRunning = (isRefresh = false): QueryAction => ({
   },
 })
 
+const setActiveNotification = (payload: NotificationShape | null): QueryAction => ({
+  type: QueryAT.SET_ACTIVE_NOTIFICATION,
+  payload,
+})
+
 export default {
   addNotification,
   cleanupNotifications,
@@ -96,4 +101,5 @@ export default {
   toggleRunning,
   setTables,
   setColumns,
+  setActiveNotification,
 }

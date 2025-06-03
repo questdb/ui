@@ -2,8 +2,7 @@ import React, { FC, useCallback, useEffect, useMemo, useState, useContext, useRe
 import { Virtuoso, VirtuosoHandle, ListRange } from 'react-virtuoso';
 import styled from 'styled-components';
 import { Loader3, FileCopy, Restart } from '@styled-icons/remix-line';
-import { Text } from "../../../components"
-import { spinAnimation } from '../../../components';
+import { spinAnimation, toast } from '../../../components';
 import { color, ErrorResult } from '../../../utils';
 import * as QuestDB from "../../../utils/questdb";
 import { State, View } from "../../Schema";
@@ -16,8 +15,6 @@ import { useSchema } from "../SchemaContext";
 import { QuestContext } from "../../../providers";
 import { PartitionBy } from "../../../utils/questdb/types";
 import { useDispatch } from 'react-redux';
-import { actions } from "../../../store"
-import { NotificationType } from "../../../types"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
@@ -169,22 +166,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
         copyToClipboard(response.data[0].ddl)
-        dispatch(
-          actions.query.addNotification({
-            content: <Text color="foreground">Schema copied to clipboard</Text>,
-            type: NotificationType.SUCCESS,
-          })
-        )
+        toast.success("Schema copied to clipboard")
       }
     } catch (error: any) {
-      dispatch(
-        actions.query.addNotification({
-          content: (
-            <Text color="red">Cannot copy schema for {isMatView ? 'materialized view' : 'table'} '{tableName}'</Text>
-          ),
-          type: NotificationType.ERROR,
-        })
-      )
+      toast.error(`Cannot copy schema for ${isMatView ? 'materialized view' : 'table'} '${tableName}'`)
     }
   }
 
@@ -195,14 +180,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         return response.data
       }
     } catch (error: any) {
-      dispatch(
-        actions.query.addNotification({
-          content: (
-            <Text color="red">Cannot show columns from table '{name}'</Text>
-          ),
-          type: NotificationType.ERROR,
-        }),
-      )
+      toast.error(`Cannot show columns from table '${name}'`)
     }
     return []
   }

@@ -106,6 +106,7 @@ const ClearAllNotifications = styled.div`
 
 const Notifications = () => {
   const notifications = useSelector(selectors.query.getNotifications)
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -142,6 +143,9 @@ const Notifications = () => {
   }, [sm])
 
   const lastNotification = notifications[notifications.length - 1]
+  const displayNotification = typeof activeNotification !== 'undefined'
+    ? activeNotification
+    : lastNotification
 
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
@@ -151,8 +155,8 @@ const Notifications = () => {
           Log
         </Header>
         <LatestNotification data-hook="notifications-collapsed">
-          {isMinimized && lastNotification && (
-            <Notification isMinimized={true} {...lastNotification} />
+          {isMinimized && displayNotification && (
+            <Notification isMinimized={true} {...displayNotification} />
           )}
         </LatestNotification>
         <Button skin={`${isMinimized ? "secondary" : "transparent"}`} onClick={toggleMinimized}>

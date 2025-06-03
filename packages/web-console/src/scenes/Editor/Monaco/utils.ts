@@ -709,36 +709,33 @@ export const clearModelMarkers = (
   }
 }
 
-export const setErrorMarkers = (
+export const setErrorMarker = (
   monaco: Monaco,
   editor: IStandaloneCodeEditor,
   bufferErrors: Record<string, { error?: ErrorResult }>,
-  queries: Request[]
+  query?: Request
 ) => {
   const model = editor.getModel()
   if (!model) return
 
   const markers: any[] = []
 
-  Object.entries(bufferErrors).forEach(([queryText, { error }]) => {
+  if (query) {
+    const { error } = bufferErrors[query.query] || {}
     if (error) {
-      queries.forEach(query => {
-        if (query.query === queryText) {
-          const errorRange = getErrorRange(editor, query, error.position)
-          if (errorRange) {
-            markers.push({
-              message: error.error,
-              severity: monaco.MarkerSeverity.Error,
-              startLineNumber: errorRange.startLineNumber,
-              endLineNumber: errorRange.endLineNumber,
-              startColumn: errorRange.startColumn,
-              endColumn: errorRange.endColumn,
-            })
-          }
-        }
-      })
+      const errorRange = getErrorRange(editor, query, error.position)
+      if (errorRange) {
+        markers.push({
+          message: error.error,
+          severity: monaco.MarkerSeverity.Error,
+          startLineNumber: errorRange.startLineNumber,
+          endLineNumber: errorRange.endLineNumber,
+          startColumn: errorRange.startColumn,
+          endColumn: errorRange.endColumn,
+        })
+      }
     }
-  })
+  }
 
   monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
 }

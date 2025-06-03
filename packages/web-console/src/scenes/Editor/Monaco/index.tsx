@@ -1,7 +1,7 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
 import { Box, Button } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
-import type { editor, IDisposable, IRange } from "monaco-editor"
+import type { editor, IDisposable } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
@@ -10,6 +10,7 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
 import { actions, selectors } from "../../../store"
+import type { NotificationShape } from "../../../store/Query/types"
 import { theme } from "../../../theme"
 import { NotificationType } from "../../../types"
 import type { ErrorResult } from "../../../utils"
@@ -32,7 +33,7 @@ import {
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
-  setErrorMarkers,
+  setErrorMarker,
   getAllQueries,
   getQueriesInRange,
 } from "./utils"
@@ -144,12 +145,14 @@ const MonacoEditor = () => {
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
+  const queryNotifications = useSelector(selectors.query.getQueryNotifications)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
   const runningValueRef = useRef(running.value)
   const activeBufferRef = useRef(activeBuffer)
   const requestRef = useRef(request)
+  const queryNotificationsRef = useRef(queryNotifications)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const decorationCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null)
@@ -170,6 +173,19 @@ const MonacoEditor = () => {
 
   const toggleRunning = (isRefresh: boolean = false) => {
     dispatch(actions.query.toggleRunning(isRefresh))
+  }
+
+  const updateQueryNotification = (query?: string) => {
+    let newActiveNotification: NotificationShape | null = null
+
+    if (query) {
+      const notification = queryNotificationsRef.current[query]
+      if (notification) {
+        newActiveNotification = notification
+      }
+    }
+
+    dispatch(actions.query.setActiveNotification(newActiveNotification))
   }
 
   const beforeMount = (monaco: Monaco) => {
@@ -233,9 +249,9 @@ const MonacoEditor = () => {
     const activeBufferId = activeBufferRef.current.id as number
     
     const lineMarkingDecorations: editor.IModelDeltaDecoration[] = []
+    const bufferErrors = errorRefs.current[activeBufferId] || {}
     
     if (queryAtCursor) {
-      const bufferErrors = errorRefs.current[activeBufferId] || {}
       const hasError = bufferErrors[queryAtCursor.query]?.error !== undefined
       const startLineNumber = queryAtCursor.row + 1
       const endLineNumber = queryAtCursor.endRow + 1
@@ -258,8 +274,9 @@ const MonacoEditor = () => {
       lineMarkingDecorationIdsRef.current,
       lineMarkingDecorations
     )
-    
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
+    updateQueryNotification(queryAtCursor?.query)
+    setErrorMarker(monaco, editor, bufferErrors, queryAtCursor)
   }
 
   const applyGlyphsAndLineMarkings = (
@@ -322,9 +339,6 @@ const MonacoEditor = () => {
                 : hasError
                 ? "cursorQueryGlyphError"
                 : "cursorQueryGlyph",
-            glyphMarginHoverMessage: {
-              value: runningValueRef.current ? "Cancel query" : "Run query",
-            }
           },
         })
       })
@@ -334,10 +348,8 @@ const MonacoEditor = () => {
       decorationCollectionRef.current.clear();
     }
     
-    decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations);
+    decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations)
     
-    const bufferErrors = errorRefs.current[activeBufferId] || {}
-    setErrorMarkers(monaco, editor, bufferErrors, queries)
     applyLineMarkings(monaco, editor)
   }
 
@@ -510,6 +522,10 @@ const MonacoEditor = () => {
   }, [activeBuffer])
 
   useEffect(() => {
+    queryNotificationsRef.current = queryNotifications
+  }, [queryNotifications])
+
+  useEffect(() => {
     if (!running.value && request) {
       quest.abort()
       dispatch(actions.query.stopRunning())
@@ -539,6 +555,7 @@ const MonacoEditor = () => {
             dispatch(
               actions.query.addNotification({
                 type: NotificationType.LOADING,
+                query: request.query,
                 content: (
                   <Box gap="1rem" align="center">
                     <Text color="foreground">Running...</Text>
@@ -576,6 +593,7 @@ const MonacoEditor = () => {
             ) {
               dispatch(
                 actions.query.addNotification({
+                  query: result.query,
                   content: <QueryInNotification query={result.query} />,
                 }),
               )
@@ -585,6 +603,7 @@ const MonacoEditor = () => {
             if (result.type === QuestDB.Type.NOTICE) {
               dispatch(
                 actions.query.addNotification({
+                  query: result.query,
                   content: (
                     <Text color="foreground" ellipsis title={result.query}>
                       {result.notice}
@@ -593,6 +612,7 @@ const MonacoEditor = () => {
                         `: ${result.query}`}
                     </Text>
                   ),
+                  sideContent: <QueryInNotification query={result.query} />,
                   type: NotificationType.NOTICE,
                 }),
               )
@@ -603,6 +623,7 @@ const MonacoEditor = () => {
               setLastExecutedQuery(request.query)
               dispatch(
                 actions.query.addNotification({
+                  query: result.query,
                   jitCompiled: result.explain?.jitCompiled ?? false,
                   content: (
                     <QueryResult {...result.timings} rowCount={result.count} />
@@ -628,6 +649,7 @@ const MonacoEditor = () => {
             dispatch(actions.query.stopRunning())
             dispatch(
               actions.query.addNotification({
+                query: request.query,
                 content: <Text color="red">{error.error}</Text>,
                 sideContent: <QueryInNotification query={request.query} />,
                 type: NotificationType.ERROR,
