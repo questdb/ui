@@ -39,7 +39,7 @@ import {
   useScreenSize,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
+import { TerminalBox, History, Close } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
@@ -55,6 +55,7 @@ const Menu = styled(PaneMenu)`
   justify-content: space-between;
   overflow: hidden;
   border: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 
   ::before {
     content: "";
@@ -80,7 +81,7 @@ const Header = styled(Text)`
 `
 
 const LatestNotification = styled.div`
-  margin-left: 1rem;
+  padding: 0 1rem;
   flex: 1;
   height: 100%;
   display: flex;
@@ -159,9 +160,14 @@ const Notifications = () => {
             <Notification isMinimized={true} {...displayNotification} />
           )}
         </LatestNotification>
-        <Button skin={`${isMinimized ? "secondary" : "transparent"}`} onClick={toggleMinimized}>
-          {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
-        </Button>
+        {(notifications.length > 0 || !isMinimized) &&(
+          <Button
+            skin={`${isMinimized ? "secondary" : "transparent"}`}
+            onClick={toggleMinimized}
+          >
+            {isMinimized ? <History size="18px" /> : <Close size="18px" />}
+          </Button>
+        )}
       </Menu>
       {!isMinimized && (
         <Content
