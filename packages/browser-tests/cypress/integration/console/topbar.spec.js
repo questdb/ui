@@ -49,20 +49,20 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-edit-icon").should("be.visible");
     cy.getByDataHook("topbar-instance-edit-icon").click();
     cy.getByDataHook("topbar-instance-name-input").type("test-instance");
-    cy.getByDataHook("topbar-instance-type-select").select("production");
+    cy.getByDataHook("topbar-instance-type-select").select("testing");
     cy.getByDataHook("topbar-instance-description-input").type(
       "test description of the test instance"
     );
     cy.getByDataHook("topbar-instance-color-option-g").click();
     cy.getByDataHook("topbar-instance-save-button").click();
     cy.getByDataHook("topbar-instance-save-button").should("not.exist");
-    cy.getByDataHook("topbar-instance-name").should("contain", "Production");
+    cy.getByDataHook("topbar-instance-name").should("contain", "Testing");
     cy.getByDataHook("topbar-instance-name").should("contain", "test-instance");
     cy.getByDataHook("topbar-instance-icon").realHover();
     cy.contains("test description of the test instance").should("be.visible");
-    cy.contains(
-      "You are connected to a QuestDB instance for production"
-    ).should("be.visible");
+    cy.contains("You are connected to a QuestDB instance for testing").should(
+      "be.visible"
+    );
   });
 });
 
