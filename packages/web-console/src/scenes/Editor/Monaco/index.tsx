@@ -77,14 +77,14 @@ const Content = styled(PaneContent)`
     &:after {
       display: block;
       content: "";
-      width: 18px;
-      height: 18px;
+      width: 22px;
+      height: 22px;
     }
   }
 
   .cursorQueryGlyph {
     &:after {
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTggNC45djE0LjJjMCAuNC41LjcuOC41bDEwLjQtNy4xYS41LjUgMCAwIDAgMC0uOEw4LjggNC42YS41LjUgMCAwIDAtLjguM3oiIGZpbGw9IiM1MGZhN2IiLz48L3N2Zz4=");
     }
   }
 
@@ -96,26 +96,16 @@ const Content = styled(PaneContent)`
     &:after {
       display: block;
       content: "";
-      width: 18px;
-      height: 18px;
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
+      width: 22px;
+      height: 22px;
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiNmZjU1NTUiLz4KICAgICAgICA8cmVjdCB4PSIxNyIgeT0iNCIgd2lkdGg9IjIiIGhlaWdodD0iNSIgZmlsbD0id2hpdGUiIHJ4PSIwLjUiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjExIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPgogICAgPC9nPgo8L3N2Zz4=");
     }
   }
 
   .cancelQueryGlyph {
     &:after {
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMThweCIgd2lkdGg9IjE4cHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
     }
-  }
-
-  .errorGlyph {
-    margin-left: 2.5rem;
-    margin-top: 0.5rem;
-    z-index: 1;
-    width: 0.75rem !important;
-    height: 0.75rem !important;
-    border-radius: 50%;
-    background: ${color("red")};
   }
 `
 
@@ -158,6 +148,7 @@ const MonacoEditor = () => {
   const decorationCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null)
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({ startLine: 1, endLine: 1 })
   const scrollTimeoutRef = useRef<number | null>(null)
+  const notificationTimeoutRef = useRef<number | null>(null)
 
   // Buffer -> Query -> Error
   const errorRefs = useRef<
@@ -550,8 +541,8 @@ const MonacoEditor = () => {
 
       if (request?.query) {
         // give the notification a slight delay to prevent flashing for fast queries
-        setTimeout(() => {
-          if (runningValueRef.current) {
+        notificationTimeoutRef.current = window.setTimeout(() => {
+          if (runningValueRef.current && requestRef.current) {
             dispatch(
               actions.query.addNotification({
                 type: NotificationType.LOADING,
@@ -568,11 +559,17 @@ const MonacoEditor = () => {
               }),
             )
           }
+          notificationTimeoutRef.current = null
         }, 1000)
 
         void quest
           .queryRaw(request.query, { limit: "0,1000", explain: true })
           .then((result) => {
+            if (notificationTimeoutRef.current) {
+              window.clearTimeout(notificationTimeoutRef.current)
+              notificationTimeoutRef.current = null
+            }
+            
             setRequest(undefined)
             const activeBufferId = activeBuffer.id as number
             
@@ -635,6 +632,11 @@ const MonacoEditor = () => {
             }
           })
           .catch((error: ErrorResult) => {
+            if (notificationTimeoutRef.current) {
+              window.clearTimeout(notificationTimeoutRef.current)
+              notificationTimeoutRef.current = null
+            }
+            
             const activeBufferId = activeBuffer.id as number
             
             if (!errorRefs.current[activeBufferId]) {
@@ -740,6 +742,10 @@ const MonacoEditor = () => {
         window.clearTimeout(scrollTimeoutRef.current);
       }
       
+      if (notificationTimeoutRef.current) {
+        window.clearTimeout(notificationTimeoutRef.current);
+      }
+      
       if (decorationCollectionRef.current) {
         decorationCollectionRef.current.clear();
       }
@@ -761,6 +767,7 @@ const MonacoEditor = () => {
           model: null,
           fixedOverflowWidgets: true,
           fontSize: 14,
+          lineHeight: 24,
           fontFamily: theme.fontMonospace,
           glyphMargin: true,
           renderLineHighlight: "gutter",
