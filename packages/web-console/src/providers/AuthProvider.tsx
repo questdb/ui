@@ -11,6 +11,7 @@ import { getValue, removeValue, setValue } from "../utils/localStorage"
 import {
   getAuthorisationURL,
   getAuthToken,
+  getSSOUserNameWithClientID,
   getTokenExpirationDate,
   removeSSOUserNameWithClientID,
 } from "../modules/OAuth2/utils"
@@ -26,11 +27,12 @@ import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
+import { authPayloadHolder } from "../modules/OAuth2/authPayloadHolder";
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>,
   logout: (promptForLogin?: boolean) => void,
-  refreshAuthToken: (settings: Settings) => Promise<AuthPayload>,
+  refreshAuthToken: (settings: Settings, refreshToken: string | undefined) => Promise<AuthPayload>,
   redirectToAuthorizationUrl: () => void,
 }
 
@@ -84,10 +86,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       tokenResponse.expires_at = getTokenExpirationDate(
         tokenResponse.expires_in,
       ).toString() // convert from the sec offset
-      setValue(StoreKey.AUTH_PAYLOAD, JSON.stringify(tokenResponse))
-      // if the token payload does not contain refresh token, token refresh has been disabled in
-      // the OAuth2 provider, and we need to clear the refresh token in local storage
-      setValue(StoreKey.AUTH_REFRESH_TOKEN, tokenResponse.refresh_token ?? "")
+      authPayloadHolder.setAuthPayload(tokenResponse)
       setSessionData(tokenResponse)
       // Remove the code from the URL
       history.replaceState &&
@@ -108,10 +107,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const refreshAuthToken = async (settings: Settings) => {
+  const refreshAuthToken = async (settings: Settings, refreshToken: string | undefined) => {
     const response = await getAuthToken(settings, {
       grant_type: "refresh_token",
-      refresh_token: getValue(StoreKey.AUTH_REFRESH_TOKEN),
+      refresh_token: refreshToken,
       client_id: settings["acl.oidc.client.id"],
     })
     const tokenResponse = await response.json()
@@ -125,16 +124,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return
     }
 
-    // Proceed with the OAuth2 flow only if it's enabled on the server
+    // Proceed with the OAuth2 flow only if it is enabled on the server
     if (settings["acl.oidc.enabled"]) {
-      // Loading state is for OAuth2 flow only, as basic auth has no persistence layer, and it's in-memory only
-      const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
-      const urlParams = new URLSearchParams(window.location.search)
-      const code = urlParams.get("code")
-      const oauth2Error = new OAuth2Error(
-        urlParams.get("error"),
-        urlParams.get("error_description"),
-      )
 
       // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
       eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
@@ -142,12 +133,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // If any prior 401 when oauth2 is enabled has been received
         if (oauthRedirectCount) {
           const count = parseInt(oauthRedirectCount)
-          // Something's wrong with the backend consistently rejecting the token.
+          // Something is wrong with the backend, it is consistently rejecting the token.
           // Redirect to a dedicated logout page instead to break the loop.
           if (!isNaN(count) && count >= 5) {
+            // redirect to /logout and force user authentication to avoid infinite loop
             removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
             logout(true)
-            // redirect to /logout to avoid infinite loop
           } else {
             setValue(
               StoreKey.OAUTH_REDIRECT_COUNT,
@@ -169,60 +160,64 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
       })
 
-      // User is authenticated already
-      if (authPayload !== "") {
-        const tokenResponse = JSON.parse(authPayload)
-        // Check if the token expired or is about to in 30 seconds
-        if (new Date(tokenResponse.expires_at).getTime() - Date.now() < 30000) {
-          if (getValue(StoreKey.AUTH_REFRESH_TOKEN) !== "") {
-            // if there is a refresh token, go to OAuth2 provider to get fresh tokens
-            await refreshAuthToken(settings)
-          } else {
-            // if there is no refresh token, send the user to the login screen
-            logout()
-          }
-        } else {
-          setSessionData(tokenResponse)
-        }
-      } else {
-        // User has just been redirected back from the OAuth2 provider and has the code
-        if (code !== null) {
-          const state = getValue(StoreKey.OAUTH_STATE)
-          if (state) {
-            removeValue(StoreKey.OAUTH_STATE)
-            const stateParam = urlParams.get("state")
-            if (!stateParam || state !== stateParam) {
-              // state is missing or there is a mismatch, send user to authenticate again
-              logout(true)
-              return
-            }
-          }
+      const ssoUsername = settings["acl.oidc.client.id"]
+        ? getSSOUserNameWithClientID(settings["acl.oidc.client.id"])
+        : ""
+      const urlParams = new URLSearchParams(window.location.search)
+      const code = urlParams.get("code")
+      const oauth2Error = new OAuth2Error(
+        urlParams.get("error"),
+        urlParams.get("error_description"),
+      )
 
-          try {
-            const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
-            const response = await getAuthToken(settings, {
-              grant_type: "authorization_code",
-              code,
-              code_verifier,
-              client_id: settings["acl.oidc.client.id"],
-              redirect_uri:
-                settings["acl.oidc.redirect.uri"] ||
-                window.location.origin + window.location.pathname,
-            })
-            const tokenResponse = await response.json()
-            setAuthToken(tokenResponse, settings)
-          } catch (e) {
-            throw e
+      if (code !== null) {
+        // User has just been redirected back from the OAuth2 provider with an authorization code
+        const state = getValue(StoreKey.OAUTH_STATE)
+        if (state) {
+          removeValue(StoreKey.OAUTH_STATE)
+          const stateParam = urlParams.get("state")
+          if (!stateParam || state !== stateParam) {
+            // state is missing or there is a mismatch, user has to re-authenticate
+            logout(true)
+            return
           }
-        } else if (oauth2Error.error) {
-          // User has just been redirected back from the OAuth2 provider and there is an error
-          setErrorMessage(
-            oauth2Error.error + ": " + oauth2Error.error_description,
-          )
-          // Stop loading and display the login state
-        } else {
-          uiAuthLogin()
         }
+
+        try {
+          const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
+          const response = await getAuthToken(settings, {
+            grant_type: "authorization_code",
+            code,
+            code_verifier,
+            client_id: settings["acl.oidc.client.id"],
+            redirect_uri:
+              settings["acl.oidc.redirect.uri"] ||
+              window.location.origin + window.location.pathname,
+          })
+          const tokenResponse = await response.json()
+          setAuthToken(tokenResponse, settings)
+        } catch (e) {
+          throw e
+        }
+      } else if (oauth2Error.error) {
+        // User has just been redirected back from the OAuth2 provider and there is an error
+        const previousPrompt = getValue(StoreKey.OAUTH_PROMPT)
+        removeValue(StoreKey.OAUTH_PROMPT)
+        if (previousPrompt === "none") {
+          // If we requested authorization code silently (prompt=none), it could be that the user
+          // does not have an active SSO session, so let's send the user to re-authenticate (prompt=login)
+          redirectToAuthorizationUrl()
+        } else {
+          // If the error is not in response for a silent authorization code request, display the error
+          setErrorMessage(oauth2Error.error + ": " + oauth2Error.error_description)
+          dispatch({ view: View.error })
+        }
+      } else if (ssoUsername) {
+        // We should try to request a token silently
+        redirectToAuthorizationUrl("none")
+      } else {
+        // Stop loading and display the login state
+        uiAuthLogin()
       }
     } else if (settings["acl.basic.auth.realm.enabled"]) {
       await basicAuthLogin()
@@ -259,21 +254,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const redirectToAuthorizationUrl = (loginWithDifferentAccount?: boolean) => {
+  const redirectToAuthorizationUrl = (prompt?: "login" | "none") => {
     const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
+    setValue(StoreKey.OAUTH_PROMPT, prompt ?? "")
     window.location.href = getAuthorisationURL({
       settings,
       code_challenge,
       state,
-      loginWithDifferentAccount,
+      prompt,
       redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
     })
   }
 
   const logout = (promptForLogin?: boolean) => {
-    removeValue(StoreKey.AUTH_PAYLOAD)
+    authPayloadHolder.clearAuthPayload()
+    removeValue(StoreKey.OAUTH_PROMPT)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
     if (promptForLogin && settings["acl.oidc.client.id"]) {
@@ -332,7 +329,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ),
     [View.login]: () => (
       <Login
-        onOAuthLogin={redirectToAuthorizationUrl}
+        onOAuthLogin={(loginWithDifferentAccount) => {
+          redirectToAuthorizationUrl(loginWithDifferentAccount ? "login" : undefined)
+        }}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })
         }}

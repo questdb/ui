@@ -38,14 +38,13 @@ import {
   TransitionDuration,
   ToastContainer,
 } from "./components"
-import { actions, rootEpic, rootReducer } from "./store"
+import { rootEpic, rootReducer } from "./store"
 import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"
 import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
-import { PosthogProviderWrapper } from "./providers/PosthogProviderWrapper"
-import { AuthProvider, QuestProvider, SettingsProvider } from "./providers"
+import { AuthProvider, QuestProvider, SettingsProvider, PosthogProviderWrapper } from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,
