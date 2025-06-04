@@ -39,7 +39,7 @@ import {
   useScreenSize,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { TerminalBox, History, Close } from "@styled-icons/remix-line"
+import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
@@ -165,7 +165,7 @@ const Notifications = () => {
             skin={`${isMinimized ? "secondary" : "transparent"}`}
             onClick={toggleMinimized}
           >
-            {isMinimized ? <History size="18px" /> : <Close size="18px" />}
+            {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
           </Button>
         )}
       </Menu>

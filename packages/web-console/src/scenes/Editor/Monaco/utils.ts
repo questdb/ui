@@ -379,12 +379,25 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
+  isExplain = false,
 ): Request | undefined => {
   const selectedText = getSelectedText(editor)
+  let request: Request | undefined
+  
   if (selectedText) {
-    return getQueryFromSelection(editor)
+    request = getQueryFromSelection(editor)
+  } else {
+    request = getQueryFromCursor(editor)
   }
-  return getQueryFromCursor(editor)
+  
+  if (request && isExplain) {
+    return {
+      ...request,
+      query: `EXPLAIN ${request.query}`,
+    }
+  }
+  
+  return request
 }
 
 export const getQueryRequestFromLastExecutedQuery = (

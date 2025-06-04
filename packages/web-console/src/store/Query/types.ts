@@ -52,6 +52,7 @@ export type NotificationShape = Readonly<{
 export type RunningShape = Readonly<{
   value: boolean
   isRefresh: boolean
+  isExplain?: boolean
 }>
 
 export type QueryStateShape = Readonly<{
@@ -103,6 +104,7 @@ type ToggleRunningAction = Readonly<{
   type: QueryAT.TOGGLE_RUNNING
   payload: Readonly<{
     isRefresh: boolean
+    isExplain?: boolean
   }>
 }>
 

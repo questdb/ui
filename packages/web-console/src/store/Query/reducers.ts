@@ -31,6 +31,7 @@ export const initialState: QueryStateShape = {
   running: {
     value: false,
     isRefresh: false,
+    isExplain: false,
   },
   queryNotifications: {},
   activeNotification: null,
@@ -88,6 +89,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         running: {
           value: false,
           isRefresh: false,
+          isExplain: false,
         },
       }
     }
@@ -98,6 +100,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         running: {
           value: !state.running.value,
           isRefresh: action.payload.isRefresh,
+          isExplain: action.payload.isExplain || false,
         },
       }
     }
