@@ -47,6 +47,13 @@ export type NotificationShape = Readonly<{
   type: NotificationType
   jitCompiled?: boolean
   isMinimized?: boolean
+  isExplain?: boolean
+}>
+
+export type QueryNotifications = Readonly<{
+  latest: NotificationShape
+  regular?: NotificationShape
+  explain?: NotificationShape
 }>
 
 export type RunningShape = Readonly<{
@@ -56,12 +63,12 @@ export type RunningShape = Readonly<{
 }>
 
 export type QueryStateShape = Readonly<{
-  notifications: string[]
+  notifications: NotificationShape[]
   tables: Table[]
   columns: InformationSchemaColumn[]
   result?: QueryRawResult
   running: RunningShape
-  queryNotifications: Record<string, NotificationShape>
+  queryNotifications: Record<string, QueryNotifications>
   activeNotification: NotificationShape | null
 }>
 

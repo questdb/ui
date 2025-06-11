@@ -40,11 +40,28 @@ export const initialState: QueryStateShape = {
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
     case QueryAT.ADD_NOTIFICATION: {
+      const { query: queryText, isExplain = false } = action.payload
+      
+      const notificationWithTimestamp = {
+        ...action.payload,
+        createdAt: action.payload.createdAt || new Date()
+      }
+      
+      const existingQueryNotifications = state.queryNotifications[queryText] || {}
+      const updatedQueryNotifications = {
+        ...existingQueryNotifications,
+        latest: notificationWithTimestamp,
+        [isExplain ? 'explain' : 'regular']: notificationWithTimestamp
+      }
+
       return {
         ...state,
-        notifications: [...state.notifications, action.payload.query],
-        queryNotifications: { ...state.queryNotifications, [action.payload.query]: action.payload },
-        activeNotification: action.payload,
+        notifications: [...state.notifications, notificationWithTimestamp],
+        queryNotifications: { 
+          ...state.queryNotifications, 
+          [queryText]: updatedQueryNotifications 
+        },
+        activeNotification: notificationWithTimestamp,
       }
     }
 
@@ -65,14 +82,17 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     }
 
     case QueryAT.REMOVE_NOTIFICATION: {
+      const filteredNotifications = state.notifications.filter(
+        (notification) => notification.query !== action.payload,
+      )
+      
+      const updatedQueryNotifications = { ...state.queryNotifications }
+      delete updatedQueryNotifications[action.payload]
+      
       return {
         ...state,
-        notifications: state.notifications.filter(
-          (query) => query !== action.payload,
-        ),
-        queryNotifications: Object.fromEntries(
-          Object.entries(state.queryNotifications).filter(([key]) => key !== action.payload),
-        ),
+        notifications: filteredNotifications,
+        queryNotifications: updatedQueryNotifications,
       }
     }
 

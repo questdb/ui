@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { NotificationShape, RunningShape, StoreShape } from "types"
+import { NotificationShape, RunningShape, StoreShape, QueryNotifications } from "types"
 import type {
   QueryRawResult,
   Table,
@@ -30,9 +30,9 @@ import type {
 } from "utils/questdb"
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
-  store.query.notifications.map((query) => store.query.queryNotifications[query])
+  store.query.notifications
 
-const getQueryNotifications: (store: StoreShape) => Record<string, NotificationShape> = (store) =>
+const getQueryNotifications: (store: StoreShape) => Record<string, QueryNotifications> = (store) =>
   store.query.queryNotifications
 
 const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>

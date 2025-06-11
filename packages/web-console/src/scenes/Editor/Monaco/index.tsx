@@ -225,9 +225,9 @@ const MonacoEditor = () => {
     let newActiveNotification: NotificationShape | null = null
 
     if (query) {
-      const notification = queryNotificationsRef.current[query]
-      if (notification) {
-        newActiveNotification = notification
+      const queryNotifications = queryNotificationsRef.current[query]
+      if (queryNotifications) {
+        newActiveNotification = queryNotifications.latest || null
       }
     }
 
@@ -314,7 +314,6 @@ const MonacoEditor = () => {
 
   const handleRunQuery = () => {
     setDropdownOpen(false)
-    console.log("targetPositionRef.current", targetPositionRef.current)
     if (targetPositionRef.current && editorRef.current) {
       editorRef.current.setPosition(targetPositionRef.current)
     }
@@ -324,7 +323,6 @@ const MonacoEditor = () => {
 
   const handleExplainQuery = () => {
     setDropdownOpen(false)
-    console.log("targetPositionRef.current", targetPositionRef.current)
     if (targetPositionRef.current && editorRef.current) {
       editorRef.current.setPosition(targetPositionRef.current)
     }
@@ -658,6 +656,7 @@ const MonacoEditor = () => {
               actions.query.addNotification({
                 type: NotificationType.LOADING,
                 query: originalQuery,
+                isExplain: running.isExplain,
                 content: (
                   <Box gap="1rem" align="center">
                     <Text color="foreground">Running...</Text>
@@ -701,6 +700,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: originalQuery,
+                  isExplain: running.isExplain,
                   content: <QueryInNotification query={request.query} />,
                 }),
               )
@@ -711,6 +711,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: originalQuery,
+                  isExplain: running.isExplain,
                   content: (
                     <Text color="foreground" ellipsis title={request.query}>
                       {result.notice}
@@ -731,6 +732,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: originalQuery,
+                  isExplain: running.isExplain,
                   jitCompiled: result.explain?.jitCompiled ?? false,
                   content: (
                     <QueryResult {...result.timings} rowCount={result.count} />
@@ -762,6 +764,7 @@ const MonacoEditor = () => {
             dispatch(
               actions.query.addNotification({
                 query: originalQuery,
+                isExplain: running.isExplain,
                 content: <Text color="red">{error.error}</Text>,
                 sideContent: <QueryInNotification query={request.query} />,
                 type: NotificationType.ERROR,

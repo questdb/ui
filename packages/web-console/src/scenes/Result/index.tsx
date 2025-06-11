@@ -119,7 +119,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             rendererFn(result)
           }
         } catch (err) {
-          dispatch(actions.query.stopRunning())
+          // Order of actions is important
           dispatch(
             actions.query.addNotification({
               query: sql,
@@ -128,6 +128,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               type: NotificationType.ERROR,
             }),
           )
+          dispatch(actions.query.stopRunning())
         }
       },
     )
