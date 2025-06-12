@@ -64,7 +64,6 @@ const Content = styled(PaneContent)`
     width: 0.2rem !important;
     background: ${color("green")};
     margin-left: 1.2rem;
-    left: 77px !important;
 
     &.hasError {
       background: ${color("red")};
@@ -123,6 +122,7 @@ const StyledDropdownContent = styled(DropdownMenu.Content)`
   box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
   z-index: 9999;
   min-width: 160px;
+  gap: 0;
 `
 
 const StyledDropdownItem = styled(DropdownMenu.Item)`
@@ -417,7 +417,16 @@ const MonacoEditor = () => {
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
         
-        // Add glyph for all queries
+        // Add glyph for all queries with line number in class name
+        const glyphClassName = 
+          runningValueRef.current &&
+            requestRef.current?.row &&
+            requestRef.current?.row + 1 === startLineNumber
+            ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}`
+            : hasError
+            ? `cursorQueryGlyphError cursorQueryGlyphError-line-${startLineNumber}`
+            : `cursorQueryGlyph cursorQueryGlyph-line-${startLineNumber}`
+        
         allDecorations.push({
           range: new monaco.Range(
             startLineNumber,
@@ -427,14 +436,7 @@ const MonacoEditor = () => {
           ),
           options: {
             isWholeLine: false,
-            glyphMarginClassName:
-              runningValueRef.current &&
-                requestRef.current?.row &&
-                requestRef.current?.row + 1 === startLineNumber
-                ? "cancelQueryGlyph"
-                : hasError
-                ? "cursorQueryGlyphError"
-                : "cursorQueryGlyph",
+            glyphMarginClassName: glyphClassName,
           },
         })
       })
@@ -922,11 +924,11 @@ const MonacoEditor = () => {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <StyledDropdownContent>
-            <StyledDropdownItem onClick={handleRunQuery}>
+            <StyledDropdownItem onClick={handleRunQuery} data-hook="dropdown-item-run-query">
               <IconWrapper><StyledPlay size={16} /></IconWrapper>
               Run
             </StyledDropdownItem>
-            <StyledDropdownItem onClick={handleExplainQuery}>
+            <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
               <IconWrapper><Information size={16} /></IconWrapper>
               Get query plan
             </StyledDropdownItem>

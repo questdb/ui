@@ -199,6 +199,36 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
 
 Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
 
+Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
+  const selectors = [
+    `.cursorQueryGlyph-line-${lineNumber}`,
+    `.cursorQueryGlyphError-line-${lineNumber}`,
+  ];
+  cy.get("body").then(() => {
+    let elementFound = false;
+
+    for (const selector of selectors) {
+      if (Cypress.$(selector).length > 0) {
+        cy.get(selector).first().click();
+        elementFound = true;
+        break;
+      }
+    }
+
+    if (!elementFound) {
+      throw new Error(`No run icon found for line ${lineNumber}.`);
+    }
+  });
+});
+
+Cypress.Commands.add("clickDropdownRunQuery", () =>
+  cy.getByDataHook("dropdown-item-run-query").click()
+);
+
+Cypress.Commands.add("clickDropdownGetQueryPlan", () =>
+  cy.getByDataHook("dropdown-item-get-query-plan").click()
+);
+
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
   const numbers = Array.from(
@@ -228,6 +258,14 @@ Cypress.Commands.add("F9", () => {
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"));
+
+Cypress.Commands.add("expandNotifications", () =>
+  cy.get('[data-hook="expand-notifications"]').click()
+);
+
+Cypress.Commands.add("collapseNotifications", () =>
+  cy.get('[data-hook="collapse-notifications"]').click()
+);
 
 Cypress.Commands.add("getCollapsedNotifications", () =>
   cy.get('[data-hook="notifications-collapsed"]')

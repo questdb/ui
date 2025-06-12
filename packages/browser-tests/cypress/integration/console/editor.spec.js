@@ -58,17 +58,6 @@ describe("run query", () => {
     cy.getColumnName(0).should("contain", "count");
     cy.getGridRow(0).should("contain", "100");
   });
-
-  it("should not suggest any query for running if the cursor is in an empty line between queries", () => {
-    cy.typeQuery("select 1;\n\nselect 2;");
-    cy.getCursorQueryGlyph().should("be.visible");
-
-    cy.realPress("ArrowUp");
-    cy.getCursorQueryGlyph().should("not.exist");
-
-    cy.realPress("ArrowUp");
-    cy.getCursorQueryGlyph().should("be.visible");
-  });
 });
 
 describe("appendQuery", () => {
@@ -654,5 +643,95 @@ describe("handling comments", () => {
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();
     cy.getGridRow(0).should("contain", "1");
+  });
+});
+
+describe("multiple run buttons with dynamic query log", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
+  });
+
+  it("should click run icon in specific line and open dropdown", () => {
+    cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
+    cy.clickRunIconInLine(3);
+
+    cy.getByDataHook("dropdown-item-run-query").should("be.visible");
+    cy.getByDataHook("dropdown-item-get-query-plan").should("be.visible");
+  });
+
+  it("should run query from specific line using dropdown", () => {
+    cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
+    cy.clickRunIconInLine(3).clickDropdownRunQuery();
+
+    cy.getGridRow(0).should("contain", "2");
+  });
+
+  it("should get query plan from specific line using dropdown", () => {
+    cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
+
+    cy.clickRunIconInLine(5).clickDropdownGetQueryPlan();
+
+    cy.getColumnName(0).should("contain", "QUERY PLAN");
+  });
+
+  it("should indicate error in glyph and notification", () => {
+    cy.typeQuery("select * from non_existent_table;\n\nselect 1;\n\nselect 2;");
+
+    cy.clickRunIconInLine(3);
+    cy.clickDropdownRunQuery();
+
+    cy.getCollapsedNotifications()
+      .getByDataHook("success-notification")
+      .should("contain", "select 1");
+
+    cy.clickRunIconInLine(5);
+    cy.clickDropdownRunQuery();
+
+    cy.getCollapsedNotifications()
+      .getByDataHook("success-notification")
+      .should("contain", "select 2");
+
+    cy.clickRunIconInLine(1);
+    cy.clickDropdownRunQuery();
+    cy.getCollapsedNotifications()
+      .getByDataHook("error-notification")
+      .should("contain", "table does not exist")
+      .should("contain", "select * from non_existent_table");
+
+    cy.clickRunIconInLine(3);
+    cy.clickDropdownGetQueryPlan();
+    cy.getCollapsedNotifications().should("contain", "EXPLAIN select 1");
+    cy.getColumnName(0).should("contain", "QUERY PLAN");
+
+    cy.expandNotifications();
+    // +1 for clear all button
+    cy.getExpandedNotifications().children().should("have.length", 5);
+    [
+      "select 1",
+      "select 2",
+      "select * from non_existent_table",
+      "EXPLAIN select 1",
+    ].forEach((notification) => {
+      cy.getExpandedNotifications().should("contain", notification);
+    });
+
+    cy.collapseNotifications();
+
+    cy.clickLine(1);
+    cy.getByDataHook("error-notification").should(
+      "contain",
+      "table does not exist"
+    );
+
+    cy.clickLine(3);
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "EXPLAIN select 1"
+    );
+
+    cy.clickLine(5);
+    cy.getByDataHook("success-notification").should("contain", "select 2");
   });
 });

@@ -164,6 +164,7 @@ const Notifications = () => {
           <Button
             skin={`${isMinimized ? "secondary" : "transparent"}`}
             onClick={toggleMinimized}
+            data-hook={`${isMinimized ? "expand-notifications" : "collapse-notifications"}`}
           >
             {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
           </Button>
