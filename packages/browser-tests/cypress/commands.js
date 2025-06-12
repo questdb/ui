@@ -218,13 +218,15 @@ Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
   });
 });
 
-Cypress.Commands.add("clickDropdownRunQuery", () =>
-  cy.getByDataHook("dropdown-item-run-query").click()
-);
+Cypress.Commands.add("clickDropdownRunQuery", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.getByDataHook("dropdown-item-run-query").click().wait("@exec");
+});
 
-Cypress.Commands.add("clickDropdownGetQueryPlan", () =>
-  cy.getByDataHook("dropdown-item-get-query-plan").click()
-);
+Cypress.Commands.add("clickDropdownGetQueryPlan", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.getByDataHook("dropdown-item-get-query-plan").click().wait("@exec");
+});
 
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
