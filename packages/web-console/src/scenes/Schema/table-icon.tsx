@@ -65,8 +65,8 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
 
 export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designatedTimestamp, isMaterializedView }) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
-  const partitionText = isPartitioned ? `partitioned by ${partitionBy.toLowerCase()}` : "unpartitioned"
-  const timestampText = !!designatedTimestamp ? `ordered on ${designatedTimestamp} column` : "unordered"
+  const partitionText = isPartitioned ? `partitioned by \"${partitionBy.toLowerCase()}\"` : "unpartitioned"
+  const timestampText = !!designatedTimestamp ? `ordered on \"${designatedTimestamp}\" column` : "unordered"
   const walText = walEnabled ? "WAL-based table" : "Legacy table format"
   const fullHeader = `${walText}, ${partitionText}, ${timestampText}.`
   const description = walEnabled
