@@ -4,10 +4,12 @@ import { Table } from "@styled-icons/remix-line"
 import { PopperHover } from "../../components/PopperHover"
 import { Tooltip } from "../../components/Tooltip"
 import { color } from '../../utils'
+import * as QuestDB from "../../utils/questdb"
 
 type TableIconProps = {
   walEnabled?: boolean
-  isPartitioned?: boolean
+  partitionBy?: QuestDB.PartitionBy
+  designatedTimestamp?: string
   isMaterializedView?: boolean
 }
 
@@ -61,7 +63,16 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const TableIcon: FC<TableIconProps> = ({ walEnabled, isPartitioned, isMaterializedView }) => {
+export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designatedTimestamp, isMaterializedView }) => {
+  const isPartitioned = partitionBy && partitionBy !== "NONE"
+  const partitionText = isPartitioned ? `partitioned by ${partitionBy.toLowerCase()}` : "unpartitioned"
+  const timestampText = !!designatedTimestamp ? `ordered on ${designatedTimestamp} column` : "unordered"
+  const walText = walEnabled ? "WAL-based table" : "Legacy table format"
+  const fullHeader = `${walText}, ${partitionText}, ${timestampText}.`
+  const description = walEnabled
+    ? "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
+    : "Legacy table format, without WAL (write-ahead-log). This table format should only be used when table does not have timestamp column and generally not a time series. These tables are not replicated and could be slower to ingress data into."
+
   if (isMaterializedView) {
     return (
       <Root data-hook="table-icon">
@@ -82,9 +93,10 @@ export const TableIcon: FC<TableIconProps> = ({ walEnabled, isPartitioned, isMat
       placement="bottom"
     >
       <Tooltip>
-        <strong>Partitioning:</strong> {isPartitioned ? "Enabled" : "Disabled"}
+        {fullHeader}
         <br />
-        <strong>WAL:</strong> {walEnabled ? "Enabled" : "Disabled"}
+        <br />
+        {description}
       </Tooltip>
     </PopperHover>
   )
