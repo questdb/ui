@@ -81,8 +81,14 @@ describe("questdb schema with working tables", () => {
 
     cy.wait(1200);
 
-    cy.getByDataHook("tooltip").should("contain", "WAL: Enabled");
-    cy.getByDataHook("tooltip").should("contain", "Partitioning: Enabled");
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      `WAL-based table, partitioned by "day", ordered on "timestamp" column.`
+    );
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
+    );
   })
 
   it("should filter the table with input field", () => {
