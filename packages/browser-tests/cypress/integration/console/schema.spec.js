@@ -73,6 +73,24 @@ describe("questdb schema with working tables", () => {
     });
   });
 
+  it("should show the table icon description in the tooltip", () => {
+    cy.getByDataHook("schema-table-title")
+      .contains("btc_trades")
+      .getByDataHook("table-icon")
+      .realHover();
+
+    cy.wait(1200);
+
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      `WAL-based table, partitioned by "day", ordered on "timestamp" column.`
+    );
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
+    );
+  })
+
   it("should filter the table with input field", () => {
     // Table name search
     cy.get('input[name="table_filter"]').type("btc_trades");

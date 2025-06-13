@@ -432,7 +432,8 @@ const Row = ({
           >
             {isTableKind && (
               <TableIcon
-                isPartitioned={partitionBy && partitionBy !== "NONE"}
+                designatedTimestamp={designatedTimestamp}
+                partitionBy={partitionBy}
                 walEnabled={walEnabled}
                 isMaterializedView={kind === "matview"}
               />

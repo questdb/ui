@@ -375,6 +375,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   navigateInTree={navigateInTree}
                   partitionBy={item.partitionBy}
                   walEnabled={item.walEnabled}
+                  designatedTimestamp={item.designatedTimestamp}
                   id={item.id}
                   errors={[
                     ...(item.matViewData?.view_status === 'invalid' ? 
