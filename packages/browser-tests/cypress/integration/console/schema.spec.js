@@ -59,16 +59,6 @@ describe("questdb schema with working tables", () => {
   });
 
   it("should show the storage details", () => {
-    cy.getByDataHook("schema-table-title")
-      .contains("btc_trades")
-      .getByDataHook("table-icon")
-      .realHover();
-
-    cy.wait(1200);
-
-    cy.getByDataHook("tooltip").should("contain", "WAL: Enabled");
-    cy.getByDataHook("tooltip").should("contain", "Partitioning: Enabled");
-
     cy.getByDataHook("schema-table-title").contains("btc_trades").dblclick();
     cy.getByDataHook("schema-row").contains("Storage details").dblclick();
 
@@ -82,6 +72,18 @@ describe("questdb schema with working tables", () => {
       expect($el.text()).to.include("By day");
     });
   });
+
+  it("should show the table icon description in the tooltip", () => {
+    cy.getByDataHook("schema-table-title")
+      .contains("btc_trades")
+      .getByDataHook("table-icon")
+      .realHover();
+
+    cy.wait(1200);
+
+    cy.getByDataHook("tooltip").should("contain", "WAL: Enabled");
+    cy.getByDataHook("tooltip").should("contain", "Partitioning: Enabled");
+  })
 
   it("should filter the table with input field", () => {
     // Table name search
