@@ -1,6 +1,8 @@
 import React, { FC } from "react"
 import styled from "styled-components"
 import { Table } from "@styled-icons/remix-line"
+import { PopperHover } from "../../components/PopperHover"
+import { Tooltip } from "../../components/Tooltip"
 import { color } from '../../utils'
 
 type TableIconProps = {
@@ -59,15 +61,31 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const TableIcon: FC<TableIconProps> = ({ walEnabled, isPartitioned, isMaterializedView }) => (
-  <Root>
-    {isMaterializedView ? (
-      <MaterializedViewIcon height="14px" width="14px" />
-    ) : (
-      <>
-        {!walEnabled && <Asterisk>*</Asterisk>}
-        {isPartitioned ? <Table size="14px" /> : <NonPartitionedTableIcon height="14px" />}
-      </>
-    )}
-  </Root>
-)
+export const TableIcon: FC<TableIconProps> = ({ walEnabled, isPartitioned, isMaterializedView }) => {
+  if (isMaterializedView) {
+    return (
+      <Root data-hook="table-icon">
+        <MaterializedViewIcon height="14px" width="14px" />
+      </Root>
+    )
+  }
+
+  return (
+    <PopperHover
+      trigger={
+        <Root data-hook="table-icon">
+          {!walEnabled && <Asterisk>*</Asterisk>}
+          {isPartitioned ? <Table size="14px" /> : <NonPartitionedTableIcon height="14px" />}
+        </Root>
+      }
+      delay={1000}
+      placement="bottom"
+    >
+      <Tooltip>
+        <strong>Partitioning:</strong> {isPartitioned ? "Enabled" : "Disabled"}
+        <br />
+        <strong>WAL:</strong> {walEnabled ? "Enabled" : "Disabled"}
+      </Tooltip>
+    </PopperHover>
+  )
+}
