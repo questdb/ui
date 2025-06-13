@@ -31,22 +31,37 @@ export const initialState: QueryStateShape = {
   running: {
     value: false,
     isRefresh: false,
+    isExplain: false,
   },
-  maxNotifications: 20,
+  queryNotifications: {},
+  activeNotification: null,
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
     case QueryAT.ADD_NOTIFICATION: {
-      const notifications = [...state.notifications, action.payload]
-
-      while (notifications.length === state.maxNotifications) {
-        notifications.shift()
+      const { query: queryText, isExplain = false } = action.payload
+      
+      const notificationWithTimestamp = {
+        ...action.payload,
+        createdAt: action.payload.createdAt || new Date()
+      }
+      
+      const existingQueryNotifications = state.queryNotifications[queryText] || {}
+      const updatedQueryNotifications = {
+        ...existingQueryNotifications,
+        latest: notificationWithTimestamp,
+        [isExplain ? 'explain' : 'regular']: notificationWithTimestamp
       }
 
       return {
         ...state,
-        notifications,
+        notifications: [...state.notifications, notificationWithTimestamp],
+        queryNotifications: { 
+          ...state.queryNotifications, 
+          [queryText]: updatedQueryNotifications 
+        },
+        activeNotification: notificationWithTimestamp,
       }
     }
 
@@ -54,15 +69,30 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         notifications: [],
+        queryNotifications: {},
+        activeNotification: null,
+      }
+    }
+
+    case QueryAT.SET_ACTIVE_NOTIFICATION: {
+      return {
+        ...state,
+        activeNotification: action.payload,
       }
     }
 
     case QueryAT.REMOVE_NOTIFICATION: {
+      const filteredNotifications = state.notifications.filter(
+        (notification) => notification.query !== action.payload,
+      )
+      
+      const updatedQueryNotifications = { ...state.queryNotifications }
+      delete updatedQueryNotifications[action.payload]
+      
       return {
         ...state,
-        notifications: state.notifications.filter(
-          ({ createdAt }) => createdAt !== action.payload,
-        ),
+        notifications: filteredNotifications,
+        queryNotifications: updatedQueryNotifications,
       }
     }
 
@@ -79,6 +109,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         running: {
           value: false,
           isRefresh: false,
+          isExplain: false,
         },
       }
     }
@@ -89,6 +120,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         running: {
           value: !state.running.value,
           isRefresh: action.payload.isRefresh,
+          isExplain: action.payload.isExplain || false,
         },
       }
     }

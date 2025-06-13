@@ -30,7 +30,7 @@ import { Timestamp } from "../Timestamp"
 export const InfoNotification = (props: NotificationShape) => {
   const { createdAt, content, sideContent, isMinimized } = props
   return (
-    <Wrapper isMinimized={isMinimized}>
+    <Wrapper isMinimized={isMinimized} data-hook="info-notification">
       <Timestamp createdAt={createdAt} />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>

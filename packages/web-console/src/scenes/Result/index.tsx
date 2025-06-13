@@ -119,14 +119,16 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             rendererFn(result)
           }
         } catch (err) {
-          dispatch(actions.query.stopRunning())
+          // Order of actions is important
           dispatch(
             actions.query.addNotification({
+              query: sql,
               content: <Text color="red">{(err as ErrorResult).error}</Text>,
               sideContent: <QueryInNotification query={sql} />,
               type: NotificationType.ERROR,
             }),
           )
+          dispatch(actions.query.stopRunning())
         }
       },
     )

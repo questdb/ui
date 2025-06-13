@@ -39,7 +39,7 @@ export const ContextMenuContent = React.forwardRef<
   HTMLDivElement,
   ContextMenuPrimitive.ContextMenuContentProps
 >((props, forwardedRef) => (
-  <ContextMenuPrimitive.Portal data-test="emre">
+  <ContextMenuPrimitive.Portal>
     <StyledContent {...props} ref={forwardedRef} />
   </ContextMenuPrimitive.Portal>
 ))

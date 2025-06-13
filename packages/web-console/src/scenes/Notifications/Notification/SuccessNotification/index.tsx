@@ -45,7 +45,7 @@ const ZapIcon = styled(Zap)`
 export const SuccessNotification = (props: NotificationShape) => {
   const { createdAt, content, sideContent, jitCompiled, isMinimized } = props
   return (
-    <Wrapper isMinimized={isMinimized}>
+    <Wrapper isMinimized={isMinimized} data-hook="success-notification">
       <Timestamp createdAt={createdAt} />
       {jitCompiled ? (
         <IconWithTooltip

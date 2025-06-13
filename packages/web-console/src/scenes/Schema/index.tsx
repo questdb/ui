@@ -76,6 +76,7 @@ import type { Duration } from "../../scenes/Editor/Metrics/types"
 import { useSchema } from "./SchemaContext"
 import { SchemaProvider } from "./SchemaContext"
 import { TreeNodeKind } from "./Row"
+import { toast } from '../../components/Toast'
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -229,23 +230,10 @@ const Schema = ({
     )
     if (tablesWithError.length === 0) {
       copyToClipboard(ddls.join("\n\n"))
-      dispatch(
-        actions.query.addNotification({
-          content: <Text color="foreground">Schemas copied to clipboard</Text>,
-        }),
-      )
+      toast.success("Schemas copied to clipboard")
+    
     } else {
-      dispatch(
-        actions.query.addNotification({
-          content: (
-            <Text color="red">
-              Cannot copy schemas from tables:{" "}
-              {tablesWithError.sort().join(", ")}
-            </Text>
-          ),
-          type: NotificationType.ERROR,
-        }),
-      )
+      toast.error("Cannot copy schemas from tables: " + tablesWithError.sort().join(", "))
     }
     setSelectOpen(false)
   }

@@ -39,6 +39,7 @@ export enum NotificationType {
 }
 
 export type NotificationShape = Readonly<{
+  query: string
   createdAt: Date
   content: ReactNode
   sideContent?: ReactNode
@@ -46,11 +47,19 @@ export type NotificationShape = Readonly<{
   type: NotificationType
   jitCompiled?: boolean
   isMinimized?: boolean
+  isExplain?: boolean
+}>
+
+export type QueryNotifications = Readonly<{
+  latest: NotificationShape
+  regular?: NotificationShape
+  explain?: NotificationShape
 }>
 
 export type RunningShape = Readonly<{
   value: boolean
   isRefresh: boolean
+  isExplain?: boolean
 }>
 
 export type QueryStateShape = Readonly<{
@@ -59,7 +68,8 @@ export type QueryStateShape = Readonly<{
   columns: InformationSchemaColumn[]
   result?: QueryRawResult
   running: RunningShape
-  maxNotifications: number
+  queryNotifications: Record<string, QueryNotifications>
+  activeNotification: NotificationShape | null
 }>
 
 export enum QueryAT {
@@ -71,6 +81,7 @@ export enum QueryAT {
   TOGGLE_RUNNING = "QUERY/TOGGLE_RUNNING",
   SET_TABLES = "QUERY/SET_TABLES",
   SET_COLUMNS = "QUERY/SET_COLUMNS",
+  SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
 }
 
 type AddNotificationAction = Readonly<{
@@ -83,7 +94,7 @@ type CleanupNotificationsAction = Readonly<{
 }>
 
 type RemoveNotificationAction = Readonly<{
-  payload: Date
+  payload: string
   type: QueryAT.REMOVE_NOTIFICATION
 }>
 
@@ -100,6 +111,7 @@ type ToggleRunningAction = Readonly<{
   type: QueryAT.TOGGLE_RUNNING
   payload: Readonly<{
     isRefresh: boolean
+    isExplain?: boolean
   }>
 }>
 
@@ -117,6 +129,11 @@ type SetColumnsActions = Readonly<{
   }>
 }>
 
+type SetActiveNotificationAction = Readonly<{
+  type: QueryAT.SET_ACTIVE_NOTIFICATION
+  payload: NotificationShape | null
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -126,3 +143,4 @@ export type QueryAction =
   | ToggleRunningAction
   | SetTablesAction
   | SetColumnsActions
+  | SetActiveNotificationAction
