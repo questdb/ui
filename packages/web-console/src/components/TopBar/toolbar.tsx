@@ -13,6 +13,7 @@ import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
@@ -349,6 +350,7 @@ export const Toolbar = () => {
   const [settingsPopperActive, setSettingsPopperActive] = useState(false)
   const [previewValues, setPreviewValues] = useState<Preferences | null>(null)
   const [canEditInstanceName, setCanEditInstanceName] = useState(false)
+  const { autoRefreshTables } = useLocalStorage()
   const shownValues = settingsPopperActive ? previewValues : preferences
   const instanceTypeReadable = shownValues?.instance_type
     ? shownValues.instance_type.charAt(0).toUpperCase() + shownValues.instance_type.slice(1)
@@ -471,12 +473,14 @@ export const Toolbar = () => {
   }, [handleUpdateInstanceInfo])
 
   useEffect(() => {
-    window.addEventListener("focus", handleUpdateInstanceInfoWithInform)
+    if (autoRefreshTables) {
+      window.addEventListener("focus", handleUpdateInstanceInfoWithInform)
+    }
 
     return () => {
       window.removeEventListener("focus", handleUpdateInstanceInfoWithInform)
     }
-  }, [handleUpdateInstanceInfoWithInform])
+  }, [handleUpdateInstanceInfoWithInform, autoRefreshTables])
 
   return (
     <Root>
