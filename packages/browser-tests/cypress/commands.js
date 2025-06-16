@@ -196,26 +196,34 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
 
 Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
 
-Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
+Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
   const selectors = [
     `.cursorQueryGlyph-line-${lineNumber}`,
     `.cursorQueryGlyphError-line-${lineNumber}`,
   ];
   cy.get("body").then(() => {
-    let elementFound = false;
+    let element = null;
 
     for (const selector of selectors) {
       if (Cypress.$(selector).length > 0) {
-        cy.get(selector).first().click();
-        elementFound = true;
+        element = cy.get(selector).first();
         break;
       }
     }
 
-    if (!elementFound) {
+    if (!element) {
       throw new Error(`No run icon found for line ${lineNumber}.`);
     }
+    return element;
   });
+});
+
+Cypress.Commands.add("openRunDropdownInLine", (lineNumber) => {
+  cy.getRunIconInLine(lineNumber).rightclick();
+});
+
+Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
+  cy.getRunIconInLine(lineNumber).click();
 });
 
 Cypress.Commands.add("clickDropdownRunQuery", () => {

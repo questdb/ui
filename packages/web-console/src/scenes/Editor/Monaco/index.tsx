@@ -38,7 +38,9 @@ import {
   getQueriesInRange,
 } from "./utils"
 import { DropdownMenu } from "../../../components/DropdownMenu"
-import { Play, Information } from "@styled-icons/remix-line"
+import { PlayFilled } from "../../../components/icons/play-filled"
+import { toast } from "../../../components/Toast"
+import { Information } from "@styled-icons/remix-line"
 
 loader.config({
   paths: {
@@ -63,7 +65,7 @@ const Content = styled(PaneContent)`
   .cursorQueryDecoration {
     width: 0.2rem !important;
     background: ${color("green")};
-    margin-left: 1.2rem;
+    margin-left: 1.4rem;
 
     &.hasError {
       background: ${color("red")};
@@ -71,7 +73,8 @@ const Content = styled(PaneContent)`
   }
 
   .cursorQueryGlyph,
-  .cancelQueryGlyph {
+  .cancelQueryGlyph,
+  .cursorQueryGlyphError {
     margin-left: 2rem;
     z-index: 1;
     cursor: pointer;
@@ -86,20 +89,12 @@ const Content = styled(PaneContent)`
 
   .cursorQueryGlyph {
     &:after {
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTggNC45djE0LjJjMCAuNC41LjcuOC41bDEwLjQtNy4xYS41LjUgMCAwIDAgMC0uOEw4LjggNC42YS41LjUgMCAwIDAtLjguM3oiIGZpbGw9IiM1MGZhN2IiLz48L3N2Zz4=");
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz48L3N2Zz4=");
     }
   }
 
   .cursorQueryGlyphError {
-    margin-left: 2rem;
-    z-index: 1;
-    cursor: pointer;
-
     &:after {
-      display: block;
-      content: "";
-      width: 22px;
-      height: 22px;
       background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiNmZjU1NTUiLz4KICAgICAgICA8cmVjdCB4PSIxNyIgeT0iNCIgd2lkdGg9IjIiIGhlaWdodD0iNSIgZmlsbD0id2hpdGUiIHJ4PSIwLjUiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjExIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPgogICAgPC9nPgo8L3N2Zz4=");
     }
   }
@@ -150,7 +145,7 @@ const IconWrapper = styled.span`
   justify-content: center;
 `
 
-const StyledPlay = styled(Play)`
+const StyledPlayFilled = styled(PlayFilled)`
   transform: scale(1.3);
 `
 
@@ -204,6 +199,7 @@ const MonacoEditor = () => {
   const scrollTimeoutRef = useRef<number | null>(null)
   const notificationTimeoutRef = useRef<number | null>(null)
   const targetPositionRef = useRef<{ lineNumber: number; column: number } | null>(null)
+  const currentBufferValueRef = useRef<string | undefined>(activeBuffer.value)
 
   // Buffer -> Query -> Error
   const errorRefs = useRef<
@@ -240,26 +236,7 @@ const MonacoEditor = () => {
     monaco.editor.defineTheme("dracula", dracula)
   }
 
-  // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
-  // This width is represented in char numbers.
-  const setLineCharsWidth = () => {
-    const lineCount = editorRef.current?.getModel()?.getLineCount()
-    if (lineCount) {
-      setLineNumbersMinChars(
-        DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
-      )
-    }
-  }
-
   const handleEditorClick = (e: React.MouseEvent) => {
-    if (dropdownOpen && 
-        e.target instanceof Element && 
-        !e.target.classList.contains("cursorQueryGlyph") &&
-        !e.target.classList.contains("cursorQueryGlyphError")) {
-      setDropdownOpen(false)
-      return
-    }
-    
     if (
       e.target instanceof Element && 
       (e.target.classList.contains("cursorQueryGlyph") ||
@@ -267,46 +244,15 @@ const MonacoEditor = () => {
       e.target.classList.contains("cancelQueryGlyph"))
     ) {  
       editorRef?.current?.focus()
-      
-      if (e.target.classList.contains("cancelQueryGlyph")) {
-        toggleRunning()
-        return
-      }
-      
       if (editorRef.current) {
         const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY)
         
         if (target && target.position) {
-          targetPositionRef.current = {
+          editorRef.current.setPosition({
             lineNumber: target.position.lineNumber,
             column: 1
-          }
-          const linePosition = { lineNumber: target.position.lineNumber, column: 1 }
-
-          const queryAtPosition = getQueriesFromPosition(editorRef.current, linePosition, linePosition)
-          if (queryAtPosition) {
-            const editorContainer = editorRef.current.getDomNode()
-            const containerRect = editorContainer?.getBoundingClientRect()
-            
-            if (containerRect) {
-              const lineHeight = 24
-              const lineNumber = target.position.lineNumber
-              const scrollTop = editorRef.current.getScrollTop()
-              
-              const yPosition = containerRect.top + (lineNumber - 1) * lineHeight - scrollTop + lineHeight / 2 + 5
-              const xPosition = containerRect.left + 115
-              
-              setDropdownPosition({ 
-                x: xPosition, 
-                y: yPosition 
-              })
-            } else {
-              // Fallback to click coordinates
-              setDropdownPosition({ x: e.clientX, y: e.clientY })
-            }
-            
-            setDropdownOpen(true)
-          }
+          })
+          toggleRunning()
         }
       }
     }
@@ -474,6 +420,48 @@ const MonacoEditor = () => {
       dispatch,
       editorContext,
     })
+    
+    editor.onContextMenu((e) => {
+      if (e.target.element && (e.target.element.classList.contains("cursorQueryGlyph") || e.target.element.classList.contains("cursorQueryGlyphError"))) {
+        const posX = e.event.posx, posY = e.event.posy
+        if (editorRef.current) {
+          const target = editorRef.current.getTargetAtClientPoint(posX, posY)
+          
+          if (target && target.position) {
+            targetPositionRef.current = {
+              lineNumber: target.position.lineNumber,
+              column: 1
+            }
+            const linePosition = { lineNumber: target.position.lineNumber, column: 1 }
+  
+            const queryAtPosition = getQueriesFromPosition(editorRef.current, linePosition, linePosition)
+            if (queryAtPosition) {
+              const editorContainer = editorRef.current.getDomNode()
+              const containerRect = editorContainer?.getBoundingClientRect()
+              
+              if (containerRect) {
+                const lineHeight = 24
+                const lineNumber = target.position.lineNumber
+                const scrollTop = editorRef.current.getScrollTop()
+                
+                const yPosition = containerRect.top + (lineNumber - 1) * lineHeight - scrollTop + lineHeight / 2 + 5
+                const xPosition = containerRect.left + 115
+                
+                setDropdownPosition({ 
+                  x: xPosition, 
+                  y: yPosition 
+                })
+              } else {
+                // Fallback to click coordinates
+                setDropdownPosition({ x: posX, y: posY })
+              }
+              
+              setDropdownOpen(true)
+            }
+          }
+        }
+      }
+    })
 
     editor.onDidChangeCursorPosition(() => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
@@ -617,6 +605,7 @@ const MonacoEditor = () => {
 
   useEffect(() => {
     activeBufferRef.current = activeBuffer
+    currentBufferValueRef.current = activeBuffer.value
   }, [activeBuffer])
 
   useEffect(() => {
@@ -889,6 +878,15 @@ const MonacoEditor = () => {
           onMount={onMount}
           saveViewState={false}
           onChange={(value) => {
+            const lineCount = editorRef.current?.getModel()?.getLineCount()
+            if (lineCount && lineCount > 99999) {
+              if (editorRef.current && currentBufferValueRef.current !== undefined) {
+                editorRef.current.setValue(currentBufferValueRef.current)
+              }
+              toast.error("Maximum line limit reached")
+              return
+            }
+            currentBufferValueRef.current = value
             updateBuffer(activeBuffer.id as number, { value })
           }}
           options={{
@@ -925,7 +923,7 @@ const MonacoEditor = () => {
         <DropdownMenu.Portal>
           <StyledDropdownContent>
             <StyledDropdownItem onClick={handleRunQuery} data-hook="dropdown-item-run-query">
-              <IconWrapper><StyledPlay size={16} /></IconWrapper>
+              <IconWrapper><StyledPlayFilled size={16} color="#fff" /></IconWrapper>
               Run
             </StyledDropdownItem>
             <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">

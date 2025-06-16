@@ -118,6 +118,23 @@ export const getQueriesFromPosition = (
   let nextSql = null
   let inQuote = false
 
+  while (
+    startCharIndex < text.length &&
+    (text[startCharIndex] === "\n" || text[startCharIndex] === " ")
+  ) {
+    if (text[startCharIndex] === "\n") {
+      row++
+      startRow++
+      column = 0
+      startCol = 0
+    } else {
+      column++
+      startCol++
+    }
+    startCharIndex++
+  }
+  startPos = startCharIndex
+
   let i = startCharIndex
   for (; i < text.length; i++) {
     if (nextSql !== null) {

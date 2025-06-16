@@ -655,7 +655,7 @@ describe("multiple run buttons with dynamic query log", () => {
 
   it("should click run icon in specific line and open dropdown", () => {
     cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
-    cy.clickRunIconInLine(3);
+    cy.openRunDropdownInLine(3);
 
     cy.getByDataHook("dropdown-item-run-query").should("be.visible");
     cy.getByDataHook("dropdown-item-get-query-plan").should("be.visible");
@@ -663,7 +663,7 @@ describe("multiple run buttons with dynamic query log", () => {
 
   it("should run query from specific line using dropdown", () => {
     cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
-    cy.clickRunIconInLine(3).clickDropdownRunQuery();
+    cy.clickRunIconInLine(3);
 
     cy.getGridRow(0).should("contain", "2");
   });
@@ -671,7 +671,7 @@ describe("multiple run buttons with dynamic query log", () => {
   it("should get query plan from specific line using dropdown", () => {
     cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
 
-    cy.clickRunIconInLine(5).clickDropdownGetQueryPlan();
+    cy.openRunDropdownInLine(5).clickDropdownGetQueryPlan();
 
     cy.getColumnName(0).should("contain", "QUERY PLAN");
   });
@@ -680,28 +680,24 @@ describe("multiple run buttons with dynamic query log", () => {
     cy.typeQuery("select * from non_existent_table;\n\nselect 1;\n\nselect 2;");
 
     cy.clickRunIconInLine(3);
-    cy.clickDropdownRunQuery();
 
     cy.getCollapsedNotifications()
       .getByDataHook("success-notification")
       .should("contain", "select 1");
 
     cy.clickRunIconInLine(5);
-    cy.clickDropdownRunQuery();
 
     cy.getCollapsedNotifications()
       .getByDataHook("success-notification")
       .should("contain", "select 2");
 
     cy.clickRunIconInLine(1);
-    cy.clickDropdownRunQuery();
     cy.getCollapsedNotifications()
       .getByDataHook("error-notification")
       .should("contain", "table does not exist")
       .should("contain", "select * from non_existent_table");
 
-    cy.clickRunIconInLine(3);
-    cy.clickDropdownGetQueryPlan();
+    cy.openRunDropdownInLine(3).clickDropdownGetQueryPlan();
     cy.getCollapsedNotifications().should("contain", "EXPLAIN select 1");
     cy.getColumnName(0).should("contain", "QUERY PLAN");
 
