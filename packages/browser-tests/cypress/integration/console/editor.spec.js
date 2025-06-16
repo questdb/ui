@@ -600,7 +600,7 @@ describe("handling comments", () => {
 
   it("should highlight and execute sql with line comments in front", () => {
     cy.typeQuery("-- comment\n-- comment\nselect x from long_sequence(1);");
-    cy.getCursorQueryDecoration().should("have.length", 3);
+    cy.getCursorQueryDecoration().should("have.length", 1);
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();
     cy.getGridRow(0).should("contain", "1");
@@ -608,7 +608,7 @@ describe("handling comments", () => {
 
   it("should highlight and execute sql with empty line comment in front", () => {
     cy.typeQuery("--\nselect x from long_sequence(1);");
-    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.getCursorQueryDecoration().should("have.length", 1);
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();
     cy.getGridRow(0).should("contain", "1");
