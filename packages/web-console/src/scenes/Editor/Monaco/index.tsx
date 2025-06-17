@@ -395,7 +395,7 @@ const MonacoEditor = () => {
         // Add glyph for all queries with line number in class name
         const glyphClassName =
           runningValueRef.current &&
-            requestRef.current?.row &&
+            requestRef.current?.row !== undefined &&
             requestRef.current?.row + 1 === startLineNumber
             ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}`
             : hasError
