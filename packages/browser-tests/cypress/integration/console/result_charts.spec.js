@@ -6,7 +6,7 @@ describe("questdb charts", () => {
   });
 
   it("should render the chart after a successful query invocation", () => {
-    cy.typeQueryDirectly(
+    cy.typeQuery(
       "SELECT rnd_timestamp(to_timestamp('2024-07-19:00:00:00.000000', 'yyyy-MM-dd:HH:mm:ss.SSSUUU'), to_timestamp('2024-07-20:00:00:00.000000', 'yyyy-MM-dd:HH:mm:ss.SSSUUU'), 0), x FROM long_sequence(10);"
     );
     cy.clickRunIconInLine(1);
