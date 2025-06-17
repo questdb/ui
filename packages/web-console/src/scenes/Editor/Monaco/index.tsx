@@ -124,6 +124,10 @@ const RunScriptButton = styled(Button)`
 
   &:hover {
     opacity: 1;
+
+    svg {
+      fill: ${color("green")}
+    }
   }
 `
 

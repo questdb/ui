@@ -192,18 +192,12 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
 Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
 
 Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
-  const selectors = [
-    `.cursorQueryGlyph-line-${lineNumber}`,
-    `.cursorQueryGlyphError-line-${lineNumber}`,
-  ];
+  const selector = `.cursorQueryGlyph-line-${lineNumber}`;
   cy.get("body").then(() => {
     let element = null;
 
-    for (const selector of selectors) {
-      if (Cypress.$(selector).length > 0) {
-        element = cy.get(selector).first();
-        break;
-      }
+    if (Cypress.$(selector).length > 0) {
+      element = cy.get(selector).first();
     }
 
     if (!element) {
