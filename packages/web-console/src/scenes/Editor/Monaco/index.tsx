@@ -625,8 +625,9 @@ const MonacoEditor = () => {
     applyGlyphsAndLineMarkings(monaco, editor)
   }
 
-  const runIndividualQuery = async (query: Request) => {
+  const runIndividualQuery = async (query: Request, isLast: boolean) => {
     const queryText = query.query
+    dispatch(actions.query.setResult(undefined))
 
     try {
       const result = await quest.queryRaw(query.query, { limit: "0,1000", explain: true })
@@ -637,6 +638,10 @@ const MonacoEditor = () => {
         if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
           delete errorRefs.current[activeBufferId]
         }
+      }
+
+      if (isLast) {
+        dispatch(actions.query.setResult(result))
       }
 
       if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
@@ -731,9 +736,10 @@ const MonacoEditor = () => {
     const startTime = Date.now()
 
     const queries = getAllQueries(editorRef.current)
-    
-    for (const query of queries) {
-      const result = await runIndividualQuery(query)
+
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i]
+      const result = await runIndividualQuery(query, i === queries.length - 1)
       if (result) {
         successfulQueries++
       } else {

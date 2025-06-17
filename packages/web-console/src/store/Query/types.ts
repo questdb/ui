@@ -100,7 +100,7 @@ type RemoveNotificationAction = Readonly<{
 }>
 
 type SetResultAction = Readonly<{
-  payload: QueryRawResult
+  payload: QueryRawResult | undefined
   type: QueryAT.SET_RESULT
 }>
 

@@ -71,7 +71,7 @@ const removeNotification = (payload: string): QueryAction => ({
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
-const setResult = (payload: QueryRawResult): QueryAction => ({
+const setResult = (payload: QueryRawResult | undefined): QueryAction => ({
   payload,
   type: QueryAT.SET_RESULT,
 })
