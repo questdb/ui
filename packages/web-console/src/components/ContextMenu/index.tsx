@@ -13,23 +13,29 @@ const StyledContent = styled(ContextMenuPrimitive.Content)`
 
 const StyledItem = styled(ContextMenuPrimitive.Item)`
   font-size: 1.3rem;
-  height: 2.6rem;
+  height: 3rem;
   font-family: "system-ui", sans-serif;
   cursor: pointer;
   color: rgb(248, 248, 242); /* vscode-menu-foreground */
   display: flex;
   align-items: center;
-  padding: 0 1.2rem;
+  padding: 1rem 1.2rem;
   border-radius: 0.4rem;
+  border: 1px solid transparent;
 
   &[data-highlighted] {
-    background-color: #45475a;
-    color: rgb(240, 240, 240);
+    background: #043c5c;
+    border: 1px solid #8be9fd;
+  }
+
+  &[data-disabled] {
+    opacity: 0.5;
+    pointer-events: none;
   }
 `
 
 const IconWrapper = styled.span`
-  margin-right: 10px;
+  margin-right: 1.2rem;
 `
 
 export const ContextMenu = ContextMenuPrimitive.Root

@@ -86,7 +86,7 @@ beforeEach(() => {
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
   cy.typeQuery("select simulate_warnings('', '');");
-  cy.clickRun();
+  cy.clickRunIconInLine(1);
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -139,11 +139,6 @@ Cypress.Commands.add("clickLine", (n) => {
     .get(".monaco-editor .view-line")
     .eq(n - 1)
     .click();
-});
-
-Cypress.Commands.add("clickRun", () => {
-  cy.intercept("/exec*").as("exec");
-  return cy.get("button").contains("Run").click().wait("@exec");
 });
 
 Cypress.Commands.add("clearEditor", () => {
@@ -364,7 +359,7 @@ Cypress.Commands.add("logout", () => {
 Cypress.Commands.add("executeSQL", (sql) => {
   cy.clearEditor();
   cy.typeQuery(sql);
-  cy.clickRun();
+  cy.clickRunIconInLine(1);
 });
 
 Cypress.Commands.add("refreshSchema", () => {

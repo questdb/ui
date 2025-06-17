@@ -40,7 +40,7 @@ export const initialState: QueryStateShape = {
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
     case QueryAT.ADD_NOTIFICATION: {
-      const { query: queryText, isExplain = false } = action.payload
+      const { query: queryText, isExplain = false, updateActiveNotification = true } = action.payload
       
       const notificationWithTimestamp = {
         ...action.payload,
@@ -61,7 +61,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
           ...state.queryNotifications, 
           [queryText]: updatedQueryNotifications 
         },
-        activeNotification: notificationWithTimestamp,
+        ...(updateActiveNotification ? { activeNotification: notificationWithTimestamp } : {}),
       }
     }
 

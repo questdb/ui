@@ -180,7 +180,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         return response.data
       }
     } catch (error: any) {
-      toast.error(`Cannot show columns from table '${name}'`)
+      console.error(`Cannot show columns from table '${name}'`)
     }
     return []
   }
@@ -376,19 +376,18 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               <MenuItem
                 data-hook="table-context-menu-copy-schema"
                 onClick={async () => await handleCopyQuery(item.name, item.kind === 'matview')}
-                icon={<FileCopy size={14} />}
+                icon={<FileCopy size={16} />}
               >
                 Copy schema
               </MenuItem>
-              {item.walTableData?.suspended && (
-                <MenuItem 
-                  data-hook="table-context-menu-resume-wal"
-                  onClick={() => setOpenedSuspensionDialog(item.id)}
-                  icon={<Restart size={14} />}
-                >
-                  Resume WAL
-                </MenuItem>
-              )}
+              <MenuItem 
+                data-hook="table-context-menu-resume-wal"
+                onClick={() => item.walTableData?.suspended && setTimeout(() => setOpenedSuspensionDialog(item.id))}
+                icon={<Restart size={16} />}
+                disabled={!item.walTableData?.suspended}
+              >
+                Resume WAL
+              </MenuItem>
             </ContextMenuContent>
           </ContextMenu>
         </>

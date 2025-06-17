@@ -6,6 +6,7 @@ import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { PaneContent, Text } from "../../../components"
+import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
@@ -73,8 +74,7 @@ const Content = styled(PaneContent)`
   }
 
   .cursorQueryGlyph,
-  .cancelQueryGlyph,
-  .cursorQueryGlyphError {
+  .cancelQueryGlyph {
     margin-left: 2rem;
     z-index: 1;
     cursor: pointer;
@@ -84,25 +84,46 @@ const Content = styled(PaneContent)`
       content: "";
       width: 22px;
       height: 22px;
-    }
-  }
-
-  .cursorQueryGlyph {
-    &:after {
+      background-repeat: no-repeat;
       background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz48L3N2Zz4=");
+      transform: scale(1.1);
+    }
+    &:hover:after {
+      filter: brightness(1.3);
     }
   }
 
-  .cursorQueryGlyphError {
-    &:after {
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiNmZjU1NTUiLz4KICAgICAgICA8cmVjdCB4PSIxNyIgeT0iNCIgd2lkdGg9IjIiIGhlaWdodD0iNSIgZmlsbD0id2hpdGUiIHJ4PSIwLjUiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjExIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPgogICAgPC9nPgo8L3N2Zz4=");
-    }
+  .cursorQueryGlyph.success-glyph:after {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiMwMGFhM2IiLz4KICAgICAgICA8cGF0aCBkPSJtMTUgOC41IDIgMiA0LTQiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz4KICAgIDwvZz4KPC9zdmc+");
+  }
+
+  .cursorQueryGlyph.error-glyph:after {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiNmZjU1NTUiLz4KICAgICAgICA8cmVjdCB4PSIxNyIgeT0iNCIgd2lkdGg9IjIiIGhlaWdodD0iNSIgZmlsbD0id2hpdGUiIHJ4PSIwLjUiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjExIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPgogICAgPC9nPgo8L3N2Zz4=");
   }
 
   .cancelQueryGlyph {
     &:after {
       background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
     }
+
+    &:hover:after {
+      filter: brightness(1.3);
+    }
+  }
+`
+
+const RunScriptButton = styled(Button)`
+  position: absolute;
+  top: 0.6rem;
+  right: 2rem;
+  z-index: 1;
+  padding: 1.2rem 0.6rem;
+  margin-bottom: 1rem;
+  opacity: .5;
+  transition: opacity 0.1s;
+
+  &:hover {
+    opacity: 1;
   }
 `
 
@@ -122,20 +143,21 @@ const StyledDropdownContent = styled(DropdownMenu.Content)`
 
 const StyledDropdownItem = styled(DropdownMenu.Item)`
   font-size: 1.3rem;
-  height: 2.6rem;
+  height: 3rem;
   font-family: "system-ui", sans-serif;
   cursor: pointer;
   color: rgb(248, 248, 242);
   display: flex;
   align-items: center;
-  padding: 0 1.2rem;
+  padding: 1rem 1.2rem;
   border-radius: 0.4rem;
   margin: 0;
-  gap: 1rem;
+  gap: 0;
+  border: 1px solid transparent;
 
   &[data-highlighted] {
-    background-color: #45475a;
-    color: rgb(240, 240, 240);
+    background: #043c5c;
+    border: 1px solid #8be9fd;
   }
 `
 
@@ -143,6 +165,7 @@ const IconWrapper = styled.span`
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-right: 1.2rem;
 `
 
 const StyledPlayFilled = styled(PlayFilled)`
@@ -180,6 +203,7 @@ const MonacoEditor = () => {
   const [refreshingTables, setRefreshingTables] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isRunningScript, setIsRunningScript] = useState(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
@@ -187,6 +211,7 @@ const MonacoEditor = () => {
   const queryNotifications = useSelector(selectors.query.getQueryNotifications)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
+  const isRunningScriptRef = useRef(isRunningScript)
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
   const runningValueRef = useRef(running.value)
   const activeBufferRef = useRef(activeBuffer)
@@ -240,7 +265,6 @@ const MonacoEditor = () => {
     if (
       e.target instanceof Element && 
       (e.target.classList.contains("cursorQueryGlyph") ||
-      e.target.classList.contains("cursorQueryGlyphError") ||
       e.target.classList.contains("cancelQueryGlyph"))
     ) {  
       editorRef?.current?.focus()
@@ -344,8 +368,8 @@ const MonacoEditor = () => {
       const startLine = Math.max(1, visibleLines.startLine - bufferSize)
       const endLine = Math.min(totalLines, visibleLines.endLine + bufferSize)
       
-      const startPosition = { lineNumber: startLine, column: 1 }
-      const endPosition = { lineNumber: endLine, column: 1 }
+      const startPosition = { lineNumber: startLine, column: 0 }
+      const endPosition = { lineNumber: endLine, column: 0 }
       
       queries = getQueriesInRange(editor, startPosition, endPosition)
     }
@@ -359,18 +383,21 @@ const MonacoEditor = () => {
       queries.forEach(query => {
         const bufferErrors = errorRefs.current[activeBufferId] || {}
         const hasError = bufferErrors[query.query]?.error !== undefined
+        const isSuccessful = queryNotificationsRef.current[query.query]?.latest?.type === "success"
         
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
         
         // Add glyph for all queries with line number in class name
-        const glyphClassName = 
+        const glyphClassName =
           runningValueRef.current &&
             requestRef.current?.row &&
             requestRef.current?.row + 1 === startLineNumber
             ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}`
             : hasError
-            ? `cursorQueryGlyphError cursorQueryGlyphError-line-${startLineNumber}`
+            ? `cursorQueryGlyph error-glyph cursorQueryGlyph-line-${startLineNumber}`
+            : isSuccessful
+            ? `cursorQueryGlyph success-glyph cursorQueryGlyph-line-${startLineNumber}`
             : `cursorQueryGlyph cursorQueryGlyph-line-${startLineNumber}`
         
         allDecorations.push({
@@ -422,7 +449,7 @@ const MonacoEditor = () => {
     })
     
     editor.onContextMenu((e) => {
-      if (e.target.element && (e.target.element.classList.contains("cursorQueryGlyph") || e.target.element.classList.contains("cursorQueryGlyphError"))) {
+      if (e.target.element && e.target.element.classList.contains("cursorQueryGlyph")) {
         const posX = e.event.posx, posY = e.event.posy
         if (editorRef.current) {
           const target = editorRef.current.getTargetAtClientPoint(posX, posY)
@@ -594,6 +621,146 @@ const MonacoEditor = () => {
     applyGlyphsAndLineMarkings(monaco, editor)
   }
 
+  const runIndividualQuery = async (query: Request) => {
+    const queryText = query.query
+
+    try {
+      const result = await quest.queryRaw(query.query, { limit: "0,1000", explain: true })
+      const activeBufferId = activeBuffer.id as number
+
+      if (errorRefs.current[activeBufferId]) {
+        delete errorRefs.current[activeBufferId][queryText]
+        if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
+          delete errorRefs.current[activeBufferId]
+        }
+      }
+
+      if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
+        dispatch(
+          actions.query.addNotification({
+            query: queryText,
+            content: <QueryInNotification query={query.query} />,
+            updateActiveNotification: false,
+          }),
+        )
+        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+      }
+
+      if (result.type === QuestDB.Type.NOTICE) {
+        dispatch(
+          actions.query.addNotification({
+            query: queryText,
+            content: (
+              <Text color="foreground" ellipsis title={query.query}>
+                {result.notice}
+                {query.query !== undefined && query.query !== "" && `: ${query.query}`}
+              </Text>
+            ),
+            sideContent: <QueryInNotification query={query.query} />,
+            type: NotificationType.NOTICE,
+            updateActiveNotification: false,
+          }),
+        )
+        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+      }
+
+      if (result.type === QuestDB.Type.DQL) {
+        setLastExecutedQuery(queryText)
+        dispatch(
+          actions.query.addNotification({
+            query: queryText,
+            jitCompiled: result.explain?.jitCompiled ?? false,
+            content: <QueryResult {...result.timings} rowCount={result.count} />,
+            sideContent: <QueryInNotification query={query.query} />,
+            updateActiveNotification: false,
+          }),
+        )
+        eventBus.publish(EventType.MSG_QUERY_DATASET, result)
+      }
+      return true
+    } catch (_error: unknown) {
+      const error = _error as ErrorResult
+      const activeBufferId = activeBuffer.id as number
+        
+      if (!errorRefs.current[activeBufferId]) {
+        errorRefs.current[activeBufferId] = {}
+      }
+      
+      errorRefs.current[activeBufferId][queryText] = {
+        error,
+      }
+      
+      dispatch(
+        actions.query.addNotification({
+          query: queryText,
+          content: <Text color="red">{error.error}</Text>,
+          sideContent: <QueryInNotification query={query.query} />,
+          type: NotificationType.ERROR,
+          updateActiveNotification: false,
+        }),
+      )
+      return false
+    }
+  }
+
+  const handleRunScript = async () => {
+    let successfulQueries = 0
+    let failedQueries = 0
+    if (!editorRef.current || isRunningScript) return
+    setIsRunningScript(true)
+
+    notificationTimeoutRef.current = window.setTimeout(() => {
+      dispatch(
+        actions.query.setActiveNotification({
+          type: NotificationType.LOADING,
+          query: activeBufferRef.current.label,
+          content: (
+            <Box gap="1rem" align="center">
+              <Text color="foreground">Running script...</Text>
+            </Box>
+          ),
+          createdAt: new Date(),
+        }),
+      )
+      notificationTimeoutRef.current = null
+    }, 1000)
+    const startTime = Date.now()
+
+    const queries = getAllQueries(editorRef.current)
+    
+    for (const query of queries) {
+      const result = await runIndividualQuery(query)
+      if (result) {
+        successfulQueries++
+      } else {
+        failedQueries++
+      }
+    }
+
+    const duration = (Date.now() - startTime) * 1e6
+
+    if (notificationTimeoutRef.current) {
+      window.clearTimeout(notificationTimeoutRef.current)
+      notificationTimeoutRef.current = null
+    }
+
+    setTimeout(() => dispatch(
+      actions.query.setActiveNotification({
+        query: queries.map((q) => q.query).join(";"),
+        content: <Text color="foreground">
+          Running script completed in {formatTiming(duration)} with
+          {successfulQueries > 0 ? ` ${successfulQueries} successful` : ""}
+          {successfulQueries > 0 && failedQueries > 0 ? " and" : ""}
+          {failedQueries > 0 ? ` ${failedQueries} failed` : ""} queries
+        </Text>,
+        type: NotificationType.SUCCESS,
+        createdAt: new Date(),
+      }),
+    ))
+    
+    setIsRunningScript(false)
+  }
+
   useEffect(() => {
     // Remove all errors for the buffers that have been deleted
     Object.keys(errorRefs.current).map((key) => {
@@ -610,7 +777,17 @@ const MonacoEditor = () => {
 
   useEffect(() => {
     queryNotificationsRef.current = queryNotifications
+    if (monacoRef.current && editorRef.current && !isRunningScript) {
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+    }
   }, [queryNotifications])
+
+  useEffect(() => {
+    if (isRunningScriptRef.current && !isRunningScript && monacoRef.current && editorRef.current) {
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+    }
+    isRunningScriptRef.current = isRunningScript
+  }, [isRunningScript])
 
   useEffect(() => {
     if (!running.value && request) {
@@ -782,8 +959,6 @@ const MonacoEditor = () => {
                 adjustedErrorPosition,
               )
               if (errorRange) {
-                applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
-
                 editorRef?.current.focus()
 
                 editorRef?.current.setPosition({
@@ -872,6 +1047,16 @@ const MonacoEditor = () => {
   return (
     <>
       <Content onClick={handleEditorClick}>
+        <RunScriptButton
+          onClick={handleRunScript}
+          skin="secondary"
+          data-hook="run-script-button"
+          prefixIcon={<PlayFilled size={18} />}
+          disabled={isRunningScript}
+        >
+          {isRunningScript ? "Running..." : "Run script"}
+        </RunScriptButton>
+
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}
@@ -898,6 +1083,7 @@ const MonacoEditor = () => {
             fontFamily: theme.fontMonospace,
             glyphMargin: true,
             renderLineHighlight: "gutter",
+            useShadowDOM: false,
             minimap: {
               enabled: false,
             },
@@ -923,11 +1109,11 @@ const MonacoEditor = () => {
         <DropdownMenu.Portal>
           <StyledDropdownContent>
             <StyledDropdownItem onClick={handleRunQuery} data-hook="dropdown-item-run-query">
-              <IconWrapper><StyledPlayFilled size={16} color="#fff" /></IconWrapper>
+              <IconWrapper><StyledPlayFilled size={18} color="#fff" /></IconWrapper>
               Run
             </StyledDropdownItem>
             <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
-              <IconWrapper><Information size={16} /></IconWrapper>
+              <IconWrapper><Information size={18} /></IconWrapper>
               Get query plan
             </StyledDropdownItem>
           </StyledDropdownContent>

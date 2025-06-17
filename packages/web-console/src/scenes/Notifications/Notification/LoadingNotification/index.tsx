@@ -23,26 +23,19 @@
  ******************************************************************************/
 
 import React from "react"
-import { NotificationShape, NotificationType } from "../../../types"
-import { SuccessNotification } from "./SuccessNotification"
-import { ErrorNotification } from "./ErrorNotification"
-import { InfoNotification } from "./InfoNotification"
-import { NoticeNotification } from "./NoticeNotification"
-import { LoadingNotification } from "./LoadingNotification"
+import { Loader as LoaderIcon } from "@questdb/react-components"
+import { Wrapper, SideContent, Content } from "../styles"
+import { NotificationShape } from "types"
+import { Timestamp } from "../Timestamp"
 
-const Notification = (props: NotificationShape) => {
-  const { type } = props
-  return type === NotificationType.SUCCESS ? (
-    <SuccessNotification {...props} />
-  ) : type === NotificationType.ERROR ? (
-    <ErrorNotification {...props} />
-  ) : type == NotificationType.NOTICE ? (
-    <NoticeNotification {...props} />
-  ) : type === NotificationType.LOADING ? (
-    <LoadingNotification {...props} />
-  ) : (
-    <InfoNotification {...props} />
+export const LoadingNotification = (props: NotificationShape) => {
+  const { createdAt, content, sideContent, isMinimized } = props
+  return (
+    <Wrapper isMinimized={isMinimized} data-hook="loading-notification">
+      <Timestamp createdAt={createdAt} />
+      <LoaderIcon />
+      <Content>{content}</Content>
+      <SideContent>{sideContent}</SideContent>
+    </Wrapper>
   )
 }
-
-export default Notification

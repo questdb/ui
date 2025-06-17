@@ -3,6 +3,8 @@
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
+const { ctrlOrCmd } = require("../../utils");
+
 const getTabDragHandleByTitle = (title) =>
   `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`;
 
@@ -15,8 +17,7 @@ describe("run query", () => {
 
   it("should correctly run query in the first line", () => {
     cy.typeQuery("select 1;\n\nselect 2;");
-    cy.clickLine(1);
-    cy.clickRun();
+    cy.clickRunIconInLine(1);
     cy.getGridRow(0).should("contain", "1");
   });
 
@@ -27,8 +28,7 @@ describe("run query", () => {
     cy.typeQuery(" select count(*) from longseq;select 1;");
 
     // go to the end of second query
-    cy.clickLine(4);
-    cy.clickRun();
+    cy.clickLine(4).type(`${ctrlOrCmd}{enter}`);
     cy.getGridCol(0).should("contain", "1");
     cy.getGridRow(0).should("contain", "1");
 
@@ -36,7 +36,7 @@ describe("run query", () => {
     cy.clickLine(4);
     cy.realPress("ArrowLeft");
     cy.realPress("ArrowLeft");
-    cy.clickRun();
+    cy.focused().type(`${ctrlOrCmd}{enter}`);
     cy.getColumnName(0).should("contain", "1");
     cy.getGridRow(0).should("contain", "1");
 
@@ -45,7 +45,7 @@ describe("run query", () => {
     for (let i = 0; i < 9; i++) {
       cy.realPress("ArrowLeft");
     }
-    cy.clickRun();
+    cy.focused().type(`${ctrlOrCmd}{enter}`);
     cy.getColumnName(0).should("contain", "count");
     cy.getGridRow(0).should("contain", "100");
 
@@ -54,7 +54,7 @@ describe("run query", () => {
     for (let i = 0; i < 11; i++) {
       cy.realPress("ArrowLeft");
     }
-    cy.clickRun();
+    cy.focused().type(`${ctrlOrCmd}{enter}`);
     cy.getColumnName(0).should("contain", "count");
     cy.getGridRow(0).should("contain", "100");
   });
@@ -212,8 +212,7 @@ describe("&query URL param", () => {
   it("should not append query if it already exists in editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
     cy.typeQuery(query);
-    cy.clickLine(1);
-    cy.clickRun();
+    cy.clickRunIconInLine(1);
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditorContent().should("be.visible");
     cy.getEditorContent().should("have.value", query);

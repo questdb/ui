@@ -26,9 +26,8 @@ import { useCallback, useEffect, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
-import { Add, Close as _CloseIcon, Play, Stop } from "@styled-icons/remix-line"
+import { Add, Close as _CloseIcon } from "@styled-icons/remix-line"
 import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
-import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 
 import {
   PaneMenu,
@@ -40,7 +39,7 @@ import {
 } from "../../../components"
 import { Box } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
-import { color, platform } from "../../../utils"
+import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
@@ -139,20 +138,14 @@ const MenuItems = styled.div`
   align-items: center;
 `
 
-const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
-
 const Menu = () => {
   const dispatch = useDispatch()
   const [queriesPopperActive, setQueriesPopperActive] = useState<boolean>()
   const escPress = useKeyPress("Escape")
   const { consoleConfig } = useSettings()
-  const running = useSelector(selectors.query.getRunning)
   const opened = useSelector(selectors.console.getSideMenuOpened)
   const { sm } = useScreenSize()
   const { exampleQueriesVisited, updateSettings } = useLocalStorage()
-  const handleClick = useCallback(() => {
-    dispatch(actions.query.toggleRunning())
-  }, [dispatch])
   const handleQueriesToggle = useCallback((active: boolean) => {
     if (!exampleQueriesVisited && active) {
       updateSettings(StoreKey.EXAMPLE_QUERIES_VISITED, true)
@@ -202,33 +195,6 @@ const Menu = () => {
       )}
 
       <Separator />
-
-      {running.value && (
-        <Button
-          skin="error"
-          onClick={handleClick}
-          prefixIcon={<Stop size="18px" />}
-        >
-          Cancel
-        </Button>
-      )}
-
-      {!running.value && (
-        <Button
-          skin="success"
-          title="Ctrl+Enter"
-          onClick={handleClick}
-          prefixIcon={<Play size="18px" />}
-        >
-          Run
-          <RunShortcut>
-            <Key>{ctrlCmd}</Key>
-            <Key>
-              <CornerDownLeft size="16px" />
-            </Key>
-          </RunShortcut>
-        </Button>
-      )}
 
       <MenuItems>
         <DocSearch
