@@ -151,7 +151,7 @@ export const SuspensionDialog = ({
           <Dialog.Title>
             <Box>
               <Table size={20} color="#FF5555" />
-              Table is suspended: {walTableData.name}
+              {kind === "table" ? "Table" : "Materialized view"} is suspended: {walTableData.name}
             </Box>
           </Dialog.Title>
 
