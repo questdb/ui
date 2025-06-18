@@ -66,7 +66,7 @@ const Content = styled(PaneContent)`
   .cursorQueryDecoration {
     width: 0.2rem !important;
     background: ${color("green")};
-    margin-left: 1.4rem;
+    margin-left: 0.5rem;
 
     &.hasError {
       background: ${color("red")};
