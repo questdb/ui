@@ -74,6 +74,7 @@ const GENERIC_ERROR_TEXT = "Error restarting transaction"
 type Props = {
   walTableData: QuestDB.WalTable
   open: boolean
+  kind: "table" | "matview"
   onOpenChange: (open: boolean) => void
 }
 
@@ -81,6 +82,7 @@ export const SuspensionDialog = ({
   walTableData,
   open,
   onOpenChange,
+  kind,
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -93,9 +95,10 @@ export const SuspensionDialog = ({
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     setError(undefined)
+    const queryStart = `ALTER ${kind === "matview" ? "MATERIALIZED VIEW" : "TABLE"}`
     try {
       const response = await quest.query(
-        `ALTER TABLE ${walTableData.name} RESUME WAL${
+        `${queryStart} ${walTableData.name} RESUME WAL${
           values.resume_transaction_id
             ? ` FROM TRANSACTION ${values.resume_transaction_id}`
             : ""
@@ -148,7 +151,7 @@ export const SuspensionDialog = ({
           <Dialog.Title>
             <Box>
               <Table size={20} color="#FF5555" />
-              Table is suspended: {walTableData.name}
+              {kind === "table" ? "Table" : "Materialized view"} is suspended: {walTableData.name}
             </Box>
           </Dialog.Title>
 
