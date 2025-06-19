@@ -1,6 +1,6 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
 import { Box, Button } from "@questdb/react-components"
-import { Stop } from "@styled-icons/remix-line"
+import { Stop, Cursor } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
@@ -37,6 +37,8 @@ import {
   setErrorMarker,
   getAllQueries,
   getQueriesInRange,
+  normalizeQueryText,
+  getSelectedText,
 } from "./utils"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
@@ -215,6 +217,7 @@ const MonacoEditor = () => {
   const queryNotifications = useSelector(selectors.query.getQueryNotifications)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
+  const isSelectionRef = useRef(false)
   const isRunningScriptRef = useRef(isRunningScript)
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
   const runningValueRef = useRef(running.value)
@@ -232,7 +235,7 @@ const MonacoEditor = () => {
 
   // Buffer -> Query -> Error
   const errorRefs = useRef<
-    Record<string, Record<string, { error?: ErrorResult }>>
+    Record<string, Record<string, { error?: ErrorResult, isSelection?: boolean }>>
   >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
@@ -259,6 +262,35 @@ const MonacoEditor = () => {
     dispatch(actions.query.setActiveNotification(newActiveNotification))
   }
 
+  const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }, isSelection?: boolean) => {
+    isSelectionRef.current = isSelection || false
+    targetPositionRef.current = targetPosition
+    
+    if (editorRef.current) {
+      const editorContainer = editorRef.current.getDomNode()
+      const containerRect = editorContainer?.getBoundingClientRect()
+      
+      if (containerRect) {
+        const lineHeight = 24
+        const lineNumber = targetPosition.lineNumber
+        const scrollTop = editorRef.current.getScrollTop()
+        
+        const yPosition = containerRect.top + (lineNumber - 1) * lineHeight - scrollTop + lineHeight / 2 + 5
+        const xPosition = containerRect.left + 115
+        
+        setDropdownPosition({ 
+          x: xPosition, 
+          y: yPosition 
+        })
+      } else {
+        // Fallback to click coordinates
+        setDropdownPosition({ x: posX, y: posY })
+      }
+      
+      setDropdownOpen(true)
+    }
+  }
+
   const beforeMount = (monaco: Monaco) => {
     registerLanguageAddons(monaco)
 
@@ -276,11 +308,18 @@ const MonacoEditor = () => {
         const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY)
         
         if (target && target.position) {
-          editorRef.current.setPosition({
+          const position = {
             lineNumber: target.position.lineNumber,
-            column: 1
-          })
-          toggleRunning()
+            column: 0
+          }
+          const [query] = getQueriesInRange(editorRef.current, position, position)
+          const selectedText = getSelectedText(editorRef.current)
+          if (selectedText && query) {
+            openDropdownAtPosition(e.clientX, e.clientY, position, true)
+          } else {
+            editorRef.current.setPosition(position)
+            toggleRunning()
+          }
         }
       }
     }
@@ -292,6 +331,11 @@ const MonacoEditor = () => {
       editorRef.current.setPosition(targetPositionRef.current)
     }
     
+    toggleRunning()
+  }
+
+  const handleRunSelection = () => {
+    setDropdownOpen(false)
     toggleRunning()
   }
 
@@ -322,7 +366,10 @@ const MonacoEditor = () => {
     const bufferErrors = errorRefs.current[activeBufferId] || {}
     
     if (queryAtCursor) {
-      const hasError = bufferErrors[queryAtCursor.query]?.error !== undefined
+      const queryErrorBuffer = bufferErrors[queryAtCursor.query]
+      const hasError = queryErrorBuffer
+        && queryErrorBuffer.error !== undefined
+        && (!queryErrorBuffer.isSelection || queryErrorBuffer.error.query === queryAtCursor.query)
       const startLineNumber = queryAtCursor.row + 1
       const endLineNumber = queryAtCursor.endRow + 1
       
@@ -386,7 +433,10 @@ const MonacoEditor = () => {
     if (queries.length > 0) {
       queries.forEach(query => {
         const bufferErrors = errorRefs.current[activeBufferId] || {}
-        const hasError = bufferErrors[query.query]?.error !== undefined
+        const queryErrorBuffer = bufferErrors[query.query]
+        const hasError = queryErrorBuffer
+          && queryErrorBuffer.error !== undefined
+          && (!queryErrorBuffer.isSelection || queryErrorBuffer.error.query === query.query)
         const isSuccessful = queryNotificationsRef.current[query.query]?.latest?.type === "success"
         
         // Convert 0-based row to 1-based line number for Monaco
@@ -459,35 +509,11 @@ const MonacoEditor = () => {
           const target = editorRef.current.getTargetAtClientPoint(posX, posY)
           
           if (target && target.position) {
-            targetPositionRef.current = {
-              lineNumber: target.position.lineNumber,
-              column: 1
-            }
             const linePosition = { lineNumber: target.position.lineNumber, column: 1 }
   
             const queryAtPosition = getQueriesFromPosition(editorRef.current, linePosition, linePosition)
             if (queryAtPosition) {
-              const editorContainer = editorRef.current.getDomNode()
-              const containerRect = editorContainer?.getBoundingClientRect()
-              
-              if (containerRect) {
-                const lineHeight = 24
-                const lineNumber = target.position.lineNumber
-                const scrollTop = editorRef.current.getScrollTop()
-                
-                const yPosition = containerRect.top + (lineNumber - 1) * lineHeight - scrollTop + lineHeight / 2 + 5
-                const xPosition = containerRect.left + 115
-                
-                setDropdownPosition({ 
-                  x: xPosition, 
-                  y: yPosition 
-                })
-              } else {
-                // Fallback to click coordinates
-                setDropdownPosition({ x: posX, y: posY })
-              }
-              
-              setDropdownOpen(true)
+              openDropdownAtPosition(posX, posY, linePosition)
             }
           }
         }
@@ -594,13 +620,14 @@ const MonacoEditor = () => {
     const query = params.get("query")
     const model = editor.getModel()
     if (query && model) {
+      const trimmedQuery = query.trim()
       // Find if the query is already in the editor
-      const matches = findMatches(model, query)
+      const matches = findMatches(model, trimmedQuery)
       if (matches && matches.length > 0) {
         editor.setSelection(matches[0].range)
         // otherwise, append the query
       } else {
-        appendQuery(editor, query, { appendAt: "end" })
+        appendQuery(editor, trimmedQuery, { appendAt: "end" })
         const newValue = editor.getValue()
         updateBuffer(activeBuffer.id as number, { value: newValue })
       }
@@ -630,7 +657,7 @@ const MonacoEditor = () => {
     dispatch(actions.query.setResult(undefined))
 
     try {
-      const result = await quest.queryRaw(query.query, { limit: "0,1000", explain: true })
+      const result = await quest.queryRaw(normalizeQueryText(query.query), { limit: "0,1000", explain: true })
       const activeBufferId = activeBuffer.id as number
 
       if (errorRefs.current[activeBufferId]) {
@@ -851,7 +878,7 @@ const MonacoEditor = () => {
         }, 1000)
 
         void quest
-          .queryRaw(request.query, { limit: "0,1000", explain: true })
+          .queryRaw(normalizeQueryText(request.query), { limit: "0,1000", explain: true })
           .then((result) => {
             if (notificationTimeoutRef.current) {
               window.clearTimeout(notificationTimeoutRef.current)
@@ -861,8 +888,15 @@ const MonacoEditor = () => {
             setRequest(undefined)
             const activeBufferId = activeBuffer.id as number
             
-            if (errorRefs.current[activeBufferId]) {
-              delete errorRefs.current[activeBufferId][originalQuery]
+            if (errorRefs.current[activeBufferId] && editorRef.current) {
+              let parentQuery = originalQuery
+              if (request.isSelection) {
+                const query = getQueryFromCursor(editorRef.current)
+                if (query) {
+                  parentQuery = query.query
+                }
+              }
+              delete errorRefs.current[activeBufferId][parentQuery]
               if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
                 delete errorRefs.current[activeBufferId]
               }
@@ -926,28 +960,9 @@ const MonacoEditor = () => {
               window.clearTimeout(notificationTimeoutRef.current)
               notificationTimeoutRef.current = null
             }
-            
-            const activeBufferId = activeBuffer.id as number
-            
-            if (!errorRefs.current[activeBufferId]) {
-              errorRefs.current[activeBufferId] = {}
-            }
-            
-            errorRefs.current[activeBufferId][originalQuery] = {
-              error,
-            }
-            
+
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
-            dispatch(
-              actions.query.addNotification({
-                query: originalQuery,
-                isExplain: running.isExplain,
-                content: <Text color="red">{error.error}</Text>,
-                sideContent: <QueryInNotification query={request.query} />,
-                type: NotificationType.ERROR,
-              }),
-            )
 
             if (editorRef?.current && monacoRef?.current) {
               // For error positioning, we need to use the original request (without EXPLAIN prefix)
@@ -968,6 +983,33 @@ const MonacoEditor = () => {
                 originalRequest,
                 adjustedErrorPosition,
               )
+
+              let parentQuery = originalQuery
+              let errorToStore = { ...error, position: adjustedErrorPosition }
+
+              if (request.isSelection && errorRange && editorRef.current) {
+                editorRef?.current.setPosition({
+                  lineNumber: errorRange.startLineNumber,
+                  column: errorRange.startColumn,
+                })
+                const query = getQueryFromCursor(editorRef.current)
+                
+                if (query) {
+                  parentQuery = query.query
+                  errorToStore = { ...error, position: query.query.indexOf(originalQuery) + adjustedErrorPosition }
+                }
+              }
+
+              const activeBufferId = activeBuffer.id as number
+              if (!errorRefs.current[activeBufferId]) {
+                errorRefs.current[activeBufferId] = {}
+              }
+              
+              errorRefs.current[activeBufferId][parentQuery] = {
+                error: errorToStore,
+                isSelection: request.isSelection,
+              }
+                            
               if (errorRange) {
                 editorRef?.current.focus()
 
@@ -981,6 +1023,16 @@ const MonacoEditor = () => {
                   column: errorRange.endColumn,
                 })
               }
+
+              dispatch(
+                actions.query.addNotification({
+                  query: parentQuery,
+                  isExplain: running.isExplain,
+                  content: <Text color="red">{error.error}</Text>,
+                  sideContent: <QueryInNotification query={request.query} />,
+                  type: NotificationType.ERROR,
+                }),
+              )
             }
           })
         setRequest(request)
@@ -1107,7 +1159,13 @@ const MonacoEditor = () => {
         <Loader show={!!request || !tables} />
       </Content>
       
-      <DropdownMenu.Root open={dropdownOpen} onOpenChange={setDropdownOpen}>
+      <DropdownMenu.Root open={dropdownOpen} onOpenChange={(open) => {
+        setDropdownOpen(open)
+        if (!open) {
+          setDropdownPosition(null)
+          isSelectionRef.current = false
+        }
+      }}>
         <DropdownMenu.Trigger asChild>
           <HiddenTrigger 
             style={{ 
@@ -1120,12 +1178,16 @@ const MonacoEditor = () => {
           <StyledDropdownContent>
             <StyledDropdownItem onClick={handleRunQuery} data-hook="dropdown-item-run-query">
               <IconWrapper><StyledPlayFilled size={18} color="#fff" /></IconWrapper>
-              Run
+              Run query
             </StyledDropdownItem>
-            <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
+            {isSelectionRef.current && <StyledDropdownItem onClick={handleRunSelection} data-hook="dropdown-item-run-selection">
+              <IconWrapper><Cursor size={18} color="#fff" /></IconWrapper>
+              Run selection
+            </StyledDropdownItem>}
+            {!isSelectionRef.current && <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
               <IconWrapper><Information size={18} /></IconWrapper>
               Get query plan
-            </StyledDropdownItem>
+            </StyledDropdownItem>}
           </StyledDropdownContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>

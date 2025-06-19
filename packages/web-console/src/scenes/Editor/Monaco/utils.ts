@@ -35,6 +35,7 @@ export type Request = Readonly<{
   column: number
   endRow: number
   endColumn: number
+  isSelection?: boolean
 }>
 
 export const stripSQLComments = (text: string): string =>
@@ -406,15 +407,21 @@ export const getQueryRequestFromEditor = (
   } else {
     request = getQueryFromCursor(editor)
   }
+
+  const normalizedRequest = request ? {
+    ...request,
+    query: normalizeQueryText(request.query),
+  } : undefined
   
-  if (request && isExplain) {
+  if (normalizedRequest && isExplain) {
     return {
-      ...request,
-      query: `EXPLAIN ${request.query}`,
+      ...normalizedRequest,
+      isSelection: !!selectedText,
+      query: `EXPLAIN ${normalizedRequest.query}`,
     }
   }
   
-  return request
+  return normalizedRequest ? { ...normalizedRequest, isSelection: !!selectedText } : undefined
 }
 
 export const getQueryRequestFromLastExecutedQuery = (
@@ -448,17 +455,7 @@ export const getErrorRange = (
   const position = toTextPosition(request, errorPosition)
   const model = editor.getModel()
   if (model) {
-    const selection = editor.getSelection()
-    const selectedText = getSelectedText(editor)
-    let wordAtPosition
-    if (selection && selectedText) {
-      wordAtPosition = model.getWordAtPosition({
-        column: selection.startColumn + position.column,
-        lineNumber: position.lineNumber,
-      })
-    } else {
-      wordAtPosition = model.getWordAtPosition(position)
-    }
+    const wordAtPosition = model.getWordAtPosition(position)
     if (wordAtPosition) {
       return {
         startColumn: wordAtPosition.startColumn,
@@ -791,6 +788,14 @@ export const toTextPosition = (
     lineNumber: row + 1 + request.row,
     column: (row === 0 ? column + request.column : column) + 1,
   }
+}
+
+export const normalizeQueryText = (query: string) => {
+  const trimmed = query.trim()
+  if (trimmed.endsWith(";")) {
+    return trimmed.slice(0, -1)
+  }
+  return trimmed
 }
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>
