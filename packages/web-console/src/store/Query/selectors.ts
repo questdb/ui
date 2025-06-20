@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { NotificationShape, RunningShape, StoreShape } from "types"
+import { NotificationShape, RunningShape, StoreShape, QueryNotifications } from "types"
 import type {
   QueryRawResult,
   Table,
@@ -31,6 +31,12 @@ import type {
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
   store.query.notifications
+
+const getQueryNotifications: (store: StoreShape) => Record<string, QueryNotifications> = (store) =>
+  store.query.queryNotifications
+
+const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>
+  store.query.activeNotification
 
 const getResult: (store: StoreShape) => undefined | QueryRawResult = (store) =>
   store.query.result
@@ -45,6 +51,8 @@ const getColumns: (store: StoreShape) => InformationSchemaColumn[] = (store) =>
 
 export default {
   getNotifications,
+  getQueryNotifications,
+  getActiveNotification,
   getResult,
   getRunning,
   getTables,

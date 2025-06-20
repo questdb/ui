@@ -35,6 +35,7 @@ import {
   NotificationType,
   QueryAction,
   QueryAT,
+  QueryKey,
 } from "../../types"
 
 const setTables = (payload: Table[]): QueryAction => ({
@@ -52,7 +53,7 @@ const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
 })
 
 const addNotification = (
-  payload: Partial<NotificationShape> & { content: ReactNode },
+  payload: Partial<NotificationShape> & { content: ReactNode, query: QueryKey },
 ): QueryAction => ({
   payload: {
     createdAt: new Date(),
@@ -66,12 +67,12 @@ const cleanupNotifications = (): QueryAction => ({
   type: QueryAT.CLEANUP_NOTIFICATIONS,
 })
 
-const removeNotification = (payload: Date): QueryAction => ({
+const removeNotification = (payload: QueryKey): QueryAction => ({
   payload,
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
-const setResult = (payload: QueryRawResult): QueryAction => ({
+const setResult = (payload: QueryRawResult | undefined): QueryAction => ({
   payload,
   type: QueryAT.SET_RESULT,
 })
@@ -80,10 +81,24 @@ const stopRunning = (): QueryAction => ({
   type: QueryAT.STOP_RUNNING,
 })
 
-const toggleRunning = (isRefresh = false): QueryAction => ({
+const toggleRunning = (isRefresh = false, isExplain = false): QueryAction => ({
   type: QueryAT.TOGGLE_RUNNING,
   payload: {
     isRefresh,
+    isExplain,
+  },
+})
+
+const setActiveNotification = (payload: NotificationShape | null): QueryAction => ({
+  type: QueryAT.SET_ACTIVE_NOTIFICATION,
+  payload,
+})
+
+const updateNotificationKey = (oldKey: QueryKey, newKey: QueryKey): QueryAction => ({
+  type: QueryAT.UPDATE_NOTIFICATION_KEY,
+  payload: {
+    oldKey,
+    newKey,
   },
 })
 
@@ -91,9 +106,11 @@ export default {
   addNotification,
   cleanupNotifications,
   removeNotification,
+  updateNotificationKey,
   setResult,
   stopRunning,
   toggleRunning,
   setTables,
   setColumns,
+  setActiveNotification,
 }

@@ -288,3 +288,33 @@
   display: flex;
   flex: 1;
 }
+
+
+.monaco-menu {
+  background: #343746;
+  color: #f8f8f2;
+}
+
+.monaco-menu .action-menu-item {
+  border: 1px solid transparent;
+  padding: 1rem 0;
+  height: 3rem !important;
+
+  &:hover {
+    background: #043c5c !important;
+    border: 1px solid #8be9fd;
+  }
+
+  &:not(.disabled) {
+    cursor: pointer;
+  }
+}
+
+.monaco-menu-container .monaco-scrollable-element {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36) !important;
+}
+
+.action-label.separator {
+  border-bottom: 1px solid #606060 !important;
+  margin: 5px 0 !important;
+}

@@ -86,7 +86,7 @@ beforeEach(() => {
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
   cy.typeQuery("select simulate_warnings('', '');");
-  cy.clickRun();
+  cy.clickRunIconInLine(1);
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -103,9 +103,7 @@ Cypress.Commands.add("getGridRow", (n) =>
   cy.get(".qg-r").filter(":visible").eq(n)
 );
 
-Cypress.Commands.add("getColumnName", (n) => {
-  cy.get(".qg-header-name").filter(":visible").eq(n);
-})
+Cypress.Commands.add("getColumnName", (n) => cy.get(".qg-header-name").eq(n));
 
 Cypress.Commands.add("getGridCol", (n) =>
   cy.get(".qg-c").filter(":visible").eq(n)
@@ -137,14 +135,10 @@ Cypress.Commands.add("runLineWithResponse", (response) => {
 });
 
 Cypress.Commands.add("clickLine", (n) => {
-  cy.get(".monaco-editor .view-line")
+  return cy
+    .get(".monaco-editor .view-line")
     .eq(n - 1)
     .click();
-});
-
-Cypress.Commands.add("clickRun", () => {
-  cy.intercept("/exec*").as("exec");
-  return cy.get("button").contains("Run").click().wait("@exec");
 });
 
 Cypress.Commands.add("clearEditor", () => {
@@ -169,9 +163,7 @@ Cypress.Commands.add("getMountedEditor", () =>
   cy.get(".monaco-scrollable-element")
 );
 
-Cypress.Commands.add("getEditor", () => {
-  cy.get(".monaco-editor.vs-dark");
-});
+Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor.vs-dark"));
 
 Cypress.Commands.add("getEditorContent", () =>
   cy
@@ -198,6 +190,40 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
 );
 
 Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
+
+Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
+  const selector = `.cursorQueryGlyph-line-${lineNumber}`;
+  cy.get("body").then(() => {
+    let element = null;
+
+    if (Cypress.$(selector).length > 0) {
+      element = cy.get(selector).first();
+    }
+
+    if (!element) {
+      throw new Error(`No run icon found for line ${lineNumber}.`);
+    }
+    return element;
+  });
+});
+
+Cypress.Commands.add("openRunDropdownInLine", (lineNumber) => {
+  cy.getRunIconInLine(lineNumber).rightclick();
+});
+
+Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
+  cy.getRunIconInLine(lineNumber).click();
+});
+
+Cypress.Commands.add("clickDropdownRunQuery", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.getByDataHook("dropdown-item-run-query").click().wait("@exec");
+});
+
+Cypress.Commands.add("clickDropdownGetQueryPlan", () => {
+  cy.intercept("/exec*").as("exec");
+  return cy.getByDataHook("dropdown-item-get-query-plan").click().wait("@exec");
+});
 
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
@@ -228,6 +254,14 @@ Cypress.Commands.add("F9", () => {
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"));
+
+Cypress.Commands.add("expandNotifications", () =>
+  cy.get('[data-hook="expand-notifications"]').click()
+);
+
+Cypress.Commands.add("collapseNotifications", () =>
+  cy.get('[data-hook="collapse-notifications"]').click()
+);
 
 Cypress.Commands.add("getCollapsedNotifications", () =>
   cy.get('[data-hook="notifications-collapsed"]')
@@ -319,7 +353,7 @@ Cypress.Commands.add("logout", () => {
 Cypress.Commands.add("executeSQL", (sql) => {
   cy.clearEditor();
   cy.typeQuery(sql);
-  cy.clickRun();
+  cy.clickRunIconInLine(1);
 });
 
 Cypress.Commands.add("refreshSchema", () => {

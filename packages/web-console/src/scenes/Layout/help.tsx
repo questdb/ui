@@ -39,6 +39,7 @@ const HelpButton = styled(PrimaryToggleButton)`
 
 const DropdownMenuContent = styled(DropdownMenu.Content)`
   background: ${({ theme }) => theme.color.backgroundDarker};
+  z-index: 2;
 `
 
 const DropdownMenuItem = styled(DropdownMenu.Item)<{ withlink?: string }>`

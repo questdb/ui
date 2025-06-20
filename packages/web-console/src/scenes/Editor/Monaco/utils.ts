@@ -21,18 +21,33 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { editor, IPosition, IRange } from "monaco-editor"
-import { Monaco } from "@monaco-editor/react"
+import type { editor, IPosition, IRange } from "monaco-editor"
+import type { Monaco } from "@monaco-editor/react"
+import type { ErrorResult } from "../../../utils"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 export const QuestDBLanguageName: string = "questdb-sql"
 
+export type QueryKey = `${string}@${number}`
+
 export type Request = Readonly<{
   query: string
   row: number
   column: number
+  endRow: number
+  endColumn: number
+  isSelection?: boolean
 }>
+
+type SqlTextItem = {
+  row: number
+  col: number
+  position: number
+  endRow: number
+  endCol: number
+  limit: number
+}
 
 export const stripSQLComments = (text: string): string =>
   text.replace(/(?<!["'`])(--\s?.*$)/gm, (match, group) => {
@@ -54,29 +69,76 @@ export const getSelectedText = (
   return model && selection ? model.getValueInRange(selection) : undefined
 }
 
-export const getQueryFromCursor = (
+export const getQueriesFromPosition = (
   editor: IStandaloneCodeEditor,
-): Request | undefined => {
-  const text = stripSQLComments(
-    editor.getValue({ preserveBOM: false, lineEnding: "\n" }),
-  )
-  const position = editor.getPosition()
-
-  let row = 0
-
-  let column = 0
-
+  editorPosition: IPosition,
+  startPosition?: IPosition
+): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
+  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  
+  if (!rawText) {
+    return { sqlTextStack: [], nextSql: null }
+  }
+  
+  const text = stripSQLComments(rawText)
+  
+  if (!text) {
+    return { sqlTextStack: [], nextSql: null }
+  }
+  
+  const position = {
+    row: editorPosition.lineNumber - 1,
+    column: editorPosition.column,
+  }
+  
+  // Calculate starting position - default to beginning if not provided
+  const start = startPosition ? {
+    row: startPosition.lineNumber - 1,
+    column: startPosition.column,
+  } : { row: 0, column: 0 }
+  
+  // Convert start position to character index
+  let startCharIndex = 0
+  if (startPosition) {
+    const lines = text.split('\n')
+    const maxRow = Math.min(start.row, lines.length - 1)
+    for (let i = 0; i < maxRow; i++) {
+      if (lines[i] !== undefined) {
+        startCharIndex += lines[i].length + 1 // +1 for newline character
+      }
+    }
+    if (lines[maxRow] !== undefined) {
+      startCharIndex += Math.min(start.column, lines[maxRow].length)
+    }
+  }
+  
+  let row = start.row
+  let column = start.column
   const sqlTextStack = []
-  let startRow = 0
-  let startCol = 0
-  let startPos = -1
+  let startRow = start.row
+  let startCol = start.column
+  let startPos = startCharIndex - 1
   let nextSql = null
   let inQuote = false
 
-  if (!position) return
+  while (
+    startCharIndex < text.length &&
+    (text[startCharIndex] === "\n" || text[startCharIndex] === " ")
+  ) {
+    if (text[startCharIndex] === "\n") {
+      row++
+      startRow++
+      column = 0
+      startCol = 0
+    } else {
+      column++
+      startCol++
+    }
+    startCharIndex++
+  }
+  startPos = startCharIndex
 
-  let i = 0;
-
+  let i = startCharIndex
   for (; i < text.length; i++) {
     if (nextSql !== null) {
       break
@@ -92,8 +154,8 @@ export const getQueryFromCursor = (
         }
 
         if (
-          row < position.lineNumber - 1 ||
-          (row === position.lineNumber - 1 && column < position.column - 1)
+          row < position.row ||
+          (row === position.row && column < position.column - 1)
         ) {
           sqlTextStack.push({
             row: startRow,
@@ -108,7 +170,6 @@ export const getQueryFromCursor = (
           startPos = i + 1
           column++
         } else {
-          // empty queries, aka ;; , make sql.length === 0
           nextSql = {
             row: startRow,
             col: startCol,
@@ -122,7 +183,6 @@ export const getQueryFromCursor = (
       }
 
       case " ": {
-        // ignore leading space
         if (startPos === i) {
           startRow = row
           startCol = column
@@ -160,22 +220,42 @@ export const getQueryFromCursor = (
 
   // lastStackItem is the last query that is completed before the current cursor position.
   // nextSql is the next query that is not completed before the current cursor position, or started after the current cursor position.
-  const normalizedCurrentRow = position.lineNumber - 1
-  const lastStackItem = sqlTextStack.length > 0 ? sqlTextStack[sqlTextStack.length - 1] : null
-
   if (!nextSql) {
-    const sqlText = startPos === - 1 ? text : text.substring(startPos)
+    const sqlText = startPos === - 1 ? text.substring(startCharIndex) : text.substring(startPos)
     if (sqlText.length > 0) {
       nextSql = {
         row: startRow,
         col: startCol,
-        position: startPos === -1 ? 0 : startPos,
+        position: startPos === -1 ? startCharIndex : startPos,
         endRow: row,
         endCol: column,
         limit: i,
       }
     }
   }
+
+  return { sqlTextStack, nextSql }
+}
+
+export const getQueryFromCursor = (
+  editor: IStandaloneCodeEditor,
+): Request | undefined => {
+  const position = editor.getPosition()
+  
+  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  
+  if (!rawText) {
+    return undefined
+  }
+  
+  const text = stripSQLComments(rawText)
+
+  if (!position || !text) return
+
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
+
+  const normalizedCurrentRow = position.lineNumber - 1
+  const lastStackItem = sqlTextStack.length > 0 ? sqlTextStack[sqlTextStack.length - 1] : null
 
   const lastStackItemRowRange = lastStackItem ? {
     start: lastStackItem.row,
@@ -193,12 +273,16 @@ export const getQueryFromCursor = (
       query: text.substring(lastStackItem!.position, lastStackItem!.limit),
       row: lastStackItem!.row,
       column: lastStackItem!.col,
+      endRow: lastStackItem!.endRow,
+      endColumn: lastStackItem!.endCol
     }
   } else if (isInNextSqlRowRange && !isInLastStackItemRowRange) {
     return {
       query: text.substring(nextSql!.position, nextSql!.limit),
       row: nextSql!.row,
       column: nextSql!.col,
+      endRow: nextSql!.endRow,
+      endColumn: nextSql!.endCol
     }
   } else if (isInLastStackItemRowRange && isInNextSqlRowRange) {
     const lastStackItemEndCol = lastStackItem!.endCol
@@ -208,14 +292,83 @@ export const getQueryFromCursor = (
         query: text.substring(nextSql!.position, nextSql!.limit),
         row: nextSql!.row,
         column: nextSql!.col,
+        endRow: nextSql!.endRow,
+        endColumn: nextSql!.endCol
       }
     }
     return {
       query: text.substring(lastStackItem!.position, lastStackItem!.limit),
       row: lastStackItem!.row,
       column: lastStackItem!.col,
+      endRow: lastStackItem!.endRow,
+      endColumn: lastStackItem!.endCol
     }
   }
+}
+
+export const getAllQueries = (editor: IStandaloneCodeEditor): Request[] => {
+  const position = getLastPosition(editor)
+  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  
+  if (!rawText) {
+    return []
+  }
+  
+  const text = stripSQLComments(rawText)
+  
+  if (!position || !text) return []
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
+  const stackQueries = sqlTextStack.map(item => ({
+    query: text.substring(item.position, item.limit),
+    row: item.row,
+    column: item.col,
+    endRow: item.endRow,
+    endColumn: item.endCol
+  }))
+  const nextSqlQuery = nextSql ? {
+    query: text.substring(nextSql.position, nextSql.limit),
+    row: nextSql.row,
+    column: nextSql.col,
+    endRow: nextSql.endRow,
+    endColumn: nextSql.endCol
+  } : null
+  return [...stackQueries, ...(nextSqlQuery ? [nextSqlQuery] : [])]
+}
+
+export const getQueriesInRange = (
+  editor: IStandaloneCodeEditor,
+  startPosition: IPosition,
+  endPosition: IPosition
+): Request[] => {
+  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  
+  if (!rawText) {
+    return []
+  }
+  
+  const text = stripSQLComments(rawText)
+  
+  if (!text) return []
+  
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, endPosition, startPosition)
+  
+  const stackQueries = sqlTextStack.map(item => ({
+    query: text.substring(item.position, item.limit),
+    row: item.row,
+    column: item.col,
+    endRow: item.endRow,
+    endColumn: item.endCol
+  }))
+  
+  const nextSqlQuery = nextSql ? {
+    query: text.substring(nextSql.position, nextSql.limit),
+    row: nextSql.row,
+    column: nextSql.col,
+    endRow: nextSql.endRow,
+    endColumn: nextSql.endCol
+  } : null
+  
+  return [...stackQueries, ...(nextSqlQuery ? [nextSqlQuery] : [])]
 }
 
 export const getQueryFromSelection = (
@@ -237,6 +390,8 @@ export const getQueryFromSelection = (
         query: selectedText.substr(0, n + 1),
         row: selection.startLineNumber - 1,
         column: selection.startColumn,
+        endRow: selection.endLineNumber - 1,
+        endColumn: selection.endColumn
       }
     }
   }
@@ -244,12 +399,31 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
+  isExplain = false,
 ): Request | undefined => {
   const selectedText = getSelectedText(editor)
+  let request: Request | undefined
+  
   if (selectedText) {
-    return getQueryFromSelection(editor)
+    request = getQueryFromSelection(editor)
+  } else {
+    request = getQueryFromCursor(editor)
   }
-  return getQueryFromCursor(editor)
+
+  const normalizedRequest = request ? {
+    ...request,
+    query: normalizeQueryText(request.query),
+  } : undefined
+  
+  if (normalizedRequest && isExplain) {
+    return {
+      ...normalizedRequest,
+      isSelection: !!selectedText,
+      query: `EXPLAIN ${normalizedRequest.query}`,
+    }
+  }
+  
+  return normalizedRequest ? { ...normalizedRequest, isSelection: !!selectedText } : undefined
 }
 
 export const getQueryRequestFromLastExecutedQuery = (
@@ -259,6 +433,8 @@ export const getQueryRequestFromLastExecutedQuery = (
     query,
     row: 0,
     column: 0,
+    endRow: 0,
+    endColumn: 0
   }
 }
 
@@ -281,17 +457,7 @@ export const getErrorRange = (
   const position = toTextPosition(request, errorPosition)
   const model = editor.getModel()
   if (model) {
-    const selection = editor.getSelection()
-    const selectedText = getSelectedText(editor)
-    let wordAtPosition
-    if (selection && selectedText) {
-      wordAtPosition = model.getWordAtPosition({
-        column: selection.startColumn + position.column,
-        lineNumber: position.lineNumber,
-      })
-    } else {
-      wordAtPosition = model.getWordAtPosition(position)
-    }
+    const wordAtPosition = model.getWordAtPosition(position)
     if (wordAtPosition) {
       return {
         startColumn: wordAtPosition.startColumn,
@@ -572,28 +738,6 @@ export const clearModelMarkers = (
   }
 }
 
-export const setErrorMarker = (
-  monaco: Monaco,
-  editor: IStandaloneCodeEditor,
-  errorRange: IRange,
-  message: string,
-) => {
-  const model = editor.getModel()
-
-  if (model) {
-    monaco.editor.setModelMarkers(model, QuestDBLanguageName, [
-      {
-        message,
-        severity: monaco.MarkerSeverity.Error,
-        startLineNumber: errorRange.startLineNumber,
-        endLineNumber: errorRange.endLineNumber,
-        startColumn: errorRange.startColumn,
-        endColumn: errorRange.endColumn,
-      },
-    ])
-  }
-}
-
 export const toTextPosition = (
   request: Request,
   position: number,
@@ -617,6 +761,14 @@ export const toTextPosition = (
   }
 }
 
+export const normalizeQueryText = (query: string) => {
+  const trimmed = query.trim()
+  if (trimmed.endsWith(";")) {
+    return trimmed.slice(0, -1)
+  }
+  return trimmed
+}
+
 export const findMatches = (model: editor.ITextModel, needle: string) =>
   model.findMatches(
     needle /* searchString */,
@@ -626,3 +778,117 @@ export const findMatches = (model: editor.ITextModel, needle: string) =>
     null /* wordSeparators */,
     true /* captureMatches */,
   ) ?? null
+
+export const getLastPosition = (editor: IStandaloneCodeEditor): IPosition | undefined => {
+  const model = editor.getModel()
+  if (!model) return undefined
+
+  const lastLineNumber = model.getLineCount()
+  const lastLineContent = model.getLineContent(lastLineNumber)
+  
+  return {
+    lineNumber: lastLineNumber,
+    column: lastLineContent.length
+  }
+}
+
+export const getQueryStartOffset = (
+  editor: IStandaloneCodeEditor,
+  request: Request
+): number => {
+  const model = editor.getModel()
+  if (!model) return 0
+  
+  return model.getOffsetAt({
+    lineNumber: request.row + 1,
+    column: request.column,
+  })
+}
+
+export const createQueryKey = (queryText: string, startOffset: number): QueryKey => {
+  return `${queryText}@${startOffset}` as QueryKey
+}
+
+export const shiftOffset = (offset: number, changeOffset: number, delta: number): number => {
+  return offset >= changeOffset ? offset + delta : offset
+}
+
+export const validateQueryAtOffset = (
+  editor: IStandaloneCodeEditor,
+  queryText: string,
+  offset: number
+): boolean => {
+  const model = editor.getModel()
+  if (!model) return false
+  
+  const totalLength = model.getValueLength()
+  if (offset < 0 || offset >= totalLength) return false
+
+  const offsetPosition = { ...model.getPositionAt(offset), column: 0 }
+
+  const queryInEditor = getQueriesInRange(editor, offsetPosition, offsetPosition)[0]
+  if (!queryInEditor) return false
+  
+  const normalizeText = (text: string) => text.trim().replace(/\s+/g, ' ')
+
+  return normalizeText(queryInEditor.query) === normalizeText(queryText)
+}
+
+export const createQueryKeyFromRequest = (
+  editor: IStandaloneCodeEditor,
+  request: Request
+): QueryKey => {
+  const startOffset = getQueryStartOffset(editor, request)
+  return createQueryKey(request.query, startOffset)
+}
+
+export const setErrorMarkerForQuery = (
+  monaco: any,
+  editor: IStandaloneCodeEditor,
+  bufferErrors: Record<QueryKey, { 
+    error?: ErrorResult, 
+    isSelection?: boolean,
+    queryText: string,
+    startOffset: number
+  }>,
+  query?: Request
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const markers: any[] = []
+
+  if (query) {
+    const queryKey = createQueryKeyFromRequest(editor, query)
+    const errorData = bufferErrors[queryKey]
+    
+    if (errorData && errorData.error) {
+      const { error } = errorData
+      
+      const errorRange = getErrorRange(editor, query, error.position)
+      
+      if (errorRange) {
+        markers.push({
+          message: error.error,
+          severity: monaco.MarkerSeverity.Error,
+          startLineNumber: errorRange.startLineNumber,
+          endLineNumber: errorRange.endLineNumber,
+          startColumn: errorRange.startColumn,
+          endColumn: errorRange.endColumn,
+        })
+      } else {
+        const errorPos = toTextPosition(query, error.position)
+        markers.push({
+          message: error.error,
+          severity: monaco.MarkerSeverity.Error,
+          startLineNumber: errorPos.lineNumber,
+          endLineNumber: errorPos.lineNumber,
+          startColumn: errorPos.column,
+          endColumn: errorPos.column + 1,
+        })
+      }
+    }
+  }
+
+  monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
+} 

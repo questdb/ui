@@ -63,7 +63,6 @@ import { Toolbar } from "./Toolbar/toolbar"
 import VirtualTables from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
-import { NotificationType } from "../../types"
 import { Checkbox } from "./checkbox"
 import { AddChart } from "@styled-icons/material"
 import { useEditor } from "../../providers/EditorProvider"
@@ -76,6 +75,7 @@ import type { Duration } from "../../scenes/Editor/Metrics/types"
 import { useSchema } from "./SchemaContext"
 import { SchemaProvider } from "./SchemaContext"
 import { TreeNodeKind } from "./Row"
+import { toast } from '../../components/Toast'
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -229,23 +229,10 @@ const Schema = ({
     )
     if (tablesWithError.length === 0) {
       copyToClipboard(ddls.join("\n\n"))
-      dispatch(
-        actions.query.addNotification({
-          content: <Text color="foreground">Schemas copied to clipboard</Text>,
-        }),
-      )
+      toast.success("Schemas copied to clipboard")
+    
     } else {
-      dispatch(
-        actions.query.addNotification({
-          content: (
-            <Text color="red">
-              Cannot copy schemas from tables:{" "}
-              {tablesWithError.sort().join(", ")}
-            </Text>
-          ),
-          type: NotificationType.ERROR,
-        }),
-      )
+      toast.error("Cannot copy schemas from tables: " + tablesWithError.sort().join(", "))
     }
     setSelectOpen(false)
   }
