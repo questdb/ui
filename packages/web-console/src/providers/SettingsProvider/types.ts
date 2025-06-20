@@ -2,6 +2,7 @@ import { ErrorTag } from "../../utils"
 export type Settings = Partial<{
   "release.type": "OSS" | "EE"
   "release.version": string
+  "http.settings.readonly": boolean
   "acl.enabled": boolean
   "acl.basic.auth.realm.enabled": boolean
   "acl.oidc.groups.encoded.in.token": boolean

@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 0.7.13 - 2025.05.30
+### Changed
+- hide edit from instance badge for readonly settings [#439](https://github.com/questdb/ui/pull/439)
+
+
 ## 0.7.12 - 2025.05.29
 ### Fixed
 - inline the logo in offline view [#435](https://github.com/questdb/ui/pull/435)

@@ -1,5 +1,8 @@
 /// <reference types="cypress" />
 
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
+const baseUrl = `http://localhost:9999${contextPath}`;
+
 describe("TopBar", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth();
@@ -46,19 +49,146 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-edit-icon").should("be.visible");
     cy.getByDataHook("topbar-instance-edit-icon").click();
     cy.getByDataHook("topbar-instance-name-input").type("test-instance");
-    cy.getByDataHook("topbar-instance-type-select").select("production");
+    cy.getByDataHook("topbar-instance-type-select").select("testing");
     cy.getByDataHook("topbar-instance-description-input").type(
       "test description of the test instance"
     );
     cy.getByDataHook("topbar-instance-color-option-g").click();
     cy.getByDataHook("topbar-instance-save-button").click();
     cy.getByDataHook("topbar-instance-save-button").should("not.exist");
-    cy.getByDataHook("topbar-instance-name").should("contain", "Production");
+    cy.getByDataHook("topbar-instance-name").should("contain", "Testing");
     cy.getByDataHook("topbar-instance-name").should("contain", "test-instance");
     cy.getByDataHook("topbar-instance-icon").realHover();
     cy.contains("test description of the test instance").should("be.visible");
-    cy.contains(
-      "You are connected to a QuestDB instance for production"
-    ).should("be.visible");
+    cy.contains("You are connected to a QuestDB instance for testing").should(
+      "be.visible"
+    );
+  });
+});
+
+describe("Instance information access control", () => {
+  it("should not allow editing instance information in OSS if the instance is readonly", () => {
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/settings`,
+      },
+      (req) => {
+        req.reply((res) => {
+          const originalConfig = res.body.config || {};
+          res.body.config = Object.assign({}, originalConfig, {
+            "http.settings.readonly": true,
+          });
+          return res;
+        });
+      }
+    ).as("settings");
+    cy.loadConsoleWithAuth();
+
+    cy.wait("@settings");
+    cy.getByDataHook("topbar-instance-badge").should("be.visible");
+    cy.getByDataHook("topbar-instance-edit-icon").should("not.exist");
+  });
+
+  it("should show edit icon if the user has SETTINGS permission", () => {
+    cy.loadConsoleWithAuth();
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/settings`,
+      },
+      (req) => {
+        req.reply((res) => {
+          const originalConfig = res.body.config || {};
+          res.body.config = Object.assign({}, originalConfig, {
+            "release.type": "EE",
+          });
+          return res;
+        });
+      }
+    ).as("settings");
+    cy.interceptQuery("SHOW PERMISSIONS admin", "showPermissions", {
+      type: "dql",
+      columns: [
+        {
+          name: "permission",
+          type: "STRING",
+        },
+        {
+          name: "table_name",
+          type: "STRING",
+        },
+        {
+          name: "column_name",
+          type: "STRING",
+        },
+        {
+          name: "grant_option",
+          type: "BOOLEAN",
+        },
+        {
+          name: "origin",
+          type: "STRING",
+        },
+      ],
+      dataset: [["SETTINGS", null, null, false, null]],
+      count: 1,
+    });
+    cy.reload();
+    cy.wait("@settings");
+    cy.wait("@showPermissions");
+    cy.getByDataHook("topbar-instance-badge").should("be.visible");
+    cy.getByDataHook("topbar-instance-edit-icon").should("be.visible");
+  });
+
+  it("should not show edit icon if the user has no SETTINGS permission", () => {
+    cy.loadConsoleWithAuth();
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/settings`,
+      },
+      (req) => {
+        req.reply((res) => {
+          const originalConfig = res.body.config || {};
+          res.body.config = Object.assign({}, originalConfig, {
+            "release.type": "EE",
+          });
+          return res;
+        });
+      }
+    ).as("settings");
+    cy.interceptQuery("SHOW PERMISSIONS admin", "showPermissions", {
+      type: "dql",
+      columns: [
+        {
+          name: "permission",
+          type: "STRING",
+        },
+        {
+          name: "table_name",
+          type: "STRING",
+        },
+        {
+          name: "column_name",
+          type: "STRING",
+        },
+        {
+          name: "grant_option",
+          type: "BOOLEAN",
+        },
+        {
+          name: "origin",
+          type: "STRING",
+        },
+      ],
+      dataset: [["HTTP", null, null, false, null]],
+      count: 1,
+    });
+    cy.reload();
+    cy.wait("@settings");
+    cy.wait("@showPermissions");
+    cy.getByDataHook("topbar-instance-badge").should("be.visible");
+    cy.getByDataHook("topbar-instance-edit-icon").should("not.exist");
   });
 });
