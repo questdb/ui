@@ -30,6 +30,8 @@ import type {
   InformationSchemaColumn,
 } from "utils/questdb"
 
+export type QueryKey = `${string}@${number}`
+
 export enum NotificationType {
   ERROR = "error",
   INFO = "info",
@@ -39,7 +41,7 @@ export enum NotificationType {
 }
 
 export type NotificationShape = Readonly<{
-  query: string
+  query: QueryKey
   createdAt: Date
   content: ReactNode
   sideContent?: ReactNode
@@ -69,7 +71,7 @@ export type QueryStateShape = Readonly<{
   columns: InformationSchemaColumn[]
   result?: QueryRawResult
   running: RunningShape
-  queryNotifications: Record<string, QueryNotifications>
+  queryNotifications: Record<QueryKey, QueryNotifications>
   activeNotification: NotificationShape | null
 }>
 
@@ -77,6 +79,7 @@ export enum QueryAT {
   ADD_NOTIFICATION = "QUERY/ADD_NOTIFICATION",
   CLEANUP_NOTIFICATIONS = "QUERY/CLEANUP_NOTIFICATIONS",
   REMOVE_NOTIFICATION = "QUERY/REMOVE_NOTIFICATION",
+  UPDATE_NOTIFICATION_KEY = "QUERY/UPDATE_NOTIFICATION_KEY",
   SET_RESULT = "QUERY/SET_RESULT",
   STOP_RUNNING = "QUERY/STOP_RUNNING",
   TOGGLE_RUNNING = "QUERY/TOGGLE_RUNNING",
@@ -95,7 +98,7 @@ type CleanupNotificationsAction = Readonly<{
 }>
 
 type RemoveNotificationAction = Readonly<{
-  payload: string
+  payload: QueryKey
   type: QueryAT.REMOVE_NOTIFICATION
 }>
 
@@ -135,10 +138,19 @@ type SetActiveNotificationAction = Readonly<{
   payload: NotificationShape | null
 }>
 
+type UpdateNotificationKeyAction = Readonly<{
+  type: QueryAT.UPDATE_NOTIFICATION_KEY
+  payload: Readonly<{
+    oldKey: QueryKey
+    newKey: QueryKey
+  }>
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
   | RemoveNotificationAction
+  | UpdateNotificationKeyAction
   | SetResultAction
   | StopRunningAction
   | ToggleRunningAction

@@ -35,6 +35,7 @@ import {
   NotificationType,
   QueryAction,
   QueryAT,
+  QueryKey,
 } from "../../types"
 
 const setTables = (payload: Table[]): QueryAction => ({
@@ -52,7 +53,7 @@ const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
 })
 
 const addNotification = (
-  payload: Partial<NotificationShape> & { content: ReactNode, query: string },
+  payload: Partial<NotificationShape> & { content: ReactNode, query: QueryKey },
 ): QueryAction => ({
   payload: {
     createdAt: new Date(),
@@ -66,7 +67,7 @@ const cleanupNotifications = (): QueryAction => ({
   type: QueryAT.CLEANUP_NOTIFICATIONS,
 })
 
-const removeNotification = (payload: string): QueryAction => ({
+const removeNotification = (payload: QueryKey): QueryAction => ({
   payload,
   type: QueryAT.REMOVE_NOTIFICATION,
 })
@@ -93,10 +94,19 @@ const setActiveNotification = (payload: NotificationShape | null): QueryAction =
   payload,
 })
 
+const updateNotificationKey = (oldKey: QueryKey, newKey: QueryKey): QueryAction => ({
+  type: QueryAT.UPDATE_NOTIFICATION_KEY,
+  payload: {
+    oldKey,
+    newKey,
+  },
+})
+
 export default {
   addNotification,
   cleanupNotifications,
   removeNotification,
+  updateNotificationKey,
   setResult,
   stopRunning,
   toggleRunning,

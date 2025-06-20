@@ -21,13 +21,15 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { editor, IPosition, IRange } from "monaco-editor"
-import { Monaco } from "@monaco-editor/react"
+import type { editor, IPosition, IRange } from "monaco-editor"
+import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 export const QuestDBLanguageName: string = "questdb-sql"
+
+export type QueryKey = `${string}@${number}`
 
 export type Request = Readonly<{
   query: string
@@ -37,6 +39,15 @@ export type Request = Readonly<{
   endColumn: number
   isSelection?: boolean
 }>
+
+type SqlTextItem = {
+  row: number
+  col: number
+  position: number
+  endRow: number
+  endCol: number
+  limit: number
+}
 
 export const stripSQLComments = (text: string): string =>
   text.replace(/(?<!["'`])(--\s?.*$)/gm, (match, group) => {
@@ -56,15 +67,6 @@ export const getSelectedText = (
   const model = editor.getModel()
   const selection = editor.getSelection()
   return model && selection ? model.getValueInRange(selection) : undefined
-}
-
-type SqlTextItem = {
-  row: number
-  col: number
-  position: number
-  endRow: number
-  endCol: number
-  limit: number
 }
 
 export const getQueriesFromPosition = (
@@ -736,37 +738,6 @@ export const clearModelMarkers = (
   }
 }
 
-export const setErrorMarker = (
-  monaco: Monaco,
-  editor: IStandaloneCodeEditor,
-  bufferErrors: Record<string, { error?: ErrorResult }>,
-  query?: Request
-) => {
-  const model = editor.getModel()
-  if (!model) return
-
-  const markers: any[] = []
-
-  if (query) {
-    const { error } = bufferErrors[query.query] || {}
-    if (error) {
-      const errorRange = getErrorRange(editor, query, error.position)
-      if (errorRange) {
-        markers.push({
-          message: error.error,
-          severity: monaco.MarkerSeverity.Error,
-          startLineNumber: errorRange.startLineNumber,
-          endLineNumber: errorRange.endLineNumber,
-          startColumn: errorRange.startColumn,
-          endColumn: errorRange.endColumn,
-        })
-      }
-    }
-  }
-
-  monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
-}
-
 export const toTextPosition = (
   request: Request,
   position: number,
@@ -820,3 +791,104 @@ export const getLastPosition = (editor: IStandaloneCodeEditor): IPosition | unde
     column: lastLineContent.length
   }
 }
+
+export const getQueryStartOffset = (
+  editor: IStandaloneCodeEditor,
+  request: Request
+): number => {
+  const model = editor.getModel()
+  if (!model) return 0
+  
+  return model.getOffsetAt({
+    lineNumber: request.row + 1,
+    column: request.column,
+  })
+}
+
+export const createQueryKey = (queryText: string, startOffset: number): QueryKey => {
+  return `${queryText}@${startOffset}` as QueryKey
+}
+
+export const shiftOffset = (offset: number, changeOffset: number, delta: number): number => {
+  return offset >= changeOffset ? offset + delta : offset
+}
+
+export const validateQueryAtOffset = (
+  editor: IStandaloneCodeEditor,
+  queryText: string,
+  offset: number
+): boolean => {
+  const model = editor.getModel()
+  if (!model) return false
+  
+  const totalLength = model.getValueLength()
+  if (offset < 0 || offset >= totalLength) return false
+
+  const offsetPosition = { ...model.getPositionAt(offset), column: 0 }
+
+  const queryInEditor = getQueriesInRange(editor, offsetPosition, offsetPosition)[0]
+  if (!queryInEditor) return false
+  
+  const normalizeText = (text: string) => text.trim().replace(/\s+/g, ' ')
+
+  return normalizeText(queryInEditor.query) === normalizeText(queryText)
+}
+
+export const createQueryKeyFromRequest = (
+  editor: IStandaloneCodeEditor,
+  request: Request
+): QueryKey => {
+  const startOffset = getQueryStartOffset(editor, request)
+  return createQueryKey(request.query, startOffset)
+}
+
+export const setErrorMarkerForQuery = (
+  monaco: any,
+  editor: IStandaloneCodeEditor,
+  bufferErrors: Record<QueryKey, { 
+    error?: ErrorResult, 
+    isSelection?: boolean,
+    queryText: string,
+    startOffset: number
+  }>,
+  query?: Request
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const markers: any[] = []
+
+  if (query) {
+    const queryKey = createQueryKeyFromRequest(editor, query)
+    const errorData = bufferErrors[queryKey]
+    
+    if (errorData && errorData.error) {
+      const { error } = errorData
+      
+      const errorRange = getErrorRange(editor, query, error.position)
+      
+      if (errorRange) {
+        markers.push({
+          message: error.error,
+          severity: monaco.MarkerSeverity.Error,
+          startLineNumber: errorRange.startLineNumber,
+          endLineNumber: errorRange.endLineNumber,
+          startColumn: errorRange.startColumn,
+          endColumn: errorRange.endColumn,
+        })
+      } else {
+        const errorPos = toTextPosition(query, error.position)
+        markers.push({
+          message: error.error,
+          severity: monaco.MarkerSeverity.Error,
+          startLineNumber: errorPos.lineNumber,
+          endLineNumber: errorPos.lineNumber,
+          startColumn: errorPos.column,
+          endColumn: errorPos.column + 1,
+        })
+      }
+    }
+  }
+
+  monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
+} 

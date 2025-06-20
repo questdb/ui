@@ -34,11 +34,18 @@ import {
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
-  setErrorMarker,
   getAllQueries,
   getQueriesInRange,
   normalizeQueryText,
   getSelectedText,
+  stripSQLComments,
+  QueryKey,
+  createQueryKey,
+  createQueryKeyFromRequest,
+  shiftOffset,
+  validateQueryAtOffset,
+  setErrorMarkerForQuery,
+  getQueryStartOffset,
 } from "./utils"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
@@ -233,9 +240,14 @@ const MonacoEditor = () => {
   const targetPositionRef = useRef<{ lineNumber: number; column: number } | null>(null)
   const currentBufferValueRef = useRef<string | undefined>(activeBuffer.value)
 
-  // Buffer -> Query -> Error
+  // Buffer -> QueryKey -> Error
   const errorRefs = useRef<
-    Record<string, Record<string, { error?: ErrorResult, isSelection?: boolean }>>
+    Record<string, Record<QueryKey, { 
+      error?: ErrorResult, 
+      isSelection?: boolean,
+      queryText: string,
+      startOffset: number
+    }>>
   >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
@@ -249,11 +261,11 @@ const MonacoEditor = () => {
     dispatch(actions.query.toggleRunning(isRefresh, isExplain))
   }
 
-  const updateQueryNotification = (query?: string) => {
+  const updateQueryNotification = (queryKey?: QueryKey) => {
     let newActiveNotification: NotificationShape | null = null
 
-    if (query) {
-      const queryNotifications = queryNotificationsRef.current[query]
+    if (queryKey) {
+      const queryNotifications = queryNotificationsRef.current[queryKey]
       if (queryNotifications) {
         newActiveNotification = queryNotifications.latest || null
       }
@@ -313,13 +325,21 @@ const MonacoEditor = () => {
             column: 0
           }
           const [query] = getQueriesInRange(editorRef.current, position, position)
-          const selectedText = getSelectedText(editorRef.current)
-          if (selectedText && query) {
-            openDropdownAtPosition(e.clientX, e.clientY, position, true)
-          } else {
-            editorRef.current.setPosition(position)
-            toggleRunning()
+          const selection = editorRef.current.getSelection()
+          if (selection && selection.startLineNumber >= query.row + 1 && selection.endLineNumber <= query.endRow + 1) {
+            const selectedText = getSelectedText(editorRef.current)
+            if (selectedText) {
+              const normalizedStrippedSelectedText = stripSQLComments(normalizeQueryText(selectedText))
+              const normalizedQueryText = normalizeQueryText(query.query)
+              if (normalizedStrippedSelectedText && normalizedStrippedSelectedText !== normalizedQueryText && normalizedQueryText.indexOf(normalizedStrippedSelectedText) !== -1) {
+                openDropdownAtPosition(e.clientX, e.clientY, position, true)
+                return
+              }
+            }
           }
+          
+          editorRef.current.setPosition(position)
+          toggleRunning()
         }
       }
     }
@@ -366,10 +386,9 @@ const MonacoEditor = () => {
     const bufferErrors = errorRefs.current[activeBufferId] || {}
     
     if (queryAtCursor) {
-      const queryErrorBuffer = bufferErrors[queryAtCursor.query]
-      const hasError = queryErrorBuffer
-        && queryErrorBuffer.error !== undefined
-        && (!queryErrorBuffer.isSelection || queryErrorBuffer.error.query === queryAtCursor.query)
+      const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
+      const queryErrorBuffer = bufferErrors[queryKey]
+      const hasError = queryErrorBuffer && queryErrorBuffer.error !== undefined
       const startLineNumber = queryAtCursor.row + 1
       const endLineNumber = queryAtCursor.endRow + 1
       
@@ -392,8 +411,10 @@ const MonacoEditor = () => {
       lineMarkingDecorations
     )
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
-    updateQueryNotification(queryAtCursor?.query)
-    setErrorMarker(monaco, editor, bufferErrors, queryAtCursor)
+    updateQueryNotification(queryAtCursor ? createQueryKeyFromRequest(editor, queryAtCursor) : undefined)
+    if (bufferErrors) {
+      setErrorMarkerForQuery(monaco, editor, bufferErrors, queryAtCursor)
+    }
   }
 
   const applyGlyphsAndLineMarkings = (
@@ -433,11 +454,10 @@ const MonacoEditor = () => {
     if (queries.length > 0) {
       queries.forEach(query => {
         const bufferErrors = errorRefs.current[activeBufferId] || {}
-        const queryErrorBuffer = bufferErrors[query.query]
-        const hasError = queryErrorBuffer
-          && queryErrorBuffer.error !== undefined
-          && (!queryErrorBuffer.isSelection || queryErrorBuffer.error.query === query.query)
-        const isSuccessful = queryNotificationsRef.current[query.query]?.latest?.type === "success"
+        const queryKey = createQueryKeyFromRequest(editor, query)
+        const queryErrorBuffer = bufferErrors[queryKey]
+        const hasError = queryErrorBuffer && queryErrorBuffer.error !== undefined
+        const isSuccessful = queryNotificationsRef.current[queryKey]?.latest?.type === "success"
         
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
@@ -546,32 +566,107 @@ const MonacoEditor = () => {
       }, 50);
     })
 
-    editor.onDidChangeModelContent(() => {
-      contentJustChangedRef.current = true;
+    editor.onDidChangeModelContent((e) => {
+      const model = editor.getModel()
+      if (!model) return
+      
+      contentJustChangedRef.current = true
       
       const activeBufferId = activeBufferRef.current.id as number
       const bufferErrors = errorRefs.current[activeBufferId]
       
-      if (bufferErrors) {
-        const currentQueries = getAllQueries(editor)
-        const currentQueryTexts = new Set(currentQueries.map(q => q.query))
+      const notificationUpdates: Array<() => void> = []
+      
+      e.changes.forEach(change => {
+        const changeStartOffset = model.getOffsetAt({
+          lineNumber: change.range.startLineNumber,
+          column: change.range.startColumn
+        })
+        const changeEndOffset = changeStartOffset + change.rangeLength
+        const offsetDelta = change.text.length - change.rangeLength
         
-        // Remove errors for queries that no longer exist
-        Object.keys(bufferErrors).forEach(queryText => {
-          if (!currentQueryTexts.has(queryText)) {
-            delete bufferErrors[queryText]
+        if (bufferErrors) {
+          const keysToUpdate: Array<{oldKey: QueryKey, newKey: QueryKey, data: any}> = []
+          const keysToRemove: QueryKey[] = []
+          
+          Object.keys(bufferErrors).forEach((key) => {
+            const queryKey = key as QueryKey
+            const { queryText, startOffset } = bufferErrors[queryKey]
+           
+            
+            // Check if error is in deleted range
+            if (startOffset >= changeStartOffset && startOffset < changeEndOffset) {
+              keysToRemove.push(queryKey)
+              notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+            }
+            // Check if error needs offset shifting
+            else if (startOffset >= changeStartOffset) {
+              const newOffset = shiftOffset(startOffset, changeStartOffset, offsetDelta)
+              // Validate query still matches at new position
+              if (validateQueryAtOffset(editor, queryText, newOffset)) {
+                const newKey = createQueryKey(queryText, newOffset)
+                keysToUpdate.push({
+                  oldKey: queryKey,
+                  newKey,
+                  data: { ...bufferErrors[queryKey], startOffset: newOffset }
+                })
+              } else {
+                keysToRemove.push(queryKey)
+                notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+              }
+            }
+          })
+          
+          keysToRemove.forEach(key => {
+            delete bufferErrors[key]
+          })
+
+          keysToUpdate.forEach(({oldKey, newKey, data}) => {
+            delete bufferErrors[oldKey]
+            bufferErrors[newKey] = data
+            notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(oldKey, newKey)))
+          })
+        }
+        
+        const currentNotifications = queryNotificationsRef.current
+        Object.keys(currentNotifications).forEach((key) => {
+          const queryKey = key as QueryKey
+          
+          if (bufferErrors && bufferErrors[queryKey]) {
+            return
+          }
+          
+          const atIndex = queryKey.lastIndexOf('@')
+          if (atIndex === -1) return
+          
+          const queryText = queryKey.substring(0, atIndex)
+          const startOffset = parseInt(queryKey.substring(atIndex + 1), 10)
+          
+          if (isNaN(startOffset)) return
+          
+          if (startOffset >= changeStartOffset && startOffset < changeEndOffset) {
+            notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+          }
+          else if (startOffset >= changeStartOffset) {
+            const newOffset = shiftOffset(startOffset, changeStartOffset, offsetDelta)
+            if (validateQueryAtOffset(editor, queryText, newOffset)) {
+              const newKey = createQueryKey(queryText, newOffset)
+              notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(queryKey, newKey)))
+            } else {
+              notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+            }
           }
         })
-        if (Object.keys(bufferErrors).length === 0) {
-          delete errorRefs.current[activeBufferId]
-        }
+      })
+      
+      if (bufferErrors && Object.keys(bufferErrors).length === 0) {
+        delete errorRefs.current[activeBufferId]
       }
 
-      applyGlyphsAndLineMarkings(monaco, editor);
+      applyGlyphsAndLineMarkings(monaco, editor)
       
-      setTimeout(() => {
-        contentJustChangedRef.current = false;
-      }, 100);
+      contentJustChangedRef.current = false
+      notificationUpdates.forEach(update => update())
     })
 
     editor.onDidChangeModel(() => {
@@ -654,6 +749,7 @@ const MonacoEditor = () => {
 
   const runIndividualQuery = async (query: Request, isLast: boolean) => {
     const queryText = query.query
+    const queryKey = createQueryKeyFromRequest(editorRef.current!, query)
     dispatch(actions.query.setResult(undefined))
 
     try {
@@ -661,20 +757,16 @@ const MonacoEditor = () => {
       const activeBufferId = activeBuffer.id as number
 
       if (errorRefs.current[activeBufferId]) {
-        delete errorRefs.current[activeBufferId][queryText]
+        delete errorRefs.current[activeBufferId][queryKey]
         if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
           delete errorRefs.current[activeBufferId]
         }
       }
 
-      if (isLast) {
-        dispatch(actions.query.setResult(result))
-      }
-
       if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
         dispatch(
           actions.query.addNotification({
-            query: queryText,
+            query: queryKey,
             content: <QueryInNotification query={query.query} />,
             updateActiveNotification: false,
           }),
@@ -685,7 +777,7 @@ const MonacoEditor = () => {
       if (result.type === QuestDB.Type.NOTICE) {
         dispatch(
           actions.query.addNotification({
-            query: queryText,
+            query: queryKey,
             content: (
               <Text color="foreground" ellipsis title={query.query}>
                 {result.notice}
@@ -704,7 +796,7 @@ const MonacoEditor = () => {
         setLastExecutedQuery(queryText)
         dispatch(
           actions.query.addNotification({
-            query: queryText,
+            query: queryKey,
             jitCompiled: result.explain?.jitCompiled ?? false,
             content: <QueryResult {...result.timings} rowCount={result.count} />,
             sideContent: <QueryInNotification query={query.query} />,
@@ -713,6 +805,10 @@ const MonacoEditor = () => {
         )
         eventBus.publish(EventType.MSG_QUERY_DATASET, result)
       }
+      if (isLast) {
+        dispatch(actions.query.setResult(result))
+      }
+
       return true
     } catch (_error: unknown) {
       const error = _error as ErrorResult
@@ -722,13 +818,16 @@ const MonacoEditor = () => {
         errorRefs.current[activeBufferId] = {}
       }
       
-      errorRefs.current[activeBufferId][queryText] = {
+      const startOffset = getQueryStartOffset(editorRef.current!, query)
+      errorRefs.current[activeBufferId][queryKey] = {
         error,
+        queryText: query.query,
+        startOffset,
       }
       
       dispatch(
         actions.query.addNotification({
-          query: queryText,
+          query: queryKey,
           content: <Text color="red">{error.error}</Text>,
           sideContent: <QueryInNotification query={query.query} />,
           type: NotificationType.ERROR,
@@ -749,7 +848,7 @@ const MonacoEditor = () => {
       dispatch(
         actions.query.setActiveNotification({
           type: NotificationType.LOADING,
-          query: activeBufferRef.current.label,
+          query: `${activeBufferRef.current.label}@1`,
           content: (
             <Box gap="1rem" align="center">
               <Text color="foreground">Running script...</Text>
@@ -781,9 +880,18 @@ const MonacoEditor = () => {
       notificationTimeoutRef.current = null
     }
 
+    const lastQuery = queries[queries.length - 1]
+    if (editorRef.current && lastQuery) {
+      const position = {
+        lineNumber: lastQuery.row + 1,
+        column: lastQuery.column
+      }
+      editorRef.current.revealPosition(position)
+    }
+
     setTimeout(() => dispatch(
       actions.query.setActiveNotification({
-        query: queries.map((q) => q.query).join(";"),
+        query: `${activeBufferRef.current.label}@-1`,
         content: <Text color="foreground">
           Running script completed in {formatTiming(duration)} with
           {successfulQueries > 0 ? ` ${successfulQueries} successful` : ""}
@@ -814,7 +922,7 @@ const MonacoEditor = () => {
 
   useEffect(() => {
     queryNotificationsRef.current = queryNotifications
-    if (monacoRef.current && editorRef.current && !isRunningScript) {
+    if (monacoRef.current && editorRef.current && !isRunningScriptRef.current && !contentJustChangedRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
   }, [queryNotifications])
@@ -856,11 +964,11 @@ const MonacoEditor = () => {
         
         // give the notification a slight delay to prevent flashing for fast queries
         notificationTimeoutRef.current = window.setTimeout(() => {
-          if (runningValueRef.current && requestRef.current) {
+          if (runningValueRef.current && requestRef.current && editorRef.current) {
             dispatch(
               actions.query.addNotification({
                 type: NotificationType.LOADING,
-                query: originalQuery,
+                query: createQueryKeyFromRequest(editorRef.current, request),
                 isExplain: running.isExplain,
                 content: (
                   <Box gap="1rem" align="center">
@@ -886,17 +994,27 @@ const MonacoEditor = () => {
             }
             
             setRequest(undefined)
+            if (!editorRef.current) return
+
+            let parentQuery: Request = request
+
+            if (request.isSelection) {
+              const query = getQueryFromCursor(editorRef.current)
+              if (query) {
+                parentQuery = query
+              } else {
+                const originalRequest = { ...request, query: originalQuery }
+                parentQuery = originalRequest
+              }
+            } else {
+              const originalRequest = { ...request, query: originalQuery }
+              parentQuery = originalRequest
+            }
+            const parentQueryKey = createQueryKeyFromRequest(editorRef.current, parentQuery)
             const activeBufferId = activeBuffer.id as number
             
             if (errorRefs.current[activeBufferId] && editorRef.current) {
-              let parentQuery = originalQuery
-              if (request.isSelection) {
-                const query = getQueryFromCursor(editorRef.current)
-                if (query) {
-                  parentQuery = query.query
-                }
-              }
-              delete errorRefs.current[activeBufferId][parentQuery]
+              delete errorRefs.current[activeBufferId][parentQueryKey]
               if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
                 delete errorRefs.current[activeBufferId]
               }
@@ -911,7 +1029,7 @@ const MonacoEditor = () => {
             ) {
               dispatch(
                 actions.query.addNotification({
-                  query: originalQuery,
+                  query: parentQueryKey,
                   isExplain: running.isExplain,
                   content: <QueryInNotification query={request.query} />,
                 }),
@@ -922,7 +1040,7 @@ const MonacoEditor = () => {
             if (result.type === QuestDB.Type.NOTICE) {
               dispatch(
                 actions.query.addNotification({
-                  query: originalQuery,
+                  query: parentQueryKey,
                   isExplain: running.isExplain,
                   content: (
                     <Text color="foreground" ellipsis title={request.query}>
@@ -943,7 +1061,7 @@ const MonacoEditor = () => {
               setLastExecutedQuery(originalQuery)
               dispatch(
                 actions.query.addNotification({
-                  query: originalQuery,
+                  query: parentQueryKey,
                   isExplain: running.isExplain,
                   jitCompiled: result.explain?.jitCompiled ?? false,
                   content: (
@@ -984,7 +1102,7 @@ const MonacoEditor = () => {
                 adjustedErrorPosition,
               )
 
-              let parentQuery = originalQuery
+              let parentQuery: Request = originalRequest
               let errorToStore = { ...error, position: adjustedErrorPosition }
 
               if (request.isSelection && errorRange && editorRef.current) {
@@ -995,19 +1113,23 @@ const MonacoEditor = () => {
                 const query = getQueryFromCursor(editorRef.current)
                 
                 if (query) {
-                  parentQuery = query.query
+                  parentQuery = query
                   errorToStore = { ...error, position: query.query.indexOf(originalQuery) + adjustedErrorPosition }
                 }
               }
 
+              const parentQueryKey = createQueryKeyFromRequest(editorRef.current, parentQuery)
               const activeBufferId = activeBuffer.id as number
               if (!errorRefs.current[activeBufferId]) {
                 errorRefs.current[activeBufferId] = {}
               }
               
-              errorRefs.current[activeBufferId][parentQuery] = {
+              const startOffset = getQueryStartOffset(editorRef.current, parentQuery)
+              errorRefs.current[activeBufferId][parentQueryKey] = {
                 error: errorToStore,
                 isSelection: request.isSelection,
+                queryText: parentQuery.query,
+                startOffset,
               }
                             
               if (errorRange) {
@@ -1026,7 +1148,7 @@ const MonacoEditor = () => {
 
               dispatch(
                 actions.query.addNotification({
-                  query: parentQuery,
+                  query: parentQueryKey,
                   isExplain: running.isExplain,
                   content: <Text color="red">{error.error}</Text>,
                   sideContent: <QueryInNotification query={request.query} />,

@@ -96,6 +96,33 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
     }
 
+    case QueryAT.UPDATE_NOTIFICATION_KEY: {
+      const { oldKey, newKey } = action.payload
+      const updatedQueryNotifications = { ...state.queryNotifications }
+      
+      if (updatedQueryNotifications[oldKey]) {
+        updatedQueryNotifications[newKey] = updatedQueryNotifications[oldKey]
+        delete updatedQueryNotifications[oldKey]
+      }
+      
+      const updatedNotifications = state.notifications.map(notification => 
+        notification.query === oldKey 
+          ? { ...notification, query: newKey }
+          : notification
+      )
+      
+      const updatedActiveNotification = state.activeNotification?.query === oldKey
+        ? { ...state.activeNotification, query: newKey }
+        : state.activeNotification
+      
+      return {
+        ...state,
+        notifications: updatedNotifications,
+        queryNotifications: updatedQueryNotifications,
+        activeNotification: updatedActiveNotification,
+      }
+    }
+
     case QueryAT.SET_RESULT: {
       return {
         ...state,
