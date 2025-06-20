@@ -87,7 +87,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
     })
 
     questClient.refreshTokenMethod = () => {
-      return refreshAuthToken(settings)
+      return refreshAuthToken(settings, sessionData.refresh_token)
     }
 
     void finishAuthCheck()
