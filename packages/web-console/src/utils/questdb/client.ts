@@ -39,12 +39,10 @@ export class Client {
 
   private tokenNeedsRefresh() {
     const authPayload = ssoAuthState.getAuthPayload()
-    if (authPayload) {
-      return (
-          authPayload.refresh_token
-        && new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
+    return (
+        authPayload && authPayload.refresh_token
+      && new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
       )
-    }
   }
 
   setCommonHeaders(headers: Record<string, string>) {
@@ -128,10 +126,6 @@ export class Client {
   async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
     const result = await this.queryRaw(query, options)
 
-    return Client.transformQueryRawResult<T>(result)
-  }
-
-  async mockQueryResult<T>(result: QueryRawResult): Promise<QueryResult<T>> {
     return Client.transformQueryRawResult<T>(result)
   }
 

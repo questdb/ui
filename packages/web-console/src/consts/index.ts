@@ -28,8 +28,7 @@ export enum TelemetryTable {
   WAL = "sys.telemetry_wal",
 }
 
-//const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
-const BASE = "alurin"
+const BASE = process.env.NODE_ENV === "production" ? "fara" : "alurin"
 
 export const API = `https://${BASE}.questdb.io`
 
