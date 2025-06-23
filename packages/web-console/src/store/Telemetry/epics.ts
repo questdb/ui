@@ -43,8 +43,8 @@ import * as QuestDB from "../../utils/questdb"
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
-import { sendServerInfoTelemetry, getTelemetryTimestamp } from "../../utils/telemetry";
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
+import { sendServerInfoTelemetry, getTelemetryTimestamp } from "../../utils/telemetry"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 const quest = new QuestDB.Client()
 

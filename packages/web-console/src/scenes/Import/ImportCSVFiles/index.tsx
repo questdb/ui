@@ -20,9 +20,9 @@ import {
   uuid,
 } from "./utils"
 import { Upload } from "./upload"
-import { getValue } from "../../../utils/localStorage";
-import { StoreKey } from "../../../utils/localStorage/types";
-import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState";
+import { getValue } from "../../../utils/localStorage"
+import { StoreKey } from "../../../utils/localStorage/types"
+import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 
 type State = "upload" | "list"
 

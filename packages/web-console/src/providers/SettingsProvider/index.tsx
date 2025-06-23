@@ -9,8 +9,8 @@ import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout } from "../../components"
 import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
-import {setValue} from "../../utils/localStorage";
-import {StoreKey} from "../../utils/localStorage/types";
+import {setValue} from "../../utils/localStorage"
+import {StoreKey} from "../../utils/localStorage/types"
 import { Preferences } from '../../utils'
 import QuestDBLogo from "./QuestDBLogo"
 

@@ -18,10 +18,10 @@ import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { Preferences, InstanceType } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
-import { TelemetryTable } from "../../consts";
-import { TelemetryConfigShape } from "../../store/Telemetry/types";
-import { sendServerInfoTelemetry } from "../../utils/telemetry";
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
+import { TelemetryTable } from "../../consts"
+import { TelemetryConfigShape } from "../../store/Telemetry/types"
+import { sendServerInfoTelemetry } from "../../utils/telemetry"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;

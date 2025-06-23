@@ -27,7 +27,7 @@ import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
-import { ssoAuthState } from "../modules/OAuth2/ssoAuthState";
+import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>,
