@@ -1,6 +1,6 @@
 import { AuthPayload } from "./types";
 
-class AuthPayloadHolder {
+class SsoAuthState {
     private authPayload: AuthPayload | null = null;
 
     setAuthPayload(authPayload: AuthPayload) {
@@ -20,4 +20,4 @@ class AuthPayloadHolder {
     }
 }
 
-export const authPayloadHolder = new AuthPayloadHolder();
+export const ssoAuthState = new SsoAuthState();

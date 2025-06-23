@@ -24,7 +24,7 @@ import {
   Preferences,
   Permission,
 } from "./types"
-import { authPayloadHolder } from "../../modules/OAuth2/authPayloadHolder";
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -38,7 +38,7 @@ export class Client {
   }
 
   private tokenNeedsRefresh() {
-    const authPayload = authPayloadHolder.getAuthPayload()
+    const authPayload = ssoAuthState.getAuthPayload()
     if (authPayload) {
       return (
           authPayload.refresh_token

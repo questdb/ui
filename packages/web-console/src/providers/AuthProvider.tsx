@@ -27,7 +27,7 @@ import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
-import { authPayloadHolder } from "../modules/OAuth2/authPayloadHolder";
+import { ssoAuthState } from "../modules/OAuth2/ssoAuthState";
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>,
@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       tokenResponse.expires_at = getTokenExpirationDate(
         tokenResponse.expires_in,
       ).toString() // convert from the sec offset
-      authPayloadHolder.setAuthPayload(tokenResponse)
+      ssoAuthState.setAuthPayload(tokenResponse)
       setSessionData(tokenResponse)
       // Remove the code from the URL
       history.replaceState &&
@@ -212,7 +212,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setErrorMessage(oauth2Error.error + ": " + oauth2Error.error_description)
           dispatch({ view: View.error })
         }
-      } else if (ssoUsername) {
+      } else if (ssoUsername && !getValue(StoreKey.REST_TOKEN)) {
+        // No REST token, so it is a page reload for an SSO user
         // We should try to request a token silently
         redirectToAuthorizationUrl("none")
       } else {
@@ -269,7 +270,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const logout = (promptForLogin?: boolean) => {
-    authPayloadHolder.clearAuthPayload()
+    ssoAuthState.clearAuthPayload()
     removeValue(StoreKey.OAUTH_PROMPT)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)

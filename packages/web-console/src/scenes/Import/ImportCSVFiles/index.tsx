@@ -22,7 +22,7 @@ import {
 import { Upload } from "./upload"
 import { getValue } from "../../../utils/localStorage";
 import { StoreKey } from "../../../utils/localStorage/types";
-import { authPayloadHolder } from "../../../modules/OAuth2/authPayloadHolder";
+import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState";
 
 type State = "upload" | "list"
 
@@ -60,7 +60,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
       if (userResult.type === "dql" && userResult.count > 0) {
         const username = Object.values(userResult.data[0])[0] as string
         if (username) {
-          const ssoAuthenticated = authPayloadHolder.isSSOAuthenticated()
+          const ssoAuthenticated = ssoAuthState.isSSOAuthenticated()
           if (!ssoAuthenticated) {
             // no OAuth2 payload, non-SSO users can set themselves as owner
             ownedByNames.push(username)
