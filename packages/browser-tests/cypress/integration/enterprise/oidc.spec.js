@@ -253,6 +253,51 @@ describe("OIDC authentication - with state", () => {
     cy.getEditor().should("not.exist");
   });
 
+  it("should login via OIDC, then admin, then OIDC again without re-authenticating if the OAuth2 provider session is still alive", () => {
+    interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
+    cy.getByDataHook("button-sso-login").click();
+    cy.wait("@authorizationCode");
+
+    interceptTokenRequest({
+      "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+      "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+      "token_type": "Bearer",
+      "expires_in": 300
+    });
+    cy.wait("@tokens");
+    cy.getEditor().should("be.visible");
+
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "user1");
+
+    cy.logout();
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.getByDataHook("button-sso-continue").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Choose a different account");
+    cy.getEditor().should("not.exist");
+
+    cy.loginWithUserAndPassword();
+    cy.getEditorContent().should("be.visible");
+
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "admin");
+
+    cy.logout();
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.getByDataHook("button-sso-continue").should("be.visible");
+    cy.getByDataHook("button-sso-login").should("be.visible");
+    cy.getByDataHook("button-sso-login").contains("Choose a different account");
+    cy.getEditorContent().should("not.exist");
+
+    cy.getByDataHook("button-sso-continue").click();
+    cy.getEditorContent().should("be.visible");
+
+    cy.executeSQL("select current_user();");
+    cy.getGridRow(0).should("contain", "user1");
+  });
+
   it("should force SSO re-authentication with state error", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`, true);
     cy.getByDataHook("button-sso-login").click();
