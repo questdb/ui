@@ -95,7 +95,7 @@ export const getQueriesFromPosition = (
   const start = startPosition ? {
     row: startPosition.lineNumber - 1,
     column: startPosition.column,
-  } : { row: 0, column: 0 }
+  } : { row: 0, column: 1 }
   
   // Convert start position to character index
   let startCharIndex = 0
@@ -108,7 +108,7 @@ export const getQueriesFromPosition = (
       }
     }
     if (lines[maxRow] !== undefined) {
-      startCharIndex += Math.min(start.column, lines[maxRow].length)
+      startCharIndex += Math.min(start.column - 1, lines[maxRow].length)
     }
   }
   
@@ -128,8 +128,8 @@ export const getQueriesFromPosition = (
     if (text[startCharIndex] === "\n") {
       row++
       startRow++
-      column = 0
-      startCol = 0
+      column = 1
+      startCol = 1
     } else {
       column++
       startCol++
@@ -155,7 +155,7 @@ export const getQueriesFromPosition = (
 
         if (
           row < position.row ||
-          (row === position.row && column < position.column - 1)
+          (row === position.row && column < position.column)
         ) {
           sqlTextStack.push({
             row: startRow,
@@ -195,7 +195,7 @@ export const getQueriesFromPosition = (
 
       case "\n": {
         row++
-        column = 0
+        column = 1
 
         if (startPos === i) {
           startRow = row
@@ -286,7 +286,7 @@ export const getQueryFromCursor = (
     }
   } else if (isInLastStackItemRowRange && isInNextSqlRowRange) {
     const lastStackItemEndCol = lastStackItem!.endCol
-    const normalizedCurrentCol = position.column - 1
+    const normalizedCurrentCol = position.column
     if (normalizedCurrentCol > lastStackItemEndCol + 1) {
       return {
         query: text.substring(nextSql!.position, nextSql!.limit),
@@ -432,9 +432,9 @@ export const getQueryRequestFromLastExecutedQuery = (
   return {
     query,
     row: 0,
-    column: 0,
+    column: 1,
     endRow: 0,
-    endColumn: 0
+    endColumn: 1
   }
 }
 
@@ -647,7 +647,7 @@ const getInsertPosition = ({
     return {
       lineStart: position.lineNumber + lineStartOffset,
       lineEnd: position.lineNumber + newQueryLines.length,
-      columnStart: 0,
+      columnStart: 1,
       columnEnd: newQueryLines[newQueryLines.length - 1].length + 1,
     }
   }
@@ -657,7 +657,7 @@ const getInsertPosition = ({
   return {
     lineStart,
     lineEnd: lineStart + newQueryLines.length,
-    columnStart: 0,
+    columnStart: 1,
     columnEnd: newQueryLines[newQueryLines.length - 1].length + 1,
   }
 }
@@ -700,7 +700,7 @@ export const appendQuery = (
           positionInsert.lineStart +
           selectStartOffset +
           (newQueryLines.length - 1),
-        columnStart: 0,
+        columnStart: 1,
         columnEnd: positionInsert.columnEnd,
       }
 
@@ -744,12 +744,12 @@ export const toTextPosition = (
 ): IPosition => {
   const end = Math.min(position, request.query.length)
   let row = 0
-  let column = 0
+  let column = 1
 
   for (let i = 0; i < end; i++) {
     if (request.query.charAt(i) === "\n") {
       row++
-      column = 0
+      column = 1
     } else {
       column++
     }
@@ -757,7 +757,7 @@ export const toTextPosition = (
 
   return {
     lineNumber: row + 1 + request.row,
-    column: (row === 0 ? column + request.column : column) + 1,
+    column: (row === 0 ? column + request.column : column),
   }
 }
 
@@ -788,7 +788,7 @@ export const getLastPosition = (editor: IStandaloneCodeEditor): IPosition | unde
   
   return {
     lineNumber: lastLineNumber,
-    column: lastLineContent.length
+    column: lastLineContent.length + 1,
   }
 }
 
@@ -806,7 +806,7 @@ export const getQueryStartOffset = (
 }
 
 export const createQueryKey = (queryText: string, startOffset: number): QueryKey => {
-  return `${queryText}@${startOffset}` as QueryKey
+  return `${normalizeQueryText(queryText)}@${startOffset}` as QueryKey
 }
 
 export const shiftOffset = (offset: number, changeOffset: number, delta: number): number => {
@@ -824,9 +824,10 @@ export const validateQueryAtOffset = (
   const totalLength = model.getValueLength()
   if (offset < 0 || offset >= totalLength) return false
 
-  const offsetPosition = { ...model.getPositionAt(offset), column: 0 }
+  const offsetPosition = model.getPositionAt(offset)
 
   const queryInEditor = getQueriesInRange(editor, offsetPosition, offsetPosition)[0]
+  console.log({ queryInEditor })
   if (!queryInEditor) return false
   
   const normalizeText = (text: string) => text.trim().replace(/\s+/g, ' ')
@@ -884,7 +885,7 @@ export const setErrorMarkerForQuery = (
           startLineNumber: errorPos.lineNumber,
           endLineNumber: errorPos.lineNumber,
           startColumn: errorPos.column,
-          endColumn: errorPos.column + 1,
+          endColumn: errorPos.column,
         })
       }
     }

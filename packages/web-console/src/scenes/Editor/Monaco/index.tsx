@@ -316,28 +316,30 @@ const MonacoEditor = () => {
       e.target.classList.contains("cancelQueryGlyph"))
     ) {  
       editorRef?.current?.focus()
-      if (editorRef.current) {
+      if (editorRef.current && editorRef.current.getModel()) {
         const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY)
         
         if (target && target.position) {
           const position = {
             lineNumber: target.position.lineNumber,
-            column: 0
+            column: 1
           }
-          const [query] = getQueriesInRange(editorRef.current, position, position)
           const selection = editorRef.current.getSelection()
-          if (selection && selection.startLineNumber >= query.row + 1 && selection.endLineNumber <= query.endRow + 1) {
+          const marginDecorations = editorRef.current.getModel()?.getAllMarginDecorations()
+          if (selection && marginDecorations) {
+            const currentGlyphIndex = marginDecorations.findIndex(g => g.range.startLineNumber === position.lineNumber)
+            const currentGlyph = marginDecorations[currentGlyphIndex]
+            const nextGlyph = marginDecorations[currentGlyphIndex + 1] || { range: { startLineNumber: editorRef.current.getModel()!.getLineCount() + 1 }}
+            const selection = editorRef.current.getSelection()
             const selectedText = getSelectedText(editorRef.current)
-            if (selectedText) {
+            if (selection && selectedText && selection.startLineNumber >= currentGlyph.range.startLineNumber && selection.endLineNumber < nextGlyph.range.startLineNumber) {
               const normalizedStrippedSelectedText = stripSQLComments(normalizeQueryText(selectedText))
-              const normalizedQueryText = normalizeQueryText(query.query)
-              if (normalizedStrippedSelectedText && normalizedStrippedSelectedText !== normalizedQueryText && normalizedQueryText.indexOf(normalizedStrippedSelectedText) !== -1) {
+              if (normalizedStrippedSelectedText) {
                 openDropdownAtPosition(e.clientX, e.clientY, position, true)
                 return
               }
             }
           }
-          
           editorRef.current.setPosition(position)
           toggleRunning()
         }
@@ -440,8 +442,8 @@ const MonacoEditor = () => {
       const startLine = Math.max(1, visibleLines.startLine - bufferSize)
       const endLine = Math.min(totalLines, visibleLines.endLine + bufferSize)
       
-      const startPosition = { lineNumber: startLine, column: 0 }
-      const endPosition = { lineNumber: endLine, column: 0 }
+      const startPosition = { lineNumber: startLine, column: 1 }
+      const endPosition = { lineNumber: endLine, column: 1 }
       
       queries = getQueriesInRange(editor, startPosition, endPosition)
     }
@@ -592,8 +594,7 @@ const MonacoEditor = () => {
           Object.keys(bufferErrors).forEach((key) => {
             const queryKey = key as QueryKey
             const { queryText, startOffset } = bufferErrors[queryKey]
-           
-            
+
             // Check if error is in deleted range
             if (startOffset >= changeStartOffset && startOffset < changeEndOffset) {
               keysToRemove.push(queryKey)
@@ -1160,10 +1161,6 @@ const MonacoEditor = () => {
         setRequest(request)
       } else {
         dispatch(actions.query.stopRunning())
-      }
-    } else {
-      if (monacoRef?.current && editorRef?.current) {
-        applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
       }
     }
   }, [running])
