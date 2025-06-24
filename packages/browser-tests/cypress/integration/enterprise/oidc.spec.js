@@ -83,7 +83,7 @@ describe("OIDC authentication", () => {
     cy.logout();
   });
 
-  it("should go to Login page if token expired, and there is no refresh token", () => {
+  it("should request a new token on page reload, even if there is no refresh token", () => {
     interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
     cy.getByDataHook("button-sso-login").click();
     cy.wait("@authorizationCode");
@@ -98,11 +98,6 @@ describe("OIDC authentication", () => {
     cy.getEditor().should("be.visible");
 
     cy.reload();
-    cy.getByDataHook("button-sso-continue").should("be.visible");
-    cy.getByDataHook("button-sso-login").should("be.visible");
-    cy.getByDataHook("button-sso-login").contains("Choose a different account");
-
-    cy.getByDataHook("button-sso-continue").click()
     cy.getEditor().should("be.visible");
   });
 
@@ -208,17 +203,19 @@ describe("OIDC authentication - with state", () => {
 
     // load login page
     interceptSettings({
-      "release.type": "EE",
-      "release.version": "1.2.3",
-      "acl.enabled": true,
-      "acl.basic.auth.realm.enabled": false,
-      "acl.oidc.enabled": true,
-      "acl.oidc.client.id": "client1",
-      "acl.oidc.authorization.endpoint": oidcAuthorizationCodeUrl,
-      "acl.oidc.token.endpoint": oidcTokenUrl,
-      "acl.oidc.pkce.required": true,
-      "acl.oidc.state.required": true,
-      "acl.oidc.groups.encoded.in.token": false,
+      "config": {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": true,
+        "acl.oidc.client.id": "client1",
+        "acl.oidc.authorization.endpoint": oidcAuthorizationCodeUrl,
+        "acl.oidc.token.endpoint": oidcTokenUrl,
+        "acl.oidc.pkce.required": true,
+        "acl.oidc.state.required": true,
+        "acl.oidc.groups.encoded.in.token": false,
+      }
     });
     cy.visit(baseUrl);
 
