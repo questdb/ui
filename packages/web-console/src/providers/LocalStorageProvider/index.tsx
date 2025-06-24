@@ -30,14 +30,13 @@ import React, {
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { parseBoolean, parseInteger } from "./utils"
+import { parseInteger } from "./utils"
 import { LocalConfig, SettingsType } from "./types"
 
 /* eslint-disable prettier/prettier */
 type Props = {}
 
 const defaultConfig: LocalConfig = {
-  authPayload: "",
   editorCol: 10,
   editorLine: 10,
   editorSplitterBasis: 350,
@@ -47,7 +46,6 @@ const defaultConfig: LocalConfig = {
 }
 
 type ContextProps = {
-  authPayload: string
   editorCol: number
   editorLine: number
   editorSplitterBasis: number
@@ -58,7 +56,6 @@ type ContextProps = {
 }
 
 const defaultValues: ContextProps = {
-  authPayload: "",
   editorCol: 1,
   editorLine: 1,
   editorSplitterBasis: 350,
@@ -73,9 +70,6 @@ export const LocalStorageContext = createContext<ContextProps>(defaultValues)
 export const LocalStorageProvider = ({
   children,
 }: PropsWithChildren<Props>) => {
-  const [authPayload, setAuthPayload] = useState<string>(
-    getValue(StoreKey.AUTH_PAYLOAD),
-  )
   const [editorCol, setEditorCol] = useState<number>(
     parseInteger(getValue(StoreKey.EDITOR_COL), defaultConfig.editorCol),
   )
@@ -113,9 +107,6 @@ export const LocalStorageProvider = ({
   const refreshSettings = (key: StoreKey) => {
     const value = getValue(key)
     switch (key) {
-      case StoreKey.AUTH_PAYLOAD:
-        setAuthPayload(value)
-        break
       case StoreKey.EDITOR_COL:
         setEditorCol(parseInteger(value, defaultConfig.editorCol))
         break
@@ -144,7 +135,6 @@ export const LocalStorageProvider = ({
   return (
     <LocalStorageContext.Provider
       value={{
-        authPayload,
         editorCol,
         editorLine,
         editorSplitterBasis,

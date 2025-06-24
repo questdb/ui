@@ -4,6 +4,6 @@ export type AuthPayload = {
   refresh_token: string
   token_type: string
   expires_in: number
-  expires_at?: string
+  expires_at: string
   groups_encoded_in_token?: boolean
 }
