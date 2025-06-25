@@ -590,12 +590,7 @@ const MonacoEditor = () => {
           const { queryText, startOffset, endOffset } = bufferErrors[queryKey]
 
           const effectiveOffsetDelta = e.changes
-            .filter(change =>
-              model.getOffsetAt({
-                lineNumber: change.range.startLineNumber,
-                column: change.range.startColumn
-              }) < endOffset
-            )
+            .filter(change => change.rangeOffset < endOffset)
             .reduce((acc, change) => acc + change.text.length - change.rangeLength, 0)
           
           if (effectiveOffsetDelta === 0) {
@@ -607,7 +602,7 @@ const MonacoEditor = () => {
             keysToUpdate.push({
               oldKey: queryKey,
               newKey: createQueryKey(queryText, newOffset),
-              data: { ...bufferErrors[queryKey], startOffset: newOffset }
+              data: { ...bufferErrors[queryKey], startOffset: newOffset, endOffset: endOffset + effectiveOffsetDelta }
             })
           } else {
             keysToRemove.push(queryKey)
@@ -631,12 +626,7 @@ const MonacoEditor = () => {
         const queryKey = key as QueryKey
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const effectiveOffsetDelta = e.changes
-          .filter(change =>
-            model.getOffsetAt({
-              lineNumber: change.range.startLineNumber,
-              column: change.range.startColumn
-            }) < endOffset
-          )
+          .filter(change => change.rangeOffset < endOffset)
           .reduce((acc, change) => acc + change.text.length - change.rangeLength, 0)
 
         if (effectiveOffsetDelta === 0) {

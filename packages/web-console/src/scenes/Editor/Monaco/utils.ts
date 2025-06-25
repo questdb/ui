@@ -74,15 +74,9 @@ export const getQueriesFromPosition = (
   editorPosition: IPosition,
   startPosition?: IPosition
 ): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
-  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
   
-  if (!rawText) {
-    return { sqlTextStack: [], nextSql: null }
-  }
-  
-  const text = stripSQLComments(rawText)
-  
-  if (!text) {
+  if (!text || !stripSQLComments(text)) {
     return { sqlTextStack: [], nextSql: null }
   }
   
@@ -185,7 +179,7 @@ export const getQueriesFromPosition = (
       case " ": {
         if (startPos === i) {
           startRow = row
-          startCol = column
+          startCol = column + 1
           startPos = i + 1
         }
 
@@ -241,16 +235,11 @@ export const getQueryFromCursor = (
   editor: IStandaloneCodeEditor,
 ): Request | undefined => {
   const position = editor.getPosition()
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
   
-  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
-  
-  if (!rawText) {
-    return undefined
+  if (!text || !stripSQLComments(text) || !position) {
+    return
   }
-  
-  const text = stripSQLComments(rawText)
-
-  if (!position || !text) return
 
   const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
 
@@ -308,15 +297,12 @@ export const getQueryFromCursor = (
 
 export const getAllQueries = (editor: IStandaloneCodeEditor): Request[] => {
   const position = getLastPosition(editor)
-  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
   
-  if (!rawText) {
+  if (!text || !stripSQLComments(text) || !position) {
     return []
   }
   
-  const text = stripSQLComments(rawText)
-  
-  if (!position || !text) return []
   const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
   const stackQueries = sqlTextStack.map(item => ({
     query: text.substring(item.position, item.limit),
@@ -340,15 +326,10 @@ export const getQueriesInRange = (
   startPosition: IPosition,
   endPosition: IPosition
 ): Request[] => {
-  const rawText = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
-  
-  if (!rawText) {
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  if (!text || !stripSQLComments(text) || !startPosition || !endPosition) {
     return []
   }
-  
-  const text = stripSQLComments(rawText)
-  
-  if (!text) return []
   
   const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, endPosition, startPosition)
   
