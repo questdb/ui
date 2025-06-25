@@ -54,7 +54,7 @@ export const SuccessNotification = (props: NotificationShape) => {
           tooltip="JIT Compiled"
         />
       ) : (
-        <CheckmarkOutlineIcon size="18px" />
+        <CheckmarkOutlineIcon size="18px" data-hook="notification-success" />
       )}
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>

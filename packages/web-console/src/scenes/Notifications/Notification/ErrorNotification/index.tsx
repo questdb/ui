@@ -40,7 +40,7 @@ export const ErrorNotification = (props: NotificationShape) => {
   return (
     <Wrapper isMinimized={isMinimized}>
       <Timestamp createdAt={createdAt} />
-      <CloseOutlineIcon size="18px" />
+      <CloseOutlineIcon size="18px" data-hook="notification-error" />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>
     </Wrapper>

@@ -40,7 +40,7 @@ export const NoticeNotification = (props: NotificationShape) => {
   return (
     <Wrapper isMinimized={isMinimized}>
       <Timestamp createdAt={createdAt} />
-      <InfoOutlineIcon size="18px" />
+      <InfoOutlineIcon size="18px" data-hook="notification-info" />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>
     </Wrapper>
