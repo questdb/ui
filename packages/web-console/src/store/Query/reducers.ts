@@ -98,6 +98,10 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
 
     case QueryAT.UPDATE_NOTIFICATION_KEY: {
       const { oldKey, newKey } = action.payload
+      if (newKey === oldKey) {
+        return { ...state }
+      }
+
       const updatedQueryNotifications = { ...state.queryNotifications }
       
       if (updatedQueryNotifications[oldKey]) {

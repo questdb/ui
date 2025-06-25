@@ -580,63 +580,77 @@ const MonacoEditor = () => {
       const bufferErrors = errorRefs.current[activeBufferId]
       
       const notificationUpdates: Array<() => void> = []
-      
-      e.changes.forEach(change => {
-        const changeStartOffset = model.getOffsetAt({
-          lineNumber: change.range.startLineNumber,
-          column: change.range.startColumn
-        })
-        const offsetDelta = change.text.length - change.rangeLength
-        
-        if (bufferErrors) {
-          const keysToUpdate: Array<{oldKey: QueryKey, newKey: QueryKey, data: any}> = []
-          const keysToRemove: QueryKey[] = []
-          
-          Object.keys(bufferErrors).forEach((key) => {
-            const queryKey = key as QueryKey
-            const { queryText, startOffset, endOffset } = bufferErrors[queryKey]
 
-            if (changeStartOffset < endOffset) {
-              const newOffset = shiftOffset(startOffset, changeStartOffset, offsetDelta)
-              if (validateQueryAtOffset(editor, queryText, newOffset)) {
-                keysToUpdate.push({
-                  oldKey: queryKey,
-                  newKey: createQueryKey(queryText, newOffset),
-                  data: { ...bufferErrors[queryKey], startOffset: newOffset }
-                })
-              } else {
-                keysToRemove.push(queryKey)
-                notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
-              }
-            }
-          })
-          
-          keysToRemove.forEach(key => {
-            delete bufferErrors[key]
-          })
-
-          keysToUpdate.forEach(({oldKey, newKey, data}) => {
-            delete bufferErrors[oldKey]
-            bufferErrors[newKey] = data
-            notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(oldKey, newKey)))
-          })
-        }
+      if (bufferErrors) {
+        const keysToUpdate: Array<{ oldKey: QueryKey, newKey: QueryKey, data: any }> = []
+        const keysToRemove: QueryKey[] = []
         
-        const currentNotifications = queryNotificationsRef.current
-        Object.keys(currentNotifications).filter(key => !bufferErrors || !bufferErrors[key as QueryKey]).forEach((key) => {
+        Object.keys(bufferErrors).forEach((key) => {
           const queryKey = key as QueryKey
-          const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+          const { queryText, startOffset, endOffset } = bufferErrors[queryKey]
 
-          if (changeStartOffset < endOffset) {
-            const newOffset = shiftOffset(startOffset, changeStartOffset, offsetDelta)
-            if (validateQueryAtOffset(editor, queryText, newOffset)) {
-              const newKey = createQueryKey(queryText, newOffset)
-              notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(queryKey, newKey)))
-            } else {
-              notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
-            }
+          const effectiveOffsetDelta = e.changes
+            .filter(change =>
+              model.getOffsetAt({
+                lineNumber: change.range.startLineNumber,
+                column: change.range.startColumn
+              }) < endOffset
+            )
+            .reduce((acc, change) => acc + change.text.length - change.rangeLength, 0)
+          
+          if (effectiveOffsetDelta === 0) {
+            return
+          }
+
+          const newOffset = startOffset + effectiveOffsetDelta
+          if (validateQueryAtOffset(editor, queryText, newOffset)) {
+            keysToUpdate.push({
+              oldKey: queryKey,
+              newKey: createQueryKey(queryText, newOffset),
+              data: { ...bufferErrors[queryKey], startOffset: newOffset }
+            })
+          } else {
+            keysToRemove.push(queryKey)
+            notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
           }
         })
+        
+        keysToRemove.forEach(key => {
+          delete bufferErrors[key]
+        })
+
+        keysToUpdate.forEach(({ oldKey, newKey, data }) => {
+          delete bufferErrors[oldKey]
+          bufferErrors[newKey] = data
+          notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(oldKey, newKey)))
+        })
+      }
+
+      const currentNotifications = queryNotificationsRef.current
+      Object.keys(currentNotifications).filter(key => !bufferErrors || !bufferErrors[key as QueryKey]).forEach((key) => {
+        const queryKey = key as QueryKey
+        const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+        const effectiveOffsetDelta = e.changes
+          .filter(change =>
+            model.getOffsetAt({
+              lineNumber: change.range.startLineNumber,
+              column: change.range.startColumn
+            }) < endOffset
+          )
+          .reduce((acc, change) => acc + change.text.length - change.rangeLength, 0)
+
+        if (effectiveOffsetDelta === 0) {
+          return
+        }
+
+        const newOffset = startOffset + effectiveOffsetDelta
+
+        if (validateQueryAtOffset(editor, queryText, newOffset)) {
+          const newKey = createQueryKey(queryText, newOffset)
+          notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(queryKey, newKey)))
+        } else {
+          notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+        }
       })
       
       if (bufferErrors && Object.keys(bufferErrors).length === 0) {
