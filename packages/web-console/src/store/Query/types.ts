@@ -30,7 +30,7 @@ import type {
   InformationSchemaColumn,
 } from "utils/questdb"
 
-export type QueryKey = `${string}@${number}`
+export type QueryKey = `${string}@${number}-${number}`
 
 export enum NotificationType {
   ERROR = "error",

@@ -41,6 +41,7 @@ import {
   stripSQLComments,
   QueryKey,
   createQueryKey,
+  parseQueryKey,
   createQueryKeyFromRequest,
   shiftOffset,
   validateQueryAtOffset,
@@ -247,6 +248,7 @@ const MonacoEditor = () => {
       isSelection?: boolean,
       queryText: string,
       startOffset: number
+      endOffset: number
     }>>
   >({})
 
@@ -584,7 +586,6 @@ const MonacoEditor = () => {
           lineNumber: change.range.startLineNumber,
           column: change.range.startColumn
         })
-        const changeEndOffset = changeStartOffset + change.rangeLength
         const offsetDelta = change.text.length - change.rangeLength
         
         if (bufferErrors) {
@@ -593,22 +594,14 @@ const MonacoEditor = () => {
           
           Object.keys(bufferErrors).forEach((key) => {
             const queryKey = key as QueryKey
-            const { queryText, startOffset } = bufferErrors[queryKey]
+            const { queryText, startOffset, endOffset } = bufferErrors[queryKey]
 
-            // Check if error is in deleted range
-            if (startOffset >= changeStartOffset && startOffset < changeEndOffset) {
-              keysToRemove.push(queryKey)
-              notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
-            }
-            // Check if error needs offset shifting
-            else if (startOffset >= changeStartOffset) {
+            if (changeStartOffset < endOffset) {
               const newOffset = shiftOffset(startOffset, changeStartOffset, offsetDelta)
-              // Validate query still matches at new position
               if (validateQueryAtOffset(editor, queryText, newOffset)) {
-                const newKey = createQueryKey(queryText, newOffset)
                 keysToUpdate.push({
                   oldKey: queryKey,
-                  newKey,
+                  newKey: createQueryKey(queryText, newOffset),
                   data: { ...bufferErrors[queryKey], startOffset: newOffset }
                 })
               } else {
@@ -630,25 +623,11 @@ const MonacoEditor = () => {
         }
         
         const currentNotifications = queryNotificationsRef.current
-        Object.keys(currentNotifications).forEach((key) => {
+        Object.keys(currentNotifications).filter(key => !bufferErrors || !bufferErrors[key as QueryKey]).forEach((key) => {
           const queryKey = key as QueryKey
-          
-          if (bufferErrors && bufferErrors[queryKey]) {
-            return
-          }
-          
-          const atIndex = queryKey.lastIndexOf('@')
-          if (atIndex === -1) return
-          
-          const queryText = queryKey.substring(0, atIndex)
-          const startOffset = parseInt(queryKey.substring(atIndex + 1), 10)
-          
-          if (isNaN(startOffset)) return
-          
-          if (startOffset >= changeStartOffset && startOffset < changeEndOffset) {
-            notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
-          }
-          else if (startOffset >= changeStartOffset) {
+          const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+
+          if (changeStartOffset < endOffset) {
             const newOffset = shiftOffset(startOffset, changeStartOffset, offsetDelta)
             if (validateQueryAtOffset(editor, queryText, newOffset)) {
               const newKey = createQueryKey(queryText, newOffset)
@@ -663,6 +642,7 @@ const MonacoEditor = () => {
       if (bufferErrors && Object.keys(bufferErrors).length === 0) {
         delete errorRefs.current[activeBufferId]
       }
+      errorRefs.current[activeBufferId] = bufferErrors
 
       applyGlyphsAndLineMarkings(monaco, editor)
       
@@ -824,6 +804,7 @@ const MonacoEditor = () => {
         error,
         queryText: query.query,
         startOffset,
+        endOffset: startOffset + normalizeQueryText(query.query).length,
       }
       
       dispatch(
@@ -849,7 +830,7 @@ const MonacoEditor = () => {
       dispatch(
         actions.query.setActiveNotification({
           type: NotificationType.LOADING,
-          query: `${activeBufferRef.current.label}@1`,
+          query: `${activeBufferRef.current.label}@${0}-${0}`,
           content: (
             <Box gap="1rem" align="center">
               <Text color="foreground">Running script...</Text>
@@ -892,7 +873,7 @@ const MonacoEditor = () => {
 
     setTimeout(() => dispatch(
       actions.query.setActiveNotification({
-        query: `${activeBufferRef.current.label}@-1`,
+        query: `${activeBufferRef.current.label}@${0}-${0}`,
         content: <Text color="foreground">
           Running script completed in {formatTiming(duration)} with
           {successfulQueries > 0 ? ` ${successfulQueries} successful` : ""}
@@ -1131,6 +1112,7 @@ const MonacoEditor = () => {
                 isSelection: request.isSelection,
                 queryText: parentQuery.query,
                 startOffset,
+                endOffset: startOffset + normalizeQueryText(parentQuery.query).length,
               }
                             
               if (errorRange) {

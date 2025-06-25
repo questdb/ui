@@ -122,7 +122,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           // Order of actions is important
           dispatch(
             actions.query.addNotification({
-              query: `${sql}@-1`,
+              query: `${sql}@${0}-${0}`,
               content: <Text color="red">{(err as ErrorResult).error}</Text>,
               sideContent: <QueryInNotification query={sql} />,
               type: NotificationType.ERROR,

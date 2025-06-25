@@ -29,7 +29,7 @@ type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 export const QuestDBLanguageName: string = "questdb-sql"
 
-export type QueryKey = `${string}@${number}`
+export type QueryKey = `${string}@${number}-${number}`
 
 export type Request = Readonly<{
   query: string
@@ -762,11 +762,11 @@ export const toTextPosition = (
 }
 
 export const normalizeQueryText = (query: string) => {
-  const trimmed = query.trim()
-  if (trimmed.endsWith(";")) {
-    return trimmed.slice(0, -1)
+  let result = query.trim()
+  if (result.endsWith(";")) {
+    result = result.slice(0, -1)
   }
-  return trimmed
+  return result.trim()
 }
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>
@@ -806,7 +806,14 @@ export const getQueryStartOffset = (
 }
 
 export const createQueryKey = (queryText: string, startOffset: number): QueryKey => {
-  return `${normalizeQueryText(queryText)}@${startOffset}` as QueryKey
+  const normalizedText = normalizeQueryText(queryText)
+  return `${normalizedText}@${startOffset}-${startOffset + normalizedText.length}` as QueryKey
+}
+
+export const parseQueryKey = (queryKey: QueryKey): { queryText: string, startOffset: number, endOffset: number } => {
+  const [queryText, offsets] = queryKey.split('@')
+  const [startOffset, endOffset] = offsets.split('-')
+  return { queryText, startOffset: parseInt(startOffset, 10), endOffset: parseInt(endOffset, 10) }
 }
 
 export const shiftOffset = (offset: number, changeOffset: number, delta: number): number => {
@@ -827,12 +834,9 @@ export const validateQueryAtOffset = (
   const offsetPosition = model.getPositionAt(offset)
 
   const queryInEditor = getQueriesInRange(editor, offsetPosition, offsetPosition)[0]
-  console.log({ queryInEditor })
   if (!queryInEditor) return false
-  
-  const normalizeText = (text: string) => text.trim().replace(/\s+/g, ' ')
 
-  return normalizeText(queryInEditor.query) === normalizeText(queryText)
+  return normalizeQueryText(queryInEditor.query) === normalizeQueryText(queryText)
 }
 
 export const createQueryKeyFromRequest = (
