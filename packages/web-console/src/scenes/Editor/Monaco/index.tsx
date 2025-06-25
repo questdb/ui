@@ -59,6 +59,8 @@ loader.config({
   },
 })
 
+export const LINE_NUMBER_HARD_LIMIT = 99999
+
 const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
@@ -230,6 +232,7 @@ const MonacoEditor = () => {
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
   const queryNotifications = useSelector(selectors.query.getQueryNotifications)
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
@@ -787,7 +790,6 @@ const MonacoEditor = () => {
           actions.query.addNotification({
             query: queryKey,
             content: <QueryInNotification query={query.query} />,
-            updateActiveNotification: false,
           }),
         )
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -805,7 +807,6 @@ const MonacoEditor = () => {
             ),
             sideContent: <QueryInNotification query={query.query} />,
             type: NotificationType.NOTICE,
-            updateActiveNotification: false,
           }),
         )
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -819,7 +820,6 @@ const MonacoEditor = () => {
             jitCompiled: result.explain?.jitCompiled ?? false,
             content: <QueryResult {...result.timings} rowCount={result.count} />,
             sideContent: <QueryInNotification query={query.query} />,
-            updateActiveNotification: false,
           }),
         )
         eventBus.publish(EventType.MSG_QUERY_DATASET, result)
@@ -851,7 +851,6 @@ const MonacoEditor = () => {
           content: <Text color="red">{error.error}</Text>,
           sideContent: <QueryInNotification query={query.query} />,
           type: NotificationType.ERROR,
-          updateActiveNotification: false,
         }),
       )
       return false
@@ -941,8 +940,14 @@ const MonacoEditor = () => {
   }, [activeBuffer])
 
   useEffect(() => {
+    const gridNotificationKeySuffix = `@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
     queryNotificationsRef.current = queryNotifications
-    if (monacoRef.current && editorRef.current && !isRunningScriptRef.current && !contentJustChangedRef.current) {
+    if (monacoRef.current
+      && editorRef.current
+      && !isRunningScriptRef.current
+      && !contentJustChangedRef.current
+      && !activeNotification?.query.endsWith(gridNotificationKeySuffix)
+    ) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
   }, [queryNotifications])
@@ -1306,7 +1311,7 @@ const MonacoEditor = () => {
           saveViewState={false}
           onChange={(value) => {
             const lineCount = editorRef.current?.getModel()?.getLineCount()
-            if (lineCount && lineCount > 99999) {
+            if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
               if (editorRef.current && currentBufferValueRef.current !== undefined) {
                 editorRef.current.setValue(currentBufferValueRef.current)
               }
