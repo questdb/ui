@@ -54,11 +54,13 @@ const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
 
 const addNotification = (
   payload: Partial<NotificationShape> & { content: ReactNode, query: QueryKey },
+  bufferId?: number,
 ): QueryAction => ({
   payload: {
     createdAt: new Date(),
     type: NotificationType.SUCCESS,
     ...payload,
+    bufferId,
   },
   type: QueryAT.ADD_NOTIFICATION,
 })
@@ -67,8 +69,16 @@ const cleanupNotifications = (): QueryAction => ({
   type: QueryAT.CLEANUP_NOTIFICATIONS,
 })
 
-const removeNotification = (payload: QueryKey): QueryAction => ({
+const cleanupBufferNotifications = (bufferId: number): QueryAction => ({
+  type: QueryAT.CLEANUP_BUFFER_NOTIFICATIONS,
+  payload: {
+    bufferId,
+  },
+})
+
+const removeNotification = (payload: QueryKey, bufferId?: number): QueryAction => ({
   payload,
+  bufferId,
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
@@ -94,17 +104,19 @@ const setActiveNotification = (payload: NotificationShape | null): QueryAction =
   payload,
 })
 
-const updateNotificationKey = (oldKey: QueryKey, newKey: QueryKey): QueryAction => ({
+const updateNotificationKey = (oldKey: QueryKey, newKey: QueryKey, bufferId?: number): QueryAction => ({
   type: QueryAT.UPDATE_NOTIFICATION_KEY,
   payload: {
     oldKey,
     newKey,
+    bufferId,
   },
 })
 
 export default {
   addNotification,
   cleanupNotifications,
+  cleanupBufferNotifications,
   removeNotification,
   updateNotificationKey,
   setResult,

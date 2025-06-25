@@ -32,8 +32,11 @@ import type {
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
   store.query.notifications
 
-const getQueryNotifications: (store: StoreShape) => Record<string, QueryNotifications> = (store) =>
+const getQueryNotifications: (store: StoreShape) => Record<number, Record<string, QueryNotifications>> = (store) =>
   store.query.queryNotifications
+
+const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<string, QueryNotifications> =>
+  store.query.queryNotifications[bufferId] || {}
 
 const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>
   store.query.activeNotification
@@ -52,6 +55,7 @@ const getColumns: (store: StoreShape) => InformationSchemaColumn[] = (store) =>
 export default {
   getNotifications,
   getQueryNotifications,
+  getQueryNotificationsForBuffer,
   getActiveNotification,
   getResult,
   getRunning,

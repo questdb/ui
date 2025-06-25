@@ -43,6 +43,7 @@ import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
+import { useEditor } from "../../providers"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
@@ -106,12 +107,16 @@ const ClearAllNotifications = styled.div`
 `
 
 const Notifications = () => {
+  const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
+  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number))
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const dispatch = useDispatch()
+
+  const bufferNotifications = notifications.filter(notification => queryNotifications[notification.query])
 
   const scrollToBottom = () => {
     contentRef.current?.scrollTo({
@@ -128,10 +133,10 @@ const Notifications = () => {
   }, [dispatch])
 
   useLayoutEffect(() => {
-    if (notifications.length > 0) {
+    if (bufferNotifications.length > 0) {
       scrollToBottom()
     }
-  }, [notifications])
+  }, [bufferNotifications])
 
   useLayoutEffect(() => {
     scrollToBottom()
@@ -143,7 +148,7 @@ const Notifications = () => {
     }
   }, [sm])
 
-  const lastNotification = notifications[notifications.length - 1]
+  const lastNotification = bufferNotifications[bufferNotifications.length - 1]
   const displayNotification = typeof activeNotification !== 'undefined'
     ? activeNotification
     : lastNotification
@@ -160,7 +165,7 @@ const Notifications = () => {
             <Notification isMinimized={true} {...displayNotification} />
           )}
         </LatestNotification>
-        {(notifications.length > 0 || !isMinimized) &&(
+        {(bufferNotifications.length > 0 || !isMinimized) &&(
           <Button
             skin={`${isMinimized ? "secondary" : "transparent"}`}
             onClick={toggleMinimized}
@@ -176,7 +181,7 @@ const Notifications = () => {
           ref={contentRef}
           data-hook="notifications-expanded"
         >
-          {notifications
+          {bufferNotifications
             .filter(
               (notification) => notification.type !== NotificationType.LOADING,
             )
@@ -193,7 +198,7 @@ const Notifications = () => {
             <ClearAllNotifications>
               <Button
                 skin="secondary"
-                disabled={notifications.length === 0}
+                disabled={bufferNotifications.length === 0}
                 onClick={cleanupNotifications}
               >
                 Clear all

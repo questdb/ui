@@ -132,7 +132,7 @@ const Content = styled(PaneContent)`
   }
 `
 
-const RunScriptButton = styled(Button)`
+const RunScriptButton = styled(Button)<{ $isRunningScript: boolean }>`
   position: absolute;
   top: 0.6rem;
   right: 2rem;
@@ -146,7 +146,7 @@ const RunScriptButton = styled(Button)`
     opacity: 1;
 
     svg {
-      fill: ${color("green")}
+      fill: ${props => props.$isRunningScript ? color("red") : color("green")}
     }
   }
 `
@@ -233,11 +233,12 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const queryNotifications = useSelector(selectors.query.getQueryNotifications)
+  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number))
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const isSelectionRef = useRef(false)
   const isRunningScriptRef = useRef(isRunningScript)
+  const scriptStopRef = useRef(false)
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
   const runningValueRef = useRef(running.value)
   const activeBufferRef = useRef(activeBuffer)
@@ -324,11 +325,12 @@ const MonacoEditor = () => {
   }
 
   const handleEditorClick = (e: React.MouseEvent) => {
-    if (
-      e.target instanceof Element && 
-      (e.target.classList.contains("cursorQueryGlyph") ||
-      e.target.classList.contains("cancelQueryGlyph"))
-    ) {  
+    if (e.target instanceof Element && e.target.classList.contains("cancelQueryGlyph")) {
+      toggleRunning()
+      return
+    }
+
+    if (e.target instanceof Element && e.target.classList.contains("cursorQueryGlyph")) {  
       editorRef?.current?.focus()
       if (editorRef.current && editorRef.current.getModel()) {
         const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY)
@@ -643,7 +645,7 @@ const MonacoEditor = () => {
             })
           } else {
             keysToRemove.push(queryKey)
-            notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+            notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey, activeBufferId)))
           }
         })
         
@@ -654,7 +656,7 @@ const MonacoEditor = () => {
         keysToUpdate.forEach(({ oldKey, newKey, data }) => {
           delete bufferExecutions[oldKey]
           bufferExecutions[newKey] = data
-          notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(oldKey, newKey)))
+          notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(oldKey, newKey, activeBufferId)))
         })
       }
 
@@ -674,9 +676,9 @@ const MonacoEditor = () => {
 
         if (validateQueryAtOffset(editor, queryText, newOffset)) {
           const newKey = createQueryKey(queryText, newOffset)
-          notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(queryKey, newKey)))
+          notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(queryKey, newKey, activeBufferId)))
         } else {
-          notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
+          notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey, activeBufferId)))
         }
       })
 
@@ -772,11 +774,11 @@ const MonacoEditor = () => {
   const runIndividualQuery = async (query: Request, isLast: boolean) => {
     const queryText = query.query
     const queryKey = createQueryKeyFromRequest(editorRef.current!, query)
+    const activeBufferId = activeBuffer.id as number
     dispatch(actions.query.setResult(undefined))
 
     try {
       const result = await quest.queryRaw(normalizeQueryText(query.query), { limit: "0,1000", explain: true })
-      const activeBufferId = activeBuffer.id as number
 
       if (executionRefs.current[activeBufferId]) {
         delete executionRefs.current[activeBufferId][queryKey]
@@ -790,7 +792,7 @@ const MonacoEditor = () => {
           actions.query.addNotification({
             query: queryKey,
             content: <QueryInNotification query={query.query} />,
-          }),
+          }, activeBufferId),
         )
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
       }
@@ -807,7 +809,7 @@ const MonacoEditor = () => {
             ),
             sideContent: <QueryInNotification query={query.query} />,
             type: NotificationType.NOTICE,
-          }),
+          }, activeBufferId),
         )
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
       }
@@ -820,7 +822,7 @@ const MonacoEditor = () => {
             jitCompiled: result.explain?.jitCompiled ?? false,
             content: <QueryResult {...result.timings} rowCount={result.count} />,
             sideContent: <QueryInNotification query={query.query} />,
-          }),
+          }, activeBufferId),
         )
         eventBus.publish(EventType.MSG_QUERY_DATASET, result)
       }
@@ -831,7 +833,6 @@ const MonacoEditor = () => {
       return true
     } catch (_error: unknown) {
       const error = _error as ErrorResult
-      const activeBufferId = activeBuffer.id as number
         
       if (!executionRefs.current[activeBufferId]) {
         executionRefs.current[activeBufferId] = {}
@@ -851,7 +852,7 @@ const MonacoEditor = () => {
           content: <Text color="red">{error.error}</Text>,
           sideContent: <QueryInNotification query={query.query} />,
           type: NotificationType.ERROR,
-        }),
+        }, activeBufferId),
       )
       return false
     }
@@ -862,6 +863,13 @@ const MonacoEditor = () => {
     let failedQueries = 0
     if (!editorRef.current || isRunningScript) return
     setIsRunningScript(true)
+
+    // Clear all notifications & execution refs for the buffer
+    const activeBufferId = activeBuffer.id as number
+    dispatch(actions.query.cleanupBufferNotifications(activeBufferId))
+    if (executionRefs.current[activeBufferId]) {
+      delete executionRefs.current[activeBufferId]
+    }
 
     notificationTimeoutRef.current = window.setTimeout(() => {
       dispatch(
@@ -881,6 +889,7 @@ const MonacoEditor = () => {
     const startTime = Date.now()
 
     const queries = getAllQueries(editorRef.current)
+    let lastQuery: Request | undefined
 
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i]
@@ -889,6 +898,10 @@ const MonacoEditor = () => {
         successfulQueries++
       } else {
         failedQueries++
+      }
+      lastQuery = query
+      if (scriptStopRef.current) {
+        break
       }
     }
 
@@ -899,7 +912,6 @@ const MonacoEditor = () => {
       notificationTimeoutRef.current = null
     }
 
-    const lastQuery = queries[queries.length - 1]
     if (editorRef.current && lastQuery) {
       const position = {
         lineNumber: lastQuery.row + 1,
@@ -907,21 +919,25 @@ const MonacoEditor = () => {
       }
       editorRef.current.revealPosition(position)
     }
+    const notificationPrefix = scriptStopRef.current
+      ? "Stopped script after running "
+      : `Running script completed in ${formatTiming(duration)} with `
 
     setTimeout(() => dispatch(
-      actions.query.setActiveNotification({
-        query: `${activeBufferRef.current.label}@${0}-${0}`,
+      actions.query.addNotification({
+        query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
         content: <Text color="foreground">
-          Running script completed in {formatTiming(duration)} with
+          {notificationPrefix}
           {successfulQueries > 0 ? ` ${successfulQueries} successful` : ""}
           {successfulQueries > 0 && failedQueries > 0 ? " and" : ""}
           {failedQueries > 0 ? ` ${failedQueries} failed` : ""} queries
         </Text>,
-        type: NotificationType.SUCCESS,
+        type: scriptStopRef.current ? NotificationType.ERROR : NotificationType.SUCCESS,
         createdAt: new Date(),
-      }),
+        updateActiveNotification: true,
+      }, activeBufferRef.current.id as number),
     ))
-    
+    scriptStopRef.current = false
     setIsRunningScript(false)
   }
 
@@ -1004,7 +1020,7 @@ const MonacoEditor = () => {
                   </Box>
                 ),
                 sideContent: <QueryInNotification query={request.query} />,
-              }),
+              }, activeBuffer.id as number),
             )
           }
           notificationTimeoutRef.current = null
@@ -1085,7 +1101,7 @@ const MonacoEditor = () => {
                   query: parentQueryKey,
                   isExplain: running.isExplain,
                   content: <QueryInNotification query={request.query} />,
-                }),
+                }, activeBuffer.id as number),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
             }
@@ -1105,7 +1121,7 @@ const MonacoEditor = () => {
                   ),
                   sideContent: <QueryInNotification query={request.query} />,
                   type: NotificationType.NOTICE,
-                }),
+                }, activeBuffer.id as number),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
             }
@@ -1121,7 +1137,7 @@ const MonacoEditor = () => {
                     <QueryResult {...result.timings} rowCount={result.count} />
                   ),
                   sideContent: <QueryInNotification query={request.query} />,
-                }),
+                }, activeBuffer.id as number),
               )
               eventBus.publish(EventType.MSG_QUERY_DATASET, result)
             }
@@ -1220,7 +1236,7 @@ const MonacoEditor = () => {
                   content: <Text color="red">{error.error}</Text>,
                   sideContent: <QueryInNotification query={request.query} />,
                   type: NotificationType.ERROR,
-                }),
+                }, activeBuffer.id as number),
               )
             }
           })
@@ -1295,13 +1311,21 @@ const MonacoEditor = () => {
     <>
       <Content onClick={handleEditorClick}>
         <RunScriptButton
-          onClick={handleRunScript}
-          skin="secondary"
+          $isRunningScript={isRunningScript}
+          onClick={() => {
+            if (isRunningScript) {
+              scriptStopRef.current = true
+              quest.abort()
+            } else {
+              handleRunScript()
+            }
+          }}
+          skin={isRunningScript ? "error" : "secondary"}
           data-hook="run-script-button"
-          prefixIcon={<PlayFilled size={18} />}
-          disabled={isRunningScript}
+          prefixIcon={isRunningScript ? <Stop size={18} /> : <PlayFilled size={18} />}
+          disabled={isRunningScript && scriptStopRef.current}
         >
-          {isRunningScript ? "Running..." : "Run script"}
+          {isRunningScript ? "Stop" : "Run script"}
         </RunScriptButton>
 
         <Editor

@@ -71,13 +71,14 @@ export type QueryStateShape = Readonly<{
   columns: InformationSchemaColumn[]
   result?: QueryRawResult
   running: RunningShape
-  queryNotifications: Record<QueryKey, QueryNotifications>
+  queryNotifications: Record<number, Record<QueryKey, QueryNotifications>>
   activeNotification: NotificationShape | null
 }>
 
 export enum QueryAT {
   ADD_NOTIFICATION = "QUERY/ADD_NOTIFICATION",
   CLEANUP_NOTIFICATIONS = "QUERY/CLEANUP_NOTIFICATIONS",
+  CLEANUP_BUFFER_NOTIFICATIONS = "QUERY/CLEANUP_BUFFER_NOTIFICATIONS",
   REMOVE_NOTIFICATION = "QUERY/REMOVE_NOTIFICATION",
   UPDATE_NOTIFICATION_KEY = "QUERY/UPDATE_NOTIFICATION_KEY",
   SET_RESULT = "QUERY/SET_RESULT",
@@ -89,7 +90,7 @@ export enum QueryAT {
 }
 
 type AddNotificationAction = Readonly<{
-  payload: NotificationShape
+  payload: NotificationShape & { bufferId?: number }
   type: QueryAT.ADD_NOTIFICATION
 }>
 
@@ -97,8 +98,16 @@ type CleanupNotificationsAction = Readonly<{
   type: QueryAT.CLEANUP_NOTIFICATIONS
 }>
 
+type CleanupBufferNotificationsAction = Readonly<{
+  type: QueryAT.CLEANUP_BUFFER_NOTIFICATIONS
+  payload: {
+    bufferId: number
+  }
+}>
+
 type RemoveNotificationAction = Readonly<{
   payload: QueryKey
+  bufferId?: number
   type: QueryAT.REMOVE_NOTIFICATION
 }>
 
@@ -140,15 +149,17 @@ type SetActiveNotificationAction = Readonly<{
 
 type UpdateNotificationKeyAction = Readonly<{
   type: QueryAT.UPDATE_NOTIFICATION_KEY
-  payload: Readonly<{
+  payload: {
     oldKey: QueryKey
     newKey: QueryKey
-  }>
+    bufferId?: number
+  }
 }>
 
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
+  | CleanupBufferNotificationsAction
   | RemoveNotificationAction
   | UpdateNotificationKeyAction
   | SetResultAction
