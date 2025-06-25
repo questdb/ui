@@ -1,7 +1,7 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
 import { Box, Button } from "@questdb/react-components"
 import { Stop, Cursor } from "@styled-icons/remix-line"
-import type { editor, IDisposable } from "monaco-editor"
+import type { editor, IDisposable, IPosition } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
@@ -81,6 +81,14 @@ const Content = styled(PaneContent)`
     &.hasError {
       background: ${color("red")};
     }
+  }
+
+  .selectionErrorHighlight {
+    background-color: rgba(255, 85, 85, 0.15);
+  }
+
+  .selectionSuccessHighlight {
+    background-color: rgba(80, 250, 123, 0.15);
   }
 
   .cursorQueryGlyph,
@@ -241,11 +249,12 @@ const MonacoEditor = () => {
   const targetPositionRef = useRef<{ lineNumber: number; column: number } | null>(null)
   const currentBufferValueRef = useRef<string | undefined>(activeBuffer.value)
 
-  // Buffer -> QueryKey -> Error
-  const errorRefs = useRef<
+  // Buffer -> QueryKey -> Execution State
+  const executionRefs = useRef<
     Record<string, Record<QueryKey, { 
       error?: ErrorResult, 
-      isSelection?: boolean,
+      success?: boolean,
+      selection?: { startOffset: number, endOffset: number },
       queryText: string,
       startOffset: number
       endOffset: number
@@ -387,15 +396,35 @@ const MonacoEditor = () => {
     const activeBufferId = activeBufferRef.current.id as number
     
     const lineMarkingDecorations: editor.IModelDeltaDecoration[] = []
-    const bufferErrors = errorRefs.current[activeBufferId] || {}
+    const bufferExecutions = executionRefs.current[activeBufferId] || {}
     
     if (queryAtCursor) {
       const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
-      const queryErrorBuffer = bufferErrors[queryKey]
-      const hasError = queryErrorBuffer && queryErrorBuffer.error !== undefined
+      const queryExecutionBuffer = bufferExecutions[queryKey]
+      const hasError = queryExecutionBuffer && queryExecutionBuffer.error !== undefined
       const startLineNumber = queryAtCursor.row + 1
       const endLineNumber = queryAtCursor.endRow + 1
-      
+
+      if (queryExecutionBuffer && queryExecutionBuffer.selection) {
+        const startPosition = model.getPositionAt(queryExecutionBuffer.selection.startOffset)
+        const endPosition = model.getPositionAt(queryExecutionBuffer.selection.endOffset)
+        const isError = queryExecutionBuffer.error !== undefined
+        const isSuccess = queryExecutionBuffer.success === true
+        
+        lineMarkingDecorations.push({
+          range: new monaco.Range(
+            startPosition.lineNumber,
+            startPosition.column,
+            endPosition.lineNumber,
+            endPosition.column,
+          ),
+          options: {
+            isWholeLine: false,
+            className: isError ? 'selectionErrorHighlight' : isSuccess ? 'selectionSuccessHighlight' : 'selectionErrorHighlight',
+          }
+        })
+      }
+
       lineMarkingDecorations.push({
         range: new monaco.Range(
           startLineNumber,
@@ -416,8 +445,8 @@ const MonacoEditor = () => {
     )
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
     updateQueryNotification(queryAtCursor ? createQueryKeyFromRequest(editor, queryAtCursor) : undefined)
-    if (bufferErrors) {
-      setErrorMarkerForQuery(monaco, editor, bufferErrors, queryAtCursor)
+    if (bufferExecutions) {
+      setErrorMarkerForQuery(monaco, editor, bufferExecutions, queryAtCursor)
     }
   }
 
@@ -457,10 +486,10 @@ const MonacoEditor = () => {
     // Add decorations for queries in range
     if (queries.length > 0) {
       queries.forEach(query => {
-        const bufferErrors = errorRefs.current[activeBufferId] || {}
+        const bufferExecutions = executionRefs.current[activeBufferId] || {}
         const queryKey = createQueryKeyFromRequest(editor, query)
-        const queryErrorBuffer = bufferErrors[queryKey]
-        const hasError = queryErrorBuffer && queryErrorBuffer.error !== undefined
+        const queryExecutionBuffer = bufferExecutions[queryKey]
+        const hasError = queryExecutionBuffer && queryExecutionBuffer.error !== undefined
         const isSuccessful = queryNotificationsRef.current[queryKey]?.latest?.type === "success"
         
         // Convert 0-based row to 1-based line number for Monaco
@@ -577,17 +606,17 @@ const MonacoEditor = () => {
       contentJustChangedRef.current = true
       
       const activeBufferId = activeBufferRef.current.id as number
-      const bufferErrors = errorRefs.current[activeBufferId]
+      const bufferExecutions = executionRefs.current[activeBufferId]
       
       const notificationUpdates: Array<() => void> = []
 
-      if (bufferErrors) {
+      if (bufferExecutions) {
         const keysToUpdate: Array<{ oldKey: QueryKey, newKey: QueryKey, data: any }> = []
         const keysToRemove: QueryKey[] = []
         
-        Object.keys(bufferErrors).forEach((key) => {
+        Object.keys(bufferExecutions).forEach((key) => {
           const queryKey = key as QueryKey
-          const { queryText, startOffset, endOffset } = bufferErrors[queryKey]
+          const { queryText, startOffset, endOffset } = bufferExecutions[queryKey]
 
           const effectiveOffsetDelta = e.changes
             .filter(change => change.rangeOffset < endOffset)
@@ -599,10 +628,15 @@ const MonacoEditor = () => {
 
           const newOffset = startOffset + effectiveOffsetDelta
           if (validateQueryAtOffset(editor, queryText, newOffset)) {
+            const selection = bufferExecutions[queryKey].selection
+            const shiftedSelection = selection ? {
+              startOffset: selection.startOffset + effectiveOffsetDelta,
+              endOffset: selection.endOffset + effectiveOffsetDelta
+            } : undefined
             keysToUpdate.push({
               oldKey: queryKey,
               newKey: createQueryKey(queryText, newOffset),
-              data: { ...bufferErrors[queryKey], startOffset: newOffset, endOffset: endOffset + effectiveOffsetDelta }
+              data: { ...bufferExecutions[queryKey], startOffset: newOffset, endOffset: endOffset + effectiveOffsetDelta, selection: shiftedSelection }
             })
           } else {
             keysToRemove.push(queryKey)
@@ -611,18 +645,18 @@ const MonacoEditor = () => {
         })
         
         keysToRemove.forEach(key => {
-          delete bufferErrors[key]
+          delete bufferExecutions[key]
         })
 
         keysToUpdate.forEach(({ oldKey, newKey, data }) => {
-          delete bufferErrors[oldKey]
-          bufferErrors[newKey] = data
+          delete bufferExecutions[oldKey]
+          bufferExecutions[newKey] = data
           notificationUpdates.push(() => dispatch(actions.query.updateNotificationKey(oldKey, newKey)))
         })
       }
 
       const currentNotifications = queryNotificationsRef.current
-      Object.keys(currentNotifications).filter(key => !bufferErrors || !bufferErrors[key as QueryKey]).forEach((key) => {
+      Object.keys(currentNotifications).forEach((key) => {
         const queryKey = key as QueryKey
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const effectiveOffsetDelta = e.changes
@@ -642,11 +676,11 @@ const MonacoEditor = () => {
           notificationUpdates.push(() => dispatch(actions.query.removeNotification(queryKey)))
         }
       })
-      
-      if (bufferErrors && Object.keys(bufferErrors).length === 0) {
-        delete errorRefs.current[activeBufferId]
+
+      if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
+        delete executionRefs.current[activeBufferId]
       }
-      errorRefs.current[activeBufferId] = bufferErrors
+      executionRefs.current[activeBufferId] = bufferExecutions
 
       applyGlyphsAndLineMarkings(monaco, editor)
       
@@ -741,10 +775,10 @@ const MonacoEditor = () => {
       const result = await quest.queryRaw(normalizeQueryText(query.query), { limit: "0,1000", explain: true })
       const activeBufferId = activeBuffer.id as number
 
-      if (errorRefs.current[activeBufferId]) {
-        delete errorRefs.current[activeBufferId][queryKey]
-        if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
-          delete errorRefs.current[activeBufferId]
+      if (executionRefs.current[activeBufferId]) {
+        delete executionRefs.current[activeBufferId][queryKey]
+        if (Object.keys(executionRefs.current[activeBufferId]).length === 0) {
+          delete executionRefs.current[activeBufferId]
         }
       }
 
@@ -799,12 +833,12 @@ const MonacoEditor = () => {
       const error = _error as ErrorResult
       const activeBufferId = activeBuffer.id as number
         
-      if (!errorRefs.current[activeBufferId]) {
-        errorRefs.current[activeBufferId] = {}
+      if (!executionRefs.current[activeBufferId]) {
+        executionRefs.current[activeBufferId] = {}
       }
       
       const startOffset = getQueryStartOffset(editorRef.current!, query)
-      errorRefs.current[activeBufferId][queryKey] = {
+      executionRefs.current[activeBufferId][queryKey] = {
         error,
         queryText: query.query,
         startOffset,
@@ -893,10 +927,10 @@ const MonacoEditor = () => {
   }
 
   useEffect(() => {
-    // Remove all errors for the buffers that have been deleted
-    Object.keys(errorRefs.current).map((key) => {
+    // Remove all execution information for the buffers that have been deleted
+    Object.keys(executionRefs.current).map((key) => {
       if (!buffers.find((b) => b.id === parseInt(key))) {
-        delete errorRefs.current[key]
+        delete executionRefs.current[key]
       }
     })
   }, [buffers])
@@ -999,10 +1033,38 @@ const MonacoEditor = () => {
             const parentQueryKey = createQueryKeyFromRequest(editorRef.current, parentQuery)
             const activeBufferId = activeBuffer.id as number
             
-            if (errorRefs.current[activeBufferId] && editorRef.current) {
-              delete errorRefs.current[activeBufferId][parentQueryKey]
-              if (Object.keys(errorRefs.current[activeBufferId]).length === 0) {
-                delete errorRefs.current[activeBufferId]
+            if (executionRefs.current[activeBufferId] && editorRef.current) {
+              delete executionRefs.current[activeBufferId][parentQueryKey]
+              if (Object.keys(executionRefs.current[activeBufferId]).length === 0) {
+                delete executionRefs.current[activeBufferId]
+              }
+            }
+
+            if (request.isSelection) {
+              const selection = editorRef.current.getSelection()
+              if (selection) {
+                const model = editorRef.current.getModel()
+                if (model) {
+                  const startOffset = model.getOffsetAt(selection.getStartPosition())
+                  const endOffset = model.getOffsetAt(selection.getEndPosition())
+                  const selectionInfo = {
+                    startOffset,
+                    endOffset
+                  }
+                  
+                  if (!executionRefs.current[activeBufferId]) {
+                    executionRefs.current[activeBufferId] = {}
+                  }
+                  
+                  const queryStartOffset = getQueryStartOffset(editorRef.current, parentQuery)
+                  executionRefs.current[activeBufferId][parentQueryKey] = {
+                    success: true,
+                    selection: selectionInfo,
+                    queryText: parentQuery.query,
+                    startOffset: queryStartOffset,
+                    endOffset: queryStartOffset + normalizeQueryText(parentQuery.query).length,
+                  }
+                }
               }
             }
 
@@ -1091,7 +1153,20 @@ const MonacoEditor = () => {
               let parentQuery: Request = originalRequest
               let errorToStore = { ...error, position: adjustedErrorPosition }
 
+              let selectionInfo = undefined
               if (request.isSelection && errorRange && editorRef.current) {
+                const selection = editorRef.current.getSelection()
+                if (selection) {
+                  const model = editorRef.current.getModel()
+                  if (model) {
+                    const startOffset = model.getOffsetAt(selection.getStartPosition())
+                    const endOffset = model.getOffsetAt(selection.getEndPosition())
+                    selectionInfo = {
+                      startOffset,
+                      endOffset
+                    }
+                  }
+                }
                 editorRef?.current.setPosition({
                   lineNumber: errorRange.startLineNumber,
                   column: errorRange.startColumn,
@@ -1106,14 +1181,14 @@ const MonacoEditor = () => {
 
               const parentQueryKey = createQueryKeyFromRequest(editorRef.current, parentQuery)
               const activeBufferId = activeBuffer.id as number
-              if (!errorRefs.current[activeBufferId]) {
-                errorRefs.current[activeBufferId] = {}
+              if (!executionRefs.current[activeBufferId]) {
+                executionRefs.current[activeBufferId] = {}
               }
               
-              const startOffset = getQueryStartOffset(editorRef.current, parentQuery)
-              errorRefs.current[activeBufferId][parentQueryKey] = {
+              const startOffset = getQueryStartOffset(editorRef.current, parentQuery)  
+              executionRefs.current[activeBufferId][parentQueryKey] = {
                 error: errorToStore,
-                isSelection: request.isSelection,
+                selection: selectionInfo,
                 queryText: parentQuery.query,
                 startOffset,
                 endOffset: startOffset + normalizeQueryText(parentQuery.query).length,

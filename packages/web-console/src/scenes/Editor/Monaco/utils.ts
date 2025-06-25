@@ -451,6 +451,24 @@ export const getErrorRange = (
   return null
 }
 
+export const clampRange = (model: editor.ITextModel, range: IRange, selection: { startOffset: number, endOffset: number }) => {
+  const rangeStartOffset = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn })
+  const rangeEndOffset = model.getOffsetAt({ lineNumber: range.endLineNumber, column: range.endColumn })
+
+  const clampedStartOffset = Math.max(rangeStartOffset, selection.startOffset)
+  const clampedEndOffset = Math.min(rangeEndOffset, selection.endOffset)
+
+  const clampedStartPosition = model.getPositionAt(clampedStartOffset)
+  const clampedEndPosition = model.getPositionAt(clampedEndOffset)
+
+  return {
+    startLineNumber: clampedStartPosition.lineNumber,
+    endLineNumber: clampedEndPosition.lineNumber,
+    startColumn: clampedStartPosition.column,
+    endColumn: clampedEndPosition.column,
+  }
+}
+
 export const insertTextAtCursor = (
   editor: IStandaloneCodeEditor,
   text: string,
@@ -831,11 +849,13 @@ export const createQueryKeyFromRequest = (
 export const setErrorMarkerForQuery = (
   monaco: any,
   editor: IStandaloneCodeEditor,
-  bufferErrors: Record<QueryKey, { 
+  bufferExecutions: Record<QueryKey, { 
     error?: ErrorResult, 
-    isSelection?: boolean,
+    success?: boolean,
+    selection?: { startOffset: number, endOffset: number },
     queryText: string,
     startOffset: number
+    endOffset: number
   }>,
   query?: Request
 ) => {
@@ -846,21 +866,23 @@ export const setErrorMarkerForQuery = (
 
   if (query) {
     const queryKey = createQueryKeyFromRequest(editor, query)
-    const errorData = bufferErrors[queryKey]
+    const executionData = bufferExecutions[queryKey]
     
-    if (errorData && errorData.error) {
-      const { error } = errorData
+    if (executionData && executionData.error) {
+      const { error, selection } = executionData
       
       const errorRange = getErrorRange(editor, query, error.position)
       
       if (errorRange) {
+        const clampedErrorRange = selection ? clampRange(model, errorRange, selection) : errorRange
+
         markers.push({
           message: error.error,
           severity: monaco.MarkerSeverity.Error,
-          startLineNumber: errorRange.startLineNumber,
-          endLineNumber: errorRange.endLineNumber,
-          startColumn: errorRange.startColumn,
-          endColumn: errorRange.endColumn,
+          startLineNumber: clampedErrorRange.startLineNumber,
+          endLineNumber: clampedErrorRange.endLineNumber,
+          startColumn: clampedErrorRange.startColumn,
+          endColumn: clampedErrorRange.endColumn,
         })
       } else {
         const errorPos = toTextPosition(query, error.position)
