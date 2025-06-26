@@ -308,9 +308,9 @@ Cypress.Commands.add("loadConsoleAsAdminAndCreateSSOGroup", (group, externalGrou
   cy.loadConsoleWithAuth(true);
 
   cy.executeSQL(`CREATE GROUP '${group}' WITH EXTERNAL ALIAS '${externalGroup || group}';`);
-  cy.getByDataHook("notification-success").should("be.visible");
+  cy.getByDataHook("success-notification").should("be.visible");
   cy.executeSQL(`GRANT HTTP TO '${group}';`);
-  cy.getByDataHook("notification-success").should("be.visible");
+  cy.getByDataHook("success-notification").should("be.visible");
 
   cy.logout();
 });
@@ -319,9 +319,9 @@ Cypress.Commands.add("loadConsoleAsAdminAndCreateDBUser", (username, password = 
   cy.loadConsoleWithAuth(true);
 
   cy.executeSQL(`create user '${username}' with password '${password}'`);
-  cy.getByDataHook("notification-success").should("be.visible");
+  cy.getByDataHook("success-notification").should("be.visible");
   cy.executeSQL(`grant HTTP to '${username}'`);
-  cy.getByDataHook("notification-success").should("be.visible");
+  cy.getByDataHook("success-notification").should("be.visible");
 
   cy.logout();
 });

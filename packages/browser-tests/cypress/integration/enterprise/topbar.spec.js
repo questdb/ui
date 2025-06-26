@@ -47,7 +47,7 @@ describe("instance information in enterprise", () => {
     cy.loginWithUserAndPassword();
 
     cy.executeSQL(`grant SETTINGS to 'john.doe'`);
-    cy.getByDataHook("notification-success").should("be.visible");
+    cy.getByDataHook("success-notification").should("be.visible");
 
     cy.logout();
 
