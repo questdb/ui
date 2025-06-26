@@ -3,6 +3,7 @@ import { Box, Button } from "@questdb/react-components"
 import { Stop, Cursor } from "@styled-icons/remix-line"
 import type { editor, IDisposable, IPosition } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { PaneContent, Text } from "../../../components"
@@ -52,6 +53,12 @@ import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
 import { toast } from "../../../components/Toast"
 import { Information } from "@styled-icons/remix-line"
+
+type IndividualQueryResult = {
+  success: boolean,
+  result?: QuestDB.QueryRawResult
+  notification: Partial<NotificationShape> & { content: ReactNode, query: QueryKey } | null
+}
 
 loader.config({
   paths: {
@@ -244,6 +251,7 @@ const MonacoEditor = () => {
   const activeBufferRef = useRef(activeBuffer)
   const requestRef = useRef(request)
   const queryNotificationsRef = useRef(queryNotifications)
+  const activeNotificationRef = useRef(activeNotification)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const decorationCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null)
@@ -286,7 +294,9 @@ const MonacoEditor = () => {
       }
     }
 
-    dispatch(actions.query.setActiveNotification(newActiveNotification))
+    if (activeNotificationRef.current?.query !== newActiveNotification?.query) {
+      dispatch(actions.query.setActiveNotification(newActiveNotification))
+    }
   }
 
   const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }, isSelection?: boolean) => {
@@ -325,6 +335,10 @@ const MonacoEditor = () => {
   }
 
   const handleEditorClick = (e: React.MouseEvent) => {
+    if (isRunningScriptRef.current && e.target instanceof Element && e.target.classList.contains("cursorQueryGlyph")) {
+      return
+    }
+
     if (e.target instanceof Element && e.target.classList.contains("cancelQueryGlyph")) {
       toggleRunning()
       return
@@ -771,10 +785,11 @@ const MonacoEditor = () => {
     applyGlyphsAndLineMarkings(monaco, editor)
   }
 
-  const runIndividualQuery = async (query: Request, isLast: boolean) => {
+  const runIndividualQuery = async (query: Request, isLast: boolean): Promise<IndividualQueryResult> => {
     const queryText = query.query
     const queryKey = createQueryKeyFromRequest(editorRef.current!, query)
     const activeBufferId = activeBuffer.id as number
+    let notification: Partial<NotificationShape> & { content: ReactNode, query: QueryKey } | null = null
     dispatch(actions.query.setResult(undefined))
 
     try {
@@ -788,49 +803,47 @@ const MonacoEditor = () => {
       }
 
       if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
-        dispatch(
-          actions.query.addNotification({
-            query: queryKey,
-            content: <QueryInNotification query={query.query} />,
-          }, activeBufferId),
-        )
-        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+        notification = {
+          query: queryKey,
+          content: <QueryInNotification query={query.query} />,
+        }
       }
 
       if (result.type === QuestDB.Type.NOTICE) {
-        dispatch(
-          actions.query.addNotification({
-            query: queryKey,
-            content: (
-              <Text color="foreground" ellipsis title={query.query}>
-                {result.notice}
-                {query.query !== undefined && query.query !== "" && `: ${query.query}`}
-              </Text>
-            ),
-            sideContent: <QueryInNotification query={query.query} />,
-            type: NotificationType.NOTICE,
-          }, activeBufferId),
-        )
-        eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+        notification = {
+          query: queryKey,
+          content: (
+            <Text color="foreground" ellipsis title={query.query}>
+              {result.notice}
+              {query.query !== undefined && query.query !== "" && `: ${query.query}`}
+            </Text>
+          ),
+          sideContent: <QueryInNotification query={query.query} />,
+          type: NotificationType.NOTICE,
+        }
       }
-
+      
       if (result.type === QuestDB.Type.DQL) {
         setLastExecutedQuery(queryText)
-        dispatch(
-          actions.query.addNotification({
-            query: queryKey,
-            jitCompiled: result.explain?.jitCompiled ?? false,
-            content: <QueryResult {...result.timings} rowCount={result.count} />,
-            sideContent: <QueryInNotification query={query.query} />,
-          }, activeBufferId),
-        )
-        eventBus.publish(EventType.MSG_QUERY_DATASET, result)
+        notification = {
+          query: queryKey,
+          jitCompiled: result.explain?.jitCompiled ?? false,
+          content: <QueryResult {...result.timings} rowCount={result.count} />,
+          sideContent: <QueryInNotification query={query.query} />,
       }
+      }
+      if (isLast) {
+        dispatch(actions.query.setResult(result))
+        }
       if (isLast) {
         dispatch(actions.query.setResult(result))
       }
 
-      return true
+      return {
+        success: true,
+        notification,
+        result,
+      }
     } catch (_error: unknown) {
       const error = _error as ErrorResult
         
@@ -845,16 +858,18 @@ const MonacoEditor = () => {
         startOffset,
         endOffset: startOffset + normalizeQueryText(query.query).length,
       }
-      
-      dispatch(
-        actions.query.addNotification({
-          query: queryKey,
-          content: <Text color="red">{error.error}</Text>,
-          sideContent: <QueryInNotification query={query.query} />,
-          type: NotificationType.ERROR,
-        }, activeBufferId),
-      )
-      return false
+
+      notification = {
+        query: queryKey,
+        content: <Text color="red">{error.error}</Text>,
+        sideContent: <QueryInNotification query={query.query} />,
+        type: NotificationType.ERROR,
+      }
+      return {
+        success: false,
+        notification,
+        result: undefined,
+      }
     }
   }
 
@@ -890,11 +905,13 @@ const MonacoEditor = () => {
 
     const queries = getAllQueries(editorRef.current)
     let lastQuery: Request | undefined
+    let individualQueryResults: Array<IndividualQueryResult> = []
 
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i]
       const result = await runIndividualQuery(query, i === queries.length - 1)
-      if (result) {
+      individualQueryResults.push(result)
+      if (result.success) {
         successfulQueries++
       } else {
         failedQueries++
@@ -911,6 +928,31 @@ const MonacoEditor = () => {
       window.clearTimeout(notificationTimeoutRef.current)
       notificationTimeoutRef.current = null
     }
+
+    const lastResult = individualQueryResults[individualQueryResults.length - 1]
+    if (lastResult && lastResult.result?.type === QuestDB.Type.DQL) {
+      dispatch(actions.query.setResult(lastResult.result))
+      eventBus.publish(EventType.MSG_QUERY_DATASET, lastResult.result)
+    }
+
+    const querySchemaMessageTypes = [QuestDB.Type.DDL, QuestDB.Type.DML, QuestDB.Type.NOTICE]
+    const querySchemaMessage = individualQueryResults
+      .filter(result => result && result.result)
+      .find(result => result?.result?.type && querySchemaMessageTypes.includes(result.result.type))
+
+    if (querySchemaMessage) {
+      eventBus.publish(EventType.MSG_QUERY_SCHEMA, querySchemaMessage.result)
+    }
+    const notifications = individualQueryResults
+      .filter(result => result && result.notification)
+      .map(result => result.notification)
+
+    individualQueryResults
+      .filter(result => result && result.notification)
+      .map(result => result.notification)
+      .forEach(notification => {
+        dispatch(actions.query.addNotification(notification!, activeBuffer.id as number))
+      })
 
     if (editorRef.current && lastQuery) {
       const position = {
@@ -967,6 +1009,10 @@ const MonacoEditor = () => {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
   }, [queryNotifications])
+
+  useEffect(() => {
+    activeNotificationRef.current = activeNotification
+  }, [activeNotification])
 
   useEffect(() => {
     if (isRunningScriptRef.current && !isRunningScript && monacoRef.current && editorRef.current) {
@@ -1312,7 +1358,8 @@ const MonacoEditor = () => {
       <Content onClick={handleEditorClick}>
         <RunScriptButton
           $isRunningScript={isRunningScript}
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation()
             if (isRunningScript) {
               scriptStopRef.current = true
               quest.abort()
@@ -1323,7 +1370,7 @@ const MonacoEditor = () => {
           skin={isRunningScript ? "error" : "secondary"}
           data-hook="run-script-button"
           prefixIcon={isRunningScript ? <Stop size={18} /> : <PlayFilled size={18} />}
-          disabled={isRunningScript && scriptStopRef.current}
+          disabled={(isRunningScript && scriptStopRef.current) || running.value}
         >
           {isRunningScript ? "Stop" : "Run script"}
         </RunScriptButton>

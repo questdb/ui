@@ -148,11 +148,6 @@ const Notifications = () => {
     }
   }, [sm])
 
-  const lastNotification = bufferNotifications[bufferNotifications.length - 1]
-  const displayNotification = typeof activeNotification !== 'undefined'
-    ? activeNotification
-    : lastNotification
-
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
       <Menu>
@@ -161,8 +156,8 @@ const Notifications = () => {
           Log
         </Header>
         <LatestNotification data-hook="notifications-collapsed">
-          {isMinimized && displayNotification && (
-            <Notification isMinimized={true} {...displayNotification} />
+          {isMinimized && activeNotification && (
+            <Notification isMinimized={true} {...activeNotification} />
           )}
         </LatestNotification>
         {(bufferNotifications.length > 0 || !isMinimized) &&(
