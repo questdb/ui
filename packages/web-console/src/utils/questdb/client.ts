@@ -332,7 +332,7 @@ export class Client {
   }
 
   async showPermissions(user: string): Promise<QueryResult<Permission>> {
-    return await this.query<Permission>(`SHOW PERMISSIONS ${user};`)
+    return await this.query<Permission>(`SHOW PERMISSIONS '${user}';`)
   }
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
