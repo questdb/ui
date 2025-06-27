@@ -1,7 +1,7 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
 import { Box, Button } from "@questdb/react-components"
-import { Stop, Cursor } from "@styled-icons/remix-line"
-import type { editor, IDisposable, IPosition } from "monaco-editor"
+import { Stop } from "@styled-icons/remix-line"
+import type { editor, IDisposable } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
@@ -12,6 +12,7 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
 import { actions, selectors } from "../../../store"
+import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
 import { theme } from "../../../theme"
 import { NotificationType } from "../../../types"
@@ -44,15 +45,16 @@ import {
   createQueryKey,
   parseQueryKey,
   createQueryKeyFromRequest,
-  shiftOffset,
   validateQueryAtOffset,
   setErrorMarkerForQuery,
   getQueryStartOffset,
+  getQueriesToRun,
 } from "./utils"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
 import { toast } from "../../../components/Toast"
 import { Information } from "@styled-icons/remix-line"
+import ButtonBar from "../ButtonBar"
 
 type IndividualQueryResult = {
   success: boolean,
@@ -139,25 +141,6 @@ const Content = styled(PaneContent)`
   }
 `
 
-const RunScriptButton = styled(Button)<{ $isRunningScript: boolean }>`
-  position: absolute;
-  top: 0.6rem;
-  right: 2rem;
-  z-index: 1;
-  padding: 1.2rem 0.6rem;
-  margin-bottom: 1rem;
-  opacity: .5;
-  transition: opacity 0.1s;
-
-  &:hover {
-    opacity: 1;
-
-    svg {
-      fill: ${props => props.$isRunningScript ? color("red") : color("green")}
-    }
-  }
-`
-
 const CancelButton = styled(Button)`
   padding: 1.2rem 0.6rem;
 `
@@ -234,20 +217,19 @@ const MonacoEditor = () => {
   const [refreshingTables, setRefreshingTables] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState<{ x: number; y: number } | null>(null)
-  const [isRunningScript, setIsRunningScript] = useState(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number))
+  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number)) || {}
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
-  const isSelectionRef = useRef(false)
-  const isRunningScriptRef = useRef(isRunningScript)
+  const isRunningScriptRef = useRef(false)
+  const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
-  const runningValueRef = useRef(running.value)
+  const runningValueRef = useRef(running)
   const activeBufferRef = useRef(activeBuffer)
   const requestRef = useRef(request)
   const queryNotificationsRef = useRef(queryNotifications)
@@ -280,8 +262,8 @@ const MonacoEditor = () => {
     1,
   )
 
-  const toggleRunning = (isRefresh: boolean = false, isExplain: boolean = false) => {
-    dispatch(actions.query.toggleRunning(isRefresh, isExplain))
+  const toggleRunning = (runningType?: RunningType) => {
+    dispatch(actions.query.toggleRunning(runningType))
   }
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
@@ -294,13 +276,12 @@ const MonacoEditor = () => {
       }
     }
 
-    if (activeNotificationRef.current?.query !== newActiveNotification?.query) {
+    if (activeNotificationRef.current?.query !== newActiveNotification?.query && !isRunningScriptRef.current) {
       dispatch(actions.query.setActiveNotification(newActiveNotification))
     }
   }
 
-  const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }, isSelection?: boolean) => {
-    isSelectionRef.current = isSelection || false
+  const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }) => {
     targetPositionRef.current = targetPosition
     
     if (editorRef.current) {
@@ -340,7 +321,7 @@ const MonacoEditor = () => {
     }
 
     if (e.target instanceof Element && e.target.classList.contains("cancelQueryGlyph")) {
-      toggleRunning()
+      toggleRunning(RunningType.NONE)
       return
     }
 
@@ -365,7 +346,7 @@ const MonacoEditor = () => {
             if (selection && selectedText && selection.startLineNumber >= currentGlyph.range.startLineNumber && selection.endLineNumber < nextGlyph.range.startLineNumber) {
               const normalizedStrippedSelectedText = stripSQLComments(normalizeQueryText(selectedText))
               if (normalizedStrippedSelectedText) {
-                openDropdownAtPosition(e.clientX, e.clientY, position, true)
+                toggleRunning()
                 return
               }
             }
@@ -386,18 +367,13 @@ const MonacoEditor = () => {
     toggleRunning()
   }
 
-  const handleRunSelection = () => {
-    setDropdownOpen(false)
-    toggleRunning()
-  }
-
   const handleExplainQuery = () => {
     setDropdownOpen(false)
     if (targetPositionRef.current && editorRef.current) {
       editorRef.current.setPosition(targetPositionRef.current)
     }
     
-    toggleRunning(false, true)
+    toggleRunning(RunningType.EXPLAIN)
   }
 
   const applyLineMarkings = (
@@ -516,7 +492,7 @@ const MonacoEditor = () => {
         
         // Add glyph for all queries with line number in class name
         const glyphClassName =
-          runningValueRef.current &&
+          runningValueRef.current !== RunningType.NONE &&
             requestRef.current?.row !== undefined &&
             requestRef.current?.row + 1 === startLineNumber
             ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}`
@@ -540,9 +516,9 @@ const MonacoEditor = () => {
         })
       })
     }
-    
+
     if (decorationCollectionRef.current) {
-      decorationCollectionRef.current.clear();
+      decorationCollectionRef.current.clear()
     }
     
     decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations)
@@ -566,11 +542,15 @@ const MonacoEditor = () => {
       editor,
       monaco,
       runQuery: () => {
-        if (!runningValueRef.current) {
+        if (runningValueRef.current === RunningType.NONE) {
           toggleRunning()
         }
       },
-      dispatch,
+      runScript: () => {
+        if (runningValueRef.current === RunningType.NONE) {
+          dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+        }
+      },
       editorContext,
     })
     
@@ -611,10 +591,12 @@ const MonacoEditor = () => {
       }
       
       cursorChangeTimeoutRef.current = window.setTimeout(() => {
+        const queriesToRun = getQueriesToRun(editor)
+        dispatch(actions.query.setQueriesToRun(queriesToRun))
         if (monacoRef.current && editorRef.current) {
-          applyLineMarkings(monaco, editor);
+          applyLineMarkings(monaco, editor)
         }
-        cursorChangeTimeoutRef.current = null;
+        cursorChangeTimeoutRef.current = null
       }, 50);
     })
 
@@ -782,6 +764,8 @@ const MonacoEditor = () => {
     }
     
     // Initial decoration setup
+    const queriesToRun = getQueriesToRun(editor)
+    dispatch(actions.query.setQueriesToRun(queriesToRun))
     applyGlyphsAndLineMarkings(monaco, editor)
   }
 
@@ -873,11 +857,19 @@ const MonacoEditor = () => {
     }
   }
 
+  const handleTriggerRunScript = (queriesToRun: Request[]) => {
+    queriesToRunRef.current = queriesToRun
+    if (running === RunningType.SCRIPT) {
+      dispatch(actions.query.toggleRunning())
+    } else if (running === RunningType.NONE) {
+      dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+    }
+  }
+
   const handleRunScript = async () => {
     let successfulQueries = 0
     let failedQueries = 0
-    if (!editorRef.current || isRunningScript) return
-    setIsRunningScript(true)
+    if (!editorRef.current) return
 
     // Clear all notifications & execution refs for the buffer
     const activeBufferId = activeBuffer.id as number
@@ -885,6 +877,7 @@ const MonacoEditor = () => {
     if (executionRefs.current[activeBufferId]) {
       delete executionRefs.current[activeBufferId]
     }
+    isRunningScriptRef.current = true
 
     notificationTimeoutRef.current = window.setTimeout(() => {
       dispatch(
@@ -902,8 +895,9 @@ const MonacoEditor = () => {
       notificationTimeoutRef.current = null
     }, 1000)
     const startTime = Date.now()
+    const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
 
-    const queries = getAllQueries(editorRef.current)
+    const queries = queriesToRun ?? getAllQueries(editorRef.current)
     let lastQuery: Request | undefined
     let individualQueryResults: Array<IndividualQueryResult> = []
 
@@ -943,9 +937,6 @@ const MonacoEditor = () => {
     if (querySchemaMessage) {
       eventBus.publish(EventType.MSG_QUERY_SCHEMA, querySchemaMessage.result)
     }
-    const notifications = individualQueryResults
-      .filter(result => result && result.notification)
-      .map(result => result.notification)
 
     individualQueryResults
       .filter(result => result && result.notification)
@@ -961,9 +952,15 @@ const MonacoEditor = () => {
       }
       editorRef.current.revealPosition(position)
     }
-    const notificationPrefix = scriptStopRef.current
-      ? "Stopped script after running "
-      : `Running script completed in ${formatTiming(duration)} with `
+
+    const completedGracefully = queries.length === individualQueryResults.length
+    if (completedGracefully) {
+      dispatch(actions.query.stopRunning())
+    }
+
+    const notificationPrefix = completedGracefully
+      ? `Running script completed in ${formatTiming(duration)} with `
+      : "Stopped script after running "
 
     setTimeout(() => dispatch(
       actions.query.addNotification({
@@ -974,13 +971,14 @@ const MonacoEditor = () => {
           {successfulQueries > 0 && failedQueries > 0 ? " and" : ""}
           {failedQueries > 0 ? ` ${failedQueries} failed` : ""} queries
         </Text>,
-        type: scriptStopRef.current ? NotificationType.ERROR : NotificationType.SUCCESS,
+        type: completedGracefully ? NotificationType.SUCCESS : NotificationType.ERROR,
         createdAt: new Date(),
         updateActiveNotification: true,
       }, activeBufferRef.current.id as number),
     ))
+    isRunningScriptRef.current = false
     scriptStopRef.current = false
-    setIsRunningScript(false)
+    queriesToRunRef.current = []
   }
 
   useEffect(() => {
@@ -993,16 +991,14 @@ const MonacoEditor = () => {
   }, [buffers])
 
   useEffect(() => {
-    activeBufferRef.current = activeBuffer
-    currentBufferValueRef.current = activeBuffer.value
-  }, [activeBuffer])
+    activeNotificationRef.current = activeNotification
+  }, [activeNotification])
 
   useEffect(() => {
     const gridNotificationKeySuffix = `@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
     queryNotificationsRef.current = queryNotifications
     if (monacoRef.current
       && editorRef.current
-      && !isRunningScriptRef.current
       && !contentJustChangedRef.current
       && !activeNotification?.query.endsWith(gridNotificationKeySuffix)
     ) {
@@ -1011,18 +1007,7 @@ const MonacoEditor = () => {
   }, [queryNotifications])
 
   useEffect(() => {
-    activeNotificationRef.current = activeNotification
-  }, [activeNotification])
-
-  useEffect(() => {
-    if (isRunningScriptRef.current && !isRunningScript && monacoRef.current && editorRef.current) {
-      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
-    }
-    isRunningScriptRef.current = isRunningScript
-  }, [isRunningScript])
-
-  useEffect(() => {
-    if (!running.value && request) {
+    if (running === RunningType.NONE && request) {
       quest.abort()
       dispatch(actions.query.stopRunning())
       setRequest(undefined)
@@ -1030,8 +1015,8 @@ const MonacoEditor = () => {
   }, [request, quest, dispatch, running])
 
   useEffect(() => {
-    runningValueRef.current = running.value
-    if (running.value && editorRef?.current) {
+    runningValueRef.current = running
+    if (![RunningType.NONE, RunningType.SCRIPT].includes(running) && editorRef?.current) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
       }
@@ -1040,12 +1025,12 @@ const MonacoEditor = () => {
         applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
       }
 
-      const request = running.isRefresh
+      const request = running === RunningType.REFRESH
         ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-        : getQueryRequestFromEditor(editorRef.current, running.isExplain)
+        : getQueryRequestFromEditor(editorRef.current, running === RunningType.EXPLAIN)
 
       if (request?.query) {
-        const originalQuery = running.isExplain && request.query.startsWith('EXPLAIN ') 
+        const originalQuery = running === RunningType.EXPLAIN && request.query.startsWith('EXPLAIN ') 
           ? request.query.substring(8) // Remove "EXPLAIN " prefix
           : request.query
         
@@ -1056,7 +1041,7 @@ const MonacoEditor = () => {
               actions.query.addNotification({
                 type: NotificationType.LOADING,
                 query: createQueryKeyFromRequest(editorRef.current, request),
-                isExplain: running.isExplain,
+                isExplain: running === RunningType.EXPLAIN,
                 content: (
                   <Box gap="1rem" align="center">
                     <Text color="foreground">Running...</Text>
@@ -1145,7 +1130,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running.isExplain,
+                  isExplain: running === RunningType.EXPLAIN,
                   content: <QueryInNotification query={request.query} />,
                 }, activeBuffer.id as number),
               )
@@ -1156,7 +1141,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running.isExplain,
+                  isExplain: running === RunningType.EXPLAIN,
                   content: (
                     <Text color="foreground" ellipsis title={request.query}>
                       {result.notice}
@@ -1177,7 +1162,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running.isExplain,
+                  isExplain: running === RunningType.EXPLAIN,
                   jitCompiled: result.explain?.jitCompiled ?? false,
                   content: (
                     <QueryResult {...result.timings} rowCount={result.count} />
@@ -1201,7 +1186,7 @@ const MonacoEditor = () => {
               // For error positioning, we need to use the original request (without EXPLAIN prefix)
               // but adjust the error position if it was an EXPLAIN query
               let adjustedErrorPosition = error.position
-              if (running.isExplain && request.query.startsWith('EXPLAIN ')) {
+              if (running === RunningType.EXPLAIN && request.query.startsWith('EXPLAIN ')) {
                 // Adjust error position to account for removed "EXPLAIN " prefix
                 adjustedErrorPosition = Math.max(0, error.position - 8)
               }
@@ -1278,7 +1263,7 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running.isExplain,
+                  isExplain: running === RunningType.EXPLAIN,
                   content: <Text color="red">{error.error}</Text>,
                   sideContent: <QueryInNotification query={request.query} />,
                   type: NotificationType.ERROR,
@@ -1290,6 +1275,11 @@ const MonacoEditor = () => {
       } else {
         dispatch(actions.query.stopRunning())
       }
+    } else if (running === RunningType.SCRIPT) {
+      handleRunScript()
+    } else if (running === RunningType.NONE && isRunningScriptRef.current) {
+      quest.abort()
+      scriptStopRef.current = true
     }
   }, [running])
 
@@ -1321,6 +1311,8 @@ const MonacoEditor = () => {
   }, [tables, columns, monacoRef, editorReady])
 
   useEffect(() => {
+    activeBufferRef.current = activeBuffer
+    currentBufferValueRef.current = activeBuffer.value
     if (monacoRef.current && editorRef.current) {
       clearModelMarkers(monacoRef.current, editorRef.current)
       
@@ -1330,51 +1322,30 @@ const MonacoEditor = () => {
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)
-    return () => window.removeEventListener("focus", setCompletionProvider)
-  }, [])
-
-  useEffect(() => {
     return () => {
+      window.removeEventListener("focus", setCompletionProvider)
       if (cursorChangeTimeoutRef.current) {
-        window.clearTimeout(cursorChangeTimeoutRef.current);
+        window.clearTimeout(cursorChangeTimeoutRef.current)
       }
       
       if (scrollTimeoutRef.current) {
-        window.clearTimeout(scrollTimeoutRef.current);
+        window.clearTimeout(scrollTimeoutRef.current)
       }
       
       if (notificationTimeoutRef.current) {
-        window.clearTimeout(notificationTimeoutRef.current);
+        window.clearTimeout(notificationTimeoutRef.current)
       }
-      
+
       if (decorationCollectionRef.current) {
-        decorationCollectionRef.current.clear();
+        decorationCollectionRef.current.clear()
       }
-    };
-  }, []);
+    }
+  }, [])
 
   return (
     <>
+      <ButtonBar onTriggerRunScript={handleTriggerRunScript} />
       <Content onClick={handleEditorClick}>
-        <RunScriptButton
-          $isRunningScript={isRunningScript}
-          onClick={(e) => {
-            e.stopPropagation()
-            if (isRunningScript) {
-              scriptStopRef.current = true
-              quest.abort()
-            } else {
-              handleRunScript()
-            }
-          }}
-          skin={isRunningScript ? "error" : "secondary"}
-          data-hook="run-script-button"
-          prefixIcon={isRunningScript ? <Stop size={18} /> : <PlayFilled size={18} />}
-          disabled={(isRunningScript && scriptStopRef.current) || running.value}
-        >
-          {isRunningScript ? "Stop" : "Run script"}
-        </RunScriptButton>
-
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}
@@ -1419,7 +1390,6 @@ const MonacoEditor = () => {
         setDropdownOpen(open)
         if (!open) {
           setDropdownPosition(null)
-          isSelectionRef.current = false
         }
       }}>
         <DropdownMenu.Trigger asChild>
@@ -1436,14 +1406,10 @@ const MonacoEditor = () => {
               <IconWrapper><StyledPlayFilled size={18} color="#fff" /></IconWrapper>
               Run query
             </StyledDropdownItem>
-            {isSelectionRef.current && <StyledDropdownItem onClick={handleRunSelection} data-hook="dropdown-item-run-selection">
-              <IconWrapper><Cursor size={18} color="#fff" /></IconWrapper>
-              Run selection
-            </StyledDropdownItem>}
-            {!isSelectionRef.current && <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
+            <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
               <IconWrapper><Information size={18} /></IconWrapper>
               Get query plan
-            </StyledDropdownItem>}
+            </StyledDropdownItem>
           </StyledDropdownContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>

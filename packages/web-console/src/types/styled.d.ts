@@ -42,6 +42,7 @@ export type ColorShape = {
   orange: string
   yellow: string
   green: string
+  greenDarker: string
   purple: string
   cyan: string
   pink: string

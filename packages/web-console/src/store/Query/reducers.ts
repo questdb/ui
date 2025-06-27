@@ -22,19 +22,16 @@
  *
  ******************************************************************************/
 
-import { QueryAction, QueryAT, QueryStateShape } from "../../types"
+import { QueryAction, QueryAT, QueryStateShape, RunningType } from "../../types"
 
 export const initialState: QueryStateShape = {
   notifications: [],
   tables: [],
   columns: [],
-  running: {
-    value: false,
-    isRefresh: false,
-    isExplain: false,
-  },
+  running: RunningType.NONE,
   queryNotifications: {},
   activeNotification: null,
+  queriesToRun: [],
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
@@ -207,22 +204,21 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     case QueryAT.STOP_RUNNING: {
       return {
         ...state,
-        running: {
-          value: false,
-          isRefresh: false,
-          isExplain: false,
-        },
+        running: RunningType.NONE,
       }
     }
 
     case QueryAT.TOGGLE_RUNNING: {
+      const currentRunning = state.running
+      if (currentRunning !== RunningType.NONE) {
+        return {
+          ...state,
+          running: RunningType.NONE,
+        }
+      }
       return {
         ...state,
-        running: {
-          value: !state.running.value,
-          isRefresh: action.payload.isRefresh,
-          isExplain: action.payload.isExplain || false,
-        },
+        running: action.payload ?? RunningType.QUERY,
       }
     }
 
@@ -240,6 +236,12 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
     }
 
+    case QueryAT.SET_QUERIES_TO_RUN: {
+      return {
+        ...state,
+        queriesToRun: action.payload,
+      }
+    }
     default:
       return state
   }

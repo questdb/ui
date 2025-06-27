@@ -69,6 +69,43 @@ export const getSelectedText = (
   return model && selection ? model.getValueInRange(selection) : undefined
 }
 
+export const getQueriesToRun = (
+  editor: IStandaloneCodeEditor,
+): Request[] => {
+  const model = editor.getModel()
+  if (!model) return []
+
+  const selection = editor.getSelection()
+  const selectedText = selection ? model.getValueInRange(selection) : undefined
+  if (!selection || !selectedText) {
+    const queryInCursor = getQueryFromCursor(editor)
+    if (queryInCursor) {
+      return [queryInCursor]
+    }
+    return []
+  }
+
+  const queries = getQueriesInRange(editor, selection.getStartPosition(), selection.getEndPosition())
+  const requests = queries.map(query => {
+    const clampedSelection = clampRange(model, selection, {
+      startOffset: model.getOffsetAt({ lineNumber: query.row + 1, column: query.column }),
+      endOffset: model.getOffsetAt({ lineNumber: query.endRow + 1, column: query.endColumn }),
+    })
+    const clampedSelectionText = model.getValueInRange(clampedSelection)
+    return stripSQLComments(normalizeQueryText(clampedSelectionText))
+      ? {
+        query: clampedSelectionText,
+        row: query.row,
+        column: query.column,
+        endRow: query.endRow,
+        endColumn: query.endColumn,
+        isSelection: true,
+      }
+      : undefined
+  })
+  return requests.filter(Boolean) as Request[]
+}
+
 export const getQueriesFromPosition = (
   editor: IStandaloneCodeEditor,
   editorPosition: IPosition,
@@ -382,10 +419,13 @@ export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
   isExplain = false,
 ): Request | undefined => {
-  const selectedText = getSelectedText(editor)
   let request: Request | undefined
+  const selectedText = getSelectedText(editor)
+  const strippedNormalizedSelectedText = selectedText
+    ? stripSQLComments(normalizeQueryText(selectedText))
+    : undefined
   
-  if (selectedText) {
+  if (strippedNormalizedSelectedText) {
     request = getQueryFromSelection(editor)
   } else {
     request = getQueryFromCursor(editor)

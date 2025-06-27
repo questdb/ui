@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import { NotificationShape, RunningShape, StoreShape, QueryNotifications } from "types"
+import { NotificationShape, RunningType, StoreShape, QueryNotifications, QueriesToRun } from "types"
 import type {
   QueryRawResult,
   Table,
@@ -35,16 +35,19 @@ const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
 const getQueryNotifications: (store: StoreShape) => Record<number, Record<string, QueryNotifications>> = (store) =>
   store.query.queryNotifications
 
-const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<string, QueryNotifications> =>
-  store.query.queryNotifications[bufferId] || {}
+const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<string, QueryNotifications> => 
+  store.query.queryNotifications[bufferId]
 
 const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>
   store.query.activeNotification
 
+const getQueriesToRun: (store: StoreShape) => QueriesToRun = (store) =>
+  store.query.queriesToRun
+
 const getResult: (store: StoreShape) => undefined | QueryRawResult = (store) =>
   store.query.result
 
-const getRunning: (store: StoreShape) => RunningShape = (store) =>
+const getRunning: (store: StoreShape) => RunningType = (store) =>
   store.query.running
 
 const getTables: (store: StoreShape) => Table[] = (store) => store.query.tables
@@ -57,6 +60,7 @@ export default {
   getQueryNotifications,
   getQueryNotificationsForBuffer,
   getActiveNotification,
+  getQueriesToRun,
   getResult,
   getRunning,
   getTables,

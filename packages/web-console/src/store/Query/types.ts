@@ -29,6 +29,7 @@ import type {
   Table,
   InformationSchemaColumn,
 } from "utils/questdb"
+import type { Request } from "../../scenes/Editor/Monaco/utils"
 
 export type QueryKey = `${string}@${number}-${number}`
 
@@ -39,6 +40,16 @@ export enum NotificationType {
   NOTICE = "notice",
   LOADING = "loading",
 }
+
+export enum RunningType {
+  SCRIPT = "script",
+  EXPLAIN = "explain",
+  REFRESH = "refresh",
+  QUERY = "query",
+  NONE = "none",
+}
+
+export type QueriesToRun = Readonly<Request[]>
 
 export type NotificationShape = Readonly<{
   query: QueryKey
@@ -59,20 +70,15 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
-export type RunningShape = Readonly<{
-  value: boolean
-  isRefresh: boolean
-  isExplain?: boolean
-}>
-
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
   columns: InformationSchemaColumn[]
   result?: QueryRawResult
-  running: RunningShape
+  running: RunningType
   queryNotifications: Record<number, Record<QueryKey, QueryNotifications>>
   activeNotification: NotificationShape | null
+  queriesToRun: QueriesToRun
 }>
 
 export enum QueryAT {
@@ -87,6 +93,7 @@ export enum QueryAT {
   SET_TABLES = "QUERY/SET_TABLES",
   SET_COLUMNS = "QUERY/SET_COLUMNS",
   SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
+  SET_QUERIES_TO_RUN = "QUERY/SET_QUERIES_TO_RUN",
 }
 
 type AddNotificationAction = Readonly<{
@@ -122,10 +129,7 @@ type StopRunningAction = Readonly<{
 
 type ToggleRunningAction = Readonly<{
   type: QueryAT.TOGGLE_RUNNING
-  payload: Readonly<{
-    isRefresh: boolean
-    isExplain?: boolean
-  }>
+  payload?: RunningType
 }>
 
 type SetTablesAction = Readonly<{
@@ -156,6 +160,11 @@ type UpdateNotificationKeyAction = Readonly<{
   }
 }>
 
+type SetQueriesToRunAction = Readonly<{
+  type: QueryAT.SET_QUERIES_TO_RUN
+  payload: QueriesToRun
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -168,3 +177,4 @@ export type QueryAction =
   | SetTablesAction
   | SetColumnsActions
   | SetActiveNotificationAction
+  | SetQueriesToRunAction

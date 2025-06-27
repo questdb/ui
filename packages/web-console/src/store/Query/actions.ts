@@ -36,6 +36,8 @@ import {
   QueryAction,
   QueryAT,
   QueryKey,
+  RunningType,
+  QueriesToRun,
 } from "../../types"
 
 const setTables = (payload: Table[]): QueryAction => ({
@@ -91,12 +93,11 @@ const stopRunning = (): QueryAction => ({
   type: QueryAT.STOP_RUNNING,
 })
 
-const toggleRunning = (isRefresh = false, isExplain = false): QueryAction => ({
+const toggleRunning = (
+  payload?: RunningType
+): QueryAction => ({
   type: QueryAT.TOGGLE_RUNNING,
-  payload: {
-    isRefresh,
-    isExplain,
-  },
+  payload,
 })
 
 const setActiveNotification = (payload: NotificationShape | null): QueryAction => ({
@@ -113,6 +114,11 @@ const updateNotificationKey = (oldKey: QueryKey, newKey: QueryKey, bufferId?: nu
   },
 })
 
+const setQueriesToRun = (payload: QueriesToRun): QueryAction => ({
+  type: QueryAT.SET_QUERIES_TO_RUN,
+  payload,
+})
+
 export default {
   addNotification,
   cleanupNotifications,
@@ -125,4 +131,5 @@ export default {
   setTables,
   setColumns,
   setActiveNotification,
+  setQueriesToRun,
 }

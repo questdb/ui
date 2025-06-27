@@ -38,6 +38,7 @@ import type { editor } from "monaco-editor"
 
 enum Command {
   EXECUTE = "execute",
+  RUN_SCRIPT = "run_script",
   FOCUS_GRID = "focus_grid",
   ADD_NEW_TAB = "add_new_tab",
   CLOSE_ACTIVE_TAB = "close_active_tab",
@@ -48,15 +49,18 @@ export const registerEditorActions = ({
   editor,
   monaco,
   runQuery,
-  dispatch,
+  runScript,
   editorContext,
 }: {
   editor: editor.IStandaloneCodeEditor
   monaco: Monaco
   runQuery: () => void
-  dispatch: Dispatch
+  runScript: () => void
   editorContext: EditorContext
 }) => {
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+  })
+
   editor.addAction({
     id: Command.EXECUTE,
     label: "Execute command",
@@ -66,6 +70,15 @@ export const registerEditorActions = ({
     ],
     run: () => {
       runQuery()
+    },
+  })
+
+  editor.addAction({
+    id: Command.RUN_SCRIPT,
+    label: "Run script",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+    run: () => {
+      runScript()
     },
   })
 
