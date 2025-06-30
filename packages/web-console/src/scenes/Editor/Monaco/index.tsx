@@ -761,11 +761,6 @@ const MonacoEditor = () => {
       }
     }
 
-    const executeQuery = params.get("executeQuery")
-    if (executeQuery) {
-      toggleRunning()
-    }
-    
     const initialVisibleRanges = editor.getVisibleRanges()
     if (initialVisibleRanges.length > 0) {
       const firstRange = initialVisibleRanges[0]
@@ -779,7 +774,17 @@ const MonacoEditor = () => {
     // Initial decoration setup
     applyGlyphsAndLineMarkings(monaco, editor)
     const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
+    queriesToRunRef.current = queriesToRun
     dispatch(actions.query.setQueriesToRun(queriesToRun))
+
+    const executeQuery = params.get("executeQuery")
+    if (executeQuery) {
+      if (queriesToRun.length > 1) {
+        handleTriggerRunScript()
+      } else {
+        toggleRunning()
+      }
+    }
   }
 
   const runIndividualQuery = async (query: Request, isLast: boolean): Promise<IndividualQueryResult> => {

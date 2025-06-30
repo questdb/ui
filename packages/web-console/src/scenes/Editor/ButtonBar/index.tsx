@@ -27,7 +27,7 @@ const SuccessButton = styled(Button)`
   background-color: ${color("greenDarker")};
   border-color: ${color("greenDarker")};
   color: ${color("foreground")};
-  
+
   &:hover:not(:disabled) {
     background-color: ${color("green")};
     border-color: ${color("green")};
@@ -91,11 +91,14 @@ const MainRunButton = styled(SuccessButton)`
   border-bottom-right-radius: 0;
 `
 
-const DropdownButton = styled(SuccessButton)`
+const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   padding: 0 0.5rem;
   min-width: auto;
+  svg {
+    transform: ${({ $open }) => $open ? "rotate(180deg)" : "rotate(0deg)"};
+  }
 `
 
 const DropdownMenu = styled.div`
@@ -245,6 +248,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
           trigger={
             <DropdownButton
               skin="success"
+              $open={dropdownActive}
               title="More run options"
             >
               <ChevronDown size="16px" />
