@@ -1,5 +1,5 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
-import { Box, Button, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
+import { Box, Button, Checkbox, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
@@ -187,6 +187,7 @@ const MonacoEditor = () => {
   const queryOffsetsRef = useRef<{ startOffset: number, endOffset: number }[] | null>([])
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
+  const stopAfterFailureRef = useRef(true)
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
   const runningValueRef = useRef(running)
   const activeBufferRef = useRef(activeBuffer)
@@ -243,6 +244,39 @@ const MonacoEditor = () => {
     }
   }
 
+  const getDropdownQueries = (lineNumber: number): Request[] => {
+    const queriesOnLine = getQueriesStartingFromLine(editorRef.current!, lineNumber, queryOffsetsRef.current || [])
+    const queriesToRun = queriesToRunRef.current || []
+    
+    const selectionsOnLine = queriesToRun.filter(query => 
+      query.selection && query.row + 1 === lineNumber
+    )
+    const nonSelectedQueries = queriesOnLine.filter(query => !selectionsOnLine.some(q => q.row === query.row && q.column === query.column && q.endRow === query.endRow && q.endColumn === query.endColumn))
+    return [...nonSelectedQueries, ...selectionsOnLine].sort((a, b) => a.column - b.column)
+  }
+
+  const setCursorBeforeRunning = (query: Request) => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+
+    if (query.selection) {
+      const startPosition = model.getPositionAt(query.selection.startOffset)
+      const endPosition = model.getPositionAt(query.selection.endOffset)
+      editor.setSelection({
+        startLineNumber: startPosition.lineNumber,
+        startColumn: startPosition.column,
+        endLineNumber: endPosition.lineNumber,
+        endColumn: endPosition.column
+      })
+    } else {
+      editor.setPosition({
+        lineNumber: query.row + 1,
+        column: query.column
+      })
+    }
+  }
+
   const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }, isContextMenu: boolean = false) => {
     targetPositionRef.current = targetPosition
     isContextMenuDropdownRef.current = isContextMenu
@@ -294,45 +328,32 @@ const MonacoEditor = () => {
 
     if (e.target instanceof Element && e.target.classList.contains("cursorQueryGlyph")) {  
       editor.focus()
-        const target = editor.getTargetAtClientPoint(e.clientX, e.clientY)
-        
-        if (target && target.position) {
-          const position = {
-            lineNumber: target.position.lineNumber,
-            column: 1
-          }   
-          const selectionCanBeRun = queriesToRunRef.current.length === 1
-            && queriesToRunRef.current[0].selection
-            && queriesToRunRef.current[0].row + 1 === target.position.lineNumber
-          if (selectionCanBeRun) {
-            toggleRunning()
-            return
-          }
-
-          const queriesOnLine = getQueriesStartingFromLine(editor, position.lineNumber, queryOffsetsRef.current || [])
-          if (queriesOnLine.length > 1) {
-            dropdownQueriesRef.current = queriesOnLine
-            openDropdownAtPosition(e.clientX, e.clientY, position, false)
-            return
-          }
-          editor.setPosition(position)
-          toggleRunning()
+      const target = editor.getTargetAtClientPoint(e.clientX, e.clientY)
+      
+      if (target && target.position) {
+        const position = {
+          lineNumber: target.position.lineNumber,
+          column: 1
+        }   
+        const dropdownQueries = getDropdownQueries(position.lineNumber)
+        if (dropdownQueries.length > 1) {
+          dropdownQueriesRef.current = dropdownQueries
+          openDropdownAtPosition(e.clientX, e.clientY, position, false)
+          return
         }
+        setCursorBeforeRunning(dropdownQueries[0])
+        toggleRunning()
+      }
     }
   }
 
   const handleRunQuery = (query?: Request) => {
     setDropdownOpen(false)
-    if (editorRef.current) {
-      if (query) { // One of the queries starting from this line that was specified in the dropdown
-        editorRef.current.setPosition({
-          lineNumber: query.row + 1,
-          column: query.column
-        })
-      } else if (targetPositionRef.current) {
-        // We only have one query on this line, so we can just use the target position, which is the first position of the line
-        editorRef.current.setPosition(targetPositionRef.current)
-      }
+
+    if (query) {
+      setCursorBeforeRunning(query)
+    } else if (targetPositionRef.current) {
+      editorRef.current?.setPosition(targetPositionRef.current)
     }
     
     toggleRunning()
@@ -340,20 +361,10 @@ const MonacoEditor = () => {
 
   const handleExplainQuery = (query?: Request) => {
     setDropdownOpen(false)
-    if (editorRef.current) {
-      if (query) { // One of the queries starting from this line that was specified in the dropdown
-        editorRef.current.setPosition({
-          lineNumber: query.row + 1,
-          column: query.column
-        })
-      } else if (targetPositionRef.current) { // We only have one query on this line, so we can just use the target position, which is the first position of the line
-        const selectionCanBeExplained = queriesToRunRef.current.length === 1
-          && !!queriesToRunRef.current[0].selection
-          && queriesToRunRef.current[0].row + 1 === targetPositionRef.current.lineNumber
-        if (!selectionCanBeExplained) { // When we have a single selection that's inside of a single query, we let the user run the explain on the query
-          editorRef.current.setPosition(targetPositionRef.current)
-        }
-      }
+    if (query) {
+      setCursorBeforeRunning(query)
+    } else if (targetPositionRef.current) {
+      editorRef.current?.setPosition(targetPositionRef.current)
     }
     
     toggleRunning(RunningType.EXPLAIN)
@@ -557,10 +568,10 @@ const MonacoEditor = () => {
           if (target && target.position) {
             const linePosition = { lineNumber: target.position.lineNumber, column: 1 }
             
-            const queriesOnLine = getQueriesStartingFromLine(editorRef.current, linePosition.lineNumber, queryOffsetsRef.current || [])
+            const dropdownQueries = getDropdownQueries(linePosition.lineNumber)
             
-            if (queriesOnLine.length > 0) {
-              dropdownQueriesRef.current = queriesOnLine
+            if (dropdownQueries.length > 0) {
+              dropdownQueriesRef.current = dropdownQueries
               openDropdownAtPosition(posX, posY, linePosition, true)
             }
           }
@@ -962,7 +973,7 @@ const MonacoEditor = () => {
         failedQueries++
       }
       lastQuery = query
-      if (scriptStopRef.current) {
+      if (scriptStopRef.current || (failedQueries > 0 && stopAfterFailureRef.current)) {
         break
       }
     }
@@ -1005,7 +1016,7 @@ const MonacoEditor = () => {
     }
 
     const completedGracefully = queries.length === individualQueryResults.length
-    if (completedGracefully) {
+    if (completedGracefully || (failedQueries > 0 && stopAfterFailureRef.current)) {
       dispatch(actions.query.stopRunning())
     }
 
@@ -1020,7 +1031,7 @@ const MonacoEditor = () => {
           {notificationPrefix}
           {successfulQueries > 0 ? ` ${successfulQueries} successful` : ""}
           {successfulQueries > 0 && failedQueries > 0 ? " and" : ""}
-          {failedQueries > 0 ? ` ${failedQueries} failed` : ""} queries
+          {failedQueries > 0 ? ` ${failedQueries} failed` : ""} {failedQueries + successfulQueries > 1 ? " queries" : " query"}
         </Text>,
         type: completedGracefully ? NotificationType.SUCCESS : NotificationType.ERROR,
         createdAt: new Date(),
@@ -1029,6 +1040,7 @@ const MonacoEditor = () => {
     ))
     isRunningScriptRef.current = false
     scriptStopRef.current = false
+    stopAfterFailureRef.current = true
   }
 
   useEffect(() => {
@@ -1423,6 +1435,16 @@ const MonacoEditor = () => {
               <Text color="foreground">
                 You are about to run all queries in this tab. This action may modify or delete your data permanently.
               </Text>
+              <Box gap="1rem" margin="1.6rem 0">
+              <label htmlFor="stop-after-failure" style={{ display: "flex", alignItems: "center", gap: "0.8rem", cursor: "pointer" }}>
+                <Checkbox
+                  defaultChecked={stopAfterFailureRef.current}
+                  onChange={(e) => { stopAfterFailureRef.current = e.target.checked }}
+                  id="stop-after-failure"
+                />
+                <Text color="foreground">Stop running after a failed query</Text>
+              </label>
+            </Box>
             </StyledDialogDescription>
             
             <Dialog.ActionButtons>

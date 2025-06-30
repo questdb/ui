@@ -33,6 +33,10 @@ const StyledDropdownItem = styled(DropdownMenu.Item)`
     background: #043c5c;
     border: 1px solid #8be9fd;
   }
+
+  &[data-disabled] {
+    opacity: 0.5;
+  }
 `
 
 const IconWrapper = styled.span`
@@ -80,6 +84,20 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
     onOpenChange(isOpen)
   }
 
+  const extractQueryTextToRun = (query: Request) => {
+    if (!query) return "query"
+    const queryText = query.selection ? query.selection.queryText : query.query
+    return queryText.length > 30 
+      ? `"${queryText.substring(0, 30)}..."` 
+      : `"${queryText}"`
+  }
+
+  const isExplainDisabled = (query: Request) => {
+    if (!query) return false
+    const queryText = query.selection ? query.selection.queryText : query.query
+    return queryText.startsWith("EXPLAIN") || queryText.startsWith("explain")
+  }
+
   return (
     <DropdownMenu.Root open={open} onOpenChange={handleOpenChange}>
       <DropdownMenu.Trigger asChild>
@@ -95,10 +113,6 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
           {queriesRef.current.length > 1 ? (
             // Multiple queries - show options for each
             queriesRef.current.map((query, index) => {
-              const truncatedQuery = query.query.length > 30 
-                ? `${query.query.substring(0, 30)}...` 
-                : query.query
-              
               const items = [
                 <StyledDropdownItem 
                   key={`run-${index}`}
@@ -106,7 +120,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                   data-hook={`dropdown-item-run-query-${index}`}
                 >
                   <IconWrapper><StyledPlayFilled size={18} color="#fff" /></IconWrapper>
-                  Run "{truncatedQuery}"
+                  Run {extractQueryTextToRun(query)}
                 </StyledDropdownItem>
               ]
               
@@ -114,11 +128,12 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                 items.push(
                   <StyledDropdownItem 
                     key={`explain-${index}`}
+                    disabled={isExplainDisabled(query)}
                     onClick={() => onExplainQuery(query)} 
                     data-hook={`dropdown-item-explain-query-${index}`}
                   >
                     <IconWrapper><Information size={18} /></IconWrapper>
-                    Explain "{truncatedQuery}"
+                    Get query plan for {extractQueryTextToRun(query)}
                   </StyledDropdownItem>
                 )
               }
@@ -127,13 +142,13 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
             }).flat()
           ) : (
             [
-              <StyledDropdownItem key="run" onClick={() => onRunQuery()} data-hook="dropdown-item-run-query">
+              <StyledDropdownItem key="run" onClick={() => onRunQuery(queriesRef.current[0])} data-hook="dropdown-item-run-query">
                 <IconWrapper><StyledPlayFilled size={18} color="#fff" /></IconWrapper>
-                Run query
+                Run {extractQueryTextToRun(queriesRef.current[0])}
               </StyledDropdownItem>,
-              <StyledDropdownItem key="explain" onClick={() => onExplainQuery()} data-hook="dropdown-item-get-query-plan">
+              <StyledDropdownItem key="explain" disabled={isExplainDisabled(queriesRef.current[0])} onClick={() => onExplainQuery(queriesRef.current[0])} data-hook="dropdown-item-get-query-plan">
                 <IconWrapper><Information size={18} /></IconWrapper>
-                Get query plan
+                Get query plan for {extractQueryTextToRun(queriesRef.current[0])}
               </StyledDropdownItem>
             ]
           )}
