@@ -109,7 +109,7 @@ const ClearAllNotifications = styled.div`
 const Notifications = () => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
-  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number))
+  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number)) || {}
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
