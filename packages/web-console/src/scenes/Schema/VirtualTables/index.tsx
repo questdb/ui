@@ -387,6 +387,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 {item.walTableData?.suspended && (
                   <SuspensionDialog 
                     walTableData={item.walTableData}
+                    kind={item.kind}
                     open={openedSuspensionDialog === item.id}
                     onOpenChange={(isOpen) => {
                       setOpenedSuspensionDialog(isOpen ? item.id : null)
@@ -406,7 +407,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               {item.walTableData?.suspended && (
                 <MenuItem 
                   data-hook="table-context-menu-resume-wal"
-                  onClick={() => setOpenedSuspensionDialog(item.id)}
+                  onClick={() => setTimeout(() => setOpenedSuspensionDialog(item.id))}
                   icon={<Restart size={14} />}
                 >
                   Resume WAL

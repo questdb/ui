@@ -472,6 +472,38 @@ describe("materialized views", () => {
     }
   });
 
+  it("should resume WAL for a materialized view", () => {
+    cy.getByDataHook("schema-row-error-icon").should("not.exist");
+    cy.typeQuery(
+      "ALTER MATERIALIZED VIEW btc_trades_mv SUSPEND WAL WITH 24, 'Too many open files';"
+    )
+      .clickRun()
+      .clearEditor();
+
+    cy.refreshSchema();
+    cy.expandMatViews();
+    cy.getByDataHook("schema-row-error-icon").should("be.visible");
+    cy.getByDataHook("schema-filter-suspended-button").should("contain", "1");
+
+    cy.getByDataHook("schema-matview-title")
+      .contains("btc_trades_mv")
+      .rightclick();
+    cy.getByDataHook("table-context-menu-resume-wal")
+      .should("not.be.disabled")
+      .click();
+
+    cy.getByDataHook("schema-suspension-dialog").should(
+      "have.attr",
+      "data-table-name",
+      "btc_trades_mv"
+    );
+    cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
+    cy.getByDataHook("schema-suspension-dialog-dismiss").click();
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist");
+    cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
+    cy.getByDataHook("schema-row-error-icon").should("not.exist");
+  });
+
   it("should show a warning icon and tooltip when the view is invalidated", () => {
     cy.intercept({
         method: "GET",
