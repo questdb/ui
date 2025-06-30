@@ -37,7 +37,11 @@ export type Request = Readonly<{
   column: number
   endRow: number
   endColumn: number
-  isSelection?: boolean
+  selection?: {
+    startOffset: number
+    endOffset: number
+    queryText: string
+  }
 }>
 
 type SqlTextItem = {
@@ -71,6 +75,7 @@ export const getSelectedText = (
 
 export const getQueriesToRun = (
   editor: IStandaloneCodeEditor,
+  queryOffsets: { startOffset: number, endOffset: number }[],
 ): Request[] => {
   const model = editor.getModel()
   if (!model) return []
@@ -84,8 +89,23 @@ export const getQueriesToRun = (
     }
     return []
   }
+  let selectionStartOffset = model.getOffsetAt(selection.getStartPosition())
+  let selectionEndOffset = model.getOffsetAt(selection.getEndPosition())
+  
+  const normalizedSelectedText = normalizeQueryText(selectedText)
 
-  const queries = getQueriesInRange(editor, selection.getStartPosition(), selection.getEndPosition())
+  if (stripSQLComments(normalizedSelectedText).length > 0) {
+    selectionStartOffset += selectedText.indexOf(normalizedSelectedText)
+    selectionEndOffset = selectionStartOffset + normalizedSelectedText.length
+  }
+
+  const selectionStartParentQueryOffsets = queryOffsets.find(offset => offset.startOffset <= selectionStartOffset && offset.endOffset >= selectionStartOffset)
+  const selectionEndParentQueryOffsets = queryOffsets.find(offset => offset.startOffset <= selectionEndOffset && offset.endOffset >= selectionEndOffset)
+  if (!selectionStartParentQueryOffsets || !selectionEndParentQueryOffsets) {
+    return []
+  }
+
+  const queries = getQueriesInRange(editor, model.getPositionAt(selectionStartParentQueryOffsets.startOffset), model.getPositionAt(selectionEndParentQueryOffsets.endOffset))
   const requests = queries.map(query => {
     const clampedSelection = clampRange(model, selection, {
       startOffset: model.getOffsetAt({ lineNumber: query.row + 1, column: query.column }),
@@ -94,12 +114,16 @@ export const getQueriesToRun = (
     const clampedSelectionText = model.getValueInRange(clampedSelection)
     return stripSQLComments(normalizeQueryText(clampedSelectionText))
       ? {
-        query: clampedSelectionText,
+        query: query.query,
         row: query.row,
         column: query.column,
         endRow: query.endRow,
         endColumn: query.endColumn,
-        isSelection: true,
+        selection: {
+          startOffset: model.getOffsetAt({ lineNumber: clampedSelection.startLineNumber, column: clampedSelection.startColumn }),
+          endOffset: model.getOffsetAt({ lineNumber: clampedSelection.endLineNumber, column: clampedSelection.endColumn }),
+          queryText: clampedSelectionText
+        }
       }
       : undefined
   })
@@ -389,27 +413,68 @@ export const getQueriesInRange = (
   return [...stackQueries, ...(nextSqlQuery ? [nextSqlQuery] : [])]
 }
 
+export const getQueriesStartingFromLine = (
+  editor: IStandaloneCodeEditor, 
+  lineNumber: number, 
+  queryOffsets: { startOffset: number, endOffset: number }[]
+): Request[] => {
+  const model = editor.getModel()
+  if (!model || !queryOffsets) return []
+  
+  const queries: Request[] = []
+  
+  for (const offset of queryOffsets) {
+    const startPosition = model.getPositionAt(offset.startOffset)
+    if (startPosition.lineNumber === lineNumber) {
+      const endPosition = model.getPositionAt(offset.endOffset)
+      const queryText = model.getValueInRange({
+        startLineNumber: startPosition.lineNumber,
+        startColumn: startPosition.column,
+        endLineNumber: endPosition.lineNumber,
+        endColumn: endPosition.column
+      })
+      
+      queries.push({
+        query: queryText,
+        row: startPosition.lineNumber - 1,
+        column: startPosition.column,
+        endRow: endPosition.lineNumber - 1,
+        endColumn: endPosition.column
+      })
+    }
+  }
+  
+  return queries
+}
+
 export const getQueryFromSelection = (
   editor: IStandaloneCodeEditor,
 ): Request | undefined => {
+  const model = editor.getModel()
+  if (!model) return
+
   const selection = editor.getSelection()
   const selectedText = getSelectedText(editor)
+
   if (selection && selectedText) {
-    let n = selectedText.length
-    let column = selectedText.charAt(n)
+    let selectionStartOffset = model.getOffsetAt(selection.getStartPosition())
+    let selectionEndOffset = model.getOffsetAt(selection.getEndPosition())
+    
+    const normalizedSelectedText = normalizeQueryText(selectedText)
 
-    while (n > 0 && (column === " " || column === "\n" || column === ";")) {
-      n--
-      column = selectedText.charAt(n)
-    }
-
-    if (n > 0) {
-      return {
-        query: selectedText.substr(0, n + 1),
-        row: selection.startLineNumber - 1,
-        column: selection.startColumn,
-        endRow: selection.endLineNumber - 1,
-        endColumn: selection.endColumn
+    if (stripSQLComments(normalizedSelectedText).length > 0) {
+      selectionStartOffset += selectedText.indexOf(normalizedSelectedText)
+      selectionEndOffset = selectionStartOffset + normalizedSelectedText.length
+      const parentQuery = getQueryFromCursor(editor)
+      if (parentQuery) {
+        return {
+          ...parentQuery,
+          selection: {
+            startOffset: selectionStartOffset,
+            endOffset: selectionEndOffset,
+            queryText: normalizedSelectedText
+          }
+        }
       }
     }
   }
@@ -417,7 +482,6 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
-  isExplain = false,
 ): Request | undefined => {
   let request: Request | undefined
   const selectedText = getSelectedText(editor)
@@ -431,20 +495,26 @@ export const getQueryRequestFromEditor = (
     request = getQueryFromCursor(editor)
   }
 
-  const normalizedRequest = request ? {
-    ...request,
-    query: normalizeQueryText(request.query),
-  } : undefined
-  
-  if (normalizedRequest && isExplain) {
-    return {
-      ...normalizedRequest,
-      isSelection: !!selectedText,
-      query: `EXPLAIN ${normalizedRequest.query}`,
+  if (!request) return
+
+  let normalizedRequest: Request | undefined
+
+  if (request.selection) {
+    normalizedRequest = {
+      ...request,
+      selection: {
+        ...request.selection,
+        queryText: normalizeQueryText(request.selection.queryText),
+      }
+    }
+  } else {
+    normalizedRequest = {
+      ...request,
+      query: normalizeQueryText(request.query),
     }
   }
   
-  return normalizedRequest ? { ...normalizedRequest, isSelection: !!selectedText } : undefined
+  return normalizedRequest
 }
 
 export const getQueryRequestFromLastExecutedQuery = (

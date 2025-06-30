@@ -222,7 +222,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (queriesToRun: 
           onClick={handleClickQueryButton}
           disabled={running !== RunningType.NONE || queriesToRun.length === 0 || queriesToRun.length > 1}
         >
-          {queriesToRun.length === 1 && queriesToRun[0].isSelection ? "Run selection" : "Run query"}
+          {queriesToRun.length === 1 && queriesToRun[0].selection ? "Run selection" : "Run query"}
           <RunShortcut>
             <Key>{ctrlCmd}</Key>
             <Key><CornerDownLeft size="16px" /></Key>

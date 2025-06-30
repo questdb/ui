@@ -1,5 +1,5 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
-import { Box, Button } from "@questdb/react-components"
+import { Box, Button, AlertDialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
@@ -26,7 +26,7 @@ import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { QueryInNotification } from "./query-in-notification"
 import { createSchemaCompletionProvider } from "./questdb-sql"
-import { getQueriesFromPosition, Request } from "./utils"
+import { Request } from "./utils"
 import {
   appendQuery,
   clearModelMarkers,
@@ -49,12 +49,11 @@ import {
   setErrorMarkerForQuery,
   getQueryStartOffset,
   getQueriesToRun,
+  getQueriesStartingFromLine,
 } from "./utils"
-import { DropdownMenu } from "../../../components/DropdownMenu"
-import { PlayFilled } from "../../../components/icons/play-filled"
 import { toast } from "../../../components/Toast"
-import { Information } from "@styled-icons/remix-line"
 import ButtonBar from "../ButtonBar"
+import { QueryDropdown } from "./QueryDropdown"
 
 type IndividualQueryResult = {
   success: boolean,
@@ -95,11 +94,11 @@ const Content = styled(PaneContent)`
   }
 
   .selectionErrorHighlight {
-    background-color: rgba(255, 85, 85, 0.15);
+    border: 1px solid rgba(255, 85, 85, 0.50);
   }
 
   .selectionSuccessHighlight {
-    background-color: rgba(80, 250, 123, 0.15);
+    border: 1px solid rgba(80, 250, 123, 0.50);
   }
 
   .cursorQueryGlyph,
@@ -145,56 +144,13 @@ const CancelButton = styled(Button)`
   padding: 1.2rem 0.6rem;
 `
 
-const StyledDropdownContent = styled(DropdownMenu.Content)`
-  background-color: #343846;
-  border-radius: 0.5rem;
-  padding: 0.4rem;
-  box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
-  z-index: 9999;
-  min-width: 160px;
-  gap: 0;
+const StyledDialogDescription = styled(AlertDialog.Description)`
+  font-size: 1.4rem;
 `
 
-const StyledDropdownItem = styled(DropdownMenu.Item)`
-  font-size: 1.3rem;
-  height: 3rem;
-  font-family: "system-ui", sans-serif;
-  cursor: pointer;
-  color: rgb(248, 248, 242);
-  display: flex;
-  align-items: center;
-  padding: 1rem 1.2rem;
-  border-radius: 0.4rem;
-  margin: 0;
-  gap: 0;
-  border: 1px solid transparent;
-
-  &[data-highlighted] {
-    background: #043c5c;
-    border: 1px solid #8be9fd;
-  }
-`
-
-const IconWrapper = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 1.2rem;
-`
-
-const StyledPlayFilled = styled(PlayFilled)`
-  transform: scale(1.3);
-`
-
-const HiddenTrigger = styled.div<{ style?: { top: string; left: string } }>`
-  position: fixed;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-  top: ${props => props.style?.top || '0px'};
-  left: ${props => props.style?.left || '0px'};
-  z-index: 9998;
+const StyledDialogButton = styled(Button)`
+  padding: 1.2rem 0.6rem;
+  font-size: 1.4rem;
 `
 
 const DEFAULT_LINE_CHARS = 5
@@ -216,7 +172,7 @@ const MonacoEditor = () => {
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
   const [refreshingTables, setRefreshingTables] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [dropdownPosition, setDropdownPosition] = useState<{ x: number; y: number } | null>(null)
+  const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
@@ -226,6 +182,7 @@ const MonacoEditor = () => {
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const isRunningScriptRef = useRef(false)
+  const queryOffsetsRef = useRef<{ startOffset: number, endOffset: number }[] | null>([])
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const lineMarkingDecorationIdsRef = useRef<string[]>([])
@@ -242,6 +199,9 @@ const MonacoEditor = () => {
   const notificationTimeoutRef = useRef<number | null>(null)
   const targetPositionRef = useRef<{ lineNumber: number; column: number } | null>(null)
   const currentBufferValueRef = useRef<string | undefined>(activeBuffer.value)
+  const dropdownPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const dropdownQueriesRef = useRef<Request[]>([])
+  const isContextMenuDropdownRef = useRef<boolean>(false)
 
   // Buffer -> QueryKey -> Execution State
   const executionRefs = useRef<
@@ -281,12 +241,15 @@ const MonacoEditor = () => {
     }
   }
 
-  const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }) => {
+  const openDropdownAtPosition = (posX: number, posY: number, targetPosition: { lineNumber: number; column: number }, isContextMenu: boolean = false) => {
     targetPositionRef.current = targetPosition
+    isContextMenuDropdownRef.current = isContextMenu
     
     if (editorRef.current) {
       const editorContainer = editorRef.current.getDomNode()
       const containerRect = editorContainer?.getBoundingClientRect()
+      
+      let finalPosition: { x: number; y: number }
       
       if (containerRect) {
         const lineHeight = 24
@@ -296,15 +259,14 @@ const MonacoEditor = () => {
         const yPosition = containerRect.top + (lineNumber - 1) * lineHeight - scrollTop + lineHeight / 2 + 5
         const xPosition = containerRect.left + 115
         
-        setDropdownPosition({ 
-          x: xPosition, 
-          y: yPosition 
-        })
+        finalPosition = { x: xPosition, y: yPosition }
       } else {
         // Fallback to click coordinates
-        setDropdownPosition({ x: posX, y: posY })
+        finalPosition = { x: posX, y: posY }
       }
       
+      dropdownPositionRef.current = finalPosition
+      isContextMenuDropdownRef.current = isContextMenu
       setDropdownOpen(true)
     }
   }
@@ -319,6 +281,9 @@ const MonacoEditor = () => {
     if (isRunningScriptRef.current && e.target instanceof Element && e.target.classList.contains("cursorQueryGlyph")) {
       return
     }
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
 
     if (e.target instanceof Element && e.target.classList.contains("cancelQueryGlyph")) {
       toggleRunning(RunningType.NONE)
@@ -326,51 +291,66 @@ const MonacoEditor = () => {
     }
 
     if (e.target instanceof Element && e.target.classList.contains("cursorQueryGlyph")) {  
-      editorRef?.current?.focus()
-      if (editorRef.current && editorRef.current.getModel()) {
-        const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY)
+      editor.focus()
+        const target = editor.getTargetAtClientPoint(e.clientX, e.clientY)
         
         if (target && target.position) {
           const position = {
             lineNumber: target.position.lineNumber,
             column: 1
+          }   
+          const selectionCanBeRun = queriesToRunRef.current.length === 1 && queriesToRunRef.current[0].row + 1 === target.position.lineNumber
+          if (selectionCanBeRun) {
+            toggleRunning()
+            return
           }
-          const selection = editorRef.current.getSelection()
-          const marginDecorations = editorRef.current.getModel()?.getAllMarginDecorations()
-          if (selection && marginDecorations) {
-            const currentGlyphIndex = marginDecorations.findIndex(g => g.range.startLineNumber === position.lineNumber)
-            const currentGlyph = marginDecorations[currentGlyphIndex]
-            const nextGlyph = marginDecorations[currentGlyphIndex + 1] || { range: { startLineNumber: editorRef.current.getModel()!.getLineCount() + 1 }}
-            const selection = editorRef.current.getSelection()
-            const selectedText = getSelectedText(editorRef.current)
-            if (selection && selectedText && selection.startLineNumber >= currentGlyph.range.startLineNumber && selection.endLineNumber < nextGlyph.range.startLineNumber) {
-              const normalizedStrippedSelectedText = stripSQLComments(normalizeQueryText(selectedText))
-              if (normalizedStrippedSelectedText) {
-                toggleRunning()
-                return
-              }
-            }
+
+          const queriesOnLine = getQueriesStartingFromLine(editor, position.lineNumber, queryOffsetsRef.current || [])
+          if (queriesOnLine.length > 1) {
+            dropdownQueriesRef.current = queriesOnLine
+            openDropdownAtPosition(e.clientX, e.clientY, position, false)
+            return
           }
-          editorRef.current.setPosition(position)
+          
+          editor.setPosition(position)
           toggleRunning()
         }
-      }
     }
   }
 
-  const handleRunQuery = () => {
+  const handleRunQuery = (query?: Request) => {
     setDropdownOpen(false)
-    if (targetPositionRef.current && editorRef.current) {
-      editorRef.current.setPosition(targetPositionRef.current)
+    if (editorRef.current) {
+      if (query) { // One of the queries starting from this line that was specified in the dropdown
+        editorRef.current.setPosition({
+          lineNumber: query.row + 1,
+          column: query.column
+        })
+      } else if (targetPositionRef.current) {
+        // We only have one query on this line, so we can just use the target position, which is the first position of the line
+        editorRef.current.setPosition(targetPositionRef.current)
+      }
     }
     
     toggleRunning()
   }
 
-  const handleExplainQuery = () => {
+  const handleExplainQuery = (query?: Request) => {
     setDropdownOpen(false)
-    if (targetPositionRef.current && editorRef.current) {
-      editorRef.current.setPosition(targetPositionRef.current)
+    if (editorRef.current) {
+      if (query) { // One of the queries starting from this line that was specified in the dropdown
+        editorRef.current.setPosition({
+          lineNumber: query.row + 1,
+          column: query.column
+        })
+      } else if (targetPositionRef.current) { // We only have one query on this line, so we can just use the target position, which is the first position of the line
+        const selectionCanBeExplained = queriesToRunRef.current.length === 1
+          && !!queriesToRunRef.current[0].selection
+          && queriesToRunRef.current[0].row + 1 === targetPositionRef.current.lineNumber
+        if (!selectionCanBeExplained) { // When we have a single selection that's inside of a single query, we let the user run the explain on the query
+          editorRef.current.setPosition(targetPositionRef.current)
+        }
+      }
     }
     
     toggleRunning(RunningType.EXPLAIN)
@@ -477,10 +457,16 @@ const MonacoEditor = () => {
     const activeBufferId = activeBufferRef.current.id as number
 
     const allDecorations: editor.IModelDeltaDecoration[] = []
+    const allQueryOffsets: { startOffset: number, endOffset: number }[] = []
     
     // Add decorations for queries in range
     if (queries.length > 0) {
       queries.forEach(query => {
+        const queryOffsets = {
+          startOffset: model.getOffsetAt({ lineNumber: query.row + 1, column: query.column }),
+          endOffset: model.getOffsetAt({ lineNumber: query.endRow + 1, column: query.endColumn })
+        }
+        allQueryOffsets.push(queryOffsets)
         const bufferExecutions = executionRefs.current[activeBufferId] || {}
         const queryKey = createQueryKeyFromRequest(editor, query)
         const queryExecutionBuffer = bufferExecutions[queryKey]
@@ -505,9 +491,9 @@ const MonacoEditor = () => {
         allDecorations.push({
           range: new monaco.Range(
             startLineNumber,
-            1,
+            query.column,
             startLineNumber,
-            1
+            query.endColumn
           ),
           options: {
             isWholeLine: false,
@@ -522,6 +508,7 @@ const MonacoEditor = () => {
     }
     
     decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations)
+    queryOffsetsRef.current = allQueryOffsets
     
     applyLineMarkings(monaco, editor)
   }
@@ -548,7 +535,7 @@ const MonacoEditor = () => {
       },
       runScript: () => {
         if (runningValueRef.current === RunningType.NONE) {
-          dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+          handleTriggerRunScript()
         }
       },
       editorContext,
@@ -562,10 +549,12 @@ const MonacoEditor = () => {
           
           if (target && target.position) {
             const linePosition = { lineNumber: target.position.lineNumber, column: 1 }
-  
-            const queryAtPosition = getQueriesFromPosition(editorRef.current, linePosition, linePosition)
-            if (queryAtPosition) {
-              openDropdownAtPosition(posX, posY, linePosition)
+            
+            const queriesOnLine = getQueriesStartingFromLine(editorRef.current, linePosition.lineNumber, queryOffsetsRef.current || [])
+            
+            if (queriesOnLine.length > 0) {
+              dropdownQueriesRef.current = queriesOnLine
+              openDropdownAtPosition(posX, posY, linePosition, true)
             }
           }
         }
@@ -591,8 +580,10 @@ const MonacoEditor = () => {
       }
       
       cursorChangeTimeoutRef.current = window.setTimeout(() => {
-        const queriesToRun = getQueriesToRun(editor)
+        const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
+        queriesToRunRef.current = queriesToRun
         dispatch(actions.query.setQueriesToRun(queriesToRun))
+
         if (monacoRef.current && editorRef.current) {
           applyLineMarkings(monaco, editor)
         }
@@ -764,20 +755,30 @@ const MonacoEditor = () => {
     }
     
     // Initial decoration setup
-    const queriesToRun = getQueriesToRun(editor)
-    dispatch(actions.query.setQueriesToRun(queriesToRun))
     applyGlyphsAndLineMarkings(monaco, editor)
+    const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
+    dispatch(actions.query.setQueriesToRun(queriesToRun))
   }
 
   const runIndividualQuery = async (query: Request, isLast: boolean): Promise<IndividualQueryResult> => {
-    const queryText = query.query
-    const queryKey = createQueryKeyFromRequest(editorRef.current!, query)
+    const editor = editorRef.current
+    const model = editorRef.current?.getModel()
+    if (!editor || !model) {
+      return {
+        success: false,
+        notification: null,
+        result: undefined,
+      }
+    }
+
+    const effectiveQueryText = query.selection ? query.selection.queryText : query.query
+    const queryKey = createQueryKeyFromRequest(editor, query)
     const activeBufferId = activeBuffer.id as number
     let notification: Partial<NotificationShape> & { content: ReactNode, query: QueryKey } | null = null
     dispatch(actions.query.setResult(undefined))
 
     try {
-      const result = await quest.queryRaw(normalizeQueryText(query.query), { limit: "0,1000", explain: true })
+      const result = await quest.queryRaw(normalizeQueryText(effectiveQueryText), { limit: "0,1000", explain: true })
 
       if (executionRefs.current[activeBufferId]) {
         delete executionRefs.current[activeBufferId][queryKey]
@@ -789,7 +790,7 @@ const MonacoEditor = () => {
       if (result.type === QuestDB.Type.DDL || result.type === QuestDB.Type.DML) {
         notification = {
           query: queryKey,
-          content: <QueryInNotification query={query.query} />,
+          content: <QueryInNotification query={effectiveQueryText} />,
         }
       }
 
@@ -797,28 +798,41 @@ const MonacoEditor = () => {
         notification = {
           query: queryKey,
           content: (
-            <Text color="foreground" ellipsis title={query.query}>
+            <Text color="foreground" ellipsis title={effectiveQueryText}>
               {result.notice}
-              {query.query !== undefined && query.query !== "" && `: ${query.query}`}
+              {effectiveQueryText !== undefined && effectiveQueryText !== "" && `: ${effectiveQueryText}`}
             </Text>
           ),
-          sideContent: <QueryInNotification query={query.query} />,
+          sideContent: <QueryInNotification query={effectiveQueryText} />,
           type: NotificationType.NOTICE,
         }
       }
       
       if (result.type === QuestDB.Type.DQL) {
-        setLastExecutedQuery(queryText)
+        setLastExecutedQuery(effectiveQueryText)
         notification = {
           query: queryKey,
           jitCompiled: result.explain?.jitCompiled ?? false,
           content: <QueryResult {...result.timings} rowCount={result.count} />,
-          sideContent: <QueryInNotification query={query.query} />,
+          sideContent: <QueryInNotification query={effectiveQueryText} />,
       }
       }
-      if (isLast) {
-        dispatch(actions.query.setResult(result))
+
+      if (query.selection) {
+        if (!executionRefs.current[activeBufferId]) {
+          executionRefs.current[activeBufferId] = {}
         }
+        
+        const queryStartOffset = getQueryStartOffset(editor, query)
+        executionRefs.current[activeBufferId][queryKey] = {
+          success: true,
+          selection: query.selection,
+          queryText: query.query,
+          startOffset: queryStartOffset,
+          endOffset: queryStartOffset + normalizeQueryText(query.query).length,
+        }
+      }
+
       if (isLast) {
         dispatch(actions.query.setResult(result))
       }
@@ -835,12 +849,13 @@ const MonacoEditor = () => {
         executionRefs.current[activeBufferId] = {}
       }
       
-      const startOffset = getQueryStartOffset(editorRef.current!, query)
+      const startOffset = getQueryStartOffset(editor, query)
       executionRefs.current[activeBufferId][queryKey] = {
         error,
         queryText: query.query,
         startOffset,
         endOffset: startOffset + normalizeQueryText(query.query).length,
+        selection: query.selection,
       }
 
       notification = {
@@ -857,13 +872,23 @@ const MonacoEditor = () => {
     }
   }
 
-  const handleTriggerRunScript = (queriesToRun: Request[]) => {
-    queriesToRunRef.current = queriesToRun
+  const handleTriggerRunScript = () => {
     if (running === RunningType.SCRIPT) {
       dispatch(actions.query.toggleRunning())
     } else if (running === RunningType.NONE) {
-      dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+      const hasMultipleSelection = queriesToRunRef.current && queriesToRunRef.current.length > 1
+      
+      if (!hasMultipleSelection) { // Run all queries in the buffer
+        setScriptConfirmationOpen(true)
+      } else { // Run selected portion of each query one by one
+        dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+      }
     }
+  }
+
+  const handleConfirmRunScript = () => {
+    setScriptConfirmationOpen(false)
+    dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
   }
 
   const handleRunScript = async () => {
@@ -978,7 +1003,6 @@ const MonacoEditor = () => {
     ))
     isRunningScriptRef.current = false
     scriptStopRef.current = false
-    queriesToRunRef.current = []
   }
 
   useEffect(() => {
@@ -1027,12 +1051,18 @@ const MonacoEditor = () => {
 
       const request = running === RunningType.REFRESH
         ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-        : getQueryRequestFromEditor(editorRef.current, running === RunningType.EXPLAIN)
+        : getQueryRequestFromEditor(editorRef.current)
+      
+      const isRunningExplain = running === RunningType.EXPLAIN
 
       if (request?.query) {
-        const originalQuery = running === RunningType.EXPLAIN && request.query.startsWith('EXPLAIN ') 
-          ? request.query.substring(8) // Remove "EXPLAIN " prefix
-          : request.query
+        const parentQuery = request.query
+        const parentQueryKey = createQueryKeyFromRequest(editorRef.current, request)
+        const originalQueryText = request.selection ? request.selection.queryText : request.query
+        let queryToRun = originalQueryText
+        if (isRunningExplain) {
+          queryToRun = `EXPLAIN ${originalQueryText}`
+        }
         
         // give the notification a slight delay to prevent flashing for fast queries
         notificationTimeoutRef.current = window.setTimeout(() => {
@@ -1040,8 +1070,8 @@ const MonacoEditor = () => {
             dispatch(
               actions.query.addNotification({
                 type: NotificationType.LOADING,
-                query: createQueryKeyFromRequest(editorRef.current, request),
-                isExplain: running === RunningType.EXPLAIN,
+                query: parentQueryKey,
+                isExplain: isRunningExplain,
                 content: (
                   <Box gap="1rem" align="center">
                     <Text color="foreground">Running...</Text>
@@ -1050,7 +1080,7 @@ const MonacoEditor = () => {
                     </CancelButton>
                   </Box>
                 ),
-                sideContent: <QueryInNotification query={request.query} />,
+                sideContent: <QueryInNotification query={queryToRun} />,
               }, activeBuffer.id as number),
             )
           }
@@ -1058,7 +1088,7 @@ const MonacoEditor = () => {
         }, 1000)
 
         void quest
-          .queryRaw(normalizeQueryText(request.query), { limit: "0,1000", explain: true })
+          .queryRaw(normalizeQueryText(queryToRun), { limit: "0,1000", explain: true })
           .then((result) => {
             if (notificationTimeoutRef.current) {
               window.clearTimeout(notificationTimeoutRef.current)
@@ -1068,21 +1098,6 @@ const MonacoEditor = () => {
             setRequest(undefined)
             if (!editorRef.current) return
 
-            let parentQuery: Request = request
-
-            if (request.isSelection) {
-              const query = getQueryFromCursor(editorRef.current)
-              if (query) {
-                parentQuery = query
-              } else {
-                const originalRequest = { ...request, query: originalQuery }
-                parentQuery = originalRequest
-              }
-            } else {
-              const originalRequest = { ...request, query: originalQuery }
-              parentQuery = originalRequest
-            }
-            const parentQueryKey = createQueryKeyFromRequest(editorRef.current, parentQuery)
             const activeBufferId = activeBuffer.id as number
             
             if (executionRefs.current[activeBufferId] && editorRef.current) {
@@ -1092,30 +1107,20 @@ const MonacoEditor = () => {
               }
             }
 
-            if (request.isSelection) {
-              const selection = editorRef.current.getSelection()
-              if (selection) {
-                const model = editorRef.current.getModel()
-                if (model) {
-                  const startOffset = model.getOffsetAt(selection.getStartPosition())
-                  const endOffset = model.getOffsetAt(selection.getEndPosition())
-                  const selectionInfo = {
-                    startOffset,
-                    endOffset
-                  }
-                  
-                  if (!executionRefs.current[activeBufferId]) {
-                    executionRefs.current[activeBufferId] = {}
-                  }
-                  
-                  const queryStartOffset = getQueryStartOffset(editorRef.current, parentQuery)
-                  executionRefs.current[activeBufferId][parentQueryKey] = {
-                    success: true,
-                    selection: selectionInfo,
-                    queryText: parentQuery.query,
-                    startOffset: queryStartOffset,
-                    endOffset: queryStartOffset + normalizeQueryText(parentQuery.query).length,
-                  }
+            if (request.selection) {
+              const model = editorRef.current.getModel()
+              if (model) {
+                if (!executionRefs.current[activeBufferId]) {
+                  executionRefs.current[activeBufferId] = {}
+                }
+                
+                const queryStartOffset = getQueryStartOffset(editorRef.current, request)
+                executionRefs.current[activeBufferId][parentQueryKey] = {
+                  success: true,
+                  selection: request.selection,
+                  queryText: parentQuery,
+                  startOffset: queryStartOffset,
+                  endOffset: queryStartOffset + normalizeQueryText(parentQuery).length,
                 }
               }
             }
@@ -1130,8 +1135,8 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running === RunningType.EXPLAIN,
-                  content: <QueryInNotification query={request.query} />,
+                  isExplain: isRunningExplain,
+                  content: <QueryInNotification query={queryToRun} />,
                 }, activeBuffer.id as number),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -1141,16 +1146,16 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running === RunningType.EXPLAIN,
+                  isExplain: isRunningExplain,
                   content: (
-                    <Text color="foreground" ellipsis title={request.query}>
+                    <Text color="foreground" ellipsis title={queryToRun}>
                       {result.notice}
-                      {request.query !== undefined &&
-                        request.query !== "" &&
-                        `: ${request.query}`}
+                      {queryToRun !== undefined &&
+                        queryToRun !== "" &&
+                        `: ${queryToRun}`}
                     </Text>
                   ),
-                  sideContent: <QueryInNotification query={request.query} />,
+                  sideContent: <QueryInNotification query={queryToRun} />,
                   type: NotificationType.NOTICE,
                 }, activeBuffer.id as number),
               )
@@ -1158,16 +1163,16 @@ const MonacoEditor = () => {
             }
 
             if (result.type === QuestDB.Type.DQL) {
-              setLastExecutedQuery(originalQuery)
+              setLastExecutedQuery(queryToRun)
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running === RunningType.EXPLAIN,
+                  isExplain: isRunningExplain,
                   jitCompiled: result.explain?.jitCompiled ?? false,
                   content: (
                     <QueryResult {...result.timings} rowCount={result.count} />
                   ),
-                  sideContent: <QueryInNotification query={request.query} />,
+                  sideContent: <QueryInNotification query={queryToRun} />,
                 }, activeBuffer.id as number),
               )
               eventBus.publish(EventType.MSG_QUERY_DATASET, result)
@@ -1186,64 +1191,35 @@ const MonacoEditor = () => {
               // For error positioning, we need to use the original request (without EXPLAIN prefix)
               // but adjust the error position if it was an EXPLAIN query
               let adjustedErrorPosition = error.position
-              if (running === RunningType.EXPLAIN && request.query.startsWith('EXPLAIN ')) {
+              if (isRunningExplain) {
                 // Adjust error position to account for removed "EXPLAIN " prefix
                 adjustedErrorPosition = Math.max(0, error.position - 8)
               }
-              
-              const originalRequest = {
-                ...request,
-                query: originalQuery
+              if (request.selection) {
+                adjustedErrorPosition += parentQuery.indexOf(request.selection.queryText)
               }
               
               const errorRange = getErrorRange(
                 editorRef.current,
-                originalRequest,
+                request,
                 adjustedErrorPosition,
               )
 
-              let parentQuery: Request = originalRequest
               let errorToStore = { ...error, position: adjustedErrorPosition }
-
-              let selectionInfo = undefined
-              if (request.isSelection && errorRange && editorRef.current) {
-                const selection = editorRef.current.getSelection()
-                if (selection) {
-                  const model = editorRef.current.getModel()
-                  if (model) {
-                    const startOffset = model.getOffsetAt(selection.getStartPosition())
-                    const endOffset = model.getOffsetAt(selection.getEndPosition())
-                    selectionInfo = {
-                      startOffset,
-                      endOffset
-                    }
-                  }
-                }
-                editorRef?.current.setPosition({
-                  lineNumber: errorRange.startLineNumber,
-                  column: errorRange.startColumn,
-                })
-                const query = getQueryFromCursor(editorRef.current)
-                
-                if (query) {
-                  parentQuery = query
-                  errorToStore = { ...error, position: query.query.indexOf(originalQuery) + adjustedErrorPosition }
-                }
-              }
-
-              const parentQueryKey = createQueryKeyFromRequest(editorRef.current, parentQuery)
+             
+              const parentQueryKey = createQueryKeyFromRequest(editorRef.current, request)
               const activeBufferId = activeBuffer.id as number
               if (!executionRefs.current[activeBufferId]) {
                 executionRefs.current[activeBufferId] = {}
               }
               
-              const startOffset = getQueryStartOffset(editorRef.current, parentQuery)  
+              const startOffset = getQueryStartOffset(editorRef.current, request)  
               executionRefs.current[activeBufferId][parentQueryKey] = {
                 error: errorToStore,
-                selection: selectionInfo,
-                queryText: parentQuery.query,
+                selection: request.selection,
+                queryText: parentQuery,
                 startOffset,
-                endOffset: startOffset + normalizeQueryText(parentQuery.query).length,
+                endOffset: startOffset + normalizeQueryText(parentQuery).length,
               }
                             
               if (errorRange) {
@@ -1263,9 +1239,9 @@ const MonacoEditor = () => {
               dispatch(
                 actions.query.addNotification({
                   query: parentQueryKey,
-                  isExplain: running === RunningType.EXPLAIN,
+                  isExplain: isRunningExplain,
                   content: <Text color="red">{error.error}</Text>,
-                  sideContent: <QueryInNotification query={request.query} />,
+                  sideContent: <QueryInNotification query={queryToRun} />,
                   type: NotificationType.ERROR,
                 }, activeBuffer.id as number),
               )
@@ -1386,33 +1362,58 @@ const MonacoEditor = () => {
         <Loader show={!!request || !tables} />
       </Content>
       
-      <DropdownMenu.Root open={dropdownOpen} onOpenChange={(open) => {
-        setDropdownOpen(open)
-        if (!open) {
-          setDropdownPosition(null)
-        }
-      }}>
-        <DropdownMenu.Trigger asChild>
-          <HiddenTrigger 
-            style={{ 
-              top: dropdownPosition?.y ? `${dropdownPosition.y}px` : '0px',
-              left: dropdownPosition?.x ? `${dropdownPosition.x}px` : '0px'
-            }} 
-          />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <StyledDropdownContent>
-            <StyledDropdownItem onClick={handleRunQuery} data-hook="dropdown-item-run-query">
-              <IconWrapper><StyledPlayFilled size={18} color="#fff" /></IconWrapper>
-              Run query
-            </StyledDropdownItem>
-            <StyledDropdownItem onClick={handleExplainQuery} data-hook="dropdown-item-get-query-plan">
-              <IconWrapper><Information size={18} /></IconWrapper>
-              Get query plan
-            </StyledDropdownItem>
-          </StyledDropdownContent>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
+      <QueryDropdown
+        open={dropdownOpen}
+        onOpenChange={(open) => {
+          setDropdownOpen(open)
+          if (!open) {
+            dropdownPositionRef.current = null
+            dropdownQueriesRef.current = []
+            isContextMenuDropdownRef.current = false
+          }
+        }}
+        positionRef={dropdownPositionRef}
+        queriesRef={dropdownQueriesRef}
+        isContextMenuRef={isContextMenuDropdownRef}
+        onRunQuery={handleRunQuery}
+        onExplainQuery={handleExplainQuery}
+      />
+      
+      <AlertDialog.Root open={scriptConfirmationOpen} onOpenChange={setScriptConfirmationOpen}>
+        <AlertDialog.Portal>
+          <ForwardRef>
+            <Overlay primitive={AlertDialog.Overlay} />
+          </ForwardRef>
+          
+          <AlertDialog.Content>
+            <AlertDialog.Title>
+              Run All Queries
+            </AlertDialog.Title>
+            
+            <StyledDialogDescription>
+              <Text color="foreground">
+                You are about to run all queries in this tab. This action may modify or delete your data permanently.
+              </Text>
+            </StyledDialogDescription>
+            
+            <AlertDialog.ActionButtons>
+              <AlertDialog.Cancel asChild>
+                <StyledDialogButton skin="secondary" onClick={() => setScriptConfirmationOpen(false)}>
+                  Cancel
+                </StyledDialogButton>
+              </AlertDialog.Cancel>
+              
+              <AlertDialog.Action asChild>
+                <ForwardRef>
+                  <StyledDialogButton skin="primary" onClick={handleConfirmRunScript}>
+                    Run All Scripts
+                  </StyledDialogButton>
+                </ForwardRef>
+              </AlertDialog.Action>
+            </AlertDialog.ActionButtons>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
     </>
   )
 }
