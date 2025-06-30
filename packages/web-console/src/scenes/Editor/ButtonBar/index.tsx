@@ -12,18 +12,15 @@ import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 
 const ButtonBarWrapper = styled.div`
-  display: flex;
-  gap: 0;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid #3a3a3a;
-  background: #282a36;
-  flex-shrink: 0;
+  position: absolute;
+  top: 1rem;
+  right: 2.4rem;
+  z-index: 1;
 `
 
 const ButtonGroup = styled.div`
   display: flex;
   gap: 0;
-  margin-right: 1rem;
 `
 
 const SuccessButton = styled(Button)`

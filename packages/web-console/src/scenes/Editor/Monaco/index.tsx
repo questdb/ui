@@ -930,10 +930,11 @@ const MonacoEditor = () => {
     let failedQueries = 0
     if (!editorRef.current) return
     const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
+    const runningAllQueries = !queriesToRun
 
     // Clear all notifications & execution refs for the buffer
     const activeBufferId = activeBuffer.id as number
-    if (!queriesToRun) {
+    if (runningAllQueries) {
       dispatch(actions.query.cleanupBufferNotifications(activeBufferId))
       if (executionRefs.current[activeBufferId]) {
         delete executionRefs.current[activeBufferId]
@@ -973,7 +974,7 @@ const MonacoEditor = () => {
         failedQueries++
       }
       lastQuery = query
-      if (scriptStopRef.current || (failedQueries > 0 && stopAfterFailureRef.current)) {
+      if (scriptStopRef.current || (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)) {
         break
       }
     }
@@ -1016,7 +1017,8 @@ const MonacoEditor = () => {
     }
 
     const completedGracefully = queries.length === individualQueryResults.length
-    if (completedGracefully || (failedQueries > 0 && stopAfterFailureRef.current)) {
+    if (completedGracefully || (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)) {
+      isRunningScriptRef.current = false
       dispatch(actions.query.stopRunning())
     }
 
@@ -1294,6 +1296,7 @@ const MonacoEditor = () => {
     } else if (running === RunningType.NONE && isRunningScriptRef.current) {
       quest.abort()
       scriptStopRef.current = true
+      eventBus.publish(EventType.MSG_QUERY_SCHEMA)
     }
   }, [running])
 
@@ -1358,8 +1361,8 @@ const MonacoEditor = () => {
 
   return (
     <>
-      <ButtonBar onTriggerRunScript={handleTriggerRunScript} />
       <Content onClick={handleEditorClick}>
+        <ButtonBar onTriggerRunScript={handleTriggerRunScript} />
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}
