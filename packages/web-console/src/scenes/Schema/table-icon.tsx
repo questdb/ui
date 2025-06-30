@@ -65,19 +65,27 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
 
 export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designatedTimestamp, isMaterializedView }) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
-  const partitionText = isPartitioned ? `partitioned by \"${partitionBy.toLowerCase()}\"` : "unpartitioned"
+  const partitionText = isPartitioned ? `Partitioned by \"${partitionBy.toLowerCase()}\"` : "Unpartitioned"
   const timestampText = !!designatedTimestamp ? `ordered on \"${designatedTimestamp}\" column` : "unordered"
   const walText = walEnabled ? "WAL-based table" : "Legacy table format"
-  const fullHeader = `${walText}, ${partitionText}, ${timestampText}.`
+  const fullHeader = `${walText}. ${partitionText}, ${timestampText}.`
   const description = walEnabled
     ? "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
     : "Legacy table format, without WAL (write-ahead-log). This table format should only be used when table does not have timestamp column and generally not a time series. These tables are not replicated and could be slower to ingress data into."
 
   if (isMaterializedView) {
     return (
-      <Root data-hook="table-icon">
-        <MaterializedViewIcon height="14px" width="14px" />
-      </Root>
+      <PopperHover
+        trigger={
+          <Root data-hook="table-icon">
+            <MaterializedViewIcon height="14px" width="14px" />
+          </Root>
+        }
+        delay={1000}
+        placement="bottom"
+      >
+        <Tooltip>{partitionText}, {timestampText}.</Tooltip>
+      </PopperHover>
     )
   }
 
