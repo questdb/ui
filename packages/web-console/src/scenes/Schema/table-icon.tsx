@@ -1,11 +1,15 @@
 import React, { FC } from "react"
 import styled from "styled-components"
 import { Table } from "@styled-icons/remix-line"
+import { PopperHover } from "../../components/PopperHover"
+import { Tooltip } from "../../components/Tooltip"
 import { color } from '../../utils'
+import * as QuestDB from "../../utils/questdb"
 
 type TableIconProps = {
   walEnabled?: boolean
-  isPartitioned?: boolean
+  partitionBy?: QuestDB.PartitionBy
+  designatedTimestamp?: string
   isMaterializedView?: boolean
 }
 
@@ -59,15 +63,49 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const TableIcon: FC<TableIconProps> = ({ walEnabled, isPartitioned, isMaterializedView }) => (
-  <Root>
-    {isMaterializedView ? (
-      <MaterializedViewIcon height="14px" width="14px" />
-    ) : (
-      <>
-        {!walEnabled && <Asterisk>*</Asterisk>}
-        {isPartitioned ? <Table size="14px" /> : <NonPartitionedTableIcon height="14px" />}
-      </>
-    )}
-  </Root>
-)
+export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designatedTimestamp, isMaterializedView }) => {
+  const isPartitioned = partitionBy && partitionBy !== "NONE"
+  const partitionText = isPartitioned ? `Partitioned by \"${partitionBy.toLowerCase()}\"` : "Unpartitioned"
+  const timestampText = !!designatedTimestamp ? `ordered on \"${designatedTimestamp}\" column` : "unordered"
+  const walText = walEnabled ? "WAL-based table" : "Legacy table format"
+  const fullHeader = `${walText}. ${partitionText}, ${timestampText}.`
+  const description = walEnabled
+    ? "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
+    : "Legacy table format, without WAL (write-ahead-log). This table format should only be used when table does not have timestamp column and generally not a time series. These tables are not replicated and could be slower to ingress data into."
+
+  if (isMaterializedView) {
+    return (
+      <PopperHover
+        trigger={
+          <Root data-hook="table-icon">
+            <MaterializedViewIcon height="14px" width="14px" />
+          </Root>
+        }
+        delay={1000}
+        placement="bottom"
+      >
+        <Tooltip>{partitionText}, {timestampText}.</Tooltip>
+      </PopperHover>
+    )
+  }
+
+  return (
+    <PopperHover
+      trigger={
+        <Root data-hook="table-icon">
+          {!walEnabled && <Asterisk>*</Asterisk>}
+          {isPartitioned ? <Table size="14px" /> : <NonPartitionedTableIcon height="14px" />}
+        </Root>
+      }
+      delay={1000}
+      placement="bottom"
+    >
+      <Tooltip>
+        {fullHeader}
+        <br />
+        <br />
+        {description}
+      </Tooltip>
+    </PopperHover>
+  )
+}
