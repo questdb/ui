@@ -44,6 +44,7 @@ export QDB_ACL_OIDC_PORT=9999
 export QDB_ACL_OIDC_USERINFO_ENDPOINT=/userinfo
 
 # Running enterprise tests
+rm -rf tmp/dbroot/*
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
 yarn workspace browser-tests test:enterprise
 ./tmp/questdb-*/bin/questdb.sh stop

@@ -67,7 +67,7 @@ describe("TopBar", () => {
 });
 
 describe("Instance information access control", () => {
-  it("should not allow editing instance information in OSS if the instance is readonly", () => {
+  it("should not allow editing instance information if the instance is readonly", () => {
     cy.intercept(
       {
         method: "GET",
@@ -86,108 +86,6 @@ describe("Instance information access control", () => {
     cy.loadConsoleWithAuth();
 
     cy.wait("@settings");
-    cy.getByDataHook("topbar-instance-badge").should("be.visible");
-    cy.getByDataHook("topbar-instance-edit-icon").should("not.exist");
-  });
-
-  it("should show edit icon if the user has SETTINGS permission", () => {
-    cy.loadConsoleWithAuth();
-    cy.intercept(
-      {
-        method: "GET",
-        url: `${baseUrl}/settings`,
-      },
-      (req) => {
-        req.reply((res) => {
-          const originalConfig = res.body.config || {};
-          res.body.config = Object.assign({}, originalConfig, {
-            "release.type": "EE",
-          });
-          return res;
-        });
-      }
-    ).as("settings");
-    cy.interceptQuery("SHOW PERMISSIONS admin", "showPermissions", {
-      type: "dql",
-      columns: [
-        {
-          name: "permission",
-          type: "STRING",
-        },
-        {
-          name: "table_name",
-          type: "STRING",
-        },
-        {
-          name: "column_name",
-          type: "STRING",
-        },
-        {
-          name: "grant_option",
-          type: "BOOLEAN",
-        },
-        {
-          name: "origin",
-          type: "STRING",
-        },
-      ],
-      dataset: [["SETTINGS", null, null, false, null]],
-      count: 1,
-    });
-    cy.reload();
-    cy.wait("@settings");
-    cy.wait("@showPermissions");
-    cy.getByDataHook("topbar-instance-badge").should("be.visible");
-    cy.getByDataHook("topbar-instance-edit-icon").should("be.visible");
-  });
-
-  it("should not show edit icon if the user has no SETTINGS permission", () => {
-    cy.loadConsoleWithAuth();
-    cy.intercept(
-      {
-        method: "GET",
-        url: `${baseUrl}/settings`,
-      },
-      (req) => {
-        req.reply((res) => {
-          const originalConfig = res.body.config || {};
-          res.body.config = Object.assign({}, originalConfig, {
-            "release.type": "EE",
-          });
-          return res;
-        });
-      }
-    ).as("settings");
-    cy.interceptQuery("SHOW PERMISSIONS admin", "showPermissions", {
-      type: "dql",
-      columns: [
-        {
-          name: "permission",
-          type: "STRING",
-        },
-        {
-          name: "table_name",
-          type: "STRING",
-        },
-        {
-          name: "column_name",
-          type: "STRING",
-        },
-        {
-          name: "grant_option",
-          type: "BOOLEAN",
-        },
-        {
-          name: "origin",
-          type: "STRING",
-        },
-      ],
-      dataset: [["HTTP", null, null, false, null]],
-      count: 1,
-    });
-    cy.reload();
-    cy.wait("@settings");
-    cy.wait("@showPermissions");
     cy.getByDataHook("topbar-instance-badge").should("be.visible");
     cy.getByDataHook("topbar-instance-edit-icon").should("not.exist");
   });

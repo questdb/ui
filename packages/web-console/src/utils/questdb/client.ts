@@ -3,7 +3,6 @@ import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
-import { StoreKey } from "../localStorage/types"
 import { API_VERSION } from "../../consts"
 import {
   Type,
@@ -25,6 +24,7 @@ import {
   Preferences,
   Permission,
 } from "./types"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -36,16 +36,13 @@ export class Client {
   > => {
     return {}
   }
+
   private tokenNeedsRefresh() {
-    const authPayload = localStorage.getItem(StoreKey.AUTH_PAYLOAD)
-    const refreshToken = localStorage.getItem(StoreKey.AUTH_REFRESH_TOKEN)
-    if (authPayload) {
-      const parsed = JSON.parse(authPayload)
-      return (
-        new Date(parsed.expires_at).getTime() - new Date().getTime() < 30000 &&
-        refreshToken !== ""
+    const authPayload = ssoAuthState.getAuthPayload()
+    return (
+        authPayload && authPayload.refresh_token
+      && new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
       )
-    }
   }
 
   setCommonHeaders(headers: Record<string, string>) {
@@ -129,10 +126,6 @@ export class Client {
   async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
     const result = await this.queryRaw(query, options)
 
-    return Client.transformQueryRawResult<T>(result)
-  }
-
-  async mockQueryResult<T>(result: QueryRawResult): Promise<QueryResult<T>> {
     return Client.transformQueryRawResult<T>(result)
   }
 
@@ -339,7 +332,7 @@ export class Client {
   }
 
   async showPermissions(user: string): Promise<QueryResult<Permission>> {
-    return await this.query<Permission>(`SHOW PERMISSIONS ${user};`)
+    return await this.query<Permission>(`SHOW PERMISSIONS '${user}';`)
   }
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
