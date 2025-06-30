@@ -149,20 +149,24 @@ const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
   [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
 }
 
-const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (queriesToRun: Request[]) => void }) => {
+const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boolean) => void }) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [dropdownActive, setDropdownActive] = useState(false)
 
   const handleClickQueryButton = useCallback(() => {
-    dispatch(actions.query.toggleRunning())
-  }, [dispatch])
+    if (queriesToRun.length > 1) {
+      onTriggerRunScript()
+    } else {
+      dispatch(actions.query.toggleRunning())
+    }
+  }, [dispatch, queriesToRun, onTriggerRunScript])
 
   const handleClickScriptButton = useCallback(() => {
-    onTriggerRunScript(queriesToRun as Request[])
+    onTriggerRunScript(true)
     setDropdownActive(false)
-  }, [dispatch, running, queriesToRun, onTriggerRunScript])
+  }, [dispatch, onTriggerRunScript])
 
   const handleDropdownToggle = useCallback((active: boolean) => {
     setDropdownActive(active)
@@ -187,7 +191,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (queriesToRun: 
         onClick={handleClickScriptButton}
         disabled={running !== RunningType.NONE}
       >
-        {queriesToRun.length > 1 ? "Run all selected" : "Run all"}
+          Run all queries
         <RunShortcut> 
           <Key>{ctrlCmd}</Key>
           <Key>⇧</Key>
@@ -211,18 +215,27 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (queriesToRun: 
         </ButtonGroup>
       )
     }
+
+    const getQueryButtonText = () => {
+      const numQueries = queriesToRun.length
+      if (numQueries === 1) {
+        return queriesToRun[0].selection ? "Run selected query" : "Run query"
+      }
+      if (numQueries > 1) {
+        return `Run ${numQueries} selected queries`
+      }
+      return "Run query"
+    }
     
     return (
       <ButtonGroup>
         <MainRunButton
           skin="success"
-          // @ts-ignore
-          style={{ border: 'none' }}
           title={shortcutTitles[RunningType.QUERY]}
           onClick={handleClickQueryButton}
-          disabled={running !== RunningType.NONE || queriesToRun.length === 0 || queriesToRun.length > 1}
+          disabled={running !== RunningType.NONE || queriesToRun.length === 0}
         >
-          {queriesToRun.length === 1 && queriesToRun[0].selection ? "Run selection" : "Run query"}
+          {getQueryButtonText()}
           <RunShortcut>
             <Key>{ctrlCmd}</Key>
             <Key><CornerDownLeft size="16px" /></Key>
@@ -251,7 +264,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (queriesToRun: 
 
   return (
     <ButtonBarWrapper>
-      {renderRunQueryButton()}
+      {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>
   )
 }

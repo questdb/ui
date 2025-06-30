@@ -465,6 +465,9 @@ export const getQueryFromSelection = (
     if (stripSQLComments(normalizedSelectedText).length > 0) {
       selectionStartOffset += selectedText.indexOf(normalizedSelectedText)
       selectionEndOffset = selectionStartOffset + normalizedSelectedText.length
+      const startPos = model.getPositionAt(selectionEndOffset)
+      const endPos = model.getPositionAt(selectionEndOffset)
+      editor.setSelection({ startLineNumber: startPos.lineNumber, endLineNumber: endPos.lineNumber, startColumn: startPos.column, endColumn: endPos.column })
       const parentQuery = getQueryFromCursor(editor)
       if (parentQuery) {
         return {

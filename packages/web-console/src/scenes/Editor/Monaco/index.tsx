@@ -1,5 +1,5 @@
 import Editor, { loader, Monaco } from "@monaco-editor/react"
-import { Box, Button, AlertDialog, ForwardRef, Overlay } from "@questdb/react-components"
+import { Box, Button, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
@@ -39,8 +39,6 @@ import {
   getAllQueries,
   getQueriesInRange,
   normalizeQueryText,
-  getSelectedText,
-  stripSQLComments,
   QueryKey,
   createQueryKey,
   parseQueryKey,
@@ -144,13 +142,17 @@ const CancelButton = styled(Button)`
   padding: 1.2rem 0.6rem;
 `
 
-const StyledDialogDescription = styled(AlertDialog.Description)`
+const StyledDialogDescription = styled(Dialog.Description)`
   font-size: 1.4rem;
 `
 
 const StyledDialogButton = styled(Button)`
   padding: 1.2rem 0.6rem;
   font-size: 1.4rem;
+
+  &:focus {
+    outline: 1px solid ${({ theme }) => theme.color.foreground};
+  }
 `
 
 const DEFAULT_LINE_CHARS = 5
@@ -299,7 +301,9 @@ const MonacoEditor = () => {
             lineNumber: target.position.lineNumber,
             column: 1
           }   
-          const selectionCanBeRun = queriesToRunRef.current.length === 1 && queriesToRunRef.current[0].row + 1 === target.position.lineNumber
+          const selectionCanBeRun = queriesToRunRef.current.length === 1
+            && queriesToRunRef.current[0].selection
+            && queriesToRunRef.current[0].row + 1 === target.position.lineNumber
           if (selectionCanBeRun) {
             toggleRunning()
             return
@@ -311,7 +315,6 @@ const MonacoEditor = () => {
             openDropdownAtPosition(e.clientX, e.clientY, position, false)
             return
           }
-          
           editor.setPosition(position)
           toggleRunning()
         }
@@ -491,9 +494,9 @@ const MonacoEditor = () => {
         allDecorations.push({
           range: new monaco.Range(
             startLineNumber,
-            query.column,
+            1,
             startLineNumber,
-            query.endColumn
+            1
           ),
           options: {
             isWholeLine: false,
@@ -530,12 +533,16 @@ const MonacoEditor = () => {
       monaco,
       runQuery: () => {
         if (runningValueRef.current === RunningType.NONE) {
-          toggleRunning()
+          if (queriesToRunRef.current.length === 1) {
+            toggleRunning()
+          } else if (queriesToRunRef.current.length > 1) {
+            handleTriggerRunScript()
+          }
         }
       },
       runScript: () => {
         if (runningValueRef.current === RunningType.NONE) {
-          handleTriggerRunScript()
+          handleTriggerRunScript(true)
         }
       },
       editorContext,
@@ -675,6 +682,10 @@ const MonacoEditor = () => {
       executionRefs.current[activeBufferId] = bufferExecutions
 
       applyGlyphsAndLineMarkings(monaco, editor)
+
+      const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
+      queriesToRunRef.current = queriesToRun
+      dispatch(actions.query.setQueriesToRun(queriesToRun))
       
       contentJustChangedRef.current = false
       notificationUpdates.forEach(update => update())
@@ -872,12 +883,16 @@ const MonacoEditor = () => {
     }
   }
 
-  const handleTriggerRunScript = () => {
+  const handleTriggerRunScript = (runAll?: boolean) => {
     if (running === RunningType.SCRIPT) {
       dispatch(actions.query.toggleRunning())
     } else if (running === RunningType.NONE) {
+      if (runAll) {
+        setScriptConfirmationOpen(true)
+        return
+      }
+
       const hasMultipleSelection = queriesToRunRef.current && queriesToRunRef.current.length > 1
-      
       if (!hasMultipleSelection) { // Run all queries in the buffer
         setScriptConfirmationOpen(true)
       } else { // Run selected portion of each query one by one
@@ -888,20 +903,32 @@ const MonacoEditor = () => {
 
   const handleConfirmRunScript = () => {
     setScriptConfirmationOpen(false)
+    queriesToRunRef.current = []
     dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+  }
+
+  const handleToggleDialog = (open: boolean) => {
+    setScriptConfirmationOpen(open)
+    if (!open) {
+      setTimeout(() => editorRef.current?.focus())
+    }
   }
 
   const handleRunScript = async () => {
     let successfulQueries = 0
     let failedQueries = 0
     if (!editorRef.current) return
+    const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
 
     // Clear all notifications & execution refs for the buffer
     const activeBufferId = activeBuffer.id as number
-    dispatch(actions.query.cleanupBufferNotifications(activeBufferId))
-    if (executionRefs.current[activeBufferId]) {
-      delete executionRefs.current[activeBufferId]
+    if (!queriesToRun) {
+      dispatch(actions.query.cleanupBufferNotifications(activeBufferId))
+      if (executionRefs.current[activeBufferId]) {
+        delete executionRefs.current[activeBufferId]
+      }
     }
+    
     isRunningScriptRef.current = true
 
     notificationTimeoutRef.current = window.setTimeout(() => {
@@ -911,7 +938,7 @@ const MonacoEditor = () => {
           query: `${activeBufferRef.current.label}@${0}-${0}`,
           content: (
             <Box gap="1rem" align="center">
-              <Text color="foreground">Running script...</Text>
+              <Text color="foreground">Running queries...</Text>
             </Box>
           ),
           createdAt: new Date(),
@@ -920,7 +947,6 @@ const MonacoEditor = () => {
       notificationTimeoutRef.current = null
     }, 1000)
     const startTime = Date.now()
-    const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
 
     const queries = queriesToRun ?? getAllQueries(editorRef.current)
     let lastQuery: Request | undefined
@@ -984,8 +1010,8 @@ const MonacoEditor = () => {
     }
 
     const notificationPrefix = completedGracefully
-      ? `Running script completed in ${formatTiming(duration)} with `
-      : "Stopped script after running "
+      ? `Running completed in ${formatTiming(duration)} with `
+      : "Stopped after running "
 
     setTimeout(() => dispatch(
       actions.query.addNotification({
@@ -1379,16 +1405,19 @@ const MonacoEditor = () => {
         onExplainQuery={handleExplainQuery}
       />
       
-      <AlertDialog.Root open={scriptConfirmationOpen} onOpenChange={setScriptConfirmationOpen}>
-        <AlertDialog.Portal>
+      <Dialog.Root open={scriptConfirmationOpen} onOpenChange={handleToggleDialog}>
+        <Dialog.Portal>
           <ForwardRef>
-            <Overlay primitive={AlertDialog.Overlay} />
+            <Overlay primitive={Dialog.Overlay} />
           </ForwardRef>
           
-          <AlertDialog.Content>
-            <AlertDialog.Title>
-              Run All Queries
-            </AlertDialog.Title>
+          <Dialog.Content
+            onEscapeKeyDown={() => handleToggleDialog(false)}
+            onInteractOutside={() => handleToggleDialog(false)}
+          >
+            <Dialog.Title>
+              Run all queries
+            </Dialog.Title>
             
             <StyledDialogDescription>
               <Text color="foreground">
@@ -1396,24 +1425,20 @@ const MonacoEditor = () => {
               </Text>
             </StyledDialogDescription>
             
-            <AlertDialog.ActionButtons>
-              <AlertDialog.Cancel asChild>
-                <StyledDialogButton skin="secondary" onClick={() => setScriptConfirmationOpen(false)}>
+            <Dialog.ActionButtons>
+              <Dialog.Close asChild>
+                <StyledDialogButton skin="secondary" onClick={() => handleToggleDialog(false)}>
                   Cancel
                 </StyledDialogButton>
-              </AlertDialog.Cancel>
+              </Dialog.Close>
               
-              <AlertDialog.Action asChild>
-                <ForwardRef>
-                  <StyledDialogButton skin="primary" onClick={handleConfirmRunScript}>
-                    Run All Scripts
-                  </StyledDialogButton>
-                </ForwardRef>
-              </AlertDialog.Action>
-            </AlertDialog.ActionButtons>
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
+              <StyledDialogButton skin="primary" onClick={handleConfirmRunScript}>
+                Run all queries
+              </StyledDialogButton>
+            </Dialog.ActionButtons>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   )
 }
