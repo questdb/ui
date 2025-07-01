@@ -36,6 +36,9 @@ const StyledItem = styled(ContextMenuPrimitive.Item)`
 
 const IconWrapper = styled.span`
   margin-right: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `
 
 export const ContextMenu = ContextMenuPrimitive.Root
