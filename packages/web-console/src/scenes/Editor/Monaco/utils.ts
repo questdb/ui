@@ -99,13 +99,14 @@ export const getQueriesToRun = (
     selectionEndOffset = selectionStartOffset + normalizedSelectedText.length
   }
 
-  const selectionStartParentQueryOffsets = queryOffsets.find(offset => offset.startOffset <= selectionStartOffset && offset.endOffset >= selectionStartOffset)
-  const selectionEndParentQueryOffsets = queryOffsets.find(offset => offset.startOffset <= selectionEndOffset && offset.endOffset >= selectionEndOffset)
-  if (!selectionStartParentQueryOffsets || !selectionEndParentQueryOffsets) {
+  const firstQueryOffsets = queryOffsets.find(offset => offset.endOffset >= selectionStartOffset)
+  const lastQueryOffsets = queryOffsets.filter(offset => offset.startOffset <= selectionEndOffset).pop()
+
+  if (!firstQueryOffsets || !lastQueryOffsets) {
     return []
   }
 
-  const queries = getQueriesInRange(editor, model.getPositionAt(selectionStartParentQueryOffsets.startOffset), model.getPositionAt(selectionEndParentQueryOffsets.endOffset))
+  const queries = getQueriesInRange(editor, model.getPositionAt(firstQueryOffsets.startOffset), model.getPositionAt(lastQueryOffsets.endOffset))
   const requests = queries.map(query => {
     const clampedSelection = clampRange(model, selection, {
       startOffset: model.getOffsetAt({ lineNumber: query.row + 1, column: query.column }),
@@ -175,6 +176,10 @@ export const getQueriesFromPosition = (
   let startPos = startCharIndex - 1
   let nextSql = null
   let inQuote = false
+  let singleLineCommentStack: number[] = []
+  let multiLineCommentStack: number[] = []
+  let inSingleLineComment = false
+  let inMultiLineComment = false
 
   while (
     startCharIndex < text.length &&
@@ -203,9 +208,9 @@ export const getQueriesFromPosition = (
 
     switch (char) {
       case ";": {
-        if (inQuote) {
+        if (inQuote || inSingleLineComment || inMultiLineComment) {
           column++
-          continue
+          break
         }
 
         if (
@@ -221,7 +226,7 @@ export const getQueriesFromPosition = (
             limit: i,
           })
           startRow = row
-          startCol = column
+          startCol = column + 1
           startPos = i + 1
           column++
         } else {
@@ -249,9 +254,16 @@ export const getQueriesFromPosition = (
       }
 
       case "\n": {
+        if (inSingleLineComment) {
+          inSingleLineComment = false
+          if (startPos === i - 1) {
+            startPos = i
+            startRow = row
+            startCol = column
+          }
+        }
         row++
         column = 1
-
         if (startPos === i) {
           startRow = row
           startCol = column
@@ -266,10 +278,80 @@ export const getQueriesFromPosition = (
         break
       }
 
+      case "-": {
+        if (!inMultiLineComment && !inQuote) {
+          singleLineCommentStack.push(i)
+          if (singleLineCommentStack.length === 2) {
+            if (singleLineCommentStack[0] + 1 === singleLineCommentStack[1]) {
+              if (startPos === i - 1) {
+                startPos = i
+                startRow = row
+                startCol = column
+              }
+              singleLineCommentStack = []
+              inSingleLineComment = true
+            } else {
+              singleLineCommentStack.shift()
+            }
+          }
+        }
+        column++
+        break
+      }
+
+      case "/": {
+        if (!inMultiLineComment && !inSingleLineComment && !inQuote) {
+          if (multiLineCommentStack.length === 0) {
+            multiLineCommentStack.push(i)
+          } else {
+            multiLineCommentStack = [i]
+          }
+        }
+        if (inMultiLineComment) {
+          if (multiLineCommentStack.length === 1 && multiLineCommentStack[0] + 1 === i) {
+            if (startPos === i - 1) {
+              startPos = i + 1
+              startRow = row
+              startCol = column + 1
+            }
+            multiLineCommentStack = []
+            inMultiLineComment = false
+          }
+        }
+        column++
+        break
+      }
+
+      case "*": {
+        if (!inMultiLineComment && !inSingleLineComment) {
+          if (multiLineCommentStack.length === 1 && multiLineCommentStack[0] + 1 === i) {
+            if (startPos === i - 1) {
+              startPos = i
+              startRow = row
+              startCol = column
+            }
+            multiLineCommentStack = []
+            inMultiLineComment = true
+          } else if (multiLineCommentStack.length > 0) {
+            multiLineCommentStack = []
+          }
+        }
+        if (inMultiLineComment) {
+          multiLineCommentStack = [i]
+        }
+        column++
+        break
+      }
+
       default: {
         column++
         break
       }
+    }
+    if ((inSingleLineComment || inMultiLineComment) && startPos === i - 1) {
+      startPos = i
+      startRow = row
+      startCol = column
     }
   }
 
@@ -289,7 +371,15 @@ export const getQueriesFromPosition = (
     }
   }
 
-  return { sqlTextStack, nextSql }
+  const filteredSqlTextStack = sqlTextStack.filter(item => {
+    return item.row !== item.endRow || item.col !== item.endCol
+  })
+  
+  const filteredNextSql = nextSql && (nextSql.row !== nextSql.endRow || nextSql.col !== nextSql.endCol)
+    ? nextSql 
+    : null
+
+  return { sqlTextStack: filteredSqlTextStack, nextSql: filteredNextSql }
 }
 
 export const getQueryFromCursor = (
@@ -465,7 +555,7 @@ export const getQueryFromSelection = (
     if (stripSQLComments(normalizedSelectedText).length > 0) {
       selectionStartOffset += selectedText.indexOf(normalizedSelectedText)
       selectionEndOffset = selectionStartOffset + normalizedSelectedText.length
-      const startPos = model.getPositionAt(selectionEndOffset)
+      const startPos = model.getPositionAt(selectionStartOffset)
       const endPos = model.getPositionAt(selectionEndOffset)
       editor.setSelection({ startLineNumber: startPos.lineNumber, endLineNumber: endPos.lineNumber, startColumn: startPos.column, endColumn: endPos.column })
       const parentQuery = getQueryFromCursor(editor)

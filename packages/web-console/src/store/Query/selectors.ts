@@ -35,7 +35,7 @@ const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
 const getQueryNotifications: (store: StoreShape) => Record<number, Record<string, QueryNotifications>> = (store) =>
   store.query.queryNotifications
 
-const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<string, QueryNotifications> => 
+const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<string, QueryNotifications> | undefined => 
   store.query.queryNotifications[bufferId]
 
 const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>

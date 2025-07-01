@@ -92,11 +92,13 @@ const Content = styled(PaneContent)`
   }
 
   .selectionErrorHighlight {
-    border: 1px solid rgba(255, 85, 85, 0.50);
+    background-color: rgba(255, 85, 85, 0.15);
+    border-radius: 2px;
   }
 
   .selectionSuccessHighlight {
-    border: 1px solid rgba(80, 250, 123, 0.50);
+    background-color: rgba(80, 250, 123, 0.15);
+    border-radius: 2px;
   }
 
   .cursorQueryGlyph,
@@ -111,7 +113,7 @@ const Content = styled(PaneContent)`
       width: 22px;
       height: 22px;
       background-repeat: no-repeat;
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz48L3N2Zz4=");
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
       transform: scale(1.1);
     }
     &:hover:after {
@@ -180,7 +182,7 @@ const MonacoEditor = () => {
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number)) || {}
+  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number))
   const [schemaCompletionHandle, setSchemaCompletionHandle] =
     useState<IDisposable>()
   const isRunningScriptRef = useRef(false)
@@ -233,13 +235,13 @@ const MonacoEditor = () => {
     let newActiveNotification: NotificationShape | null = null
 
     if (queryKey) {
-      const queryNotifications = queryNotificationsRef.current[queryKey]
+      const queryNotifications = queryNotificationsRef.current?.[queryKey]
       if (queryNotifications) {
         newActiveNotification = queryNotifications.latest || null
       }
     }
 
-    if (activeNotificationRef.current?.query !== newActiveNotification?.query && !isRunningScriptRef.current) {
+    if (activeNotificationRef.current?.query !== newActiveNotification?.query) {
       dispatch(actions.query.setActiveNotification(newActiveNotification))
     }
   }
@@ -372,7 +374,8 @@ const MonacoEditor = () => {
 
   const applyLineMarkings = (
     monaco: Monaco,
-    editor: editor.IStandaloneCodeEditor
+    editor: editor.IStandaloneCodeEditor,
+    source?: string
   ) => {
     const model = editor.getModel()
     const editorValue = editor.getValue()
@@ -433,7 +436,9 @@ const MonacoEditor = () => {
       lineMarkingDecorations
     )
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
-    updateQueryNotification(queryAtCursor ? createQueryKeyFromRequest(editor, queryAtCursor) : undefined)
+    if (!["scroll", "script"].includes(source ?? "") && !isRunningScriptRef.current) {
+      updateQueryNotification(queryAtCursor ? createQueryKeyFromRequest(editor, queryAtCursor) : undefined)
+    }
     if (bufferExecutions) {
       setErrorMarkerForQuery(monaco, editor, bufferExecutions, queryAtCursor)
     }
@@ -441,7 +446,8 @@ const MonacoEditor = () => {
 
   const applyGlyphsAndLineMarkings = (
     monaco: Monaco,
-    editor: editor.IStandaloneCodeEditor
+    editor: editor.IStandaloneCodeEditor,
+    source?: string
   ) => {
     const model = editor.getModel()
     const editorValue = editor.getValue()
@@ -463,7 +469,7 @@ const MonacoEditor = () => {
       const endLine = Math.min(totalLines, visibleLines.endLine + bufferSize)
       
       const startPosition = { lineNumber: startLine, column: 1 }
-      const endPosition = { lineNumber: endLine, column: 1 }
+      const endPosition = { lineNumber: endLine, column: editor.getModel()?.getLineMaxColumn(endLine) ?? 1 }
       
       queries = getQueriesInRange(editor, startPosition, endPosition)
     }
@@ -485,7 +491,7 @@ const MonacoEditor = () => {
         const queryKey = createQueryKeyFromRequest(editor, query)
         const queryExecutionBuffer = bufferExecutions[queryKey]
         const hasError = queryExecutionBuffer && queryExecutionBuffer.error !== undefined
-        const isSuccessful = queryNotificationsRef.current[queryKey]?.latest?.type === "success"
+        const isSuccessful = queryNotificationsRef.current?.[queryKey]?.latest?.type === NotificationType.SUCCESS
         
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
@@ -524,7 +530,7 @@ const MonacoEditor = () => {
     decorationCollectionRef.current = editor.createDecorationsCollection(allDecorations)
     queryOffsetsRef.current = allQueryOffsets
     
-    applyLineMarkings(monaco, editor)
+    applyLineMarkings(monaco, editor, source)
   }
 
   const onMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
@@ -579,7 +585,7 @@ const MonacoEditor = () => {
       }
     })
 
-    editor.onDidChangeCursorPosition(() => {
+    editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
       // This width is represented in char numbers.
       const lineCount = editorRef.current?.getModel()?.getLineCount()
@@ -603,7 +609,7 @@ const MonacoEditor = () => {
         dispatch(actions.query.setQueriesToRun(queriesToRun))
 
         if (monacoRef.current && editorRef.current) {
-          applyLineMarkings(monaco, editor)
+          applyLineMarkings(monaco, editor, e.source)
         }
         cursorChangeTimeoutRef.current = null
       }, 50);
@@ -665,7 +671,7 @@ const MonacoEditor = () => {
         })
       }
 
-      const currentNotifications = queryNotificationsRef.current
+      const currentNotifications = queryNotificationsRef.current || {}
       Object.keys(currentNotifications).forEach((key) => {
         const queryKey = key as QueryKey
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
@@ -734,7 +740,7 @@ const MonacoEditor = () => {
           
           if (startLineDiff > 100 || endLineDiff > 100) {
             if (monacoRef.current && editorRef.current) {
-              applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+              applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current, "scroll")
             }
           }
         }
@@ -935,8 +941,7 @@ const MonacoEditor = () => {
     let failedQueries = 0
     if (!editorRef.current) return
     const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
-    const runningAllQueries = !queriesToRun
-
+    const runningAllQueries = !queriesToRun    
     // Clear all notifications & execution refs for the buffer
     const activeBufferId = activeBuffer.id as number
     if (runningAllQueries) {
@@ -1010,7 +1015,7 @@ const MonacoEditor = () => {
       .filter(result => result && result.notification)
       .map(result => result.notification)
       .forEach(notification => {
-        dispatch(actions.query.addNotification(notification!, activeBuffer.id as number))
+        dispatch(actions.query.addNotification({ ...notification!, updateActiveNotification: false }, activeBuffer.id as number))
       })
 
     if (editorRef.current && lastQuery) {
@@ -1018,7 +1023,11 @@ const MonacoEditor = () => {
         lineNumber: lastQuery.row + 1,
         column: lastQuery.column
       }
+      editorRef.current.focus()
       editorRef.current.revealPosition(position)
+      if (runningAllQueries) {
+        editorRef.current.setPosition(position, "script")
+      }
     }
 
     const completedGracefully = queries.length === individualQueryResults.length
@@ -1031,7 +1040,7 @@ const MonacoEditor = () => {
       ? `Running completed in ${formatTiming(duration)} with `
       : "Stopped after running "
 
-    setTimeout(() => dispatch(
+    dispatch(
       actions.query.addNotification({
         query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
         content: <Text color="foreground">
@@ -1041,10 +1050,8 @@ const MonacoEditor = () => {
           {failedQueries > 0 ? ` ${failedQueries} failed` : ""} {failedQueries + successfulQueries > 1 ? " queries" : " query"}
         </Text>,
         type: completedGracefully ? NotificationType.SUCCESS : NotificationType.ERROR,
-        createdAt: new Date(),
-        updateActiveNotification: true,
       }, activeBufferRef.current.id as number),
-    ))
+    )
     isRunningScriptRef.current = false
     scriptStopRef.current = false
     stopAfterFailureRef.current = true
@@ -1270,10 +1277,12 @@ const MonacoEditor = () => {
               if (errorRange) {
                 editorRef?.current.focus()
 
-                editorRef?.current.setPosition({
-                  lineNumber: errorRange.startLineNumber,
-                  column: errorRange.startColumn,
-                })
+                if (!request.selection) {
+                  editorRef?.current.setPosition({
+                    lineNumber: errorRange.startLineNumber,
+                    column: errorRange.startColumn,
+                  })
+                }
 
                 editorRef?.current.revealPosition({
                   lineNumber: errorRange.startLineNumber,
