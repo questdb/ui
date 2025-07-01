@@ -353,6 +353,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   navigateInTree={navigateInTree}
                   partitionBy={item.partitionBy}
                   walEnabled={item.walEnabled}
+                  designatedTimestamp={item.designatedTimestamp}
                   id={item.id}
                   errors={[
                     ...(item.matViewData?.view_status === 'invalid' ? 
@@ -364,6 +365,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 {item.walTableData?.suspended && (
                   <SuspensionDialog 
                     walTableData={item.walTableData}
+                    kind={item.kind}
                     open={openedSuspensionDialog === item.id}
                     onOpenChange={(isOpen) => {
                       setOpenedSuspensionDialog(isOpen ? item.id : null)

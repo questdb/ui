@@ -100,6 +100,7 @@ export const createTableNode = (
     isExpanded: getSectionExpanded(tableId),
     partitionBy: table.partitionBy,
     walEnabled: table.walEnabled,
+    designatedTimestamp: table.designatedTimestamp,
     walTableData,
     children: [
       {

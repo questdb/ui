@@ -168,7 +168,6 @@ Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor.vs-dark"));
 Cypress.Commands.add("getEditorContent", () =>
   cy
     .get(".monaco-editor")
-    .should("be.visible")
     .find("textarea")
     .should("be.visible")
 );
@@ -317,31 +316,47 @@ Cypress.Commands.add("interceptQuery", (query, alias, response) => {
   ).as(alias);
 });
 
-Cypress.Commands.add("loginWithUserAndPassword", () => {
+Cypress.Commands.add("loginWithUserAndPassword", (username = "admin", password = "quest") => {
   cy.getByDataHook("auth-login").should("be.visible");
-  cy.get("input[name='username']").type("admin");
-  cy.get("input[type='password']").type("quest");
+  cy.get("input[name='username']").type(username);
+  cy.get("input[type='password']").type(password);
   cy.get("button[type='submit']").click();
+
+  cy.getEditor().should("be.visible");
 });
 
-Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings) => {
+Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings = false) => {
   cy.clearLocalStorage();
   indexedDB.deleteDatabase("web-console");
   cy.visit(baseUrl);
   cy.loginWithUserAndPassword();
-  cy.getEditorContent().should("be.visible");
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
     indexedDB.deleteDatabase("web-console");
     cy.visit(baseUrl);
-    cy.getEditorContent().should("be.visible");
+    cy.getEditor().should("be.visible");
   }
 });
 
 Cypress.Commands.add("loadConsoleAsAdminAndCreateSSOGroup", (group, externalGroup = undefined) => {
   cy.loadConsoleWithAuth(true);
-  cy.executeSQL(`CREATE GROUP ${group} WITH EXTERNAL ALIAS ${externalGroup || group};`);
-  cy.executeSQL(`GRANT HTTP TO ${group};`);
+
+  cy.executeSQL(`CREATE GROUP '${group}' WITH EXTERNAL ALIAS '${externalGroup || group}';`);
+  cy.getByDataHook("success-notification").should("be.visible");
+  cy.executeSQL(`GRANT HTTP TO '${group}';`);
+  cy.getByDataHook("success-notification").should("be.visible");
+
+  cy.logout();
+});
+
+Cypress.Commands.add("loadConsoleAsAdminAndCreateDBUser", (username, password = "pwd") => {
+  cy.loadConsoleWithAuth(true);
+
+  cy.executeSQL(`create user '${username}' with password '${password}'`);
+  cy.getByDataHook("success-notification").should("be.visible");
+  cy.executeSQL(`grant HTTP to '${username}'`);
+  cy.getByDataHook("success-notification").should("be.visible");
+
   cy.logout();
 });
 

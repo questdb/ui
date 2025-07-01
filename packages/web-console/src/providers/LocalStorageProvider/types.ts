@@ -25,7 +25,6 @@
 export type SettingsType = string | boolean | number
 
 export type LocalConfig = {
-  authPayload: string
   editorCol: number
   editorLine: number
   editorSplitterBasis: number

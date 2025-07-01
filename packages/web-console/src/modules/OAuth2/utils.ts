@@ -26,13 +26,13 @@ export const getAuthorisationURL = ({
   settings,
   code_challenge = null,
   state = null,
-  loginWithDifferentAccount,
+  prompt,
   redirect_uri,
 }: {
   settings: Settings
   code_challenge: string | null
   state: string | null
-  loginWithDifferentAccount?: boolean
+  prompt?: "login" | "none"
   redirect_uri: string
 }) => {
   const params = {
@@ -50,8 +50,8 @@ export const getAuthorisationURL = ({
   if (state) {
     urlParams.append("state", state)
   }
-  if (loginWithDifferentAccount) {
-    urlParams.append("prompt", "login")
+  if (prompt) {
+    urlParams.append("prompt", prompt)
   }
 
   return (

@@ -14,15 +14,14 @@ import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { getValue } from "../../utils/localStorage"
-import { StoreKey } from "../../utils/localStorage/types"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { Preferences, InstanceType } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
-import { TelemetryTable } from "../../consts";
-import { TelemetryConfigShape } from "../../store/Telemetry/types";
-import { sendServerInfoTelemetry } from "../../utils/telemetry";
+import { TelemetryTable } from "../../consts"
+import { TelemetryConfigShape } from "../../store/Telemetry/types"
+import { sendServerInfoTelemetry } from "../../utils/telemetry"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;
@@ -370,9 +369,9 @@ export const Toolbar = () => {
         const currentUser = response.data[0].current_user
         setCurrentUser(currentUser)
 
-        // an SSO user is logged in, update the SSO username
-        const authPayload = getValue(StoreKey.AUTH_PAYLOAD)
-        if (authPayload && currentUser && settings["acl.oidc.client.id"]) {
+        const ssoAuthenticated = ssoAuthState.isSSOAuthenticated()
+        if (ssoAuthenticated && currentUser && settings["acl.oidc.client.id"]) {
+          // it is an SSO user, we should update the SSO username
           setSSOUserNameWithClientID(settings["acl.oidc.client.id"], currentUser)
         }
         return currentUser

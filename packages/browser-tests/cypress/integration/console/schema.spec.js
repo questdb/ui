@@ -73,6 +73,24 @@ describe("questdb schema with working tables", () => {
     });
   });
 
+  it("should show the table icon description in the tooltip", () => {
+    cy.getByDataHook("schema-table-title")
+      .contains("btc_trades")
+      .getByDataHook("table-icon")
+      .realHover();
+
+    cy.wait(1200);
+
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      `WAL-based table. Partitioned by "day", ordered on "timestamp" column.`
+    );
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
+    );
+  });
+
   it("should filter the table with input field", () => {
     // Table name search
     cy.get('input[name="table_filter"]').type("btc_trades");
@@ -427,6 +445,19 @@ describe("materialized views", () => {
     cy.getByDataHook("schema-matview-title").should("contain", "btc_trades_mv");
   });
 
+  it("should show the table icon description in the tooltip for a materialized view", () => {
+    cy.expandMatViews();
+    cy.getByDataHook("schema-matview-title")
+      .contains("btc_trades_mv")
+      .getByDataHook("table-icon")
+      .realHover();
+    cy.wait(1200);
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      `Partitioned by "week", ordered on "timestamp" column.`
+    );
+  });
+
   it("should show the base table and copy schema for a materialized view", () => {
     cy.expandMatViews();
     cy.getByDataHook("schema-matview-title")
@@ -452,6 +483,38 @@ describe("materialized views", () => {
           /^CREATE MATERIALIZED VIEW.*'btc_trades_mv' WITH BASE 'btc_trades'/
         );
     }
+  });
+
+  it("should resume WAL for a materialized view", () => {
+    cy.getByDataHook("schema-row-error-icon").should("not.exist");
+    cy.typeQuery(
+      "ALTER MATERIALIZED VIEW btc_trades_mv SUSPEND WAL WITH 24, 'Too many open files';"
+    )
+      .clickRun()
+      .clearEditor();
+
+    cy.refreshSchema();
+    cy.expandMatViews();
+    cy.getByDataHook("schema-row-error-icon").should("be.visible");
+    cy.getByDataHook("schema-filter-suspended-button").should("contain", "1");
+
+    cy.getByDataHook("schema-matview-title")
+      .contains("btc_trades_mv")
+      .rightclick();
+    cy.getByDataHook("table-context-menu-resume-wal")
+      .should("not.be.disabled")
+      .click();
+
+    cy.getByDataHook("schema-suspension-dialog").should(
+      "have.attr",
+      "data-table-name",
+      "btc_trades_mv"
+    );
+    cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
+    cy.getByDataHook("schema-suspension-dialog-dismiss").click();
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist");
+    cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
+    cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });
 
   it("should show a warning icon and tooltip when the view is invalidated", () => {
