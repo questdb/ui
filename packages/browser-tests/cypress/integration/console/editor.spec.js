@@ -470,7 +470,8 @@ describe("&query URL param", () => {
   });
 
   it("should append and select single line query", () => {
-    cy.typeQuery("select x from long_sequence(1)"); // running query caches it, it's available after refresh
+    cy.typeQueryDirectly("select x from long_sequence(1)"); // running query caches it, it's available after refresh
+    cy.getCursorQueryGlyph().should("be.visible");
     const query = encodeURIComponent("select x+1 from long_sequence(1)");
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`);
     cy.getEditorContent().should("be.visible");
@@ -479,11 +480,12 @@ describe("&query URL param", () => {
   });
 
   it("should append and select multiline query", () => {
-    cy.typeQuery(
+    cy.typeQueryDirectly(
       `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
         5
       )}`
     );
+    cy.getCursorQueryGlyph().should("be.visible");
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);");
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`);
     cy.getEditorContent().should("be.visible");
@@ -493,7 +495,7 @@ describe("&query URL param", () => {
 
   it("should not append query if it already exists in editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c";
-    cy.typeQuery(query);
+    cy.typeQueryDirectly(query);
     cy.clickRunIconInLine(1);
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`);
     cy.getEditorContent().should("be.visible");
@@ -501,7 +503,8 @@ describe("&query URL param", () => {
   });
 
   it("should append query and scroll to it", () => {
-    cy.typeQuery("select x from long_sequence(1);");
+    cy.typeQueryDirectly("select x from long_sequence(1);");
+    cy.getCursorQueryGlyph().should("be.visible");
     cy.typeQuery("\n".repeat(20));
 
     const appendedQuery = "-- hello world";
