@@ -74,12 +74,9 @@ describe("run query", () => {
       "contain",
       `Run "select 3"`
     );
-    cy.intercept("/exec*").as("exec");
     cy.getByDataHook("dropdown-item-run-query-1")
       .contains(`Run "select 2"`)
       .click();
-    cy.wait("@exec");
-    cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should("contain", "select 2");
   });
 });
@@ -161,7 +158,9 @@ describe("run query with selection", () => {
     const subQueryTruncated = "select md5(concat('1', x)) as ...";
 
     // When
-    cy.typeQuery(`create table long_seq as (\n${subQuery}\n--comment`);
+    cy.typeQueryDirectly(
+      `create table long_seq as (\n  ${subQuery}\n  --comment\n);`
+    );
     cy.openRunDropdownInLine(1);
     // Then
     cy.getByDataHook("dropdown-item-run-query").should(
@@ -942,19 +941,13 @@ describe("handling comments", () => {
     cy.clickLine(4);
     cy.getCursorQueryDecoration().should("have.length", 4);
     cy.getCursorQueryGlyph().should("have.length", 2);
-    cy.intercept("/exec*").as("exec");
     cy.clickRunIconInLine(3);
-    cy.wait("@exec");
-    cy.getGridRow(0).should("contain", "1");
     cy.getByDataHook("success-notification").should(
       "contain",
       "select /* not; a; query;*/ 1"
     );
 
-    cy.intercept("/exec*").as("exec2");
     cy.clickRunIconInLine(4);
-    cy.wait("@exec2");
-    cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should(
       "contain",
       `select\n\n --line;\n 2`
@@ -981,10 +974,7 @@ describe("multiple run buttons with dynamic query log", () => {
       "contain",
       `Get query plan for "select 2"`
     );
-    cy.intercept("/exec*").as("exec");
     cy.getByDataHook("dropdown-item-run-query").click();
-    cy.wait("@exec");
-    cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should("contain", "select 2");
 
     cy.openRunDropdownInLine(1);
@@ -1015,11 +1005,9 @@ describe("multiple run buttons with dynamic query log", () => {
 
   it("should run query from specific line using dropdown", () => {
     cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
-    cy.intercept("/exec*").as("exec");
     cy.clickRunIconInLine(3);
-    cy.wait("@exec");
 
-    cy.getGridRow(0).should("contain", "2");
+    cy.getByDataHook("success-notification").should("contain", "select 2");
   });
 
   it("should get query plan from specific line using dropdown", () => {

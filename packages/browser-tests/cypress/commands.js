@@ -207,6 +207,7 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
 Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
 
 Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
+  cy.getCursorQueryGlyph().should("be.visible");
   const selector = `.cursorQueryGlyph-line-${lineNumber}`;
   cy.get("body").then(() => {
     let element = null;
