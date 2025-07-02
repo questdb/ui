@@ -229,12 +229,8 @@ describe("run all queries in tab", () => {
 
   it("should run all queries in tab", () => {
     // Given
-    cy.typeQuery("select 1;select 2;select 3;\n\n");
-    cy.typeQuery(
-      "create table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
-    );
-    cy.typeQuery(
-      ";\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
+    cy.typeQueryDirectly(
+      "select 1;select 2;select 3;\n\ncreate table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment\n);\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
     );
 
     // When
@@ -940,10 +936,11 @@ describe("handling comments", () => {
   });
 
   it("should extract only two queries when comments have semicolons", () => {
-    cy.typeQuery(
+    cy.typeQueryDirectly(
       "-- not a query;\n/* not a query 2;\n not a query 3; */select /* not; a; query;*/ 1; --not a query /* ; 4;\nselect\n\n --line;\n 2;"
     );
-    cy.getCursorQueryDecoration().should("have.length", 3);
+    cy.clickLine(4);
+    cy.getCursorQueryDecoration().should("have.length", 4);
     cy.getCursorQueryGlyph().should("have.length", 2);
     cy.intercept("/exec*").as("exec");
     cy.clickRunIconInLine(3);
@@ -954,13 +951,13 @@ describe("handling comments", () => {
       "select /* not; a; query;*/ 1"
     );
 
-    cy.intercept("/exec*").as("exec");
+    cy.intercept("/exec*").as("exec2");
     cy.clickRunIconInLine(4);
-    cy.wait("@exec");
+    cy.wait("@exec2");
     cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should(
       "contain",
-      `SELECT\n  --line;\n   2`
+      `select\n\n --line;\n 2`
     );
   });
 });
