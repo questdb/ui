@@ -1,0 +1,92 @@
+name: Flakiness Check
+
+on:
+  push:
+
+jobs:
+  CI:
+    name: Flakiness Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build QuestDB
+        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
+
+      - name: Extract QuestDB
+        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
+
+      - name: Create DB Root
+        run: mkdir tmp/dbroot
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable --immutable-cache
+
+      - name: Build @questdb/react-components
+        run: yarn workspace @questdb/react-components run build
+
+      - name: Build @questdb/web-console
+        run: yarn workspace @questdb/web-console run build
+
+      - name: Run bundle watcher on @questdb/web-console
+        run: yarn workspace @questdb/web-console bundlewatch
+      
+      - name: Start FE Server
+        run: |
+          node packages/web-console/serve-dist.js &
+          sleep 2
+          echo "FE Server started in background"
+      - name: Start QuestDB, set auth credentials
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        env:
+          QDB_DEV_MODE_ENABLED: "true"
+          QDB_HTTP_USER: "admin"
+          QDB_HTTP_PASSWORD: "quest"
+
+      - name: Run browser-tests test multiple times
+        run: |
+          for i in {1..20}; do
+            echo "Running browser-tests iteration $i/20"
+            yarn workspace browser-tests cypress run --spec 'cypress/integration/console/editor.spec.js'
+            if [ $? -ne 0 ]; then
+              echo "Test failed on iteration $i"
+              exit 1
+            fi
+            echo "Iteration $i completed successfully"
+          done
+      - name: Print Log Files
+        if: success() || failure()
+        run: cat tmp/dbroot/log/*
+
+      - name: Save QuestDB log on test failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: questdb-log
+          path: tmp/dbroot/log/*
+
+      - name: Upload Cypress Screenshots
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: packages/browser-tests/cypress/screenshots
+          if-no-files-found: ignore
+
+      - name: Stop QuestDB
+        if: success() || failure()
+        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
