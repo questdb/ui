@@ -515,6 +515,7 @@ describe("materialized views", () => {
     cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
     cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
+    cy.refreshSchema();
     cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });
 

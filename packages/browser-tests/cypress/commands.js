@@ -415,7 +415,9 @@ Cypress.Commands.add("logout", () => {
 Cypress.Commands.add("executeSQL", (sql) => {
   cy.clearEditor();
   cy.typeQuery(sql);
+  cy.intercept("/exec*").as("exec");
   cy.clickRunIconInLine(1);
+  cy.wait("@exec");
 });
 
 Cypress.Commands.add("refreshSchema", () => {

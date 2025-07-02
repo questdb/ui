@@ -234,9 +234,9 @@ describe("run all queries in tab", () => {
     cy.typeQuery(
       "create table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
     );
-    cy.typeQuery("{rightArrow}".repeat(3) + ";");
+    cy.clickLine(4);
     cy.typeQuery(
-      "drop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
+      ";\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
     );
 
     // When
@@ -281,7 +281,7 @@ describe("run all queries in tab", () => {
     cy.get(".error-glyph").should("have.length", 1);
 
     // When
-    cy.clickLine(8);
+    cy.clickLine(9);
     // Then
     cy.getByDataHook("error-notification").should(
       "contain",
@@ -947,7 +947,9 @@ describe("handling comments", () => {
     );
     cy.getCursorQueryDecoration().should("have.length", 3);
     cy.getCursorQueryGlyph().should("have.length", 2);
+    cy.intercept("/exec*").as("exec");
     cy.clickRunIconInLine(3);
+    cy.wait("@exec");
     cy.getGridRow(0).should("contain", "1");
     cy.getByDataHook("success-notification").should(
       "contain",
