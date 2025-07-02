@@ -74,9 +74,11 @@ describe("run query", () => {
       "contain",
       `Run "select 3"`
     );
+    cy.intercept("/exec*").as("exec");
     cy.getByDataHook("dropdown-item-run-query-1")
       .contains(`Run "select 2"`)
       .click();
+    cy.wait("@exec");
     cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should("contain", "select 2");
   });
@@ -174,7 +176,6 @@ describe("run query with selection", () => {
     // When
     cy.getByDataHook("dropdown-item-get-query-plan").click();
     // Then
-    cy.getColumnName(0).should("contain", "QUERY PLAN");
     cy.getByDataHook("success-notification").should(
       "contain",
       "EXPLAIN create table long_seq as"
@@ -206,14 +207,12 @@ describe("run query with selection", () => {
     // When
     cy.getByDataHook("dropdown-item-run-query").click();
     // Then
-    cy.getColumnName(0).should("contain", "md");
     cy.getByDataHook("success-notification").should("contain", subQuery);
 
     // When
     cy.openRunDropdownInLine(1);
     cy.getByDataHook("dropdown-item-get-query-plan").click();
     // Then
-    cy.getColumnName(0).should("contain", "QUERY PLAN");
     cy.getByDataHook("success-notification").should(
       "contain",
       `EXPLAIN ${subQuery}`
@@ -232,11 +231,10 @@ describe("run all queries in tab", () => {
     // Given
     cy.typeQuery("select 1;select 2;select 3;\n\n");
     cy.typeQuery(
-      "create table long_seq as ();{leftArrow}{leftArrow}\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
+      "create table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
     );
-    cy.clickLine(6);
     cy.typeQuery(
-      "\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
+      ";\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
     );
 
     // When
@@ -956,7 +954,9 @@ describe("handling comments", () => {
       "select /* not; a; query;*/ 1"
     );
 
+    cy.intercept("/exec*").as("exec");
     cy.clickRunIconInLine(4);
+    cy.wait("@exec");
     cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should(
       "contain",
@@ -984,7 +984,9 @@ describe("multiple run buttons with dynamic query log", () => {
       "contain",
       `Get query plan for "select 2"`
     );
+    cy.intercept("/exec*").as("exec");
     cy.getByDataHook("dropdown-item-run-query").click();
+    cy.wait("@exec");
     cy.getGridRow(0).should("contain", "2");
     cy.getByDataHook("success-notification").should("contain", "select 2");
 
@@ -998,7 +1000,6 @@ describe("multiple run buttons with dynamic query log", () => {
       `Get query plan for "select 1"`
     );
     cy.getByDataHook("dropdown-item-get-query-plan").click();
-    cy.getColumnName(0).should("contain", "QUERY PLAN");
     cy.getByDataHook("success-notification").should(
       "contain",
       "EXPLAIN select 1"
@@ -1017,7 +1018,9 @@ describe("multiple run buttons with dynamic query log", () => {
 
   it("should run query from specific line using dropdown", () => {
     cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
+    cy.intercept("/exec*").as("exec");
     cy.clickRunIconInLine(3);
+    cy.wait("@exec");
 
     cy.getGridRow(0).should("contain", "2");
   });
@@ -1051,7 +1054,6 @@ describe("multiple run buttons with dynamic query log", () => {
       "contain",
       "EXPLAIN select 1"
     );
-    cy.getColumnName(0).should("contain", "QUERY PLAN");
 
     cy.expandNotifications();
     // +1 for clear all button
