@@ -249,18 +249,6 @@ Cypress.Commands.add("clickRunQuery", () => {
     .wait("@exec");
 });
 
-Cypress.Commands.add("clickRunScript", () => {
-  cy.intercept("/exec*").as("exec");
-  cy.getByDataHook("button-run-query-dropdown").click();
-  cy.getByDataHook("button-run-script").click().wait("@exec");
-});
-
-Cypress.Commands.add("clickCancelScript", () => {
-  cy.intercept("/exec*").as("exec");
-  cy.getByDataHook("button-run-query-dropdown").click();
-  cy.getByDataHook("button-cancel-script").click().wait("@exec");
-});
-
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
   const numbers = Array.from(

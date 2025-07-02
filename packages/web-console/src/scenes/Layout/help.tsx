@@ -18,8 +18,8 @@ import {
   Link,
   PopperToggle,
 } from "../../components"
+import { DropdownMenu } from "../../components/DropdownMenu"
 import {
-  DropdownMenu,
   FeedbackDialog,
   ForwardRef,
   Box,
@@ -39,7 +39,7 @@ const HelpButton = styled(PrimaryToggleButton)`
 
 const DropdownMenuContent = styled(DropdownMenu.Content)`
   background: ${({ theme }) => theme.color.backgroundDarker};
-  z-index: 2;
+  z-index: 1000;
 `
 
 const DropdownMenuItem = styled(DropdownMenu.Item)<{ withlink?: string }>`

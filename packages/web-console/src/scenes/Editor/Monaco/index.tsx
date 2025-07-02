@@ -6,6 +6,7 @@ import React, { useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
+import type { ExecutionRefs } from "../../Editor"
 import { PaneContent, Text } from "../../../components"
 import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
@@ -159,7 +160,7 @@ const StyledDialogButton = styled(Button)`
 
 const DEFAULT_LINE_CHARS = 5
 
-const MonacoEditor = () => {
+const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject<ExecutionRefs> }) => {
   const editorContext = useEditor()
   const {
     buffers,
@@ -207,18 +208,6 @@ const MonacoEditor = () => {
   const dropdownPositionRef = useRef<{ x: number; y: number } | null>(null)
   const dropdownQueriesRef = useRef<Request[]>([])
   const isContextMenuDropdownRef = useRef<boolean>(false)
-
-  // Buffer -> QueryKey -> Execution State
-  const executionRefs = useRef<
-    Record<string, Record<QueryKey, { 
-      error?: ErrorResult, 
-      success?: boolean,
-      selection?: { startOffset: number, endOffset: number },
-      queryText: string,
-      startOffset: number
-      endOffset: number
-    }>>
-  >({})
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(

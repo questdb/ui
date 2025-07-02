@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { CSSProperties, forwardRef, Ref, useEffect } from "react"
+import React, { CSSProperties, forwardRef, Ref, useEffect, useRef } from "react"
 import styled from "styled-components"
 
 import { PaneWrapper } from "../../components"
@@ -32,10 +32,24 @@ import { Tabs } from "./Monaco/tabs"
 import { useEditor } from "../../providers/EditorProvider"
 import { Metrics } from "./Metrics"
 import Notifications from "../../scenes/Notifications"
+import type { QueryKey } from "../../store/Query/types"
+import type { ErrorResult } from "../../utils"
+import { useDispatch } from "react-redux"
+import { actions } from "../../store"
 
 type Props = Readonly<{
   style?: CSSProperties
 }>
+
+// Buffer ID -> QueryKey -> Execution State
+export type ExecutionRefs = Record<string, Record<QueryKey, { 
+  error?: ErrorResult, 
+  success?: boolean,
+  selection?: { startOffset: number, endOffset: number },
+  queryText: string,
+  startOffset: number
+  endOffset: number
+}>>
 
 const EditorPaneWrapper = styled(PaneWrapper)`
   height: 100%;
@@ -46,7 +60,14 @@ const Editor = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
+  const dispatch = useDispatch()
   const { activeBuffer, addBuffer, setActiveBuffer } = useEditor()
+  const executionRefs = useRef<ExecutionRefs>({})
+
+  const handleClearNotifications = (bufferId: number) => {
+    dispatch(actions.query.cleanupBufferNotifications(bufferId))
+    delete executionRefs.current[bufferId]
+  }
   
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -59,9 +80,9 @@ const Editor = ({
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
-      {activeBuffer.editorViewState && <Monaco />}
+      {activeBuffer.editorViewState && <Monaco executionRefs={executionRefs} />}
       {activeBuffer.metricsViewState && <Metrics />}
-      {activeBuffer.editorViewState && <Notifications />}
+      {activeBuffer.editorViewState && <Notifications onClearNotifications={handleClearNotifications} />}
     </EditorPaneWrapper>
   )
 }

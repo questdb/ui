@@ -71,6 +71,14 @@ const altOption = platform.isMacintosh || platform.isIOS ? "⌥" : "Alt"
 
 const editorList: ShortcutsList = [
   {
+    keys: [["F9"], [ctrlCmd, "Enter"]],
+    title: "Run query",
+  },
+  {
+    keys: [[ctrlCmd, "⇧", "Enter"]],
+    title: "Run all queries in a tab",
+  },
+  {
     keys: [[altOption, "T"]],
     title: "Add new tab",
   },
@@ -110,16 +118,8 @@ const editorList: ShortcutsList = [
 
 const globalList: ShortcutsList = [
   {
-    keys: [["F9"], [ctrlCmd, "Enter"]],
-    title: "Run query",
-  },
-  {
-    keys: [["F2"]],
-    title: "Focus results grid",
-  },
-  {
     keys: [[ctrlCmd, "K"]],
-    title: "Clear all notifications",
+    title: "Search docs",
   },
 ]
 

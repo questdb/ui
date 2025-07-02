@@ -4,7 +4,6 @@ import { useDispatch, useSelector } from "react-redux"
 import { Stop } from "@styled-icons/remix-line"
 import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
-import type { Request } from "../Monaco/utils"
 import { PopperToggle } from "../../../components"
 import { Box, Button } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
@@ -103,11 +102,10 @@ const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
 
 const DropdownMenu = styled.div`
   background: ${color("backgroundDarker")};
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 0.4rem;
+  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.3);
   overflow: hidden;
-  z-index: 1000;
-  transform: translateX(-70px) translateY(5px);
+  transform: translateX(-7rem) translateY(0.5rem);
   padding: 0;
   min-width: unset;
   border: 0;
@@ -115,14 +113,14 @@ const DropdownMenu = styled.div`
   > * {
     justify-content: space-between;
     width: 100%;
-    font-size: 14px;
+    font-size: 1.4rem;
   }
 `
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
-  padding: 0 4px;
+  padding: 0 0.4rem;
   background: ${color("gray1")};
-  border-radius: 2px;
+  border-radius: 0.2rem;
   font-size: 1.2rem;
   height: 1.8rem;
   color: ${color("green")};

@@ -1044,7 +1044,7 @@ describe("multiple run buttons with dynamic query log", () => {
     );
 
     cy.expandNotifications();
-    // +1 for clear all button
+    // +1 for clear query log button
     cy.getExpandedNotifications().children().should("have.length", 5);
     [
       "select 1",

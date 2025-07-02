@@ -106,7 +106,7 @@ const ClearAllNotifications = styled.div`
   flex-shrink: 0;
 `
 
-const Notifications = () => {
+const Notifications = ({ onClearNotifications }: { onClearNotifications: (bufferId: number) => void }) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
   const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number)) || {}
@@ -127,10 +127,6 @@ const Notifications = () => {
   const toggleMinimized = useCallback(() => {
     setIsMinimized(!isMinimized)
   }, [isMinimized])
-
-  const cleanupNotifications = useCallback(() => {
-    dispatch(actions.query.cleanupNotifications())
-  }, [dispatch])
 
   useLayoutEffect(() => {
     if (bufferNotifications.length > 0) {
@@ -194,9 +190,9 @@ const Notifications = () => {
               <Button
                 skin="secondary"
                 disabled={bufferNotifications.length === 0}
-                onClick={cleanupNotifications}
+                onClick={() => onClearNotifications(activeBuffer.id as number)}
               >
-                Clear all
+                Clear query log
               </Button>
             </ClearAllNotifications>
           )}
