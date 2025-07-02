@@ -427,7 +427,7 @@ export const getQueryFromCursor = (
   } else if (isInLastStackItemRowRange && isInNextSqlRowRange) {
     const lastStackItemEndCol = lastStackItem!.endCol
     const normalizedCurrentCol = position.column
-    if (normalizedCurrentCol > lastStackItemEndCol + 1) {
+    if (normalizedCurrentCol > lastStackItemEndCol) {
       return {
         query: text.substring(nextSql!.position, nextSql!.limit),
         row: nextSql!.row,

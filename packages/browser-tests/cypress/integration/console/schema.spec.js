@@ -220,10 +220,11 @@ describe("keyboard navigation", () => {
     cy.contains("btc_trades_mv").should("not.exist");
   });
 
-  it("should switch the focus between grid and schema", () => {
+  it("should switch the focus between editor, grid, and schema", () => {
     cy.getEditorContent().should("be.visible");
     cy.typeQuery("SELECT 123123;");
     cy.runLine();
+    cy.contains(".qg-c", "123123").click();
     cy.focused().should("contain", "123123");
 
     cy.expandMatViews();
@@ -490,7 +491,7 @@ describe("materialized views", () => {
     cy.typeQuery(
       "ALTER MATERIALIZED VIEW btc_trades_mv SUSPEND WAL WITH 24, 'Too many open files';"
     )
-      .clickRun()
+      .runLine()
       .clearEditor();
 
     cy.refreshSchema();

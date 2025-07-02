@@ -343,8 +343,10 @@ const MonacoEditor = () => {
           openDropdownAtPosition(e.clientX, e.clientY, position, false)
           return
         }
-        setCursorBeforeRunning(dropdownQueries[0])
-        toggleRunning()
+        if (dropdownQueries.length === 1) {
+          setCursorBeforeRunning(dropdownQueries[0])
+          toggleRunning()
+        }
       }
     }
   }
@@ -1045,9 +1047,9 @@ const MonacoEditor = () => {
         query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
         content: <Text color="foreground">
           {notificationPrefix}
-          {successfulQueries > 0 ? ` ${successfulQueries} successful` : ""}
-          {successfulQueries > 0 && failedQueries > 0 ? " and" : ""}
-          {failedQueries > 0 ? ` ${failedQueries} failed` : ""} {failedQueries + successfulQueries > 1 ? " queries" : " query"}
+          {successfulQueries > 0 ? `${successfulQueries} successful` : ""}
+          {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
+          {failedQueries > 0 ? `${failedQueries} failed` : ""} {failedQueries + successfulQueries > 1 ? " queries" : " query"}
         </Text>,
         type: completedGracefully ? NotificationType.SUCCESS : NotificationType.ERROR,
       }, activeBufferRef.current.id as number),
@@ -1458,6 +1460,7 @@ const MonacoEditor = () => {
                   defaultChecked={stopAfterFailureRef.current}
                   onChange={(e) => { stopAfterFailureRef.current = e.target.checked }}
                   id="stop-after-failure"
+                  data-hook="stop-after-failure-checkbox"
                 />
                 <Text color="foreground">Stop running after a failed query</Text>
               </label>
@@ -1471,7 +1474,7 @@ const MonacoEditor = () => {
                 </StyledDialogButton>
               </Dialog.Close>
               
-              <StyledDialogButton skin="primary" onClick={handleConfirmRunScript}>
+              <StyledDialogButton skin="primary" data-hook="run-all-queries-confirm" onClick={handleConfirmRunScript}>
                 Run all queries
               </StyledDialogButton>
             </Dialog.ActionButtons>

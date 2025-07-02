@@ -42,7 +42,7 @@ describe("run query", () => {
 
     // go to the end of first query
     cy.clickLine(4);
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       cy.realPress("ArrowLeft");
     }
     cy.focused().type(`${ctrlOrCmd}{enter}`);
@@ -57,6 +57,295 @@ describe("run query", () => {
     cy.focused().type(`${ctrlOrCmd}{enter}`);
     cy.getColumnName(0).should("contain", "count");
     cy.getGridRow(0).should("contain", "100");
+  });
+
+  it("should provide query selection dropdown when multiple queries start from the same line", () => {
+    cy.typeQuery("select 1;select 2;select 3;");
+    cy.clickRunIconInLine(1);
+    cy.getByDataHook("dropdown-item-run-query-0").should(
+      "contain",
+      `Run "select 1"`
+    );
+    cy.getByDataHook("dropdown-item-run-query-1").should(
+      "contain",
+      `Run "select 2"`
+    );
+    cy.getByDataHook("dropdown-item-run-query-2").should(
+      "contain",
+      `Run "select 3"`
+    );
+    cy.getByDataHook("dropdown-item-run-query-1")
+      .contains(`Run "select 2"`)
+      .click();
+    cy.getGridRow(0).should("contain", "2");
+    cy.getByDataHook("success-notification").should("contain", "select 2");
+  });
+});
+
+describe("run query with selection", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
+  });
+
+  it("should correctly identify and run selected queries", () => {
+    // Given
+    cy.getByDataHook("button-run-query").should("be.disabled");
+
+    // When
+    cy.typeQuery("select 11;select 22;select 33;");
+    // Then
+    cy.getByDataHook("button-run-query").should("contain", "Run query");
+
+    // When
+    cy.clickRunQuery();
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 33");
+
+    // When
+    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 1, column: 9 });
+    // Then
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run selected query"
+    );
+
+    // When
+    cy.clickRunQuery();
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 1");
+
+    // When
+    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 1, column: 10 });
+    // Then
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run selected query"
+    );
+
+    // When
+    cy.clickRunQuery();
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 11");
+
+    // When
+    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 1, column: 19 });
+    // Then
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run 2 selected queries"
+    );
+
+    // When
+    cy.clickRunQuery();
+    // Then
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Running completed in \d+ms with\s+2 successful\s+queries/
+      );
+
+    // When
+    cy.expandNotifications();
+    // Then
+    cy.getExpandedNotifications().should("contain", "select 11");
+    cy.getExpandedNotifications().should("contain", "select 2");
+  });
+
+  it("should run and explain a specific query from the line glyph", () => {
+    const subQuery = "select md5(concat('1', x)) as md from long_sequence(100)";
+    const subQueryTruncated = "select md5(concat('1', x)) as ...";
+
+    // When
+    cy.typeQuery(`create table long_seq as (\n${subQuery}\n--comment`);
+    cy.openRunDropdownInLine(1);
+    // Then
+    cy.getByDataHook("dropdown-item-run-query").should(
+      "contain",
+      `Run "create table long_seq as (`
+    );
+    cy.getByDataHook("dropdown-item-get-query-plan").should(
+      "contain",
+      `Get query plan for "create table long_seq as (`
+    );
+
+    // When
+    cy.getByDataHook("dropdown-item-get-query-plan").click();
+    // Then
+    cy.getColumnName(0).should("contain", "QUERY PLAN");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "EXPLAIN create table long_seq as"
+    );
+
+    // When
+    cy.selectRange(
+      { lineNumber: 2, column: 3 },
+      { lineNumber: 2, column: 3 + subQuery.length }
+    );
+    // Then
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run selected query"
+    );
+
+    // When
+    cy.openRunDropdownInLine(1);
+    // Then
+    cy.getByDataHook("dropdown-item-run-query").should(
+      "contain",
+      `Run "${subQueryTruncated}"`
+    );
+    cy.getByDataHook("dropdown-item-get-query-plan").should(
+      "contain",
+      `Get query plan for "${subQueryTruncated}"`
+    );
+
+    // When
+    cy.getByDataHook("dropdown-item-run-query").click();
+    // Then
+    cy.getColumnName(0).should("contain", "md");
+    cy.getByDataHook("success-notification").should("contain", subQuery);
+
+    // When
+    cy.openRunDropdownInLine(1);
+    cy.getByDataHook("dropdown-item-get-query-plan").click();
+    // Then
+    cy.getColumnName(0).should("contain", "QUERY PLAN");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      `EXPLAIN ${subQuery}`
+    );
+  });
+});
+
+describe("run all queries in tab", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth();
+    cy.getEditorContent().should("be.visible");
+    cy.clearEditor();
+  });
+
+  it("should run all queries in tab", () => {
+    // Given
+    cy.typeQuery("select 1;select 2;select 3;\n\n");
+    cy.typeQuery(
+      "create table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
+    );
+    cy.typeQuery("{rightArrow}".repeat(3) + ";");
+    cy.typeQuery(
+      "drop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
+    );
+
+    // When
+    cy.typeQuery(`${ctrlOrCmd}a`);
+    // Then
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run 6 selected queries"
+    );
+
+    // When
+    cy.clickLine(1);
+    // Then
+    cy.getByDataHook("button-run-script").should("not.exist");
+
+    // When
+    cy.getByDataHook("button-run-query-dropdown").click();
+    // Then
+    cy.getByDataHook("button-run-script").should("be.visible");
+
+    // When
+    cy.getByDataHook("button-run-script").click();
+    // Then
+    cy.getByRole("dialog").should("be.visible");
+    cy.getByDataHook("stop-after-failure-checkbox").should("be.checked");
+
+    // When
+    cy.getByDataHook("run-all-queries-confirm").click();
+    // Then
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Running completed in \d+ms with\s+5 successful\s+and\s+1 failed\s+queries/
+      );
+
+    // When
+    cy.scrollToLine(1);
+
+    // Then
+    cy.get(".success-glyph").should("have.length", 3);
+    cy.get(".error-glyph").should("have.length", 1);
+
+    // When
+    cy.clickLine(8);
+    // Then
+    cy.getByDataHook("error-notification").should(
+      "contain",
+      "table does not exist"
+    );
+    cy.getByDataHook("error-notification").should(
+      "contain",
+      "drop table long_seq"
+    );
+
+    // When
+    cy.expandNotifications();
+    // Then
+    cy.getExpandedNotifications().children().should("have.length", 8);
+  });
+
+  it("should not run all queries if stop after failure is checked", () => {
+    // Given
+    cy.typeQuery("select 1;\nselect a;\nselect 3;");
+
+    // When
+    cy.getByDataHook("button-run-query-dropdown").click();
+    cy.getByDataHook("button-run-script").click();
+    // Then
+    cy.getByRole("dialog").should("be.visible");
+    cy.getByDataHook("stop-after-failure-checkbox").should("be.checked");
+
+    // When
+    cy.getByDataHook("run-all-queries-confirm").click();
+    // Then
+    cy.getByDataHook("error-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Stopped after running\s+1 successful\s+and\s+1 failed\s+queries/
+      );
+    cy.get(".success-glyph").should("have.length", 1);
+    cy.get(".error-glyph").should("have.length", 1);
+    cy.get(".cursorQueryGlyph").should("have.length", 3);
+  });
+
+  it("should run all queries if stop after failure is unchecked", () => {
+    // Given
+    cy.typeQuery("select 1;\nselect a;\nselect 3;");
+
+    // When
+    cy.getByDataHook("button-run-query-dropdown").click();
+    cy.getByDataHook("button-run-script").click();
+    // Then
+    cy.getByRole("dialog").should("be.visible");
+    cy.getByDataHook("stop-after-failure-checkbox").uncheck();
+
+    // When
+    cy.getByDataHook("run-all-queries-confirm").click();
+    // Then
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Running completed in \d+ms with\s+2 successful\s+and\s+1 failed\s+queries/
+      );
+    cy.get(".success-glyph").should("have.length", 2);
+    cy.get(".error-glyph").should("have.length", 1);
+    cy.get(".cursorQueryGlyph").should("have.length", 3);
   });
 });
 
@@ -615,17 +904,21 @@ describe("handling comments", () => {
 
   it("should highlight and execute sql with block comments", () => {
     cy.typeQuery("/* comment */\nselect x from long_sequence(1);");
-    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.getCursorQueryDecoration().should("have.length", 1);
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();
     cy.getGridRow(0).should("contain", "1");
 
     cy.clearEditor();
     cy.typeQuery("/*\ncomment\n*/\nselect x from long_sequence(1);");
-    cy.getCursorQueryDecoration().should("have.length", 4);
+    cy.getCursorQueryDecoration().should("have.length", 1);
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();
     cy.getGridRow(0).should("contain", "1");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "select x from long_sequence(1)"
+    );
   });
 
   it("should highlight and execute sql with line comments inside", () => {
@@ -642,6 +935,31 @@ describe("handling comments", () => {
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();
     cy.getGridRow(0).should("contain", "1");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "select x from long_sequence(1)"
+    );
+  });
+
+  it("should extract only two queries when comments have semicolons", () => {
+    cy.typeQuery(
+      "-- not a query;\n/* not a query 2;\n not a query 3; */select /* not; a; query;*/ 1; --not a query /* ; 4;\nselect\n\n --line;\n 2;"
+    );
+    cy.getCursorQueryDecoration().should("have.length", 3);
+    cy.getCursorQueryGlyph().should("have.length", 2);
+    cy.clickRunIconInLine(3);
+    cy.getGridRow(0).should("contain", "1");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "select /* not; a; query;*/ 1"
+    );
+
+    cy.clickRunIconInLine(4);
+    cy.getGridRow(0).should("contain", "2");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      `SELECT\n  --line;\n   2`
+    );
   });
 });
 
@@ -656,8 +974,43 @@ describe("multiple run buttons with dynamic query log", () => {
     cy.typeQuery("select 1;\n\nselect 2;\n\nselect 3;");
     cy.openRunDropdownInLine(3);
 
-    cy.getByDataHook("dropdown-item-run-query").should("be.visible");
-    cy.getByDataHook("dropdown-item-get-query-plan").should("be.visible");
+    cy.getByDataHook("dropdown-item-run-query").should(
+      "contain",
+      `Run "select 2"`
+    );
+    cy.getByDataHook("dropdown-item-get-query-plan").should(
+      "contain",
+      `Get query plan for "select 2"`
+    );
+    cy.getByDataHook("dropdown-item-run-query").click();
+    cy.getGridRow(0).should("contain", "2");
+    cy.getByDataHook("success-notification").should("contain", "select 2");
+
+    cy.openRunDropdownInLine(1);
+    cy.getByDataHook("dropdown-item-run-query").should(
+      "contain",
+      `Run "select 1"`
+    );
+    cy.getByDataHook("dropdown-item-get-query-plan").should(
+      "contain",
+      `Get query plan for "select 1"`
+    );
+    cy.getByDataHook("dropdown-item-get-query-plan").click();
+    cy.getColumnName(0).should("contain", "QUERY PLAN");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "EXPLAIN select 1"
+    );
+
+    cy.openRunDropdownInLine(5);
+    cy.getByDataHook("dropdown-item-run-query").should(
+      "contain",
+      `Run "select 3"`
+    );
+    cy.getByDataHook("dropdown-item-get-query-plan").should(
+      "contain",
+      `Get query plan for "select 3"`
+    );
   });
 
   it("should run query from specific line using dropdown", () => {
@@ -728,5 +1081,59 @@ describe("multiple run buttons with dynamic query log", () => {
 
     cy.clickLine(5);
     cy.getByDataHook("success-notification").should("contain", "select 2");
+  });
+
+  it("should keep execution info per tab", () => {
+    // When
+    cy.typeQuery("select 1;\nselect a;\nselect 3;");
+    cy.getByDataHook("button-run-query-dropdown").click();
+    cy.getByDataHook("button-run-script").click();
+    // Then
+    cy.getByRole("dialog").should("be.visible");
+    cy.getByDataHook("stop-after-failure-checkbox").uncheck();
+
+    // When
+    cy.getByDataHook("run-all-queries-confirm").click();
+    // Then
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Running completed in \d+ms with\s+2 successful\s+and\s+1 failed\s+queries/
+      );
+    cy.get(".success-glyph").should("have.length", 2);
+    cy.get(".error-glyph").should("have.length", 1);
+    cy.get(".cursorQueryGlyph").should("have.length", 3);
+
+    // When
+    cy.get(".new-tab-button").click();
+    // Then
+    cy.getEditorTabByTitle("SQL 1")
+      .should("be.visible")
+      .should("have.attr", "active");
+
+    // When
+    cy.typeQuery("select 1;\nselect a;\nselect 3;");
+    // Then
+    cy.get(".success-glyph").should("have.length", 0);
+    cy.get(".error-glyph").should("have.length", 0);
+    cy.get(".cursorQueryGlyph").should("have.length", 3);
+
+    // When
+    cy.clickRunIconInLine(3);
+    // Then
+    cy.get(".success-glyph").should("have.length", 1);
+    cy.get(".error-glyph").should("have.length", 0);
+    cy.get(".cursorQueryGlyph").should("have.length", 3);
+
+    // When
+    cy.getEditorTabByTitle("SQL").within(() => {
+      cy.get(".chrome-tab-drag-handle").click();
+    });
+    // Then
+    cy.getEditorTabByTitle("SQL").should("have.attr", "active");
+    cy.get(".success-glyph").should("have.length", 2);
+    cy.get(".error-glyph").should("have.length", 1);
+    cy.get(".cursorQueryGlyph").should("have.length", 3);
   });
 });

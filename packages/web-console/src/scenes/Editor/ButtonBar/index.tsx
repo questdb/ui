@@ -177,6 +177,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
       return (
         <StopButton
           skin="error"
+          data-hook="button-cancel-script"
           onClick={handleClickScriptButton}
           prefixIcon={<Stop size="18px" />}
         >
@@ -187,6 +188,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
     return (
       <SuccessButton
         skin="success"
+        data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
         disabled={running !== RunningType.NONE}
@@ -207,6 +209,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
         <ButtonGroup>
           <StopButton
             skin="error"
+            data-hook="button-cancel-query"
             onClick={handleClickQueryButton}
             prefixIcon={<Stop size="18px" />}
           >
@@ -231,6 +234,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
       <ButtonGroup>
         <MainRunButton
           skin="success"
+          data-hook="button-run-query"
           title={shortcutTitles[RunningType.QUERY]}
           onClick={handleClickQueryButton}
           disabled={running !== RunningType.NONE || queriesToRun.length === 0}
@@ -248,6 +252,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
           trigger={
             <DropdownButton
               skin="success"
+              data-hook="button-run-query-dropdown"
               $open={dropdownActive}
               title="More run options"
             >

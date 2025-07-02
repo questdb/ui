@@ -93,6 +93,8 @@ Cypress.Commands.add("getByDataHook", (name) =>
   cy.get(`[data-hook="${name}"]`)
 );
 
+Cypress.Commands.add("getByRole", (name) => cy.get(`[role="${name}"]`));
+
 Cypress.Commands.add("getGrid", () =>
   cy.get(".qg-viewport .qg-canvas").should("be.visible")
 );
@@ -135,10 +137,22 @@ Cypress.Commands.add("runLineWithResponse", (response) => {
 });
 
 Cypress.Commands.add("clickLine", (n) => {
-  return cy
-    .get(".monaco-editor .view-line")
-    .eq(n - 1)
-    .click();
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.revealLine(n);
+    monacoEditor.setPosition({
+      lineNumber: n,
+      column: monacoEditor.getModel().getLineMaxColumn(n),
+    });
+  });
+  cy.get(".active-line-number").should("contain", n);
+});
+
+Cypress.Commands.add("scrollToLine", (n) => {
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.revealLine(n);
+  });
 });
 
 Cypress.Commands.add("clearEditor", () => {
@@ -224,6 +238,26 @@ Cypress.Commands.add("clickDropdownGetQueryPlan", () => {
   return cy.getByDataHook("dropdown-item-get-query-plan").click().wait("@exec");
 });
 
+Cypress.Commands.add("clickRunQuery", () => {
+  cy.intercept("/exec*").as("exec");
+  cy.getByDataHook("button-run-query")
+    .should("not.be.disabled")
+    .click()
+    .wait("@exec");
+});
+
+Cypress.Commands.add("clickRunScript", () => {
+  cy.intercept("/exec*").as("exec");
+  cy.getByDataHook("button-run-query-dropdown").click();
+  cy.getByDataHook("button-run-script").click().wait("@exec");
+});
+
+Cypress.Commands.add("clickCancelScript", () => {
+  cy.intercept("/exec*").as("exec");
+  cy.getByDataHook("button-run-query-dropdown").click();
+  cy.getByDataHook("button-cancel-script").click().wait("@exec");
+});
+
 const numberRangeRegexp = (n, width = 3) => {
   const [min, max] = [n - width, n + width];
   const numbers = Array.from(
@@ -252,15 +286,28 @@ Cypress.Commands.add("F9", () => {
 
 Cypress.Commands.add("getSelectedLines", () => cy.get(".selected-text"));
 
+Cypress.Commands.add("selectRange", (startPos, endPos) => {
+  cy.window().then((win) => {
+    const monacoEditor = win.monaco.editor.getEditors()[0];
+    monacoEditor.setSelection({
+      startLineNumber: startPos.lineNumber,
+      startColumn: startPos.column,
+      endLineNumber: endPos.lineNumber,
+      endColumn: endPos.column,
+    });
+  });
+});
+
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"));
 
 Cypress.Commands.add("expandNotifications", () =>
   cy.get('[data-hook="expand-notifications"]').click()
 );
 
-Cypress.Commands.add("collapseNotifications", () =>
-  cy.get('[data-hook="collapse-notifications"]').click()
-);
+Cypress.Commands.add("collapseNotifications", () => {
+  cy.get('[data-hook="collapse-notifications"]').click();
+  cy.get('[data-hook="notifications-collapsed"]').should("be.visible");
+});
 
 Cypress.Commands.add("getCollapsedNotifications", () =>
   cy.get('[data-hook="notifications-collapsed"]')
