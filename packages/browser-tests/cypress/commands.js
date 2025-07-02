@@ -105,7 +105,9 @@ Cypress.Commands.add("getGridRow", (n) =>
   cy.get(".qg-r").filter(":visible").eq(n)
 );
 
-Cypress.Commands.add("getColumnName", (n) => cy.get(".qg-header-name").eq(n));
+Cypress.Commands.add("getColumnName", (n) =>
+  cy.get(".qg-header-name").eq(n).invoke("text")
+);
 
 Cypress.Commands.add("getGridCol", (n) =>
   cy.get(".qg-c").filter(":visible").eq(n)

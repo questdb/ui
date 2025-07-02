@@ -250,6 +250,16 @@ describe("keyboard navigation", () => {
     const lastMatView = materializedViews[materializedViews.length - 1];
     cy.focused().should("contain", lastMatView);
   });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+    tables.forEach((table) => {
+      cy.dropTable(table);
+    });
+    materializedViews.forEach((mv) => {
+      cy.dropMaterializedView(mv);
+    });
+  });
 });
 
 describe("questdb schema with suspended tables with Linux OS error codes", () => {

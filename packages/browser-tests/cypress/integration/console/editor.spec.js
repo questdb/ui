@@ -234,7 +234,7 @@ describe("run all queries in tab", () => {
     cy.typeQuery(
       "create table long_seq as ();{leftArrow}{leftArrow}\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
     );
-    cy.clickLine(4);
+    cy.clickLine(6);
     cy.typeQuery(
       "\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
     );
