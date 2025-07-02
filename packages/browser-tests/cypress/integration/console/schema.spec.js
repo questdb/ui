@@ -503,7 +503,7 @@ describe("materialized views", () => {
       .contains("btc_trades_mv")
       .rightclick();
     cy.getByDataHook("table-context-menu-resume-wal")
-      .should("not.be.disabled")
+      .filter(":visible")
       .click();
 
     cy.getByDataHook("schema-suspension-dialog").should(
@@ -514,8 +514,8 @@ describe("materialized views", () => {
     cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
     cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
-    cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
     cy.refreshSchema();
+    cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
     cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });
 

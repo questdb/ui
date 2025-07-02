@@ -232,11 +232,11 @@ describe("run all queries in tab", () => {
     // Given
     cy.typeQuery("select 1;select 2;select 3;\n\n");
     cy.typeQuery(
-      "create table long_seq as (\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
+      "create table long_seq as ();{leftArrow}{leftArrow}\nselect md5(concat('1', x)) as md from long_sequence(100)\n--comment"
     );
     cy.clickLine(4);
     cy.typeQuery(
-      ";\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
+      "\ndrop table long_seq;\n\ndrop table long_seq;\n;\n;\n ;\n  ;\n; ;;\n"
     );
 
     // When
@@ -1035,24 +1035,22 @@ describe("multiple run buttons with dynamic query log", () => {
 
     cy.clickRunIconInLine(3);
 
-    cy.getCollapsedNotifications()
-      .getByDataHook("success-notification")
-      .should("contain", "select 1");
+    cy.getByDataHook("success-notification").should("contain", "select 1");
 
     cy.clickRunIconInLine(5);
 
-    cy.getCollapsedNotifications()
-      .getByDataHook("success-notification")
-      .should("contain", "select 2");
+    cy.getByDataHook("success-notification").should("contain", "select 2");
 
     cy.clickRunIconInLine(1);
-    cy.getCollapsedNotifications()
-      .getByDataHook("error-notification")
+    cy.getByDataHook("error-notification")
       .should("contain", "table does not exist")
       .should("contain", "select * from non_existent_table");
 
     cy.openRunDropdownInLine(3).clickDropdownGetQueryPlan();
-    cy.getCollapsedNotifications().should("contain", "EXPLAIN select 1");
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "EXPLAIN select 1"
+    );
     cy.getColumnName(0).should("contain", "QUERY PLAN");
 
     cy.expandNotifications();
