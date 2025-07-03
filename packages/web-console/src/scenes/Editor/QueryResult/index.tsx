@@ -73,7 +73,7 @@ const addColor = (timing: string) => {
   return <Text color="orange">{timing}</Text>
 }
 
-const formatTiming = (nanos: number) => {
+export const formatTiming = (nanos: number) => {
   if (nanos === 0) {
     return "0"
   }

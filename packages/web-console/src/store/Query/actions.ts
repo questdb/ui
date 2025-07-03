@@ -35,6 +35,9 @@ import {
   NotificationType,
   QueryAction,
   QueryAT,
+  QueryKey,
+  RunningType,
+  QueriesToRun,
 } from "../../types"
 
 const setTables = (payload: Table[]): QueryAction => ({
@@ -52,12 +55,14 @@ const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
 })
 
 const addNotification = (
-  payload: Partial<NotificationShape> & { content: ReactNode },
+  payload: Partial<NotificationShape> & { content: ReactNode, query: QueryKey },
+  bufferId?: number,
 ): QueryAction => ({
   payload: {
     createdAt: new Date(),
     type: NotificationType.SUCCESS,
     ...payload,
+    bufferId,
   },
   type: QueryAT.ADD_NOTIFICATION,
 })
@@ -66,12 +71,20 @@ const cleanupNotifications = (): QueryAction => ({
   type: QueryAT.CLEANUP_NOTIFICATIONS,
 })
 
-const removeNotification = (payload: Date): QueryAction => ({
+const cleanupBufferNotifications = (bufferId: number): QueryAction => ({
+  type: QueryAT.CLEANUP_BUFFER_NOTIFICATIONS,
+  payload: {
+    bufferId,
+  },
+})
+
+const removeNotification = (payload: QueryKey, bufferId?: number): QueryAction => ({
   payload,
+  bufferId,
   type: QueryAT.REMOVE_NOTIFICATION,
 })
 
-const setResult = (payload: QueryRawResult): QueryAction => ({
+const setResult = (payload: QueryRawResult | undefined): QueryAction => ({
   payload,
   type: QueryAT.SET_RESULT,
 })
@@ -80,20 +93,43 @@ const stopRunning = (): QueryAction => ({
   type: QueryAT.STOP_RUNNING,
 })
 
-const toggleRunning = (isRefresh = false): QueryAction => ({
+const toggleRunning = (
+  payload?: RunningType
+): QueryAction => ({
   type: QueryAT.TOGGLE_RUNNING,
+  payload,
+})
+
+const setActiveNotification = (payload: NotificationShape | null): QueryAction => ({
+  type: QueryAT.SET_ACTIVE_NOTIFICATION,
+  payload,
+})
+
+const updateNotificationKey = (oldKey: QueryKey, newKey: QueryKey, bufferId?: number): QueryAction => ({
+  type: QueryAT.UPDATE_NOTIFICATION_KEY,
   payload: {
-    isRefresh,
+    oldKey,
+    newKey,
+    bufferId,
   },
+})
+
+const setQueriesToRun = (payload: QueriesToRun): QueryAction => ({
+  type: QueryAT.SET_QUERIES_TO_RUN,
+  payload,
 })
 
 export default {
   addNotification,
   cleanupNotifications,
+  cleanupBufferNotifications,
   removeNotification,
+  updateNotificationKey,
   setResult,
   stopRunning,
   toggleRunning,
   setTables,
   setColumns,
+  setActiveNotification,
+  setQueriesToRun,
 }

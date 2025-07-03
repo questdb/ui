@@ -43,6 +43,7 @@ import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
+import { useEditor } from "../../providers"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
@@ -55,6 +56,7 @@ const Menu = styled(PaneMenu)`
   justify-content: space-between;
   overflow: hidden;
   border: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 
   ::before {
     content: "";
@@ -80,7 +82,7 @@ const Header = styled(Text)`
 `
 
 const LatestNotification = styled.div`
-  margin-left: 1rem;
+  padding: 0 1rem;
   flex: 1;
   height: 100%;
   display: flex;
@@ -104,12 +106,17 @@ const ClearAllNotifications = styled.div`
   flex-shrink: 0;
 `
 
-const Notifications = () => {
+const Notifications = ({ onClearNotifications }: { onClearNotifications: (bufferId: number) => void }) => {
+  const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
+  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number)) || {}
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const dispatch = useDispatch()
+
+  const bufferNotifications = notifications.filter(notification => queryNotifications[notification.query])
 
   const scrollToBottom = () => {
     contentRef.current?.scrollTo({
@@ -121,15 +128,11 @@ const Notifications = () => {
     setIsMinimized(!isMinimized)
   }, [isMinimized])
 
-  const cleanupNotifications = useCallback(() => {
-    dispatch(actions.query.cleanupNotifications())
-  }, [dispatch])
-
   useLayoutEffect(() => {
-    if (notifications.length > 0) {
+    if (bufferNotifications.length > 0) {
       scrollToBottom()
     }
-  }, [notifications])
+  }, [bufferNotifications])
 
   useLayoutEffect(() => {
     scrollToBottom()
@@ -141,8 +144,6 @@ const Notifications = () => {
     }
   }, [sm])
 
-  const lastNotification = notifications[notifications.length - 1]
-
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
       <Menu>
@@ -151,13 +152,19 @@ const Notifications = () => {
           Log
         </Header>
         <LatestNotification data-hook="notifications-collapsed">
-          {isMinimized && lastNotification && (
-            <Notification isMinimized={true} {...lastNotification} />
+          {isMinimized && activeNotification && (
+            <Notification isMinimized={true} {...activeNotification} />
           )}
         </LatestNotification>
-        <Button skin={`${isMinimized ? "secondary" : "transparent"}`} onClick={toggleMinimized}>
-          {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
-        </Button>
+        {(bufferNotifications.length > 0 || !isMinimized) &&(
+          <Button
+            skin={`${isMinimized ? "secondary" : "transparent"}`}
+            onClick={toggleMinimized}
+            data-hook={`${isMinimized ? "expand-notifications" : "collapse-notifications"}`}
+          >
+            {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
+          </Button>
+        )}
       </Menu>
       {!isMinimized && (
         <Content
@@ -165,7 +172,7 @@ const Notifications = () => {
           ref={contentRef}
           data-hook="notifications-expanded"
         >
-          {notifications
+          {bufferNotifications
             .filter(
               (notification) => notification.type !== NotificationType.LOADING,
             )
@@ -182,10 +189,10 @@ const Notifications = () => {
             <ClearAllNotifications>
               <Button
                 skin="secondary"
-                disabled={notifications.length === 0}
-                onClick={cleanupNotifications}
+                disabled={bufferNotifications.length === 0}
+                onClick={() => onClearNotifications(activeBuffer.id as number)}
               >
-                Clear all
+                Clear query log
               </Button>
             </ClearAllNotifications>
           )}

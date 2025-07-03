@@ -51,6 +51,7 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
+import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
@@ -119,14 +120,17 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             rendererFn(result)
           }
         } catch (err) {
-          dispatch(actions.query.stopRunning())
+          // Order of actions is important
           dispatch(
             actions.query.addNotification({
+              query: `${sql}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
               content: <Text color="red">{(err as ErrorResult).error}</Text>,
               sideContent: <QueryInNotification query={sql} />,
               type: NotificationType.ERROR,
+              updateActiveNotification: true,
             }),
           )
+          dispatch(actions.query.stopRunning())
         }
       },
     )

@@ -22,20 +22,33 @@
  *
  ******************************************************************************/
 
-import { NotificationShape, RunningShape, StoreShape } from "types"
+import { NotificationShape, RunningType, StoreShape, QueryNotifications, QueriesToRun } from "types"
 import type {
   QueryRawResult,
   Table,
   InformationSchemaColumn,
 } from "utils/questdb"
+import { QueryKey } from "./types"
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
   store.query.notifications
 
+const getQueryNotifications: (store: StoreShape) => Record<number, Record<QueryKey, QueryNotifications>> = (store) =>
+  store.query.queryNotifications
+
+const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<QueryKey, QueryNotifications> | undefined => 
+  store.query.queryNotifications[bufferId]
+
+const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>
+  store.query.activeNotification
+
+const getQueriesToRun: (store: StoreShape) => QueriesToRun = (store) =>
+  store.query.queriesToRun
+
 const getResult: (store: StoreShape) => undefined | QueryRawResult = (store) =>
   store.query.result
 
-const getRunning: (store: StoreShape) => RunningShape = (store) =>
+const getRunning: (store: StoreShape) => RunningType = (store) =>
   store.query.running
 
 const getTables: (store: StoreShape) => Table[] = (store) => store.query.tables
@@ -45,6 +58,10 @@ const getColumns: (store: StoreShape) => InformationSchemaColumn[] = (store) =>
 
 export default {
   getNotifications,
+  getQueryNotifications,
+  getQueryNotificationsForBuffer,
+  getActiveNotification,
+  getQueriesToRun,
   getResult,
   getRunning,
   getTables,

@@ -22,31 +22,56 @@
  *
  ******************************************************************************/
 
-import { QueryAction, QueryAT, QueryStateShape } from "../../types"
+import { QueryAction, QueryAT, QueryStateShape, RunningType } from "../../types"
 
 export const initialState: QueryStateShape = {
   notifications: [],
   tables: [],
   columns: [],
-  running: {
-    value: false,
-    isRefresh: false,
-  },
-  maxNotifications: 20,
+  running: RunningType.NONE,
+  queryNotifications: {},
+  activeNotification: null,
+  queriesToRun: [],
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
     case QueryAT.ADD_NOTIFICATION: {
-      const notifications = [...state.notifications, action.payload]
-
-      while (notifications.length === state.maxNotifications) {
-        notifications.shift()
+      const { query: queryText, isExplain = false, updateActiveNotification = true, bufferId } = action.payload
+      
+      const notificationWithTimestamp = {
+        ...action.payload,
+        createdAt: action.payload.createdAt || new Date()
       }
+      const { bufferId: _, ...cleanNotification } = notificationWithTimestamp
+      
+      if (bufferId !== undefined) {
+        const bufferNotifications = state.queryNotifications[bufferId] || {}
+        const existingQueryNotifications = bufferNotifications[queryText] || {}
+        const updatedQueryNotifications = {
+          ...existingQueryNotifications,
+          latest: cleanNotification,
+          [isExplain ? 'explain' : 'regular']: cleanNotification
+        }
 
+        return {
+          ...state,
+          notifications: [...state.notifications, cleanNotification],
+          queryNotifications: { 
+            ...state.queryNotifications, 
+            [bufferId]: {
+              ...bufferNotifications,
+              [queryText]: updatedQueryNotifications
+            }
+          },
+          ...(updateActiveNotification ? { activeNotification: cleanNotification } : {}),
+        }
+      }
+      
       return {
         ...state,
-        notifications,
+        notifications: [...state.notifications, cleanNotification],
+        ...(updateActiveNotification ? { activeNotification: cleanNotification } : {}),
       }
     }
 
@@ -54,15 +79,118 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         notifications: [],
+        queryNotifications: {},
+        activeNotification: null,
+      }
+    }
+
+    case QueryAT.CLEANUP_BUFFER_NOTIFICATIONS: {
+      const { bufferId } = action.payload
+      const bufferNotifications = state.queryNotifications[bufferId] || {}
+      
+      const filteredNotifications = state.notifications.filter(notification => 
+        !bufferNotifications[notification.query]
+      )
+      
+      const updatedQueryNotifications = { ...state.queryNotifications }
+      delete updatedQueryNotifications[bufferId]
+      
+      const updatedActiveNotification = state.activeNotification && bufferNotifications[state.activeNotification.query]
+        ? null
+        : state.activeNotification
+      
+      return {
+        ...state,
+        notifications: filteredNotifications,
+        queryNotifications: updatedQueryNotifications,
+        activeNotification: updatedActiveNotification,
+      }
+    }
+
+    case QueryAT.SET_ACTIVE_NOTIFICATION: {
+      return {
+        ...state,
+        activeNotification: action.payload,
       }
     }
 
     case QueryAT.REMOVE_NOTIFICATION: {
+      const { bufferId } = action
+      const filteredNotifications = state.notifications.filter(
+        (notification) => notification.query !== action.payload,
+      )
+      
+      if (bufferId !== undefined) {
+        const bufferNotifications = state.queryNotifications[bufferId] || {}
+        const updatedBufferNotifications = { ...bufferNotifications }
+        delete updatedBufferNotifications[action.payload]
+        
+        return {
+          ...state,
+          notifications: filteredNotifications,
+          queryNotifications: {
+            ...state.queryNotifications,
+            [bufferId]: updatedBufferNotifications
+          },
+        }
+      }
+      
       return {
         ...state,
-        notifications: state.notifications.filter(
-          ({ createdAt }) => createdAt !== action.payload,
-        ),
+        notifications: filteredNotifications,
+      }
+    }
+
+    case QueryAT.UPDATE_NOTIFICATION_KEY: {
+      const { oldKey, newKey, bufferId } = action.payload
+      if (newKey === oldKey) {
+        return { ...state }
+      }
+
+      if (bufferId !== undefined) {
+        const bufferNotifications = state.queryNotifications[bufferId] || {}
+        const updatedBufferNotifications = { ...bufferNotifications }
+        
+        if (updatedBufferNotifications[oldKey]) {
+          updatedBufferNotifications[newKey] = updatedBufferNotifications[oldKey]
+          delete updatedBufferNotifications[oldKey]
+        }
+        
+        const updatedNotifications = state.notifications.map(notification => 
+          notification.query === oldKey 
+            ? { ...notification, query: newKey }
+            : notification
+        )
+        
+        const updatedActiveNotification = state.activeNotification?.query === oldKey
+          ? { ...state.activeNotification, query: newKey }
+          : state.activeNotification
+        
+        return {
+          ...state,
+          notifications: updatedNotifications,
+          queryNotifications: {
+            ...state.queryNotifications,
+            [bufferId]: updatedBufferNotifications
+          },
+          activeNotification: updatedActiveNotification,
+        }
+      }
+      
+      const updatedNotifications = state.notifications.map(notification => 
+        notification.query === oldKey 
+          ? { ...notification, query: newKey }
+          : notification
+      )
+      
+      const updatedActiveNotification = state.activeNotification?.query === oldKey
+        ? { ...state.activeNotification, query: newKey }
+        : state.activeNotification
+      
+      return {
+        ...state,
+        notifications: updatedNotifications,
+        activeNotification: updatedActiveNotification,
       }
     }
 
@@ -76,20 +204,21 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     case QueryAT.STOP_RUNNING: {
       return {
         ...state,
-        running: {
-          value: false,
-          isRefresh: false,
-        },
+        running: RunningType.NONE,
       }
     }
 
     case QueryAT.TOGGLE_RUNNING: {
+      const currentRunning = state.running
+      if (currentRunning !== RunningType.NONE) {
+        return {
+          ...state,
+          running: RunningType.NONE,
+        }
+      }
       return {
         ...state,
-        running: {
-          value: !state.running.value,
-          isRefresh: action.payload.isRefresh,
-        },
+        running: action.payload ?? RunningType.QUERY,
       }
     }
 
@@ -107,6 +236,12 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
     }
 
+    case QueryAT.SET_QUERIES_TO_RUN: {
+      return {
+        ...state,
+        queriesToRun: action.payload,
+      }
+    }
     default:
       return state
   }

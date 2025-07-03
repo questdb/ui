@@ -44,6 +44,7 @@ const color: ColorShape = {
   orange: "#ffb86c",
   yellow: "#f1fa8c",
   green: "#50fa7b",
+  greenDarker: "#00aa3b",
   purple: "#bd93f9",
   cyan: "#8be9fd",
   pink: "#d14671",

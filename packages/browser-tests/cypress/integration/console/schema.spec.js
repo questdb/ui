@@ -220,10 +220,11 @@ describe("keyboard navigation", () => {
     cy.contains("btc_trades_mv").should("not.exist");
   });
 
-  it("should switch the focus between grid and schema", () => {
+  it("should switch the focus between editor, grid, and schema", () => {
     cy.getEditorContent().should("be.visible");
     cy.typeQuery("SELECT 123123;");
     cy.runLine();
+    cy.contains(".qg-c", "123123").click();
     cy.focused().should("contain", "123123");
 
     cy.expandMatViews();
@@ -249,6 +250,16 @@ describe("keyboard navigation", () => {
     const lastMatView = materializedViews[materializedViews.length - 1];
     cy.focused().should("contain", lastMatView);
   });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+    tables.forEach((table) => {
+      cy.dropTable(table);
+    });
+    materializedViews.forEach((mv) => {
+      cy.dropMaterializedView(mv);
+    });
+  });
 });
 
 describe("questdb schema with suspended tables with Linux OS error codes", () => {
@@ -262,13 +273,13 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.typeQuery(
       "ALTER TABLE btc_trades SUSPEND WAL WITH 24, 'Too many open files';"
     )
-      .clickRun()
+      .clickRunIconInLine(1)
       .clearEditor();
 
     cy.typeQuery(
       "ALTER TABLE ecommerce_stats SUSPEND WAL WITH 12, 'Out of memory';"
     )
-      .clickRun()
+      .clickRunIconInLine(1)
       .clearEditor();
   });
   beforeEach(() => {
@@ -490,7 +501,7 @@ describe("materialized views", () => {
     cy.typeQuery(
       "ALTER MATERIALIZED VIEW btc_trades_mv SUSPEND WAL WITH 24, 'Too many open files';"
     )
-      .clickRun()
+      .runLine()
       .clearEditor();
 
     cy.refreshSchema();
@@ -502,7 +513,7 @@ describe("materialized views", () => {
       .contains("btc_trades_mv")
       .rightclick();
     cy.getByDataHook("table-context-menu-resume-wal")
-      .should("not.be.disabled")
+      .filter(":visible")
       .click();
 
     cy.getByDataHook("schema-suspension-dialog").should(
@@ -513,6 +524,7 @@ describe("materialized views", () => {
     cy.getByDataHook("schema-suspension-dialog-restart-transaction").click();
     cy.getByDataHook("schema-suspension-dialog-dismiss").click();
     cy.getByDataHook("schema-suspension-dialog").should("not.exist");
+    cy.refreshSchema();
     cy.getByDataHook("schema-filter-suspended-button").should("not.exist");
     cy.getByDataHook("schema-row-error-icon").should("not.exist");
   });

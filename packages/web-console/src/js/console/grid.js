@@ -191,6 +191,8 @@ export function grid(rootElement, _paginationFn, id) {
   // Cell will pulse when its content is copied to clipboard
   let activeCellPulseClearTimer
 
+  let initialFocusSkipped = false
+
   function getColumn(index) {
     return columns[columnPositions[index]]
   }
@@ -1966,6 +1968,10 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function focusTopLeftCell() {
+    if (!initialFocusSkipped) {
+      initialFocusSkipped = true
+      return
+    }
     focusedRowIndex = 0
     focusedRowContainer = rows[focusedRowIndex]
     focusedRowContainerLeft = rowsLeft[focusedRowIndex]
@@ -2122,6 +2128,7 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function setData(_data) {
+    initialFocusSkipped = false
     setTimeout(() => {
       setDataPart1(_data)
       // This part of the update sequence requires layoutStore access.
