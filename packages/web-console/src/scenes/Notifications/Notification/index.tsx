@@ -27,7 +27,8 @@ import { NotificationShape, NotificationType } from "../../../types"
 import { SuccessNotification } from "./SuccessNotification"
 import { ErrorNotification } from "./ErrorNotification"
 import { InfoNotification } from "./InfoNotification"
-import {NoticeNotification} from "./NoticeNotification"
+import { NoticeNotification } from "./NoticeNotification"
+import { LoadingNotification } from "./LoadingNotification"
 
 const Notification = (props: NotificationShape) => {
   const { type } = props
@@ -37,6 +38,8 @@ const Notification = (props: NotificationShape) => {
     <ErrorNotification {...props} />
   ) : type == NotificationType.NOTICE ? (
     <NoticeNotification {...props} />
+  ) : type === NotificationType.LOADING ? (
+    <LoadingNotification {...props} />
   ) : (
     <InfoNotification {...props} />
   )

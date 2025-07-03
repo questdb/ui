@@ -25,6 +25,7 @@ import { appendQuery, AppendQueryOptions } from "./utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import type { editor } from "monaco-editor"
+import { RunningType } from "../../../store/Query/types"
 
 export const registerLegacyEventBusEvents = ({
   editor,
@@ -33,7 +34,7 @@ export const registerLegacyEventBusEvents = ({
 }: {
   editor: editor.IStandaloneCodeEditor
   insertTextAtCursor: (text: string) => void
-  toggleRunning: (isRefresh?: boolean) => void
+  toggleRunning: (runningType?: RunningType) => void
 }) => {
   eventBus.subscribe<string>(EventType.MSG_EDITOR_INSERT_COLUMN, (column) => {
     if (column) {
@@ -53,7 +54,7 @@ export const registerLegacyEventBusEvents = ({
   )
 
   eventBus.subscribe(EventType.MSG_QUERY_EXEC, () => {
-    toggleRunning(true)
+    toggleRunning(RunningType.REFRESH)
   })
 
   eventBus.subscribe(EventType.MSG_EDITOR_FOCUS, () => {
