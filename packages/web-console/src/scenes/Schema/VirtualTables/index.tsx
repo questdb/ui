@@ -180,7 +180,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         return response.data
       }
     } catch (error: any) {
-      console.error(`Cannot show columns from table '${name}'`)
+      toast.error(`Cannot show columns from table '${name}'`)
     }
     return []
   }

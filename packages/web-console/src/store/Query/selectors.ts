@@ -28,14 +28,15 @@ import type {
   Table,
   InformationSchemaColumn,
 } from "utils/questdb"
+import { QueryKey } from "./types"
 
 const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
   store.query.notifications
 
-const getQueryNotifications: (store: StoreShape) => Record<number, Record<string, QueryNotifications>> = (store) =>
+const getQueryNotifications: (store: StoreShape) => Record<number, Record<QueryKey, QueryNotifications>> = (store) =>
   store.query.queryNotifications
 
-const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<string, QueryNotifications> | undefined => 
+const getQueryNotificationsForBuffer = (bufferId: number) => (store: StoreShape): Record<QueryKey, QueryNotifications> | undefined => 
   store.query.queryNotifications[bufferId]
 
 const getActiveNotification: (store: StoreShape) => NotificationShape | null = (store) =>
