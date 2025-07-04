@@ -24,8 +24,7 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import styled from "styled-components"
-import { InfoCircle } from "@styled-icons/boxicons-regular"
-import { SortDown } from "@styled-icons/boxicons-regular"
+import { SortDown, Bracket, InfoCircle } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
@@ -223,6 +222,10 @@ const TYPE_ICONS = {
   geo: {
     types: ["GEOHASH"],
     icon: GeoAlt
+  },
+  array: {
+    types: ["ARRAY"],
+    icon: Bracket,
   }
 } as const
 
