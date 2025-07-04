@@ -59,6 +59,7 @@ export function grid(rootElement, _paginationFn, id) {
     dragHandleWidth: 20,
     dataPageSize: 1000,
     layoutStoreTimeout: 1000,
+    cellWidthMultiplier: 9.6,
   }
   const ACTIVE_CELL_CLASS = "qg-c-active"
   const NAV_EVENT_ANY_VERTICAL = 0
@@ -93,6 +94,7 @@ export function grid(rootElement, _paginationFn, id) {
   let rowsLeft = []
   let columnResizeGhost
   let columnOffsets
+  let columnOffsetsToRestore = []
   let columns = []
   let columnPositions = []
   let columnCount = 0
@@ -199,6 +201,9 @@ export function grid(rootElement, _paginationFn, id) {
 
   function shuffleToFront() {
     const columnIndex = focusedColumnIndex
+    if (columnIndex === -1) {
+      return
+    }
     let freezeLeftBefore = 0
 
     // handle frozen columns by resetting the panel
@@ -292,7 +297,7 @@ export function grid(rootElement, _paginationFn, id) {
           row.style.display = "flex"
           for (let i = colLo; i < colHi; i++) {
             setCellData(
-              columns[i],
+              getColumn(i),
               row.childNodes[i % visColumnCount],
               rowData[columnPositions[i]],
             )
@@ -528,7 +533,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function triggerHeaderClick(e) {
     // avoid broadcasting fat finger clicks
-    if (!colResizeColIndex) {
+    if (colResizeColIndex === undefined) {
       triggerEvent("header.click", {
         columnName: e.currentTarget.getAttribute("data-column-name"),
       })
@@ -725,7 +730,7 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function getCellWidth(valueLen) {
-    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * 8 * 1.2))
+    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * defaults.cellWidthMultiplier))
   }
 
   function colFreezeMouseEnter(e) {
@@ -1009,6 +1014,7 @@ export function grid(rootElement, _paginationFn, id) {
     rows = []
     rowsLeft = []
     data = []
+    columnOffsetsToRestore = []
     sql = null
     loPage = 0
     hiPage = 0
@@ -1077,37 +1083,55 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function getDisplayedCellValue(column, cellData) {
-    const isArray = Array.isArray(cellData)
+  function getArrayString(cellData) {
+    return escapeHtml(JSON.stringify(cellData, (_, val) => {
+      if (Number.isInteger(val)) {
+        return val.toString() + ".0"
+      }
+      return val
+    }).replace(/"/g, ""))
+  }
+
+  function getDisplayedCellValue(column, cellData, columnWidth = null) {
+    const isArray = column.type === "ARRAY"
     const precisionTypes = ["FLOAT", "DOUBLE"]
     const containsPrecision = isArray
       ? precisionTypes.includes(column.elemType)
       : precisionTypes.includes(column.type)
 
-    if (!containsPrecision) {
-      return isArray ? JSON.stringify(cellData) : escapeHtml(cellData.toString())
-    }
-
     if (!isArray) {
-      return Number.isInteger(cellData) ? cellData.toString() + ".0" : cellData.toString()
+      if (containsPrecision) {
+        return Number.isInteger(cellData) ? escapeHtml(cellData.toString() + ".0") : escapeHtml(cellData.toString())
+      }
+      return escapeHtml(cellData.toString())
     }
 
-    return "ARRAY" + JSON.stringify(cellData, (_, val) => {
-      if (Number.isInteger(val)) {
-        return val.toString() + ".0"
-      }
-      return val
-    }).replace(/"/g, "")
+    const arrayString = getArrayString(cellData)
+    
+    const maxWidthToSpan = columnWidth ?? (viewport.getBoundingClientRect().width * 0.4)
+    const maxArrayTextLength = Math.ceil(maxWidthToSpan / defaults.cellWidthMultiplier)
+
+    const openCloseBracketsLength = column.dim
+    const maxContentLength = maxArrayTextLength - (openCloseBracketsLength * 2 + 5) // "ARRAY" + opening and closing brackets
+    const content = arrayString.slice(openCloseBracketsLength, -openCloseBracketsLength)
+
+    if (content.length > maxContentLength) {
+      const contentToShow = content.slice(0, maxContentLength)
+      return "ARRAY" + "[".repeat(column.dim) + contentToShow + "..." + "]".repeat(column.dim)
+    }
+    return "ARRAY" + "[".repeat(column.dim) + content + "]".repeat(column.dim)
   }
 
   function setCellData(column, cell, cellData) {
     if (cellData !== null) {
-      cell.innerHTML = getDisplayedCellValue(column, cellData)
+      const layoutEntry = getLayoutEntry()
+      const columnWidth = layoutEntry.deviants[column.name] ?? null
+      cell.innerHTML = getDisplayedCellValue(column, cellData, columnWidth)
 
       cell.classList.remove("qg-null")
 
-      if (column.type === "ARRAY" && column.dim > 1) {
-        cell.classList.add("qg-arr-multidim")
+      if (column.type === "ARRAY") {
+        cell.classList.add("qg-arr")
       }
     } else {
       cell.innerHTML = "null"
@@ -1119,7 +1143,7 @@ export function grid(rootElement, _paginationFn, id) {
     const cell = row.childNodes[columnIndex % visColumnCount]
     configureCell(cell, columnIndex)
     setCellData(
-      columns[columnIndex],
+      getColumn(columnIndex),
       cell,
       rowData[columnPositions[columnIndex]],
     )
@@ -1704,24 +1728,22 @@ export function grid(rootElement, _paginationFn, id) {
         clearTimeout(activeCellPulseClearTimer)
       }
       addClass(focusedCell, "qg-c-active-pulse")
+      
+      let valueToCopy = focusedCell.innerHTML
+      
+      if (focusedCell.classList.contains("qg-arr")) {
+        const rowIndex = focusedCell.parentElement.rowIndex
+        const columnIndex = focusedCell.columnIndex
+        const pageIndex = Math.floor(rowIndex / pageSize)
+        const rowInPage = rowIndex % pageSize
 
-      let textToCopy
-      if (focusedCell.classList.contains("qg-arr-multidim")) {
-        try {
-          textToCopy = "ARRAY" + JSON.stringify(JSON.parse(focusedCell.innerHTML.slice(5)), (_, val) => {
-            if (Number.isInteger(val)) {
-              return val.toString() + ".0"
-            }
-            return val
-          }, 2).replace(/"/g, "")
-        } catch (e) {
-          textToCopy = focusedCell.innerHTML
+        if (data[pageIndex] && data[pageIndex][rowInPage]) {
+          const originalCellData = data[pageIndex][rowInPage][columnPositions[columnIndex]]
+          valueToCopy = originalCellData === null ? "null" : "ARRAY" + getArrayString(originalCellData)
         }
-      } else {
-        textToCopy = focusedCell.innerHTML
       }
       
-      copyToClipboard(textToCopy)
+      copyToClipboard(valueToCopy)
         .then(undefined)
 
       activeCellPulseClearTimer = setTimeout(() => {
@@ -1746,7 +1768,7 @@ export function grid(rootElement, _paginationFn, id) {
     // compute column width from scratch
     header.innerHTML = ""
     computeHeaderWidths()
-    computeColumnWidths()
+    computeColumnWidths(true)
     panelLeftWidth = 0
     headerStub = createHeaderElements(header, 0, columnCount, true)
     ensureCellsFillViewport()
@@ -1760,7 +1782,6 @@ export function grid(rootElement, _paginationFn, id) {
     )
     renderCells(rowsLeft, 0, freezeLeft, visColumnLo)
     viewport.scrollLeft = 0
-    focusFirstCell()
   }
 
   function isCtrlOrCmd() {
@@ -1915,7 +1936,45 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function computeColumnWidths() {
+  function computeColumnWidthsFromData() {
+    const maxWidth = viewport.getBoundingClientRect().width * 0.8
+    const offsets = Array(columnCount + 1).fill(0)
+    let offset = 0
+
+    if (data && data.length > 0) {
+      const dataPage = data[0]
+
+      // a little inefficient, but lets traverse
+      for (let i = 0; i < columnCount; i++) {
+        let w = getColumnWidth(i)
+
+        // Traverse the page to find the widest value in the column, set the width to the widest value
+        for (let j = 0; j < (dataPage?.length ?? 0); j++) {
+          const value = dataPage[j][i]
+          let str
+          if (value === null) {
+            str = "null"
+          } else if (Array.isArray(value)) {
+            str = getDisplayedCellValue(getColumn(i), value)
+          } else {
+            str = value.toString()
+          }
+          w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+        }
+        offsets[i] = offset
+        offset += w
+      } 
+      offsets[columnCount] = offset
+      return offsets
+    }
+  }
+
+  function computeColumnWidths(reset = false) {
+    if (reset) {
+      columnOffsets = [...columnOffsetsToRestore]
+      totalWidth = columnOffsets[columnCount]
+      return
+    }
     const maxWidth = viewport.getBoundingClientRect().width * 0.8
     recomputeColumnWidthOnResize = maxWidth < 0.1
 
@@ -1946,7 +2005,7 @@ export function grid(rootElement, _paginationFn, id) {
             if (value === null) {
               str = "null"
             } else if (getColumn(i).type === "ARRAY") {
-              str = "ARRAY" + JSON.stringify(value)
+              str = getDisplayedCellValue(getColumn(i), value)
             } else {
               str = value.toString()
             }
@@ -2018,6 +2077,7 @@ export function grid(rootElement, _paginationFn, id) {
       columnPositions = storedLayout.columnPositions
       timestampIndex = storedLayout.timestampIndex
     }
+    columnOffsetsToRestore = computeColumnWidthsFromData()
     computeColumnWidths()
     computePanelLeftWidth()
     headerStub = createHeaderElements(header, 0, columnCount, true)
