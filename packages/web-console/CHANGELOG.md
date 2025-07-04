@@ -17,6 +17,20 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.0.0 - 2025.07.04
+### Added
+- dynamic query status indicators, run button per query, run all queries in tab [#437](https://github.com/questdb/ui/pull/437)
+- show table icon description in the tooltip [#443](https://github.com/questdb/ui/pull/443)
+
+### Fixed
+- array truncation in grid & bug fixes [#448](https://github.com/questdb/ui/pull/448)
+- use correct query for resuming WAL for a materialized view [#445](https://github.com/questdb/ui/pull/445)
+- fix for users with a . in their name are unable to edit instance name (enterprise) [#446](https://github.com/questdb/ui/pull/446)
+- do not persist OAuth2 tokens [#438](https://github.com/questdb/ui/pull/438)
+- do not refresh settings on focus when auto-refresh is disabled [#442](https://github.com/questdb/ui/pull/442)
+- flakiness and case updates [#441](https://github.com/questdb/ui/pull/441)
+
+
 ## 0.7.13 - 2025.05.30
 ### Changed
 - hide edit from instance badge for readonly settings [#439](https://github.com/questdb/ui/pull/439)
