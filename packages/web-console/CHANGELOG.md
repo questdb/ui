@@ -23,6 +23,7 @@ and this project adheres to
 - show table icon description in the tooltip [#443](https://github.com/questdb/ui/pull/443)
 
 ### Fixed
+- array truncation in grid & bug fixes [#448](https://github.com/questdb/ui/pull/448)
 - use correct query for resuming WAL for a materialized view [#445](https://github.com/questdb/ui/pull/445)
 - fix for users with a . in their name are unable to edit instance name (enterprise) [#446](https://github.com/questdb/ui/pull/446)
 - do not persist OAuth2 tokens [#438](https://github.com/questdb/ui/pull/438)
