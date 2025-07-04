@@ -2,6 +2,10 @@ import { SchemaColumn } from "components/TableSchemaDialog/types"
 
 export const isGeoHash = (type: string) => type.startsWith("GEOHASH")
 
+const arrayRegex = /^[a-z][a-z0-9]*(\[\])+$/i
+
+export const isArray = (type: string) => arrayRegex.test(type)
+
 export const extractPrecionFromGeohash = (geohash: string) => {
   const regex = /\(([^)]+)\)/g
   const matches = regex.exec(geohash)
@@ -14,7 +18,11 @@ export const extractPrecionFromGeohash = (geohash: string) => {
 export const mapColumnTypeToUI = (type: string) => {
   if (isGeoHash(type)) {
     return "GEOHASH"
-  } else return type.toUpperCase()
+  }
+  if (isArray(type)) {
+    return "ARRAY"
+  }
+  return type.toUpperCase()
 }
 
 export const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
