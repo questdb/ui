@@ -112,6 +112,11 @@ const Dracula: editor.IStandaloneThemeData = {
       token: "variable.parameter",
     },
     {
+      foreground: "bd93f9",
+      token: "variable",
+      fontStyle: "italic",
+    },
+    {
       foreground: "ff79c6",
       token: "entity.name.tag",
     },
