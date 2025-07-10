@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.0.1 - 2025.07.10
+### Fixed
+- declare variable highlighting in editor & query parameter parsing in chart request [#452](https://github.com/questdb/ui/pull/452)
+
+
 ## 1.0.0 - 2025.07.04
 ### Added
 - dynamic query status indicators, run button per query, run all queries in tab [#437](https://github.com/questdb/ui/pull/437)
