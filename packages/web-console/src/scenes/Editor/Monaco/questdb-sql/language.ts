@@ -66,6 +66,7 @@ export const language: monaco.languages.IMonarchLanguage = {
       { include: "@numbers" },
       { include: "@strings" },
       { include: "@complexIdentifiers" },
+      { include: "@variable" },
       { include: "@scopes" },
       { include: "@array" },
       [/[;,.]/, "delimiter"],
@@ -122,6 +123,10 @@ export const language: monaco.languages.IMonarchLanguage = {
       [/[^']+/, "string"],
       [/''/, "string"],
       [/'/, { token: "string", next: "@pop" }],
+    ],
+    variable: [
+      [/@[\w.$]+/, "variable"],
+      [/@(["'`])(?:\\[\s\S]|(?!\1)[^\\])+\1/, "variable"],
     ],
     complexIdentifiers: [
       [/\[/, { token: "identifier.quote", next: "@bracketedIdentifier" }],
