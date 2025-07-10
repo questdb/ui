@@ -260,7 +260,7 @@ export function quickVis(
         if (urlColumns !== "") {
           urlColumns += ","
         }
-        urlColumns += value
+        urlColumns += JSON.stringify(value)
       })
 
       // time the query because control that displays query success expected time delta
