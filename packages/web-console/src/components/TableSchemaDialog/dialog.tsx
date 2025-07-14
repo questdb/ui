@@ -157,7 +157,7 @@ export const Dialog = ({
         }
         return value
       })
-      .unique((a, b) => a.name === b.name)
+      .unique((a, b) => a.name.toLowerCase() === b.name.toLowerCase())
       .messages({
         "array.required": "Please add at least one column",
         "array.unique": "Column names must be unique",
