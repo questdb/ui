@@ -24,7 +24,7 @@ const tableSchemas = {
 const materializedViewSchemas = {
   btc_trades_mv:
     "CREATE MATERIALIZED VIEW IF NOT EXISTS btc_trades_mv WITH BASE btc_trades as (" +
-    "SELECT timestamp, avg(amount) FROM btc_trades SAMPLE BY 1m) PARTITION BY week;",
+    "SELECT timestamp, avg(amount) avg FROM btc_trades SAMPLE BY 1m) PARTITION BY week;",
 };
 
 before(() => {
@@ -209,18 +209,7 @@ Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
 Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
   cy.getCursorQueryGlyph().should("be.visible");
   const selector = `.cursorQueryGlyph-line-${lineNumber}`;
-  cy.get("body").then(() => {
-    let element = null;
-
-    if (Cypress.$(selector).length > 0) {
-      element = cy.get(selector).first();
-    }
-
-    if (!element) {
-      throw new Error(`No run icon found for line ${lineNumber}.`);
-    }
-    return element;
-  });
+  return cy.get(selector).first();
 });
 
 Cypress.Commands.add("openRunDropdownInLine", (lineNumber) => {
@@ -247,6 +236,18 @@ Cypress.Commands.add("clickRunQuery", () => {
     .should("not.be.disabled")
     .click()
     .wait("@exec");
+});
+
+Cypress.Commands.add("clickRunScript", (continueOnFailure = false) => {
+  cy.getEditor().should("be.visible");
+  cy.getByDataHook("button-run-query-dropdown").click();
+  cy.getByDataHook("button-run-script").click();
+
+  cy.getByRole("dialog").should("be.visible");
+  if (continueOnFailure) {
+    cy.getByDataHook("stop-after-failure-checkbox").uncheck();
+  }
+  cy.getByDataHook("run-all-queries-confirm").click();
 });
 
 const numberRangeRegexp = (n, width = 3) => {

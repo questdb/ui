@@ -273,13 +273,13 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
     cy.typeQuery(
       "ALTER TABLE btc_trades SUSPEND WAL WITH 24, 'Too many open files';"
     )
-      .clickRunIconInLine(1)
+      .clickRunQuery()
       .clearEditor();
 
     cy.typeQuery(
       "ALTER TABLE ecommerce_stats SUSPEND WAL WITH 12, 'Out of memory';"
     )
-      .clickRunIconInLine(1)
+      .clickRunQuery()
       .clearEditor();
   });
   beforeEach(() => {

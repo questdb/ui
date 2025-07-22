@@ -954,7 +954,8 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     let successfulQueries = 0
     let failedQueries = 0
     const editor = editorRef.current
-    if (!editor) return
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
     const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
     const runningAllQueries = !queriesToRun    
     // Clear all notifications & execution refs for the buffer
@@ -967,7 +968,6 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     }
     
     isRunningScriptRef.current = true
-    const startTime = Date.now()
 
     const queries = queriesToRun ?? getAllQueries(editor)
     let lastQuery: Request | undefined
@@ -975,18 +975,29 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
     editor.updateOptions({ readOnly: true })
 
+    const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i]
       editor.revealPositionInCenterIfOutsideViewport({ lineNumber: query.row + 1, column: query.column })
       const queryGlyph = editor.getLineDecorations(query.row + 1)?.find(d => d.options.glyphMarginClassName?.includes("cursorQueryGlyph"))
+      let delta = null
       if (queryGlyph) {
-        queryGlyph.options.glyphMarginClassName += " loading-glyph"
-        editor.deltaDecorations([], [queryGlyph])
+        delta = editor.createDecorationsCollection([{
+          range: new monaco.Range(
+            query.row + 1,
+            1,
+            query.row + 1,
+            1
+          ),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName: 'cursorQueryGlyph loading-glyph',
+          },
+        }])
       }
       const result = await runIndividualQuery(query, i === queries.length - 1)
-      if (queryGlyph) {
-        queryGlyph.options.glyphMarginClassName = queryGlyph.options.glyphMarginClassName?.replace(" loading-glyph", "")
-        editor.deltaDecorations([], [queryGlyph])
+      if (delta) {
+        delta.clear()
       }
       individualQueryResults.push(result)
       if (result.success) {
@@ -1024,16 +1035,15 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
         dispatch(actions.query.addNotification({ ...notification!, updateActiveNotification: false }, activeBuffer.id as number))
       })
 
-    if (editorRef.current && lastQuery) {
-      if (lastResult && !lastResult.success) {
-        editor.setPosition({
-          lineNumber: lastQuery.row + 1,
-          column: lastQuery.column,
-        }, "script")
-      }
-      editorRef.current.focus()
-      editorRef.current.revealPosition(editor.getPosition()!)
+    const lastFailureIndex = individualQueryResults.reduce((acc, result, index) => result.success ? acc : index, -1)
+    if (lastFailureIndex !== -1) {
+      editor.setPosition({
+        lineNumber: queries[lastFailureIndex].row + 1,
+        column: queries[lastFailureIndex].column,
+      }, "script")
     }
+    editor.focus()
+    editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
 
     const completedGracefully = queries.length === individualQueryResults.length
     if (completedGracefully || (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)) {
