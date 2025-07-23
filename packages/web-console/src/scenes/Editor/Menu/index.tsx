@@ -37,7 +37,6 @@ import {
   useKeyPress,
   useScreenSize,
 } from "../../../components"
-import { Box } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"
@@ -65,25 +64,20 @@ const Separator = styled.div`
   flex: 1;
 `
 
-const QueryPickerButton = styled(Button)<{
-  $firstTimeVisitor: boolean
-}>`
+const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
   position: relative;
-  margin: 0 1rem;
   flex: 0 0 auto;
 
-  ${({ $firstTimeVisitor }) =>
-    $firstTimeVisitor &&
-    `&:after {
-    border-radius: 50%;
-    content: "";
-    background: #dc4949;
-    width: 8px;
-    height: 8px;
-    position: absolute;
-    top: -3px;
-    right: -3px;
-  }`}
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0px ${color("cyan")};
+    }
+    75% {
+      box-shadow: 0 0 0 5px transparent;
+    }
+  }
+
+  animation: ${({ $firstTimeVisitor }) => $firstTimeVisitor ? "pulse 2s infinite" : "none"};
 `
 
 const MenuIcon = styled(_MenuIcon)`
@@ -114,22 +108,6 @@ const SideMenuMenuButton = styled(TransparentButton)`
     opacity: 1;
     transition: opacity ${TransitionDuration.REG}ms;
   }
-`
-
-const Key = styled(Box).attrs({ alignItems: "center" })`
-  padding: 0 4px;
-  background: #61647a;
-  border-radius: 2px;
-  font-size: 1.2rem;
-  height: 1.8rem;
-
-  &:not(:last-child) {
-    margin-right: 0.25rem;
-  }
-`
-
-const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
-  margin-left: 1.5rem;
 `
 
 const MenuItems = styled.div`
