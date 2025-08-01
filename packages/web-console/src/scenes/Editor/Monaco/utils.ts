@@ -106,7 +106,8 @@ export const getQueriesToRun = (
     return []
   }
 
-  const queries = getQueriesInRange(editor, model.getPositionAt(firstQueryOffsets.startOffset), model.getPositionAt(lastQueryOffsets.endOffset))
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  const queries = getQueriesInRange(text, model.getPositionAt(firstQueryOffsets.startOffset), model.getPositionAt(lastQueryOffsets.endOffset))
   const requests = queries.map(query => {
     const clampedSelection = clampRange(model, selection, {
       startOffset: model.getOffsetAt({ lineNumber: query.row + 1, column: query.column }),
@@ -132,12 +133,10 @@ export const getQueriesToRun = (
 }
 
 export const getQueriesFromPosition = (
-  editor: IStandaloneCodeEditor,
+  text: string,
   editorPosition: IPosition,
   startPosition?: IPosition
 ): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
-  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
-  
   if (!text || !stripSQLComments(text)) {
     return { sqlTextStack: [], nextSql: null }
   }
@@ -392,7 +391,7 @@ export const getQueryFromCursor = (
     return
   }
 
-  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(text, position)
 
   const normalizedCurrentRow = position.lineNumber - 1
   const lastStackItem = sqlTextStack.length > 0 ? sqlTextStack[sqlTextStack.length - 1] : null
@@ -454,7 +453,7 @@ export const getAllQueries = (editor: IStandaloneCodeEditor): Request[] => {
     return []
   }
   
-  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(text, position)
   const stackQueries = sqlTextStack.map(item => ({
     query: text.substring(item.position, item.limit),
     row: item.row,
@@ -473,16 +472,15 @@ export const getAllQueries = (editor: IStandaloneCodeEditor): Request[] => {
 }
 
 export const getQueriesInRange = (
-  editor: IStandaloneCodeEditor,
+  text: string,
   startPosition: IPosition,
   endPosition: IPosition
 ): Request[] => {
-  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
   if (!text || !stripSQLComments(text) || !startPosition || !endPosition) {
     return []
   }
   
-  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, endPosition, startPosition)
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(text, endPosition, startPosition)
   
   const stackQueries = sqlTextStack.map(item => ({
     query: text.substring(item.position, item.limit),
@@ -866,6 +864,7 @@ const getInsertPosition = ({
 
 export type AppendQueryOptions = {
   appendAt: "cursor" | "end"
+  newTabName?: string
 }
 
 export const appendQuery = (
@@ -985,6 +984,10 @@ export const getLastPosition = (editor: IStandaloneCodeEditor): IPosition | unde
   const model = editor.getModel()
   if (!model) return undefined
 
+  return getLastPositionFromModel(model)
+}
+
+const getLastPositionFromModel = (model: editor.ITextModel): IPosition | undefined => {
   const lastLineNumber = model.getLineCount()
   const lastLineContent = model.getLineContent(lastLineNumber)
   
@@ -1035,7 +1038,8 @@ export const validateQueryAtOffset = (
 
   const offsetPosition = model.getPositionAt(offset)
 
-  const queryInEditor = getQueriesInRange(editor, offsetPosition, offsetPosition)[0]
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+  const queryInEditor = getQueriesInRange(text, offsetPosition, offsetPosition)[0]
   if (!queryInEditor) return false
 
   return normalizeQueryText(queryInEditor.query) === normalizeQueryText(queryText)

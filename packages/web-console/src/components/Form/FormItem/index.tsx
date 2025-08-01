@@ -1,6 +1,6 @@
 import React from "react";
 import styled from "styled-components";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, get } from "react-hook-form";
 import { Text } from "../../../components/Text";
 
 type Props = {
@@ -89,8 +89,8 @@ export const FormItem = ({
           helperText
         ))}
 
-      {name && errors && errors[name] && (
-        <Text color="red">{errors[name]?.message}</Text>
+      {name && errors && get(errors, name) && (
+        <Text color="red">{get(errors, name)?.message}</Text>
       )}
     </Root>
   );

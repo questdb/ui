@@ -51,7 +51,7 @@ type Props = {
   hasWalSetting: boolean
   walEnabled?: boolean
   onOpenChange: (openedFileName?: string) => void
-  onSchemaChange: (values: SchemaFormValues) => void
+  onSchemaChange: (values: SchemaFormValues) => Promise<void> | void
   name: string
   schema: SchemaColumn[]
   partitionBy: string
@@ -216,8 +216,8 @@ export const Dialog = ({
         <Form<SchemaFormValues>
           name="table-schema"
           defaultValues={defaults}
-          onSubmit={(values) => {
-            onSchemaChange(values)
+          onSubmit={async (values) => {
+            await onSchemaChange(values)
             onOpenChange(undefined)
           }}
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}

@@ -462,7 +462,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
       const startPosition = { lineNumber: startLine, column: 1 }
       const endPosition = { lineNumber: endLine, column: editor.getModel()?.getLineMaxColumn(endLine) ?? 1 }
       
-      queries = getQueriesInRange(editor, startPosition, endPosition)
+      queries = getQueriesInRange(editor.getValue({ preserveBOM: false, lineEnding: "\n" }), startPosition, endPosition)
     }
     
     const activeBufferId = activeBufferRef.current.id as number

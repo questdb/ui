@@ -25,8 +25,13 @@ import {
   makeFallbackBuffer,
 } from "../../store/buffers"
 import { db } from "../../store/db"
+import SharedTabsService from "../../utils/SharedTabsService"
 
 import { useLiveQuery } from "dexie-react-hooks"
+import { QuestContext } from "../QuestProvider"
+import { MetricType, RefreshRate } from "../../scenes/Editor/Metrics/utils"
+import { MetricViewMode } from "../../scenes/Editor/Metrics/utils"
+import merge from "lodash.merge"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -34,7 +39,8 @@ export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
-  appendQuery: (query: string, options?: AppendQueryOptions) => void
+  appendQuery: (query: string, options?: AppendQueryOptions) => Promise<void>
+  appendMetric: (metricType: MetricType, tableId?: number) => Promise<void>
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (buffer: Buffer) => Promise<void>
@@ -48,13 +54,15 @@ export type EditorContext = {
   updateBuffer: (id: number, buffer?: Partial<Buffer>) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   inFocus: boolean
+  sharedTabsService: SharedTabsService | null
 }
 
 const defaultValues = {
   editorRef: { current: null },
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
-  appendQuery: () => undefined,
+  appendQuery: () => Promise.resolve(),
+  appendMetric: () => Promise.resolve(),
   buffers: [],
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
@@ -65,6 +73,7 @@ const defaultValues = {
   updateBuffer: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
   inFocus: false,
+  sharedTabsService: null
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -77,9 +86,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     () => bufferStore.getActiveId(),
     [],
   )?.value
+  const { quest } = useContext(QuestContext)
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
   const [inFocus, setInFocus] = useState(false)
+  const sharedTabsService = useRef<SharedTabsService>(new SharedTabsService(quest))
 
   const ranOnce = useRef(false)
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
@@ -91,6 +102,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       ranOnce.current = true
     }
   }, [buffers, activeBufferId])
+
+  useEffect(() => {
+    sharedTabsService.current.init()
+  }, [])
 
   if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
@@ -255,9 +270,48 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             insertTextAtCursor(editorRef.current, text)
           }
         },
-        appendQuery: (text, options) => {
+        appendQuery: async (text, options) => {
+          if (activeBuffer.metricsViewState) {
+            const buffer = await addBuffer({ label: options?.newTabName ?? "Query" })
+            await setActiveBuffer(buffer)
+          }
           if (editorRef?.current) {
             appendQuery(editorRef.current, text, options)
+          }
+        },
+        appendMetric: async (metricType, tableId) => {
+          if (activeBuffer.editorViewState) {
+            const buffer = await addBuffer({
+              metricsViewState: {
+                metrics: [{
+                  metricType,
+                  tableId,
+                  position: 0,
+                  removed: false,
+                  color: '#FF6B6B',
+                }],
+                dateFrom: "now-1h",
+                dateTo: "now",
+                refreshRate: RefreshRate.AUTO,
+                viewMode: MetricViewMode.GRID,
+              },
+            })
+            await setActiveBuffer(buffer)
+          } else {
+            const newBuffer = merge(activeBuffer, {
+              metricsViewState: {
+                metrics: [
+                  ...(activeBuffer.metricsViewState?.metrics ?? []),
+                  {
+                    metricType,
+                    tableId,
+                    position: activeBuffer.metricsViewState?.metrics?.length ?? 0,
+                    color: '#FF6B6B',
+                  },
+                ],
+              },
+            })
+            await updateBuffer(activeBuffer.id as number, newBuffer)
           }
         },
         inFocus,
@@ -269,6 +323,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         archiveBuffer,
         deleteAllBuffers,
         updateBuffer,
+        sharedTabsService: sharedTabsService.current,
         editorReadyTrigger: (editor) => {
           editor.focus()
           setInFocus(true)

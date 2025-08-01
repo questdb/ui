@@ -25,7 +25,7 @@ export const CreateTableDialog = () => {
   const { consoleConfig } = useSettings()
   const { appendQuery } = useEditor()
 
-  const handleAddTableSchema = (values: SchemaFormValues) => {
+  const handleAddTableSchema = async (values: SchemaFormValues) => {
     const { name, partitionBy, timestamp, ttlValue, ttlUnit, schemaColumns, walEnabled } = values
     const tableSchemaQuery = formatTableSchemaQuery({
       name,
@@ -40,7 +40,7 @@ export const CreateTableDialog = () => {
       })),
       dedup: false,
     })
-    appendQuery(tableSchemaQuery, { appendAt: "end" })
+    await appendQuery(tableSchemaQuery, { appendAt: "end" })
     dispatch(actions.query.toggleRunning())
   }
 

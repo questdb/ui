@@ -6,9 +6,9 @@ import {
   File,
   History,
   LineChart,
-  Show,
   Trash,
 } from "@styled-icons/boxicons-regular"
+import { InsertChart } from "@styled-icons/material"
 import {
   Box,
   Button,
@@ -19,6 +19,7 @@ import { Text } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 import type { Buffer } from "../../../store/buffers"
+import { SharedTabs } from "./shared-tabs"
 
 type Tab = {
   id: string
@@ -182,6 +183,7 @@ export const Tabs = () => {
               } as Tab),
           )}
       />
+      <SharedTabs />
       <DropdownMenu.Root modal={false} onOpenChange={setHistoryOpen}>
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
@@ -222,7 +224,7 @@ export const Tabs = () => {
                   title={buffer.label}
                 >
                   {buffer.metricsViewState ? (
-                    <LineChart size="18px" />
+                    <InsertChart size="18px" />
                   ) : (
                     <File size="18px" />
                   )}
