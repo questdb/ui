@@ -76,6 +76,16 @@ The entire integration runs client-side in the user's browser:
 3. **Wait**: The system sends your query to Claude for explanation
 4. **Review**: AI explanation appears as a comment above your query
 
+### Using Error Explanations
+When a SQL query fails, you can get AI help to understand and fix the error:
+
+1. **Query Fails**: Execute a SQL query that results in an error
+2. **Click "Why did this fail?"**: Use the error explanation button in the error notification
+3. **View Explanation**: A dialog opens showing:
+   - Your original SQL query
+   - The error message from QuestDB
+   - AI-generated explanation of what went wrong and how to fix it
+
 ### Example Output
 ```sql
 /*
@@ -108,6 +118,28 @@ WHERE o.order_date >= '2024-01-01'
 GROUP BY c.customer_type
 ORDER BY revenue DESC;
 ```
+
+### Error Explanation Example
+
+**Failed Query:**
+```sql
+SELECT * FROM nonexistent_table WHERE timestamp > '2024-01-01';
+```
+
+**Error Message:**
+```
+Table 'nonexistent_table' does not exist
+```
+
+**AI Explanation:**
+> The error occurs because you're trying to query a table called 'nonexistent_table' that doesn't exist in your QuestDB database. 
+> 
+> **To fix this:**
+> 1. Check the correct table name using `SHOW TABLES;`
+> 2. Verify the table spelling and capitalization 
+> 3. If the table should exist, check if it was created properly or if you're connected to the right database
+> 
+> **QuestDB Note:** Table names are case-sensitive in QuestDB, so make sure the capitalization matches exactly.
 
 ## Error Handling
 

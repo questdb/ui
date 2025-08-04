@@ -302,3 +302,167 @@ export const testApiKey = async (apiKey: string): Promise<{ valid: boolean; erro
     }
   }
 }
+
+// Explain SQL error using Claude API
+export const explainError = async (
+  query: string,
+  errorMessage: string,
+  apiKey: string
+): Promise<ClaudeExplanation> => {
+  if (!apiKey || !query || !errorMessage) {
+    return {
+      explanation: '',
+      error: {
+        type: 'invalid_key',
+        message: 'API key, query, or error message is missing'
+      }
+    }
+  }
+
+  // Client-side rate limiting
+  const now = Date.now()
+  const timeSinceLastRequest = now - lastRequestTime
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
+  }
+  lastRequestTime = Date.now()
+
+  const systemPrompt = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query and its error message, provide a clear explanation of:
+
+1. What caused the error in simple terms
+2. How to fix the issue with specific suggestions
+3. QuestDB-specific considerations if relevant
+
+Focus on practical solutions rather than technical jargon. Consider QuestDB-specific features such as:
+- Time-series operations (SAMPLE BY, LATEST ON, designated timestamp columns)
+- Data ingestion and table structure requirements
+- Performance considerations for time-series queries
+- QuestDB-specific SQL syntax and functions
+
+Keep explanations concise but actionable, providing specific steps to resolve the issue.`
+
+  let retries = 0
+  while (retries <= MAX_RETRIES) {
+    try {
+      // Create Anthropic client with dangerouslyAllowBrowser enabled
+      const anthropic = new Anthropic({
+        apiKey: apiKey,
+        dangerouslyAllowBrowser: true
+      })
+
+      const message = await anthropic.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 600, // Slightly more tokens for error explanations
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: `Please explain this QuestDB SQL error:
+
+SQL Query:
+\`\`\`sql
+${query}
+\`\`\`
+
+Error Message:
+\`\`\`
+${errorMessage}
+\`\`\`
+
+What went wrong and how can I fix it?`
+          }
+        ],
+        temperature: 0.3
+      })
+
+      // Extract text content from the response
+      const explanation = message.content
+        .filter(block => block.type === 'text')
+        .map(block => {
+          if ('text' in block) {
+            return block.text
+          }
+          return ''
+        })
+        .join('\n')
+        .trim()
+
+      return {
+        explanation
+      }
+
+    } catch (error) {
+      retries++
+      
+      if (retries > MAX_RETRIES) {
+        // Handle Anthropic SDK specific errors
+        if (error instanceof Anthropic.AuthenticationError) {
+          return {
+            explanation: '',
+            error: {
+              type: 'invalid_key',
+              message: 'Invalid API key. Please check your Claude API key in settings.',
+              details: error.message
+            }
+          }
+        }
+
+        if (error instanceof Anthropic.RateLimitError) {
+          return {
+            explanation: '',
+            error: {
+              type: 'rate_limit',
+              message: 'Rate limit exceeded. Please try again later.',
+              details: error.message
+            }
+          }
+        }
+
+        if (error instanceof Anthropic.APIConnectionError) {
+          return {
+            explanation: '',
+            error: {
+              type: 'network',
+              message: 'Network error. Please check your internet connection.',
+              details: error.message
+            }
+          }
+        }
+
+        // Generic API error
+        if (error instanceof Anthropic.APIError) {
+          return {
+            explanation: '',
+            error: {
+              type: 'unknown',
+              message: `API error: ${error.message}`,
+              details: error
+            }
+          }
+        }
+
+        // Fallback for other errors
+        return {
+          explanation: '',
+          error: {
+            type: 'unknown',
+            message: 'An unexpected error occurred. Please try again.',
+            details: error
+          }
+        }
+      }
+
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * retries))
+    }
+  }
+
+  // Should never reach here
+  return {
+    explanation: '',
+    error: {
+      type: 'unknown',
+      message: 'Failed to get error explanation after retries'
+    }
+  }
+}
