@@ -22,15 +22,16 @@
  *
  ******************************************************************************/
 
-import React, { useState } from "react"
+import React, { useState, useContext } from "react"
 import styled from "styled-components"
 import { Button, Loader } from "@questdb/react-components"
 import { Lightbulb } from "@styled-icons/remix-fill"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { explainQuery, formatExplanationAsComment } from "../../utils/claude"
+import { explainQuery, explainQueryWithSchema, formatExplanationAsComment, createSchemaClient } from "../../utils/claude"
 import { toast } from "../Toast"
 import type { editor } from "monaco-editor"
 import { getQueryFromCursor, normalizeQueryText } from "../../scenes/Editor/Monaco/utils"
+import { QuestContext } from "../../providers"
 
 const ExplainButton = styled(Button)`
   background-color: ${({ theme }) => theme.color.orange};
@@ -61,6 +62,7 @@ type Props = {
 
 export const ExplainQueryButton = ({ editor, disabled }: Props) => {
   const { claudeApiKey } = useLocalStorage()
+  const { quest } = useContext(QuestContext)
   const [isExplaining, setIsExplaining] = useState(false)
 
   const handleExplainQuery = async () => {
@@ -81,7 +83,9 @@ export const ExplainQueryButton = ({ editor, disabled }: Props) => {
     setIsExplaining(true)
 
     try {
-      const result = await explainQuery(queryText, claudeApiKey)
+      // Use enhanced function with schema support
+      const schemaClient = createSchemaClient(quest)
+      const result = await explainQueryWithSchema(queryText, claudeApiKey, schemaClient)
 
       if (result.error) {
         let errorMessage = result.error.message

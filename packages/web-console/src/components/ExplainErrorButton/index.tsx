@@ -22,13 +22,14 @@
  *
  ******************************************************************************/
 
-import React, { useState } from "react"
+import React, { useState, useContext } from "react"
 import styled from "styled-components"
 import { Button, Loader } from "@questdb/react-components"
 import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { explainError } from "../../utils/claude"
+import { explainError, explainErrorWithSchema, createSchemaClient } from "../../utils/claude"
 import { toast } from "../Toast"
+import { QuestContext } from "../../providers"
 
 const StyledExplainErrorButton = styled(Button)`
   background-color: ${({ theme }) => theme.color.orange};
@@ -146,6 +147,7 @@ type Props = {
 
 export const ExplainErrorButton = ({ query, errorMessage, disabled }: Props) => {
   const { claudeApiKey } = useLocalStorage()
+  const { quest } = useContext(QuestContext)
   const [isExplaining, setIsExplaining] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [explanation, setExplanation] = useState<string>('')
@@ -159,7 +161,9 @@ export const ExplainErrorButton = ({ query, errorMessage, disabled }: Props) => 
     setIsExplaining(true)
 
     try {
-      const result = await explainError(query, errorMessage, claudeApiKey)
+      // Use enhanced function with schema support
+      const schemaClient = createSchemaClient(quest)
+      const result = await explainErrorWithSchema(query, errorMessage, claudeApiKey, schemaClient)
 
       if (result.error) {
         let errorMsg = result.error.message

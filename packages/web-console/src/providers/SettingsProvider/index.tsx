@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react"
 import { ConsoleConfig, Settings, Warning } from "./types"
-import { CenteredLayout } from "../../components"
+import { CenteredLayout } from "../../components/CenteredLayout"
 import { Box, Button, Text } from "@questdb/react-components"
 import { Refresh } from "@styled-icons/remix-line"
 import {setValue} from "../../utils/localStorage"
