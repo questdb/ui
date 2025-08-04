@@ -6,6 +6,7 @@ import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
 import { PopperToggle } from "../../../components"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
+import { GenerateSQLButton } from "../../../components/GenerateSQLButton"
 import { Box, Button } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
@@ -278,6 +279,10 @@ const ButtonBar = ({
 
   return (
     <ButtonBarWrapper>
+      <GenerateSQLButton 
+        editor={editor} 
+        disabled={running !== RunningType.NONE}
+      />
       <ExplainQueryButton 
         editor={editor} 
         disabled={running !== RunningType.NONE || queriesToRun.length === 0}

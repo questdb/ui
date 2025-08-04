@@ -37,12 +37,18 @@ export interface ClaudeExplanation {
   error?: ClaudeAPIError
 }
 
+export interface GeneratedSQL {
+  sql: string
+  explanation?: string
+  error?: ClaudeAPIError
+}
+
 export interface SchemaToolsClient {
   getTables: () => Promise<Array<{ name: string; type: 'table' | 'matview' }>>
   getTableSchema: (tableName: string) => Promise<string | null>
 }
 
-const CLAUDE_MODEL = 'claude-3-5-sonnet-20241022'
+const CLAUDE_MODEL = 'claude-sonnet-4-20250514'
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
 
@@ -289,6 +295,118 @@ What went wrong and how can I fix it?`
     error: {
       type: 'unknown',
       message: 'Failed to get error explanation after retries'
+    }
+  }
+}
+
+// Generate SQL from natural language description
+export const generateSQLFromDescription = async (
+  description: string,
+  apiKey: string,
+  schemaClient: SchemaToolsClient
+): Promise<GeneratedSQL> => {
+  if (!apiKey || !description) {
+    return {
+      sql: '',
+      error: {
+        type: 'invalid_key',
+        message: 'API key or description is missing'
+      }
+    }
+  }
+
+  // Client-side rate limiting
+  const now = Date.now()
+  const timeSinceLastRequest = now - lastRequestTime
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
+  }
+  lastRequestTime = Date.now()
+
+  const systemPrompt = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. 
+When given a natural language description, generate the corresponding QuestDB SQL query.
+
+Important guidelines:
+1. Generate only valid QuestDB SQL syntax
+2. Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) when relevant
+3. Follow QuestDB best practices for performance
+4. Use proper timestamp handling for time-series data
+5. Include appropriate WHERE clauses for time filtering when mentioned
+6. Use correct data types and functions specific to QuestDB
+
+You have access to tools that can help you understand the database schema:
+- get_tables: Get a list of all tables and materialized views
+- get_table_schema: Get the full DDL schema for a specific table
+
+Use these tools to ensure you generate queries with correct table and column names.
+
+Return ONLY the SQL query without any explanation or markdown formatting.`
+
+  let retries = 0
+  while (retries <= MAX_RETRIES) {
+    try {
+      const anthropic = new Anthropic({
+        apiKey: apiKey,
+        dangerouslyAllowBrowser: true
+      })
+
+      const initialMessages = [
+        {
+          role: 'user' as const,
+          content: description
+        }
+      ]
+
+      const message = await anthropic.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 1000,
+        system: systemPrompt,
+        tools: SCHEMA_TOOLS,
+        messages: initialMessages,
+        temperature: 0.2 // Lower temperature for more consistent SQL generation
+      })
+
+      // Handle tool calls
+      const response = await handleToolCalls(message, anthropic, schemaClient, initialMessages)
+      
+      // Extract the SQL query from the response
+      let sql = ''
+      for (const block of response.content) {
+        if (block.type === 'text' && 'text' in block) {
+          sql += block.text
+        }
+      }
+      
+      sql = sql.trim()
+      
+      // Remove any markdown code block formatting if present
+      sql = sql.replace(/^```sql\s*/i, '').replace(/\s*```$/i, '')
+      sql = sql.replace(/^```\s*/i, '').replace(/\s*```$/i, '')
+      
+      return { 
+        sql,
+        explanation: description 
+      }
+
+    } catch (error) {
+      retries++
+      
+      if (retries > MAX_RETRIES) {
+        return {
+          sql: '',
+          error: handleClaudeError(error).error
+        }
+      }
+
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * retries))
+    }
+  }
+
+  return {
+    sql: '',
+    error: {
+      type: 'unknown',
+      message: 'Failed to generate SQL after retries'
     }
   }
 }
