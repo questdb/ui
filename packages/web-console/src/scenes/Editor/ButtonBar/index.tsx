@@ -5,6 +5,7 @@ import { Stop } from "@styled-icons/remix-line"
 import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
 import { PopperToggle } from "../../../components"
+import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { Box, Button } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
@@ -15,6 +16,9 @@ const ButtonBarWrapper = styled.div`
   top: 1rem;
   right: 2.4rem;
   z-index: 1;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 `
 
 const ButtonGroup = styled.div`
@@ -147,7 +151,13 @@ const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
   [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
 }
 
-const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boolean) => void }) => {
+const ButtonBar = ({ 
+  onTriggerRunScript, 
+  editor 
+}: { 
+  onTriggerRunScript: (runAll?: boolean) => void
+  editor: any
+}) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
@@ -268,6 +278,10 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
 
   return (
     <ButtonBarWrapper>
+      <ExplainQueryButton 
+        editor={editor} 
+        disabled={running !== RunningType.NONE || queriesToRun.length === 0}
+      />
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>
   )

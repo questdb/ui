@@ -206,6 +206,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@anthropic-ai/sdk@npm:^0.57.0":
+  version: 0.57.0
+  resolution: "@anthropic-ai/sdk@npm:0.57.0"
+  bin:
+    anthropic-ai-sdk: bin/cli
+  checksum: 10/3ff430ded97067467e1731acd906a5ad2e5dfd2f0283ce0ce90f292e7ec57f5ddfdc76094c093f141eac272f6038d9780f7516468bfda0128fb25db6078d041d
+  languageName: node
+  linkType: hard
+
 "@babel/cli@npm:^7.17.10":
   version: 7.23.0
   resolution: "@babel/cli@npm:7.23.0"
@@ -3228,6 +3237,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@questdb/web-console@workspace:packages/web-console"
   dependencies:
+    "@anthropic-ai/sdk": "npm:^0.57.0"
     "@babel/cli": "npm:^7.17.10"
     "@babel/core": "npm:^7.20.12"
     "@babel/preset-env": "npm:^7.20.2"

@@ -15,6 +15,7 @@ import { IconWithTooltip } from "../IconWithTooltip"
 import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
+import { ClaudeApiSettings } from "../ClaudeApiSettings"
 import { Preferences, InstanceType } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
@@ -543,6 +544,7 @@ export const Toolbar = () => {
         </Badge>
       )}
       <Box gap="0.5rem">
+        <ClaudeApiSettings />
         {settings["acl.enabled"] && currentUser && (
           <User>
             <UserIcon size="18px" />

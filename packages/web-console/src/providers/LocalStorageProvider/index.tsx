@@ -30,6 +30,7 @@ import React, {
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
+import { obfuscateKey, deobfuscateKey } from "../../utils/localStorage/crypto"
 import { parseInteger } from "./utils"
 import { LocalConfig, SettingsType } from "./types"
 
@@ -43,6 +44,7 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  claudeApiKey: "",
 }
 
 type ContextProps = {
@@ -53,6 +55,7 @@ type ContextProps = {
   updateSettings: (key: StoreKey, value: SettingsType) => void
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  claudeApiKey: string
 }
 
 const defaultValues: ContextProps = {
@@ -63,6 +66,7 @@ const defaultValues: ContextProps = {
   updateSettings: (key: StoreKey, value: SettingsType) => undefined,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  claudeApiKey: "",
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -99,8 +103,17 @@ export const LocalStorageProvider = ({
       : defaultConfig.autoRefreshTables,
   )
 
+  const [claudeApiKey, setClaudeApiKey] = useState<string>(
+    deobfuscateKey(getValue(StoreKey.CLAUDE_API_KEY) || ""),
+  )
+
   const updateSettings = (key: StoreKey, value: SettingsType) => {
-    setValue(key, value.toString())
+    // Special handling for API key to obfuscate it
+    if (key === StoreKey.CLAUDE_API_KEY) {
+      setValue(key, obfuscateKey(value.toString()))
+    } else {
+      setValue(key, value.toString())
+    }
     refreshSettings(key)
   }
 
@@ -129,6 +142,9 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_TABLES:
         setAutoRefreshTables(value === "true")
         break
+      case StoreKey.CLAUDE_API_KEY:
+        setClaudeApiKey(deobfuscateKey(value || ""))
+        break
     }
   }
 
@@ -142,6 +158,7 @@ export const LocalStorageProvider = ({
         updateSettings,
         exampleQueriesVisited,
         autoRefreshTables,
+        claudeApiKey,
       }}
     >
       {children}

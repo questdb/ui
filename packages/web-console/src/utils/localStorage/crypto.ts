@@ -22,14 +22,30 @@
  *
  ******************************************************************************/
 
-export type SettingsType = string | boolean | number
+// Simple obfuscation for API keys - not cryptographically secure
+// but prevents casual inspection of localStorage
 
-export type LocalConfig = {
-  editorCol: number
-  editorLine: number
-  editorSplitterBasis: number
-  resultsSplitterBasis: number
-  exampleQueriesVisited: boolean
-  autoRefreshTables: boolean
-  claudeApiKey: string
+export const obfuscateKey = (key: string): string => {
+  if (!key) return ""
+  try {
+    // Add a prefix to identify obfuscated values
+    return "obf_" + btoa(key)
+  } catch {
+    return key
+  }
+}
+
+export const deobfuscateKey = (obfuscated: string): string => {
+  if (!obfuscated || !obfuscated.startsWith("obf_")) return obfuscated
+  try {
+    return atob(obfuscated.slice(4))
+  } catch {
+    return ""
+  }
+}
+
+// Mask API key for display (show only first 8 and last 4 characters)
+export const maskApiKey = (key: string): string => {
+  if (!key || key.length < 20) return "••••••••••••••••"
+  return `${key.slice(0, 8)}••••••••${key.slice(-4)}`
 }

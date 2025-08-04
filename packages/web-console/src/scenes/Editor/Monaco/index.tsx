@@ -1367,7 +1367,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   return (
     <>
       <Content onClick={handleEditorClick}>
-        <ButtonBar onTriggerRunScript={handleTriggerRunScript} />
+        <ButtonBar onTriggerRunScript={handleTriggerRunScript} editor={editorRef.current} />
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}
