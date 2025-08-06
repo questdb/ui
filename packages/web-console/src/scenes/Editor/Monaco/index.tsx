@@ -1,4 +1,6 @@
-import Editor, { loader, Monaco } from "@monaco-editor/react"
+import Editor from "@monaco-editor/react"
+import type { Monaco } from "@monaco-editor/react"
+import { loader } from "@monaco-editor/react"
 import { Box, Button, Checkbox, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"

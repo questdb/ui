@@ -1,5 +1,5 @@
 import { Table, uniq, InformationSchemaColumn } from "../../../../utils"
-import * as monaco from "monaco-editor"
+import type { editor, languages } from "monaco-editor"
 import { CompletionItemPriority } from "./types"
 import { findMatches, getQueryFromCursor } from "../utils"
 import { getTableCompletions } from "./getTableCompletions"
@@ -16,11 +16,11 @@ const isInColumnListing = (text: string) =>
   )
 
 export const createSchemaCompletionProvider = (
-  editor: monaco.editor.IStandaloneCodeEditor,
+  editor: editor.IStandaloneCodeEditor,
   tables: Table[] = [],
   informationSchemaColumns: InformationSchemaColumn[] = [],
 ) => {
-  const completionProvider: monaco.languages.CompletionItemProvider = {
+  const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n ."'.split(""),
     provideCompletionItems(model, position) {

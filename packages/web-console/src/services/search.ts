@@ -1,10 +1,11 @@
-import * as monaco from 'monaco-editor'
+import type { IRange } from 'monaco-editor'
+import type { Monaco } from '@monaco-editor/react'
 import { QuestDBLanguageName } from '../scenes/Editor/Monaco/utils'
 
 export interface SearchMatch {
   bufferId: number
   bufferLabel: string
-  range: monaco.IRange
+  range: IRange
   text: string
   previewText: string
   isArchived?: boolean
@@ -29,7 +30,8 @@ export class SearchService {
   static searchInBuffers(
     buffers: Array<{ id?: number; label: string; value: string; archived?: boolean; archivedAt?: number; isTemporary?: boolean }>,
     query: string,
-    options: SearchOptions = {}
+    options: SearchOptions = {},
+    monaco: Monaco | null
   ): SearchResult {
     const {
       caseSensitive = false,
@@ -63,7 +65,8 @@ export class SearchService {
         buffer as { id: number; label: string; value: string; archived?: boolean; archivedAt?: number },
         query,
         { caseSensitive, wholeWord, useRegex },
-        remainingCapacity
+        monaco,
+        remainingCapacity,
       )
       
       matches = [...matches, ...bufferMatches]
@@ -85,11 +88,13 @@ export class SearchService {
     buffer: { id: number; label: string; value: string; archived?: boolean; archivedAt?: number },
     query: string,
     options: Pick<SearchOptions, 'caseSensitive' | 'wholeWord' | 'useRegex'>,
-    limit?: number
+    monaco: Monaco | null,
+    limit?: number,
   ): SearchMatch[] {
     const { caseSensitive, wholeWord, useRegex } = options
+    if (!monaco) return []
     
-    const model = monaco.editor.createModel(buffer.value, QuestDBLanguageName)
+    const model = monaco?.editor.createModel(buffer.value, QuestDBLanguageName)
     
     try {
       let searchString = query

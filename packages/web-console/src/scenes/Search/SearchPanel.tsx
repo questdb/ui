@@ -7,6 +7,7 @@ import { bufferStore } from '../../store/buffers'
 import { SearchResults } from './SearchResults'
 import { eventBus } from '../../modules/EventBus'
 import { EventType } from '../../modules/EventBus/types'
+import { useEditor } from '../../providers/EditorProvider'
 
 const Wrapper = styled(PaneWrapper)<{
   $open?: boolean
@@ -118,6 +119,7 @@ export interface SearchPanelRef {
 }
 
 export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({ open }, ref) => {
+  const { monacoRef } = useEditor()
   const inputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({
@@ -136,7 +138,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
       return
     }
 
-    const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions)
+    const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions, monacoRef.current)
     setSearchResult(result)
   }, [searchQuery, searchOptions])
 

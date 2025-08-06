@@ -1,4 +1,4 @@
-import { Monaco } from "@monaco-editor/react"
+import type { Monaco } from "@monaco-editor/react"
 import type { editor } from "monaco-editor"
 import React, {
   createContext,
@@ -9,7 +9,6 @@ import React, {
   useRef,
   useState,
   useCallback,
-  useMemo,
 } from "react"
 import {
   appendQuery,
