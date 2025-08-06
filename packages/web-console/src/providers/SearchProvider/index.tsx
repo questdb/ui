@@ -65,7 +65,7 @@ export const SearchProvider = ({ children }: PropsWithChildren<{}>) => {
   }, [updateLeftPanelState])
 
   const handleGlobalSearch = useCallback((event: KeyboardEvent) => {
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === 'f') {
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === 'f' || event.key === 'F')) {
       event.preventDefault()
       setSearchPanelOpen(true)
       setTimeout(() => {
