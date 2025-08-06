@@ -37,12 +37,17 @@ const CloseIcon = styled(Close)`
 `
 
 const StyledInput = styled(Input)`
-  padding-left: 3.5rem;
+  padding-left: 0.75rem;
   padding-right: 3.5rem;
   width: 100%;
 
   &::placeholder {
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.gray2};
+  }
+
+  &::selection {
+    background: rgba(255, 255, 255, 0.3);
+    color: inherit;
   }
 `
 
@@ -79,7 +84,6 @@ export const Toolbar = ({
   return (
     <Root>
       <Filter>
-        <FilterIcon size="20px" />
         {queryRef.current?.value && (
           <CloseIcon
             size="20px"

@@ -13,7 +13,7 @@ import { actions, selectors } from "../../store"
 import { Tooltip } from "../../components"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, PieChart, Upload2 } from "@styled-icons/remix-line"
+import { Database2, Grid, PieChart, Search } from "@styled-icons/remix-line"
 import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
@@ -21,7 +21,9 @@ import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
 import { Allotment, AllotmentHandle } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
-import { useSettings } from "../../providers"
+import { useSettings, useSearch } from "../../providers"
+import { SearchPanel } from "../Search"
+import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
 
 const Root = styled.div`
   display: flex;
@@ -72,14 +74,15 @@ const viewModes: {
 const Console = () => {
   const dispatch = useDispatch()
   const { sm } = useScreenSize()
-  const { editorSplitterBasis, resultsSplitterBasis, updateSettings } =
+  const { resultsSplitterBasis, updateSettings, leftPanelState, updateLeftPanelState } =
     useLocalStorage()
-  const [savedEditorSplitterBasis, setSavedEditorSplitterBasis] = useState(
-    editorSplitterBasis !== 0 ? editorSplitterBasis : 300,
-  )
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { consoleConfig } = useSettings()
+  const { isSearchPanelOpen, setSearchPanelOpen, searchPanelRef } = useSearch()
+
+  const isDataSourcesPanelOpen = leftPanelState.type === LeftPanelType.DATASOURCES
+  
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
@@ -124,52 +127,74 @@ const Console = () => {
             <Sidebar align="top">
               {!sm && (
                 <PopperHover
-                  placement="bottom"
+                  placement="right"
                   trigger={
                     <Navigation
                       data-hook="tables-panel-button"
                       direction="left"
                       onClick={() => {
-                        dispatch(
-                          actions.console.setActiveTopPanel(
-                            editorSplitterBasis === 0 ? "tables" : undefined,
-                          ),
-                        )
-                        updateSettings(
-                          StoreKey.EDITOR_SPLITTER_BASIS,
-                          editorSplitterBasis === 0
-                            ? savedEditorSplitterBasis
-                            : 0,
-                        )
+                        if (isDataSourcesPanelOpen) {
+                          dispatch(actions.console.setActiveTopPanel(undefined))
+                          updateLeftPanelState({
+                            type: null,
+                            width: leftPanelState.width
+                          })
+                        } else {
+                          dispatch(actions.console.setActiveTopPanel("tables"))
+                          updateLeftPanelState({
+                            type: LeftPanelType.DATASOURCES,
+                            width: leftPanelState.width
+                          })
+                        }
                       }}
-                      selected={editorSplitterBasis !== 0}
+                      selected={isDataSourcesPanelOpen}
                     >
                       <Database2 size={BUTTON_ICON_SIZE} />
                     </Navigation>
                   }
                 >
                   <Tooltip>
-                    {editorSplitterBasis === 0 ? "Show" : "Hide"} data sources
+                    {isDataSourcesPanelOpen ? "Hide" : "Show"} data sources
                   </Tooltip>
                 </PopperHover>
               )}
+              <PopperHover
+                placement="right"
+                trigger={
+                  <Navigation
+                    data-hook="search-panel-button"
+                    direction="left"
+                    onClick={() => setSearchPanelOpen(!isSearchPanelOpen)}
+                    selected={isSearchPanelOpen}
+                  >
+                    <Search size={BUTTON_ICON_SIZE} style={{ transform: 'scale(0.9)'}} />
+                  </Navigation>
+                }
+              >
+                <Tooltip>
+                  {isSearchPanelOpen ? "Hide" : "Show"} search
+                </Tooltip>
+              </PopperHover>
             </Sidebar>
             <Allotment
               ref={horizontalSplitterRef}
               onDragEnd={(sizes) => {
                 if (sizes[0] !== 0) {
-                  setSavedEditorSplitterBasis(sizes[0])
+                  updateLeftPanelState({
+                    type: leftPanelState.type,
+                    width: sizes[0]
+                  })
                 }
-                updateSettings(StoreKey.EDITOR_SPLITTER_BASIS, sizes[0])
               }}
               snap
             >
               <Allotment.Pane
-                preferredSize={editorSplitterBasis}
-                visible={editorSplitterBasis !== 0 && !sm}
+                preferredSize={leftPanelState.width}
+                visible={(isDataSourcesPanelOpen || isSearchPanelOpen) && !sm}
                 minSize={250}
               >
-                <Schema />
+                <Schema open={isDataSourcesPanelOpen} />
+                <SearchPanel ref={searchPanelRef} open={isSearchPanelOpen} />
               </Allotment.Pane>
               <Allotment.Pane>
                 <Editor />

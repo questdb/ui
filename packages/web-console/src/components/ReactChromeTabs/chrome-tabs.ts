@@ -397,9 +397,16 @@ class ChromeTabs {
 
     const faviconEl = tabEl.querySelector(".chrome-tab-favicon") as HTMLElement
     const { favicon, faviconClass, className } = tabProperties
+    
+    const currentClasses = tabEl.className.split(' ')
+    const baseClasses = currentClasses.filter(cls => 
+      cls.startsWith('chrome-tab') || cls === 'dragging' || cls === 'phantom-tab'
+    )
+    
     if (className) {
-      // add className to existing classes
-      tabEl.className = [tabEl.className, className].join(" ")
+      tabEl.className = [...baseClasses, ...className.split(' ')].join(' ')
+    } else {
+      tabEl.className = baseClasses.join(' ')
     }
     faviconEl.className = "chrome-tab-favicon"
     faviconEl!.style!.backgroundImage = ""

@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 import type { Monaco } from "@monaco-editor/react"
-import { Dispatch } from "redux"
 
 import {
   conf as QuestDBLanguageConf,
@@ -51,12 +50,14 @@ export const registerEditorActions = ({
   runQuery,
   runScript,
   editorContext,
+  onTabClosed,
 }: {
   editor: editor.IStandaloneCodeEditor
   monaco: Monaco
   runQuery: () => void
   runScript: () => void
   editorContext: EditorContext
+  onTabClosed?: () => void
 }) => {
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
   })
@@ -104,6 +105,9 @@ export const registerEditorActions = ({
         typeof activeId?.value === "number"
       ) {
         editorContext.deleteBuffer(activeId.value)
+        if (onTabClosed) {
+          onTabClosed()
+        }
       }
     },
   })

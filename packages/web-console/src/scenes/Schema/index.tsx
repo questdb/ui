@@ -80,6 +80,7 @@ import { toast } from '../../components/Toast'
 type Props = Readonly<{
   hideMenu?: boolean
   style?: CSSProperties
+  open?: boolean
 }>
 
 const loadingStyles = css`
@@ -87,9 +88,14 @@ const loadingStyles = css`
   justify-content: center;
 `
 
-const Wrapper = styled(PaneWrapper)`
+const Wrapper = styled(PaneWrapper)<{
+  open?: boolean
+}>`
   overflow-x: auto;
   height: 100%;
+  ${({ open }) => !open && css`
+    display: none;
+  `}
 `
 
 const Content = styled(PaneContent)<{

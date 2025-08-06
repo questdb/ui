@@ -102,6 +102,11 @@ const Content = styled(PaneContent)`
     border-radius: 2px;
   }
 
+  .searchHighlight {
+    background-color: rgba(255, 184, 108, 0.5);
+    border-radius: 2px;
+  }
+
   .cursorQueryGlyph,
   .cancelQueryGlyph {
     margin-left: 2rem;
@@ -1367,7 +1372,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   return (
     <>
       <Content onClick={handleEditorClick}>
-        <ButtonBar onTriggerRunScript={handleTriggerRunScript} />
+        <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}

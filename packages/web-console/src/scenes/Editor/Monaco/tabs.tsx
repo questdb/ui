@@ -90,7 +90,7 @@ export const Tabs = () => {
   const repositionActiveBuffers = async (excludedId: string) => {
     const sortedActiveBuffers = buffers
       .filter(
-        (buffer) => !buffer.archived && buffer.id !== parseInt(excludedId),
+        (buffer) => (!buffer.archived || buffer.isTemporary) && buffer.id !== parseInt(excludedId),
       )
       .sort((a, b) => a.position - b.position)
 
@@ -104,9 +104,16 @@ export const Tabs = () => {
 
   const close = async (id: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (!buffer || buffers.filter((buffer) => !buffer.archived).length === 1) {
+    if (!buffer || buffers.filter((buffer) => !buffer.archived || buffer.isTemporary).length === 1) {
       return
     }
+    
+    if (buffer.isTemporary) {
+      await updateBuffer(parseInt(id), { isTemporary: false })
+      await repositionActiveBuffers(id)
+      return
+    }
+    
     buffer?.value !== "" ||
     (buffer.metricsViewState?.metrics &&
       buffer.metricsViewState.metrics.length > 0)
@@ -132,7 +139,7 @@ export const Tabs = () => {
       return
     }
     let newTabs = buffers
-      .filter((tab) => tab.id !== parseInt(tabId) && !tab.archived)
+      .filter((tab) => tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary))
       .sort((a, b) => a.position - b.position)
     newTabs.splice(toIndex, 0, beforeTab)
     newTabs.forEach(async (tab, index) => {
@@ -169,17 +176,28 @@ export const Tabs = () => {
         onTabRename={rename}
         onNewTab={addBuffer}
         tabs={buffers
-          .filter((buffer) => !buffer.archived)
+          .filter((buffer) => !buffer.archived || buffer.isTemporary)
           .sort((a, b) => a.position - b.position)
           .map(
-            (buffer) =>
-              ({
+            (buffer) => {
+              const classNames = []
+              if (buffer.metricsViewState) {
+                classNames.push("metrics-tab")
+              }
+              if (buffer.isTemporary) {
+                classNames.push("temporary-tab")
+              }
+              
+              const className = classNames.length > 0 ? classNames.join(" ") : undefined
+              
+              return {
                 id: buffer.id?.toString(),
                 favicon: mapTabIconToType(buffer),
                 title: buffer.label,
                 active: activeBuffer.id === buffer.id,
-                className: buffer.metricsViewState ? "metrics-tab" : "",
-              } as Tab),
+                className,
+              } as Tab
+            }
           )}
       />
       <DropdownMenu.Root modal={false} onOpenChange={setHistoryOpen}>
@@ -210,7 +228,7 @@ export const Tabs = () => {
                   await updateBuffer(buffer.id as number, {
                     archived: false,
                     archivedAt: undefined,
-                    position: buffers.length - 1,
+                    position: buffers.filter(b => !b.archived || b.isTemporary).length,
                   })
                   await setActiveBuffer(buffer)
                 }}

@@ -147,7 +147,7 @@ const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
   [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
 }
 
-const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boolean) => void }) => {
+const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (runAll?: boolean) => void, isTemporary: boolean | undefined }) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
@@ -189,7 +189,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
         data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
-        disabled={running !== RunningType.NONE}
+        disabled={running !== RunningType.NONE || isTemporary}
       >
           Run all queries
         <RunShortcut> 
@@ -235,7 +235,7 @@ const ButtonBar = ({ onTriggerRunScript }: { onTriggerRunScript: (runAll?: boole
           data-hook="button-run-query"
           title={shortcutTitles[RunningType.QUERY]}
           onClick={handleClickQueryButton}
-          disabled={running !== RunningType.NONE || queriesToRun.length === 0}
+          disabled={running !== RunningType.NONE || queriesToRun.length === 0 || isTemporary}
         >
           {getQueryButtonText()}
           <RunShortcut>
