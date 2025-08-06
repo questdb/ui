@@ -25,15 +25,10 @@ import {
   ConsoleAction,
   ConsoleAT,
   ImageToZoom,
-  TopPanel,
   Sidebar,
   BottomPanel,
 } from "./types"
 
-const setActiveTopPanel = (panel: TopPanel): ConsoleAction => ({
-  payload: panel,
-  type: ConsoleAT.SET_ACTIVE_TOP_PANEL,
-})
 const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_SIDEBAR,
@@ -55,7 +50,6 @@ const toggleSideMenu = (): ConsoleAction => ({
 
 export default {
   toggleSideMenu,
-  setActiveTopPanel,
   setActiveSidebar,
   setActiveBottomPanel,
   setImageToZoom,

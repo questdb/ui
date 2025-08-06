@@ -45,7 +45,7 @@ const defaultConfig: LocalConfig = {
   exampleQueriesVisited: false,
   autoRefreshTables: true,
   leftPanelState: {
-    type: null,
+    type: LeftPanelType.DATASOURCES,
     width: 350
   }
 }

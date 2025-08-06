@@ -134,13 +134,11 @@ const Console = () => {
                       direction="left"
                       onClick={() => {
                         if (isDataSourcesPanelOpen) {
-                          dispatch(actions.console.setActiveTopPanel(undefined))
                           updateLeftPanelState({
                             type: null,
                             width: leftPanelState.width
                           })
                         } else {
-                          dispatch(actions.console.setActiveTopPanel("tables"))
                           updateLeftPanelState({
                             type: LeftPanelType.DATASOURCES,
                             width: leftPanelState.width
