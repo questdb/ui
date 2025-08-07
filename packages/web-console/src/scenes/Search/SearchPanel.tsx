@@ -8,6 +8,8 @@ import { SearchResults } from './SearchResults'
 import { eventBus } from '../../modules/EventBus'
 import { EventType } from '../../modules/EventBus/types'
 import { useSearch } from '../../providers'
+import { db } from '../../store/db'
+import { useEffectIgnoreFirst } from '../../components/Hooks/useEffectIgnoreFirst'
 
 const Wrapper = styled(PaneWrapper)<{
   $open?: boolean
@@ -154,8 +156,15 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
     }
   }, [performSearch])
 
-  useEffect(() => {
+  useEffectIgnoreFirst(() => {
     const timeoutId = setTimeout(() => {
+      if (!db.ready) {
+        setTimeout(() => {
+          performSearch()
+        }, 1000)
+        return
+      }
+
       performSearch()
     }, 300)
 

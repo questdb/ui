@@ -363,15 +363,21 @@ Cypress.Commands.add(
   }
 );
 
+Cypress.Commands.add("clearStorageAndVisit", (url) => {
+  cy.visit(url, {
+    onBeforeLoad: (win) => {
+      win.localStorage.clear();
+      win.indexedDB.deleteDatabase("web-console");
+    },
+  });
+});
+
 Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings = false) => {
-  cy.clearLocalStorage();
-  indexedDB.deleteDatabase("web-console");
-  cy.visit(baseUrl);
+  cy.clearStorageAndVisit(baseUrl);
   cy.loginWithUserAndPassword();
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
-    indexedDB.deleteDatabase("web-console");
-    cy.visit(baseUrl);
+    cy.clearStorageAndVisit(baseUrl);
     cy.getEditor().should("be.visible");
   }
 });

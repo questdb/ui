@@ -46,7 +46,7 @@ describe("run query", () => {
       cy.realPress("ArrowLeft");
     }
     cy.focused().type(`${ctrlOrCmd}{enter}`);
-    cy.getColumnName(0).should("contain", "count");
+    cy.getColumnName(0).should("contain", "count()");
     cy.getGridRow(0).should("contain", "100");
 
     // go inside the first query
@@ -55,7 +55,7 @@ describe("run query", () => {
       cy.realPress("ArrowLeft");
     }
     cy.focused().type(`${ctrlOrCmd}{enter}`);
-    cy.getColumnName(0).should("contain", "count");
+    cy.getColumnName(0).should("contain", "count()");
     cy.getGridRow(0).should("contain", "100");
   });
 
@@ -918,7 +918,7 @@ describe("handling comments", () => {
   });
 
   it("should highlight and execute sql with line comments inside", () => {
-    cy.typeQuery("select\n\nx\n-- y\n-- z\n from long_sequence(1);");
+    cy.typeQueryDirectly("select\nx\n-- y\n-- z\n from long_sequence(1);");
     cy.getCursorQueryDecoration().should("have.length", 5);
     cy.getCursorQueryGlyph().should("have.length", 1);
     cy.runLine();

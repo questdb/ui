@@ -38,6 +38,7 @@ export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
   read_notifications!: Table<{ newsId: string }, number>
+  ready: boolean = false
 
   constructor() {
     super("web-console")
@@ -140,6 +141,7 @@ export class Storage extends Dexie {
 
       // clear search params from the address bar
       window.history.replaceState({}, "", url)
+      this.ready = true
     })
   }
 }
