@@ -437,4 +437,81 @@ describe("search panel", () => {
       cy.getSearchResults().first().should("contain.text", "trader_email");
     });
   });
+
+  describe("all search option combinations", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth();
+      cy.ensureDataSourcesPanel();
+      cy.closeSearchPanel();
+    });
+    const allWords = [
+      "Find",
+      "product",
+      "in",
+      "production",
+      "PRODUCT",
+      "products",
+      "Product",
+      "testX",
+      "text",
+      "teXt",
+    ];
+    const checkMatches = (matches) => {
+      for (let i = 0; i < matches.length; i++) {
+        const result = cy.getSearchResults().eq(i);
+        result.should("contain", allWords[matches[i]]);
+        result
+          .getByDataHook("search-result-line-number")
+          .should("contain", `${matches[i] + 1}`);
+      }
+    };
+
+    it("should handle all combinations correctly", () => {
+      cy.clearEditor();
+      cy.typeQueryDirectly(allWords.join("\n"));
+      cy.openSearchPanel();
+
+      // !regex + !wholeWord + !caseSensitive (default)
+      cy.searchFor("product");
+      cy.wait(400);
+      checkMatches([1, 3, 4, 5, 6]);
+
+      // !regex + !wholeWord + caseSensitive
+      cy.toggleSearchOption("caseSensitive");
+      cy.wait(400);
+      checkMatches([1, 3, 5]);
+
+      // !regex + wholeWord + caseSensitive
+      cy.toggleSearchOption("wholeWord");
+      cy.wait(400);
+      checkMatches([1]);
+
+      // !regex + wholeWord + !caseSensitive
+      cy.toggleSearchOption("caseSensitive");
+      cy.wait(400);
+      checkMatches([1, 4, 6]);
+
+      cy.searchFor("te[sx]t");
+
+      // regex + wholeWord + !caseSensitive
+      cy.toggleSearchOption("useRegex");
+      cy.wait(400);
+      checkMatches([8, 9]);
+
+      // regex + !wholeWord + !caseSensitive
+      cy.toggleSearchOption("wholeWord");
+      cy.wait(400);
+      checkMatches([7, 8, 9]);
+
+      // regex + !wholeWord + caseSensitive
+      cy.toggleSearchOption("caseSensitive");
+      cy.wait(400);
+      checkMatches([7, 8]);
+
+      // regex + wholeWord + caseSensitive
+      cy.toggleSearchOption("wholeWord");
+      cy.wait(400);
+      checkMatches([8]);
+    });
+  });
 });

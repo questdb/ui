@@ -57,13 +57,16 @@ export function createSearchPattern(query: string, options: SearchOptions): RegE
   if (!query) return null
   
   try {
+    let pattern: string
+    
     if (useRegex) {
-      return new RegExp(query, caseSensitive ? 'g' : 'gi')
+      pattern = wholeWord ? `\\b(?:${query})\\b` : query
     } else {
       const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const pattern = wholeWord ? `\\b${escaped}\\b` : escaped
-      return new RegExp(pattern, caseSensitive ? 'g' : 'gi')
+      pattern = wholeWord ? `\\b${escaped}\\b` : escaped
     }
+    
+    return new RegExp(pattern, caseSensitive ? 'g' : 'gi')
   } catch (e) {
     return null
   }
