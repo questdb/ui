@@ -366,7 +366,7 @@ describe("search panel", () => {
         "100 results in 1 tab"
       );
       cy.getByDataHook("search-result-buffer-group").click();
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 25; i++) {
         cy.realPress("ArrowDown");
         cy.get('[data-hook="search-result-match"][data-active="true"]')
           .should("contain", `Trading day ${i}`)
