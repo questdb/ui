@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useState, useEffect } from "react"
 import styled from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
 import { Stop } from "@styled-icons/remix-line"
@@ -10,11 +10,12 @@ import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 
-const ButtonBarWrapper = styled.div`
+const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null }>`
   position: absolute;
-  top: 1rem;
+  top: ${({ $searchWidgetType }) => $searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
   right: 2.4rem;
   z-index: 1;
+  transition: top .1s linear;
 `
 
 const ButtonGroup = styled.div`
@@ -152,6 +153,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [dropdownActive, setDropdownActive] = useState(false)
+  const [searchWidgetType, setSearchWidgetType] = useState<"find" | "replace" | null>(null)
 
   const handleClickQueryButton = useCallback(() => {
     if (queriesToRun.length > 1) {
@@ -168,6 +170,53 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
 
   const handleDropdownToggle = useCallback((active: boolean) => {
     setDropdownActive(active)
+  }, [])
+
+  useEffect(() => {
+    const checkFindWidgetVisibility = () => {
+      const findWidget = document.querySelector('.find-widget')
+      const isVisible = !!findWidget && findWidget.classList.contains('visible')
+      const isReplace = !!findWidget && findWidget.classList.contains('replaceToggled')
+      
+      setSearchWidgetType(isVisible ? (isReplace ? "replace" : "find") : null)
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      let shouldCheck = false
+
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const element = node as Element
+              if (element.classList?.contains('find-widget') || element.querySelector?.('.find-widget')) {
+                shouldCheck = true
+              }
+            }
+          })
+        } else if (mutation.type === 'attributes' && 
+                   mutation.target instanceof Element && 
+                   mutation.target.classList.contains('find-widget')) {
+          shouldCheck = true
+        }
+      })
+
+      if (shouldCheck) {
+        checkFindWidgetVisibility()
+      }
+    })
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class'],
+      attributeOldValue: false
+    })
+
+    return () => {
+      observer.disconnect()
+    }
   }, [])
 
   const renderRunScriptButton = () => {
@@ -267,7 +316,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
   }
 
   return (
-    <ButtonBarWrapper>
+    <ButtonBarWrapper $searchWidgetType={searchWidgetType}>
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>
   )

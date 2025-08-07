@@ -7,7 +7,7 @@ import { bufferStore } from '../../store/buffers'
 import { SearchResults } from './SearchResults'
 import { eventBus } from '../../modules/EventBus'
 import { EventType } from '../../modules/EventBus/types'
-import { useEditor } from '../../providers/EditorProvider'
+import { useSearch } from '../../providers'
 
 const Wrapper = styled(PaneWrapper)<{
   $open?: boolean
@@ -119,7 +119,7 @@ export interface SearchPanelRef {
 }
 
 export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({ open }, ref) => {
-  const { monacoRef } = useEditor()
+  const { setSearchPanelOpen } = useSearch()
   const inputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({
@@ -138,7 +138,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
       return
     }
 
-    const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions, monacoRef.current)
+    const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions)
     setSearchResult(result)
   }, [searchQuery, searchOptions])
 
@@ -214,20 +214,28 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
           <InputWrapper>
             <StyledInput
               ref={inputRef}
-              placeholder="Search..."
+              placeholder="Search in tabs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   performSearch()
+                } else if (e.key === 'Escape') {
+                  if (searchQuery.length > 0) {
+                    setSearchQuery('')
+                  } else {
+                    setSearchPanelOpen(false)
+                  }
                 }
               }}
+              data-hook="search-input"
             />
             <ToggleButtonsContainer>
               <ToggleButton
                 active={searchOptions.caseSensitive || false}
                 onClick={() => toggleOption('caseSensitive')}
                 title="Match Case (Alt+C)"
+                data-hook="search-option-case-sensitive"
               >
                 Aa
               </ToggleButton>
@@ -235,6 +243,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
                 active={searchOptions.wholeWord || false}
                 onClick={() => toggleOption('wholeWord')}
                 title="Match Whole Word (Alt+W)"
+                data-hook="search-option-whole-word"
               >
                 W
               </ToggleButton>
@@ -242,6 +251,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
                 active={searchOptions.useRegex || false}
                 onClick={() => toggleOption('useRegex')}
                 title="Use Regular Expression (Alt+R)"
+                data-hook="search-option-regex"
               >
                 .*
               </ToggleButton>
@@ -252,13 +262,14 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
             <Checkbox
               checked={searchOptions.includeDeleted || false}
               onChange={() => toggleOption('includeDeleted')}
+              data-hook="search-option-include-closed"
             />
-            <CheckboxLabel>Include closed tabs</CheckboxLabel>
+            <CheckboxLabel data-hook="search-option-include-closed-label">Include closed tabs</CheckboxLabel>
           </CheckboxWrapper>
         </SearchInputContainer>
 
         {getSummaryText() && (
-          <SearchSummary>
+          <SearchSummary data-hook="search-summary">
             {getSummaryText()}
           </SearchSummary>
         )}
@@ -267,7 +278,6 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
           <SearchResults
             groupedMatches={groupedMatches}
             searchQuery={searchQuery}
-            searchOptions={searchOptions}
           />
         </SearchResultsContainer>
       </Content>

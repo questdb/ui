@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import styled from 'styled-components'
-import { SearchMatch, SearchOptions, SearchService } from '../../services/search'
+import type { SearchMatch } from '../../services/search'
 import { useEditor } from '../../providers'
 import { ChevronRight, ChevronDown } from '@styled-icons/boxicons-solid'
 import { FileText } from '@styled-icons/remix-line'
@@ -125,13 +125,11 @@ type FlattenedItem =
 interface SearchResultsProps {
   groupedMatches: Map<number, SearchMatch[]>
   searchQuery: string
-  searchOptions: SearchOptions
 }
 
 const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   groupedMatches,
   searchQuery,
-  searchOptions,
 }) => {
   const { setActiveBuffer, buffers, setTemporaryBuffer, temporaryBufferId, editorRef, updateBuffer } = useEditor()
   const [expandedBuffers, setExpandedBuffers] = useState<Map<number, boolean>>(
@@ -339,17 +337,26 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     }
   }, [expandedBuffers, toggleBufferExpansion, flattenedItems])
 
-  const renderHighlightedText = useCallback((text: string) => {
-    const highlighted = SearchService.highlightText(text, searchQuery, searchOptions)
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />
-  }, [searchQuery, searchOptions])
+  const renderHighlightedTextAtPosition = useCallback((text: string, matchStart: number, matchEnd: number) => {
+    const beforeMatch = text.substring(0, matchStart)
+    const matchText = text.substring(matchStart, matchEnd)
+    const afterMatch = text.substring(matchEnd)
+    
+    return (
+      <span>
+        {beforeMatch}
+        <mark>{matchText}</mark>
+        {afterMatch}
+      </span>
+    )
+  }, [])
 
   const renderItem = useCallback((item: FlattenedItem, _index: number, isFocused: boolean) => {
     if (item.type === 'header') {
       const isExpanded = expandedBuffers.get(item.bufferId) === true
       
       return (
-        <ItemWrapper $focused={isFocused} $isHeader $level={1}>
+        <ItemWrapper $focused={isFocused} $isHeader $level={1} data-hook="search-result-buffer-group">
           <ChevronIcon onClick={() => toggleBufferExpansion(item.bufferId)}>
             {isExpanded ? <ChevronDown /> : <ChevronRight />}
           </ChevronIcon>
@@ -365,15 +372,19 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       )
     } else {
       return (
-        <ItemWrapper $focused={isFocused} $level={2}>
-          <LineNumber>{item.match.range.startLineNumber}</LineNumber>
+        <ItemWrapper $focused={isFocused} $level={2} data-hook="search-result-match" data-active={isFocused}>
+          <LineNumber data-hook="search-result-line-number">{item.match.range.startLineNumber}</LineNumber>
           <MatchText>
-            {renderHighlightedText(item.match.previewText)}
+            {renderHighlightedTextAtPosition(
+              item.match.previewText, 
+              item.match.matchStartInPreview, 
+              item.match.matchEndInPreview
+            )}
           </MatchText>
         </ItemWrapper>
       )
     }
-  }, [expandedBuffers, toggleBufferExpansion, renderHighlightedText])
+  }, [expandedBuffers, toggleBufferExpansion, renderHighlightedTextAtPosition])
 
   useEffect(() => {
     handleClick(focusedIndex)
@@ -417,7 +428,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
 
   if (groupedMatches.size === 0 && searchQuery.trim()) {
     return (
-      <NoResults>
+      <NoResults data-hook="search-no-results">
         No results found
       </NoResults>
     )

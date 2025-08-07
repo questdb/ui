@@ -124,7 +124,7 @@ const PrimaryToggleButtonStyled = styled.button<Props>`
 const PrimaryToggleButtonWithRef = (
   props: RenderRefProps,
   ref: Ref<HTMLButtonElement>,
-) => <PrimaryToggleButtonStyled {...defaultProps} {...props} ref={ref} />
+) => <PrimaryToggleButtonStyled {...defaultProps} {...props} ref={ref} data-selected={props.selected} />
 
 export const PrimaryToggleButton = forwardRef(PrimaryToggleButtonWithRef)
 

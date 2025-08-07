@@ -535,6 +535,11 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
+    editor.updateOptions({ 
+      find: {
+        addExtraSpaceOnTop: false,
+      }
+    })
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )

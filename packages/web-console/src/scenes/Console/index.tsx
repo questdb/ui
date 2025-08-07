@@ -13,7 +13,7 @@ import { actions, selectors } from "../../store"
 import { Tooltip } from "../../components"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, PieChart, Search } from "@styled-icons/remix-line"
+import { Database2, Grid, PieChart, Search, FileSearch } from "@styled-icons/remix-line"
 import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
@@ -165,12 +165,12 @@ const Console = () => {
                     onClick={() => setSearchPanelOpen(!isSearchPanelOpen)}
                     selected={isSearchPanelOpen}
                   >
-                    <Search size={BUTTON_ICON_SIZE} style={{ transform: 'scale(0.9)'}} />
+                    <FileSearch size={BUTTON_ICON_SIZE} />
                   </Navigation>
                 }
               >
                 <Tooltip>
-                  {isSearchPanelOpen ? "Hide" : "Show"} search
+                  {isSearchPanelOpen ? "Hide search in tabs" : "Search in tabs"}
                 </Tooltip>
               </PopperHover>
             </Sidebar>

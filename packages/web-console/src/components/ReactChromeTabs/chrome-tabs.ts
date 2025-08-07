@@ -39,7 +39,7 @@ const noop = (_: any) => {}
 
 const newTabButtonTemplate = `
     <div class="new-tab-button-wrapper">
-      <button class="new-tab-button">✚</button>
+      <button class="new-tab-button" data-hook="new-tab-button">✚</button>
     </div>
   `
 
