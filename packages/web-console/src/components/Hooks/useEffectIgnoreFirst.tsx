@@ -8,6 +8,7 @@ export const useEffectIgnoreFirst = (effect: () => void, deps?: React.Dependency
       firstRender.current = false
       return
     }
-    effect()
+    const cleanup = effect()
+    return cleanup
   }, deps ?? [])
 }
