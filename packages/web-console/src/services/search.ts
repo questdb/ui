@@ -1,6 +1,6 @@
 import type { IRange } from 'monaco-editor'
 import type { Buffer } from '../store/buffers'
-import { findMatches, highlightMatches } from '../utils/textSearch'
+import { findMatches } from '../utils/textSearch'
 
 export interface SearchMatch {
   bufferId: number
@@ -166,10 +166,6 @@ export class SearchService {
     }
 
     return grouped
-  }
-
-  static highlightText(text: string, query: string, options: SearchOptions = {}): string {
-    return highlightMatches(text, query, options)
   }
 
   private static createTitleMatch(

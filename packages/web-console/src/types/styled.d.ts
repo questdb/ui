@@ -39,6 +39,7 @@ export type ColorShape = {
   selectionDarker: string
   comment: string
   red: string
+  redDark: string
   orange: string
   yellow: string
   green: string

@@ -110,6 +110,16 @@ const SearchResultsContainer = styled.div`
   overflow-y: auto;
 `
 
+const SearchError = styled.div`
+  background: ${({ theme }) => theme.color.redDark};
+  border: 1px solid ${({ theme }) => theme.color.red};
+  border-radius: 0.4rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  color: ${({ theme }) => theme.color.foreground};
+  font-size: 1.1rem;
+`
+
 interface SearchPanelProps {
   open?: boolean
 }
@@ -131,6 +141,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
     includeDeleted: true,
   })
   const [searchResult, setSearchResult] = useState<SearchResult>({ query: '', matches: [], totalMatches: 0 })
+  const [searchError, setSearchError] = useState<{type: string, message: string} | null>(null)
 
   const performSearch = useCallback(async () => {
     const allBuffers = await bufferStore.getAll()
@@ -140,8 +151,15 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
       return
     }
 
-    const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions)
-    setSearchResult(result)
+    try {
+      const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions)
+      setSearchResult(result)
+      setSearchError(null)
+    } catch (e) {
+      const error = e as Error
+      setSearchResult({ query: searchQuery, matches: [], totalMatches: 0 })
+      setSearchError({ type: error.name, message: error.message })
+    }
   }, [searchQuery, searchOptions])
 
   useEffect(() => {
@@ -266,6 +284,12 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
               </ToggleButton>
             </ToggleButtonsContainer>
           </InputWrapper>
+
+          {searchError && (
+            <SearchError data-hook="search-error">
+              <b>{searchError.type}:</b> {searchError.message}
+            </SearchError>
+          )}
           
           <CheckboxWrapper>
             <Checkbox

@@ -553,6 +553,131 @@ describe("search panel", () => {
     });
   });
 
+  describe("search error handling", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth();
+      cy.ensureDataSourcesPanel();
+      cy.closeSearchPanel();
+      cy.typeQueryDirectly(
+        "SELECT symbol, price FROM trades WHERE symbol = 'BTC-USD';"
+      );
+      cy.openSearchPanel();
+    });
+
+    it("should display error when invalid regex is used", () => {
+      cy.toggleSearchOption("useRegex");
+      cy.searchFor("[invalid-regex");
+
+      cy.getByDataHook("search-error").should("be.visible");
+      cy.getByDataHook("search-error").should("contain", "SyntaxError");
+      cy.getSearchResults().should("not.exist");
+      cy.getByDataHook("search-summary").should("not.exist");
+    });
+
+    it("should clear error when valid search is performed after error", () => {
+      cy.toggleSearchOption("useRegex");
+      cy.searchFor("[invalid-regex");
+      cy.getByDataHook("search-error").should("be.visible");
+
+      cy.searchFor("symbol");
+      cy.getByDataHook("search-error").should("not.exist");
+      cy.getSearchResults().should("have.length.at.least", 1);
+      cy.getByDataHook("search-summary").should("be.visible");
+    });
+
+    it("should display SyntaxError for invalid regex when regex option is enabled", () => {
+      cy.toggleSearchOption("useRegex");
+      cy.searchFor("(unclosed-group");
+
+      cy.getByDataHook("search-error").should("be.visible");
+      cy.getByDataHook("search-error").should("contain", "SyntaxError:");
+    });
+
+    it("should hide error when search input is cleared", () => {
+      cy.toggleSearchOption("useRegex");
+      cy.searchFor("[invalid-regex");
+      cy.getByDataHook("search-error").should("be.visible");
+
+      cy.getByDataHook("search-input").clear();
+      cy.wait(400);
+
+      cy.getByDataHook("search-error").should("not.exist");
+      cy.getSearchResults().should("not.exist");
+    });
+  });
+
+  describe("special character escaping", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth();
+      cy.ensureDataSourcesPanel();
+      cy.closeSearchPanel();
+    });
+
+    it("should properly escape regex special characters when regex is disabled", () => {
+      cy.clearEditor();
+      cy.typeQueryDirectly(
+        "-- Find patterns with special characters\n" +
+          "SELECT * FROM prices WHERE pattern = '^BTC.*$';\n" +
+          "INSERT INTO regex_patterns VALUES ('[A-Z]+\\.(ETH|BTC)\\*');\n" +
+          "INSERT INTO logs VALUES('Error: File not found at /path/to/file+backup');\n" +
+          "CREATE TABLE test_patterns (id INT, email VARCHAR(50) CHECK (email ~ '@.*\\.(com|org)'));\n" +
+          "-- Special query: price >= $100 && volume > 1000\n" +
+          "SELECT COUNT(*) FROM trades WHERE notes LIKE '%profit: +15.5%';\n"
+      );
+      cy.openSearchPanel();
+
+      const testCases = [
+        { search: "^BTC.*$", expectedMatches: 1 },
+        { search: "[A-Z]+", expectedMatches: 1 },
+        { search: "\\.(ETH|BTC)\\*", expectedMatches: 1 },
+        { search: "/path/to/file+backup", expectedMatches: 1 },
+        { search: "price >= $100 && volume", expectedMatches: 1 },
+        { search: "%profit: +15.5%", expectedMatches: 1 },
+        { search: "@.*\\.(com|org)", expectedMatches: 1 },
+        { search: "(email", expectedMatches: 1 },
+        { search: ")", expectedMatches: 6 },
+        { search: "*", expectedMatches: 5 },
+        { search: ".", expectedMatches: 5 },
+      ];
+
+      testCases.forEach((testCase) => {
+        cy.searchFor(testCase.search);
+        cy.wait(400);
+
+        cy.getByDataHook("search-error").should("not.exist");
+
+        cy.getSearchResults().should("have.length", testCase.expectedMatches);
+
+        if (testCase.expectedMatches > 0) {
+          cy.getSearchResults().first().should("contain", testCase.search);
+        }
+      });
+    });
+
+    it("should treat special characters as regex when regex is enabled", () => {
+      cy.clearEditor();
+      cy.typeQueryDirectly(
+        "SELECT price FROM btc_trades;\n" +
+          "SELECT price FROM eth_trades;\n" +
+          "SELECT price FROM ada_trades;\n"
+      );
+      cy.openSearchPanel();
+      cy.toggleSearchOption("useRegex");
+
+      cy.searchFor("(btc|eth)_trades");
+      cy.wait(400);
+
+      cy.getByDataHook("search-error").should("not.exist");
+      cy.getSearchResults().should("have.length", 2);
+
+      cy.searchFor("\\(btc\\|eth\\)_trades");
+      cy.wait(400);
+
+      cy.getByDataHook("search-error").should("not.exist");
+      cy.getSearchResults().should("have.length", 0);
+    });
+  });
+
   describe("all search option combinations", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth();
