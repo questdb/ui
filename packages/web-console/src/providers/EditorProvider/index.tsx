@@ -86,8 +86,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
+  const temporaryBufferId: number | null = activeBuffer?.isTemporary ? activeBuffer.id as number : null
   const [inFocus, setInFocus] = useState(false)
-  const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(null)
   const searchUpdateTimeoutRef = useRef<number | null>(null)
 
   const ranOnce = useRef(false)
@@ -252,7 +252,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
           position: -1,
         }
       }
-      setTemporaryBufferId(null)
     }
 
     await bufferStore.update(id, {
@@ -321,7 +320,6 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       position,
     })
     
-    setTemporaryBufferId(buffer.id as number)
     await setActiveBuffer({ ...buffer, isTemporary: true, position }, { focus: false })
   }
 

@@ -80,7 +80,7 @@ const Editor = ({
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
-      {activeBuffer.editorViewState && <Monaco executionRefs={executionRefs} />}
+      <Monaco executionRefs={executionRefs} hidden={!activeBuffer.editorViewState} />
       {activeBuffer.metricsViewState && <Metrics />}
       {activeBuffer.editorViewState && <Notifications onClearNotifications={handleClearNotifications} />}
     </EditorPaneWrapper>

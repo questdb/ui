@@ -171,7 +171,7 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
     return () => clearTimeout(timeoutId)
   }, [performSearch])
 
-  useEffect(() => {
+  useEffectIgnoreFirst(() => {
     if (inputRef.current && open) {
       inputRef.current.focus()
       inputRef.current.select()

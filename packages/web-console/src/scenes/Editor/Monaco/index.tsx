@@ -70,11 +70,11 @@ loader.config({
 
 export const LINE_NUMBER_HARD_LIMIT = 99999
 
-const Content = styled(PaneContent)`
+const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   position: relative;
   overflow: hidden;
   background: #2c2e3d;
-
+  display: ${({ $hidden }) => $hidden ? 'none' : 'block'};
   .monaco-editor .squiggly-error {
     background: none;
     border-bottom: 0.3rem ${color("red")} solid;
@@ -167,7 +167,7 @@ const StyledDialogButton = styled(Button)`
 
 const DEFAULT_LINE_CHARS = 5
 
-const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject<ExecutionRefs> }) => {
+const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableRefObject<ExecutionRefs>, hidden?: boolean }) => {
   const editorContext = useEditor()
   const {
     buffers,
@@ -1378,7 +1378,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
   return (
     <>
-      <Content onClick={handleEditorClick}>
+      <Content onClick={handleEditorClick} $hidden={hidden}>
         <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
         <Editor
           beforeMount={beforeMount}

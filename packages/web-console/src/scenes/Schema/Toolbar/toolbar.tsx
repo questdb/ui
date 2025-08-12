@@ -5,6 +5,7 @@ import { Close, Filter3 } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { PopperHover, Tooltip } from "../../../components"
 import { useSchema } from "../SchemaContext"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
 const Root = styled(Box).attrs({
   justifyContent: "space-between",
@@ -79,6 +80,7 @@ export const Toolbar = ({
   setFilterSuspendedOnly: (filter: boolean) => void
 }) => {
   const { setQuery } = useSchema()
+  const { leftPanelState, updateLeftPanelState } = useLocalStorage()
   const queryRef = React.useRef<HTMLInputElement>(null)
 
   return (
@@ -99,6 +101,19 @@ export const Toolbar = ({
           name="table_filter"
           placeholder="Filter..."
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+            if (e.key === 'Escape') {
+              if (queryRef.current?.value && queryRef.current.value.length > 0) {
+                setQuery("")
+                queryRef.current.value = ""
+              } else {
+                updateLeftPanelState({
+                  type: null,
+                  width: leftPanelState.width
+                })
+              }
+            }
+          }}
         />
       </Filter>
       {suspendedTablesCount > 0 && (

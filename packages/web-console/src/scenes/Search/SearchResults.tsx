@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import styled from 'styled-components'
 import type { SearchMatch } from '../../services/search'
 import { useEditor } from '../../providers'
+import { InsertChart } from '@styled-icons/material'
 import { ChevronRight, ChevronDown } from '@styled-icons/boxicons-solid'
 import { FileText } from '@styled-icons/remix-line'
 import { Text } from '../../components'
@@ -71,6 +72,13 @@ const ItemText = styled(Text)<{ $isArchived?: boolean }>`
     background-color: #45475a;
     color: ${({ theme }) => theme.color.foreground};
   }
+  
+  mark {
+    background-color: rgb(163,127,96);
+    border-radius: 0.2rem;
+    color: ${({ theme }) => theme.color.foreground};
+    padding: 0.2rem;
+  }
 `
 
 const BufferStatus = styled.span`
@@ -118,9 +126,11 @@ const NoResults = styled.div`
   text-align: center;
 `
 
-type FlattenedItem = 
-  | { type: 'header'; bufferId: number; bufferLabel: string; isArchived: boolean; matchCount: number; id: string; parentId?: string }
+type FlattenedItem = { isMetricsMatch: boolean } & (
+  | { type: 'header'; bufferId: number; bufferLabel: string; isArchived: boolean; matchCount: number; id: string; parentId?: string; titleMatch?: SearchMatch }
   | { type: 'match'; match: SearchMatch; id: string; parentId: string }
+  | { type: 'title-match'; match: SearchMatch; id: string }
+)
 
 interface SearchResultsProps {
   groupedMatches: Map<number, SearchMatch[]>
@@ -136,7 +146,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     new Map(Array.from(groupedMatches.keys()).map(id => [id, true]))
   )
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
-  const lastFocusedIndexRef = useRef<number | null>(null)
   const selectionDecorations = useRef<string[]>([])
   const virtualizedTreeRef = useRef<VirtualizedTreeHandle>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
@@ -152,26 +161,45 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     Array.from(groupedMatches.entries()).forEach(([bufferId, matches]) => {
       const firstMatch = matches[0]
       
-      const headerId = `header-${bufferId}`
+      const onlyTitleMatches = matches.every(m => m.isTitleMatch)
+      const titleMatch = matches.find(m => m.isTitleMatch)
       
-      items.push({
-        type: 'header',
-        bufferId,
-        bufferLabel: firstMatch.bufferLabel,
-        isArchived: firstMatch.isArchived || false,
-        matchCount: matches.length,
-        id: headerId
-      })
-      
-      if (expandedBuffers.get(bufferId) === true) {
+      if (onlyTitleMatches) {
         matches.forEach((match, index) => {
           items.push({
-            type: 'match',
+            type: 'title-match',
             match,
-            id: `match-${bufferId}-${match.range.startLineNumber}-${match.range.startColumn}-${index}`,
-            parentId: headerId
+            id: `title-match-${bufferId}-${index}`,
+            isMetricsMatch: !!firstMatch.isMetricsMatch,
           })
         })
+      } else {
+        const headerId = `header-${bufferId}`
+        
+        items.push({
+          type: 'header',
+          bufferId,
+          bufferLabel: firstMatch.bufferLabel,
+          isArchived: firstMatch.isArchived || false,
+          matchCount: matches.length - (titleMatch ? 1 : 0),
+          id: headerId,
+          titleMatch: titleMatch,
+          isMetricsMatch: !!firstMatch.isMetricsMatch,
+        })
+        
+        if (expandedBuffers.get(bufferId) === true) {
+          matches.forEach((match, index) => {
+            if (!match.isTitleMatch) {
+              items.push({
+                type: 'match',
+                match,
+                id: `match-${bufferId}-${match.range.startLineNumber}-${match.range.startColumn}-${index}`,
+                parentId: headerId,
+                isMetricsMatch: !!match.isMetricsMatch,
+              })
+            }
+          })
+        }
       }
     })
     
@@ -206,6 +234,82 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     })
   }, [])
 
+  const getBufferIdFromItem = useCallback((item: FlattenedItem): number | undefined => {
+    if (item.type === 'header') return item.bufferId
+    if (item.type === 'match' || item.type === 'title-match') return item.match.bufferId
+    return undefined
+  }, [])
+
+  const openBufferFromItem = useCallback(async (item: FlattenedItem, shouldFocus: boolean) => {
+    const bufferId = getBufferIdFromItem(item)
+    if (!bufferId) return null
+
+    const buffer = buffers?.find(b => b.id === bufferId)
+    if (!buffer) return null
+
+    if (!buffer.archived) {
+      if (temporaryBufferId !== null) {
+        await updateBuffer(temporaryBufferId, { isTemporary: false })
+      }
+      await setActiveBuffer(buffer, { focus: shouldFocus })
+    } else {
+      if (shouldFocus) {
+        // Double-click on archived buffer
+        if (temporaryBufferId !== null && temporaryBufferId === bufferId) {
+          await convertTemporaryToPermanent()
+        } else {
+          await updateBuffer(bufferId, {
+            archived: false,
+            archivedAt: undefined,
+            position: activeBufferCount,
+          })
+          await setActiveBuffer(buffer, { focus: true })
+          
+          if (temporaryBufferId !== null) {
+            await updateBuffer(temporaryBufferId, { isTemporary: false })
+          }
+        }
+      } else {
+        // Single-click on archived buffer
+        if (temporaryBufferId !== bufferId) {
+          await setTemporaryBuffer(buffer)
+        }
+      }
+    }
+  }, [getBufferIdFromItem, buffers, temporaryBufferId, updateBuffer, setActiveBuffer, 
+      convertTemporaryToPermanent, activeBufferCount, setTemporaryBuffer])
+
+  const positionEditorForItem = useCallback((item: FlattenedItem) => {
+    if (item.isMetricsMatch) {
+      return
+    }
+
+    if (item.type === 'header' || item.type === 'title-match') {
+      editorRef.current?.revealPositionInCenter({ lineNumber: 1, column: 1 })
+      editorRef.current?.setPosition({ lineNumber: 1, column: 1 })
+      selectionDecorations.current = editorRef.current?.getModel()?.deltaDecorations(selectionDecorations.current, []) ?? []
+    } else if (item.type === 'match') {
+      // Content matches position at specific line and highlight
+      editorRef.current?.revealPositionInCenter({
+        lineNumber: item.match.range.startLineNumber,
+        column: item.match.range.startColumn
+      })
+      editorRef.current?.setPosition({
+        lineNumber: item.match.range.startLineNumber,
+        column: item.match.range.startColumn
+      })
+      selectionDecorations.current = editorRef.current?.getModel()?.deltaDecorations(selectionDecorations.current, [
+        {
+          range: item.match.range,
+          options: {
+            isWholeLine: false,
+            className: 'searchHighlight',
+          }
+        }
+      ]) ?? []
+    }
+  }, [editorRef])
+
   const handleClick = async (focusedIndex: number | null) => {
     if (focusedIndex === null) {
       selectionDecorations.current = editorRef.current?.getModel()?.deltaDecorations(selectionDecorations.current, []) ?? []
@@ -213,90 +317,29 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     }
 
     const item = flattenedItems.at(focusedIndex)
-    if (!item || item.type !== 'match') {
+    if (!item) {
       return
     }
 
-    const buffer = buffers?.find(b => b.id === item.match.bufferId)
-    if (!buffer) {
-      return
-    }
-
-    if (!buffer.archived) {
-      if (temporaryBufferId !== null) {
-        await updateBuffer(temporaryBufferId, { isTemporary: false })
-      }        
-      await setActiveBuffer(buffer, { focus: false })
-    } else {
-      if (temporaryBufferId !== item.match.bufferId) {
-        await setTemporaryBuffer(buffer)
-      }
-    }
-
-    editorRef.current?.revealPositionInCenter({
-      lineNumber: item.match.range.startLineNumber,
-      column: item.match.range.startColumn
-    })
-    selectionDecorations.current = editorRef.current?.getModel()?.deltaDecorations(selectionDecorations.current, [
-      {
-        range: item.match.range,
-        options: {
-          isWholeLine: false,
-          className: 'searchHighlight',
-        }
-      }
-    ]) ?? []
+    await openBufferFromItem(item, false)
+    positionEditorForItem(item)
   }
 
   const handleDoubleClick = async (item: FlattenedItem) => {
     if (!item) {
       return
     }
-
-    if (item.type === 'header') {
-      toggleBufferExpansion(item.bufferId)
-      return
-    }
-
-    const buffer = buffers?.find(b => b.id === item.match.bufferId)
-    if (!buffer) {
-      return
-    }
-
-    if (!buffer.archived) {
-      await setActiveBuffer(buffer, { focus: true })
-      if (temporaryBufferId !== null) {
-        await updateBuffer(temporaryBufferId, { isTemporary: false })
-      }
+    await openBufferFromItem(item, true)
+    positionEditorForItem(item)
+    
+    if (!item.isMetricsMatch) {
+      editorRef.current?.focus()
     } else {
-      if (temporaryBufferId !== null && temporaryBufferId === item.match.bufferId) {
-        await convertTemporaryToPermanent()
-      } else {
-        await updateBuffer(item.match.bufferId, {
-          archived: false,
-          archivedAt: undefined,
-          position: activeBufferCount,
-        })
-        await setActiveBuffer(buffer, { focus: true })
-        
-        if (temporaryBufferId !== null) {
-          await updateBuffer(temporaryBufferId, { isTemporary: false })
-        }
-      }
+      setFocusedIndex(null)
     }
-
-    editorRef.current?.revealPositionInCenter({
-      lineNumber: item.match.range.startLineNumber,
-      column: item.match.range.startColumn
-    })
-    editorRef.current?.focus()
-    editorRef.current?.setPosition({
-      lineNumber: item.match.range.startLineNumber,
-      column: item.match.range.startColumn
-    })
   }
 
-  const handleItemKeyDown = useCallback((item: FlattenedItem, _index: number, e: React.KeyboardEvent) => {
+  const handleItemKeyDown = (item: FlattenedItem, _index: number, e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       handleDoubleClick(item)
@@ -335,7 +378,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
         return
       }
     }
-  }, [expandedBuffers, toggleBufferExpansion, flattenedItems])
+  }
 
   const renderHighlightedTextAtPosition = useCallback((text: string, matchStart: number, matchEnd: number) => {
     const beforeMatch = text.substring(0, matchStart)
@@ -357,17 +400,43 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       
       return (
         <ItemWrapper $focused={isFocused} $isHeader $level={1} data-hook="search-result-buffer-group">
-          <ChevronIcon onClick={() => toggleBufferExpansion(item.bufferId)}>
+          <ChevronIcon onClick={(e) => {
+            e.stopPropagation()
+            toggleBufferExpansion(item.bufferId)
+          }}>
             {isExpanded ? <ChevronDown /> : <ChevronRight />}
           </ChevronIcon>
           <FileIcon>
-            <FileText />
+            {item.isMetricsMatch ? <InsertChart /> : <FileText />}
           </FileIcon>
           <ItemText $isArchived={item.isArchived}>
-            {item.bufferLabel}
+            {item.titleMatch 
+              ? renderHighlightedTextAtPosition(
+                  item.titleMatch.previewText, 
+                  item.titleMatch.matchStartInPreview, 
+                  item.titleMatch.matchEndInPreview
+                )
+              : item.bufferLabel
+            }
             {item.isArchived && <BufferStatus>closed</BufferStatus>}
           </ItemText>
           <MatchCount>{item.matchCount > 1 ? `${item.matchCount} results` : `${item.matchCount} result`}</MatchCount>
+        </ItemWrapper>
+      )
+    } else if (item.type === 'title-match') {
+      return (
+        <ItemWrapper $focused={isFocused} $level={1} data-hook="search-result-title-match" data-active={isFocused}>
+          <FileIcon data-hook="search-result-title-match-icon">
+            {item.isMetricsMatch ? <InsertChart /> : <FileText />}
+          </FileIcon>
+          <ItemText $isArchived={item.match.isArchived} data-hook="search-result-title-match-text">
+            {renderHighlightedTextAtPosition(
+              item.match.previewText, 
+              item.match.matchStartInPreview, 
+              item.match.matchEndInPreview
+            )}
+            {item.match.isArchived && <BufferStatus data-hook="search-result-title-match-closed-status">closed</BufferStatus>}
+          </ItemText>
         </ItemWrapper>
       )
     } else {
@@ -411,7 +480,9 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     const handleGlobalClick = async (event: MouseEvent) => {
       if (searchResultsRef.current && !searchResultsRef.current.contains(event.target as Node)) {
         if (temporaryBufferId !== null) {
-          if (event.target instanceof HTMLElement && event.target.closest(".monaco-editor")) {
+          if (event.target instanceof HTMLElement && (
+            event.target.closest(".monaco-editor") || event.target.closest(".metrics-root")
+          )) {
             await convertTemporaryToPermanent()
           } else {
             await updateBuffer(temporaryBufferId, { isTemporary: false }, true)

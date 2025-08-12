@@ -438,6 +438,121 @@ describe("search panel", () => {
     });
   });
 
+  describe("title matching functionality", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth();
+      cy.ensureDataSourcesPanel();
+      cy.closeSearchPanel();
+    });
+
+    it("should find title-only matches", () => {
+      cy.typeQueryDirectly("SELECT symbol FROM market_data;");
+      cy.createTabWithContent(
+        "INSERT INTO trades VALUES(now(), 'BTC-USD', 45000.0, 1000);",
+        "crypto analysis"
+      );
+      cy.createTabWithContent(
+        "DROP TABLE temp_portfolio;",
+        "portfolio cleanup"
+      );
+
+      cy.openSearchPanel();
+      cy.searchFor("crypto");
+
+      cy.getByDataHook("search-result-title-match").should("have.length", 1);
+      cy.getByDataHook("search-result-title-match-text").should(
+        "contain",
+        "crypto analysis"
+      );
+      cy.getByDataHook("search-result-title-match-text")
+        .find("mark")
+        .should("contain", "crypto");
+    });
+
+    it("should find title matches with closed tabs", () => {
+      cy.createTabWithContent(
+        "CREATE TABLE trading_positions (symbol SYMBOL, qty DOUBLE);",
+        "position tracking"
+      );
+      cy.createTabWithContent(
+        "SELECT * FROM market_data WHERE symbol = 'ETH-USD';"
+      );
+      cy.toggleSearchOption("wholeWord");
+
+      cy.getEditorTabs().eq(1).find(".chrome-tab-close").click();
+
+      cy.openSearchPanel();
+      cy.searchFor("position");
+
+      cy.getByDataHook("search-result-title-match").should("have.length", 1);
+      cy.getByDataHook("search-result-title-match-closed-status").should(
+        "contain",
+        "closed"
+      );
+    });
+
+    it("should show header with title highlight when buffer has both title and content matches", () => {
+      cy.createTabWithContent(
+        "SELECT price FROM crypto_trades WHERE symbol = 'BTC-USD';",
+        "crypto price query"
+      );
+
+      cy.openSearchPanel();
+      cy.searchFor("crypto");
+
+      cy.getByDataHook("search-result-buffer-group").should("have.length", 1);
+      cy.getByDataHook("search-result-buffer-group")
+        .find("mark")
+        .should("contain", "crypto");
+      cy.getByDataHook("search-result-buffer-group").should(
+        "contain",
+        "1 result"
+      );
+    });
+
+    it("should navigate to buffer when title match is clicked", () => {
+      cy.createTabWithContent(
+        "SELECT timestamp FROM price_history;",
+        "price analysis"
+      );
+
+      cy.openSearchPanel();
+      cy.searchFor("price");
+
+      cy.getByDataHook("search-result-buffer-group").click();
+
+      cy.getEditorTabByTitle("price analysis").should("have.attr", "active");
+      cy.getEditor().should("contain", "price_history");
+    });
+
+    it("should convert temporary buffer to permanent on double click", () => {
+      cy.createTabWithContent(
+        "INSERT INTO orders VALUES(now(), 'BTC-USD', 1.5);",
+        "order entry"
+      );
+
+      cy.getEditorTabs().eq(1).find(".chrome-tab-close").click();
+
+      cy.openSearchPanel();
+      cy.searchFor("order");
+
+      cy.getByDataHook("search-result-buffer-group").click();
+
+      cy.getEditorTabByTitle("order entry").should(
+        "have.class",
+        "temporary-tab"
+      );
+
+      cy.getByDataHook("search-result-buffer-group").dblclick();
+
+      cy.getEditorTabByTitle("order entry").should(
+        "not.have.class",
+        "temporary-tab"
+      );
+      cy.getEditorTabByTitle("order entry").should("have.attr", "active");
+    });
+  });
+
   describe("all search option combinations", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth();

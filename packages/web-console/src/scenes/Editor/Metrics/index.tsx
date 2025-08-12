@@ -335,7 +335,7 @@ export const Metrics = () => {
   }, [])
 
   return (
-    <Root data-hook="metrics-root" {...(telemetryEnabled ? {} : { ref: elementRef })}>
+    <Root data-hook="metrics-root" {...(telemetryEnabled ? {} : { ref: elementRef })} className="metrics-root">
       {!telemetryEnabled ? (
         <MetricsUnavailable />
       ) : (

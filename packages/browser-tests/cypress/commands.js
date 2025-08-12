@@ -531,9 +531,17 @@ Cypress.Commands.add("getSearchResultGroups", () => {
   return cy.getByDataHook("search-result-buffer-group");
 });
 
-Cypress.Commands.add("createTabWithContent", (content) => {
+Cypress.Commands.add("createTabWithContent", (content, title) => {
   cy.getByDataHook("new-tab-button").click();
   cy.get(".chrome-tab-was-just-added").should("be.visible");
   cy.get(".chrome-tab-was-just-added").should("not.exist");
   cy.typeQueryDirectly(content);
+
+  if (title) {
+    cy.get(".chrome-tab[active] .chrome-tab-drag-handle").dblclick();
+    cy.get(".chrome-tab[active] .chrome-tab-rename")
+      .should("be.visible")
+      .type(title + "{enter}");
+    cy.get(".chrome-tab[active] .chrome-tab-rename").should("not.be.visible");
+  }
 });

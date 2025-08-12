@@ -12,6 +12,8 @@ export interface SearchMatch {
   matchEndInPreview: number
   isArchived?: boolean
   archivedAt?: number
+  isTitleMatch?: boolean
+  isMetricsMatch?: boolean
 }
 
 export interface SearchResult {
@@ -52,7 +54,7 @@ export class SearchService {
     let limitReached = false
     
     for (const buffer of sortedBuffers) {
-      if (typeof buffer.id !== 'number' || !buffer.value) continue
+      if (typeof buffer.id !== 'number') continue
       
       const remainingCapacity = maxLength - matches.length
       if (remainingCapacity <= 0) {
@@ -60,14 +62,30 @@ export class SearchService {
         break
       }
       
-      const bufferMatches = this.searchInBuffer(
-        buffer,
+      const titleMatches = this.findTitleMatches(
+        buffer.label,
         query,
-        { caseSensitive, wholeWord, useRegex },
-        remainingCapacity,
+        { caseSensitive, wholeWord, useRegex }
       )
       
-      matches = [...matches, ...bufferMatches]
+      const contentMatches = buffer.value 
+        ? this.searchInBuffer(
+            buffer,
+            query,
+            { caseSensitive, wholeWord, useRegex },
+            remainingCapacity - titleMatches.length,
+          )
+        : []
+      
+      for (const titleMatch of titleMatches) {
+        if (matches.length >= maxLength) {
+          limitReached = true
+          break
+        }
+        matches.push(this.createTitleMatch(buffer, titleMatch.start, titleMatch.end))
+      }
+      
+      matches = [...matches, ...contentMatches]
       if (matches.length >= maxLength) {
         limitReached = true
         break
@@ -133,6 +151,7 @@ export class SearchService {
       matchEndInPreview: match.matchEndInPreview,
       isArchived: buffer.archived || false,
       archivedAt: buffer.archivedAt,
+      isMetricsMatch: !!buffer.metricsViewState,
     }))
   }
 
@@ -151,5 +170,42 @@ export class SearchService {
 
   static highlightText(text: string, query: string, options: SearchOptions = {}): string {
     return highlightMatches(text, query, options)
+  }
+
+  private static createTitleMatch(
+    buffer: Buffer,
+    matchStart: number,
+    matchEnd: number
+  ): SearchMatch {
+    return {
+      bufferId: buffer.id!,
+      bufferLabel: buffer.label,
+      range: {
+        startLineNumber: 1,
+        startColumn: matchStart + 1,
+        endLineNumber: 1,
+        endColumn: matchEnd + 1
+      },
+      text: buffer.label.substring(matchStart, matchEnd),
+      previewText: buffer.label,
+      matchStartInPreview: matchStart,
+      matchEndInPreview: matchEnd,
+      isArchived: buffer.archived || false,
+      archivedAt: buffer.archivedAt,
+      isTitleMatch: true,
+      isMetricsMatch: !!buffer.metricsViewState,
+    }
+  }
+
+  private static findTitleMatches(
+    bufferLabel: string,
+    query: string,
+    options: Pick<SearchOptions, 'caseSensitive' | 'wholeWord' | 'useRegex'>
+  ): Array<{ start: number; end: number }> {
+    const pattern = findMatches(bufferLabel, query, options)
+    return pattern.map(match => ({
+      start: match.startOffset,
+      end: match.endOffset
+    }))
   }
 }
