@@ -399,14 +399,27 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       const isExpanded = expandedBuffers.get(item.bufferId) === true
       
       return (
-        <ItemWrapper $focused={isFocused} $isHeader $level={1} data-hook="search-result-buffer-group" data-active={isFocused}>
-          <ChevronIcon onClick={(e) => {
-            e.stopPropagation()
-            toggleBufferExpansion(item.bufferId)
-          }}>
+        <ItemWrapper 
+          $focused={isFocused} 
+          $isHeader 
+          $level={1} 
+          data-hook="search-result-buffer-group" 
+          data-active={isFocused}
+          role="treeitem"
+          aria-expanded={isExpanded}
+          aria-level={1}
+          aria-label={`${item.bufferLabel} ${item.isArchived ? 'closed' : ''} - ${item.matchCount} ${item.matchCount > 1 ? 'results' : 'result'}`}
+        >
+          <ChevronIcon 
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleBufferExpansion(item.bufferId)
+            }}
+            aria-hidden="true"
+          >
             {isExpanded ? <ChevronDown /> : <ChevronRight />}
           </ChevronIcon>
-          <FileIcon>
+          <FileIcon aria-hidden="true">
             {item.isMetricsMatch ? <InsertChart /> : <FileText />}
           </FileIcon>
           <ItemText $isArchived={item.isArchived}>
@@ -425,8 +438,16 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       )
     } else if (item.type === 'title-match') {
       return (
-        <ItemWrapper $focused={isFocused} $level={1} data-hook="search-result-title-match" data-active={isFocused}>
-          <FileIcon data-hook="search-result-title-match-icon">
+        <ItemWrapper 
+          $focused={isFocused} 
+          $level={1} 
+          data-hook="search-result-title-match" 
+          data-active={isFocused}
+          role="treeitem"
+          aria-level={1}
+          aria-label={`${item.match.bufferLabel} ${item.match.isArchived ? 'closed' : ''}`}
+        >
+          <FileIcon data-hook="search-result-title-match-icon" aria-hidden="true">
             {item.isMetricsMatch ? <InsertChart /> : <FileText />}
           </FileIcon>
           <ItemText $isArchived={item.match.isArchived} data-hook="search-result-title-match-text">
@@ -441,8 +462,16 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       )
     } else {
       return (
-        <ItemWrapper $focused={isFocused} $level={2} data-hook="search-result-match" data-active={isFocused}>
-          <LineNumber data-hook="search-result-line-number">{item.match.range.startLineNumber}</LineNumber>
+        <ItemWrapper 
+          $focused={isFocused} 
+          $level={2} 
+          data-hook="search-result-match" 
+          data-active={isFocused}
+          role="treeitem"
+          aria-level={2}
+          aria-label={`Line ${item.match.range.startLineNumber}: ${item.match.previewText}`}
+        >
+          <LineNumber data-hook="search-result-line-number" aria-hidden="true">{item.match.range.startLineNumber}</LineNumber>
           <MatchText>
             {renderHighlightedTextAtPosition(
               item.match.previewText, 
@@ -477,7 +506,11 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   }, [groupedMatches])
 
   useEffect(() => {
+    let isCleanedUp = false
+    
     const handleGlobalClick = async (event: MouseEvent) => {
+      if (isCleanedUp) return
+      
       if (searchResultsRef.current && !searchResultsRef.current.contains(event.target as Node)) {
         if (temporaryBufferId !== null) {
           if (event.target instanceof HTMLElement && (
@@ -493,20 +526,30 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     document.addEventListener('click', handleGlobalClick)
 
     return () => {
+      isCleanedUp = true
       document.removeEventListener('click', handleGlobalClick)
     }
-  }, [temporaryBufferId, updateBuffer, convertTemporaryToPermanent, flattenedItems])
+  }, [temporaryBufferId, updateBuffer, convertTemporaryToPermanent])
 
   if (groupedMatches.size === 0 && searchQuery.trim()) {
     return (
-      <NoResults data-hook="search-no-results">
+      <NoResults 
+        data-hook="search-no-results"
+        role="status"
+        aria-live="polite"
+      >
         No results found
       </NoResults>
     )
   }
 
   return (
-    <ResultsContainer ref={searchResultsRef} tabIndex={-1}>
+    <ResultsContainer 
+      ref={searchResultsRef} 
+      tabIndex={-1}
+      role="tree"
+      aria-label={`Search results: ${groupedMatches.size} buffers found`}
+    >
       <VirtualizedTree
         ref={virtualizedTreeRef}
         items={flattenedItems}

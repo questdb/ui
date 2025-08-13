@@ -133,6 +133,7 @@ export interface SearchPanelRef {
 export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({ open }, ref) => {
   const { setSearchPanelOpen } = useSearch()
   const inputRef = useRef<HTMLInputElement>(null)
+  const searchRequestIdRef = useRef(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({
     caseSensitive: false,
@@ -144,7 +145,13 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
   const [searchError, setSearchError] = useState<{type: string, message: string} | null>(null)
 
   const performSearch = useCallback(async () => {
+    const currentRequestId = ++searchRequestIdRef.current
+    
     const allBuffers = await bufferStore.getAll()
+    
+    if (currentRequestId !== searchRequestIdRef.current) {
+      return // A newer search has been initiated
+    }
     
     if (!allBuffers || allBuffers.length === 0) {
       setSearchResult({ query: searchQuery, matches: [], totalMatches: 0 })
@@ -153,12 +160,17 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
 
     try {
       const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions)
-      setSearchResult(result)
-      setSearchError(null)
+      
+      if (currentRequestId === searchRequestIdRef.current) {
+        setSearchResult(result)
+        setSearchError(null)
+      }
     } catch (e) {
-      const error = e as Error
-      setSearchResult({ query: searchQuery, matches: [], totalMatches: 0 })
-      setSearchError({ type: error.name, message: error.message })
+      if (currentRequestId === searchRequestIdRef.current) {
+        const error = e as Error
+        setSearchResult({ query: searchQuery, matches: [], totalMatches: 0 })
+        setSearchError({ type: error.name, message: error.message })
+      }
     }
   }, [searchQuery, searchOptions])
 
@@ -177,9 +189,6 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
   useEffectIgnoreFirst(() => {
     const timeoutId = setTimeout(() => {
       if (!db.ready) {
-        setTimeout(() => {
-          performSearch()
-        }, 1000)
         return
       }
 
@@ -255,6 +264,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
                   }
                 }
               }}
+              aria-label="Search in tabs"
+              aria-describedby="search-summary"
               data-hook="search-input"
             />
             <ToggleButtonsContainer>
@@ -262,6 +273,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
                 active={searchOptions.caseSensitive || false}
                 onClick={() => toggleOption('caseSensitive')}
                 title="Match Case (Alt+C)"
+                aria-label="Match Case"
+                aria-pressed={searchOptions.caseSensitive || false}
                 data-hook="search-option-case-sensitive"
               >
                 Aa
@@ -270,6 +283,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
                 active={searchOptions.wholeWord || false}
                 onClick={() => toggleOption('wholeWord')}
                 title="Match Whole Word (Alt+W)"
+                aria-label="Match Whole Word"
+                aria-pressed={searchOptions.wholeWord || false}
                 data-hook="search-option-whole-word"
               >
                 W
@@ -278,6 +293,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
                 active={searchOptions.useRegex || false}
                 onClick={() => toggleOption('useRegex')}
                 title="Use Regular Expression (Alt+R)"
+                aria-label="Use Regular Expression"
+                aria-pressed={searchOptions.useRegex || false}
                 data-hook="search-option-regex"
               >
                 .*
@@ -293,11 +310,19 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
           
           <CheckboxWrapper>
             <Checkbox
+              id="search-include-closed"
               checked={searchOptions.includeDeleted || false}
               onChange={() => toggleOption('includeDeleted')}
+              aria-describedby="search-include-closed-label"
               data-hook="search-option-include-closed"
             />
-            <CheckboxLabel data-hook="search-option-include-closed-label">Include closed tabs</CheckboxLabel>
+            <CheckboxLabel 
+              id="search-include-closed-label"
+              htmlFor="search-include-closed"
+              data-hook="search-option-include-closed-label"
+            >
+              Include closed tabs
+            </CheckboxLabel>
           </CheckboxWrapper>
         </SearchInputContainer>
 
