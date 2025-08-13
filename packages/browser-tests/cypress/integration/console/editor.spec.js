@@ -522,10 +522,12 @@ describe("&query URL param", () => {
     cy.getByDataHook("metrics-root").should("be.visible");
 
     // when
-    cy.visit(`${baseUrl}?query=${encodeURIComponent("select x from long_sequence(1)")}`);
+    cy.visit(
+      `${baseUrl}?query=${encodeURIComponent("select x from long_sequence(1)")}`
+    );
 
     // then
-    cy.getEditorContent().should("be.visible");
+    cy.getEditor().should("be.visible");
     cy.getEditorTabs().should("have.length", 3);
     cy.getEditorTabByTitle("Metrics 1").should("be.visible");
     cy.getEditorTabByTitle("Query")

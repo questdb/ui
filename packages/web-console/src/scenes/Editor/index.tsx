@@ -61,7 +61,7 @@ const Editor = ({
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const dispatch = useDispatch()
-  const { activeBuffer, addBuffer, setActiveBuffer } = useEditor()
+  const { activeBuffer, addBuffer } = useEditor()
   const executionRefs = useRef<ExecutionRefs>({})
 
   const handleClearNotifications = (bufferId: number) => {
@@ -73,14 +73,14 @@ const Editor = ({
     const params = new URLSearchParams(window.location.search)
     const query = params.get("query")
     if (query && activeBuffer.metricsViewState) {
-      addBuffer({ label: "Query" }).then(setActiveBuffer)
+      addBuffer({ label: "Query" })
     }
   }, [])
 
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
-      <Monaco executionRefs={executionRefs} hidden={!activeBuffer.editorViewState} />
+      {activeBuffer.editorViewState && <Monaco executionRefs={executionRefs} />}
       {activeBuffer.metricsViewState && <Metrics />}
       {activeBuffer.editorViewState && <Notifications onClearNotifications={handleClearNotifications} />}
     </EditorPaneWrapper>

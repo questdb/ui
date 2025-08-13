@@ -70,11 +70,10 @@ loader.config({
 
 export const LINE_NUMBER_HARD_LIMIT = 99999
 
-const Content = styled(PaneContent)<{ $hidden?: boolean }>`
+const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
   background: #2c2e3d;
-  display: ${({ $hidden }) => $hidden ? 'none' : 'block'};
   .monaco-editor .squiggly-error {
     background: none;
     border-bottom: 0.3rem ${color("red")} solid;
@@ -167,7 +166,7 @@ const StyledDialogButton = styled(Button)`
 
 const DEFAULT_LINE_CHARS = 5
 
-const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableRefObject<ExecutionRefs>, hidden?: boolean }) => {
+const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject<ExecutionRefs> }) => {
   const editorContext = useEditor()
   const {
     buffers,
@@ -177,6 +176,8 @@ const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableR
     activeBuffer,
     updateBuffer,
     editorReadyTrigger,
+    queryParamProcessedRef,
+    isNavigatingFromSearchRef,
   } = editorContext
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -545,6 +546,7 @@ const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableR
     )
     setEditorReady(true)
     editorReadyTrigger(editor)
+    isNavigatingFromSearchRef.current = false
 
     // Support legacy bus events for non-react codebase
     registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
@@ -719,7 +721,7 @@ const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableR
       }, 10)
     })
 
-    editor.onDidScrollChange((e) => {
+    editor.onDidScrollChange(() => {
       if (scrollTimeoutRef.current) {
         window.clearTimeout(scrollTimeoutRef.current)
       }
@@ -756,18 +758,20 @@ const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableR
     // Support multi-line queries (URL encoded)
     const query = params.get("query")
     const model = editor.getModel()
-    if (query && model) {
+    if (query && model && !queryParamProcessedRef.current) {
       const trimmedQuery = query.trim()
       // Find if the query is already in the editor
       const matches = findMatches(model, trimmedQuery)
       if (matches && matches.length > 0) {
         editor.setSelection(matches[0].range)
+        editor.revealPositionInCenter({ lineNumber: matches[0].range.startLineNumber, column: matches[0].range.startColumn })
         // otherwise, append the query
       } else {
         appendQuery(editor, trimmedQuery, { appendAt: "end" })
         const newValue = editor.getValue()
         updateBuffer(activeBuffer.id as number, { value: newValue })
       }
+      queryParamProcessedRef.current = true
     }
 
     const initialVisibleRanges = editor.getVisibleRanges()
@@ -1378,7 +1382,7 @@ const MonacoEditor = ({ executionRefs, hidden }: { executionRefs: React.MutableR
 
   return (
     <>
-      <Content onClick={handleEditorClick} $hidden={hidden}>
+      <Content onClick={handleEditorClick}>
         <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
         <Editor
           beforeMount={beforeMount}

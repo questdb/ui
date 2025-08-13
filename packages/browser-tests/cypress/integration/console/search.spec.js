@@ -551,6 +551,67 @@ describe("search panel", () => {
       );
       cy.getEditorTabByTitle("order entry").should("have.attr", "active");
     });
+
+    it("should navigate between metrics and editor without losing focus", () => {
+      // Add a metrics tab
+      cy.getByDataHook("schema-add-metrics-button").click();
+      cy.getByDataHook("metrics-root").should("be.visible");
+      // Rename it to "trades"
+      cy.get(".chrome-tab[active]").find(".chrome-tab-drag-handle").dblclick();
+      cy.get(".chrome-tab[active]")
+        .find(".chrome-tab-rename")
+        .should("be.visible")
+        .type("trades{enter}");
+
+      // Add a new tab with "trades" content
+      cy.createTabWithContent(
+        "SELECT symbol, price FROM trades WHERE symbol = 'BTC-USD';"
+      );
+
+      // Navigate to the "trades" tab
+      cy.getEditorTabByTitle("trades").find(".chrome-tab-drag-handle").click();
+
+      // Search for "trades"
+      cy.openSearchPanel();
+      cy.searchFor("trades");
+      cy.getByDataHook("search-summary").should(
+        "contain",
+        "2 results in 2 tabs"
+      );
+
+      // Click on metrics tab result
+      cy.getByDataHook("search-result-title-match").click();
+      cy.getByDataHook("metrics-root").should("be.visible");
+      // Navigate to editor tab result
+      cy.realPress("ArrowDown");
+      cy.getEditor().should("be.visible");
+      // Search result should not lose focus
+      cy.getByDataHook("search-result-buffer-group").should(
+        "have.attr",
+        "data-active",
+        "true"
+      );
+
+      // Go back to metrics result
+      cy.realPress("ArrowUp");
+      cy.getByDataHook("search-result-title-match").should(
+        "have.attr",
+        "data-active",
+        "true"
+      );
+      // Close editor tab
+      cy.getEditorTabs().eq(2).find(".chrome-tab-close").click();
+      cy.getByDataHook("search-result-title-match").click();
+      // Navigate to editor tab result
+      cy.realPress("ArrowDown");
+      cy.getEditor().should("be.visible");
+      // Focus should be on search results
+      cy.getByDataHook("search-result-buffer-group").should(
+        "have.attr",
+        "data-active",
+        "true"
+      );
+    });
   });
 
   describe("search error handling", () => {

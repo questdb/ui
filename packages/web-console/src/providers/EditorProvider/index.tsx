@@ -40,7 +40,7 @@ export type EditorContext = {
   appendQuery: (query: string, options?: AppendQueryOptions) => void
   buffers: Buffer[]
   activeBuffer: Buffer
-  setActiveBuffer: (buffer: Buffer, options?: { focus?: boolean }) => Promise<void>
+  setActiveBuffer: (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => Promise<void>
   addBuffer: (
     buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
@@ -53,6 +53,8 @@ export type EditorContext = {
   inFocus: boolean
   setTemporaryBuffer: (buffer: Buffer) => Promise<void>
   temporaryBufferId: number | null
+  queryParamProcessedRef: MutableRefObject<boolean>
+  isNavigatingFromSearchRef: MutableRefObject<boolean>
 }
 
 const defaultValues = {
@@ -72,6 +74,8 @@ const defaultValues = {
   inFocus: false,
   setTemporaryBuffer: () => Promise.resolve(),
   temporaryBufferId: null,
+  queryParamProcessedRef: { current: false },
+  isNavigatingFromSearchRef: { current: false },
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -89,6 +93,8 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const temporaryBufferId: number | null = activeBuffer?.isTemporary ? activeBuffer.id as number : null
   const [inFocus, setInFocus] = useState(false)
   const searchUpdateTimeoutRef = useRef<number | null>(null)
+  const queryParamProcessedRef = useRef(false)
+  const isNavigatingFromSearchRef = useRef(false)
 
   const ranOnce = useRef(false)
   
@@ -98,6 +104,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return Math.max(...activeBuffers.map(b => b.position), -1) + 1
   }, [buffers])
   
+  // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
     const cleanupTemporaryBuffers = async () => {
       try {
@@ -110,16 +117,12 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         console.warn('Failed to cleanup temporary buffers:', error)
       }
     }
-    
-    cleanupTemporaryBuffers()
-  }, [])
-  
-  // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
-  useEffect(() => {
     if (!ranOnce.current && buffers && activeBufferId) {
       const buffer =
         buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
-      setActiveBufferState(buffer)
+      const nonTemporaryBuffers = buffers.filter(b => !b.isTemporary && !b.archived)
+      setActiveBufferState(buffer.isTemporary || buffer.archived ? nonTemporaryBuffers[0] ?? fallbackBuffer : buffer)
+      cleanupTemporaryBuffers()
       ranOnce.current = true
     }
   }, [buffers, activeBufferId])
@@ -128,7 +131,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return null
   }
 
-  const setActiveBuffer = async (buffer: Buffer, options?: { focus?: boolean }) => {
+  const setActiveBuffer = async (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
     try {
       const currentActiveBufferId = (await bufferStore.getActiveId())?.value
       monacoRef.current?.editor.getModels().forEach((model: editor.ITextModel) => {
@@ -151,6 +154,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
       await bufferStore.setActiveId(buffer.id as number)
       setActiveBufferState(buffer)
+
+      if (options?.fromSearch) {
+        isNavigatingFromSearchRef.current = true
+      }
 
       if (editorRef.current && monacoRef.current) {
         const model = monacoRef.current.editor.createModel(
@@ -320,7 +327,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       position,
     })
     
-    await setActiveBuffer({ ...buffer, isTemporary: true, position }, { focus: false })
+    await setActiveBuffer({ ...buffer, isTemporary: true, position }, { focus: false, fromSearch: true })
   }
 
   return (
@@ -349,9 +356,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         updateBuffer,
         setTemporaryBuffer,
         temporaryBufferId,
+        queryParamProcessedRef,
+        isNavigatingFromSearchRef,
         editorReadyTrigger: (editor) => {
-          editor.focus()
-          setInFocus(true)
+          if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
+            editor.focus()
+            setInFocus(true)
+          }
+          
           editor.onDidFocusEditorWidget(() => setInFocus(true))
           editor.onDidBlurEditorWidget(() => setInFocus(false))
           if (activeBuffer.editorViewState) {

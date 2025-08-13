@@ -123,7 +123,7 @@ const MetricsUnavailable = () => {
 }
 
 export const Metrics = () => {
-  const { activeBuffer, updateBuffer, buffers } = useEditor()
+  const { activeBuffer, updateBuffer, buffers, isNavigatingFromSearchRef } = useEditor()
   const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
     MetricViewMode.GRID,
   )
@@ -326,6 +326,7 @@ export const Metrics = () => {
   useEffect(() => {
     eventBus.subscribe(EventType.TAB_FOCUS, focusListener)
     eventBus.subscribe(EventType.TAB_BLUR, blurListener)
+    isNavigatingFromSearchRef.current = false
 
     return () => {
       eventBus.unsubscribe(EventType.TAB_FOCUS, focusListener)

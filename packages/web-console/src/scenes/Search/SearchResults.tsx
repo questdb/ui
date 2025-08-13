@@ -217,7 +217,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       
       if (tempBuffer) {
         await updateBuffer(temporaryBufferId, updatedFields)
-        await setActiveBuffer({ ...tempBuffer, ...updatedFields }, { focus: true })
+        await setActiveBuffer({ ...tempBuffer, ...updatedFields }, { focus: true, fromSearch: true })
         
         return tempBuffer
       }
@@ -251,7 +251,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       if (temporaryBufferId !== null) {
         await updateBuffer(temporaryBufferId, { isTemporary: false })
       }
-      await setActiveBuffer(buffer, { focus: shouldFocus })
+      await setActiveBuffer(buffer, { focus: shouldFocus, fromSearch: true })
     } else {
       if (shouldFocus) {
         // Double-click on archived buffer
@@ -263,7 +263,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             archivedAt: undefined,
             position: activeBufferCount,
           })
-          await setActiveBuffer(buffer, { focus: true })
+          await setActiveBuffer(buffer, { focus: true, fromSearch: true })
           
           if (temporaryBufferId !== null) {
             await updateBuffer(temporaryBufferId, { isTemporary: false })
@@ -399,7 +399,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       const isExpanded = expandedBuffers.get(item.bufferId) === true
       
       return (
-        <ItemWrapper $focused={isFocused} $isHeader $level={1} data-hook="search-result-buffer-group">
+        <ItemWrapper $focused={isFocused} $isHeader $level={1} data-hook="search-result-buffer-group" data-active={isFocused}>
           <ChevronIcon onClick={(e) => {
             e.stopPropagation()
             toggleBufferExpansion(item.bufferId)
