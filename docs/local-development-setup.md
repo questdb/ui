@@ -46,12 +46,11 @@ It does feel a bit strange to have dependencies committed, but it's a well worth
 First make sure you have `node` and `yarn` and that their versions are compatible with this project.
 This is a common source of issues, best not to skip this step:
 
-- `node -v` should return `16.13.1`\
+- `node -v` should return a version compatible with what's in [.nvmrc](../.nvmrc)\
   If it doesn't, you can use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to manage node versions on your machine.\
   Then run `fnm use` or `nvm use` to set correct version.
 
-- `yarn -v` should return v3 (like `3.2.1`).\
-  If it returns `command not found`, enable `yarn` by running `corepack enable`.\
+- If `yarn -v` returns `command not found`, enable `yarn` by running `corepack enable`.\
   Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have trouble.
 
 #### Bootstrap
