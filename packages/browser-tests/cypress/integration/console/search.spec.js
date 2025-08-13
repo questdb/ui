@@ -635,7 +635,7 @@ describe("search panel", () => {
         { search: "%profit: +15.5%", expectedMatches: 1 },
         { search: "@.*\\.(com|org)", expectedMatches: 1 },
         { search: "(email", expectedMatches: 1 },
-        { search: ")", expectedMatches: 6 },
+        { search: ")", expectedMatches: 8 },
         { search: "*", expectedMatches: 5 },
         { search: ".", expectedMatches: 5 },
       ];
@@ -646,7 +646,12 @@ describe("search panel", () => {
 
         cy.getByDataHook("search-error").should("not.exist");
 
-        cy.getSearchResults().should("have.length", testCase.expectedMatches);
+        cy.getByDataHook("search-summary").should(
+          "contain",
+          `${testCase.expectedMatches} result${
+            testCase.expectedMatches > 1 ? "s" : ""
+          } in 1 tab`
+        );
 
         if (testCase.expectedMatches > 0) {
           cy.getSearchResults().first().should("contain", testCase.search);
@@ -668,7 +673,10 @@ describe("search panel", () => {
       cy.wait(400);
 
       cy.getByDataHook("search-error").should("not.exist");
-      cy.getSearchResults().should("have.length", 2);
+      cy.getByDataHook("search-summary").should(
+        "contain",
+        "2 results in 1 tab"
+      );
 
       cy.searchFor("\\(btc\\|eth\\)_trades");
       cy.wait(400);
