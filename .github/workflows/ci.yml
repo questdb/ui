@@ -95,18 +95,16 @@ jobs:
 
       - name: Publish @questdb/react-components to npm
         if: success() && github.ref == 'refs/heads/main'
-        uses: JS-DevTools/npm-publish@v1
+        uses: JS-DevTools/npm-publish@v3
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
-          check-version: true
           package: ./packages/react-components/package.json
 
       - name: Publish @questdb/web-console to npm
         if: success() && github.ref == 'refs/heads/main'
-        uses: JS-DevTools/npm-publish@v1
+        uses: JS-DevTools/npm-publish@v3
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
-          check-version: true
           package: ./packages/web-console/package.json
