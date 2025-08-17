@@ -1,15 +1,32 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Loader3 } from '@styled-icons/remix-line'
+import { Error as ErrorIcon } from '@styled-icons/boxicons-regular'
 import styled, { css } from 'styled-components'
 import { Input, Checkbox } from '@questdb/react-components'
 import { PaneWrapper, PaneContent } from '../../components'
-import { SearchService, SearchResult, SearchOptions } from '../../services/search'
+import { SearchService, SearchResult, SearchOptions, SearchProgress, SearchMatch } from '../../services/search'
 import { bufferStore } from '../../store/buffers'
 import { SearchResults } from './SearchResults'
 import { eventBus } from '../../modules/EventBus'
 import { EventType } from '../../modules/EventBus/types'
 import { useSearch } from '../../providers'
 import { db } from '../../store/db'
+import { spinAnimation } from '../../components'
+import { color } from '../../utils'
 import { useEffectIgnoreFirst } from '../../components/Hooks/useEffectIgnoreFirst'
+import { SearchTimeoutError, SearchCancelledError, terminateSearchWorker } from '../../utils/textSearch'
+
+export type BufferUpdatePayload =
+  | { type: 'update', bufferId: number, metaUpdate: boolean, contentUpdate: boolean }
+  | { type: 'archive', bufferId: number }
+  | { type: 'delete', bufferId: number }
+  | { type: 'deleteAll' }
+
+type PendingUpdate = {
+  delete: boolean
+  metaUpdate: boolean
+  contentUpdate: boolean
+}
 
 const Wrapper = styled(PaneWrapper)<{
   $open?: boolean
@@ -87,15 +104,29 @@ const ToggleButton = styled.button<{ active: boolean }>`
 `
 
 const SearchSummary = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 4rem;
   padding: 1rem;
   color: ${({ theme }) => theme.color.gray2};
   font-size: 1.1rem;
+`
+
+const Loader = styled(Loader3)`
+  width: 2rem;
+  color: ${color("pink")};
+  ${spinAnimation};
 `
 
 const CheckboxWrapper = styled.div`
   display: flex;
   align-items: center;
   padding: 0.4rem 0;
+  
+  input {
+    margin-left: 0;
+  }
 `
 
 const CheckboxLabel = styled.label`
@@ -111,29 +142,73 @@ const SearchResultsContainer = styled.div`
 `
 
 const SearchError = styled.div`
-  background: ${({ theme }) => theme.color.redDark};
-  border: 1px solid ${({ theme }) => theme.color.red};
+  background: transparent;;
+
   border-radius: 0.4rem;
-  margin-bottom: 1rem;
-  padding: 1rem;
-  color: ${({ theme }) => theme.color.foreground};
-  font-size: 1.1rem;
+  margin: 0.5rem 0 1rem 0;
+  color: ${({ theme }) => theme.color.gray2};
+  font-size: 1.2rem;
+  align-items: center;
+  gap: 0.8rem;
+  
+  svg {
+    display: inline;
+    color: ${({ theme }) => theme.color.red};
+    align-self: flex-start;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-right: 0.3rem;
+    flex-shrink: 0;
+    transform: translateY(-0.1rem);
+  }
 `
+
+const LoaderContainer = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  gap: 0.5rem;
+  color: ${color("offWhite")};
+`
+
+const DelayedLoader = () => {
+  const [render, setRender] = useState(false)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setRender(true)
+    }, 1500)
+
+    return () => clearTimeout(timeout)
+  }, [])
+
+  if (!render) {
+    return null
+  }
+
+  return (
+    <LoaderContainer>
+      <Loader />
+      Searching...
+    </LoaderContainer>
+  )
+}
 
 interface SearchPanelProps {
   open?: boolean
 }
 
-// Create a ref interface for external access to search functionality
 export interface SearchPanelRef {
-  refreshSearch: () => void
   focusSearchInput: () => void
+}
+
+const createErrorTermsString = (query: string, options: SearchOptions) => {
+  return JSON.stringify({ query, options })
 }
 
 export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({ open }, ref) => {
   const { setSearchPanelOpen } = useSearch()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const searchRequestIdRef = useRef(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({
     caseSensitive: false,
@@ -141,50 +216,390 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
     useRegex: false,
     includeDeleted: true,
   })
-  const [searchResult, setSearchResult] = useState<SearchResult>({ query: '', matches: [], totalMatches: 0 })
+  const [searchResult, setSearchResult] = useState<SearchResult>({ query: '', matches: [] })
+  const [staleBuffers, setStaleBuffers] = useState<number[]>([])
   const [searchError, setSearchError] = useState<{type: string, message: string} | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+
+  const inputRef = useRef<HTMLInputElement>(null)
+  const searchVersionRef = useRef(0)
+  const searchInProgressRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const lastErrorTermsRef = useRef<string | null>(null)
+
+  const pendingUpdatesRef = useRef<Record<number, Record<number, PendingUpdate>>>({})
+  const currentSearchResultRef = useRef<SearchResult>(searchResult)
+  const currentStaleBuffersRef = useRef<number[]>([])
+  const bufferSearchTimesRef = useRef<Record<number, { duration: number; query: string }>>({})
+  const singleSearchAbortControllersRef = useRef<Map<number, AbortController>>(new Map())
+
+  useEffect(() => {
+    currentSearchResultRef.current = searchResult
+  }, [searchResult])
+
+  useEffect(() => {
+    currentStaleBuffersRef.current = staleBuffers
+  }, [staleBuffers])
 
   const performSearch = useCallback(async () => {
-    const currentRequestId = ++searchRequestIdRef.current
-    
-    const allBuffers = await bufferStore.getAll()
-    
-    if (currentRequestId !== searchRequestIdRef.current) {
-      return // A newer search has been initiated
+    const currentVersion = ++searchVersionRef.current
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    if (createErrorTermsString(searchQuery, searchOptions) === lastErrorTermsRef.current) {
+      return
+    }
+    if (!searchQuery.trim()) {
+      setSearchResult({ query: searchQuery, matches: [] })
+      setIsSearching(false)
+      setSearchError(null)
+      return
     }
     
+    const allBuffers = await bufferStore.getAll()
     if (!allBuffers || allBuffers.length === 0) {
-      setSearchResult({ query: searchQuery, matches: [], totalMatches: 0 })
+      setSearchResult({ query: searchQuery, matches: [] })
+      setIsSearching(false)
       return
     }
 
+    setIsSearching(true)
+    searchInProgressRef.current = true
+    
+    if (searchQuery !== currentSearchResultRef.current.query) {
+      bufferSearchTimesRef.current = {}
+    }
+    
     try {
-      const result = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions)
+      setSearchError(null)
+      setStaleBuffers([])
+      let currentMatches: SearchMatch[] = []
       
-      if (currentRequestId === searchRequestIdRef.current) {
-        setSearchResult(result)
-        setSearchError(null)
+      const generator = SearchService.searchInBuffers(allBuffers, searchQuery, searchOptions, abortController.signal, currentVersion.toString())
+      
+      while (true) {
+        const { value, done } = await generator.next()
+
+        if (abortController.signal.aborted) {
+          throw new SearchCancelledError()
+        }
+
+        if (done) {
+          const result = value as SearchResult
+          if (currentVersion === searchVersionRef.current) {
+            setSearchResult(result)
+            lastErrorTermsRef.current = null
+          }
+          break
+        }
+        
+        const progress = value as SearchProgress
+        if (progress && currentVersion === searchVersionRef.current) {
+          if (progress.bufferId && progress.searchDuration !== undefined) {
+            bufferSearchTimesRef.current[progress.bufferId] = {
+              duration: progress.searchDuration,
+              query: searchQuery
+            }
+          }
+          
+          if (progress.currentMatches.length > 0) {
+            currentMatches = [...currentMatches, ...progress.currentMatches]
+            setSearchResult({
+              query: searchQuery,
+              matches: currentMatches,
+            })
+          }
+        }
       }
     } catch (e) {
-      if (currentRequestId === searchRequestIdRef.current) {
+      if (e instanceof SearchCancelledError) {
+        return
+      }
+      
+      if (currentVersion === searchVersionRef.current) {
         const error = e as Error
-        setSearchResult({ query: searchQuery, matches: [], totalMatches: 0 })
-        setSearchError({ type: error.name, message: error.message })
+        
+        if (e instanceof SearchTimeoutError) {
+          // Partial matches contains all matches from multiple buffers before the timeout
+          const partialMatches = e.partialSearchMatches || []
+          setSearchResult({ 
+            query: searchQuery, 
+            matches: partialMatches, 
+            limitReached: true
+          })
+          setSearchError({type: 'timeout', message: error.message })
+          lastErrorTermsRef.current = createErrorTermsString(searchQuery, searchOptions)
+        } else {
+          setSearchResult({ query: searchQuery, matches: [] })
+          setSearchError({ type: error.name, message: error.message })
+          lastErrorTermsRef.current = createErrorTermsString(searchQuery, searchOptions)
+        }
+      }
+    } finally {
+      if (currentVersion === searchVersionRef.current) {
+        setIsSearching(false)
+        searchInProgressRef.current = false
+        
+        const pendingForCurrentVersion = pendingUpdatesRef.current[currentVersion]
+        if (pendingForCurrentVersion && Object.keys(pendingForCurrentVersion).length > 0) {
+          setTimeout(async () => {
+            const currentResult = currentSearchResultRef.current
+            const currentStaleBuffers = currentStaleBuffersRef.current
+            
+            const { result, staleBuffers: newStaleBuffers, buffersToRefresh } = await applyPatchesByVersion(
+              currentVersion,
+              currentResult,
+              currentStaleBuffers
+            )
+            
+            if (currentVersion === searchVersionRef.current) {
+              setSearchResult(result)
+              setStaleBuffers(newStaleBuffers)
+              
+              if (buffersToRefresh.length > 0) {
+                await refreshBuffers(buffersToRefresh)
+              }
+            }
+          }, 100)
+        }
       }
     }
   }, [searchQuery, searchOptions])
 
+  const performSingleSearch = useCallback(async (bufferId: number, abortSignal: AbortSignal, limit: number): Promise<SearchMatch[]> => {
+    try {
+      const buffer = await bufferStore.getById(bufferId)
+      if (!buffer || abortSignal.aborted) {
+        return []
+      }
+      
+      const matches = await SearchService.searchInSingleBuffer(
+        buffer,
+        searchQuery,
+        searchOptions,
+        abortSignal,
+        `queue-${bufferId}-${Date.now()}`,
+        limit
+      )
+      
+      return matches
+    } catch (e) {
+      if (e instanceof SearchCancelledError) {
+        return []
+      }
+      return []
+    }
+  }, [searchQuery, searchOptions, bufferStore])
+
+  const refreshBuffers = async (bufferIds: number[]) => {
+    for (const bufferId of bufferIds) {
+      const existingController = singleSearchAbortControllersRef.current.get(bufferId)
+      if (existingController) {
+        existingController.abort()
+      }
+      
+      const abortController = new AbortController()
+      singleSearchAbortControllersRef.current.set(bufferId, abortController)
+      
+      try {
+        const newMatches = await performSingleSearch(bufferId, abortController.signal, 10000)
+        
+        setSearchResult(prev => {
+          const firstMatchIndex = prev.matches.findIndex(m => m.bufferId === bufferId)
+          const filteredMatches = prev.matches.filter(m => m.bufferId !== bufferId)
+          
+          if (firstMatchIndex === -1 || newMatches.length === 0) {
+            return {
+              ...prev,
+              matches: [...filteredMatches, ...newMatches]
+            }
+          } else {
+            const before = filteredMatches.slice(0, firstMatchIndex)
+            const after = filteredMatches.slice(firstMatchIndex)
+            return {
+              ...prev,
+              matches: [...before, ...newMatches, ...after]
+            }
+          }
+        })
+        
+        setStaleBuffers(prev => prev.filter(id => id !== bufferId))
+      } catch (error) {
+        if (error instanceof SearchCancelledError) {
+          continue
+        }
+        setStaleBuffers(prev => [...prev.filter(id => id !== bufferId), bufferId])
+      } finally {
+        singleSearchAbortControllersRef.current.delete(bufferId)
+      }
+    }
+  }
+
+  const applyPatchesByVersion = async (version: number, searchResult: SearchResult, staleBuffers: number[]): Promise<{ result: SearchResult; staleBuffers: number[]; buffersToRefresh: number[] }> => {
+    const currentVersionUpdates = pendingUpdatesRef.current[version]
+    if (!currentVersionUpdates) {
+      return { result: searchResult, staleBuffers, buffersToRefresh: [] }
+    }
+
+    let updatedMatches = [...searchResult.matches]
+    let updatedStaleBuffers = [...staleBuffers]
+    const buffersToRefresh: number[] = []
+
+    for (const [bufferId, update] of Object.entries(currentVersionUpdates)) {
+      const { delete: deleteUpdate, metaUpdate, contentUpdate: contentUpdateInitial } = update
+      const bufferIdNum = Number(bufferId)
+      let contentUpdate = contentUpdateInitial
+
+      if (deleteUpdate) {
+        updatedMatches = updatedMatches.filter(match => match.bufferId !== bufferIdNum)
+        updatedStaleBuffers = updatedStaleBuffers.filter(id => id !== bufferIdNum)
+      }
+
+      if (metaUpdate) {
+        const bufferMeta = await bufferStore.getMetaById(bufferIdNum)
+        if (bufferMeta) {
+          updatedMatches = updatedMatches.map(match => {
+            if (match.isTitleMatch) {
+              contentUpdate = true
+            }
+            return match.bufferId === bufferIdNum ? {
+              ...match,
+              bufferLabel: bufferMeta.label!,
+              isArchived: bufferMeta.archived,
+              archivedAt: bufferMeta.archivedAt,
+              isTemporary: bufferMeta.isTemporary,
+            } : match
+          })
+        }
+      }
+
+      if (contentUpdate) {
+        const isNewBuffer = !bufferSearchTimesRef.current[bufferIdNum]
+        const isFastBuffer = bufferSearchTimesRef.current[bufferIdNum]?.query === searchQuery &&
+                            (bufferSearchTimesRef.current[bufferIdNum]?.duration || 0) < 5000
+        
+        if (isNewBuffer || isFastBuffer) {
+          buffersToRefresh.push(bufferIdNum)
+        } else {
+          if (!updatedStaleBuffers.includes(bufferIdNum)) {
+            updatedStaleBuffers.push(bufferIdNum)
+          }
+        }
+      }
+    }
+
+    delete pendingUpdatesRef.current[version]
+
+    return {
+      result: {
+        ...searchResult,
+        matches: updatedMatches
+      },
+      staleBuffers: updatedStaleBuffers,
+      buffersToRefresh
+    }
+  }
+
   useEffect(() => {
-    const handleBuffersUpdated = () => {
-      performSearch()
+    const handleBuffersUpdated = async (payload?: BufferUpdatePayload) => {
+      if (!payload || searchQuery.trim() === '') {
+        return
+      }
+
+      const { type } = payload
+
+      if (type !== 'deleteAll') {
+        pendingUpdatesRef.current[searchVersionRef.current] = pendingUpdatesRef.current[searchVersionRef.current] || {}
+      }
+      const currentVersionUpdate = pendingUpdatesRef.current[searchVersionRef.current]
+
+      switch (type) {
+        case 'deleteAll':
+          searchVersionRef.current++
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+          }
+          setSearchResult({ query: searchQuery, matches: [] })
+          pendingUpdatesRef.current = {}
+          setStaleBuffers([])
+          break
+
+        case 'delete':
+          const { bufferId: deleteBufferId } = payload
+          if (currentVersionUpdate) {
+            currentVersionUpdate[deleteBufferId] = {
+              delete: true,
+              metaUpdate: false,
+              contentUpdate: false,
+            }
+          }
+          break
+
+        case 'update':
+          const { bufferId } = payload
+          if (currentVersionUpdate) {
+            currentVersionUpdate[bufferId] = {
+              delete: currentVersionUpdate[bufferId]?.delete,
+              metaUpdate: payload?.metaUpdate || currentVersionUpdate[bufferId]?.metaUpdate,
+              contentUpdate: payload?.contentUpdate || currentVersionUpdate[bufferId]?.contentUpdate,
+            }
+          }
+          break
+        
+        case 'archive':
+          const { bufferId: archiveBufferId } = payload
+          if (currentVersionUpdate) {
+            currentVersionUpdate[archiveBufferId] = {
+              delete: currentVersionUpdate[archiveBufferId]?.delete,
+              metaUpdate: true,
+              contentUpdate: currentVersionUpdate[archiveBufferId]?.contentUpdate,
+            }
+          }
+          break
+
+        default:
+          break
+      }
+      if (!searchInProgressRef.current) {
+        (async () => {
+          const currentResult = currentSearchResultRef.current
+          const currentStaleBuffers = currentStaleBuffersRef.current
+          const currentVersion = searchVersionRef.current
+          
+          if (!('bufferId' in payload) || !payload.bufferId) {
+            return
+          }
+          
+          const { result, staleBuffers: newStaleBuffers, buffersToRefresh } = await applyPatchesByVersion(
+            currentVersion, 
+            currentResult, 
+            currentStaleBuffers
+          )
+          
+          setSearchResult(result)
+          setStaleBuffers(newStaleBuffers)
+          
+          if (buffersToRefresh.length > 0) {
+            await refreshBuffers(buffersToRefresh)
+          }
+        })()
+      }
     }
     
     eventBus.subscribe(EventType.BUFFERS_UPDATED, handleBuffersUpdated)
     
     return () => {
       eventBus.unsubscribe(EventType.BUFFERS_UPDATED, handleBuffersUpdated)
+      singleSearchAbortControllersRef.current.forEach(controller => {
+        controller.abort()
+      })
+      singleSearchAbortControllersRef.current.clear()
     }
-  }, [performSearch])
+  }, [searchQuery])
 
   useEffectIgnoreFirst(() => {
     const timeoutId = setTimeout(() => {
@@ -214,13 +629,13 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
 
   const groupedMatches = useMemo(() => {
     return SearchService.groupMatchesByBuffer(searchResult.matches)
-  }, [searchResult.matches])
+  }, [searchResult])
 
   const getSummaryText = useCallback(() => {
     if (!searchQuery.trim()) return ''
     
     const bufferCount = groupedMatches.size
-    const matchCount = searchResult.totalMatches
+    const matchCount = searchResult.matches.length
     const limited = searchResult.limitReached
     
     if (matchCount === 0) {
@@ -237,11 +652,18 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
     }
   }, [])
 
-  // Expose methods via ref
   React.useImperativeHandle(ref, () => ({
-    refreshSearch: performSearch,
     focusSearchInput: focusSearchInput
-  }), [performSearch, focusSearchInput])
+  }), [focusSearchInput])
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      terminateSearchWorker()
+    }
+  }, [])
 
   return (
     <Wrapper $open={open}>
@@ -301,12 +723,6 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
               </ToggleButton>
             </ToggleButtonsContainer>
           </InputWrapper>
-
-          {searchError && (
-            <SearchError data-hook="search-error">
-              <b>{searchError.type}:</b> {searchError.message}
-            </SearchError>
-          )}
           
           <CheckboxWrapper>
             <Checkbox
@@ -324,19 +740,27 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
               Include closed tabs
             </CheckboxLabel>
           </CheckboxWrapper>
+          {searchError && (
+            <SearchError data-hook="search-error">
+              <ErrorIcon />
+              {searchError.message}
+            </SearchError>
+          )}
         </SearchInputContainer>
 
-        {getSummaryText() && (
-          <SearchSummary data-hook="search-summary">
-            {getSummaryText()}
-          </SearchSummary>
-        )}
+        <SearchSummary data-hook="search-summary">
+          {getSummaryText()}
+          {isSearching && <DelayedLoader />}
+        </SearchSummary>
 
         <SearchResultsContainer>
-          <SearchResults
-            groupedMatches={groupedMatches}
-            searchQuery={searchQuery}
-          />
+          {!isSearching || groupedMatches.size > 0 ? (
+            <SearchResults
+              groupedMatches={groupedMatches}
+              searchQuery={searchQuery}
+              staleBuffers={staleBuffers}
+            />
+          ) : null} 
         </SearchResultsContainer>
       </Content>
     </Wrapper>

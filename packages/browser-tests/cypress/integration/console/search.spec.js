@@ -112,7 +112,8 @@ describe("search panel", () => {
       );
 
       cy.createTabWithContent(
-        "CREATE TABLE market_data_staging (\n  timestamp TIMESTAMP,\nsymbol SYMBOL,\nopen_price DOUBLE,\nclose_price DOUBLE,\nvolume LONG \n{rightArrow}{rightArrow}TIMESTAMP(timestamp);\n"
+        "CREATE TABLE market_data_staging (\n  timestamp TIMESTAMP,\nsymbol SYMBOL,\nopen_price DOUBLE,\nclose_price DOUBLE,\nvolume LONG \n{rightArrow}{rightArrow}TIMESTAMP(timestamp);\n",
+        "markets"
       );
 
       cy.openSearchPanel();
@@ -158,6 +159,72 @@ describe("search panel", () => {
 
       cy.getSearchResults().should("not.exist");
       cy.getByDataHook("search-no-results").should("be.visible");
+    });
+
+    it("should update title match when the title changes", () => {
+      cy.searchFor("market");
+
+      cy.getByDataHook("search-summary").should(
+        "contain",
+        "2 results in 1 tab"
+      );
+      cy.getByDataHook("search-result-buffer-group")
+        .find("mark")
+        .should("be.visible");
+
+      cy.getEditorTabByTitle("markets")
+        .find(".chrome-tab-drag-handle")
+        .dblclick();
+
+      cy.get(".chrome-tab[active]")
+        .find(".chrome-tab-rename")
+        .should("be.visible")
+        .type("changed!{enter}");
+
+      cy.wait(400);
+
+      cy.getByDataHook("search-summary").should("contain", "1 result in 1 tab");
+      cy.getByDataHook("search-result-buffer-group")
+        .find("mark")
+        .should("not.exist");
+    });
+
+    it("should update open & closed status in search results", () => {
+      cy.searchFor("market");
+
+      cy.getByDataHook("search-summary").should(
+        "contain",
+        "2 results in 1 tab"
+      );
+      cy.getByDataHook("search-result-buffer-group").should(
+        "not.contain",
+        "closed"
+      );
+
+      cy.getEditorTabByTitle("markets").find(".chrome-tab-close").click();
+      cy.wait(400);
+
+      cy.getByDataHook("search-result-buffer-group").should(
+        "contain",
+        "closed"
+      );
+
+      cy.getByDataHook("search-result-buffer-group").click();
+
+      cy.getEditorTabByTitle("markets")
+        .should("have.class", "temporary-tab")
+        .should("have.attr", "active");
+      cy.getByDataHook("search-result-buffer-group").should(
+        "contain",
+        "closed"
+      );
+
+      cy.getEditor().click();
+
+      cy.getByDataHook("search-result-buffer-group").should(
+        "not.contain",
+        "closed"
+      );
     });
   });
 
@@ -324,7 +391,7 @@ describe("search panel", () => {
       cy.wait(400);
 
       cy.getSearchResults().should("not.exist");
-      cy.getByDataHook("search-summary").should("not.exist");
+      cy.getByDataHook("search-no-results").should("not.exist");
     });
 
     it("should handle special characters in search", () => {
@@ -630,9 +697,11 @@ describe("search panel", () => {
       cy.searchFor("[invalid-regex");
 
       cy.getByDataHook("search-error").should("be.visible");
-      cy.getByDataHook("search-error").should("contain", "SyntaxError");
+      cy.getByDataHook("search-error").should(
+        "contain",
+        "Invalid regular expression"
+      );
       cy.getSearchResults().should("not.exist");
-      cy.getByDataHook("search-summary").should("not.exist");
     });
 
     it("should clear error when valid search is performed after error", () => {
@@ -646,12 +715,15 @@ describe("search panel", () => {
       cy.getByDataHook("search-summary").should("be.visible");
     });
 
-    it("should display SyntaxError for invalid regex when regex option is enabled", () => {
+    it("should display Invalid Regex Error for invalid regex when regex option is enabled", () => {
       cy.toggleSearchOption("useRegex");
       cy.searchFor("(unclosed-group");
 
       cy.getByDataHook("search-error").should("be.visible");
-      cy.getByDataHook("search-error").should("contain", "SyntaxError:");
+      cy.getByDataHook("search-error").should(
+        "contain",
+        "Invalid regular expression"
+      );
     });
 
     it("should hide error when search input is cleared", () => {
@@ -663,7 +735,7 @@ describe("search panel", () => {
       cy.wait(400);
 
       cy.getByDataHook("search-error").should("not.exist");
-      cy.getSearchResults().should("not.exist");
+      cy.getByDataHook("search-no-results").should("not.exist");
     });
   });
 

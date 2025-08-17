@@ -67,4 +67,11 @@ export const registerLegacyEventBusEvents = ({
     }
     editor.focus()
   })
+
+  return () => {
+    eventBus.unsubscribe(EventType.MSG_EDITOR_INSERT_COLUMN)
+    eventBus.unsubscribe(EventType.MSG_QUERY_FIND_N_EXEC)
+    eventBus.unsubscribe(EventType.MSG_QUERY_EXEC)
+    eventBus.unsubscribe(EventType.MSG_EDITOR_FOCUS)
+  }
 }

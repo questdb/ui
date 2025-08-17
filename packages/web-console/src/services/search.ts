@@ -1,6 +1,6 @@
 import type { IRange } from 'monaco-editor'
 import type { Buffer } from '../store/buffers'
-import { findMatches } from '../utils/textSearch'
+import { findMatches, SearchTimeoutError, SearchCancelledError } from '../utils/textSearch'
 
 export interface SearchMatch {
   bufferId: number
@@ -14,13 +14,22 @@ export interface SearchMatch {
   archivedAt?: number
   isTitleMatch?: boolean
   isMetricsMatch?: boolean
+  isStale?: boolean
 }
 
 export interface SearchResult {
   query: string
   matches: SearchMatch[]
-  totalMatches: number
   limitReached?: boolean
+}
+
+export interface SearchProgress {
+  bufferLabel: string
+  currentMatches: SearchMatch[]
+  isComplete: boolean
+  error?: Error
+  bufferId?: number
+  searchDuration?: number
 }
 
 export interface SearchOptions {
@@ -31,11 +40,87 @@ export interface SearchOptions {
 }
 
 export class SearchService {
-  static searchInBuffers(
+  static async searchInSingleBuffer(
+    buffer: Buffer,
+    query: string,
+    options: SearchOptions = {},
+    signal: AbortSignal,
+    searchId: string,
+    maxMatches: number = 10000
+  ): Promise<SearchMatch[]> {
+    const {
+      caseSensitive = false,
+      wholeWord = false,
+      useRegex = false,
+    } = options
+
+    if (typeof buffer.id !== 'number') return []
+    
+    const matches: SearchMatch[] = []
+    
+    try {
+      if (signal?.aborted) {
+        throw new SearchCancelledError()
+      }
+      
+      const titleMatches = await this.findTitleMatches(
+        buffer.label,
+        query,
+        { caseSensitive, wholeWord, useRegex },
+        searchId
+      )
+      
+      if (signal?.aborted) {
+        throw new SearchCancelledError()
+      }
+      
+      for (const titleMatch of titleMatches) {
+        if (matches.length >= maxMatches) break
+        matches.push(this.createTitleMatch(buffer, titleMatch.start, titleMatch.end))
+      }
+      
+      if (matches.length < maxMatches && buffer.value) {
+        const remainingCapacity = maxMatches - matches.length
+        const contentMatches = await this.searchInBuffer(
+          buffer,
+          query,
+          { caseSensitive, wholeWord, useRegex },
+          remainingCapacity,
+          searchId
+        )
+        
+        if (signal?.aborted) {
+          throw new SearchCancelledError()
+        }
+        
+        matches.push(...contentMatches)
+      }
+      
+      return matches
+      
+    } catch (e) {
+      if (e instanceof SearchCancelledError) {
+        throw e
+      }
+      
+      if (e instanceof SearchTimeoutError) {
+        if (e.partialSearchMatches) {
+          matches.push(...e.partialSearchMatches)
+        }
+        e.partialSearchMatches = matches
+      }
+      
+      throw e
+    }
+  }
+
+  static async *searchInBuffers(
     buffers: Buffer[],
     query: string,
-    options: SearchOptions = {}
-  ): SearchResult {
+    options: SearchOptions = {},
+    signal: AbortSignal,
+    searchId: string
+  ): AsyncGenerator<SearchProgress, SearchResult, unknown> {
     const {
       caseSensitive = false,
       wholeWord = false,
@@ -43,61 +128,122 @@ export class SearchService {
       includeDeleted = true,
     } = options
 
-    if (!query.trim()) {
-      return { query, matches: [], totalMatches: 0 }
-    }
-
     const sortedBuffers = this.sortBuffersByPriority(buffers, includeDeleted)
-
-    let matches: SearchMatch[] = []
+    
+    let allMatches: SearchMatch[] = []
     const maxLength = 10000
+    const totalTimeout = 30000
     let limitReached = false
+    let hasTimeoutError = false
+    const timeoutBuffers: string[] = []
+    
+    const startTime = Date.now()
     
     for (const buffer of sortedBuffers) {
+      if (signal?.aborted) {
+        throw new SearchCancelledError()
+      }
+      
+      if (Date.now() - startTime > totalTimeout) {
+        hasTimeoutError = true
+        break
+      }
+      
       if (typeof buffer.id !== 'number') continue
       
-      const remainingCapacity = maxLength - matches.length
+      const remainingCapacity = maxLength - allMatches.length
       if (remainingCapacity <= 0) {
         limitReached = true
         break
       }
       
-      const titleMatches = this.findTitleMatches(
-        buffer.label,
-        query,
-        { caseSensitive, wholeWord, useRegex }
-      )
-      
-      const contentMatches = buffer.value 
-        ? this.searchInBuffer(
-            buffer,
-            query,
-            { caseSensitive, wholeWord, useRegex },
-            remainingCapacity - titleMatches.length,
-          )
-        : []
-      
-      for (const titleMatch of titleMatches) {
-        if (matches.length >= maxLength) {
+      try {
+        const searchStartTime = Date.now()
+        const bufferMatches = await this.searchInSingleBuffer(
+          buffer,
+          query,
+          { caseSensitive, wholeWord, useRegex },
+          signal,
+          searchId,
+          remainingCapacity
+        )
+        const searchDuration = Date.now() - searchStartTime
+        
+        if (bufferMatches.length > 0) {
+          allMatches = [...allMatches, ...bufferMatches]
+          
+          yield {
+            bufferLabel: buffer.label,
+            currentMatches: bufferMatches,
+            isComplete: false,
+            bufferId: buffer.id,
+            searchDuration
+          }
+        } else {
+          yield {
+            bufferLabel: buffer.label,
+            currentMatches: [],
+            isComplete: false,
+            bufferId: buffer.id,
+            searchDuration
+          }
+        }
+        
+        if (allMatches.length >= maxLength) {
           limitReached = true
           break
         }
-        matches.push(this.createTitleMatch(buffer, titleMatch.start, titleMatch.end))
-      }
-      
-      matches = [...matches, ...contentMatches]
-      if (matches.length >= maxLength) {
-        limitReached = true
-        break
+      } catch (e) {
+        if (e instanceof SearchCancelledError) {
+          throw e
+        }
+        
+        if (e instanceof SearchTimeoutError) {
+          hasTimeoutError = true
+          timeoutBuffers.push(buffer.label)
+          
+          // searchInSingleBuffer already put all partial matches in the error
+          const partialMatches = e.partialSearchMatches || []
+          
+          if (partialMatches.length > 0) {
+            allMatches = [...allMatches, ...partialMatches]
+            
+            yield {
+              bufferLabel: buffer.label,
+              currentMatches: partialMatches,
+              isComplete: false,
+              error: e
+            }
+          }
+        } else {
+          yield {
+            bufferLabel: buffer.label,
+            currentMatches: [],
+            isComplete: false,
+            error: e as Error
+          }
+          throw e
+        }
       }
     }
-
-    return {
+    
+    const finalResult: SearchResult = {
       query,
-      matches,
-      totalMatches: matches.length,
+      matches: allMatches,
       limitReached
     }
+    
+    if (hasTimeoutError) {
+      const bufferText = timeoutBuffers.length === 1 
+        ? `1 tab (${timeoutBuffers[0]})` 
+        : `${timeoutBuffers.length} tabs`;
+      throw new SearchTimeoutError(
+        `Search timed out after processing ${bufferText}.${allMatches.length > 0 ? " Showing partial results." : ""}`,
+        allMatches
+      )
+    }
+    
+    return finalResult
   }
 
   private static sortBuffersByPriority(
@@ -126,33 +272,60 @@ export class SearchService {
     ]
   }
 
-  private static searchInBuffer(
+  private static async searchInBuffer(
     buffer: Buffer,
     query: string,
     options: Pick<SearchOptions, 'caseSensitive' | 'wholeWord' | 'useRegex'>,
-    limit?: number,
-  ): SearchMatch[] {
+    limit: number,
+    searchId: string
+  ): Promise<SearchMatch[]> {
     if (!buffer.value) return []
     
-    const textMatches = findMatches(buffer.value, query, options, limit)
-    
-    return textMatches.map(match => ({
-      bufferId: buffer.id!,
-      bufferLabel: buffer.label,
-      range: {
-        startLineNumber: match.lineNumber,
-        startColumn: match.column,
-        endLineNumber: match.endLineNumber,
-        endColumn: match.endColumn
-      },
-      text: match.text,
-      previewText: match.previewText,
-      matchStartInPreview: match.matchStartInPreview,
-      matchEndInPreview: match.matchEndInPreview,
-      isArchived: buffer.archived || false,
-      archivedAt: buffer.archivedAt,
-      isMetricsMatch: !!buffer.metricsViewState,
-    }))
+    try {
+      const textMatches = await findMatches(buffer.value, query, options, limit, searchId)
+      
+      return textMatches.map(match => ({
+        bufferId: buffer.id!,
+        bufferLabel: buffer.label,
+        range: {
+          startLineNumber: match.lineNumber,
+          startColumn: match.column,
+          endLineNumber: match.endLineNumber,
+          endColumn: match.endColumn
+        },
+        text: match.text,
+        previewText: match.previewText,
+        matchStartInPreview: match.matchStartInPreview,
+        matchEndInPreview: match.matchEndInPreview,
+        isArchived: buffer.archived || false,
+        archivedAt: buffer.archivedAt,
+        isMetricsMatch: !!buffer.metricsViewState,
+      }))
+    } catch (e) {
+      if (e instanceof SearchTimeoutError) {
+        // Convert partial TextMatch[] to SearchMatch[]
+        const partialSearchMatches = e.partialMatches?.map(match => ({
+          bufferId: buffer.id!,
+          bufferLabel: buffer.label,
+          range: {
+            startLineNumber: match.lineNumber,
+            startColumn: match.column,
+            endLineNumber: match.endLineNumber,
+            endColumn: match.endColumn
+          },
+          text: match.text,
+          previewText: match.previewText,
+          matchStartInPreview: match.matchStartInPreview,
+          matchEndInPreview: match.matchEndInPreview,
+          isArchived: buffer.archived || false,
+          archivedAt: buffer.archivedAt,
+          isMetricsMatch: !!buffer.metricsViewState,
+        })) || []
+        
+        throw new SearchTimeoutError(e.message, partialSearchMatches)
+      }
+      throw e
+    }
   }
 
   static groupMatchesByBuffer(matches: SearchMatch[]): Map<number, SearchMatch[]> {
@@ -193,12 +366,13 @@ export class SearchService {
     }
   }
 
-  private static findTitleMatches(
+  private static async findTitleMatches(
     bufferLabel: string,
     query: string,
-    options: Pick<SearchOptions, 'caseSensitive' | 'wholeWord' | 'useRegex'>
-  ): Array<{ start: number; end: number }> {
-    const pattern = findMatches(bufferLabel, query, options)
+    options: Pick<SearchOptions, 'caseSensitive' | 'wholeWord' | 'useRegex'>,
+    searchId: string
+  ): Promise<Array<{ start: number; end: number }>> {
+    const pattern = await findMatches(bufferLabel, query, options, 1, searchId)
     return pattern.map(match => ({
       start: match.startOffset,
       end: match.endOffset

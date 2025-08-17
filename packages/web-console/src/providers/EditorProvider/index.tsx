@@ -134,22 +134,12 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const setActiveBuffer = async (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
     try {
       const currentActiveBufferId = (await bufferStore.getActiveId())?.value
-      monacoRef.current?.editor.getModels().forEach((model: editor.ITextModel) => {
-        const value = model.getValue()
-        if (
-          buffer.id !== currentActiveBufferId &&
-          (model.getValue() !== buffer.value || value === "")
-        ) {
-          model.dispose()
-        }
-      })
 
       if (currentActiveBufferId) {
         if (buffer.id === currentActiveBufferId) {
           setActiveBufferState(buffer)
           return
         }
-        await updateBuffer(activeBuffer.id as number)
       }
 
       await bufferStore.setActiveId(buffer.id as number)
@@ -160,6 +150,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       }
 
       if (editorRef.current && monacoRef.current) {
+        const currentModel = editorRef.current.getModel()
+        if (currentModel) {
+          currentModel.dispose()
+        }
+
         const model = monacoRef.current.editor.createModel(
           buffer.value,
           QuestDBLanguageName,
@@ -240,7 +235,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const deleteAllBuffers = async () => {
     await bufferStore.deleteAll()
-    eventBus.publish(EventType.BUFFERS_UPDATED)
+    eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'deleteAll' })
   }
 
   const updateBuffer: EditorContext["updateBuffer"] = async (id, payload, setNewActiveBuffer = false) => {
@@ -273,12 +268,22 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     if (searchUpdateTimeoutRef.current) {
       window.clearTimeout(searchUpdateTimeoutRef.current)
     }
-    searchUpdateTimeoutRef.current = window.setTimeout(() => {
-      if (!payload?.isTemporary) {
-        eventBus.publish(EventType.BUFFERS_UPDATED)
-      }
-      searchUpdateTimeoutRef.current = null
-    }, 500)
+
+    const searchUpdateKeys = ['value', 'isTemporary', 'label', 'archived']
+    const keys = Object.keys(payload || {})
+    if (searchUpdateKeys.some(key => keys.includes(key))) {
+      searchUpdateTimeoutRef.current = window.setTimeout(() => {
+        let metaUpdate = !(keys.length === 0 && keys[0] === 'value')
+        let contentUpdate = keys.includes('value')
+        eventBus.publish(EventType.BUFFERS_UPDATED, {
+          type: 'update',
+          metaUpdate,
+          contentUpdate,
+          bufferId: id,
+        })
+        searchUpdateTimeoutRef.current = null
+      }, 300)
+    }
   }
 
   const setActiveBufferOnRemoved = async (id: number) => {
@@ -304,14 +309,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       position: -1,
     })
     await setActiveBufferOnRemoved(id)
-    eventBus.publish(EventType.BUFFERS_UPDATED)
+    eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'archive', bufferId: id })
   }
 
   const deleteBuffer: EditorContext["deleteBuffer"] = async (id, isTemporary = false) => {
     await bufferStore.delete(id)
     if (!isTemporary) {
       await setActiveBufferOnRemoved(id)
-      eventBus.publish(EventType.BUFFERS_UPDATED)
+      eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'delete', bufferId: id })
     }
   }
 

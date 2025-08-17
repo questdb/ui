@@ -243,7 +243,7 @@ const Schema = ({
     setSelectOpen(false)
   }
 
-  const handleAddMetricsBuffer = async () => {
+  const handleAddMetricsBuffer = useCallback(async () => {
     const last1h = metricDurations.find(
       (d) => d.dateFrom === "now-1h" && d.dateTo === "now",
     ) as Duration
@@ -256,7 +256,7 @@ const Schema = ({
         viewMode: MetricViewMode.GRID,
       },
     })
-  }
+  }, [addBuffer])
 
   useEffect(() => {
     void fetchTables()

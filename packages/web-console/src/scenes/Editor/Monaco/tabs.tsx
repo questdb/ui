@@ -109,7 +109,7 @@ export const Tabs = () => {
     }
     
     if (buffer.isTemporary) {
-      await updateBuffer(parseInt(id), { isTemporary: false })
+      await updateBuffer(parseInt(id), { isTemporary: false }, true)
       await repositionActiveBuffers(id)
       return
     }

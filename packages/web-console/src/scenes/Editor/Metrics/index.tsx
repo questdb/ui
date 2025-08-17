@@ -214,7 +214,7 @@ export const Metrics = () => {
     if (refreshRateRef.current !== RefreshRate.OFF) {
       refreshMetricsData()
     }
-  }, [refreshRateRef.current])
+  }, [])
 
   const blurListener = useCallback(() => {
     tabInFocusRef.current = false
@@ -230,15 +230,16 @@ export const Metrics = () => {
   const setupListeners = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
+      intervalRef.current = undefined
     }
-    if (refreshRate && refreshRate !== RefreshRate.OFF) {
+    if (refreshRate && refreshRate !== RefreshRate.OFF && refreshRateInSec > 0) {
       intervalRef.current = setInterval(
         () => {
           if (isVisibleRef.current) {
             refreshMetricsData()
           }
         },
-        refreshRateInSec > 0 ? refreshRateInSec * 1000 : 0,
+        refreshRateInSec * 1000,
       )
     } else {
       clearInterval(intervalRef.current)
@@ -282,19 +283,18 @@ export const Metrics = () => {
           .map((metric: Metric) => ({ ...metric, removed: false }))
       }
 
-      const merged = merge(buffer, {
-        metricsViewState: {
-          ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
-            viewMode: metricViewMode,
-          }),
-          ...(dateFrom !== buffer?.metricsViewState?.dateFrom && {
-            dateFrom,
-          }),
-          ...(dateTo !== buffer?.metricsViewState?.dateTo && {
-            dateTo,
-          }),
-        },
-      })
+      const newMetricsViewState = {
+        ...buffer.metricsViewState,
+        ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
+          viewMode: metricViewMode,
+        }),
+        ...(dateFrom !== buffer?.metricsViewState?.dateFrom && {
+          dateFrom,
+        }),
+        ...(dateTo !== buffer?.metricsViewState?.dateTo && {
+          dateTo,
+        }),
+      }
 
       if (dateFrom && dateTo) {
         if (refreshRate === RefreshRate.AUTO) {
@@ -302,7 +302,9 @@ export const Metrics = () => {
         }
       }
       if (dateFrom && dateTo) {
-        updateBuffer(buffer.id, merged)
+        updateBuffer(buffer.id, {
+          metricsViewState: newMetricsViewState,
+        })
         refreshMetricsData(true)
       }
     }
@@ -331,7 +333,10 @@ export const Metrics = () => {
     return () => {
       eventBus.unsubscribe(EventType.TAB_FOCUS, focusListener)
       eventBus.unsubscribe(EventType.TAB_BLUR, blurListener)
-      clearInterval(intervalRef.current)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = undefined
+      }
     }
   }, [])
 

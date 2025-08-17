@@ -146,6 +146,14 @@ export const bufferStore = {
 
   getById: (id: number) => db.buffers.get(id),
 
+  getMetaById: (id: number) => db.buffers.get(id).then(buffer => ({
+    archived: buffer?.archived,
+    archivedAt: buffer?.archivedAt,
+    isTemporary: buffer?.isTemporary,
+    label: buffer?.label,
+    type: buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+  })),
+
   getActiveId: () =>
     db.editor_settings.where("key").equals("activeBufferId").first(),
 

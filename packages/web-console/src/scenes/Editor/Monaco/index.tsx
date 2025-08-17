@@ -4,7 +4,7 @@ import { loader } from "@monaco-editor/react"
 import { Box, Button, Checkbox, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
-import React, { useContext, useEffect, useRef, useState } from "react"
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
@@ -216,6 +216,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   const dropdownPositionRef = useRef<{ x: number; y: number } | null>(null)
   const dropdownQueriesRef = useRef<Request[]>([])
   const isContextMenuDropdownRef = useRef<boolean>(false)
+  const cleanupActionsRef = useRef<(() => void)[]>([])
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -549,8 +550,8 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     isNavigatingFromSearchRef.current = false
 
     // Support legacy bus events for non-react codebase
-    registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
-    registerEditorActions({
+    cleanupActionsRef.current.push(registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning }))
+    cleanupActionsRef.current.push(registerEditorActions({
       editor,
       monaco,
       runQuery: () => {
@@ -567,8 +568,9 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
           handleTriggerRunScript(true)
         }
       },
-      editorContext,
-    })
+      deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
+      addBuffer: () => editorContext.addBuffer(),
+    }))
     
     editor.onContextMenu((e) => {
       if (e.target.element && e.target.element.classList.contains("cursorQueryGlyph")) {
@@ -1328,7 +1330,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     }
   }, [request])
 
-  const setCompletionProvider = async () => {
+  const setCompletionProvider = useCallback(async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
       schemaCompletionHandle?.dispose()
       setRefreshingTables(true)
@@ -1340,7 +1342,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
       )
       setRefreshingTables(false)
     }
-  }
+  }, [editorReady, schemaCompletionHandle, tables, columns])
 
   useEffect(() => {
     if (!refreshingTables) {
@@ -1362,6 +1364,12 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     window.addEventListener("focus", setCompletionProvider)
     return () => {
       window.removeEventListener("focus", setCompletionProvider)
+    }
+  }, [setCompletionProvider])
+
+  useEffect(() => {
+    return () => {
+      cleanupActionsRef.current.forEach(cleanup => cleanup())
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current)
       }
@@ -1377,6 +1385,10 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
       if (decorationCollectionRef.current) {
         decorationCollectionRef.current.clear()
       }
+      editorRef.current?.getModel()?.dispose()
+      editorRef.current?.dispose()
+      editorRef.current = null
+      monacoRef.current = null
     }
   }, [])
 

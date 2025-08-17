@@ -127,7 +127,7 @@ const NoResults = styled.div`
 `
 
 type FlattenedItem = { isMetricsMatch: boolean } & (
-  | { type: 'header'; bufferId: number; bufferLabel: string; isArchived: boolean; matchCount: number; id: string; parentId?: string; titleMatch?: SearchMatch }
+  | { type: 'header'; bufferId: number; bufferLabel: string; isArchived: boolean; matchCount: number; id: string; parentId?: string; titleMatch?: SearchMatch; isStale?: boolean }
   | { type: 'match'; match: SearchMatch; id: string; parentId: string }
   | { type: 'title-match'; match: SearchMatch; id: string }
 )
@@ -135,17 +135,20 @@ type FlattenedItem = { isMetricsMatch: boolean } & (
 interface SearchResultsProps {
   groupedMatches: Map<number, SearchMatch[]>
   searchQuery: string
+  staleBuffers: number[]
 }
 
 const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   groupedMatches,
   searchQuery,
+  staleBuffers,
 }) => {
   const { setActiveBuffer, buffers, setTemporaryBuffer, temporaryBufferId, editorRef, updateBuffer } = useEditor()
   const [expandedBuffers, setExpandedBuffers] = useState<Map<number, boolean>>(
     new Map(Array.from(groupedMatches.keys()).map(id => [id, true]))
   )
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
+  const lastFocusedIndexRef = useRef<number | null>(null)
   const selectionDecorations = useRef<string[]>([])
   const virtualizedTreeRef = useRef<VirtualizedTreeHandle>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
@@ -185,6 +188,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
           id: headerId,
           titleMatch: titleMatch,
           isMetricsMatch: !!firstMatch.isMetricsMatch,
+          isStale: staleBuffers.includes(bufferId),
         })
         
         if (expandedBuffers.get(bufferId) === true) {
@@ -204,7 +208,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     })
     
     return items
-  }, [groupedMatches, expandedBuffers])
+  }, [groupedMatches, expandedBuffers, staleBuffers])
 
   const convertTemporaryToPermanent = useCallback(async () => {
     if (temporaryBufferId !== null) {
@@ -432,6 +436,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
               : item.bufferLabel
             }
             {item.isArchived && <BufferStatus>closed</BufferStatus>}
+            {item.isStale && <BufferStatus>stale</BufferStatus>}
           </ItemText>
           <MatchCount>{item.matchCount > 1 ? `${item.matchCount} results` : `${item.matchCount} result`}</MatchCount>
         </ItemWrapper>
@@ -485,8 +490,11 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
   }, [expandedBuffers, toggleBufferExpansion, renderHighlightedTextAtPosition])
 
   useEffect(() => {
-    handleClick(focusedIndex)
-  }, [focusedIndex])
+    if (lastFocusedIndexRef.current !== focusedIndex) {
+      handleClick(focusedIndex)
+      lastFocusedIndexRef.current = focusedIndex
+    }
+  }, [focusedIndex, handleClick])
 
   useEffect(() => {
     setExpandedBuffers(prevMap => {
@@ -505,12 +513,8 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     })
   }, [groupedMatches])
 
-  useEffect(() => {
-    let isCleanedUp = false
-    
+  useEffect(() => { 
     const handleGlobalClick = async (event: MouseEvent) => {
-      if (isCleanedUp) return
-      
       if (searchResultsRef.current && !searchResultsRef.current.contains(event.target as Node)) {
         if (temporaryBufferId !== null) {
           if (event.target instanceof HTMLElement && (
@@ -526,7 +530,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     document.addEventListener('click', handleGlobalClick)
 
     return () => {
-      isCleanedUp = true
       document.removeEventListener('click', handleGlobalClick)
     }
   }, [temporaryBufferId, updateBuffer, convertTemporaryToPermanent])
@@ -564,5 +567,5 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
 }
 
 export const SearchResults = React.memo(SearchResultsComponent, (prevProps, nextProps) => {
-  return prevProps.groupedMatches === nextProps.groupedMatches
+  return prevProps.groupedMatches === nextProps.groupedMatches && prevProps.staleBuffers === nextProps.staleBuffers
 })
