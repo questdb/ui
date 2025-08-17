@@ -30,7 +30,7 @@ export class SearchTimeoutError extends Error {
   partialMatches?: TextMatch[]
   partialSearchMatches?: SearchMatch[] // SearchMatch[] from search service
   
-  constructor(message: string, partialMatches?: TextMatch[] | any[]) {
+  constructor(message: string, partialMatches?: TextMatch[] | SearchMatch[]) {
     super(message)
     this.name = 'Search timeout error'
     
