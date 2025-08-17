@@ -223,7 +223,7 @@ function createSearchWorker(searchId: string): SearchWorker {
       ${executeSearch.toString()}
       ${workerMessageHandler.toString()}
       
-      self.onmessage = workerMessageHandler
+      self.onmessage = ${workerMessageHandler.name}
     `
     
     const blob = new Blob([workerCode], { type: 'application/javascript' })
