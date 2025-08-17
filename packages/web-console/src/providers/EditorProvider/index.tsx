@@ -273,7 +273,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     const keys = Object.keys(payload || {})
     if (searchUpdateKeys.some(key => keys.includes(key))) {
       searchUpdateTimeoutRef.current = window.setTimeout(() => {
-        let metaUpdate = !(keys.length === 0 && keys[0] === 'value')
+        let metaUpdate = !(keys.length === 1 && keys[0] === 'value')
         let contentUpdate = keys.includes('value')
         eventBus.publish(EventType.BUFFERS_UPDATED, {
           type: 'update',
