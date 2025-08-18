@@ -105,7 +105,7 @@ export function createSearchPattern(query: string, options: SearchOptions): RegE
     }
   }
   
-  return new RegExp(searchString, caseSensitive ? 'g' : 'gi')
+  return new RegExp(searchString, caseSensitive ? 'gm' : 'gim')
   
 }
 

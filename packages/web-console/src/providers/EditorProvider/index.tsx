@@ -271,6 +271,9 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
     const searchUpdateKeys = ['value', 'isTemporary', 'label', 'archived']
     const keys = Object.keys(payload || {})
+    if (payload?.isTemporary) {
+      return
+    }
     if (searchUpdateKeys.some(key => keys.includes(key))) {
       searchUpdateTimeoutRef.current = window.setTimeout(() => {
         let metaUpdate = !(keys.length === 1 && keys[0] === 'value')
