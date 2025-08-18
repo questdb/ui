@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.0 - 2025.08.18
+### Added
+- search across multiple tabs [#459](https://github.com/questdb/ui/pull/459)
+
+
 ## 1.0.2 - 2025.08.15
 ### Fixed
 - add pulse to example queries button if not visited [#457](https://github.com/questdb/ui/pull/457)
