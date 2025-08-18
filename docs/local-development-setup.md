@@ -105,5 +105,5 @@ documentation](https://yarnpkg.com/getting-started/editor-sdks).
 If you need help, here are some useful links:
 
 - [GitHub issues](https://github.com/questdb/ui/issues), might already have an answer to your question
-- [QuestDB Documentation](https://questdb.io/docs/) includes a lot of useful information
-- [QuestDB Slack](https://slack.questdb.io/) join our helpful community!
+- [QuestDB Documentation](https://questdb.com/docs/) includes a lot of useful information
+- [QuestDB Slack Channel](https://slack.questdb.io/) and [QuestDB Community Forum](https://community.questdb.io/): join our helpful community!
