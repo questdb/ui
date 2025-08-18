@@ -1,8 +1,8 @@
 import { operators } from "./operators"
-import * as monaco from "monaco-editor"
+import type { languages } from "monaco-editor"
 import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
 
-export const language: monaco.languages.IMonarchLanguage = {
+export const language: languages.IMonarchLanguage = {
   defaultToken: "",
   tokenPostfix: ".sql",
   ignoreCase: true,

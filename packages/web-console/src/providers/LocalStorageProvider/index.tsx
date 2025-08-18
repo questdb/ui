@@ -27,11 +27,12 @@ import React, {
   PropsWithChildren,
   useState,
   useContext,
+  useCallback,
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { parseInteger } from "./utils"
-import { LocalConfig, SettingsType } from "./types"
+import { LocalConfig, SettingsType, LeftPanelState, LeftPanelType } from "./types"
 
 /* eslint-disable prettier/prettier */
 type Props = {}
@@ -43,6 +44,10 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  leftPanelState: {
+    type: LeftPanelType.DATASOURCES,
+    width: 350
+  }
 }
 
 type ContextProps = {
@@ -53,6 +58,8 @@ type ContextProps = {
   updateSettings: (key: StoreKey, value: SettingsType) => void
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  leftPanelState: LeftPanelState
+  updateLeftPanelState: (state: LeftPanelState) => void
 }
 
 const defaultValues: ContextProps = {
@@ -63,6 +70,8 @@ const defaultValues: ContextProps = {
   updateSettings: (key: StoreKey, value: SettingsType) => undefined,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  leftPanelState: defaultConfig.leftPanelState,
+  updateLeftPanelState: (state: LeftPanelState) => undefined,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -99,10 +108,29 @@ export const LocalStorageProvider = ({
       : defaultConfig.autoRefreshTables,
   )
 
+  const getLeftPanelState = (): LeftPanelState => {
+    const stored = getValue("left.panel.state" as any)
+    if (stored) {
+      try {
+        return JSON.parse(stored) as LeftPanelState
+      } catch (e) {
+        return defaultConfig.leftPanelState
+      }
+    }
+    return defaultConfig.leftPanelState
+  }
+
+  const [leftPanelState, setLeftPanelState] = useState<LeftPanelState>(getLeftPanelState())
+
   const updateSettings = (key: StoreKey, value: SettingsType) => {
     setValue(key, value.toString())
     refreshSettings(key)
   }
+
+  const updateLeftPanelState = useCallback((state: LeftPanelState) => {
+    setValue("left.panel.state" as any, JSON.stringify(state))
+    setLeftPanelState(state)
+  }, [])
 
   const refreshSettings = (key: StoreKey) => {
     const value = getValue(key)
@@ -142,6 +170,8 @@ export const LocalStorageProvider = ({
         updateSettings,
         exampleQueriesVisited,
         autoRefreshTables,
+        leftPanelState,
+        updateLeftPanelState,
       }}
     >
       {children}

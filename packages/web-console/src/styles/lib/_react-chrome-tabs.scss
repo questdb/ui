@@ -479,6 +479,26 @@
   background: #323639;
 }
 
+.chrome-tabs .temporary-tab.chrome-tab .chrome-tab-title {
+  color: #9ca1a7;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.chrome-tabs.chrome-tabs-dark-theme .temporary-tab.chrome-tab .chrome-tab-title {
+  color: #9ca1a7;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.chrome-tabs .temporary-tab.chrome-tab .chrome-tab-background {
+  opacity: 0.7;
+}
+
+.chrome-tabs.chrome-tabs-dark-theme .temporary-tab.chrome-tab .chrome-tab-favicon {
+  opacity: 0.7;
+}
+
 @media only screen and (-webkit-min-device-pixel-ratio: 2),
 only screen and (min--moz-device-pixel-ratio: 2),
 only screen and (-o-min-device-pixel-ratio: 2/1),

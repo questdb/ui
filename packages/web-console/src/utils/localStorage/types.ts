@@ -38,4 +38,5 @@ export enum StoreKey {
   BASIC_AUTH_HEADER = "basic.auth.header",
   AUTO_REFRESH_TABLES = "auto.refresh.tables",
   SSO_USERNAME = "sso.username",
+  LEFT_PANEL_STATE = "left.panel.state",
 }

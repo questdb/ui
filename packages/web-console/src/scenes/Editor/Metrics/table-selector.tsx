@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Box, Input } from "@questdb/react-components"
 import { Table } from "@styled-icons/remix-line"
 import Highlighter from "react-highlight-words"
@@ -29,7 +29,7 @@ const TableIcon = styled(Table)`
   color: ${({ theme }: { theme: any }) => theme.color.gray2};
 `
 
-const StyledInput = styled(Input)`
+const StyledInput = styled(Input)<{ $highlight?: boolean }>`
   border: 1px solid transparent;
   background: transparent;
   font-weight: 600;
@@ -37,6 +37,10 @@ const StyledInput = styled(Input)`
   color: ${({ theme }: { theme: any }) => theme.color.yellow};
   text-transform: uppercase;
   width: 100%;
+  ${({ $highlight }) => $highlight && css`
+    background: transparent;
+    border-color: ${({ theme }: { theme: any }) => theme.color.comment};
+  `}
 
   &:hover,
   &:active,
@@ -127,10 +131,6 @@ export const TableSelector = ({
         initialQuery.current = defaultValue ?? ""
       }
 
-      if (defaultValue === "" && !tableId) {
-        inputRef.current!.focus()
-      }
-
       const onBlur = (e: MouseEvent) => {
         if (inputRef.current?.contains(e.target as Node)) {
           return
@@ -184,6 +184,7 @@ export const TableSelector = ({
         <TableIcon size="18px" />
         <StyledInput
           value={query}
+          $highlight={defaultValue === ""}
           placeholder={defaultValue !== "" ? defaultValue : placeholder}
           ref={inputRef}
           onFocus={() => {

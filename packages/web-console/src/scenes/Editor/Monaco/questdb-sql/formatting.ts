@@ -1,11 +1,10 @@
-import { IRange } from "monaco-editor"
-import * as monaco from "monaco-editor"
+import type { IRange, editor, languages } from "monaco-editor"
 import { formatSql } from "../../../../utils"
 
 export const documentFormattingEditProvider = {
   provideDocumentFormattingEdits(
-    model: monaco.editor.IModel,
-    options: monaco.languages.FormattingOptions,
+    model: editor.IModel,
+    options: languages.FormattingOptions,
   ) {
     const formatted = formatSql(model.getValue(), {
       indent: " ".repeat(options.tabSize),
@@ -21,9 +20,9 @@ export const documentFormattingEditProvider = {
 
 export const documentRangeFormattingEditProvider = {
   provideDocumentRangeFormattingEdits(
-    model: monaco.editor.IModel,
+    model: editor.IModel,
     range: IRange,
-    options: monaco.languages.FormattingOptions,
+    options: languages.FormattingOptions,
   ) {
     const formatted = formatSql(model.getValueInRange(range), {
       indent: " ".repeat(options.tabSize),

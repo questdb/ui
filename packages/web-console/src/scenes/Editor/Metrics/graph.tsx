@@ -1,7 +1,7 @@
 import { Box, Button, Loader } from "@questdb/react-components"
 import { Error } from "@styled-icons/boxicons-regular"
 import { Information } from "@styled-icons/remix-line"
-import React, { useContext, useEffect, useRef, useState } from "react"
+import React, { useContext, useEffect, useRef, useState, useMemo } from "react"
 import styled, { ThemeContext } from "styled-components"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
@@ -127,12 +127,14 @@ export const Graph = ({
     undefined,
   )
 
-  const resizeObserver = new ResizeObserver((entries) => {
-    uPlotRef.current?.setSize({
-      width: entries[0].contentRect.width,
-      height: 200,
-    })
-  })
+  const resizeObserver = useMemo(() => new ResizeObserver((entries) => {
+    if (entries[0] && uPlotRef.current) {
+      uPlotRef.current.setSize({
+        width: entries[0].contentRect.width,
+        height: 200,
+      })
+    }
+  }), [])
 
   const from = durationTokenToDate(dateFrom)
   const to = durationTokenToDate(dateTo)
@@ -163,8 +165,12 @@ export const Graph = ({
 
     return () => {
       resizeObserver.disconnect()
+      if (uPlotRef.current) {
+        uPlotRef.current.destroy()
+        uPlotRef.current = undefined
+      }
     }
-  }, [graphRootRef.current])
+  }, [])
 
   useEffect(() => {
     if (loading) {
