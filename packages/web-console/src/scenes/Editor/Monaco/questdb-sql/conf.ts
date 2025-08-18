@@ -1,6 +1,6 @@
-import * as monaco from "monaco-editor"
+import type { languages } from "monaco-editor"
 
-export const conf: monaco.languages.LanguageConfiguration = {
+export const conf: languages.LanguageConfiguration = {
   /**
    * Override the default word definition regex to also allow single quotes and dots.
    * This way we can highlight table names escaped with quotes and the ones created from CSV files.

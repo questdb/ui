@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useMemo } from "react"
+import React, { useContext, useEffect, useState, useMemo, useCallback } from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   compactSQL,
@@ -91,10 +91,7 @@ export const Metric = ({
     )
   }
 
-  const fetchMetric = async (overwrite?: boolean) => {
-    const isRollingAppendEnabled =
-      widgetConfig.querySupportsRollingAppend && !overwrite
-    let isMounted = true
+  const fetchMetric = useCallback(async () => {
     setLoading(true)
     setHasError(false)
     try {
@@ -147,20 +144,12 @@ export const Metric = ({
         )
       }
     } catch (err) {
-      if (isMounted) {
-        console.error(err)
-        setHasError(true)
-      }
+      console.error(err)
+      setHasError(true)
     } finally {
-      if (isMounted) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
-
-    return () => {
-      isMounted = false
-    }
-  }
+  }, [tableName, widgetConfig, quest])
 
   const handleZoomToData = () => {
     if (lastNotNull) {
@@ -168,9 +157,9 @@ export const Metric = ({
     }
   }
 
-  const refreshMetricsData = (payload?: MetricsRefreshPayload) => {
+  const refreshMetricsData = () => {
     if (tableNameRef.current) {
-      fetchMetric(payload?.overwrite)
+      fetchMetric()
     } else {
       dataRef.current = [[], []]
       setLoading(false)
@@ -182,7 +171,7 @@ export const Metric = ({
       tableNameRef.current = tableName
       tableIdRef.current = metric.tableId
       dataRef.current = [[], []]
-      fetchMetric(true)
+      fetchMetric()
     }
   }, [tableName, widgetConfig])
 

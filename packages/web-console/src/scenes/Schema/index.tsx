@@ -80,6 +80,7 @@ import { toast } from '../../components/Toast'
 type Props = Readonly<{
   hideMenu?: boolean
   style?: CSSProperties
+  open?: boolean
 }>
 
 const loadingStyles = css`
@@ -87,9 +88,14 @@ const loadingStyles = css`
   justify-content: center;
 `
 
-const Wrapper = styled(PaneWrapper)`
+const Wrapper = styled(PaneWrapper)<{
+  open?: boolean
+}>`
   overflow-x: auto;
   height: 100%;
+  ${({ open }) => !open && css`
+    display: none;
+  `}
 `
 
 const Content = styled(PaneContent)<{
@@ -237,7 +243,7 @@ const Schema = ({
     setSelectOpen(false)
   }
 
-  const handleAddMetricsBuffer = async () => {
+  const handleAddMetricsBuffer = useCallback(async () => {
     const last1h = metricDurations.find(
       (d) => d.dateFrom === "now-1h" && d.dateTo === "now",
     ) as Duration
@@ -250,7 +256,7 @@ const Schema = ({
         viewMode: MetricViewMode.GRID,
       },
     })
-  }
+  }, [addBuffer])
 
   useEffect(() => {
     void fetchTables()

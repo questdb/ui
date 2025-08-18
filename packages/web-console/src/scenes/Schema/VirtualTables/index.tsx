@@ -488,6 +488,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       <Virtuoso
         totalCount={flattenedItems.length}
         ref={virtuosoRef}
+        data-hook="schema-tree"
         rangeChanged={(newRange) => {
           rangeRef.current = newRange
         }}

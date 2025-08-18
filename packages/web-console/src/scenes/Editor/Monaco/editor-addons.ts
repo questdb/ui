@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 import type { Monaco } from "@monaco-editor/react"
-import { Dispatch } from "redux"
 
 import {
   conf as QuestDBLanguageConf,
@@ -32,9 +31,8 @@ import {
 } from "./questdb-sql"
 
 import { QuestDBLanguageName } from "./utils"
-import type { EditorContext } from "../../../providers"
 import { bufferStore } from "../../../store/buffers"
-import type { editor } from "monaco-editor"
+import type { editor, IDisposable } from "monaco-editor"
 
 enum Command {
   EXECUTE = "execute",
@@ -50,18 +48,23 @@ export const registerEditorActions = ({
   monaco,
   runQuery,
   runScript,
-  editorContext,
+  onTabClosed,
+  deleteBuffer,
+  addBuffer,
 }: {
   editor: editor.IStandaloneCodeEditor
   monaco: Monaco
   runQuery: () => void
   runScript: () => void
-  editorContext: EditorContext
+  deleteBuffer: (id: number) => void
+  addBuffer: () => void
+  onTabClosed?: () => void
 }) => {
+  const actions: IDisposable[] = []
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
   })
 
-  editor.addAction({
+  actions.push(editor.addAction({
     id: Command.EXECUTE,
     label: "Execute command",
     keybindings: [
@@ -71,27 +74,27 @@ export const registerEditorActions = ({
     run: () => {
       runQuery()
     },
-  })
+  }))
 
-  editor.addAction({
+  actions.push(editor.addAction({
     id: Command.RUN_SCRIPT,
     label: "Run script",
     keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
     run: () => {
       runScript()
     },
-  })
+  }))
 
-  editor.addAction({
+  actions.push(editor.addAction({
     id: Command.ADD_NEW_TAB,
     label: "Add new tab",
     keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
     run: () => {
-      editorContext.addBuffer()
+      addBuffer()
     },
-  })
+  }))
 
-  editor.addAction({
+  actions.push(editor.addAction({
     id: Command.CLOSE_ACTIVE_TAB,
     label: "Close current tab",
     keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyW],
@@ -103,12 +106,15 @@ export const registerEditorActions = ({
         activeId?.value &&
         typeof activeId?.value === "number"
       ) {
-        editorContext.deleteBuffer(activeId.value)
+        deleteBuffer(activeId.value)
+        if (onTabClosed) {
+          onTabClosed()
+        }
       }
     },
-  })
+  }))
 
-  editor.addAction({
+  actions.push(editor.addAction({
     id: Command.SEARCH_DOCS,
     label: "Search QuestDB Docs",
     keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
@@ -119,7 +125,13 @@ export const registerEditorActions = ({
         docSearchButton.click()
       }
     },
-  })
+  }))
+
+  return () => {
+    actions.forEach(action => {
+      action.dispose()
+    })
+  }
 }
 
 export const registerLanguageAddons = (monaco: Monaco) => {
