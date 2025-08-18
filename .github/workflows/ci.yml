@@ -99,6 +99,7 @@ jobs:
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
+          strategy: upgrade
           package: ./packages/react-components/package.json
 
       - name: Publish @questdb/web-console to npm
@@ -107,4 +108,5 @@ jobs:
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
+          strategy: upgrade
           package: ./packages/web-console/package.json
