@@ -15,17 +15,19 @@ Each step is described in below.
 
 There are few ways to clone a repository. Check [Github docs](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) if you need help.
 
-* Clone this repository using SSH:
+- Clone this repository using SSH:
+
   ```
   git clone git@github.com:questdb/ui.git
   ```
 
-* or HTTPS:
+- or HTTPS:
+
   ```
   git clone https://github.com/questdb/ui.git
   ```
 
-* or with [Github CLI](https://cli.github.com/):
+- or with [Github CLI](https://cli.github.com/):
   ```
   gh repo clone questdb/ui
   ```
@@ -39,20 +41,18 @@ It does feel a bit strange to have dependencies committed, but it's a well worth
 
 ### 2. Bootstrap dependencies
 
-
 #### `node` and `yarn`
 
 First make sure you have `node` and `yarn` and that their versions are compatible with this project.
 This is a common source of issues, best not to skip this step:
 
-* `node -v` should return `16.13.1`\
+- `node -v` should return a version compatible with what's in [.nvmrc](../.nvmrc)\
   If it doesn't, you can use [fnm](https://fnm.vercel.app) or [nvm](https://github.com/nvm-sh/nvm) to manage node versions on your machine.\
   Then run `fnm use` or `nvm use` to set correct version.
 
-* `yarn -v` should return v3 (like `3.2.1`).\
-  If it returns `command not found`, enable `yarn` by running `corepack enable`.\
+- If `yarn -v` returns `command not found`, enable `yarn` by running `corepack enable`.\
   Follow [official installation guide](https://yarnpkg.com/getting-started/install) if you have trouble.
-  
+
 #### Bootstrap
 
 Simply run `yarn` to bootstrap.
@@ -71,10 +71,10 @@ yarn workspace $package-name $script
 
 where:
 
-* `$package-name` is the `"name"` property in package's `package.json` file.\
+- `$package-name` is the `"name"` property in package's `package.json` file.\
    For example, [`packages/web-console/package.json`](../packages/web-console/package.json) has `"name": "@questdb/web-console"`.
 
-* `$script` is one of the scripts defined in package's `package.json` file.\
+- `$script` is one of the scripts defined in package's `package.json` file.\
    For example, [`packages/web-console/package.json`](../packages/web-console/package.json) has `"scripts"` which has `"start"`
 
 Knowing this it's easy to run any script of any package.
@@ -85,6 +85,7 @@ development server with:
 ```
 yarn workspace @questdb/web-console start
 ```
+
 _You might need to run_ `yarn workspace @questdb/react-components build` _first._
 
 [localhost:9999](http://localhost:9999) should display the web console.
@@ -103,6 +104,6 @@ documentation](https://yarnpkg.com/getting-started/editor-sdks).
 
 If you need help, here are some useful links:
 
-* [GitHub issues](https://github.com/questdb/ui/issues), might already have an answer to your question
-* [QuestDB Documentation](https://questdb.io/docs/) includes a lot of useful information
-* [QuestDB Slack](https://slack.questdb.io/) join our helpful community!
+- [GitHub issues](https://github.com/questdb/ui/issues), might already have an answer to your question
+- [QuestDB Documentation](https://questdb.com/docs/) includes a lot of useful information
+- [QuestDB Slack Channel](https://slack.questdb.io/) and [QuestDB Community Forum](https://community.questdb.io/): join our helpful community!

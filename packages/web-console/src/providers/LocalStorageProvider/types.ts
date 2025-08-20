@@ -24,6 +24,16 @@
 
 export type SettingsType = string | boolean | number
 
+export enum LeftPanelType {
+  DATASOURCES = "datasources",
+  SEARCH = "search",
+}
+
+export type LeftPanelState = {
+  type: LeftPanelType | null
+  width: number
+}
+
 export type LocalConfig = {
   editorCol: number
   editorLine: number
@@ -31,5 +41,6 @@ export type LocalConfig = {
   resultsSplitterBasis: number
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  leftPanelState: LeftPanelState
   claudeApiKey: string
 }

@@ -4,7 +4,7 @@ require("@4tw/cypress-drag-drop");
 
 const { ctrlOrCmd, escapeRegExp } = require("./utils");
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tableSchemas = {
@@ -182,10 +182,7 @@ Cypress.Commands.add("getMountedEditor", () =>
 Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor.vs-dark"));
 
 Cypress.Commands.add("getEditorContent", () =>
-  cy
-    .get(".monaco-editor")
-    .find("textarea")
-    .should("be.visible")
+  cy.get(".monaco-editor").find("textarea").should("be.visible")
 );
 
 Cypress.Commands.add("getEditorHitbox", () =>
@@ -354,49 +351,71 @@ Cypress.Commands.add("interceptQuery", (query, alias, response) => {
   ).as(alias);
 });
 
-Cypress.Commands.add("loginWithUserAndPassword", (username = "admin", password = "quest") => {
-  cy.getByDataHook("auth-login").should("be.visible");
-  cy.get("input[name='username']").type(username);
-  cy.get("input[type='password']").type(password);
-  cy.get("button[type='submit']").click();
+Cypress.Commands.add(
+  "loginWithUserAndPassword",
+  (username = "admin", password = "quest") => {
+    cy.getByDataHook("auth-login").should("be.visible");
+    cy.get("input[name='username']").type(username);
+    cy.get("input[type='password']").type(password);
+    cy.get("button[type='submit']").click();
 
-  cy.getEditor().should("be.visible");
-});
+    cy.getEditor().should("be.visible");
+  }
+);
+
+Cypress.Commands.add(
+  "clearStorageAndVisit",
+  (url, clearLocalStorage = true) => {
+    cy.visit(url, {
+      onBeforeLoad: (win) => {
+        if (clearLocalStorage) {
+          win.localStorage.clear();
+        }
+        win.indexedDB.deleteDatabase("web-console");
+      },
+    });
+  }
+);
 
 Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings = false) => {
-  cy.clearLocalStorage();
-  indexedDB.deleteDatabase("web-console");
-  cy.visit(baseUrl);
+  cy.clearStorageAndVisit(baseUrl);
   cy.loginWithUserAndPassword();
   if (clearWarnings) {
     cy.clearSimulatedWarnings();
-    indexedDB.deleteDatabase("web-console");
-    cy.visit(baseUrl);
+    cy.clearStorageAndVisit(baseUrl, false);
     cy.getEditor().should("be.visible");
   }
 });
 
-Cypress.Commands.add("loadConsoleAsAdminAndCreateSSOGroup", (group, externalGroup = undefined) => {
-  cy.loadConsoleWithAuth(true);
+Cypress.Commands.add(
+  "loadConsoleAsAdminAndCreateSSOGroup",
+  (group, externalGroup = undefined) => {
+    cy.loadConsoleWithAuth(true);
 
-  cy.executeSQL(`CREATE GROUP '${group}' WITH EXTERNAL ALIAS '${externalGroup || group}';`);
-  cy.getByDataHook("success-notification").should("be.visible");
-  cy.executeSQL(`GRANT HTTP TO '${group}';`);
-  cy.getByDataHook("success-notification").should("be.visible");
+    cy.executeSQL(
+      `CREATE GROUP '${group}' WITH EXTERNAL ALIAS '${externalGroup || group}';`
+    );
+    cy.getByDataHook("success-notification").should("be.visible");
+    cy.executeSQL(`GRANT HTTP TO '${group}';`);
+    cy.getByDataHook("success-notification").should("be.visible");
 
-  cy.logout();
-});
+    cy.logout();
+  }
+);
 
-Cypress.Commands.add("loadConsoleAsAdminAndCreateDBUser", (username, password = "pwd") => {
-  cy.loadConsoleWithAuth(true);
+Cypress.Commands.add(
+  "loadConsoleAsAdminAndCreateDBUser",
+  (username, password = "pwd") => {
+    cy.loadConsoleWithAuth(true);
 
-  cy.executeSQL(`create user '${username}' with password '${password}'`);
-  cy.getByDataHook("success-notification").should("be.visible");
-  cy.executeSQL(`grant HTTP to '${username}'`);
-  cy.getByDataHook("success-notification").should("be.visible");
+    cy.executeSQL(`create user '${username}' with password '${password}'`);
+    cy.getByDataHook("success-notification").should("be.visible");
+    cy.executeSQL(`grant HTTP to '${username}'`);
+    cy.getByDataHook("success-notification").should("be.visible");
 
-  cy.logout();
-});
+    cy.logout();
+  }
+);
 
 Cypress.Commands.add("logout", () => {
   cy.getByDataHook("button-logout").click();
@@ -459,4 +478,70 @@ Cypress.Commands.add("getEditorTabs", () => {
 
 Cypress.Commands.add("getEditorTabByTitle", (title) => {
   return cy.get(`.chrome-tab[data-tab-title="${title}"]`);
+});
+
+Cypress.Commands.add("openSearchPanel", () => {
+  cy.getByDataHook("search-panel-button").then(($btn) => {
+    if ($btn.attr("data-selected") === "false") {
+      cy.wrap($btn).click();
+    }
+  });
+  cy.getByDataHook("search-input").should("be.visible");
+});
+
+Cypress.Commands.add("closeSearchPanel", () => {
+  cy.getByDataHook("search-panel-button").then(($btn) => {
+    if ($btn.attr("data-selected") === "true") {
+      cy.wrap($btn).click();
+    }
+  });
+  cy.getByDataHook("search-input").should("not.be.visible");
+});
+
+Cypress.Commands.add("ensureDataSourcesPanel", () => {
+  cy.getByDataHook("tables-panel-button").then(($btn) => {
+    if ($btn.attr("data-selected") === "false") {
+      cy.wrap($btn).click();
+    }
+  });
+  cy.getByDataHook("schema-tree").should("be.visible");
+});
+
+Cypress.Commands.add("searchFor", (query) => {
+  cy.getByDataHook("search-input").clear().type(query);
+  cy.wait(400); // Wait for debounce
+});
+
+Cypress.Commands.add("toggleSearchOption", (option) => {
+  const hooks = {
+    caseSensitive: "search-option-case-sensitive",
+    wholeWord: "search-option-whole-word",
+    useRegex: "search-option-regex",
+    includeDeleted: "search-option-include-closed",
+  };
+  cy.getByDataHook(hooks[option]).realHover();
+  cy.getByDataHook(hooks[option]).click({ force: true });
+});
+
+Cypress.Commands.add("getSearchResults", () => {
+  return cy.getByDataHook("search-result-match");
+});
+
+Cypress.Commands.add("getSearchResultGroups", () => {
+  return cy.getByDataHook("search-result-buffer-group");
+});
+
+Cypress.Commands.add("createTabWithContent", (content, title) => {
+  cy.getByDataHook("new-tab-button").click();
+  cy.get(".chrome-tab-was-just-added").should("be.visible");
+  cy.get(".chrome-tab-was-just-added").should("not.exist");
+  cy.typeQueryDirectly(content);
+
+  if (title) {
+    cy.get(".chrome-tab[active] .chrome-tab-drag-handle").dblclick();
+    cy.get(".chrome-tab[active] .chrome-tab-rename")
+      .should("be.visible")
+      .type(title + "{enter}");
+    cy.get(".chrome-tab[active] .chrome-tab-rename").should("not.be.visible");
+  }
 });

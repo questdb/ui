@@ -38,6 +38,7 @@ export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
   read_notifications!: Table<{ newsId: string }, number>
+  ready: boolean = false
 
   constructor() {
     super("web-console")
@@ -60,6 +61,10 @@ export class Storage extends Dexie {
             buffer.position = counter
             counter++
           })
+      })
+    this.version(4)
+      .stores({
+        buffers: "++id, label, position, archived, archivedAt, isTemporary",
       })
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
@@ -136,6 +141,7 @@ export class Storage extends Dexie {
 
       // clear search params from the address bar
       window.history.replaceState({}, "", url)
+      this.ready = true
     })
   }
 }

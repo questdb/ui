@@ -41,6 +41,7 @@ const color: ColorShape = {
   selectionDarker: "#333544",
   comment: "#6272a4",
   red: "#ff5555",
+  redDark: "#5a1d1d",
   orange: "#ffb86c",
   yellow: "#f1fa8c",
   green: "#50fa7b",

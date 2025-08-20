@@ -314,6 +314,21 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36) !important;
 }
 
+.monaco-editor .find-widget.visible {
+  right: 2.4rem !important;
+  top: 1rem !important;
+  box-shadow: none !important;
+}
+
+.monaco-editor .find-widget {
+  transition: transform .1s linear !important;
+}
+
+.monaco-editor .find-widget > .button.codicon-widget-close {
+  top: 0.8rem !important;
+  right: 0.8rem !important;
+}
+
 .action-label.separator {
   border-bottom: 1px solid #606060 !important;
   margin: 5px 0 !important;
