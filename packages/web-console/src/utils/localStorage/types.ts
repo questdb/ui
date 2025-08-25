@@ -39,5 +39,5 @@ export enum StoreKey {
   AUTO_REFRESH_TABLES = "auto.refresh.tables",
   SSO_USERNAME = "sso.username",
   LEFT_PANEL_STATE = "left.panel.state",
-  CLAUDE_API_KEY = "claude.api.key",
+  AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
 }

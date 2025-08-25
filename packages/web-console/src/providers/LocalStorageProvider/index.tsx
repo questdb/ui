@@ -31,12 +31,17 @@ import React, {
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { obfuscateKey, deobfuscateKey } from "../../utils/localStorage/crypto"
 import { parseInteger } from "./utils"
-import { LocalConfig, SettingsType, LeftPanelState, LeftPanelType } from "./types"
+import { LocalConfig, SettingsType, LeftPanelState, LeftPanelType, AiAssistantSettings } from "./types"
 
 /* eslint-disable prettier/prettier */
 type Props = {}
+
+export const DEFAULT_AI_ASSISTANT_SETTINGS = {
+  apiKey: "",
+  model: "claude-3-5-sonnet-latest",
+  grantSchemaAccess: true
+}
 
 const defaultConfig: LocalConfig = {
   editorCol: 10,
@@ -45,7 +50,7 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
-  claudeApiKey: "",
+  aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
     type: LeftPanelType.DATASOURCES,
     width: 350
@@ -62,7 +67,7 @@ type ContextProps = {
   autoRefreshTables: boolean
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
-  claudeApiKey: string
+  aiAssistantSettings: AiAssistantSettings
 }
 
 const defaultValues: ContextProps = {
@@ -75,7 +80,7 @@ const defaultValues: ContextProps = {
   autoRefreshTables: true,
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (state: LeftPanelState) => undefined,
-  claudeApiKey: "",
+  aiAssistantSettings: defaultConfig.aiAssistantSettings,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -126,14 +131,28 @@ export const LocalStorageProvider = ({
 
   const [leftPanelState, setLeftPanelState] = useState<LeftPanelState>(getLeftPanelState())
 
-  const [claudeApiKey, setClaudeApiKey] = useState<string>(
-    deobfuscateKey(getValue(StoreKey.CLAUDE_API_KEY) || ""),
-  )
+  const getAiAssistantSettings = (): AiAssistantSettings => {
+    const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as AiAssistantSettings
+        return {
+          apiKey: parsed.apiKey || "",
+          model: parsed.model || DEFAULT_AI_ASSISTANT_SETTINGS.model,
+          grantSchemaAccess: parsed.grantSchemaAccess !== undefined ? parsed.grantSchemaAccess : true
+        }
+      } catch (e) {
+        return defaultConfig.aiAssistantSettings
+      }
+    }
+    return defaultConfig.aiAssistantSettings
+  }
+
+  const [aiAssistantSettings, setAiAssistantSettings] = useState<AiAssistantSettings>(getAiAssistantSettings())
 
   const updateSettings = (key: StoreKey, value: SettingsType) => {
-    // Special handling for API key to obfuscate it
-    if (key === StoreKey.CLAUDE_API_KEY) {
-      setValue(key, obfuscateKey(value.toString()))
+    if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
+      setValue(key, JSON.stringify(value))
     } else {
       setValue(key, value.toString())
     }
@@ -170,8 +189,8 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_TABLES:
         setAutoRefreshTables(value === "true")
         break
-      case StoreKey.CLAUDE_API_KEY:
-        setClaudeApiKey(deobfuscateKey(value || ""))
+      case StoreKey.AI_ASSISTANT_SETTINGS:
+        setAiAssistantSettings(getAiAssistantSettings())
         break
     }
   }
@@ -188,7 +207,7 @@ export const LocalStorageProvider = ({
         autoRefreshTables,
         leftPanelState,
         updateLeftPanelState,
-        claudeApiKey,
+        aiAssistantSettings,
       }}
     >
       {children}

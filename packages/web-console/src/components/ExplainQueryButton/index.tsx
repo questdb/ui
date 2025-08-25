@@ -1,37 +1,16 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
-
 import React, { useState, useContext } from "react"
 import styled from "styled-components"
 import { Button, Loader } from "@questdb/react-components"
 import { Lightbulb } from "@styled-icons/remix-fill"
+import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { explainQuery, explainQueryWithSchema, formatExplanationAsComment, createSchemaClient } from "../../utils/claude"
+import type { ClaudeAPIError, ClaudeExplanation } from "../../utils/claude"
+import { explainQuery, formatExplanationAsComment, createSchemaClient, isClaudeError } from "../../utils/claude"
 import { toast } from "../Toast"
 import type { editor } from "monaco-editor"
 import { getQueryFromCursor, normalizeQueryText } from "../../scenes/Editor/Monaco/utils"
 import { QuestContext } from "../../providers"
+import { selectors } from "../../store"
 
 const ExplainButton = styled(Button)`
   background-color: ${({ theme }) => theme.color.orange};
@@ -61,13 +40,13 @@ type Props = {
 }
 
 export const ExplainQueryButton = ({ editor, disabled }: Props) => {
-  const { claudeApiKey } = useLocalStorage()
+  const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
+  const tables = useSelector(selectors.query.getTables)
   const [isExplaining, setIsExplaining] = useState(false)
 
   const handleExplainQuery = async () => {
-    if (!editor || !claudeApiKey) return
-
+    if (!editor) return
     const queryRequest = getQueryFromCursor(editor)
     if (!queryRequest) {
       toast.error("No query found at cursor position")
@@ -83,29 +62,21 @@ export const ExplainQueryButton = ({ editor, disabled }: Props) => {
     setIsExplaining(true)
 
     try {
-      // Use enhanced function with schema support
-      const schemaClient = createSchemaClient(quest)
-      const result = await explainQueryWithSchema(queryText, claudeApiKey, schemaClient)
+      const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
+      const response = await explainQuery(queryText, aiAssistantSettings, schemaClient)
 
-      if (result.error) {
-        let errorMessage = result.error.message
-        
-        if (result.error.type === 'rate_limit') {
-          errorMessage = "Rate limit exceeded. Please wait before trying again."
-        } else if (result.error.type === 'invalid_key') {
-          errorMessage = "Invalid API key. Please check your Claude API settings."
-        }
-        
-        toast.error(errorMessage, { autoClose: 5000 })
+      if (isClaudeError(response)) {
+        const error = response as ClaudeAPIError
+        toast.error(error.message)
         return
       }
 
+      const result = response as ClaudeExplanation
       if (!result.explanation) {
         toast.error("No explanation received from Claude API")
         return
       }
 
-      // Insert the explanation as a comment above the query
       const model = editor.getModel()
       if (!model) return
 
@@ -171,14 +142,13 @@ export const ExplainQueryButton = ({ editor, disabled }: Props) => {
       toast.success("Query explanation added!")
 
     } catch (error) {
-      console.error("Failed to explain query:", error)
       toast.error("Failed to get query explanation")
     } finally {
       setIsExplaining(false)
     }
   }
 
-  if (!claudeApiKey) {
+  if (!aiAssistantSettings.apiKey) {
     return null
   }
 
@@ -188,7 +158,7 @@ export const ExplainQueryButton = ({ editor, disabled }: Props) => {
       onClick={handleExplainQuery}
       disabled={disabled || isExplaining || !editor}
       prefixIcon={isExplaining ? <Loader size="14px" /> : <Lightbulb size="16px" />}
-      title="Explain query with AI (requires Claude API key)"
+      title="Explain query with AI (requires Anthropic API key)"
       data-hook="button-explain-query"
     >
       {isExplaining ? "Explaining..." : "Explain"}

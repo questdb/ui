@@ -1,35 +1,14 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
-
 import React, { useState, useContext } from "react"
 import styled from "styled-components"
 import { Button, Loader } from "@questdb/react-components"
 import { InfoCircle } from "@styled-icons/boxicons-regular"
+import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { explainError, explainErrorWithSchema, createSchemaClient } from "../../utils/claude"
+import type { ClaudeAPIError, ClaudeExplanation } from "../../utils/claude"
+import { isClaudeError, explainError, createSchemaClient } from "../../utils/claude"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
+import { selectors } from "../../store"
 
 const StyledExplainErrorButton = styled(Button)`
   background-color: ${({ theme }) => theme.color.orange};
@@ -146,52 +125,34 @@ type Props = {
 }
 
 export const ExplainErrorButton = ({ query, errorMessage, disabled }: Props) => {
-  const { claudeApiKey } = useLocalStorage()
+  const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
+  const tables = useSelector(selectors.query.getTables)
   const [isExplaining, setIsExplaining] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [explanation, setExplanation] = useState<string>('')
 
   const handleExplainError = async () => {
-    if (!claudeApiKey) {
-      toast.error("Please configure your Claude API key in settings first")
+    const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
+
+    setIsExplaining(true)
+    const response = await explainError(query, errorMessage, aiAssistantSettings, schemaClient)
+
+    if (isClaudeError(response)) {
+      const error = response as ClaudeAPIError   
+      toast.error(error.message)
       return
     }
 
-    setIsExplaining(true)
-
-    try {
-      // Use enhanced function with schema support
-      const schemaClient = createSchemaClient(quest)
-      const result = await explainErrorWithSchema(query, errorMessage, claudeApiKey, schemaClient)
-
-      if (result.error) {
-        let errorMsg = result.error.message
-        
-        if (result.error.type === 'rate_limit') {
-          errorMsg = "Rate limit exceeded. Please wait before trying again."
-        } else if (result.error.type === 'invalid_key') {
-          errorMsg = "Invalid API key. Please check your Claude API settings."
-        }
-        
-        toast.error(errorMsg, { autoClose: 5000 })
-        return
-      }
-
-      if (!result.explanation) {
-        toast.error("No explanation received from Claude API")
-        return
-      }
-
-      setExplanation(result.explanation)
-      setShowDialog(true)
-
-    } catch (error) {
-      console.error("Failed to explain error:", error)
-      toast.error("Failed to get error explanation")
-    } finally {
-      setIsExplaining(false)
+    const result = response as ClaudeExplanation
+    if (!result.explanation) {
+      toast.error("No explanation received from Anthropic API")
+      return
     }
+
+    setExplanation(result.explanation)
+    setShowDialog(true)
+    setIsExplaining(false)
   }
 
   const handleCloseDialog = () => {
@@ -199,7 +160,7 @@ export const ExplainErrorButton = ({ query, errorMessage, disabled }: Props) => 
     setExplanation('')
   }
 
-  if (!claudeApiKey) {
+  if (!aiAssistantSettings.apiKey) {
     return null
   }
 

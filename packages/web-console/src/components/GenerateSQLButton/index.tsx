@@ -1,36 +1,15 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
-
 import React, { useState, useContext } from "react"
 import styled from "styled-components"
 import { Button, Loader } from "@questdb/react-components"
 import { Star } from "@styled-icons/remix-line"
+import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { generateSQLFromDescription, formatExplanationAsComment, createSchemaClient } from "../../utils/claude"
+import type { ClaudeAPIError, GeneratedSQL } from "../../utils/claude"
+import { generateSQL, formatExplanationAsComment, createSchemaClient, isClaudeError } from "../../utils/claude"
 import { toast } from "../Toast"
 import type { editor } from "monaco-editor"
 import { QuestContext } from "../../providers"
+import { selectors } from "../../store"
 
 const GenerateButton = styled(Button)`
   background-color: ${({ theme }) => theme.color.purple};
@@ -131,83 +110,62 @@ type Props = {
 }
 
 export const GenerateSQLButton = ({ editor, disabled }: Props) => {
-  const { claudeApiKey } = useLocalStorage()
+  const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
+  const tables = useSelector(selectors.query.getTables)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
 
   const handleGenerate = async () => {
-    if (!description.trim()) {
-      toast.error("Please enter a description of the query you want")
+    setIsGenerating(true)
+
+    const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
+    const response = await generateSQL(description, aiAssistantSettings, schemaClient)
+
+    if (isClaudeError(response)) {
+      const error = response as ClaudeAPIError
+      toast.error(error.message)
       return
     }
 
-    setIsGenerating(true)
-
-    try {
-      const schemaClient = createSchemaClient(quest)
-      const result = await generateSQLFromDescription(description, claudeApiKey, schemaClient)
-
-      if (result.error) {
-        let errorMessage = result.error.message
-        
-        if (result.error.type === 'rate_limit') {
-          errorMessage = "Rate limit exceeded. Please wait before trying again."
-        } else if (result.error.type === 'invalid_key') {
-          errorMessage = "Invalid API key. Please check your Claude API settings."
-        }
-        
-        toast.error(errorMessage, { autoClose: 5000 })
-        return
-      }
-
-      if (!result.sql) {
-        toast.error("No SQL query was generated")
-        return
-      }
-
-      // Insert the SQL with the original description as a comment
-      if (editor) {
-        const model = editor.getModel()
-        if (!model) return
-
-        const commentBlock = formatExplanationAsComment(`Generated from: ${description}`)
-        const sqlWithComment = `${commentBlock}\n${result.sql}`
-        
-        // Get current cursor position
-        const position = editor.getPosition()
-        if (!position) return
-
-        // Insert at cursor position
-        editor.executeEdits("generate-sql", [{
-          range: {
-            startLineNumber: position.lineNumber,
-            startColumn: position.column,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column
-          },
-          text: sqlWithComment
-        }])
-
-        // Move cursor to the end of the inserted SQL
-        const lines = sqlWithComment.split('\n')
-        const newLineNumber = position.lineNumber + lines.length - 1
-        const newColumn = lines[lines.length - 1].length + 1
-        editor.setPosition({ lineNumber: newLineNumber, column: newColumn })
-        editor.focus()
-      }
-
-      toast.success("SQL query generated!")
-      setShowDialog(false)
-      setDescription("")
-
-    } catch (error) {
-      console.error("Failed to generate SQL:", error)
-      toast.error("Failed to generate SQL query")
-    } finally {
-      setIsGenerating(false)
+    const result = response as GeneratedSQL
+    if (!result.sql) {
+      toast.error("No SQL query was generated")
+      return
     }
+
+    if (editor) {
+      const model = editor.getModel()
+      if (!model) return
+
+      const commentBlock = formatExplanationAsComment(`${description}`, "Prompt")
+      const sqlWithComment = `${commentBlock}\n${result.sql}`
+      
+      const position = editor.getPosition() ?? { lineNumber: model.getLineCount(), column: model.getLineLength(model.getLineCount()) }
+
+      editor.executeEdits("generate-sql", [{
+        range: {
+          startLineNumber: position.lineNumber,
+          startColumn: position.column,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column
+        },
+        text: sqlWithComment
+      }])
+
+      // Move cursor to the end of the inserted SQL
+      const lines = sqlWithComment.split('\n')
+      const newLineNumber = position.lineNumber + lines.length - 1
+      const newColumn = lines[lines.length - 1].length + 1
+      editor.setPosition({ lineNumber: newLineNumber, column: newColumn })
+      editor.focus()
+    }
+
+    toast.success("SQL query generated!")
+    setShowDialog(false)
+    setDescription("")
+    setIsGenerating(false)
   }
 
   const handleOpenDialog = () => {
@@ -222,7 +180,7 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
     }
   }
 
-  if (!claudeApiKey) {
+  if (!aiAssistantSettings.apiKey) {
     return null
   }
 
@@ -233,7 +191,7 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
         onClick={handleOpenDialog}
         disabled={disabled || !editor}
         prefixIcon={<Star size="16px" />}
-        title="Generate SQL from natural language description (requires Claude API key)"
+        title="Generate SQL from natural language description (requires Anthropic API key)"
         data-hook="button-generate-sql"
       >
         Generate SQL
