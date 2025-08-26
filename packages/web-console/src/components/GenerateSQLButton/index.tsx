@@ -1,7 +1,7 @@
-import React, { useState, useContext } from "react"
+import React, { useState, useContext, useEffect, useRef } from "react"
 import styled from "styled-components"
-import { Button, Loader } from "@questdb/react-components"
-import { Star } from "@styled-icons/remix-line"
+import { Button, Loader, Box, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
+import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import type { ClaudeAPIError, GeneratedSQL } from "../../utils/claude"
@@ -10,21 +10,24 @@ import { toast } from "../Toast"
 import type { editor } from "monaco-editor"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
+import { RunningType } from "../../store/Query/types"
 
 const GenerateButton = styled(Button)`
-  background-color: ${({ theme }) => theme.color.purple};
-  border-color: ${({ theme }) => theme.color.purple};
+  background-color: ${({ theme }) => theme.color.pink};
+  border-color: ${({ theme }) => theme.color.pink};
   color: ${({ theme }) => theme.color.foreground};
 
   &:hover:not(:disabled) {
-    background-color: ${({ theme }) => theme.color.purple};
-    border-color: ${({ theme }) => theme.color.purple};
+    background-color: ${({ theme }) => theme.color.pink};
+    border-color: ${({ theme }) => theme.color.pink};
     filter: brightness(1.2);
   }
 
   &:disabled {
-    background-color: ${({ theme }) => theme.color.purple};
-    border-color: ${({ theme }) => theme.color.purple};
+    background-color: ${({ theme }) => theme.color.pink};
+    border-color: ${({ theme }) => theme.color.pink};
     opacity: 0.6;
   }
 
@@ -33,48 +36,39 @@ const GenerateButton = styled(Button)`
   }
 `
 
-const Modal = styled.div`
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.gray1};
-  border-radius: 0.8rem;
-  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  padding: 2rem;
-  min-width: 500px;
-  max-width: 700px;
+const Key = styled(Box).attrs({ alignItems: "center" })`
+  padding: 0 0.4rem;
+  background: ${({ theme }) => theme.color.gray1};
+  border-radius: 0.2rem;
+  font-size: 1.2rem;
+  height: 1.8rem;
+  color: ${({ theme }) => theme.color.pink};
+
+  &:not(:last-child) {
+    margin-right: 0.25rem;
+  }
 `
 
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 999;
+const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
+  margin-left: 1rem;
 `
 
-const DialogTitle = styled.h3`
-  margin: 0 0 1.5rem 0;
-  color: ${({ theme }) => theme.color.foreground};
-  font-size: 1.6rem;
-  font-weight: 600;
-`
-
-const DialogDescription = styled.p`
-  margin: 0 0 1.5rem 0;
+const StyledDialogDescription = styled(Dialog.Description)`
+  font-size: 1.4rem;
   color: ${({ theme }) => theme.color.gray2};
-  font-size: 1.3rem;
   line-height: 1.5;
-`
-
-const InputWrapper = styled.div`
   margin-bottom: 2rem;
 `
+
+const StyledDialogButton = styled(Button)`
+  padding: 1.2rem 1.6rem;
+  font-size: 1.4rem;
+
+  &:focus {
+    outline: 1px solid ${({ theme }) => theme.color.foreground};
+  }
+`
+
 
 const StyledTextArea = styled.textarea`
   width: 100%;
@@ -88,9 +82,10 @@ const StyledTextArea = styled.textarea`
   font-size: 1.4rem;
   resize: vertical;
   outline: none;
+  margin-bottom: 2rem;
 
   &:focus {
-    border-color: ${({ theme }) => theme.color.selection};
+    border-color: ${({ theme }) => theme.color.pink};
   }
 
   &::placeholder {
@@ -98,24 +93,24 @@ const StyledTextArea = styled.textarea`
   }
 `
 
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-`
 
 type Props = {
   editor: editor.IStandaloneCodeEditor | null
-  disabled?: boolean
+  running: RunningType
 }
 
-export const GenerateSQLButton = ({ editor, disabled }: Props) => {
+const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
+const shortcutTitle = platform.isMacintosh || platform.isIOS ? "Cmd+G" : "Ctrl+G"
+
+export const GenerateSQLButton = ({ editor, running }: Props) => {
   const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
   const tables = useSelector(selectors.query.getTables)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
+  const highlightDecorationsRef = useRef<string[]>([])
+  const disabled = running !== RunningType.NONE
 
   const handleGenerate = async () => {
     setIsGenerating(true)
@@ -131,7 +126,7 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
 
     const result = response as GeneratedSQL
     if (!result.sql) {
-      toast.error("No SQL query was generated")
+      toast.error("No query was generated")
       return
     }
 
@@ -139,30 +134,43 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
       const model = editor.getModel()
       if (!model) return
 
-      const commentBlock = formatExplanationAsComment(`${description}`, "Prompt")
-      const sqlWithComment = `${commentBlock}\n${result.sql}`
+      const commentBlock = formatExplanationAsComment(`${description}\nExplanation:\n${result.explanation}`, `Prompt`)
+      const sqlWithComment = `\n${commentBlock}\n${result.sql}\n`
       
-      const position = editor.getPosition() ?? { lineNumber: model.getLineCount(), column: model.getLineLength(model.getLineCount()) }
+      const lineNumber = model.getLineCount()
+      const column = model.getLineMaxColumn(lineNumber)
 
       editor.executeEdits("generate-sql", [{
         range: {
-          startLineNumber: position.lineNumber,
-          startColumn: position.column,
-          endLineNumber: position.lineNumber,
-          endColumn: position.column
+          startLineNumber: lineNumber,
+          startColumn: column,
+          endLineNumber: lineNumber,
+          endColumn: column
         },
         text: sqlWithComment
       }])
 
-      // Move cursor to the end of the inserted SQL
-      const lines = sqlWithComment.split('\n')
-      const newLineNumber = position.lineNumber + lines.length - 1
-      const newColumn = lines[lines.length - 1].length + 1
-      editor.setPosition({ lineNumber: newLineNumber, column: newColumn })
+      editor.revealLineInCenter(lineNumber)
+      highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
+        range: {
+          startLineNumber: lineNumber,
+          startColumn: column,
+          endLineNumber: lineNumber + sqlWithComment.split("\n").length - 1,
+          endColumn: column
+        },
+        options: {
+          className: "aiQueryHighlight",
+          isWholeLine: false
+        }
+      }]) ?? []
+      setTimeout(() => {
+        highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
+      }, 1000)
+      editor.setPosition({ lineNumber: lineNumber + 1, column: 1 })
       editor.focus()
     }
 
-    toast.success("SQL query generated!")
+    toast.success("Query generated!")
     setShowDialog(false)
     setDescription("")
     setIsGenerating(false)
@@ -180,6 +188,20 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
     }
   }
 
+  useEffect(() => {
+    const handleGenerateQueryOpen = () => {
+      if (!disabled && editor && aiAssistantSettings.apiKey) {
+        handleOpenDialog()
+      }
+    }
+
+    eventBus.subscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
+
+    return () => {
+      eventBus.unsubscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
+    }
+  }, [disabled, editor, aiAssistantSettings.apiKey])
+
   if (!aiAssistantSettings.apiKey) {
     return null
   }
@@ -187,29 +209,41 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
   return (
     <>
       <GenerateButton
-        size="sm"
         onClick={handleOpenDialog}
         disabled={disabled || !editor}
-        prefixIcon={<Star size="16px" />}
-        title="Generate SQL from natural language description (requires Anthropic API key)"
+        title={`Generate query with AI Assistant (${shortcutTitle})`}
         data-hook="button-generate-sql"
       >
-        Generate SQL
+        Generate query
+        <KeyBinding>
+          <Key>{ctrlCmd}</Key>
+          <Key>G</Key>
+        </KeyBinding>
       </GenerateButton>
 
-      {showDialog && (
-        <>
-          <ModalOverlay onClick={handleCloseDialog} />
-          <Modal>
-            <DialogTitle>Generate SQL Query</DialogTitle>
-            <DialogDescription>
-              Describe what data you want to query in plain English, and I'll generate the SQL for you.
-              For example: "Show me the average price by symbol for the last hour"
-            </DialogDescription>
+      <Dialog.Root open={showDialog} onOpenChange={(open) => !open && handleCloseDialog()}>
+        <Dialog.Portal>
+          <ForwardRef>
+            <Overlay primitive={Dialog.Overlay} />
+          </ForwardRef>
+
+          <Dialog.Content
+            onEscapeKeyDown={handleCloseDialog}
+            onInteractOutside={handleCloseDialog}
+            style={{
+              minWidth: '60rem'
+            }}
+          >
+            <Dialog.Title>Generate query</Dialog.Title>
             
-            <InputWrapper>
+            <StyledDialogDescription>
+              <p>
+                Describe what data you want to query in natural language, and I'll generate the query for you.
+                For example: "Show me the average price by symbol for the last hour"
+              </p>
+
               <StyledTextArea
-                placeholder="Describe your query in plain English..."
+                placeholder="Describe your query..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isGenerating}
@@ -221,27 +255,31 @@ export const GenerateSQLButton = ({ editor, disabled }: Props) => {
                   }
                 }}
               />
-            </InputWrapper>
+            </StyledDialogDescription>
 
-            <ButtonGroup>
-              <Button
-                skin="secondary"
-                onClick={handleCloseDialog}
-                disabled={isGenerating}
-              >
-                Cancel
-              </Button>
-              <GenerateButton
+            <Dialog.ActionButtons>
+              <Dialog.Close asChild>
+                <StyledDialogButton
+                  skin="secondary"
+                  onClick={handleCloseDialog}
+                  disabled={isGenerating}
+                >
+                  Cancel
+                </StyledDialogButton>
+              </Dialog.Close>
+              
+              <StyledDialogButton
+                skin="primary"
                 onClick={handleGenerate}
                 disabled={isGenerating || !description.trim()}
-                prefixIcon={isGenerating ? <Loader size="14px" /> : <Star size="16px" />}
+                prefixIcon={isGenerating ? <Loader size="14px" /> : undefined}
               >
                 {isGenerating ? "Generating..." : "Generate"}
-              </GenerateButton>
-            </ButtonGroup>
-          </Modal>
-        </>
-      )}
+              </StyledDialogButton>
+            </Dialog.ActionButtons>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   )
 }

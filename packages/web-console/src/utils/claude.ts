@@ -3,6 +3,7 @@ import { Client } from './questdb/client'
 import { Type } from './questdb/types'
 import type { AiAssistantSettings } from '../providers/LocalStorageProvider/types'
 import { formatSql } from './formatSql'
+import type { Request } from '../scenes/Editor/Monaco/utils'
 
 export interface ClaudeAPIError {
   type: 'rate_limit' | 'invalid_key' | 'network' | 'unknown'
@@ -274,7 +275,7 @@ const tryWithRetries = async <T>(fn: () => Promise<T>): Promise<T | ClaudeAPIErr
 }
 
 export const explainQuery = async (
-  query: string,
+  query: Request,
   settings: AiAssistantSettings,
   schemaClient?: SchemaToolsClient
 ): Promise<ClaudeExplanation | ClaudeAPIError> => {
@@ -292,11 +293,14 @@ export const explainQuery = async (
       apiKey: settings.apiKey,
       dangerouslyAllowBrowser: true
     })
+    const content = query.selection
+      ? `Explain this portion of the query:\n\n\`\`\`sql\n${query.selection.queryText}\n\`\`\` in this query:\n\n\`\`\`sql\n${query.query}\n\`\`\` with 2-4 sentences`
+      : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${query.query}\n\`\`\``
 
     const initialMessages = [
       {
         role: 'user' as const,
-        content: `Explain this SQL query with 2-4 sentences:\n\n${query}`
+        content
       }
     ]
 
@@ -309,11 +313,10 @@ export const explainQuery = async (
       temperature: 0.3
     })
 
-    // Handle tool calls if schema access is granted
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
       ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model)
       : message
-    
+
     const explanation = response.content
       .filter(block => block.type === 'text')
       .map(block => {
@@ -325,7 +328,41 @@ export const explainQuery = async (
       .join('\n')
       .trim()
 
-    return { explanation }
+    const formattingResponse = await anthropic.messages.create({
+      model: settings.model,
+      max_tokens: 1000,
+      messages: [
+        {
+          role: 'assistant' as const,
+          content: explanation
+        },
+        {
+          role: 'user' as const,
+          content: 'Return a JSON string with the following structure:\n{ "explanation": "The explanation of the query" }'
+        },
+        {
+          role: 'assistant' as const,
+          content: '{'
+        },
+      ]
+    })
+
+    const fullContent = formattingResponse.content.reduce((acc, block) => {
+      if (block.type === 'text' && 'text' in block) {
+        acc += block.text
+      }
+      return acc
+    }, '{')
+
+    try {
+      const json = JSON.parse(fullContent)
+      return { explanation: json.explanation }
+    } catch (error) {
+      return {
+        type: 'unknown',
+        message: 'Failed to parse assistant response.'
+      } as ClaudeAPIError
+    }
   })
 }
 
@@ -398,7 +435,6 @@ What went wrong and how can I fix it?`
   })
 }
 
-// Unified function to generate SQL from natural language description
 export const generateSQL = async (
   description: string,
   settings: AiAssistantSettings,
@@ -450,7 +486,7 @@ export const generateSQL = async (
         },
         {
           role: 'user' as const,
-          content: 'Please return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }'
+          content: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }'
         },
         {
           role: 'assistant' as const,
@@ -467,14 +503,21 @@ export const generateSQL = async (
 
     try {
       const json = JSON.parse(fullContent)
+      let sql = formatSql(json.sql) || ''
+      if (sql) {
+        sql = sql.trim()
+        if (!sql.endsWith(';')) {
+          sql = sql + ';'
+        }
+      }
       return {
-        sql: formatSql(json.sql) || '',
+        sql,
         explanation: json.explanation || ''
-      } as GeneratedSQL
+      }
     } catch (error) {
       return {
         type: 'unknown',
-        message: 'Failed to parse JSON response'
+        message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
   })
@@ -590,7 +633,7 @@ export const isValidApiKeyFormat = (key: string): boolean => {
 }
 
 // Test API key by making a simple request
-export const testApiKey = async (apiKey: string): Promise<{ valid: boolean; error?: string }> => {
+export const testApiKey = async (apiKey: string, model: string): Promise<{ valid: boolean; error?: string }> => {
   try {
     // Create a simple test client
     const anthropic = new Anthropic({
@@ -600,7 +643,7 @@ export const testApiKey = async (apiKey: string): Promise<{ valid: boolean; erro
 
     // Make a minimal test request
     await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-latest',
+      model,
       max_tokens: 10,
       messages: [
         {

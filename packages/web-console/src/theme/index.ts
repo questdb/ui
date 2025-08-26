@@ -42,6 +42,7 @@ const color: ColorShape = {
   comment: "#6272a4",
   red: "#ff5555",
   redDark: "#5a1d1d",
+  orangeDark: "#ff7f2a",
   orange: "#ffb86c",
   yellow: "#f1fa8c",
   green: "#50fa7b",

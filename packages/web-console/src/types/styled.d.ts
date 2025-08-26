@@ -40,6 +40,7 @@ export type ColorShape = {
   comment: string
   red: string
   redDark: string
+  orangeDark: string
   orange: string
   yellow: string
   green: string

@@ -162,6 +162,7 @@ export const SetupAIAssistant = () => {
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dirty = inputValue !== aiAssistantSettings.apiKey || selectedModel !== aiAssistantSettings.model || grantSchemaAccess !== aiAssistantSettings.grantSchemaAccess
 
   const handleToggle = (newActive: boolean) => {
     if (newActive) {
@@ -192,7 +193,7 @@ export const SetupAIAssistant = () => {
     setError(null)
 
     try {
-      const result = await testApiKey(key)
+      const result = await testApiKey(key, selectedModel)
       if (result.valid) {
         const newSettings = {
           apiKey: key,
@@ -366,7 +367,7 @@ export const SetupAIAssistant = () => {
               </StyledButton>
               <StyledButton
                 type="submit"
-                disabled={!inputValue || isValidating}
+                disabled={!inputValue || isValidating || !dirty}
                 prefixIcon={isValidating ? <Loader size="14px" /> : undefined}
                 data-hook="anthropic-api-save-button"
               >

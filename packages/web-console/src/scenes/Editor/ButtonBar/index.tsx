@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useEffect } from "react"
-import styled from "styled-components"
+import React, { useCallback, useState, useEffect, useRef } from "react"
+import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
 import { Stop } from "@styled-icons/remix-line"
 import { CornerDownLeft } from "@styled-icons/evaicons-solid"
@@ -11,24 +11,41 @@ import { Box, Button } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
-const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null }>`
-  position: absolute;
-  top: ${({ $searchWidgetType }) => $searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
-  right: 2.4rem;
-  z-index: 1;
-  transition: top .1s linear;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
+type ButtonBarProps = {
+  onTriggerRunScript: (runAll?: boolean) => void
+  isTemporary: boolean | undefined
+  editor: any
+}
+
+const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null, $aiAssistantEnabled: boolean }>`
+  ${({ $aiAssistantEnabled, $searchWidgetType }) => !$aiAssistantEnabled ? css`
+    position: absolute;
+    top: ${$searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
+    right: 2.4rem;
+    z-index: 1;
+    transition: top .1s linear;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  ` : css`
+    min-height: 5rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin: 0 2.4rem;
+  `}
 `
 
 const ButtonGroup = styled.div`
   display: flex;
   gap: 0;
+  margin-left: auto;
 `
 
 const SuccessButton = styled(Button)`
+  margin-left: auto;
   background-color: ${color("greenDarker")};
   border-color: ${color("greenDarker")};
   color: ${color("foreground")};
@@ -60,6 +77,7 @@ const SuccessButton = styled(Button)`
 `
 
 const StopButton = styled(Button)`
+  margin-left: auto;
   background-color: ${color("red")};
   border-color: ${color("red")};
   color: ${color("foreground")};
@@ -153,12 +171,15 @@ const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
   [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
 }
 
-const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: { onTriggerRunScript: (runAll?: boolean) => void, isTemporary: boolean | undefined, editor: any }) => {
+const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
+  const { aiAssistantSettings } = useLocalStorage()
   const [dropdownActive, setDropdownActive] = useState(false)
   const [searchWidgetType, setSearchWidgetType] = useState<"find" | "replace" | null>(null)
+  const observerRef = useRef<MutationObserver | null>(null)
+  const aiAssistantEnabled = !!aiAssistantSettings.apiKey && !!aiAssistantSettings.model
 
   const handleClickQueryButton = useCallback(() => {
     if (queriesToRun.length > 1) {
@@ -178,6 +199,14 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: { onTriggerRunSc
   }, [])
 
   useEffect(() => {
+    if (aiAssistantEnabled) {
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
+      return
+    }
+
     const checkFindWidgetVisibility = () => {
       const findWidget = document.querySelector('.find-widget')
       const isVisible = !!findWidget && findWidget.classList.contains('visible')
@@ -218,11 +247,15 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: { onTriggerRunSc
       attributeFilter: ['class'],
       attributeOldValue: false
     })
+    observerRef.current = observer
 
     return () => {
-      observer.disconnect()
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
     }
-  }, [])
+  }, [aiAssistantEnabled])
 
   const renderRunScriptButton = () => {
     if (running === RunningType.SCRIPT) {
@@ -321,14 +354,15 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: { onTriggerRunSc
   }
 
   return (
-    <ButtonBarWrapper $searchWidgetType={searchWidgetType}>
+    <ButtonBarWrapper $searchWidgetType={searchWidgetType} $aiAssistantEnabled={aiAssistantEnabled}>
       <GenerateSQLButton 
         editor={editor} 
-        disabled={running !== RunningType.NONE}
+        running={running}
       />
       <ExplainQueryButton 
-        editor={editor} 
-        disabled={running !== RunningType.NONE || queriesToRun.length === 0}
+        editor={editor}
+        queriesToRun={queriesToRun}
+        running={running}
       />
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>

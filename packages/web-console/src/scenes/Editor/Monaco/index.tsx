@@ -109,6 +109,11 @@ const Content = styled(PaneContent)`
     border-radius: 2px;
   }
 
+  .aiQueryHighlight {
+    background-color: rgba(241, 250, 140, 0.5);
+    border-radius: 2px;
+  }
+
   .cursorQueryGlyph,
   .cancelQueryGlyph {
     margin-left: 2rem;
@@ -1412,7 +1417,11 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   return (
     <>
       <Content onClick={handleEditorClick}>
-        <ButtonBar onTriggerRunScript={handleTriggerRunScript} editor={editorRef.current} isTemporary={activeBuffer.isTemporary} />
+        <ButtonBar
+          onTriggerRunScript={handleTriggerRunScript}
+          editor={editorRef.current}
+          isTemporary={activeBuffer.isTemporary}
+        />
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}
