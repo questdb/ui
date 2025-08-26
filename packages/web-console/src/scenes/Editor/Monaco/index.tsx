@@ -10,6 +10,7 @@ import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import type { ExecutionRefs } from "../../Editor"
 import { PaneContent, Text } from "../../../components"
+import { ExplainErrorButton } from "../../../components/ExplainErrorButton"
 import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -105,6 +106,11 @@ const Content = styled(PaneContent)`
 
   .searchHighlight {
     background-color: rgba(255, 184, 108, 0.5);
+    border-radius: 2px;
+  }
+
+  .aiQueryHighlight {
+    background-color: rgba(241, 250, 140, 0.5);
     border-radius: 2px;
   }
 
@@ -902,7 +908,15 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
       notification = {
         query: queryKey,
-        content: <Text color="red">{error.error}</Text>,
+        content: (
+          <Box flexDirection="column" gap="1rem">
+            <Text color="red">{error.error}</Text>
+            <ExplainErrorButton 
+              query={query.query} 
+              errorMessage={error.error}
+            />
+          </Box>
+        ),
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
@@ -1303,7 +1317,15 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
                 actions.query.addNotification({
                   query: parentQueryKey,
                   isExplain: isRunningExplain,
-                  content: <Text color="red">{error.error}</Text>,
+                  content: (
+                    <Box flexDirection="column" gap="1rem">
+                      <Text color="red">{error.error}</Text>
+                      <ExplainErrorButton 
+                        query={queryToRun} 
+                        errorMessage={error.error}
+                      />
+                    </Box>
+                  ),
                   sideContent: <QueryInNotification query={queryToRun} />,
                   type: NotificationType.ERROR,
                 }, activeBuffer.id as number),
@@ -1395,7 +1417,11 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   return (
     <>
       <Content onClick={handleEditorClick}>
-        <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
+        <ButtonBar
+          onTriggerRunScript={handleTriggerRunScript}
+          editor={editorRef.current}
+          isTemporary={activeBuffer.isTemporary}
+        />
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}

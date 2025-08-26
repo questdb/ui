@@ -36,6 +36,7 @@ import {
   TransparentButton,
   useKeyPress,
   useScreenSize,
+  SetupAIAssistant,
 } from "../../../components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
@@ -67,6 +68,7 @@ const Separator = styled.div`
 const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
   position: relative;
   flex: 0 0 auto;
+  margin-right: 0.5rem;
 
   @keyframes pulse {
     0% {
@@ -171,6 +173,7 @@ const Menu = () => {
           />
         </PopperToggle>
       )}
+      <SetupAIAssistant />
 
       <Separator />
 

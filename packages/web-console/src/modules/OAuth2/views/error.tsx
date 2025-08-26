@@ -1,5 +1,6 @@
 import React from "react"
-import { CenteredLayout, Text } from "../../../components"
+import { CenteredLayout } from "../../../components/CenteredLayout"
+import { Text } from "../../../components/Text"
 import { Box, Button } from "@questdb/react-components"
 import { User } from "@styled-icons/remix-line"
 
