@@ -958,6 +958,22 @@ describe("handling comments", () => {
       `select\n\n --line;\n 2`
     );
   });
+
+  it("should ignore quotes inside comments", () => {
+    cy.typeQueryDirectly(
+      "/*\n * Today's intraday EURUSD market activity.\n */\nselect timestamp, open, high, low,  close, total_volume\nfrom market_data_ohlc_15m\nwhere  date_trunc('day', now()) < timestamp and symbol = 'EURUSD';\nselect 1;\n"
+    );
+    cy.getCursorQueryGlyph().should("have.length", 2);
+
+    cy.clickLine(1);
+    cy.getCursorQueryDecoration().should("not.exist");
+
+    cy.clickLine(4);
+    cy.getCursorQueryDecoration().should("have.length", 3);
+
+    cy.clickLine(7);
+    cy.getCursorQueryDecoration().should("have.length", 1);
+  });
 });
 
 describe("multiple run buttons with dynamic query log", () => {

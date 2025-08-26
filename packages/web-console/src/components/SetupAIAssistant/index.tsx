@@ -14,7 +14,6 @@ import { testApiKey, isValidApiKeyFormat } from "../../utils/claude"
 import { PopperHover } from "../PopperHover"
 
 const Wrapper = styled.div`
-
   margin-top: 0.5rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
   border: 1px solid ${({ theme }) => theme.color.gray1};
@@ -144,10 +143,6 @@ const StyledInfoCircle = styled(InfoCircle)`
   margin-left: 0.3rem;
 `
 
-type Props = {
-  onApiKeyChange?: (hasKey: boolean) => void
-}
-
 const MODEL_OPTIONS = [
   { label: "Claude Opus 4.1", value: "claude-opus-4-1" },
   { label: "Claude Opus 4.0", value: "claude-opus-4-0" },
@@ -157,7 +152,7 @@ const MODEL_OPTIONS = [
   { label: "Claude 3.5 Sonnet (Latest)", value: "claude-3-5-sonnet-latest" },
 ]
 
-export const SetupAIAssistant = ({ onApiKeyChange }: Props) => {
+export const SetupAIAssistant = () => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const [active, setActive] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
@@ -205,7 +200,6 @@ export const SetupAIAssistant = ({ onApiKeyChange }: Props) => {
           grantSchemaAccess: grantSchemaAccess
         }
         updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
-        onApiKeyChange?.(true)
         toast.success("Settings saved successfully")
         return true
       } else {
@@ -228,30 +222,16 @@ export const SetupAIAssistant = ({ onApiKeyChange }: Props) => {
     }
   }
 
-  const handleDelete = () => {
-    const newSettings = {
-      apiKey: "",
-      model: selectedModel,
-      grantSchemaAccess: grantSchemaAccess
-    }
-    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
-    onApiKeyChange?.(false)
-    setInputValue("")
-    setError(null)
-    toast.success("API key removed")
-  }
-
   const handleCancel = () => {
-    if (aiAssistantSettings.apiKey) {
-      setInputValue(aiAssistantSettings.apiKey)
-      setError(null)
-    }
+    setInputValue(aiAssistantSettings.apiKey)
+    setSelectedModel(aiAssistantSettings.model)
+    setGrantSchemaAccess(aiAssistantSettings.grantSchemaAccess)
+    setError(null)
     handleToggle(false)
   }
 
   const handleClearAllSettings = () => {
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, DEFAULT_AI_ASSISTANT_SETTINGS)
-    onApiKeyChange?.(false)
     setInputValue(DEFAULT_AI_ASSISTANT_SETTINGS.apiKey)
     setSelectedModel(DEFAULT_AI_ASSISTANT_SETTINGS.model)
     setGrantSchemaAccess(DEFAULT_AI_ASSISTANT_SETTINGS.grantSchemaAccess)
@@ -357,7 +337,7 @@ export const SetupAIAssistant = ({ onApiKeyChange }: Props) => {
                 htmlFor="grant-schema-access"
                 data-hook="grant-schema-access-label"
               >
-                  Grant schema access
+                Grant schema access
               </CheckboxLabel>
             </Box>
           </FormGroup>
