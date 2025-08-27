@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import Dexie from "dexie"
+import { Dexie } from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
 import { makeBuffer, fallbackBuffer } from "./buffers"

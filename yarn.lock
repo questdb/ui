@@ -3291,7 +3291,7 @@ __metadata:
     cross-env: "npm:7.0.2"
     css-loader: "npm:3.5.3"
     date-fns: "npm:4.1.0"
-    dexie: "npm:^3.2.4"
+    dexie: "npm:^4.0.11"
     dexie-react-hooks: "npm:^1.1.6"
     dotenv: "npm:^10.0.0"
     draggabilly: "npm:^3.0.0"
@@ -10541,10 +10541,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dexie@npm:^3.2.4":
-  version: 3.2.4
-  resolution: "dexie@npm:3.2.4"
-  checksum: 10/361f7e05fda5db20d9d90ce3e39f4539d1a56acad35a6e4ba26e48ab74c55d81e6daba502a7412be6c0e67ebad3e232e6dbbc1b50426f5743cc0f166cd4e8671
+"dexie@npm:^4.0.11":
+  version: 4.2.0
+  resolution: "dexie@npm:4.2.0"
+  checksum: 10/b69511f40b855a2dfe4e7aaadda6c7073d7418abd699480181160f8f34a058eb205d3e2cd5697fa1d6ebe281dd7835052fa2e9b47f3c400fc0263e8413f62f92
   languageName: node
   linkType: hard
 

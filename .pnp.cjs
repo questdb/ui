@@ -6662,7 +6662,7 @@ const RAW_RUNTIME_STATE =
           ["cross-env", "npm:7.0.2"],\
           ["css-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.3"],\
           ["date-fns", "npm:4.1.0"],\
-          ["dexie", "npm:3.2.4"],\
+          ["dexie", "npm:4.2.0"],\
           ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
           ["dotenv", "npm:10.0.0"],\
           ["draggabilly", "npm:3.0.0"],\
@@ -16970,10 +16970,10 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["dexie", [\
-      ["npm:3.2.4", {\
-        "packageLocation": "./.yarn/cache/dexie-npm-3.2.4-05177fe3ec-361f7e05fd.zip/node_modules/dexie/",\
+      ["npm:4.2.0", {\
+        "packageLocation": "./.yarn/cache/dexie-npm-4.2.0-47130d509d-b69511f40b.zip/node_modules/dexie/",\
         "packageDependencies": [\
-          ["dexie", "npm:3.2.4"]\
+          ["dexie", "npm:4.2.0"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -16992,7 +16992,7 @@ const RAW_RUNTIME_STATE =
           ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
           ["@types/dexie", null],\
           ["@types/react", "npm:17.0.2"],\
-          ["dexie", "npm:3.2.4"],\
+          ["dexie", "npm:4.2.0"],\
           ["react", "npm:17.0.2"]\
         ],\
         "packagePeers": [\
