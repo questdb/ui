@@ -6663,7 +6663,7 @@ const RAW_RUNTIME_STATE =
           ["css-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.3"],\
           ["date-fns", "npm:4.1.0"],\
           ["dexie", "npm:4.2.0"],\
-          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
+          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0"],\
           ["dotenv", "npm:10.0.0"],\
           ["draggabilly", "npm:3.0.0"],\
           ["echarts", "npm:5.4.3"],\
@@ -16979,17 +16979,17 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["dexie-react-hooks", [\
-      ["npm:1.1.6", {\
-        "packageLocation": "./.yarn/cache/dexie-react-hooks-npm-1.1.6-3fe966852c-e8432c8ed9.zip/node_modules/dexie-react-hooks/",\
+      ["npm:4.2.0", {\
+        "packageLocation": "./.yarn/cache/dexie-react-hooks-npm-4.2.0-4dbbe66cd4-2e0536c3ed.zip/node_modules/dexie-react-hooks/",\
         "packageDependencies": [\
-          ["dexie-react-hooks", "npm:1.1.6"]\
+          ["dexie-react-hooks", "npm:4.2.0"]\
         ],\
         "linkType": "SOFT"\
       }],\
-      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6", {\
-        "packageLocation": "./.yarn/__virtual__/dexie-react-hooks-virtual-1bb013645e/0/cache/dexie-react-hooks-npm-1.1.6-3fe966852c-e8432c8ed9.zip/node_modules/dexie-react-hooks/",\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0", {\
+        "packageLocation": "./.yarn/__virtual__/dexie-react-hooks-virtual-aab0b51b4b/0/cache/dexie-react-hooks-npm-4.2.0-4dbbe66cd4-2e0536c3ed.zip/node_modules/dexie-react-hooks/",\
         "packageDependencies": [\
-          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
+          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0"],\
           ["@types/dexie", null],\
           ["@types/react", "npm:17.0.2"],\
           ["dexie", "npm:4.2.0"],\

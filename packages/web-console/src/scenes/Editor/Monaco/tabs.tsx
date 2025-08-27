@@ -64,6 +64,7 @@ export const Tabs = () => {
     setActiveBuffer,
     addBuffer,
     updateBuffer,
+    updateBuffersPositions,
     deleteBuffer,
     archiveBuffer,
   } = useEditor()
@@ -94,11 +95,15 @@ export const Tabs = () => {
       )
       .sort((a, b) => a.position - b.position)
 
-    for (const buffer of sortedActiveBuffers) {
-      const index = sortedActiveBuffers.indexOf(buffer)
-      if (buffer.id) {
-        await updateBuffer(buffer.id, { position: index })
-      }
+    const positions = sortedActiveBuffers
+      .map((buffer, index) => ({
+        id: buffer.id as number,
+        position: index
+      }))
+      .filter(p => p.id !== undefined)
+    
+    if (positions.length > 0) {
+      await updateBuffersPositions(positions)
     }
   }
 
@@ -110,7 +115,6 @@ export const Tabs = () => {
     
     if (buffer.isTemporary) {
       await updateBuffer(parseInt(id), { isTemporary: false }, true)
-      await repositionActiveBuffers(id)
       return
     }
     
@@ -140,11 +144,22 @@ export const Tabs = () => {
     }
     let newTabs = buffers
       .filter((tab) => tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary))
-      .sort((a, b) => a.position - b.position)
+      .sort((a, b) => {
+        if (a.isTemporary) {
+          return 1
+        }
+        if (b.isTemporary) {
+          return -1
+        }
+        return a.position - b.position
+      })
     newTabs.splice(toIndex, 0, beforeTab)
-    newTabs.forEach(async (tab, index) => {
-      await updateBuffer(tab.id as number, { position: index })
-    })
+    
+    const positions = newTabs.map((tab, index) => ({
+      id: tab.id as number,
+      position: index
+    }))
+    await updateBuffersPositions(positions)
   }
 
   const rename = async (id: string, title: string) => {

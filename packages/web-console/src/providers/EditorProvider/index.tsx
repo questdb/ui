@@ -50,6 +50,7 @@ export type EditorContext = {
   archiveBuffer: (id: number) => Promise<void>
   deleteAllBuffers: () => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>, setNewActiveBuffer?: boolean) => Promise<void>
+  updateBuffersPositions: (positions: { id: number; position: number }[]) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   inFocus: boolean
   setTemporaryBuffer: (buffer: Buffer) => Promise<void>
@@ -71,6 +72,7 @@ const defaultValues = {
   archiveBuffer: () => Promise.resolve(),
   deleteAllBuffers: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
+  updateBuffersPositions: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
   inFocus: false,
   setTemporaryBuffer: () => Promise.resolve(),
@@ -291,7 +293,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       const nextActive = await db.buffers
         .toCollection()
         .filter((buffer) => {
-          return !buffer.archived || buffer.id === temporaryBufferId
+          return !buffer.archived && !(buffer.id === temporaryBufferId || buffer.id === id)
         })
         .last()
       await setActiveBuffer(nextActive ?? fallbackBuffer)
@@ -327,6 +329,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     await setActiveBuffer({ ...buffer, isTemporary: true }, { focus: false, fromSearch: true })
   }
 
+  const updateBuffersPositions: EditorContext["updateBuffersPositions"] = async (positions) => {
+    await db.transaction('rw', db.buffers, async () => {
+      for (const { id, position } of positions) {
+        await db.buffers.update(id, { position })
+      }
+    })
+  }
+
   return (
     <EditorContext.Provider
       value={{
@@ -351,6 +361,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         archiveBuffer,
         deleteAllBuffers,
         updateBuffer,
+        updateBuffersPositions,
         setTemporaryBuffer,
         temporaryBufferId,
         queryParamProcessedRef,

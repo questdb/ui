@@ -3292,7 +3292,7 @@ __metadata:
     css-loader: "npm:3.5.3"
     date-fns: "npm:4.1.0"
     dexie: "npm:^4.0.11"
-    dexie-react-hooks: "npm:^1.1.6"
+    dexie-react-hooks: "npm:^4.2.0"
     dotenv: "npm:^10.0.0"
     draggabilly: "npm:^3.0.0"
     echarts: "npm:^5.2.2"
@@ -10530,14 +10530,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dexie-react-hooks@npm:^1.1.6":
-  version: 1.1.6
-  resolution: "dexie-react-hooks@npm:1.1.6"
+"dexie-react-hooks@npm:^4.2.0":
+  version: 4.2.0
+  resolution: "dexie-react-hooks@npm:4.2.0"
   peerDependencies:
     "@types/react": ">=16"
-    dexie: ^3.2 || ^4.0.1-alpha
+    dexie: ">=4.2.0-alpha.1 <5.0.0"
     react: ">=16"
-  checksum: 10/e8432c8ed98bae6a646a0bd3af8e08ba64536c839f745e72d2c87315f9b59d5c9858a085257d499bf288e60a9fdd9889846cdd8d5f9fcb0792e156fc5c6dc152
+  checksum: 10/2e0536c3edce8b109cc9a0cede609e7e1543cc586bb7da2f014de4280bb12a98e48325e9e65124723f54bd6d327cde4aded76680206ecc6f1418bc9213d59b60
   languageName: node
   linkType: hard
 
