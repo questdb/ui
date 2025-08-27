@@ -62,10 +62,6 @@ export class Storage extends Dexie {
             counter++
           })
       })
-    this.version(4)
-      .stores({
-        buffers: "++id, label, position, archived, archivedAt, isTemporary",
-      })
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", () => {

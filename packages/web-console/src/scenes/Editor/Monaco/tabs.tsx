@@ -177,7 +177,15 @@ export const Tabs = () => {
         onNewTab={addBuffer}
         tabs={buffers
           .filter((buffer) => !buffer.archived || buffer.isTemporary)
-          .sort((a, b) => a.position - b.position)
+          .sort((a, b) => {
+            if (a.isTemporary) {
+              return 1
+            }
+            if (b.isTemporary) {
+              return -1
+            }
+            return a.position - b.position
+          })
           .map(
             (buffer) => {
               const classNames = []
