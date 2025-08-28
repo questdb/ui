@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import Dexie from "dexie"
+import { Dexie } from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
 import { makeBuffer, fallbackBuffer } from "./buffers"
@@ -61,10 +61,6 @@ export class Storage extends Dexie {
             buffer.position = counter
             counter++
           })
-      })
-    this.version(4)
-      .stores({
-        buffers: "++id, label, position, archived, archivedAt, isTemporary",
       })
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet

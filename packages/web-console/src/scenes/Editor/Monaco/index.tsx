@@ -1394,7 +1394,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
   return (
     <>
-      <Content onClick={handleEditorClick}>
+      <Content className="monaco-content" onClick={handleEditorClick}>
         <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
         <Editor
           beforeMount={beforeMount}

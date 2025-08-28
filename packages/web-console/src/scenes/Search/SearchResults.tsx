@@ -517,9 +517,8 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     const handleGlobalClick = async (event: MouseEvent) => {
       if (searchResultsRef.current && !searchResultsRef.current.contains(event.target as Node)) {
         if (temporaryBufferId !== null) {
-          if (event.target instanceof HTMLElement && (
-            event.target.closest(".monaco-editor") || event.target.closest(".metrics-root")
-          )) {
+          const target = event.target as HTMLElement | null
+          if (target?.closest(".monaco-content") || target?.closest(".metrics-root")) {
             await convertTemporaryToPermanent()
           } else {
             await updateBuffer(temporaryBufferId, { isTemporary: false }, true)
@@ -527,10 +526,10 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
         }
       }
     }
-    document.addEventListener('click', handleGlobalClick)
+    document.addEventListener('mousedown', handleGlobalClick)
 
     return () => {
-      document.removeEventListener('click', handleGlobalClick)
+      document.removeEventListener('mousedown', handleGlobalClick)
     }
   }, [temporaryBufferId, updateBuffer, convertTemporaryToPermanent])
 
