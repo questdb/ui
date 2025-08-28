@@ -493,6 +493,9 @@ class ChromeTabs {
     }
 
     this.draggabillies.forEach((d) => d.destroy())
+    if (tabEls.find(el => el.classList.contains("temporary-tab"))) {
+      return
+    }
 
     tabEls.forEach((tabEl, originalIndex) => {
       const originalTabPositionX = tabPositions[originalIndex]
