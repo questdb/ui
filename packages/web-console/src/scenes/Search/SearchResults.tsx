@@ -526,10 +526,10 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
         }
       }
     }
-    document.addEventListener('click', handleGlobalClick)
+    document.addEventListener('mousedown', handleGlobalClick)
 
     return () => {
-      document.removeEventListener('click', handleGlobalClick)
+      document.removeEventListener('mousedown', handleGlobalClick)
     }
   }, [temporaryBufferId, updateBuffer, convertTemporaryToPermanent])
 

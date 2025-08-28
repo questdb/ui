@@ -239,11 +239,17 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const updateBuffer: EditorContext["updateBuffer"] = async (id, payload, setNewActiveBuffer = false) => {
     const editorViewState = editorRef.current?.saveViewState()
     const bufferType = await bufferStore.getBufferTypeById(id)
+    let newPosition = null
 
     if (payload && 'isTemporary' in payload) {
       if (payload.isTemporary) { // archived -> temporary
         setTemporaryBufferId(id)
-      } else if (id === temporaryBufferId) { // temporary -> archived
+      } else if (id === temporaryBufferId) {
+        if (payload?.archived === false) { // temporary -> permanent
+          newPosition = getNextPosition()
+        } else { // temporary -> archived
+          newPosition = -1
+        }
         setTemporaryBufferId(null)
       }
     }
@@ -251,7 +257,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     const { isTemporary, ...dbPayload } = payload || {}
     let effectivePayload = {
       ...dbPayload,
-      ...(temporaryBufferId === id && payload?.isTemporary === false ? { position: getNextPosition() } : {})
+      ...(newPosition !== null ? { position: newPosition } : {})
     }
 
     if (Object.keys(effectivePayload).length > 0) {
