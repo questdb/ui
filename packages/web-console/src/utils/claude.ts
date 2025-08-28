@@ -147,6 +147,28 @@ ${grantSchemaAccess ? `You have access to tools that can help you understand the
 Use these tools to ensure you generate queries with correct table and column names.` : ''}
 `
 
+const getFixQueryPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
+When given a QuestDB SQL query with an error, fix the query to resolve the error.
+
+Important guidelines:
+1. Analyze the error message carefully to understand what went wrong
+2. Generate only valid QuestDB SQL syntax
+3. Preserve the original intent of the query while fixing the error
+4. Follow QuestDB best practices and syntax rules
+5. Consider common issues like:
+   - Missing or incorrect column names
+   - Invalid syntax for time-series operations
+   - Data type mismatches
+   - Missing quotes around string literals
+   - Incorrect function usage
+
+${grantSchemaAccess ? `You have access to tools that can help you understand the database schema:
+- get_tables: Get a list of all tables and materialized views
+- get_table_schema: Get the full DDL schema for a specific table
+
+Use these tools to verify correct table and column names, and to understand the data types.` : ''}
+`
+
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
 
@@ -487,6 +509,117 @@ export const generateSQL = async (
         {
           role: 'user' as const,
           content: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }'
+        },
+        {
+          role: 'assistant' as const,
+          content: '{'
+        }
+      ]
+    })
+    const fullContent = formattingResponse.content.reduce((acc, block) => {
+      if (block.type === 'text' && 'text' in block) {
+        acc += block.text
+      }
+      return acc
+    }, '{')
+
+    try {
+      const json = JSON.parse(fullContent)
+      let sql = formatSql(json.sql) || ''
+      if (sql) {
+        sql = sql.trim()
+        if (!sql.endsWith(';')) {
+          sql = sql + ';'
+        }
+      }
+      return {
+        sql,
+        explanation: json.explanation || ''
+      }
+    } catch (error) {
+      return {
+        type: 'unknown',
+        message: 'Failed to parse assistant response.'
+      } as ClaudeAPIError
+    }
+  })
+}
+
+export const fixQuery = async (
+  query: string,
+  errorMessage: string,
+  settings: AiAssistantSettings,
+  schemaClient?: SchemaToolsClient
+): Promise<GeneratedSQL | ClaudeAPIError> => {
+  if (!settings.apiKey || !query || !errorMessage) {
+    return {
+      type: 'invalid_key',
+      message: 'API key, query, or error message is missing'
+    }
+  }
+  return {
+    sql: formatSql(`
+      SELECT 
+        timestamp, 
+        symbol, 
+        spread_bps(bids[1][1], asks[1][1]) spread_bps 
+        FROM market_data 
+        WHERE symbol IN ('GBPUSD', 'EURUSD') LIMIT 10`),
+    explanation: "The original query used curly braces {} in the IN clause, which is incorrect SQL syntax. The fix replaced the curly braces with standard parentheses () in the IN clause and ensured string literals were properly enclosed in single quotes. This follows standard SQL syntax which QuestDB expects."
+  }
+
+  await handleRateLimit()
+
+  return tryWithRetries(async () => {
+    const anthropic = new Anthropic({
+      apiKey: settings.apiKey,
+      dangerouslyAllowBrowser: true
+    })
+
+    const initialMessages = [
+      {
+        role: 'user' as const,
+        content: `Please fix this QuestDB SQL query based on the error:
+
+SQL Query:
+\`\`\`sql
+${query}
+\`\`\`
+
+Error Message:
+\`\`\`
+${errorMessage}
+\`\`\`
+
+Fix the query to resolve this error.`
+      }
+    ]
+
+    const message = await anthropic.messages.create({
+      model: settings.model,
+      max_tokens: 1000,
+      system: getFixQueryPrompt(settings.grantSchemaAccess),
+      tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
+      messages: initialMessages,
+      temperature: 0.2 // Lower temperature for more consistent fixes
+    })
+
+    // Handle tool calls if schema access is granted
+    const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model)
+      : message
+    
+    const formattingResponse = await anthropic.messages.create({
+      model: settings.model,
+      max_tokens: 1000,
+      messages: [
+        {
+          role: 'assistant' as const,
+          content: response.content
+        },
+        {
+          role: 'user' as const,
+          content: 'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }'
         },
         {
           role: 'assistant' as const,

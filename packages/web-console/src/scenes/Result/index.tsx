@@ -42,7 +42,6 @@ import {
   Text,
   Tooltip,
 } from "../../components"
-import { ExplainErrorButton } from "../../components/ExplainErrorButton"
 import { actions, selectors } from "../../store"
 import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
@@ -125,15 +124,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           dispatch(
             actions.query.addNotification({
               query: `${sql}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
-              content: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <Text color="red">{(err as ErrorResult).error}</Text>
-                  <ExplainErrorButton 
-                    query={sql} 
-                    errorMessage={(err as ErrorResult).error}
-                  />
-                </div>
-              ),
+              content: <Text color="red">{(err as ErrorResult).error}</Text>,
               sideContent: <QueryInNotification query={sql} />,
               type: NotificationType.ERROR,
               updateActiveNotification: true,

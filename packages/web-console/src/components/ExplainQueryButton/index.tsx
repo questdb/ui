@@ -115,7 +115,7 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
       },
       text: insertText
     }])
-    editor.revealPositionInCenter({ lineNumber: queryStartLine, column: 1 })
+    editor.revealPositionNearTop({ lineNumber: queryStartLine, column: 1 })
     editor.setPosition({ lineNumber: queryStartLine, column: 1 })
     highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
       range: {

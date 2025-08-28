@@ -10,7 +10,6 @@ import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import type { ExecutionRefs } from "../../Editor"
 import { PaneContent, Text } from "../../../components"
-import { ExplainErrorButton } from "../../../components/ExplainErrorButton"
 import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -112,6 +111,39 @@ const Content = styled(PaneContent)`
   .aiQueryHighlight {
     background-color: rgba(241, 250, 140, 0.5);
     border-radius: 2px;
+  }
+
+  .ai-fix-suggestion {
+    background-color: rgba(80, 250, 123, 0.15);
+    border-radius: 2px;
+  }
+
+  .fix-action-button {
+    height: 2.4rem;
+    padding: 1px 6px;
+    font-size: 1.4rem;
+    color: #f8f8f2;
+    border-radius: 4px;
+    cursor: pointer;
+    &.accept-fix {
+      background-color: #00aa3b;
+      border: 1px solid #00aa3b;
+    }
+
+    &.reject-fix {
+      background-color: #ff5555;
+      border: 1px solid #ff5555;
+    }
+
+    &:hover {
+      filter: brightness(1.3);
+    }
+  }
+
+  div[widgetid="fix-query-buttons"] { 
+    display: inline-flex !important;
+    width: 30rem;
+    gap: 1rem !important;
   }
 
   .cursorQueryGlyph,
@@ -908,15 +940,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
       notification = {
         query: queryKey,
-        content: (
-          <Box flexDirection="column" gap="1rem">
-            <Text color="red">{error.error}</Text>
-            <ExplainErrorButton 
-              query={query.query} 
-              errorMessage={error.error}
-            />
-          </Box>
-        ),
+        content: <Text color="red">{error.error}</Text>,
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
@@ -1317,15 +1341,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
                 actions.query.addNotification({
                   query: parentQueryKey,
                   isExplain: isRunningExplain,
-                  content: (
-                    <Box flexDirection="column" gap="1rem">
-                      <Text color="red">{error.error}</Text>
-                      <ExplainErrorButton 
-                        query={queryToRun} 
-                        errorMessage={error.error}
-                      />
-                    </Box>
-                  ),
+                  content: <Text color="red">{error.error}</Text>,
                   sideContent: <QueryInNotification query={queryToRun} />,
                   type: NotificationType.ERROR,
                 }, activeBuffer.id as number),
@@ -1377,6 +1393,19 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     currentBufferValueRef.current = activeBuffer.value
     if (monacoRef.current && editorRef.current) {
       clearModelMarkers(monacoRef.current, editorRef.current)
+      
+      // Clean up any pending fix widget when switching buffers
+      const fixWidget = (window as any).__questdb_fix_widget
+      if (fixWidget && fixWidget.widget) {
+        editorRef.current.removeContentWidget(fixWidget.widget)
+        if (fixWidget.decorations) {
+          fixWidget.decorations.clear()
+        }
+        delete (window as any).__questdb_fix_widget
+        delete (window as any).__questdb_fix_original_content
+        // Restore editor to be editable
+        editorRef.current.updateOptions({ readOnly: false })
+      }
       
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }

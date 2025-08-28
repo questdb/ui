@@ -7,6 +7,7 @@ import { ChevronDown } from "@styled-icons/boxicons-solid"
 import { PopperToggle } from "../../../components"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { GenerateSQLButton } from "../../../components/GenerateSQLButton"
+import { FixQueryButton } from "./FixQueryButton"
 import { Box, Button } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
@@ -175,11 +176,14 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: ButtonBarProps) 
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { aiAssistantSettings } = useLocalStorage()
   const [dropdownActive, setDropdownActive] = useState(false)
   const [searchWidgetType, setSearchWidgetType] = useState<"find" | "replace" | null>(null)
   const observerRef = useRef<MutationObserver | null>(null)
   const aiAssistantEnabled = !!aiAssistantSettings.apiKey && !!aiAssistantSettings.model
+  
+  const hasQueryError = activeNotification?.type === 'error' && !activeNotification?.isExplain
 
   const handleClickQueryButton = useCallback(() => {
     if (queriesToRun.length > 1) {
@@ -359,11 +363,20 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: ButtonBarProps) 
         editor={editor} 
         running={running}
       />
-      <ExplainQueryButton 
-        editor={editor}
-        queriesToRun={queriesToRun}
-        running={running}
-      />
+      {hasQueryError ? (
+        <FixQueryButton
+          editor={editor}
+          queriesToRun={queriesToRun}
+          running={running}
+          hasError={hasQueryError}
+        />
+      ) : (
+        <ExplainQueryButton 
+          editor={editor}
+          queriesToRun={queriesToRun}
+          running={running}
+        />
+      )}
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>
   )
