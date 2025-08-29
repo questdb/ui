@@ -277,9 +277,7 @@ export const Metrics = () => {
     }
   }, [buffer?.id, refreshMetricsData])
 
-  useEffect(() => {
-    setupListeners()
-  }, [refreshRate, setupListeners])
+  }, [refreshRate])
 
   useEffect(() => {
     isNavigatingFromSearchRef.current = false
