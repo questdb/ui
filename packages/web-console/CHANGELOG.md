@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.2 - 2025.08.29
+### Fixed
+- infinite state updates in metrics [#469](https://github.com/questdb/ui/pull/469)
+
+
 ## 1.1.1 - 2025.08.28
 ### Fixed
 - remove indexed db backwards/forwards compatibility issue [#467](https://github.com/questdb/ui/pull/467)
