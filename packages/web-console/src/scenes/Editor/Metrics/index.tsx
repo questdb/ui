@@ -277,6 +277,8 @@ export const Metrics = () => {
     }
   }, [buffer?.id, refreshMetricsData])
 
+  useEffect(() => {
+    setupListeners()
   }, [refreshRate])
 
   useEffect(() => {
