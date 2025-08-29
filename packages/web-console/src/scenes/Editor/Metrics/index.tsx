@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from "react"
+import React, { useCallback, useEffect, useState, useRef, useMemo } from "react"
 import styled from "styled-components"
 import { Box, Button, Select } from "@questdb/react-components"
 import { Text, Link } from "../../../components"
@@ -17,7 +17,6 @@ import { Metric as MetricComponent } from "./metric"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
-import merge from "lodash.merge"
 import { AddChart } from "@styled-icons/material"
 import { IconWithTooltip } from "../../../components"
 import { eventBus } from "../../../modules/EventBus"
@@ -124,22 +123,29 @@ const MetricsUnavailable = () => {
 
 export const Metrics = () => {
   const { activeBuffer, updateBuffer, buffers, isNavigatingFromSearchRef } = useEditor()
-  const [metricViewMode, setMetricViewMode] = useState<MetricViewMode>(
-    MetricViewMode.GRID,
-  )
-  const [dateFrom, setDateFrom] = useState<string>(formatISO(new Date()))
-  const [dateTo, setDateTo] = useState<string>(formatISO(new Date()))
-  const [refreshRate, setRefreshRate] = useState<RefreshRate>()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [metrics, setMetrics] = useState<Metric[]>([])
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const telemetryEnabled = telemetryConfig && telemetryConfig.enabled
+  const metricsFilteredRef = useRef<boolean>(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval>>()
+  
+  const defaultDateFromRef = useRef(formatISO(new Date(Date.now() - 15 * 60 * 1000)))
+  const defaultDateToRef = useRef(formatISO(new Date()))
 
-  const tabInFocusRef = React.useRef<boolean>(true)
-  const refreshRateRef = React.useRef<RefreshRate>()
-  const intervalRef = React.useRef<NodeJS.Timeout>()
+  const buffer = useMemo(
+    () => buffers.find((b: any) => b.id === activeBuffer?.id),
+    [buffers, activeBuffer?.id],
+  )
+  const {
+    dateFrom = defaultDateFromRef.current,
+    dateTo = defaultDateToRef.current,
+    refreshRate,
+    viewMode: metricViewMode = MetricViewMode.GRID,
+  } = buffer?.metricsViewState ?? {}
+  const metrics = buffer?.metricsViewState?.metrics ?? []
 
-  const buffer = buffers.find((b: any) => b.id === activeBuffer?.id)
+  const dateFromRef = useRef(dateFrom)
+  const dateToRef = useRef(dateTo)
 
   const refreshRateInSec = refreshRate
     ? refreshRate === RefreshRate.AUTO
@@ -147,7 +153,7 @@ export const Metrics = () => {
       : refreshRatesInSeconds[refreshRate]
     : 0
 
-  const updateMetrics = (metrics: Metric[]) => {
+  const updateMetrics = useCallback((metrics: Metric[]) => {
     if (buffer?.id) {
       updateBuffer(buffer?.id, {
         metricsViewState: {
@@ -155,22 +161,17 @@ export const Metrics = () => {
           metrics,
         },
       })
-      if (buffer?.metricsViewState?.metrics) {
-        buffer.metricsViewState.metrics = metrics
-      }
     }
-  }
+  }, [buffer?.id, buffer?.metricsViewState, updateBuffer]) 
 
-  const refreshMetricsData = (overwrite?: boolean) => {
+  const refreshMetricsData = useCallback(() => {
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
-      dateFrom,
-      dateTo,
-      overwrite,
+      dateFrom: dateFromRef.current,
+      dateTo: dateToRef.current,
     })
-  }
+  }, [])
 
-  const handleRemoveMetric = (metric: Metric) => {
-    metric.removed = true
+  const handleRemoveMetric = useCallback((metric: Metric) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics
@@ -178,9 +179,9 @@ export const Metrics = () => {
           .map((m: Metric, index: number) => ({ ...m, position: index })),
       )
     }
-  }
+  }, [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics])
 
-  const handleTableChange = (metric: Metric, tableId: number) => {
+  const handleTableChange = useCallback((metric: Metric, tableId: number) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics.map((m: any) =>
@@ -188,37 +189,35 @@ export const Metrics = () => {
         ),
       )
     }
-  }
+  },
+  [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics])
 
-  const handleColorChange = (metric: Metric, color: string) => {
+  const handleColorChange = useCallback((metric: Metric, color: string) => {
     if (buffer?.id && buffer?.metricsViewState?.metrics) {
       updateMetrics(
         buffer?.metricsViewState?.metrics.map((m: any) =>
           m.position === metric.position ? { ...m, color } : m,
         ),
       )
-    }
-  }
-
-  const handleDateFromToChange = (dateFrom: string, dateTo: string) => {
-    setDateFrom(dateFrom)
-    setDateTo(dateTo)
-  }
-
-  const handleFullRefresh = () => {
-    refreshMetricsData(true)
-  }
-
-  const focusListener = useCallback(() => {
-    tabInFocusRef.current = true
-    if (refreshRateRef.current !== RefreshRate.OFF) {
       refreshMetricsData()
     }
-  }, [])
+  },
+  [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics, refreshMetricsData])
 
-  const blurListener = useCallback(() => {
-    tabInFocusRef.current = false
-  }, [])
+  const handleDateFromToChange = useCallback((dateFrom: string, dateTo: string) => {
+    dateFromRef.current = dateFrom
+    dateToRef.current = dateTo
+    if (buffer?.id) {
+      updateBuffer(buffer.id, {
+        metricsViewState: {
+          ...buffer?.metricsViewState,
+          dateFrom,
+          dateTo,
+        },
+      })
+      refreshMetricsData()
+    }
+  }, [buffer?.id, buffer?.metricsViewState, updateBuffer, refreshMetricsData])
 
   const [elementRef, isVisible] = useElementVisibility(1000)
   const isVisibleRef = useRef(isVisible)
@@ -226,6 +225,11 @@ export const Metrics = () => {
   useEffect(() => {
     isVisibleRef.current = isVisible
   }, [isVisible])
+
+  useEffect(() => {
+    dateFromRef.current = dateFrom
+    dateToRef.current = dateTo
+  }, [dateFrom, dateTo])
 
   const setupListeners = useCallback(() => {
     if (intervalRef.current) {
@@ -235,7 +239,7 @@ export const Metrics = () => {
     if (refreshRate && refreshRate !== RefreshRate.OFF && refreshRateInSec > 0) {
       intervalRef.current = setInterval(
         () => {
-          if (isVisibleRef.current) {
+          if (isVisibleRef.current && telemetryEnabled) {
             refreshMetricsData()
           }
         },
@@ -247,101 +251,48 @@ export const Metrics = () => {
   }, [refreshRate, refreshRateInSec, refreshMetricsData])
 
   useEffect(() => {
-    if (buffer) {
-      const metrics = buffer?.metricsViewState?.metrics
-      const refreshRate = buffer?.metricsViewState?.refreshRate
-      const metricViewMode = buffer?.metricsViewState?.viewMode
-      const dateFrom = buffer?.metricsViewState?.dateFrom
-      const dateTo = buffer?.metricsViewState?.dateTo
-
-      if (dateFrom) {
-        setDateFrom(dateFrom)
-      }
-      if (dateTo) {
-        setDateTo(dateTo)
-      }
-      if (metrics) {
-        setMetrics(metrics)
-      }
-      if (refreshRate) {
-        setRefreshRate(refreshRate)
-      }
-      if (metricViewMode) {
-        setMetricViewMode(metricViewMode)
-      }
-    }
-  }, [buffer])
-
-  useEffect(() => {
-    if (buffer?.id) {
+    if (buffer?.id && metricsFilteredRef.current === false) {
       // remove all unknown (or obsolete) metrics on startup
       // and also make sure entries without "removed" attribute
       // receive default value
       if (buffer?.metricsViewState?.metrics) {
-        buffer.metricsViewState.metrics = buffer.metricsViewState.metrics
+        const metrics = [...buffer.metricsViewState.metrics]
           .filter((metric: Metric) => widgets[metric.metricType])
           .map((metric: Metric) => ({ ...metric, removed: false }))
-      }
 
-      const newMetricsViewState = {
-        ...buffer.metricsViewState,
-        ...(metricViewMode !== buffer?.metricsViewState?.viewMode && {
-          viewMode: metricViewMode,
-        }),
-        ...(dateFrom !== buffer?.metricsViewState?.dateFrom && {
-          dateFrom,
-        }),
-        ...(dateTo !== buffer?.metricsViewState?.dateTo && {
-          dateTo,
-        }),
-      }
-
-      if (dateFrom && dateTo) {
-        if (refreshRate === RefreshRate.AUTO) {
-          setupListeners()
-        }
-      }
-      if (dateFrom && dateTo) {
-        updateBuffer(buffer.id, {
-          metricsViewState: newMetricsViewState,
-        })
-        refreshMetricsData(true)
-      }
-    }
-  }, [metricViewMode, dateFrom, dateTo])
-
-  useEffect(() => {
-    if (refreshRate) {
-      refreshRateRef.current = refreshRate
-      setupListeners()
-      if (buffer?.id) {
         updateBuffer(buffer.id, {
           metricsViewState: {
             ...buffer?.metricsViewState,
-            refreshRate,
+            metrics,
           },
         })
       }
+      metricsFilteredRef.current = true
     }
-  }, [refreshRate])
+  }, [buffer, updateBuffer])
 
   useEffect(() => {
-    eventBus.subscribe(EventType.TAB_FOCUS, focusListener)
-    eventBus.subscribe(EventType.TAB_BLUR, blurListener)
+    if (buffer?.id) {
+      refreshMetricsData()
+    }
+  }, [buffer?.id, refreshMetricsData])
+
+  useEffect(() => {
+    setupListeners()
+  }, [refreshRate, setupListeners])
+
+  useEffect(() => {
     isNavigatingFromSearchRef.current = false
 
     return () => {
-      eventBus.unsubscribe(EventType.TAB_FOCUS, focusListener)
-      eventBus.unsubscribe(EventType.TAB_BLUR, blurListener)
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
-        intervalRef.current = undefined
-      }
+      }      
     }
   }, [])
 
   return (
-    <Root data-hook="metrics-root" {...(telemetryEnabled ? {} : { ref: elementRef })} className="metrics-root">
+    <Root data-hook="metrics-root" {...(telemetryEnabled ? { ref: elementRef } : {})} className="metrics-root">
       {!telemetryEnabled ? (
         <MetricsUnavailable />
       ) : (
@@ -352,7 +303,7 @@ export const Metrics = () => {
               <Box gap="0.5rem" style={{ flexShrink: 0 }}>
                 <IconWithTooltip
                   icon={
-                    <Button skin="secondary" onClick={handleFullRefresh}>
+                    <Button skin="secondary" onClick={refreshMetricsData}>
                       <Refresh size="20px" />
                     </Button>
                   }
@@ -368,9 +319,16 @@ export const Metrics = () => {
                         label: `Refresh: ${rate}`,
                         value: rate,
                       }))}
-                      onChange={(e: any) =>
-                        setRefreshRate(e.target.value as RefreshRate)
-                      }
+                      onChange={(e: any) => {
+                        if (buffer?.id) {
+                          updateBuffer(buffer.id, {
+                            metricsViewState: {
+                              ...buffer?.metricsViewState,
+                              refreshRate: e.target.value as RefreshRate,
+                            },
+                          })
+                        }
+                      }}
                     />
                   }
                   tooltip="Widget refresh rate"
@@ -394,13 +352,18 @@ export const Metrics = () => {
                 icon={
                   <Button
                     skin="secondary"
-                    onClick={() =>
-                      setMetricViewMode(
-                        metricViewMode === MetricViewMode.GRID
-                          ? MetricViewMode.LIST
-                          : MetricViewMode.GRID,
-                      )
-                    }
+                    onClick={() => {
+                      if (buffer?.id) {
+                        updateBuffer(buffer.id, {
+                          metricsViewState: {
+                            ...buffer?.metricsViewState,
+                            viewMode: metricViewMode === MetricViewMode.GRID
+                              ? MetricViewMode.LIST
+                              : MetricViewMode.GRID,
+                          },
+                        })
+                      }
+                    }}
                   >
                     {metricViewMode === MetricViewMode.LIST ? (
                       <GridAlt size="18px" />
@@ -437,20 +400,17 @@ export const Metrics = () => {
               </GlobalInfo>
             )}
             {metrics &&
-              metrics
+              [...metrics]
                 .sort((a: Metric, b: Metric) => a.position - b.position)
                 .filter(
                   (metric: Metric) => widgets[metric.metricType] && !metric.removed,
                 )
-                .map((metric: Metric, index: number) => {
+                .map((metric: Metric) => {
                   return (
                     <MetricComponent
                       dateFrom={dateFrom}
                       dateTo={dateTo}
-                      // key is not used by the metric component, but
-                      // is required to comply with React requirements for
-                      // components that are being added to a list
-                      key={index}
+                      key={`${metric.position}-${metric.metricType}`}
                       metric={metric}
                       onRemove={handleRemoveMetric}
                       onTableChange={handleTableChange}

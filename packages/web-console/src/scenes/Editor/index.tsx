@@ -81,7 +81,7 @@ const Editor = ({
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
       {activeBuffer.editorViewState && <Monaco executionRefs={executionRefs} />}
-      {activeBuffer.metricsViewState && <Metrics />}
+      {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
       {activeBuffer.editorViewState && <Notifications onClearNotifications={handleClearNotifications} />}
     </EditorPaneWrapper>
   )
