@@ -149,7 +149,6 @@ export const bufferStore = {
   getMetaById: (id: number) => db.buffers.get(id).then(buffer => ({
     archived: buffer?.archived,
     archivedAt: buffer?.archivedAt,
-    isTemporary: buffer?.isTemporary,
     label: buffer?.label,
     type: buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
   })),

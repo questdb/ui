@@ -471,7 +471,6 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(({
               bufferLabel: bufferMeta.label!,
               isArchived: bufferMeta.archived,
               archivedAt: bufferMeta.archivedAt,
-              isTemporary: bufferMeta.isTemporary,
             } : match
           })
         }
