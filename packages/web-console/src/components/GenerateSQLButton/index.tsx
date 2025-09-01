@@ -1,56 +1,37 @@
-import React, { useState, useContext, useEffect, useRef } from "react"
-import styled from "styled-components"
+import React, { useCallback, useState, useContext, useEffect, useRef } from "react"
+import styled, { css } from "styled-components"
 import { Button, Loader, Box, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { useEditor } from "../../providers/EditorProvider"
 import type { ClaudeAPIError, GeneratedSQL } from "../../utils/claude"
 import { generateSQL, formatExplanationAsComment, createSchemaClient, isClaudeError } from "../../utils/claude"
 import { toast } from "../Toast"
-import type { editor } from "monaco-editor"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { RunningType } from "../../store/Query/types"
 
-const GenerateButton = styled(Button)`
-  background-color: ${({ theme }) => theme.color.pink};
-  border-color: ${({ theme }) => theme.color.pink};
-  color: ${({ theme }) => theme.color.foreground};
-
-  &:hover:not(:disabled) {
-    background-color: ${({ theme }) => theme.color.pink};
-    border-color: ${({ theme }) => theme.color.pink};
-    filter: brightness(1.2);
-  }
-
-  &:disabled {
-    background-color: ${({ theme }) => theme.color.pink};
-    border-color: ${({ theme }) => theme.color.pink};
-    opacity: 0.6;
-  }
-
-  svg {
-    color: ${({ theme }) => theme.color.foreground};
-  }
-`
-
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
-  background: ${({ theme }) => theme.color.gray1};
+  background: ${({ theme }) => theme.color.selectionDarker};
   border-radius: 0.2rem;
   font-size: 1.2rem;
   height: 1.8rem;
-  color: ${({ theme }) => theme.color.pink};
+  color: inherit;
 
   &:not(:last-child) {
     margin-right: 0.25rem;
   }
 `
 
-const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
+const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{ $disabled: boolean }>`
   margin-left: 1rem;
+  ${({ $disabled, theme }) => $disabled && css`
+    color: ${theme.color.gray1};
+  `}
 `
 
 const StyledDialogDescription = styled(Dialog.Description)`
@@ -95,17 +76,18 @@ const StyledTextArea = styled.textarea`
 
 
 type Props = {
-  editor: editor.IStandaloneCodeEditor | null
-  running: RunningType
+  onBufferContentChange?: (value?: string) => void
 }
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 const shortcutTitle = platform.isMacintosh || platform.isIOS ? "Cmd+G" : "Ctrl+G"
 
-export const GenerateSQLButton = ({ editor, running }: Props) => {
+export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
+  const { editorRef } = useEditor()
   const tables = useSelector(selectors.query.getTables)
+  const running = useSelector(selectors.query.getRunning)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
@@ -130,8 +112,8 @@ export const GenerateSQLButton = ({ editor, running }: Props) => {
       return
     }
 
-    if (editor) {
-      const model = editor.getModel()
+    if (editorRef.current) {
+      const model = editorRef.current.getModel()
       if (!model) return
 
       const commentBlock = formatExplanationAsComment(`${description}\nExplanation:\n${result.explanation}`, `Prompt`)
@@ -140,7 +122,7 @@ export const GenerateSQLButton = ({ editor, running }: Props) => {
       const lineNumber = model.getLineCount()
       const column = model.getLineMaxColumn(lineNumber)
 
-      editor.executeEdits("generate-sql", [{
+      editorRef.current.executeEdits("generate-sql", [{
         range: {
           startLineNumber: lineNumber,
           startColumn: column,
@@ -149,9 +131,13 @@ export const GenerateSQLButton = ({ editor, running }: Props) => {
         },
         text: sqlWithComment
       }])
+      
+      if (onBufferContentChange) {
+        onBufferContentChange(editorRef.current.getValue())
+      }
 
-      editor.revealLineInCenter(lineNumber)
-      highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
+      editorRef.current.revealLineInCenter(lineNumber)
+      highlightDecorationsRef.current = editorRef.current.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
         range: {
           startLineNumber: lineNumber,
           startColumn: column,
@@ -164,10 +150,10 @@ export const GenerateSQLButton = ({ editor, running }: Props) => {
         }
       }]) ?? []
       setTimeout(() => {
-        highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
+        highlightDecorationsRef.current = editorRef.current?.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
       }, 1000)
-      editor.setPosition({ lineNumber: lineNumber + 1, column: 1 })
-      editor.focus()
+      editorRef.current.setPosition({ lineNumber: lineNumber + 1, column: 1 })
+      editorRef.current.focus()
     }
 
     toast.success("Query generated!")
@@ -176,31 +162,31 @@ export const GenerateSQLButton = ({ editor, running }: Props) => {
     setIsGenerating(false)
   }
 
-  const handleOpenDialog = () => {
+  const handleOpenDialog = useCallback(() => {
     setShowDialog(true)
     setDescription("")
-  }
+  }, [])
 
-  const handleCloseDialog = () => {
+  const handleCloseDialog = useCallback(() => {
     if (!isGenerating) {
       setShowDialog(false)
       setDescription("")
     }
-  }
+  }, [isGenerating])
+
+  const handleGenerateQueryOpen = useCallback(() => {
+    if (!disabled && editorRef.current && aiAssistantSettings.apiKey) {
+      handleOpenDialog()
+    }
+  }, [disabled, aiAssistantSettings.apiKey])
 
   useEffect(() => {
-    const handleGenerateQueryOpen = () => {
-      if (!disabled && editor && aiAssistantSettings.apiKey) {
-        handleOpenDialog()
-      }
-    }
-
     eventBus.subscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
 
     return () => {
       eventBus.unsubscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
     }
-  }, [disabled, editor, aiAssistantSettings.apiKey])
+  }, [handleGenerateQueryOpen])
 
   if (!aiAssistantSettings.apiKey) {
     return null
@@ -208,18 +194,19 @@ export const GenerateSQLButton = ({ editor, running }: Props) => {
 
   return (
     <>
-      <GenerateButton
-        onClick={handleOpenDialog}
-        disabled={disabled || !editor}
+      <Button
+        skin="success"
+        onClick={handleGenerateQueryOpen}
+        disabled={disabled || !editorRef.current}
         title={`Generate query with AI Assistant (${shortcutTitle})`}
         data-hook="button-generate-sql"
       >
         Generate query
-        <KeyBinding>
+        <KeyBinding $disabled={disabled}>
           <Key>{ctrlCmd}</Key>
           <Key>G</Key>
         </KeyBinding>
-      </GenerateButton>
+      </Button>
 
       <Dialog.Root open={showDialog} onOpenChange={(open) => !open && handleCloseDialog()}>
         <Dialog.Portal>

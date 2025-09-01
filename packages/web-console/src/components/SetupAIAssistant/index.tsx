@@ -247,7 +247,7 @@ export const SetupAIAssistant = () => {
       trigger={
         <SettingsButton
           skin="secondary"
-          prefixIcon={<AutoAwesome size="16px" />}
+          prefixIcon={<AutoAwesome size="16px" color="#f1fa8c" />}
           data-hook="anthropic-api-settings-button"
           title="Anthropic API Settings"
         >

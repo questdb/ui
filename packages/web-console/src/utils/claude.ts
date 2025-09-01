@@ -50,7 +50,7 @@ const SCHEMA_TOOLS = [
   },
 ]
 
-export function isClaudeError(response: ClaudeAPIError | ClaudeExplanation | GeneratedSQL)  {
+export function isClaudeError(response: ClaudeAPIError | ClaudeExplanation | GeneratedSQL | Partial<GeneratedSQL>)  {
   if ('type' in response && 'message' in response) {
     return true
   }
@@ -550,22 +550,12 @@ export const fixQuery = async (
   errorMessage: string,
   settings: AiAssistantSettings,
   schemaClient?: SchemaToolsClient
-): Promise<GeneratedSQL | ClaudeAPIError> => {
+): Promise<Partial<GeneratedSQL> | ClaudeAPIError> => {
   if (!settings.apiKey || !query || !errorMessage) {
     return {
       type: 'invalid_key',
       message: 'API key, query, or error message is missing'
     }
-  }
-  return {
-    sql: formatSql(`
-      SELECT 
-        timestamp, 
-        symbol, 
-        spread_bps(bids[1][1], asks[1][1]) spread_bps 
-        FROM market_data 
-        WHERE symbol IN ('GBPUSD', 'EURUSD') LIMIT 10`),
-    explanation: "The original query used curly braces {} in the IN clause, which is incorrect SQL syntax. The fix replaced the curly braces with standard parentheses () in the IN clause and ensured string literals were properly enclosed in single quotes. This follows standard SQL syntax which QuestDB expects."
   }
 
   await handleRateLimit()
@@ -579,9 +569,7 @@ export const fixQuery = async (
     const initialMessages = [
       {
         role: 'user' as const,
-        content: `Please fix this QuestDB SQL query based on the error:
-
-SQL Query:
+        content: `SQL Query:
 \`\`\`sql
 ${query}
 \`\`\`
@@ -591,7 +579,7 @@ Error Message:
 ${errorMessage}
 \`\`\`
 
-Fix the query to resolve this error.`
+Analyze the error and fix the query if possible, otherwise provide an explanation why it was failed.`
       }
     ]
 
@@ -619,7 +607,7 @@ Fix the query to resolve this error.`
         },
         {
           role: 'user' as const,
-          content: 'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }'
+          content: 'If the query needs to be fixed, return a JSON string with the following structure:\n{"sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }'
         },
         {
           role: 'assistant' as const,
@@ -636,15 +624,15 @@ Fix the query to resolve this error.`
 
     try {
       const json = JSON.parse(fullContent)
-      let sql = formatSql(json.sql) || ''
+      let sql = json.sql
       if (sql) {
         sql = sql.trim()
-        if (!sql.endsWith(';')) {
-          sql = sql + ';'
+        if (sql.endsWith(';')) {
+          sql = sql.slice(0, -1)
         }
       }
       return {
-        sql,
+        ...(sql ? { sql } : {}),
         explanation: json.explanation || ''
       }
     } catch (error) {

@@ -1,81 +1,61 @@
 import React, { useState, useContext, useEffect, useRef } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Button, Loader, Box } from "@questdb/react-components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { useEditor } from "../../providers/EditorProvider"
 import type { ClaudeAPIError, ClaudeExplanation } from "../../utils/claude"
 import { explainQuery, formatExplanationAsComment, createSchemaClient, isClaudeError } from "../../utils/claude"
 import { toast } from "../Toast"
-import type { editor } from "monaco-editor"
-import { getQueryFromCursor, normalizeQueryText } from "../../scenes/Editor/Monaco/utils"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { QueriesToRun, RunningType } from "../../store/Query/types"
-
-const ExplainButton = styled(Button)`
-  background-color: ${({ theme }) => theme.color.orangeDark};
-  border-color: ${({ theme }) => theme.color.orangeDark};
-  color: ${({ theme }) => theme.color.foreground};
-
-  &:hover:not(:disabled) {
-    background-color: ${({ theme }) => theme.color.orangeDark};
-    border-color: ${({ theme }) => theme.color.orangeDark};
-    filter: brightness(1.2);
-  }
-
-  &:disabled {
-    background-color: ${({ theme }) => theme.color.orangeDark};
-    border-color: ${({ theme }) => theme.color.orangeDark};
-    color: ${({ theme }) => theme.color.foreground};
-    opacity: .6;
-  }
-
-  svg {
-    color: ${({ theme }) => theme.color.foreground};
-  }
-`
+import { RunningType } from "../../store/Query/types"
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
-  background: ${({ theme }) => theme.color.gray1};
+  background: ${({ theme }) => theme.color.selectionDarker};
   border-radius: 0.2rem;
   font-size: 1.2rem;
   height: 1.8rem;
-  color: ${({ theme }) => theme.color.orangeDark};
+  color: inherit;
 
   &:not(:last-child) {
     margin-right: 0.25rem;
   }
 `
 
-const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
+const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{ $disabled: boolean }>`
   margin-left: 1rem;
+  ${({ $disabled, theme }) => $disabled && css`
+    color: ${theme.color.gray1};
+  `}
 `
 
 type Props = {
-  editor: editor.IStandaloneCodeEditor | null
-  queriesToRun: QueriesToRun
-  running: RunningType
+  onBufferContentChange?: (value?: string) => void
 }
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 
 const shortcutTitle = platform.isMacintosh || platform.isIOS ? "Cmd+E" : "Ctrl+E"
 
-export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => {
+export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
   const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
+  const { editorRef } = useEditor()
   const tables = useSelector(selectors.query.getTables)
+  const running = useSelector(selectors.query.getRunning)
+  const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [isExplaining, setIsExplaining] = useState(false)
   const highlightDecorationsRef = useRef<string[]>([])
-  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isExplaining || !editor
+  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isExplaining
   const isSelection = queriesToRun.length === 1 && queriesToRun[0].selection
 
   const handleExplainQuery = async () => {
-    if (!editor) return
+    if (!editorRef.current) return
     setIsExplaining(true)
 
     const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
@@ -93,7 +73,7 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
       return
     }
 
-    const model = editor.getModel()
+    const model = editorRef.current.getModel()
     if (!model) return
 
     const commentBlock = formatExplanationAsComment(result.explanation)
@@ -106,7 +86,7 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
     const insertText = commentBlock + "\n"
     const explanationEndLine = queryStartLine + insertText.split("\n").length - 1
     
-    editor.executeEdits("explain-query", [{
+    editorRef.current.executeEdits("explain-query", [{
       range: {
         startLineNumber: queryStartLine,
         startColumn: 1,
@@ -115,9 +95,13 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
       },
       text: insertText
     }])
-    editor.revealPositionNearTop({ lineNumber: queryStartLine, column: 1 })
-    editor.setPosition({ lineNumber: queryStartLine, column: 1 })
-    highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
+    
+    if (onBufferContentChange) {
+      onBufferContentChange(editorRef.current.getValue())
+    }
+    editorRef.current.revealPositionNearTop({ lineNumber: queryStartLine, column: 1 })
+    editorRef.current.setPosition({ lineNumber: queryStartLine, column: 1 })
+    highlightDecorationsRef.current = editorRef.current.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
       range: {
         startLineNumber: queryStartLine,
         startColumn: 1,
@@ -130,7 +114,7 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
       }
     }]) ?? []
     setTimeout(() => {
-      highlightDecorationsRef.current = editor.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
+      highlightDecorationsRef.current = editorRef.current?.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
     }, 1000)
 
     toast.success("Query explanation added!")
@@ -149,14 +133,15 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
     return () => {
       eventBus.unsubscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQueryExec)
     }
-  }, [isExplaining, editor, aiAssistantSettings.apiKey])
+  }, [disabled, handleExplainQuery])
 
   if (!aiAssistantSettings.apiKey) {
     return null
   }
 
   return (
-    <ExplainButton
+    <Button
+      skin="success"
       onClick={handleExplainQuery}
       disabled={disabled}
       prefixIcon={isExplaining ? <Loader size="14px" /> : undefined}
@@ -165,11 +150,11 @@ export const ExplainQueryButton = ({ editor, queriesToRun, running }: Props) => 
     >
       {isExplaining ? "Explaining..." : isSelection ? "Explain selected query" : "Explain query"}
       {!isExplaining && (
-        <KeyBinding>
+        <KeyBinding $disabled={disabled}>
           <Key>{ctrlCmd}</Key>
           <Key>E</Key>
         </KeyBinding>
       )}
-    </ExplainButton>
+    </Button>
   )
 }

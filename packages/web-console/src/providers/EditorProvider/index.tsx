@@ -46,7 +46,7 @@ export type EditorContext = {
     buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
   ) => Promise<Buffer>
-  deleteBuffer: (id: number) => Promise<void>
+  deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
   deleteAllBuffers: () => Promise<void>
   updateBuffer: (id: number, buffer?: Partial<Buffer>, setNewActiveBuffer?: boolean) => Promise<void>
@@ -318,9 +318,11 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'archive', bufferId: id })
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (id, setActiveBuffer = true) => {
     await bufferStore.delete(id)
-    await setActiveBufferOnRemoved(id)
+    if (setActiveBuffer) {
+      await setActiveBufferOnRemoved(id)
+    }
     eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'delete', bufferId: id })
   }
 

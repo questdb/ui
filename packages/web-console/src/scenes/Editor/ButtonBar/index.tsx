@@ -13,11 +13,13 @@ import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
   isTemporary: boolean | undefined
-  editor: any
+  executionRefs?: React.MutableRefObject<ExecutionRefs>
+  onBufferContentChange?: (value?: string) => void
 }
 
 const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null, $aiAssistantEnabled: boolean }>`
@@ -54,7 +56,7 @@ const SuccessButton = styled(Button)`
   &:hover:not(:disabled) {
     background-color: ${color("green")};
     border-color: ${color("green")};
-    color: ${color("gray1")};
+    color: ${color("selectionDarker")};
   }
   
   &:disabled {
@@ -144,7 +146,7 @@ const DropdownMenu = styled.div`
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
-  background: ${color("gray1")};
+  background: ${({ theme }) => theme.color.selectionDarker};
   border-radius: 0.2rem;
   font-size: 1.2rem;
   height: 1.8rem;
@@ -172,7 +174,7 @@ const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
   [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
 }
 
-const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: ButtonBarProps) => {
+const ButtonBar = ({ onTriggerRunScript, isTemporary, executionRefs, onBufferContentChange }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
@@ -360,21 +362,15 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, editor }: ButtonBarProps) 
   return (
     <ButtonBarWrapper $searchWidgetType={searchWidgetType} $aiAssistantEnabled={aiAssistantEnabled}>
       <GenerateSQLButton 
-        editor={editor} 
-        running={running}
+        onBufferContentChange={onBufferContentChange}
       />
-      {hasQueryError ? (
-        <FixQueryButton
-          editor={editor}
-          queriesToRun={queriesToRun}
-          running={running}
-          hasError={hasQueryError}
+      <ExplainQueryButton 
+          onBufferContentChange={onBufferContentChange}
         />
-      ) : (
-        <ExplainQueryButton 
-          editor={editor}
-          queriesToRun={queriesToRun}
-          running={running}
+      {hasQueryError && queriesToRun.length === 1 && (
+        <FixQueryButton
+          executionRefs={executionRefs}
+          onBufferContentChange={onBufferContentChange}
         />
       )}
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}

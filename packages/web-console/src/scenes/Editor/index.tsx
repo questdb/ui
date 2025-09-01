@@ -31,6 +31,7 @@ import Monaco from "./Monaco"
 import { Tabs } from "./Monaco/tabs"
 import { useEditor } from "../../providers/EditorProvider"
 import { Metrics } from "./Metrics"
+import { DiffEditorComponent } from "./DiffEditor"
 import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
@@ -56,6 +57,13 @@ const EditorPaneWrapper = styled(PaneWrapper)`
   overflow: hidden;
 `
 
+export type PendingFix = {
+  modifiedContent: string
+  queryStartOffset: number
+  originalQuery: string
+  originalBufferId: number
+}
+
 const Editor = ({
   innerRef,
   ...rest
@@ -63,6 +71,7 @@ const Editor = ({
   const dispatch = useDispatch()
   const { activeBuffer, addBuffer } = useEditor()
   const executionRefs = useRef<ExecutionRefs>({})
+  const pendingFixRef = useRef<PendingFix | null>(null)
 
   const handleClearNotifications = (bufferId: number) => {
     dispatch(actions.query.cleanupBufferNotifications(bufferId))
@@ -80,9 +89,10 @@ const Editor = ({
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
-      {activeBuffer.editorViewState && <Monaco executionRefs={executionRefs} />}
+      {activeBuffer.isDiffBuffer && <DiffEditorComponent pendingFixRef={pendingFixRef} />}
+      {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Monaco executionRefs={executionRefs} pendingFixRef={pendingFixRef} />}
       {activeBuffer.metricsViewState && <Metrics />}
-      {activeBuffer.editorViewState && <Notifications onClearNotifications={handleClearNotifications} />}
+      {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Notifications onClearNotifications={handleClearNotifications} />}
     </EditorPaneWrapper>
   )
 }
