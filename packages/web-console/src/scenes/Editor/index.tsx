@@ -37,6 +37,7 @@ import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
+import { AIStatusProvider } from "../../providers/AIStatusProvider"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -88,11 +89,13 @@ const Editor = ({
 
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
-      <Tabs />
-      {activeBuffer.isDiffBuffer && <DiffEditorComponent pendingFixRef={pendingFixRef} />}
-      {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Monaco executionRefs={executionRefs} pendingFixRef={pendingFixRef} />}
-      {activeBuffer.metricsViewState && <Metrics />}
-      {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Notifications onClearNotifications={handleClearNotifications} />}
+      <AIStatusProvider>
+        <Tabs />
+        {activeBuffer.isDiffBuffer && <DiffEditorComponent pendingFixRef={pendingFixRef} />}
+        {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Monaco executionRefs={executionRefs} pendingFixRef={pendingFixRef} />}
+        {activeBuffer.metricsViewState && <Metrics />}
+        {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Notifications onClearNotifications={handleClearNotifications} />}
+      </AIStatusProvider>
     </EditorPaneWrapper>
   )
 }

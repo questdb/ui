@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useContext, useEffect, useRef } from "react"
 import styled, { css } from "styled-components"
-import { Button, Loader, Box, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
+import { Button, Box, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -13,6 +13,7 @@ import { selectors } from "../../store"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { RunningType } from "../../store/Query/types"
+import { useAIStatus, isBlockingAIStatus } from "../../providers/AIStatusProvider"
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
@@ -88,21 +89,30 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   const { editorRef } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
-  const [isGenerating, setIsGenerating] = useState(false)
+  const { status: aiStatus, setStatus, abortController } = useAIStatus()
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
   const highlightDecorationsRef = useRef<string[]>([])
-  const disabled = running !== RunningType.NONE
+  const disabled = running !== RunningType.NONE || !editorRef.current || isBlockingAIStatus(aiStatus)
 
   const handleGenerate = async () => {
-    setIsGenerating(true)
+    setShowDialog(false)
+    setDescription("")
 
     const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
-    const response = await generateSQL(description, aiAssistantSettings, schemaClient)
+    const response = await generateSQL({
+      description,
+      settings: aiAssistantSettings,
+      schemaClient,
+      setStatus,
+      abortSignal: abortController?.signal
+    })
 
     if (isClaudeError(response)) {
       const error = response as ClaudeAPIError
-      toast.error(error.message)
+      if (error.type !== 'aborted') {
+        toast.error(error.message)
+      }
       return
     }
 
@@ -157,9 +167,6 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     }
 
     toast.success("Query generated!")
-    setShowDialog(false)
-    setDescription("")
-    setIsGenerating(false)
   }
 
   const handleOpenDialog = useCallback(() => {
@@ -168,11 +175,9 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   }, [])
 
   const handleCloseDialog = useCallback(() => {
-    if (!isGenerating) {
-      setShowDialog(false)
-      setDescription("")
-    }
-  }, [isGenerating])
+    setShowDialog(false)
+    setDescription("")
+  }, [])
 
   const handleGenerateQueryOpen = useCallback((e?: KeyboardEvent) => {
     if (e instanceof KeyboardEvent) {
@@ -181,7 +186,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
       }
       e.preventDefault()
     }
-    if (!disabled && editorRef.current && aiAssistantSettings.apiKey) {
+    if (!disabled && aiAssistantSettings.apiKey) {
       handleOpenDialog()
     }
   }, [disabled, aiAssistantSettings.apiKey])
@@ -210,7 +215,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
       <Button
         skin="success"
         onClick={() => handleGenerateQueryOpen()}
-        disabled={disabled || !editorRef.current}
+        disabled={disabled}
         title={`Generate query with AI Assistant (${shortcutTitle})`}
         data-hook="button-generate-sql"
       >
@@ -246,7 +251,6 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
                 placeholder="Describe your query..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                disabled={isGenerating}
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && e.ctrlKey) {
@@ -262,7 +266,6 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
                 <StyledDialogButton
                   skin="secondary"
                   onClick={handleCloseDialog}
-                  disabled={isGenerating}
                 >
                   Cancel
                 </StyledDialogButton>
@@ -271,10 +274,9 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
               <StyledDialogButton
                 skin="primary"
                 onClick={handleGenerate}
-                disabled={isGenerating || !description.trim()}
-                prefixIcon={isGenerating ? <Loader size="14px" /> : undefined}
+                disabled={!description.trim()}
               >
-                {isGenerating ? "Generating..." : "Generate"}
+                Generate
               </StyledDialogButton>
             </Dialog.ActionButtons>
           </Dialog.Content>

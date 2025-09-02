@@ -1,10 +1,11 @@
 import React, { useCallback, useState, useEffect, useRef } from "react"
 import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
-import { Stop } from "@styled-icons/remix-line"
+import { CloseOutline } from "@styled-icons/evaicons-outline"
+import { Stop, Loader3 } from "@styled-icons/remix-line"
 import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
-import { PopperToggle } from "../../../components"
+import { PopperToggle, spinAnimation } from "../../../components"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { GenerateSQLButton } from "../../../components/GenerateSQLButton"
 import { FixQueryButton } from "./FixQueryButton"
@@ -13,6 +14,7 @@ import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import { useAIStatus, AIOperationStatus } from "../../../providers/AIStatusProvider"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
@@ -39,6 +41,22 @@ const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | nu
     align-items: center;
     margin: 0 2.4rem;
   `}
+`
+
+const StatusIndicator = styled.div<{ $aborted: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: ${color("gray2")};
+  ${({ $aborted }) => $aborted && css`
+    color: ${color("red")};
+  `}
+`
+
+const StatusLoader = styled(Loader3)`
+  width: 2rem;
+  color: ${color("pink")};
+  ${spinAnimation};
 `
 
 const ButtonGroup = styled.div`
@@ -180,6 +198,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, executionRefs, onBufferCon
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { aiAssistantSettings } = useLocalStorage()
+  const { status: aiStatus } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const [searchWidgetType, setSearchWidgetType] = useState<"find" | "replace" | null>(null)
   const observerRef = useRef<MutationObserver | null>(null)
@@ -372,6 +391,12 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, executionRefs, onBufferCon
           executionRefs={executionRefs}
           onBufferContentChange={onBufferContentChange}
         />
+      )}
+      {aiStatus && (
+        <StatusIndicator $aborted={aiStatus === AIOperationStatus.Aborted}>
+          {aiStatus === AIOperationStatus.Aborted ? <CloseOutline size="18px" /> : <StatusLoader />}
+          {aiStatus}
+        </StatusIndicator>
       )}
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>

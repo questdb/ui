@@ -33,15 +33,6 @@ const ExplanationBox = styled(Box)`
   overflow-y: auto;
 `
 
-const Title = styled.div`
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  font-size: 1.4rem;
-`
-
 const ButtonBar = styled(Box)`
   padding: 0.5rem 1rem;
   gap: 1rem;

@@ -1,4 +1,4 @@
-import React, { useState, useContext, MutableRefObject } from "react"
+import React, { useContext, MutableRefObject } from "react"
 import styled, { css, keyframes } from "styled-components"
 import { Button } from "@questdb/react-components"
 import { useSelector } from "react-redux"
@@ -9,13 +9,13 @@ import { isClaudeError, createSchemaClient, fixQuery } from "../../../utils/clau
 import { toast } from "../../../components/Toast"
 import { QuestContext } from "../../../providers"
 import { selectors } from "../../../store"
-import { color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 import { formatExplanationAsComment } from "../../../utils/claude"
-import { createQueryKeyFromRequest, getQueryStartOffset } from "../../../scenes/Editor/Monaco/utils"
+import { createQueryKeyFromRequest } from "../../../scenes/Editor/Monaco/utils"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 import type { Request } from "../../../scenes/Editor/Monaco/utils"
 import type { editor } from "monaco-editor"
+import { isBlockingAIStatus, useAIStatus } from "../../../providers/AIStatusProvider"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -96,7 +96,7 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
-  const [isFixing, setIsFixing] = useState(false)
+  const { status: aiStatus, setStatus, abortController } = useAIStatus()
 
   if (!aiAssistantSettings.apiKey) {
     return null
@@ -115,30 +115,45 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
     }
     const { errorMessage, fixStart, queryText } = errorInfo
     const fixStartPosition = model.getPositionAt(fixStart)
+    editorRef.current?.updateOptions({
+      readOnly: true,
+      readOnlyMessage: {
+        value: "Query fix in progress",
+      }
+    })
     const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
 
-    setIsFixing(true)
-    const response = await fixQuery(queryText, errorMessage, aiAssistantSettings, schemaClient)
+    const response = await fixQuery({
+      query: queryText,
+      errorMessage: errorMessage,
+      settings: aiAssistantSettings,
+      schemaClient: schemaClient,
+      setStatus,
+      abortSignal: abortController?.signal
+    })
 
     if (isClaudeError(response)) {
-      const error = response as ClaudeAPIError   
-      toast.error(error.message)
-      setIsFixing(false)
+      const error = response as ClaudeAPIError
+      if (error.type !== 'aborted') {
+        toast.error(error.message)
+      }
+      editorRef.current?.updateOptions({
+        readOnly: false,
+        readOnlyMessage: undefined
+      })
       return
     }
 
     const result = response as GeneratedSQL
     
     if (!result.sql && result.explanation) {
-      const model = editorRef.current.getModel()
-      if (!model) {
-        setIsFixing(false)
-        return
-      }
-
       const commentBlock = formatExplanationAsComment(result.explanation, "AI Error Explanation")
       const insertText = commentBlock + "\n"
-      
+
+      editorRef.current?.updateOptions({
+        readOnly: false,
+        readOnlyMessage: undefined
+      })
       editorRef.current.executeEdits("fix-query-explanation", [{
         range: {
           startLineNumber: fixStartPosition.lineNumber,
@@ -175,13 +190,16 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
       }, 1000)
       
       toast.success("Error explanation added!")
-      setIsFixing(false)
       return
     }
+
+    editorRef.current?.updateOptions({
+      readOnly: false,
+      readOnlyMessage: undefined
+    })
     
     if (!result.sql) {
       toast.error("No fixed query or explanation received from AI")
-      setIsFixing(false)
       return
     }
 
@@ -198,20 +216,18 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
         originalQuery: queryText
       }
     })
-    
-    setIsFixing(false)
   }
 
   return (
     <StyledFixButton
       skin="success"
       onClick={handleFixQuery}
-      disabled={isFixing || running !== RunningType.NONE}
+      disabled={running !== RunningType.NONE || isBlockingAIStatus(aiStatus)}
       title="Fix query with AI Assistant"
       data-hook="button-fix-query"
-      $pulse={!isFixing}
+      $pulse={!isBlockingAIStatus(aiStatus)}
     >
-      {isFixing ? "Fixing..." : "Fix query with AI"}
+      Fix query with AI
     </StyledFixButton>
   )
 }

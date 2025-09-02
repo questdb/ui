@@ -4,9 +4,10 @@ import { Type } from './questdb/types'
 import type { AiAssistantSettings } from '../providers/LocalStorageProvider/types'
 import { formatSql } from './formatSql'
 import type { Request } from '../scenes/Editor/Monaco/utils'
+import { AIOperationStatus } from '../providers/AIStatusProvider'
 
 export interface ClaudeAPIError {
-  type: 'rate_limit' | 'invalid_key' | 'network' | 'unknown'
+  type: 'rate_limit' | 'invalid_key' | 'network' | 'unknown' | 'aborted'
   message: string
   details?: any
 }
@@ -24,6 +25,8 @@ export interface SchemaToolsClient {
   getTables: () => Promise<Array<{ name: string; type: 'table' | 'matview' }>>
   getTableSchema: (tableName: string) => Promise<string | null>
 }
+
+type StatusCallback = (status: AIOperationStatus | null) => void
 
 const SCHEMA_TOOLS = [
   {
@@ -109,26 +112,6 @@ Use these tools when the query references tables and it would be helpful to unde
 
 Do not use markdown formatting in your response.`
 
-const getExplainErrorPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query and its error message, provide a clear explanation of:
-
-1. What caused the error in simple terms
-2. How to fix the issue with specific suggestions
-3. QuestDB-specific considerations if relevant
-
-Focus on practical solutions rather than technical jargon. Consider QuestDB-specific features such as:
-- Time-series operations (SAMPLE BY, LATEST ON, designated timestamp columns)
-- Data ingestion and table structure requirements
-- Performance considerations for time-series queries
-- QuestDB-specific SQL syntax and functions
-
-${grantSchemaAccess ? `You have access to tools that can help you understand the database schema:
-- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table
-
-Use these tools when the error might be related to table structure, column names, or data types.` : ''}
-
-Keep explanations concise but actionable, providing specific steps to resolve the issue.`
-
 const getGenerateSQLPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. 
 When given a natural language description, generate the corresponding QuestDB SQL query.
 
@@ -189,10 +172,22 @@ async function handleToolCalls(
   anthropic: Anthropic,
   schemaClient: SchemaToolsClient,
   conversationHistory: Array<any> = [],
-  model: string
-): Promise<Anthropic.Messages.Message> {
+  model: string,
+  setStatus: StatusCallback,
+  abortSignal?: AbortSignal
+): Promise<Anthropic.Messages.Message | ClaudeAPIError> {
   const toolUseBlocks = message.content.filter(block => block.type === 'tool_use')
   const toolResults = []
+  
+  if (abortSignal?.aborted) {
+    return {
+      type: 'aborted',
+      message: 'Operation was cancelled'
+    } as ClaudeAPIError
+  }
+  if (toolUseBlocks.length > 0) {
+    setStatus(AIOperationStatus.InvestigatingSchema)
+  }
 
   for (const toolUse of toolUseBlocks) {
     if ('name' in toolUse) {
@@ -268,16 +263,23 @@ async function handleToolCalls(
   })
 
   if (followUpMessage.stop_reason === 'tool_use') {
-    return handleToolCalls(followUpMessage, anthropic, schemaClient, updatedHistory, model)
+    return handleToolCalls(followUpMessage, anthropic, schemaClient, updatedHistory, model, setStatus, abortSignal)
   }
 
   return followUpMessage
 }
 
-const tryWithRetries = async <T>(fn: () => Promise<T>): Promise<T | ClaudeAPIError> => {
+const tryWithRetries = async <T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T | ClaudeAPIError> => {
   let retries = 0
   while (retries <= MAX_RETRIES) {
     try {
+      if (abortSignal?.aborted) {
+        return {
+          type: 'aborted',
+          message: 'Operation was cancelled'
+        } as ClaudeAPIError
+      }
+
       return await fn()
     } catch (error) {
       retries++
@@ -296,11 +298,19 @@ const tryWithRetries = async <T>(fn: () => Promise<T>): Promise<T | ClaudeAPIErr
   }
 }
 
-export const explainQuery = async (
+export const explainQuery = async ({
+  query,
+  settings,
+  schemaClient,
+  setStatus,
+  abortSignal,
+}: {
   query: Request,
   settings: AiAssistantSettings,
-  schemaClient?: SchemaToolsClient
-): Promise<ClaudeExplanation | ClaudeAPIError> => {
+  schemaClient?: SchemaToolsClient,
+  setStatus: StatusCallback,
+  abortSignal?: AbortSignal
+}): Promise<ClaudeExplanation | ClaudeAPIError> => {
   if (!settings.apiKey || !query) {
     return {
       type: 'invalid_key',
@@ -309,6 +319,13 @@ export const explainQuery = async (
   }
 
   await handleRateLimit()
+  if (abortSignal?.aborted) {
+    return {
+      type: 'aborted',
+      message: 'Operation was cancelled'
+    } as ClaudeAPIError
+  }
+  setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
     const anthropic = new Anthropic({
@@ -336,10 +353,16 @@ export const explainQuery = async (
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
 
-    const explanation = response.content
+    const responseError = response as ClaudeAPIError
+    if (responseError.type === 'aborted') {
+      return responseError
+    }
+
+    const responseMessage = response as Anthropic.Messages.Message
+    const explanation = responseMessage.content
       .filter(block => block.type === 'text')
       .map(block => {
         if ('text' in block) {
@@ -349,6 +372,14 @@ export const explainQuery = async (
       })
       .join('\n')
       .trim()
+
+    if (abortSignal?.aborted) {
+      return {
+        type: 'aborted',
+        message: 'Operation was cancelled'
+      } as ClaudeAPIError
+    }
+    setStatus(AIOperationStatus.FormattingResponse)
 
     const formattingResponse = await anthropic.messages.create({
       model: settings.model,
@@ -377,7 +408,14 @@ export const explainQuery = async (
     }, '{')
 
     try {
+      if (abortSignal?.aborted) {
+        return {
+          type: 'aborted',
+          message: 'Operation was cancelled'
+        } as ClaudeAPIError
+      }
       const json = JSON.parse(fullContent)
+      setStatus(null)
       return { explanation: json.explanation }
     } catch (error) {
       return {
@@ -385,83 +423,22 @@ export const explainQuery = async (
         message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
-  })
+  }, abortSignal)
 }
 
-export const explainError = async (
-  query: string,
-  errorMessage: string,
-  settings: AiAssistantSettings,
-  schemaClient?: SchemaToolsClient
-): Promise<ClaudeExplanation | ClaudeAPIError> => {
-  if (!settings.apiKey || !query || !errorMessage) {
-    return {
-      type: 'invalid_key',
-      message: 'API key, query, or error message is missing'
-    }
-  }
-
-  await handleRateLimit()
-
-  return tryWithRetries(async () => {
-      const anthropic = new Anthropic({
-        apiKey: settings.apiKey,
-        dangerouslyAllowBrowser: true
-      })
-
-      const initialMessages = [
-        {
-          role: 'user' as const,
-          content: `Please explain this QuestDB SQL error:
-
-SQL Query:
-\`\`\`sql
-${query}
-\`\`\`
-
-Error Message:
-\`\`\`
-${errorMessage}
-\`\`\`
-
-What went wrong and how can I fix it?`
-        }
-      ]
-
-      const message = await anthropic.messages.create({
-        model: settings.model,
-        max_tokens: 1000,
-        system: getExplainErrorPrompt(settings.grantSchemaAccess),
-        tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
-        messages: initialMessages,
-        temperature: 0.3
-      })
-
-      // Handle tool calls if schema access is granted
-      const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-        ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model)
-        : message
-      
-      const explanation = response.content
-        .filter(block => block.type === 'text')
-        .map(block => {
-          if ('text' in block) {
-            return block.text
-          }
-          return ''
-        })
-        .join('\n')
-        .trim()
-
-      return { explanation }
-  })
-}
-
-export const generateSQL = async (
+export const generateSQL = async ({
+  description,
+  settings,
+  schemaClient,
+  setStatus,
+  abortSignal,
+}: {
   description: string,
   settings: AiAssistantSettings,
-  schemaClient?: SchemaToolsClient
-): Promise<GeneratedSQL | ClaudeAPIError> => {
+  schemaClient?: SchemaToolsClient,
+  setStatus: StatusCallback,
+  abortSignal?: AbortSignal
+}): Promise<GeneratedSQL | ClaudeAPIError> => {
   if (!settings.apiKey || !description) {
     return {
       type: 'invalid_key',
@@ -470,6 +447,13 @@ export const generateSQL = async (
   }
 
   await handleRateLimit()
+  if (abortSignal?.aborted) {
+    return {
+      type: 'aborted',
+      message: 'Operation was cancelled'
+    } as ClaudeAPIError
+  }
+  setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
     const anthropic = new Anthropic({
@@ -490,13 +474,27 @@ export const generateSQL = async (
       system: getGenerateSQLPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
       messages: initialMessages,
-      temperature: 0.2 // Lower temperature for more consistent SQL generation
+      temperature: 0.2
     })
 
-    // Handle tool calls if schema access is granted
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
+    
+    const responseError = response as ClaudeAPIError
+    if (responseError.type === 'aborted') {
+      return responseError
+    }
+
+    const responseMessage = response as Anthropic.Messages.Message
+    
+    if (abortSignal?.aborted) {
+      return {
+        type: 'aborted',
+        message: 'Operation was cancelled'
+      } as ClaudeAPIError
+    }
+    setStatus(AIOperationStatus.FormattingResponse)
     
     const formattingResponse = await anthropic.messages.create({
       model: settings.model,
@@ -504,7 +502,7 @@ export const generateSQL = async (
       messages: [
         {
           role: 'assistant' as const,
-          content: response.content
+          content: responseMessage.content
         },
         {
           role: 'user' as const,
@@ -516,6 +514,7 @@ export const generateSQL = async (
         }
       ]
     })
+    
     const fullContent = formattingResponse.content.reduce((acc, block) => {
       if (block.type === 'text' && 'text' in block) {
         acc += block.text
@@ -524,6 +523,13 @@ export const generateSQL = async (
     }, '{')
 
     try {
+      if (abortSignal?.aborted) {
+        return {
+          type: 'aborted',
+          message: 'Operation was cancelled'
+        } as ClaudeAPIError
+      }
+      setStatus(null)
       const json = JSON.parse(fullContent)
       let sql = formatSql(json.sql) || ''
       if (sql) {
@@ -542,15 +548,24 @@ export const generateSQL = async (
         message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
-  })
+  }, abortSignal)
 }
 
-export const fixQuery = async (
+export const fixQuery = async ({
+  query,
+  errorMessage,
+  settings,
+  schemaClient,
+  setStatus,
+  abortSignal,
+}: {
   query: string,
   errorMessage: string,
   settings: AiAssistantSettings,
-  schemaClient?: SchemaToolsClient
-): Promise<Partial<GeneratedSQL> | ClaudeAPIError> => {
+  schemaClient?: SchemaToolsClient,
+  setStatus: StatusCallback,
+  abortSignal?: AbortSignal
+}): Promise<Partial<GeneratedSQL> | ClaudeAPIError> => {
   if (!settings.apiKey || !query || !errorMessage) {
     return {
       type: 'invalid_key',
@@ -559,6 +574,13 @@ export const fixQuery = async (
   }
 
   await handleRateLimit()
+  if (abortSignal?.aborted) {
+    return {
+      type: 'aborted',
+      message: 'Operation was cancelled'
+    } as ClaudeAPIError
+  }
+  setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
     const anthropic = new Anthropic({
@@ -589,13 +611,27 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
       system: getFixQueryPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
       messages: initialMessages,
-      temperature: 0.2 // Lower temperature for more consistent fixes
+      temperature: 0.2
     })
 
-    // Handle tool calls if schema access is granted
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
+    
+    const responseError = response as ClaudeAPIError
+    if (responseError.type === 'aborted') {
+      return responseError
+    }
+
+    const responseMessage = response as Anthropic.Messages.Message
+    
+    if (abortSignal?.aborted) {
+      return {
+        type: 'aborted',
+        message: 'Operation was cancelled'
+      } as ClaudeAPIError
+    }
+    setStatus(AIOperationStatus.FormattingResponse)
     
     const formattingResponse = await anthropic.messages.create({
       model: settings.model,
@@ -603,7 +639,7 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
       messages: [
         {
           role: 'assistant' as const,
-          content: response.content
+          content: responseMessage.content
         },
         {
           role: 'user' as const,
@@ -615,6 +651,7 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
         }
       ]
     })
+    
     const fullContent = formattingResponse.content.reduce((acc, block) => {
       if (block.type === 'text' && 'text' in block) {
         acc += block.text
@@ -623,6 +660,13 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
     }, '{')
 
     try {
+      if (abortSignal?.aborted) {
+        return {
+          type: 'aborted',
+          message: 'Operation was cancelled'
+        } as ClaudeAPIError
+      }
+      setStatus(null)
       const json = JSON.parse(fullContent)
       let sql = json.sql
       if (sql) {
@@ -641,7 +685,7 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
         message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
-  })
+  }, abortSignal)
 }
 
 function handleClaudeError(error: any): ClaudeAPIError {

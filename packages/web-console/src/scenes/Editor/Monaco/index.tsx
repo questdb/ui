@@ -14,6 +14,7 @@ import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
@@ -221,6 +222,7 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     isNavigatingFromSearchRef,
   } = editorContext
   const { quest } = useContext(QuestContext)
+  const { abortOperation: abortAIOperation } = useAIStatus()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
@@ -770,6 +772,8 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     })
 
     editor.onDidChangeModel(() => {
+      abortAIOperation()
+      
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
           applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -1456,6 +1460,7 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
 
   useEffect(() => {
     return () => {
+      abortAIOperation()
       cleanupActionsRef.current.forEach(cleanup => cleanup())
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current)

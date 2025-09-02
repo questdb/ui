@@ -1,6 +1,6 @@
-import React, { useState, useContext, useEffect, useRef, useCallback } from "react"
+import React, { useContext, useEffect, useRef, useCallback } from "react"
 import styled, { css } from "styled-components"
-import { Button, Loader, Box } from "@questdb/react-components"
+import { Button, Box } from "@questdb/react-components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -13,6 +13,7 @@ import { selectors } from "../../store"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { RunningType } from "../../store/Query/types"
+import { useAIStatus, isBlockingAIStatus } from "../../providers/AIStatusProvider"
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
@@ -49,32 +50,52 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
-  const [isExplaining, setIsExplaining] = useState(false)
+  const { status: aiStatus, setStatus, abortController } = useAIStatus()
   const highlightDecorationsRef = useRef<string[]>([])
-  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isExplaining 
+  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isBlockingAIStatus(aiStatus)
   const isSelection = queriesToRun.length === 1 && queriesToRun[0].selection
 
   const handleExplainQuery = useCallback(async () => {
     if (!editorRef.current || disabled) return
-    setIsExplaining(true)
+    const model = editorRef.current.getModel()
+    if (!model) return
 
+    editorRef.current?.updateOptions({
+      readOnly: true,
+      readOnlyMessage: {
+        value: "Query explanation in progress",
+      }
+    })
     const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
-    const response = await explainQuery(queriesToRun[0], aiAssistantSettings, schemaClient)
+    const response = await explainQuery({
+      query: queriesToRun[0],
+      settings: aiAssistantSettings,
+      schemaClient,
+      setStatus,
+      abortSignal: abortController?.signal
+    })
 
     if (isClaudeError(response)) {
       const error = response as ClaudeAPIError
-      toast.error(error.message)
+      if (error.type !== 'aborted') {
+        toast.error(error.message)
+      }
+      editorRef.current?.updateOptions({
+        readOnly: false,
+        readOnlyMessage: undefined
+      })
       return
     }
 
     const result = response as ClaudeExplanation
     if (!result.explanation) {
       toast.error("No explanation received from Anthropic API")
+      editorRef.current?.updateOptions({
+        readOnly: false,
+        readOnlyMessage: undefined
+      })
       return
     }
-
-    const model = editorRef.current.getModel()
-    if (!model) return
 
     const commentBlock = formatExplanationAsComment(result.explanation)
     const isSelection = !!queriesToRun[0].selection
@@ -85,7 +106,11 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     
     const insertText = commentBlock + "\n"
     const explanationEndLine = queryStartLine + insertText.split("\n").length - 1
-    
+
+    editorRef.current?.updateOptions({
+      readOnly: false,
+      readOnlyMessage: undefined
+    })
     editorRef.current.executeEdits("explain-query", [{
       range: {
         startLineNumber: queryStartLine,
@@ -118,8 +143,7 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     }, 1000)
 
     toast.success("Query explanation added!")
-    setIsExplaining(false)
-  }, [disabled, onBufferContentChange, queriesToRun, aiAssistantSettings, tables, quest])
+  }, [disabled, onBufferContentChange, queriesToRun, aiAssistantSettings, tables, quest, setStatus, abortController])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E'))) {
@@ -148,17 +172,14 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
       skin="success"
       onClick={handleExplainQuery}
       disabled={disabled}
-      prefixIcon={isExplaining ? <Loader size="14px" /> : undefined}
       title={`Explain query with AI Assistant (${shortcutTitle})`}
       data-hook="button-explain-query"
     >
-      {isExplaining ? "Explaining..." : isSelection ? "Explain selected query" : "Explain query"}
-      {!isExplaining && (
-        <KeyBinding $disabled={disabled}>
-          <Key>{ctrlCmd}</Key>
-          <Key>E</Key>
-        </KeyBinding>
-      )}
+      {isSelection ? "Explain selected query" : "Explain query"}
+      <KeyBinding $disabled={disabled}>
+        <Key>{ctrlCmd}</Key>
+        <Key>E</Key>
+      </KeyBinding>
     </Button>
   )
 }
