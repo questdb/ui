@@ -10,19 +10,22 @@ import type { editor } from "monaco-editor"
 import dracula from "../Monaco/dracula"
 import { toast } from "../../../components/Toast"
 import type { PendingFix } from "../../Editor"
+import { color } from "../../../utils"
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: ${color("backgroundLighter")};
 `
 
 const ExplanationBox = styled(Box)`
   display: flex;
   align-items: flex-start;
-  background: rgb(71,97,75);
+  background: ${color("backgroundLighter")};
   padding: 1rem;
+  padding-bottom: 2rem;
   font-size: 1.4rem;
   line-height: 1.5;
   white-space: pre-wrap;

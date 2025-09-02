@@ -21,7 +21,7 @@ type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 const pulse = keyframes`
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 85, 85, 0.7);
+    box-shadow: 0 0 0 0 #50fa7b;
   }
   70% {
     box-shadow: 0 0 0 8px rgba(255, 85, 85, 0);
@@ -32,29 +32,9 @@ const pulse = keyframes`
 `
 
 const StyledFixButton = styled(Button)<{ $pulse?: boolean }>`
-  background-color: ${color("redDark")};
-  border-color: ${color("redDark")};
-  color: ${color("foreground")};
-  
   ${({ $pulse }) => $pulse && css`
-    animation: ${pulse} 1.5s infinite;
+    animation: ${pulse} 1s 2;
   `}
-
-  &:hover:not(:disabled) {
-    background-color: ${color("red")};
-    border-color: ${color("red")};
-    color: ${color("foreground")};
-  }
-
-  &:disabled {
-    background-color: ${color("redDark")};
-    border-color: ${color("redDark")};
-    opacity: 0.6;
-  }
-
-  svg {
-    color: ${color("foreground")};
-  }
 `
 
 const extractError = (
@@ -224,9 +204,10 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
 
   return (
     <StyledFixButton
+      skin="success"
       onClick={handleFixQuery}
       disabled={isFixing || running !== RunningType.NONE}
-      title="Fix query with AI"
+      title="Fix query with AI Assistant"
       data-hook="button-fix-query"
       $pulse={!isFixing}
     >
