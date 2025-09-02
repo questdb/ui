@@ -632,7 +632,7 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
         }
       }
       return {
-        ...(sql ? { sql } : {}),
+        ...(sql ? { sql: formatSql(sql) } : {}),
         explanation: json.explanation || ''
       }
     } catch (error) {

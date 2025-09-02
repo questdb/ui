@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect, useRef } from "react"
+import React, { useState, useContext, useEffect, useRef, useCallback } from "react"
 import styled, { css } from "styled-components"
 import { Button, Loader, Box } from "@questdb/react-components"
 import { platform } from "../../utils"
@@ -51,11 +51,11 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [isExplaining, setIsExplaining] = useState(false)
   const highlightDecorationsRef = useRef<string[]>([])
-  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isExplaining
+  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isExplaining 
   const isSelection = queriesToRun.length === 1 && queriesToRun[0].selection
 
-  const handleExplainQuery = async () => {
-    if (!editorRef.current) return
+  const handleExplainQuery = useCallback(async () => {
+    if (!editorRef.current || disabled) return
     setIsExplaining(true)
 
     const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
@@ -119,21 +119,25 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
 
     toast.success("Query explanation added!")
     setIsExplaining(false)
-  }
+  }, [disabled, onBufferContentChange, queriesToRun, aiAssistantSettings, tables, quest])
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E'))) {
+      return
+    }
+    e.preventDefault()
+    handleExplainQuery()
+  }, [handleExplainQuery])
 
   useEffect(() => {
-    const handleExplainQueryExec = () => {
-      if (!disabled) {
-        handleExplainQuery()
-      }
-    }
-
-    eventBus.subscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQueryExec)
+    eventBus.subscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQuery)
+    document.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      eventBus.unsubscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQueryExec)
+      eventBus.unsubscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQuery)
+      document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [disabled, handleExplainQuery])
+  }, [handleExplainQuery])
 
   if (!aiAssistantSettings.apiKey) {
     return null

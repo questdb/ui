@@ -136,7 +136,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
         onBufferContentChange(editorRef.current.getValue())
       }
 
-      editorRef.current.revealLineInCenter(lineNumber)
+      editorRef.current.revealLineNearTop(lineNumber)
       highlightDecorationsRef.current = editorRef.current.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
         range: {
           startLineNumber: lineNumber,
@@ -174,11 +174,24 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     }
   }, [isGenerating])
 
-  const handleGenerateQueryOpen = useCallback(() => {
+  const handleGenerateQueryOpen = useCallback((e?: KeyboardEvent) => {
+    if (e instanceof KeyboardEvent) {
+      if (!((e.metaKey || e.ctrlKey) && (e.key === 'g' || e.key === 'G'))) {
+        return
+      }
+      e.preventDefault()
+    }
     if (!disabled && editorRef.current && aiAssistantSettings.apiKey) {
       handleOpenDialog()
     }
   }, [disabled, aiAssistantSettings.apiKey])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleGenerateQueryOpen)
+    return () => {
+      document.removeEventListener('keydown', handleGenerateQueryOpen)
+    }
+  }, [handleGenerateQueryOpen])
 
   useEffect(() => {
     eventBus.subscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
@@ -196,7 +209,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     <>
       <Button
         skin="success"
-        onClick={handleGenerateQueryOpen}
+        onClick={() => handleGenerateQueryOpen()}
         disabled={disabled || !editorRef.current}
         title={`Generate query with AI Assistant (${shortcutTitle})`}
         data-hook="button-generate-sql"

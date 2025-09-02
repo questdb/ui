@@ -74,11 +74,6 @@ const FormLabel = styled.label`
   font-weight: 600;
 `
 
-const HelpText = styled(Text)`
-  font-size: 1.3rem;
-  line-height: 1.6;
-`
-
 const ErrorText = styled(Text)`
   color: ${({ theme }) => theme.color.red};
   font-size: 1.3rem;
@@ -141,6 +136,11 @@ const CheckboxLabel = styled.label`
 
 const StyledInfoCircle = styled(InfoCircle)`
   margin-left: 0.3rem;
+`
+
+const DisclaimerText = styled(Text)`
+  font-size: 1.2rem;
+  line-height: 1.5;
 `
 
 const MODEL_OPTIONS = [
@@ -287,7 +287,7 @@ export const SetupAIAssistant = () => {
             </InputWrapper>
             {error && <ErrorText>{error}</ErrorText>}
             
-            <HelpText color="gray2">
+            <DisclaimerText color="gray2">
               Enter your Anthropic API key to enable AI Assistant. 
               Get your API key from{" "}
               <a 
@@ -299,7 +299,7 @@ export const SetupAIAssistant = () => {
                 Anthropic Console
               </a>.
               Your key is stored locally in your browser and never sent to QuestDB servers.
-            </HelpText>
+            </DisclaimerText>
           </FormGroup>
 
           <FormGroup>
@@ -342,6 +342,10 @@ export const SetupAIAssistant = () => {
               </CheckboxLabel>
             </Box>
           </FormGroup>
+
+          <DisclaimerText color="gray2">
+            This AI assistant may occasionally produce inaccurate information. Please verify important details and review all generated queries before execution.
+          </DisclaimerText>
 
           <Buttons>
             <Box>
