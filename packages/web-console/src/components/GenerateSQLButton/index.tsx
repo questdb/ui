@@ -60,7 +60,6 @@ const StyledTextArea = styled.textarea`
   border: 1px solid ${({ theme }) => theme.color.gray1};
   border-radius: 0.4rem;
   color: ${({ theme }) => theme.color.foreground};
-  font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.4rem;
   resize: vertical;
   outline: none;
@@ -111,14 +110,14 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     if (isClaudeError(response)) {
       const error = response as ClaudeAPIError
       if (error.type !== 'aborted') {
-        toast.error(error.message)
+        toast.error(error.message, { autoClose: 10000 })
       }
       return
     }
 
     const result = response as GeneratedSQL
     if (!result.sql) {
-      toast.error("No query was generated")
+      toast.error("No query received from Anthropic API", { autoClose: 10000 })
       return
     }
 

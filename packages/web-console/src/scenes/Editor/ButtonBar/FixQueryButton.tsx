@@ -110,7 +110,7 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
     const queryToFix = queriesToRun[0]
     const errorInfo = extractError(queryToFix, executionRefs, activeBuffer.id, editorRef)
     if (!errorInfo) {
-      toast.error("Unable to retrieve error information")
+      toast.error("Unable to retrieve error information from the editor", { autoClose: 10000 })
       return
     }
     const { errorMessage, fixStart, queryText } = errorInfo
@@ -135,7 +135,7 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
     if (isClaudeError(response)) {
       const error = response as ClaudeAPIError
       if (error.type !== 'aborted') {
-        toast.error(error.message)
+        toast.error(error.message, { autoClose: 10000 })
       }
       editorRef.current?.updateOptions({
         readOnly: false,
@@ -199,7 +199,7 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
     })
     
     if (!result.sql) {
-      toast.error("No fixed query or explanation received from AI")
+      toast.error("No fixed query or explanation received from Anthropic API", { autoClose: 10000 })
       return
     }
 

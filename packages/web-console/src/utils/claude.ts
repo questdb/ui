@@ -167,12 +167,19 @@ const handleRateLimit = async () => {
   lastRequestTime = Date.now()
 }
 
+const isNonRetryableError = (error: any) => {
+  return error instanceof RefusalError || 
+         error instanceof MaxTokensError || 
+         error instanceof Anthropic.AuthenticationError
+}
+
 async function handleToolCalls(
   message: Anthropic.Messages.Message,
   anthropic: Anthropic,
   schemaClient: SchemaToolsClient,
   conversationHistory: Array<any> = [],
   model: string,
+  maxTokens: number,
   setStatus: StatusCallback,
   abortSignal?: AbortSignal
 ): Promise<Anthropic.Messages.Message | ClaudeAPIError> {
@@ -254,22 +261,22 @@ async function handleToolCalls(
     }
   ]
 
-  const followUpMessage = await anthropic.messages.create({
+  const followUpMessage = await createAnthropicMessage(anthropic, {
     model,
-    max_tokens: 1000,
+    max_tokens: maxTokens,
     tools: SCHEMA_TOOLS,
     messages: updatedHistory,
     temperature: 0.3
   })
 
   if (followUpMessage.stop_reason === 'tool_use') {
-    return handleToolCalls(followUpMessage, anthropic, schemaClient, updatedHistory, model, setStatus, abortSignal)
+    return handleToolCalls(followUpMessage, anthropic, schemaClient, updatedHistory, model, maxTokens, setStatus, abortSignal)
   }
 
   return followUpMessage
 }
 
-const tryWithRetries = async <T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T | ClaudeAPIError> => {
+const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback, abortSignal?: AbortSignal): Promise<T | ClaudeAPIError> => {
   let retries = 0
   while (retries <= MAX_RETRIES) {
     try {
@@ -283,8 +290,8 @@ const tryWithRetries = async <T>(fn: () => Promise<T>, abortSignal?: AbortSignal
       return await fn()
     } catch (error) {
       retries++
-      
-      if (retries > MAX_RETRIES) {
+      if (retries > MAX_RETRIES || isNonRetryableError(error)) {
+        setStatus(null)
         return handleClaudeError(error)
       }
 
@@ -292,6 +299,7 @@ const tryWithRetries = async <T>(fn: () => Promise<T>, abortSignal?: AbortSignal
     }
   }
 
+  setStatus(null)
   return {
     type: 'unknown',
     message: `Failed to get response after ${retries} retries`
@@ -343,9 +351,9 @@ export const explainQuery = async ({
       }
     ]
 
-    const message = await anthropic.messages.create({
+    const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: 1000,
+      max_tokens: settings.maxTokens,
       system: getExplainQueryPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
       messages: initialMessages,
@@ -353,7 +361,7 @@ export const explainQuery = async ({
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, settings.maxTokens, setStatus, abortSignal)
       : message
 
     const responseError = response as ClaudeAPIError
@@ -381,9 +389,9 @@ export const explainQuery = async ({
     }
     setStatus(AIOperationStatus.FormattingResponse)
 
-    const formattingResponse = await anthropic.messages.create({
+    const formattingResponse = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: 1000,
+      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'assistant' as const,
@@ -418,12 +426,13 @@ export const explainQuery = async ({
       setStatus(null)
       return { explanation: json.explanation }
     } catch (error) {
+      setStatus(null)
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
-  }, abortSignal)
+  }, setStatus, abortSignal)
 }
 
 export const generateSQL = async ({
@@ -468,9 +477,9 @@ export const generateSQL = async ({
       },
     ]
 
-    const message = await anthropic.messages.create({
+    const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: 1000,
+      max_tokens: settings.maxTokens,
       system: getGenerateSQLPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
       messages: initialMessages,
@@ -478,7 +487,7 @@ export const generateSQL = async ({
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, settings.maxTokens, setStatus, abortSignal)
       : message
     
     const responseError = response as ClaudeAPIError
@@ -496,9 +505,9 @@ export const generateSQL = async ({
     }
     setStatus(AIOperationStatus.FormattingResponse)
     
-    const formattingResponse = await anthropic.messages.create({
+    const formattingResponse = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: 1000,
+      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'assistant' as const,
@@ -543,12 +552,13 @@ export const generateSQL = async ({
         explanation: json.explanation || ''
       }
     } catch (error) {
+      setStatus(null)
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
-  }, abortSignal)
+  }, setStatus, abortSignal)
 }
 
 export const fixQuery = async ({
@@ -605,9 +615,9 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
       }
     ]
 
-    const message = await anthropic.messages.create({
+    const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: 1000,
+      max_tokens: settings.maxTokens,
       system: getFixQueryPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
       messages: initialMessages,
@@ -615,7 +625,7 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, settings.maxTokens, setStatus, abortSignal)
       : message
     
     const responseError = response as ClaudeAPIError
@@ -633,9 +643,9 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
     }
     setStatus(AIOperationStatus.FormattingResponse)
     
-    const formattingResponse = await anthropic.messages.create({
+    const formattingResponse = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: 1000,
+      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'assistant' as const,
@@ -680,15 +690,66 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
         explanation: json.explanation || ''
       }
     } catch (error) {
+      setStatus(null)
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
       } as ClaudeAPIError
     }
-  }, abortSignal)
+  }, setStatus, abortSignal)
+}
+
+class RefusalError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RefusalError'
+  }
+}
+
+class MaxTokensError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MaxTokensError'
+  }
+}
+
+async function createAnthropicMessage(
+  anthropic: Anthropic,
+  params: Anthropic.MessageCreateParams
+): Promise<Anthropic.Messages.Message> {
+  const message = await anthropic.messages.create({
+    ...params,
+    stream: false
+  })
+  
+  if (message.stop_reason === 'refusal') {
+    throw new RefusalError('The model refused to generate a response for this request.')
+  }
+  
+  if (message.stop_reason === 'max_tokens') {
+    throw new MaxTokensError('The response exceeded the maximum token limit. Please try generating shorter queries.')
+  }
+  
+  return message
 }
 
 function handleClaudeError(error: any): ClaudeAPIError {
+  if (error instanceof RefusalError) {
+    return {
+      type: 'unknown',
+      message: 'The model refused to generate a response for this request.',
+      details: error.message
+    }
+  }
+
+  if (error instanceof MaxTokensError) {
+    return {
+      type: 'unknown',
+      message: 'The response exceeded the maximum token limit. Please try generating shorter queries or increase token limits.',
+      details: error.message
+    }
+  }
+
   if (error instanceof Anthropic.AuthenticationError) {
     return {
       type: 'invalid_key',
@@ -791,23 +852,14 @@ export const formatExplanationAsComment = (explanation: string, prefix: string =
   return `/*\n * ${prefix}:\n${formattedLines.join('\n')}\n */`
 }
 
-// Validate API key format (basic check)
-export const isValidApiKeyFormat = (key: string): boolean => {
-  // Anthropic API keys typically start with 'sk-ant-api' and are around 100+ chars
-  return /^sk-ant-api\d{2}-[\w-]{90,}$/i.test(key)
-}
-
-// Test API key by making a simple request
 export const testApiKey = async (apiKey: string, model: string): Promise<{ valid: boolean; error?: string }> => {
   try {
-    // Create a simple test client
     const anthropic = new Anthropic({
       apiKey: apiKey,
       dangerouslyAllowBrowser: true
     })
 
-    // Make a minimal test request
-    await anthropic.messages.create({
+    await createAnthropicMessage(anthropic, {
       model,
       max_tokens: 10,
       messages: [
@@ -826,10 +878,16 @@ export const testApiKey = async (apiKey: string, model: string): Promise<{ valid
         error: 'Invalid API key' 
       }
     }
+
+    if (error instanceof MaxTokensError) {
+      return { 
+        valid: true,
+      }
+    }
     
     if (error instanceof Anthropic.RateLimitError) {
       return { 
-        valid: true // API key is valid, just rate limited
+        valid: true
       }
     }
 

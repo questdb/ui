@@ -2,6 +2,7 @@ export type AiAssistantSettings = {
   apiKey: string
   model: string
   grantSchemaAccess: boolean
+  maxTokens: number
 }
 
 export type SettingsType = string | boolean | number | AiAssistantSettings

@@ -40,7 +40,8 @@ type Props = {}
 export const DEFAULT_AI_ASSISTANT_SETTINGS = {
   apiKey: "",
   model: "claude-3-5-sonnet-latest",
-  grantSchemaAccess: true
+  grantSchemaAccess: true,
+  maxTokens: 1000
 }
 
 const defaultConfig: LocalConfig = {
@@ -139,7 +140,8 @@ export const LocalStorageProvider = ({
         return {
           apiKey: parsed.apiKey || "",
           model: parsed.model || DEFAULT_AI_ASSISTANT_SETTINGS.model,
-          grantSchemaAccess: parsed.grantSchemaAccess !== undefined ? parsed.grantSchemaAccess : true
+          grantSchemaAccess: parsed.grantSchemaAccess !== undefined ? parsed.grantSchemaAccess : true,
+          maxTokens: parsed.maxTokens || DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens
         }
       } catch (e) {
         return defaultConfig.aiAssistantSettings

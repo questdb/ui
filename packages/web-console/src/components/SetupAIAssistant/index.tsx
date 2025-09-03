@@ -10,7 +10,7 @@ import { PopperToggle } from "../PopperToggle"
 import { toast } from "../Toast"
 import { useLocalStorage, DEFAULT_AI_ASSISTANT_SETTINGS } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
-import { testApiKey, isValidApiKeyFormat } from "../../utils/claude"
+import { testApiKey } from "../../utils/claude"
 import { PopperHover } from "../PopperHover"
 
 const Wrapper = styled.div`
@@ -40,13 +40,10 @@ const InputWrapper = styled.div`
 
 const StyledInput = styled(Input)<{ $hasError?: boolean }>`
   width: 100%;
-  height: 3.2rem;
-  padding-right: ${({ disabled }) => disabled ? '9rem' : '4rem'};
   background: ${({ theme }) => theme.color.selection};
   border: 1px solid ${({ theme, $hasError }) => $hasError ? theme.color.red : theme.color.gray1};
   border-radius: 0.4rem;
   color: ${({ theme }) => theme.color.foreground};
-  font-family: monospace;
 
   &::placeholder {
     color: ${({ theme }) => theme.color.gray2};
@@ -159,10 +156,11 @@ export const SetupAIAssistant = () => {
   const [inputValue, setInputValue] = useState(aiAssistantSettings.apiKey || "")
   const [selectedModel, setSelectedModel] = useState(aiAssistantSettings.model || DEFAULT_AI_ASSISTANT_SETTINGS.model)
   const [grantSchemaAccess, setGrantSchemaAccess] = useState(aiAssistantSettings.grantSchemaAccess !== false)
+  const [maxTokens, setMaxTokens] = useState(aiAssistantSettings.maxTokens || DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens)
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const dirty = inputValue !== aiAssistantSettings.apiKey || selectedModel !== aiAssistantSettings.model || grantSchemaAccess !== aiAssistantSettings.grantSchemaAccess
+  const dirty = inputValue !== aiAssistantSettings.apiKey || selectedModel !== aiAssistantSettings.model || grantSchemaAccess !== aiAssistantSettings.grantSchemaAccess || maxTokens !== aiAssistantSettings.maxTokens
 
   const handleToggle = (newActive: boolean) => {
     if (newActive) {
@@ -184,11 +182,6 @@ export const SetupAIAssistant = () => {
       return false
     }
 
-    if (!isValidApiKeyFormat(key)) {
-      setError("Invalid API key format")
-      return false
-    }
-
     setIsValidating(true)
     setError(null)
 
@@ -198,7 +191,8 @@ export const SetupAIAssistant = () => {
         const newSettings = {
           apiKey: key,
           model: selectedModel,
-          grantSchemaAccess: grantSchemaAccess
+          grantSchemaAccess: grantSchemaAccess,
+          maxTokens: maxTokens
         }
         updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
         toast.success("Settings saved successfully")
@@ -227,6 +221,7 @@ export const SetupAIAssistant = () => {
     setInputValue(aiAssistantSettings.apiKey)
     setSelectedModel(aiAssistantSettings.model)
     setGrantSchemaAccess(aiAssistantSettings.grantSchemaAccess)
+    setMaxTokens(aiAssistantSettings.maxTokens)
     setError(null)
     handleToggle(false)
   }
@@ -236,6 +231,7 @@ export const SetupAIAssistant = () => {
     setInputValue(DEFAULT_AI_ASSISTANT_SETTINGS.apiKey)
     setSelectedModel(DEFAULT_AI_ASSISTANT_SETTINGS.model)
     setGrantSchemaAccess(DEFAULT_AI_ASSISTANT_SETTINGS.grantSchemaAccess)
+    setMaxTokens(DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens)
     setError(null)
     toast.success("All settings cleared")
   }
@@ -341,6 +337,26 @@ export const SetupAIAssistant = () => {
                 Grant schema access
               </CheckboxLabel>
             </Box>
+          </FormGroup>
+
+          <FormGroup>
+            <FormLabel htmlFor="max-tokens-input">
+              Max Tokens Per Message
+            </FormLabel>
+            <StyledInput
+              id="max-tokens-input"
+              data-hook="max-tokens-input"
+              type="number"
+              min="100"
+              value={maxTokens}
+              onChange={(e) => {
+                const value = parseInt(e.target.value) || DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens
+                setMaxTokens(Math.max(value, 100))
+              }}
+            />
+            <DisclaimerText color="gray2">
+              Maximum number of tokens Claude can generate per response
+            </DisclaimerText>
           </FormGroup>
 
           <DisclaimerText color="gray2">

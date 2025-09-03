@@ -78,7 +78,7 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     if (isClaudeError(response)) {
       const error = response as ClaudeAPIError
       if (error.type !== 'aborted') {
-        toast.error(error.message)
+        toast.error(error.message, { autoClose: 10000 })
       }
       editorRef.current?.updateOptions({
         readOnly: false,
@@ -89,7 +89,7 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
 
     const result = response as ClaudeExplanation
     if (!result.explanation) {
-      toast.error("No explanation received from Anthropic API")
+      toast.error("No explanation received from Anthropic API", { autoClose: 10000 })
       editorRef.current?.updateOptions({
         readOnly: false,
         readOnlyMessage: undefined

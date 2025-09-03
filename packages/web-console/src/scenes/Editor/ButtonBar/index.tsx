@@ -185,11 +185,11 @@ const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
-  [RunningType.QUERY]: "Cmd+Enter",
-  [RunningType.SCRIPT]: "Cmd+Shift+Enter",
+  [RunningType.QUERY]: "Run query (Cmd+Enter)",
+  [RunningType.SCRIPT]: "Run all queries (Cmd+Shift+Enter)",
 } : {
-  [RunningType.QUERY]: "Ctrl+Enter",
-  [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
+  [RunningType.QUERY]: "Run query (Ctrl+Enter)",
+  [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
 }
 
 const ButtonBar = ({ onTriggerRunScript, isTemporary, executionRefs, onBufferContentChange }: ButtonBarProps) => {
