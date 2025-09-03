@@ -39,7 +39,7 @@ type Props = {}
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS = {
   apiKey: "",
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-0",
   grantSchemaAccess: true,
   maxTokens: 1000
 }

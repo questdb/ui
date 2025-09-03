@@ -16,6 +16,16 @@ export interface ClaudeExplanation {
   explanation: string
 }
 
+export interface TableSchemaExplanation {
+  explanation: string
+  columns: Array<{
+    name: string
+    description: string
+    data_type: string
+  }>
+  storage_details: string[]
+}
+
 export interface GeneratedSQL {
   sql: string
   explanation?: string
@@ -151,6 +161,26 @@ ${grantSchemaAccess ? `You have access to tools that can help you understand the
 
 Use these tools to verify correct table and column names, and to understand the data types.` : ''}
 `
+
+const getExplainSchemaPrompt = (tableName: string, schema: string, isMatView: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
+Briefly explain the following ${isMatView ? 'materialized view' : 'table'} schema in detail. Include:
+- The purpose of the ${isMatView ? 'materialized view' : 'table'}
+- What each column represents and its data type
+- Any important properties like WAL enablement, partitioning strategy, designated timestamps
+- Any performance or storage considerations
+
+${isMatView ? 'Materialized View' : 'Table'} Name: ${tableName}
+
+Schema:
+\`\`\`sql
+${schema}
+\`\`\`
+
+Provide a short explanation that helps developers understand how to use this ${isMatView ? 'materialized view' : 'table'}.
+Do not use markdown formatting in your response.
+
+Return a JSON string with the following structure:
+{ "explanation": "The purpose of the table/materialized view", "columns": [ { "name": "Column Name", "description": "Column Description", "data_type": "Data Type" } ], "storage_details": ["Storage detail 1", "Storage detail 2"] }`
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
@@ -787,6 +817,83 @@ function handleClaudeError(error: any): ClaudeAPIError {
     message: 'An unexpected error occurred. Please try again.',
     details: error
   }
+}
+
+export const explainTableSchema = async ({
+  tableName,
+  schema,
+  isMatView,
+  settings,
+  setStatus,
+}: {
+  tableName: string,
+  schema: string,
+  isMatView: boolean,
+  settings: AiAssistantSettings,
+  setStatus: StatusCallback,
+}): Promise<TableSchemaExplanation | ClaudeAPIError> => {
+  if (!settings.apiKey || !schema) {
+    return {
+      type: 'invalid_key',
+      message: 'API key or schema is missing'
+    }
+  }
+
+  if (!settings.grantSchemaAccess) {
+    return {
+      type: 'unknown',
+      message: 'Schema access is not granted to the AI Assistant'
+    }
+  }
+
+  await handleRateLimit()
+  setStatus(AIOperationStatus.Processing)
+
+  return tryWithRetries(async () => {
+    const anthropic = new Anthropic({
+      apiKey: settings.apiKey,
+      dangerouslyAllowBrowser: true
+    })
+
+    const message = await createAnthropicMessage(anthropic, {
+      model: settings.model,
+      max_tokens: settings.maxTokens,
+      messages: [
+        {
+          role: 'user' as const,
+          content: getExplainSchemaPrompt(tableName, schema, isMatView)
+        },
+        {
+          role: 'assistant' as const,
+          content: '{"'
+        }
+      ],
+      temperature: 0.3
+    })
+
+    const fullContent = '{"' + message.content.reduce((acc, block) => {
+      if (block.type === 'text' && 'text' in block) {
+        acc += block.text
+      }
+      return acc
+    }, '')
+
+    try {
+      const json = JSON.parse(fullContent)
+      setStatus(null)
+      return { 
+        explanation: json.explanation || '',
+        columns: json.columns || [],
+        storage_details: json.storage_details || []
+      }
+    } catch (error) {
+      setStatus(null)
+      return {
+        type: 'unknown',
+        message: 'Failed to parse assistant response.'
+      } as ClaudeAPIError
+    }
+  }, setStatus)
 }
 
 export const formatExplanationAsComment = (explanation: string, prefix: string = 'AI Explanation'): string => {

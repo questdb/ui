@@ -2,6 +2,7 @@ import React, { FC, useCallback, useEffect, useMemo, useState, useContext, useRe
 import { Virtuoso, VirtuosoHandle, ListRange } from 'react-virtuoso';
 import styled from 'styled-components';
 import { Loader3, FileCopy, Restart } from '@styled-icons/remix-line';
+import { AutoAwesome } from '@styled-icons/material';
 import { spinAnimation, toast } from '../../../components';
 import { color, ErrorResult } from '../../../utils';
 import * as QuestDB from "../../../utils/questdb";
@@ -14,10 +15,13 @@ import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROU
 import { useSchema } from "../SchemaContext";
 import { QuestContext } from "../../../providers";
 import { PartitionBy } from "../../../utils/questdb/types";
-import { useDispatch } from 'react-redux';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
+import { SchemaExplanationDialog } from '../SchemaExplanationDialog'
+import { explainTableSchema, isClaudeError, ClaudeAPIError, TableSchemaExplanation } from '../../../utils/claude'
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import { useAIStatus, isBlockingAIStatus } from '../../../providers/AIStatusProvider'
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -109,14 +113,20 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   state,
   loadingError,
 }) => {
-  const dispatch = useDispatch()
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
+  const { aiAssistantSettings } = useLocalStorage()
+  const { status: aiStatus, setStatus } = useAIStatus()
 
   const [columnsReady, setColumnsReady] = useState(false)
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(null)
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<string | null>(null)
+  const [schemaExplanationDialog, setSchemaExplanationDialog] = useState<{
+    tableName: string
+    isMatView: boolean
+    explanation: TableSchemaExplanation | null
+  } | null>(null)
 
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const rangeRef = useRef<ListRange | null>(null)
@@ -155,22 +165,65 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }, [] as FlattenedTreeItem[]);
   }, [schemaTree, columnsReady]);
 
-  const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
+  const getTableSchema = async (tableName: string, isMatView: boolean): Promise<string | null> => {
     try {
-      let response
-      if (isMatView) {
-        response = await quest.showMatViewDDL(tableName)
-      } else {
-        response = await quest.showTableDDL(tableName)
-      }
+      const response = isMatView
+        ? await quest.showMatViewDDL(tableName)
+        : await quest.showTableDDL(tableName)
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
-        copyToClipboard(response.data[0].ddl)
-        toast.success("Schema copied to clipboard")
+        return response.data[0].ddl
       }
     } catch (error: any) {
-      toast.error(`Cannot copy schema for ${isMatView ? 'materialized view' : 'table'} '${tableName}'`)
+      toast.error(`Cannot fetch schema for ${isMatView ? 'materialized view' : 'table'} '${tableName}'`)
     }
+    return null
+  }
+
+  const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
+    const schema = await getTableSchema(tableName, isMatView)
+    if (schema) {
+      copyToClipboard(schema)
+      toast.success("Schema copied to clipboard")
+    }
+  }
+
+  const handleExplainSchema = async (tableName: string, isMatView: boolean) => {
+    if (!aiAssistantSettings.apiKey) {
+      toast.error("AI Assistant is not enabled. Please configure your API key in settings.")
+      return
+    }
+
+    const schema = await getTableSchema(tableName, isMatView)
+    if (!schema) {
+      return
+    }
+
+    const response = await explainTableSchema({
+      tableName,
+      schema,
+      isMatView,
+      settings: aiAssistantSettings,
+      setStatus,
+    })
+
+    if (isClaudeError(response)) {
+      const error = response as ClaudeAPIError
+      toast.error(error.message, { autoClose: 10000 })
+      return
+    }
+
+    const result = response as TableSchemaExplanation
+    if (!result.explanation) {
+      toast.error("No explanation received from AI Assistant", { autoClose: 10000 })
+      return
+    }
+
+    setSchemaExplanationDialog({
+      tableName,
+      isMatView,
+      explanation: result
+    })
   }
 
   const fetchColumns = async (name: string) => {
@@ -382,6 +435,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               >
                 Copy schema
               </MenuItem>
+              <MenuItem
+                data-hook="table-context-menu-explain-schema"
+                onClick={async () => await handleExplainSchema(item.name, item.kind === 'matview')}
+                icon={<AutoAwesome size={16} />}
+                disabled={!aiAssistantSettings.apiKey || !aiAssistantSettings.grantSchemaAccess || isBlockingAIStatus(aiStatus)}
+              >
+                Explain schema with AI
+              </MenuItem>
               <MenuItem 
                 data-hook="table-context-menu-resume-wal"
                 onClick={() => item.walTableData?.suspended && setTimeout(() => setOpenedSuspensionDialog(item.id))}
@@ -484,19 +545,29 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }
   
   return (
-    <div ref={wrapperRef} style={{ height: '100%' }}>
-      <Virtuoso
-        totalCount={flattenedItems.length}
-        ref={virtuosoRef}
-        data-hook="schema-tree"
-        rangeChanged={(newRange) => {
-          rangeRef.current = newRange
-        }}
-        data={flattenedItems}
-        itemContent={(index) => renderRow(index)}
-        style={{ height: '100%' }}
-      />
-    </div>
+    <>
+      <div ref={wrapperRef} style={{ height: '100%' }}>
+        <Virtuoso
+          totalCount={flattenedItems.length}
+          ref={virtuosoRef}
+          data-hook="schema-tree"
+          rangeChanged={(newRange) => {
+            rangeRef.current = newRange
+          }}
+          data={flattenedItems}
+          itemContent={(index) => renderRow(index)}
+          style={{ height: '100%' }}
+        />
+      </div>
+      {schemaExplanationDialog && (
+        <SchemaExplanationDialog
+          open={true}
+          onOpenChange={(open) => !open && setSchemaExplanationDialog(null)}
+          tableName={schemaExplanationDialog.tableName}
+          explanation={schemaExplanationDialog.explanation}
+        />
+      )}
+    </>
   );
 }
 
