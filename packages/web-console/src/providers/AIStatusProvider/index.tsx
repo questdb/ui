@@ -42,7 +42,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({ children }) 
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const abortOperation = useCallback(() => {
-    if (abortControllerRef.current) {
+    if (abortControllerRef.current && status !== null) {
       abortControllerRef.current?.abort()
       setAbortController(new AbortController())
       setStatus(AIOperationStatus.Aborted)
