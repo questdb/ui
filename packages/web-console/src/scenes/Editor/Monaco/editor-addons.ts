@@ -33,6 +33,8 @@ import {
 import { QuestDBLanguageName } from "./utils"
 import { bufferStore } from "../../../store/buffers"
 import type { editor, IDisposable } from "monaco-editor"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 
 enum Command {
   EXECUTE = "execute",
@@ -41,6 +43,8 @@ enum Command {
   ADD_NEW_TAB = "add_new_tab",
   CLOSE_ACTIVE_TAB = "close_active_tab",
   SEARCH_DOCS = "search_docs",
+  GENERATE_QUERY = "generate_query",
+  EXPLAIN_QUERY = "explain_query",
 }
 
 export const registerEditorActions = ({
@@ -124,6 +128,24 @@ export const registerEditorActions = ({
       if (docSearchButton) {
         docSearchButton.click()
       }
+    },
+  }))
+
+  actions.push(editor.addAction({
+    id: Command.GENERATE_QUERY,
+    label: "Generate query",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG],
+    run: () => {
+      eventBus.publish(EventType.GENERATE_QUERY_OPEN)
+    },
+  }))
+
+  actions.push(editor.addAction({
+    id: Command.EXPLAIN_QUERY,
+    label: "Explain query",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
+    run: () => {
+      eventBus.publish(EventType.EXPLAIN_QUERY_EXEC)
     },
   }))
 

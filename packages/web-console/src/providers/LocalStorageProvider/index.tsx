@@ -32,10 +32,17 @@ import React, {
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { parseInteger } from "./utils"
-import { LocalConfig, SettingsType, LeftPanelState, LeftPanelType } from "./types"
+import { LocalConfig, SettingsType, LeftPanelState, LeftPanelType, AiAssistantSettings } from "./types"
 
 /* eslint-disable prettier/prettier */
 type Props = {}
+
+export const DEFAULT_AI_ASSISTANT_SETTINGS = {
+  apiKey: "",
+  model: "claude-sonnet-4-0",
+  grantSchemaAccess: true,
+  maxTokens: 1000
+}
 
 const defaultConfig: LocalConfig = {
   editorCol: 10,
@@ -44,6 +51,7 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
     type: LeftPanelType.DATASOURCES,
     width: 350
@@ -60,6 +68,7 @@ type ContextProps = {
   autoRefreshTables: boolean
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
+  aiAssistantSettings: AiAssistantSettings
 }
 
 const defaultValues: ContextProps = {
@@ -72,6 +81,7 @@ const defaultValues: ContextProps = {
   autoRefreshTables: true,
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (state: LeftPanelState) => undefined,
+  aiAssistantSettings: defaultConfig.aiAssistantSettings,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -122,8 +132,32 @@ export const LocalStorageProvider = ({
 
   const [leftPanelState, setLeftPanelState] = useState<LeftPanelState>(getLeftPanelState())
 
+  const getAiAssistantSettings = (): AiAssistantSettings => {
+    const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as AiAssistantSettings
+        return {
+          apiKey: parsed.apiKey || "",
+          model: parsed.model || DEFAULT_AI_ASSISTANT_SETTINGS.model,
+          grantSchemaAccess: parsed.grantSchemaAccess !== undefined ? parsed.grantSchemaAccess : true,
+          maxTokens: parsed.maxTokens || DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens
+        }
+      } catch (e) {
+        return defaultConfig.aiAssistantSettings
+      }
+    }
+    return defaultConfig.aiAssistantSettings
+  }
+
+  const [aiAssistantSettings, setAiAssistantSettings] = useState<AiAssistantSettings>(getAiAssistantSettings())
+
   const updateSettings = (key: StoreKey, value: SettingsType) => {
-    setValue(key, value.toString())
+    if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
+      setValue(key, JSON.stringify(value))
+    } else {
+      setValue(key, value.toString())
+    }
     refreshSettings(key)
   }
 
@@ -157,6 +191,9 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_TABLES:
         setAutoRefreshTables(value === "true")
         break
+      case StoreKey.AI_ASSISTANT_SETTINGS:
+        setAiAssistantSettings(getAiAssistantSettings())
+        break
     }
   }
 
@@ -172,6 +209,7 @@ export const LocalStorageProvider = ({
         autoRefreshTables,
         leftPanelState,
         updateLeftPanelState,
+        aiAssistantSettings,
       }}
     >
       {children}
