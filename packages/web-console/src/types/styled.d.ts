@@ -48,6 +48,7 @@ export type ColorShape = {
   cyan: string
   pink: string
   pink50: string
+  pinkPrimary: string
   pinkDarker: string
   pinkLighter: string
   transparent: string

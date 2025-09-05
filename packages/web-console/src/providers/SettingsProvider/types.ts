@@ -33,7 +33,7 @@ export type QueryGroup = {
 }
 
 export type ConsoleConfig = Partial<{
-  githubBanner: boolean
+  ctaBanner: boolean
   readOnly?: boolean
   savedQueries: Array<Query | QueryGroup>
 }>
