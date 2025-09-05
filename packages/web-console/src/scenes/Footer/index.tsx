@@ -29,7 +29,7 @@ import { Github } from "@styled-icons/remix-fill"
 
 import { Link, Text, TransitionDuration } from "../../components"
 
-import GithubBanner from "./GithubBanner"
+import CtaBanner from "./CtaBanner"
 import BuildVersion from "./BuildVersion"
 import ConnectionStatus from "./ConnectionStatus"
 import { eventBus } from "../../modules/EventBus"
@@ -63,24 +63,28 @@ const RightContainer = styled.div`
   }
 `
 
-const GithubBannerTransition = createGlobalStyle`
-  .github-banner-enter {
-    max-height: 0;
+const CtaBannerTransition = createGlobalStyle`
+  .cta-banner-enter {
+    bottom: -10rem;
+    opacity: 0;
   }
 
-  .github-banner-enter-active {
-    max-height: 4rem;
-    transition: all ${TransitionDuration.REG}ms;
+  .cta-banner-enter-active {
+    bottom: 1.6rem;
+    opacity: 1;
+    transition: bottom ${TransitionDuration.REG}ms ease-out, opacity ${TransitionDuration.REG}ms ease-out;
   }
 
-  .github-banner-exit,
-  .github-banner-enter-done {
-    max-height: 4rem;
+  .cta-banner-exit,
+  .cta-banner-enter-done {
+    bottom: 1.6rem;
+    opacity: 1;
   }
 
-  .github-banner-exit-active {
-    max-height: 0;
-    transition: all ${TransitionDuration.REG}ms;
+  .cta-banner-exit-active {
+    bottom: -10rem;
+    opacity: 0;
+    transition: bottom ${TransitionDuration.REG}ms ease-in, opacity ${TransitionDuration.REG}ms ease-in;
   }
 `
 
@@ -127,14 +131,14 @@ const Footer = () => {
         </Link>
       </RightContainer>
 
-      <GithubBannerTransition />
+      <CtaBannerTransition />
       <CSSTransition
-        classNames="github-banner"
-        in={showBanner && consoleConfig.githubBanner}
+        classNames="cta-banner"
+        in={showBanner && consoleConfig.ctaBanner}
         timeout={TransitionDuration.REG}
         unmountOnExit
       >
-        <GithubBanner onClick={handleClick} />
+        <CtaBanner onClick={handleClick} />
       </CSSTransition>
     </Wrapper>
   )
