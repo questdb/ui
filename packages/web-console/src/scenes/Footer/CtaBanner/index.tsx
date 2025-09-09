@@ -92,10 +92,7 @@ const EnterpriseLinkSmall = styled(EnterpriseLink)`
 
 const CloseIcon = styled(Close)`
   color: ${color("white")};
-
-  &:hover {
-    cursor: pointer;
-  }
+  cursor: pointer;
 `
 
 const CtaBanner = ({ onClick }: Props) => (
