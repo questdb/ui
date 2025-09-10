@@ -1,6 +1,12 @@
 import { operators } from "./operators"
 import type { languages } from "monaco-editor"
-import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
+import { constants, dataTypes, functions, keywords } from "@questdb/sql-grammar"
+import { escapeRegExpCharacters } from "../../../../utils/textSearch"
+
+const functionPattern = new RegExp(
+  `(${functions.map(escapeRegExpCharacters).join('|')})(\\s*)(\\()`,
+  'i'
+)
 
 export const language: languages.IMonarchLanguage = {
   defaultToken: "",
@@ -11,10 +17,10 @@ export const language: languages.IMonarchLanguage = {
     { open: "[", close: "]", token: "delimiter.square" },
     { open: "(", close: ")", token: "delimiter.parenthesis" },
   ],
+  constants,
   dataTypes,
   keywords,
   operators,
-  builtinFunctions: functions,
   builtinVariables: [
     // Configuration
     "@@DATEFIRST",
@@ -65,19 +71,20 @@ export const language: languages.IMonarchLanguage = {
       { include: "@pseudoColumns" },
       { include: "@numbers" },
       { include: "@strings" },
+      [functionPattern, ["predefined", "white", "@brackets"]],
       { include: "@complexIdentifiers" },
       { include: "@variable" },
       { include: "@scopes" },
       { include: "@array" },
       [/[;,.]/, "delimiter"],
-      [/[()]/, "@brackets"],
+      [/[()[\]]/, "@brackets"],
       [
         /[\w@#$]+/,
         {
           cases: {
+            "@constants": "constant.language",
             "@operators": "operator",
             "@builtinVariables": "predefined",
-            "@builtinFunctions": "predefined",
             "@keywords": "keyword",
             "@dataTypes": "dataType",
             "@default": "identifier",
@@ -111,6 +118,7 @@ export const language: languages.IMonarchLanguage = {
       ],
     ],
     numbers: [
+      [/\b(\d+)([utsmhdwmy])\b/i, "number"], // sampling rate
       [/([+-]?\d+\.\d+[eE]?[+-]?\d+)/, "number"], // floating point number
       [/0[xX][0-9a-fA-F]*/, "number"], // hex integers
       [/[+-]?\d+((_)?\d+)*[Ll]?/, "number"], // integers
@@ -129,13 +137,7 @@ export const language: languages.IMonarchLanguage = {
       [/@(["'`])(?:\\[\s\S]|(?!\1)[^\\])+\1/, "variable"],
     ],
     complexIdentifiers: [
-      [/\[/, { token: "identifier.quote", next: "@bracketedIdentifier" }],
       [/"/, { token: "identifier.quote", next: "@quotedIdentifier" }],
-    ],
-    bracketedIdentifier: [
-      [/[^\]]+/, "identifier"],
-      [/]]/, "identifier"],
-      [/]/, { token: "identifier.quote", next: "@pop" }],
     ],
     quotedIdentifier: [
       [/[^"]+/, "identifier"],

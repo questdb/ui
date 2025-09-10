@@ -84,7 +84,7 @@ export function getColumn(offset: number, lineNumber: number, lineStarts: number
   return offset - lineStarts[lineNumber - 1] + 1
 }
 
-function escapeRegExpCharacters(value: string): string {
+export function escapeRegExpCharacters(value: string): string {
   return value.replace(/[\\\{\}\*\+\?\|\^\$\.\[\]\(\)]/g, '\\$&');
 }
 
