@@ -91,7 +91,7 @@ export const language: languages.IMonarchLanguage = {
           },
         },
       ],
-      [/[<>=!%&+\-*/|~^]/, "operator"],
+      [/[<>=!%&+\-*/|~^:]/, "operator"],
     ],
     whitespace: [[/\s+/, "white"]],
     comments: [
