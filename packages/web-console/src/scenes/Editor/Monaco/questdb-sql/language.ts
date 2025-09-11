@@ -4,7 +4,7 @@ import { constants, dataTypes, functions, keywords } from "@questdb/sql-grammar"
 import { escapeRegExpCharacters } from "../../../../utils/textSearch"
 
 const functionPattern = new RegExp(
-  `(${functions.map(escapeRegExpCharacters).join('|')})(\\s*)(\\()`,
+  `(${functions.filter(fn => !keywords.includes(fn)).map(escapeRegExpCharacters).join('|')})(\\s*)(?=\\s*\\()`,
   'i'
 )
 
@@ -71,7 +71,7 @@ export const language: languages.IMonarchLanguage = {
       { include: "@pseudoColumns" },
       { include: "@numbers" },
       { include: "@strings" },
-      [functionPattern, ["predefined", "white", "@brackets"]],
+      [functionPattern, "predefined"],
       { include: "@complexIdentifiers" },
       { include: "@variable" },
       { include: "@scopes" },
