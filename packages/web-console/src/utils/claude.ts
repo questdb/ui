@@ -702,13 +702,15 @@ export const fixQuery = async ({
   schemaClient,
   setStatus,
   abortSignal,
+  word,
 }: {
   query: string,
   errorMessage: string,
   settings: AiAssistantSettings,
   schemaClient?: SchemaToolsClient,
   setStatus: StatusCallback,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  word: string | null,
 }): Promise<Partial<GeneratedSQL> | ClaudeAPIError> => {
   if (!settings.apiKey || !query || !errorMessage) {
     return {
@@ -745,7 +747,8 @@ Error Message:
 ${errorMessage}
 \`\`\`
 
-Analyze the error and fix the query if possible, otherwise provide an explanation why it was failed.`
+Analyze the error and fix the query if possible, otherwise provide an explanation why it was failed.
+${word ? `The error occurred at word: ${word}` : ''}`
       }
     ]
 

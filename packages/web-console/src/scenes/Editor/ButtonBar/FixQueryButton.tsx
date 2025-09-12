@@ -42,7 +42,7 @@ const extractError = (
   executionRefs: React.MutableRefObject<ExecutionRefs> | undefined,
   activeBufferId: string | number | undefined,
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
-): { errorMessage: string; fixStart: number; queryText: string } | null => {
+): { errorMessage: string; fixStart: number; queryText: string, word: string | null } | null => {
   if (!executionRefs?.current || !activeBufferId || !editorRef.current) {
     return null
   }
@@ -67,6 +67,8 @@ const extractError = (
     : execution.startOffset
 
   const startPosition = model.getPositionAt(fixStart)
+  const errorWordPosition = model.getPositionAt(fixStart + execution.error.position)
+  const errorWord = model.getWordAtPosition(errorWordPosition)
   const endPosition = model.getPositionAt(execution.selection?.endOffset ?? execution.startOffset)
   const queryText = execution.selection
     ? model.getValueInRange({
@@ -79,6 +81,7 @@ const extractError = (
 
   return {
     errorMessage: execution.error.error || "Query execution failed",
+    word: errorWord ? errorWord.word : null,
     fixStart,
     queryText,
   }
@@ -113,7 +116,7 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
       toast.error("Unable to retrieve error information from the editor", { autoClose: 10000 })
       return
     }
-    const { errorMessage, fixStart, queryText } = errorInfo
+    const { errorMessage, fixStart, queryText, word } = errorInfo
     const fixStartPosition = model.getPositionAt(fixStart)
     editorRef.current?.updateOptions({
       readOnly: true,
@@ -129,7 +132,8 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
       settings: aiAssistantSettings,
       schemaClient: schemaClient,
       setStatus,
-      abortSignal: abortController?.signal
+      abortSignal: abortController?.signal,
+      word,
     })
 
     if (isClaudeError(response)) {

@@ -355,7 +355,7 @@ export const SetupAIAssistant = () => {
               }}
             />
             <DisclaimerText color="gray2">
-              Maximum number of tokens Claude can generate per response
+              Maximum number of tokens for single prompt
             </DisclaimerText>
           </FormGroup>
 
