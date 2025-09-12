@@ -35,7 +35,7 @@ const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | nu
     gap: 1rem;
     align-items: center;
   ` : css`
-    min-height: 5rem;
+    padding: 1rem 0;
     display: flex;
     gap: 1rem;
     align-items: center;

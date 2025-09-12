@@ -73,6 +73,8 @@ export const LINE_NUMBER_HARD_LIMIT = 99999
 
 const Content = styled(PaneContent)`
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: #2c2e3d;
   .monaco-editor .squiggly-error {
@@ -201,6 +203,12 @@ const StyledDialogButton = styled(Button)`
   &:focus {
     outline: 1px solid ${({ theme }) => theme.color.foreground};
   }
+`
+
+const EditorWrapper = styled.div`
+  flex: 1;
+  overflow: hidden;
+  position: relative;
 `
 
 const DEFAULT_LINE_CHARS = 5
@@ -835,7 +843,7 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
             text: modifiedContent,
             forceMoveMarkers: true
           }])
-          
+          handleBufferContentChange(model.getValue())
           editor.revealPositionInCenter(startPosition)
         }
         toast.success("Fix applied successfully")
@@ -1493,32 +1501,34 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
           executionRefs={executionRefs}
           onBufferContentChange={handleBufferContentChange}
         />
-        <Editor
-          beforeMount={beforeMount}
-          defaultLanguage={QuestDBLanguageName}
-          onMount={onMount}
-          saveViewState={false}
-          onChange={handleBufferContentChange}
-          options={{
-            // initially null, but will be set during onMount with editor.setModel
-            model: null,
-            fixedOverflowWidgets: true,
-            fontSize: 14,
-            lineHeight: 24,
-            fontFamily: theme.fontMonospace,
-            glyphMargin: true,
-            renderLineHighlight: "gutter",
-            useShadowDOM: false,
-            minimap: {
-              enabled: false,
-            },
-            selectOnLineNumbers: false,
-            scrollBeyondLastLine: false,
-            tabSize: 2,
-            lineNumbersMinChars: lineNumbersMinChars,
-          }}
-          theme="vs-dark"
-        />
+        <EditorWrapper>
+          <Editor
+            beforeMount={beforeMount}
+            defaultLanguage={QuestDBLanguageName}
+            onMount={onMount}
+            saveViewState={false}
+            onChange={handleBufferContentChange}
+            options={{
+              // initially null, but will be set during onMount with editor.setModel
+              model: null,
+              fixedOverflowWidgets: true,
+              fontSize: 14,
+              lineHeight: 24,
+              fontFamily: theme.fontMonospace,
+              glyphMargin: true,
+              renderLineHighlight: "gutter",
+              useShadowDOM: false,
+              minimap: {
+                enabled: false,
+              },
+              selectOnLineNumbers: false,
+              scrollBeyondLastLine: false,
+              tabSize: 2,
+              lineNumbersMinChars: lineNumbersMinChars,
+            }}
+            theme="vs-dark"
+          />
+        </EditorWrapper>
         <Loader show={!!request || !tables} />
       </Content>
       

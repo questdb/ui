@@ -5,6 +5,11 @@ import type { AiAssistantSettings } from '../providers/LocalStorageProvider/type
 import { formatSql } from './formatSql'
 import type { Request } from '../scenes/Editor/Monaco/utils'
 import { AIOperationStatus } from '../providers/AIStatusProvider'
+import { 
+  getQuestDBTableOfContents, 
+  getSpecificDocumentation,
+  DocCategory 
+} from './questdbDocsRetrieval'
 
 export interface ClaudeAPIError {
   type: 'rate_limit' | 'invalid_key' | 'network' | 'unknown' | 'aborted'
@@ -63,6 +68,41 @@ const SCHEMA_TOOLS = [
   },
 ]
 
+const DOC_TOOLS = [
+  {
+    name: 'get_questdb_toc',
+    description: 'Get a table of contents listing all available QuestDB functions, operators, and SQL keywords. Use this first to see what documentation is available before requesting specific items.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'get_questdb_documentation',
+    description: 'Get documentation for specific QuestDB functions, operators, or SQL keywords. This is much more efficient than loading all documentation.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        category: {
+          type: 'string' as const,
+          enum: ['functions', 'operators', 'sql'],
+          description: 'The category of documentation to retrieve',
+        },
+        items: {
+          type: 'array' as const,
+          items: {
+            type: 'string' as const,
+          },
+          description: 'List of specific function names, operators, or SQL keywords to get documentation for',
+        },
+      },
+      required: ['category', 'items'],
+    },
+  },
+]
+
+const ALL_TOOLS = [...SCHEMA_TOOLS, ...DOC_TOOLS]
+
 export function isClaudeError(response: ClaudeAPIError | ClaudeExplanation | GeneratedSQL | Partial<GeneratedSQL>)  {
   if ('type' in response && 'message' in response) {
     return true
@@ -114,30 +154,44 @@ Focus on the business logic and what the query achieves, not the SQL syntax itse
 - Real-time data ingestion patterns
 - Performance optimizations specific to time-series data
 
-${grantSchemaAccess ? `You have access to tools that can help you understand the database schema:
-- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table
+You have access to tools that can help you understand QuestDB features:
+- get_questdb_toc: Get a table of contents of all QuestDB documentation (USE THIS FIRST!)
+- get_questdb_documentation: Get specific documentation for functions, operators, or SQL keywords
+${grantSchemaAccess ? `- get_tables: Get a list of all tables and materialized views
+- get_table_schema: Get the full DDL schema for a specific table` : ''}
 
-Use these tools when the query references tables and it would be helpful to understand their structure for providing a better explanation.` : ''}
+Refer to QuestDB documentation about functions, operators
+IMPORTANT: For documentation, use a two-phase approach:
+1. First use get_questdb_toc to see what's available
+2. Then use get_questdb_documentation to get specific items you need
 
-Do not use markdown formatting in your response.`
+Example: To understand SAMPLE BY:
+- First: get_questdb_toc → find "sample_by" in SQL section
+- Then: get_questdb_documentation(category="sql", items=["sample_by"])`
 
 const getGenerateSQLPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. 
 When given a natural language description, generate the corresponding QuestDB SQL query.
 
 Important guidelines:
-1. Generate only valid QuestDB SQL syntax
-2. Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) when relevant
-3. Follow QuestDB best practices for performance
-4. Use proper timestamp handling for time-series data
-5. Include appropriate WHERE clauses for time filtering when mentioned
-6. Use correct data types and functions specific to QuestDB
+- Generate only valid QuestDB SQL syntax referring to the documentation
+- Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
+- Follow QuestDB best practices for performance referring to the documentation
+- Use proper timestamp handling for time-series data
+- Use correct data types and functions specific to QuestDB referring to the documentation. Do not use any word that is not in the documentation.
 
-${grantSchemaAccess ? `You have access to tools that can help you understand the database schema:
-- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table
+You have access to tools that can help you understand QuestDB features:
+- get_questdb_toc: Get a table of contents of all QuestDB documentation
+- get_questdb_documentation: Get specific documentation for functions, operators, or SQL keywords
+${grantSchemaAccess ? `- get_tables: Get a list of all tables and materialized views
+- get_table_schema: Get the full DDL schema for a specific table` : ''}
 
-Use these tools to ensure you generate queries with correct table and column names.` : ''}
+CRITICAL: Always follow this two-phase documentation approach:
+1. Use get_questdb_toc to see available functions/keywords/operators
+2. Use get_questdb_documentation to get details for specific items you'll use
+
+Example workflow:
+- Need a time function? → get_questdb_toc → find relevant functions → get_questdb_documentation(category="functions", items=["dateadd", "datediff"])
+- Need SAMPLE BY syntax? → get_questdb_documentation(category="sql", items=["sample_by"])
 `
 
 const getFixQueryPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
@@ -145,9 +199,9 @@ When given a QuestDB SQL query with an error, fix the query to resolve the error
 
 Important guidelines:
 1. Analyze the error message carefully to understand what went wrong
-2. Generate only valid QuestDB SQL syntax
+2. Generate only valid QuestDB SQL syntax referring to the documentation
 3. Preserve the original intent of the query while fixing the error
-4. Follow QuestDB best practices and syntax rules
+4. Follow QuestDB best practices and syntax rules referring to the documentation
 5. Consider common issues like:
    - Missing or incorrect column names
    - Invalid syntax for time-series operations
@@ -155,11 +209,18 @@ Important guidelines:
    - Missing quotes around string literals
    - Incorrect function usage
 
-${grantSchemaAccess ? `You have access to tools that can help you understand the database schema:
-- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table
+You have access to tools that can help you understand QuestDB features:
+- get_questdb_toc: Get a table of contents of all QuestDB documentation
+- get_questdb_documentation: Get specific documentation for functions, operators, or SQL keywords
+${grantSchemaAccess ? `- get_tables: Get a list of all tables and materialized views
+- get_table_schema: Get the full DDL schema for a specific table` : ''}
 
-Use these tools to verify correct table and column names, and to understand the data types.` : ''}
+Do not use any function, operator, or SQL keyword that is not in the documentation.
+When fixing queries with errors:
+1. If error mentions unknown function/keyword → use get_questdb_toc to check available options
+2. Get documentation only for the specific item causing the error
+
+Example: "Unknown function 'date_diff'" → get_questdb_toc → see it's actually "datediff" → get_questdb_documentation(category="functions", items=["datediff"])
 `
 
 const getExplainSchemaPrompt = (tableName: string, schema: string, isMatView: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
@@ -177,7 +238,6 @@ ${schema}
 \`\`\`
 
 Provide a short explanation that helps developers understand how to use this ${isMatView ? 'materialized view' : 'table'}.
-Do not use markdown formatting in your response.
 
 Return a JSON string with the following structure:
 { "explanation": "The purpose of the table/materialized view", "columns": [ { "name": "Column Name", "description": "Column Description", "data_type": "Data Type" } ], "storage_details": ["Storage detail 1", "Storage detail 2"] }`
@@ -207,7 +267,7 @@ async function handleToolCalls(
   message: Anthropic.Messages.Message,
   anthropic: Anthropic,
   schemaClient: SchemaToolsClient,
-  conversationHistory: Array<any> = [],
+  conversationHistory: any[],
   model: string,
   maxTokens: number,
   setStatus: StatusCallback,
@@ -233,17 +293,33 @@ async function handleToolCalls(
       try {
         switch (toolUse.name) {
           case 'get_tables':
-            result = await schemaClient.getTables()
-            toolResults.push({
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: JSON.stringify(result, null, 2)
-            })
+            if (!schemaClient) {
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: 'Error: Schema access is not granted. This tool is not available.',
+                is_error: true
+              })
+            } else {
+              result = await schemaClient.getTables()
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: JSON.stringify(result, null, 2)
+              })
+            }
             break
 
           case 'get_table_schema':
             const tableName = (toolUse.input as any)?.table_name
-            if (!tableName) {
+            if (!schemaClient) {
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: 'Error: Schema access is not granted. This tool is not available.',
+                is_error: true
+              })
+            } else if (!tableName) {
               toolResults.push({
                 type: 'tool_result' as const,
                 tool_use_id: toolUse.id,
@@ -256,6 +332,34 @@ async function handleToolCalls(
                 type: 'tool_result' as const,
                 tool_use_id: toolUse.id,
                 content: result || `Table '${tableName}' not found or schema unavailable`
+              })
+            }
+            break
+
+          case 'get_questdb_toc':
+            const tocContent = getQuestDBTableOfContents()
+            toolResults.push({
+              type: 'tool_result' as const,
+              tool_use_id: toolUse.id,
+              content: tocContent
+            })
+            break
+
+          case 'get_questdb_documentation':
+            const { category, items } = (toolUse.input as any) || {}
+            if (!category || !items || !Array.isArray(items)) {
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: 'Error: category and items parameters are required',
+                is_error: true
+              })
+            } else {
+              const documentation = getSpecificDocumentation(category as DocCategory, items)
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolUse.id,
+                content: documentation
               })
             }
             break
@@ -294,7 +398,7 @@ async function handleToolCalls(
   const followUpMessage = await createAnthropicMessage(anthropic, {
     model,
     max_tokens: maxTokens,
-    tools: SCHEMA_TOOLS,
+    tools: schemaClient ? ALL_TOOLS : DOC_TOOLS,
     messages: updatedHistory,
     temperature: 0.3
   })
@@ -385,7 +489,7 @@ export const explainQuery = async ({
       model: settings.model,
       max_tokens: settings.maxTokens,
       system: getExplainQueryPrompt(settings.grantSchemaAccess),
-      tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
+      tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
       messages: initialMessages,
       temperature: 0.3
     })
@@ -511,7 +615,7 @@ export const generateSQL = async ({
       model: settings.model,
       max_tokens: settings.maxTokens,
       system: getGenerateSQLPrompt(settings.grantSchemaAccess),
-      tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
+      tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
       messages: initialMessages,
       temperature: 0.2
     })
@@ -649,7 +753,7 @@ Analyze the error and fix the query if possible, otherwise provide an explanatio
       model: settings.model,
       max_tokens: settings.maxTokens,
       system: getFixQueryPrompt(settings.grantSchemaAccess),
-      tools: settings.grantSchemaAccess && schemaClient ? SCHEMA_TOOLS : undefined,
+      tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
       messages: initialMessages,
       temperature: 0.2
     })
