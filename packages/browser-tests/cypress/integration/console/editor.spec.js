@@ -561,7 +561,7 @@ describe("autocomplete", () => {
     const assertFrom = () =>
       cy.getAutocomplete().within(() => {
         cy.getMonacoListRow()
-          .should("have.length", 3)
+          .should("have.length", 4)
           .eq(0)
           .should("contain", "FROM");
       });
