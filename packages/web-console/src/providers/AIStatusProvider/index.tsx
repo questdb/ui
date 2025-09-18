@@ -10,17 +10,20 @@ export const useAIStatus = () => {
 }
 
 export const isBlockingAIStatus = (status: AIOperationStatus | null) => {
-  return status === AIOperationStatus.InvestigatingSchema
-    || status === AIOperationStatus.FormattingResponse
-    || status === AIOperationStatus.Processing
+  return status !== undefined && status !== null && status !== AIOperationStatus.Aborted
 }
 
 const AIStatusContext = createContext<AIStatusContextType | undefined>(undefined)
 
 export enum AIOperationStatus {
-  Processing = 'Processing the request...',
-  InvestigatingSchema = 'Investigating schema...',
-  FormattingResponse = 'Formatting response...',
+  Processing = 'Processing the request',
+  RetrievingTables = 'Retrieving tables',
+  InvestigatingTableSchema = 'Investigating table schema',
+  RetrievingDocumentation = 'Retrieving docs',
+  InvestigatingFunctions = 'Investigating functions',
+  InvestigatingOperators = 'Investigating operators',
+  InvestigatingKeywords = 'Investigating keywords',
+  FormattingResponse = 'Formatting response',
   Aborted = 'Operation has been cancelled'
 }
 
@@ -40,9 +43,10 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({ children }) 
   const [status, setStatus] = useState<AIOperationStatus | null>(null)
   const [abortController, setAbortController] = useState<AbortController>(new AbortController())
   const abortControllerRef = useRef<AbortController | null>(null)
+  const statusRef = useRef<AIOperationStatus | null>(null)
 
   const abortOperation = useCallback(() => {
-    if (abortControllerRef.current && status !== null) {
+    if (abortControllerRef.current && statusRef.current !== null) {
       abortControllerRef.current?.abort()
       setAbortController(new AbortController())
       setStatus(AIOperationStatus.Aborted)
@@ -51,11 +55,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({ children }) 
         readOnlyMessage: undefined
       })
     }
-  }, [])
+  }, [status, editorRef])
 
   useEffect(() => {
     abortControllerRef.current = abortController
   }, [abortController])
+
+  useEffect(() => {
+    statusRef.current = status
+  }, [status])
 
   useEffect(() => {
     return () => {

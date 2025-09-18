@@ -43,6 +43,19 @@ export interface SchemaToolsClient {
 
 type StatusCallback = (status: AIOperationStatus | null) => void
 
+const getStatusFromCategory = (category: DocCategory) => {
+  switch (category) {
+    case 'functions':
+      return AIOperationStatus.InvestigatingFunctions
+    case 'operators':
+      return AIOperationStatus.InvestigatingOperators
+    case 'sql':
+      return AIOperationStatus.InvestigatingKeywords
+    default:
+      return null
+  }
+}
+
 const SCHEMA_TOOLS = [
   {
     name: 'get_tables',
@@ -275,15 +288,12 @@ async function handleToolCalls(
 ): Promise<Anthropic.Messages.Message | ClaudeAPIError> {
   const toolUseBlocks = message.content.filter(block => block.type === 'tool_use')
   const toolResults = []
-  
+
   if (abortSignal?.aborted) {
     return {
       type: 'aborted',
       message: 'Operation was cancelled'
     } as ClaudeAPIError
-  }
-  if (toolUseBlocks.length > 0) {
-    setStatus(AIOperationStatus.InvestigatingSchema)
   }
 
   for (const toolUse of toolUseBlocks) {
@@ -293,6 +303,7 @@ async function handleToolCalls(
       try {
         switch (toolUse.name) {
           case 'get_tables':
+            setStatus(AIOperationStatus.RetrievingTables)
             if (!schemaClient) {
               toolResults.push({
                 type: 'tool_result' as const,
@@ -311,6 +322,7 @@ async function handleToolCalls(
             break
 
           case 'get_table_schema':
+            setStatus(AIOperationStatus.InvestigatingTableSchema)
             const tableName = (toolUse.input as any)?.table_name
             if (!schemaClient) {
               toolResults.push({
@@ -337,6 +349,7 @@ async function handleToolCalls(
             break
 
           case 'get_questdb_toc':
+            setStatus(AIOperationStatus.RetrievingDocumentation)
             const tocContent = getQuestDBTableOfContents()
             toolResults.push({
               type: 'tool_result' as const,
@@ -355,6 +368,7 @@ async function handleToolCalls(
                 is_error: true
               })
             } else {
+              setStatus(getStatusFromCategory(category as DocCategory))
               const documentation = getSpecificDocumentation(category as DocCategory, items)
               toolResults.push({
                 type: 'tool_result' as const,

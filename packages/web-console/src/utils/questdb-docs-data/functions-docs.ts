@@ -1,5 +1,5 @@
 // Auto-generated documentation data for functions
-// Generated on 2025-09-11T17:23:20.106Z
+// Generated on 2025-09-18T21:16:04.078Z
 
 export interface DocFile {
   path: string
@@ -10,9 +10,9 @@ export interface DocFile {
 
 export const functionsDocs: DocFile[] = [
   {
-    path: 'function/aggregation.md',
-    title: 'Aggregate functions',
-    headers: ['approx_count_distinct', 'approx_percentile', 'approx_median', 'avg', 'corr', 'count', 'count_distinct', 'covar_pop', 'covar_samp', 'first/last', 'first_not_null', 'last_not_null', 'haversine_dist_deg', 'ksum', 'max', 'min', 'nsum', 'stddev / stddev_samp', 'stddev_pop', 'string_agg', 'string_distinct_agg', 'sum', 'variance / var_samp', 'var_pop'],
+    path: "function/aggregation.md",
+    title: "Aggregate functions",
+    headers: ["approx_count_distinct", "approx_percentile", "approx_median", "avg", "corr", "count", "count_distinct", "covar_pop", "covar_samp", "first/last", "first_not_null", "last_not_null", "haversine_dist_deg", "ksum", "max", "min", "nsum", "stddev / stddev_samp", "stddev_pop", "string_agg", "string_distinct_agg", "sum", "variance / var_samp", "var_pop"],
     content: `This page describes the available functions to assist with performing aggregate
 calculations.
 
@@ -1037,9 +1037,9 @@ FROM (SELECT x FROM long_sequence(100));
 `
   },
   {
-    path: 'function/array.md',
-    title: 'Array functions',
-    headers: ['array_avg', 'array_count', 'array_cum_sum', 'array_max', 'array_min', 'array_position', 'array_sum', 'array_stddev', 'array_stddev_pop', 'array_stddev_samp', 'dim_length', 'dot_product', 'flatten', 'insertion_point', 'matmul', 'shift', 'transpose'],
+    path: "function/array.md",
+    title: "Array functions",
+    headers: ["array_avg", "array_count", "array_cum_sum", "array_max", "array_min", "array_position", "array_sum", "array_stddev", "array_stddev_pop", "array_stddev_samp", "dim_length", "dot_product", "flatten", "insertion_point", "matmul", "shift", "transpose"],
     content: `This page documents functions for n-dimensional arrays. This isn't an exhaustive
 list of all functions that may take an array parameter. For example, financial
 functions are listed in [their own section](/docs/reference/function/finance/), whether or
@@ -1488,9 +1488,9 @@ SELECT transpose(ARRAY[[1, 2], [3, 4]]);
 `
   },
   {
-    path: 'function/binary.md',
-    title: 'Binary functions',
-    headers: ['base64', 'See also'],
+    path: "function/binary.md",
+    title: "Binary functions",
+    headers: ["base64", "See also"],
     content: `This page describes the available functions to assist with working with binary
 data.
 
@@ -1526,9 +1526,9 @@ used to generate random binary data.
 `
   },
   {
-    path: 'function/boolean.md',
-    title: 'Boolean functions',
-    headers: ['isOrdered', 'SELECT boolean expressions'],
+    path: "function/boolean.md",
+    title: "Boolean functions",
+    headers: ["isOrdered", "SELECT boolean expressions"],
     content: `This page describes the available functions to assist with performing boolean
 calculations on numeric and timestamp types.
 
@@ -1589,9 +1589,9 @@ If you'd like to apply boolean logic in your SELECT expressions, see the
 `
   },
   {
-    path: 'function/conditional.md',
-    title: 'Conditional functions',
-    headers: ['case', 'coalesce', 'nullif'],
+    path: "function/conditional.md",
+    title: "Conditional functions",
+    headers: ["case", "coalesce", "nullif"],
     content: `Conditional functions allow for conditionally selecting input values.
 
 ## case
@@ -1690,9 +1690,9 @@ FROM transactions
 `
   },
   {
-    path: 'function/date-time.md',
-    title: 'Timestamp, date and time functions',
-    headers: ['Timestamp format', 'Timestamp to Date conversion', 'date_trunc', 'dateadd', 'datediff', 'day', 'day_of_week', 'day_of_week_sunday_first', 'days_in_month', 'extract', 'hour', 'interval', 'interval_start', 'interval_end', 'is_leap_year', 'micros', 'millis', 'minute', 'month', 'now', 'pg_postmaster_start_time', 'second', 'today, tomorrow, yesterday', 'today, tomorrow, yesterday with timezone', 'sysdate', 'systimestamp', 'timestamp_ceil', 'timestamp_floor', 'timestamp_shuffle', 'to_date', 'to_str', 'to_timestamp', 'to_timezone', 'to_utc', 'week_of_year', 'year'],
+    path: "function/date-time.md",
+    title: "Timestamp, date and time functions",
+    headers: ["Timestamp format", "Timestamp to Date conversion", "date_trunc", "dateadd", "datediff", "day", "day_of_week", "day_of_week_sunday_first", "days_in_month", "extract", "hour", "interval", "interval_start", "interval_end", "is_leap_year", "micros", "millis", "minute", "month", "now", "pg_postmaster_start_time", "second", "today, tomorrow, yesterday", "today, tomorrow, yesterday with timezone", "sysdate", "systimestamp", "timestamp_ceil", "timestamp_floor", "timestamp_shuffle", "to_date", "to_str", "to_timestamp", "to_timezone", "to_utc", "week_of_year", "year"],
     content: `This page describes the available functions to assist with performing time-based
 calculations using timestamps.
 
@@ -3208,9 +3208,9 @@ SELECT month(ts), count() FROM transactions;
 `
   },
   {
-    path: 'function/finance.md',
-    title: 'Finance functions',
-    headers: ['l2price', 'mid', 'regr_intercept', 'regr_slope', 'spread_bps', 'vwap', 'wmid'],
+    path: "function/finance.md",
+    title: "Finance functions",
+    headers: ["l2price", "mid", "regr_intercept", "regr_slope", "spread_bps", "vwap", "wmid"],
     content: `This page describes functions specific to the financial services domain.
 
 ## l2price
@@ -3808,9 +3808,9 @@ SELECT wmid(100, 5, 6, 100)
 `
   },
   {
-    path: 'function/hash.md',
-    title: 'Hash Functions',
-    headers: ['Supported functions', 'Function reference', 'Notes and restrictions'],
+    path: "function/hash.md",
+    title: "Hash Functions",
+    headers: ["Supported functions", "Function reference", "Notes and restrictions"],
     content: `Hash functions generate fixed-size string outputs from variable-length inputs. 
 
 These functions are useful for data integrity verification, checksums, and data anonymization.
@@ -3955,9 +3955,9 @@ FROM binary_files;
 `
   },
   {
-    path: 'function/json.md',
-    title: 'JSON functions',
-    headers: ['json_extract'],
+    path: "function/json.md",
+    title: "JSON functions",
+    headers: ["json_extract"],
     content: `This page describes functions to handle JSON data.
 
 ## json_extract
@@ -4179,9 +4179,9 @@ FROM trades;
 `
   },
   {
-    path: 'function/meta.md',
-    title: 'Meta functions',
-    headers: ['build', 'functions', 'query_activity', 'memory_metrics', 'reader_pool', 'writer_pool', 'current database, schema, or user', 'tables', 'table_storage', 'wal_tables', 'table_columns', 'table_partitions', 'materialized_views', 'version/pg_catalog.version', 'hydrate_table_metadata(\'table1\', \'table2\' ...)', 'flush_query_cache()', 'reload_config()'],
+    path: "function/meta.md",
+    title: "Meta functions",
+    headers: ["build", "functions", "query_activity", "memory_metrics", "reader_pool", "writer_pool", "current database, schema, or user", "tables", "table_storage", "wal_tables", "table_columns", "table_partitions", "materialized_views", "version/pg_catalog.version", "hydrate_table_metadata('table1', 'table2' ...)", "flush_query_cache()", "reload_config()"],
     content: `These functions provide instance-level information and table, column and
 partition information including metadata. They are particularly useful for
 learning useful information about your instance, including:
@@ -4810,9 +4810,9 @@ SELECT reload_config();
 `
   },
   {
-    path: 'function/numeric.md',
-    title: 'Numeric functions',
-    headers: ['abs', 'ceil / ceiling', 'exp', 'floor', 'greatest', 'least', 'ln', 'log', 'power', 'round', 'round_down', 'round_half_even', 'round_up', 'sign', 'size_pretty', 'sqrt'],
+    path: "function/numeric.md",
+    title: "Numeric functions",
+    headers: ["abs", "ceil / ceiling", "exp", "floor", "greatest", "least", "ln", "log", "power", "round", "round_down", "round_half_even", "round_up", "sign", "size_pretty", "sqrt"],
     content: `This page describes the available functions to assist with performing numeric
 calculations.
 
@@ -5297,9 +5297,9 @@ SELECT sqrt(4000.32)
 `
   },
   {
-    path: 'function/parquet.md',
-    title: 'Parquet functions',
-    headers: ['read_parquet'],
+    path: "function/parquet.md",
+    title: "Parquet functions",
+    headers: ["read_parquet"],
     content: `This page introduces the [Apache Parquet](/glossary/apache-parquet/) read function.
 
 :::info
@@ -5378,9 +5378,9 @@ Nested data and/or arrays are not supported.
 `
   },
   {
-    path: 'function/pattern-matching.md',
-    title: 'Pattern matching operators',
-    headers: ['~ (match) and !~ (does not match)', 'LIKE/ILIKE', 'regexp_replace'],
+    path: "function/pattern-matching.md",
+    title: "Pattern matching operators",
+    headers: ["~ (match) and !~ (does not match)", "LIKE/ILIKE", "regexp_replace"],
     content: `This page describes the available operators to assist with performing pattern
 matching. For operators using regular expressions (\`regex\` in the syntax),
 QuestDB uses
@@ -5525,9 +5525,9 @@ QuestDB is a great database
 `
   },
   {
-    path: 'function/random-value-generator.md',
-    title: 'Random value generator',
-    headers: ['Usage', 'Generating sequences', 'rnd_boolean', 'rnd_byte', 'rnd_short', 'rnd_int', 'rnd_long', 'rnd_long256', 'rnd_float', 'rnd_double', 'rnd_date()', 'rnd_timestamp()', 'rnd_char', 'rnd_symbol', 'rnd_varchar', 'rnd_str', 'rnd_bin', 'rnd_uuid4', 'rnd_ipv4()', 'rnd_ipv4(string, int)', 'rnd_double_array()'],
+    path: "function/random-value-generator.md",
+    title: "Random value generator",
+    headers: ["Usage", "Generating sequences", "rnd_boolean", "rnd_byte", "rnd_short", "rnd_int", "rnd_long", "rnd_long256", "rnd_float", "rnd_double", "rnd_date()", "rnd_timestamp()", "rnd_char", "rnd_symbol", "rnd_varchar", "rnd_str", "rnd_bin", "rnd_uuid4", "rnd_ipv4()", "rnd_ipv4(string, int)", "rnd_double_array()"],
     content: `The following functions have been created to help with our test suite. They are
 also useful for users testing QuestDB on specific workloads in order to quickly
 generate large test datasets that mimic the structure of their actual data.
@@ -6222,9 +6222,9 @@ SELECT rnd_double_array(2, 0, 0, 2, 5);
 `
   },
   {
-    path: 'function/row-generator.md',
-    title: 'Row generator',
-    headers: ['generate_series', 'long_sequence'],
+    path: "function/row-generator.md",
+    title: "Row generator",
+    headers: ["generate_series", "long_sequence"],
     content: `## generate_series
 
 Use \`generate_series\` to generate a pseudo-table with an arithmetic series in a
@@ -6395,9 +6395,9 @@ use the same seed in \`long_sequence\`.
 `
   },
   {
-    path: 'function/spatial.md',
-    title: 'Geospatial functions',
-    headers: ['rnd_geohash', 'make_geohash'],
+    path: "function/spatial.md",
+    title: "Geospatial functions",
+    headers: ["rnd_geohash", "make_geohash"],
     content: `Spatial functions allow for operations relating to the geohash types which
 provide geospatial data support. For more information on this type of data, see
 the [geohashes documentation](/docs/concept/geohashes/) and the
@@ -6472,9 +6472,9 @@ SELECT make_geohash(142.89124148, -12.90604153, 40)
 `
   },
   {
-    path: 'function/text.md',
-    title: 'Text functions',
-    headers: ['concat', 'length', 'left', 'right', 'replace', 'lpad', 'ltrim', 'rtrim', 'trim', 'split_part', 'starts_with', 'string_agg', 'strpos / position', 'substring', 'to_lowercase / lower', 'to_uppercase / upper', 'quote_ident'],
+    path: "function/text.md",
+    title: "Text functions",
+    headers: ["concat", "length", "left", "right", "replace", "lpad", "ltrim", "rtrim", "trim", "split_part", "starts_with", "string_agg", "strpos / position", "substring", "to_lowercase / lower", "to_uppercase / upper", "quote_ident"],
     content: `This page describes the available functions to assist with performing text
 manipulation such as concatenation, case conversion, and string length
 calculation.
@@ -7022,9 +7022,9 @@ SELECT quote_ident("ab");
 `
   },
   {
-    path: 'function/timestamp-generator.md',
-    title: 'Timestamp generator',
-    headers: ['timestamp_sequence', 'generate_series'],
+    path: "function/timestamp-generator.md",
+    title: "Timestamp generator",
+    headers: ["timestamp_sequence", "generate_series"],
     content: `## timestamp_sequence
 
 This function acts similarly to
@@ -7181,9 +7181,9 @@ generate_series(
 `
   },
   {
-    path: 'function/timestamp.md',
-    title: 'Timestamp function',
-    headers: ['Syntax', 'Optimization with WHERE clauses'],
+    path: "function/timestamp.md",
+    title: "Timestamp function",
+    headers: ["Syntax", "Optimization with WHERE clauses"],
     content: `\`timestamp(columnName)\` elects a
 [designated timestamp](/docs/concept/designated-timestamp/):
 
@@ -7298,8 +7298,8 @@ SAMPLE BY 1d;
 `
   },
   {
-    path: 'function/touch.md',
-    title: 'Touch function',
+    path: "function/touch.md",
+    title: "Touch function",
     headers: [],
     content: `The \`touch()\` function loads a table from disk to memory. Useful for triggering
 a "hot" start from conditions where data may be "cold", such as after a restart
@@ -7375,9 +7375,9 @@ confirmation.
 `
   },
   {
-    path: 'function/trigonometric.md',
-    title: 'Trigonometric functions',
-    headers: ['sin', 'cos', 'tan', 'cot', 'asin', 'acos', 'atan', 'atan2', 'radians', 'degrees', 'pi'],
+    path: "function/trigonometric.md",
+    title: "Trigonometric functions",
+    headers: ["sin", "cos", "tan", "cot", "asin", "acos", "atan", "atan2", "radians", "degrees", "pi"],
     content: `This page describes the available functions to assist with performing
 trigonometric calculations.
 
@@ -7729,9 +7729,9 @@ SELECT pi();
 `
   },
   {
-    path: 'function/uuid.md',
-    title: 'UUID functions',
-    headers: ['to_uuid'],
+    path: "function/uuid.md",
+    title: "UUID functions",
+    headers: ["to_uuid"],
     content: `This page describes the available functions related to UUID data type.
 
 ## to_uuid
@@ -7761,9 +7761,9 @@ Returns:
 `
   },
   {
-    path: 'function/window.md',
-    title: 'Window Functions',
-    headers: ['avg()', 'count()', 'dense_rank()', 'first_not_null_value()', 'first_value()', 'max()', 'min()', 'lag()', 'last_value()', 'lead()', 'rank()', 'row_number()', 'sum()', 'Common window function examples'],
+    path: "function/window.md",
+    title: "Window Functions",
+    headers: ["avg()", "count()", "dense_rank()", "first_not_null_value()", "first_value()", "max()", "min()", "lag()", "last_value()", "lead()", "rank()", "row_number()", "sum()", "Common window function examples"],
     content: `Window functions perform calculations across sets of table rows that are related to the current row. Unlike aggregate functions that return a single result for a group of rows, window functions return a value for every row while considering a window of rows defined by the OVER clause.
 
 For details about window functions syntax and components, please visit the [OVER Keyword reference](/docs/reference/sql/over/)

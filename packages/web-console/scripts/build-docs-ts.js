@@ -125,13 +125,12 @@ function buildDocs() {
     // Extract unique items for TOC
     const items = new Set()
     files.forEach(file => {
-      // Add file name (without extension and dashes)
-      const fileName = path.basename(file.path, '.md').replace(/-/g, '_')
-      items.add(fileName)
+      // Add document title for top-level entries (readable, no underscores)
+      items.add(file.title)
       
-      // Add headers
+      // Add headers (prefixed with document title for context)
       file.headers.forEach(header => {
-        items.add(header.toLowerCase().replace(/[^a-z0-9_]/g, '_'))
+        items.add(`${file.title} - ${header}`)
       })
     })
     
@@ -150,9 +149,9 @@ export interface DocFile {
 
 export const ${category}Docs: DocFile[] = [
 ${files.map(file => `  {
-    path: '${file.path}',
-    title: '${file.title.replace(/'/g, "\\'")}',
-    headers: [${file.headers.map(h => `'${h.replace(/'/g, "\\'")}'`).join(', ')}],
+    path: ${JSON.stringify(file.path)},
+    title: ${JSON.stringify(file.title)},
+    headers: [${file.headers.map(h => JSON.stringify(h)).join(', ')}],
     content: \`${escapeForTS(file.content)}\`
   }`).join(',\n')}
 ]

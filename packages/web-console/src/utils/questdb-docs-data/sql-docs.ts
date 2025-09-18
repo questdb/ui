@@ -1,5 +1,5 @@
 // Auto-generated documentation data for sql
-// Generated on 2025-09-11T17:23:20.117Z
+// Generated on 2025-09-18T21:16:04.091Z
 
 export interface DocFile {
   path: string
@@ -10,9 +10,9 @@ export interface DocFile {
 
 export const sqlDocs: DocFile[] = [
   {
-    path: 'sql/acl/add-user.md',
-    title: 'ADD USER reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/add-user.md",
+    title: "ADD USER reference",
+    headers: ["Syntax", "Description"],
     content: `To add user to one or more groups in the database, the \`ADD USER\` keywords are
 used.
 
@@ -57,9 +57,9 @@ that yields:
 `
   },
   {
-    path: 'sql/acl/alter-service-account.md',
-    title: 'ALTER SERVICE ACCOUNT reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/alter-service-account.md",
+    title: "ALTER SERVICE ACCOUNT reference",
+    headers: ["Syntax", "Description"],
     content: `\`ALTER SERVICE ACCOUNT\` modifies service account settings.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -207,9 +207,9 @@ SHOW SERVICE ACCOUNT client_app;
 `
   },
   {
-    path: 'sql/acl/alter-user.md',
-    title: 'ALTER USER reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/alter-user.md",
+    title: "ALTER USER reference",
+    headers: ["Syntax", "Description"],
     content: `For full documentation of the Access Control List and Role-based Access Control,
 see the [RBAC operations](/docs/operations/rbac) page.
 
@@ -354,9 +354,9 @@ SHOW USER john;
 `
   },
   {
-    path: 'sql/acl/assume-service-account.md',
-    title: 'ASSUME SERVICE ACCOUNT reference',
-    headers: ['Syntax'],
+    path: "sql/acl/assume-service-account.md",
+    title: "ASSUME SERVICE ACCOUNT reference",
+    headers: ["Syntax"],
     content: `\`ASSUME SERVICE ACCOUNT\` switches current user to a service account, basically
 replacing its current access list with the service account's access list.
 
@@ -384,9 +384,9 @@ ASSUME SERVICE ACCOUNT ilp_ingestion;
 `
   },
   {
-    path: 'sql/acl/create-group.md',
-    title: 'CREATE GROUP reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/create-group.md",
+    title: "CREATE GROUP reference",
+    headers: ["Syntax", "Description"],
     content: `\`CREATE GROUP\` - create a new group
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -439,9 +439,9 @@ that yields:
 `
   },
   {
-    path: 'sql/acl/create-service-account.md',
-    title: 'CREATE SERVICE ACCOUNT reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/create-service-account.md",
+    title: "CREATE SERVICE ACCOUNT reference",
+    headers: ["Syntax", "Description"],
     content: `To create a new service account in the database, the \`CREATE SERVICE ACCOUNT\`
 keywords are used.
 
@@ -512,9 +512,9 @@ that yields:
 `
   },
   {
-    path: 'sql/acl/create-user.md',
-    title: 'CREATE USER reference',
-    headers: ['Syntax', 'Description', 'Conditional user creation'],
+    path: "sql/acl/create-user.md",
+    title: "CREATE USER reference",
+    headers: ["Syntax", "Description", "Conditional user creation"],
     content: `\`CREATE USER\` - create a new user in the database.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -610,9 +610,9 @@ In this case \`SHOW USER\` command returns:
 `
   },
   {
-    path: 'sql/acl/drop-group.md',
-    title: 'DROP GROUP reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/drop-group.md",
+    title: "DROP GROUP reference",
+    headers: ["Syntax", "Description"],
     content: `\`DROP GROUP\` - remove an existing group.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -659,9 +659,9 @@ that does not include \`admins\` in its result.
 `
   },
   {
-    path: 'sql/acl/drop-service-account.md',
-    title: 'DROP SERVICE ACCOUNT reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/drop-service-account.md",
+    title: "DROP SERVICE ACCOUNT reference",
+    headers: ["Syntax", "Description"],
     content: `\`DROP SERVICE ACCOUNT\` - drop an existing service account
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -706,9 +706,9 @@ that does not include \`audit\` in its result.
 `
   },
   {
-    path: 'sql/acl/drop-user.md',
-    title: 'DROP USER reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/drop-user.md",
+    title: "DROP USER reference",
+    headers: ["Syntax", "Description"],
     content: `\`DROP USER\` - drop an existing user
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -754,9 +754,9 @@ that does not include \`john\` in its result.
 `
   },
   {
-    path: 'sql/acl/exit-service-account.md',
-    title: 'EXIT SERVICE ACCOUNT reference',
-    headers: ['Syntax'],
+    path: "sql/acl/exit-service-account.md",
+    title: "EXIT SERVICE ACCOUNT reference",
+    headers: ["Syntax"],
     content: `\`EXIT SERVICE ACCOUNT\` - switches current user back from service account,
 basically replacing its current access list (belonging to a user account) with
 the user's access list.
@@ -785,9 +785,9 @@ EXIT SERVICE ACCOUNT audit;
 `
   },
   {
-    path: 'sql/acl/grant-assume-service-account.md',
-    title: 'GRANT ASSUME SERVICE ACCOUNT reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/grant-assume-service-account.md",
+    title: "GRANT ASSUME SERVICE ACCOUNT reference",
+    headers: ["Syntax", "Description"],
     content: `\`GRANT ASSUME SERVICE ACCOUNT\` - assigns a service account to a user or a group.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -880,9 +880,9 @@ SHOW SERVICE ACCOUNTS john;
 `
   },
   {
-    path: 'sql/acl/grant.md',
-    title: 'GRANT reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/grant.md",
+    title: "GRANT reference",
+    headers: ["Syntax", "Description"],
     content: `\`GRANT\` - grants permissions to a user, group or service account.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -1171,9 +1171,9 @@ An owner grant means:
 `
   },
   {
-    path: 'sql/acl/remove-user.md',
-    title: 'REMOVE USER reference',
-    headers: ['Syntax'],
+    path: "sql/acl/remove-user.md",
+    title: "REMOVE USER reference",
+    headers: ["Syntax"],
     content: `\`REMOVE USER\` - removes user from one or more groups.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -1209,9 +1209,9 @@ should yield an empty list.
 `
   },
   {
-    path: 'sql/acl/revoke-assume-service-account.md',
-    title: 'REVOKE ASSUME SERVICE ACCOUNT reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/revoke-assume-service-account.md",
+    title: "REVOKE ASSUME SERVICE ACCOUNT reference",
+    headers: ["Syntax", "Description"],
     content: `\`REVOKE ASSUME SERVICE ACCOUNT\` - revokes a service account from a user or a
 group.
 
@@ -1261,9 +1261,9 @@ REVOKE ASSUME SERVICE ACCOUNT ingestion FROM john;
 `
   },
   {
-    path: 'sql/acl/revoke.md',
-    title: 'REVOKE reference',
-    headers: ['Syntax', 'Description'],
+    path: "sql/acl/revoke.md",
+    title: "REVOKE reference",
+    headers: ["Syntax", "Description"],
     content: `\`REVOKE\` - revoke permission from user, group or service account.
 
 For full documentation of the Access Control List and Role-based Access Control,
@@ -1458,9 +1458,9 @@ REMOVE USER john FROM admins;
 `
   },
   {
-    path: 'sql/alter-mat-view-alter-column-add-index.md',
-    title: 'ALTER MATERIALIZED VIEW ADD INDEX',
-    headers: ['Syntax'],
+    path: "sql/alter-mat-view-alter-column-add-index.md",
+    title: "ALTER MATERIALIZED VIEW ADD INDEX",
+    headers: ["Syntax"],
     content: `Indexes an existing [\`symbol\`](/docs/concept/symbol/) column.
 
 ## Syntax
@@ -1491,9 +1491,9 @@ ALTER MATERIALIZED VIEW trades_1h
 `
   },
   {
-    path: 'sql/alter-mat-view-alter-column-drop-index.md',
-    title: 'ALTER MATERIALIZED VIEW ALTER COLUMN DROP INDEX',
-    headers: ['Syntax'],
+    path: "sql/alter-mat-view-alter-column-drop-index.md",
+    title: "ALTER MATERIALIZED VIEW ALTER COLUMN DROP INDEX",
+    headers: ["Syntax"],
     content: `Removes an existing [index](/docs/concept/indexes/) from a column of type [symbol](/docs/concept/symbol/).
 
 
@@ -1515,9 +1515,9 @@ ALTER MATERIALIZED VIEW trades
 `
   },
   {
-    path: 'sql/alter-mat-view-change-symbol-capacity.md',
-    title: 'ALTER MATERIALIZED VIEW SYMBOL CAPACITY',
-    headers: ['Syntax', 'Notes'],
+    path: "sql/alter-mat-view-change-symbol-capacity.md",
+    title: "ALTER MATERIALIZED VIEW SYMBOL CAPACITY",
+    headers: ["Syntax", "Notes"],
     content: `Changes the capacity of an existing SYMBOL column in a
 [materialized view](/docs/concept/mat-views/).
 
@@ -1547,9 +1547,9 @@ ALTER MATERIALIZED VIEW trades_1h ALTER COLUMN symbol SYMBOL CAPACITY 10000;
 `
   },
   {
-    path: 'sql/alter-mat-view-resume-wal.md',
-    title: 'ALTER MATERIALIZED VIEW RESUME WAL',
-    headers: ['Syntax', 'See also'],
+    path: "sql/alter-mat-view-resume-wal.md",
+    title: "ALTER MATERIALIZED VIEW RESUME WAL",
+    headers: ["Syntax", "See also"],
     content: `:::info
 
 Materialized View support is now generally available (GA) and ready for production use.
@@ -1599,9 +1599,9 @@ For more information on the concept, see the
 `
   },
   {
-    path: 'sql/alter-mat-view-set-refresh-limit.md',
-    title: 'ALTER MATERIALIZED VIEW SET REFRESH LIMIT',
-    headers: ['Syntax', 'Description'],
+    path: "sql/alter-mat-view-set-refresh-limit.md",
+    title: "ALTER MATERIALIZED VIEW SET REFRESH LIMIT",
+    headers: ["Syntax", "Description"],
     content: `Sets the time limit for incremental refresh on a materialized view.
 
 ## Syntax
@@ -1693,9 +1693,9 @@ ALTER MATERIALIZED VIEW trades_hourly_prices SET REFRESH LIMIT 8h;
 `
   },
   {
-    path: 'sql/alter-mat-view-set-refresh.md',
-    title: 'ALTER MATERIALIZED VIEW SET REFRESH',
-    headers: ['Syntax', 'Description'],
+    path: "sql/alter-mat-view-set-refresh.md",
+    title: "ALTER MATERIALIZED VIEW SET REFRESH",
+    headers: ["Syntax", "Description"],
     content: `Changes a materialized view's refresh strategy and parameters.
 
 ## Syntax
@@ -1730,9 +1730,9 @@ ALTER MATERIALIZED VIEW trades_hourly_prices SET REFRESH MANUAL;
 `
   },
   {
-    path: 'sql/alter-mat-view-set-ttl.md',
-    title: 'ALTER MATERIALIZED VIEW SET TTL',
-    headers: ['Syntax', 'Description'],
+    path: "sql/alter-mat-view-set-ttl.md",
+    title: "ALTER MATERIALIZED VIEW SET TTL",
+    headers: ["Syntax", "Description"],
     content: `Sets the [time-to-live](/docs/concept/ttl/) (TTL) period on a materialized view.
 
 ## Syntax
@@ -1772,9 +1772,9 @@ ALTER MATERIALIZED VIEW trades_hourly_prices SET TTL 12h;
 `
   },
   {
-    path: 'sql/alter-table-add-column.md',
-    title: 'ALTER TABLE ADD COLUMN',
-    headers: ['Syntax', 'OWNED BY'],
+    path: "sql/alter-table-add-column.md",
+    title: "ALTER TABLE ADD COLUMN",
+    headers: ["Syntax", "OWNED BY"],
     content: `Adds a new column of a specified type to an existing table.
 
 The new column is not back-populated even if the table contains data. While a
@@ -1836,9 +1836,9 @@ ALTER TABLE ratings ADD COLUMN comment SYMBOL NOCACHE INDEX;
 `
   },
   {
-    path: 'sql/alter-table-alter-column-add-index.md',
-    title: 'ALTER TABLE COLUMN ADD INDEX',
-    headers: ['Syntax'],
+    path: "sql/alter-table-alter-column-add-index.md",
+    title: "ALTER TABLE COLUMN ADD INDEX",
+    headers: ["Syntax"],
     content: `Indexes an existing [\`symbol\`](/docs/concept/symbol/) column.
 
 ## Syntax
@@ -1858,9 +1858,9 @@ ALTER TABLE trades ALTER COLUMN instrument ADD INDEX;
 `
   },
   {
-    path: 'sql/alter-table-alter-column-cache.md',
-    title: 'ALTER TABLE COLUMN CACHE | NOCACHE',
-    headers: ['Syntax'],
+    path: "sql/alter-table-alter-column-cache.md",
+    title: "ALTER TABLE COLUMN CACHE | NOCACHE",
+    headers: ["Syntax"],
     content: `\`ALTER TABLE ALTER COLUMN CACHE | NOCACHE\` changes the cache setting for a
 [symbol](/docs/concept/symbol/) column.
 
@@ -1882,9 +1882,9 @@ ALTER TABLE 'taxi_ride' ALTER COLUMN passenger_count NOCACHE;
 `
   },
   {
-    path: 'sql/alter-table-alter-column-drop-index.md',
-    title: 'ALTER TABLE COLUMN DROP INDEX',
-    headers: ['Syntax'],
+    path: "sql/alter-table-alter-column-drop-index.md",
+    title: "ALTER TABLE COLUMN DROP INDEX",
+    headers: ["Syntax"],
     content: `Removes an existing [index](/docs/concept/indexes/) from a column of type [symbol](/docs/concept/symbol/).
 
 
@@ -1920,9 +1920,9 @@ ALTER TABLE trades ALTER COLUMN instrument DROP INDEX;
 `
   },
   {
-    path: 'sql/alter-table-attach-partition.md',
-    title: 'ALTER TABLE ATTACH PARTITION',
-    headers: ['Syntax', 'Description', 'Limitation'],
+    path: "sql/alter-table-attach-partition.md",
+    title: "ALTER TABLE ATTACH PARTITION",
+    headers: ["Syntax", "Description", "Limitation"],
     content: `Restores one or more partitions to the table where they have been detached from
 by using the SQL
 [ALTER TABLE DETACH PARTITION](/docs/reference/sql/alter-table-detach-partition/)
@@ -2131,9 +2131,9 @@ The SQL reference to the partitions does not include the suffix \`.attachable\`.
 `
   },
   {
-    path: 'sql/alter-table-change-column-type.md',
-    title: 'ALTER TABLE COLUMN TYPE',
-    headers: ['Syntax', 'Supported Data Types', 'Available Conversions', 'Unsupported Conversions'],
+    path: "sql/alter-table-change-column-type.md",
+    title: "ALTER TABLE COLUMN TYPE",
+    headers: ["Syntax", "Supported Data Types", "Available Conversions", "Unsupported Conversions"],
     content: `Changes the data type of an existing column in a table.
 
 The data type of the column is altered without affecting the data already stored
@@ -2265,9 +2265,9 @@ ALTER TABLE employees ALTER COLUMN department TYPE SYMBOL CAPACITY 4096;
 `
   },
   {
-    path: 'sql/alter-table-change-symbol-capacity.md',
-    title: 'ALTER TABLE SYMBOL CAPACITY',
-    headers: ['Syntax', 'Notes'],
+    path: "sql/alter-table-change-symbol-capacity.md",
+    title: "ALTER TABLE SYMBOL CAPACITY",
+    headers: ["Syntax", "Notes"],
     content: `Changes the capacity of an existing SYMBOL column in a table.
 
 The capacity of the SYMBOL column is altered without rewriting the data already
@@ -2306,9 +2306,9 @@ ALTER TABLE employees ALTER COLUMN department SYMBOL CAPACITY 10000;
 `
   },
   {
-    path: 'sql/alter-table-detach-partition.md',
-    title: 'ALTER TABLE DETACH PARTITION',
-    headers: ['Syntax', 'Limitation'],
+    path: "sql/alter-table-detach-partition.md",
+    title: "ALTER TABLE DETACH PARTITION",
+    headers: ["Syntax", "Limitation"],
     content: `Makes partition data unavailable for reads and prepares partition directory for
 transportation. A partition detached by this SQL keyword can be "re-attached"
 using the complementary SQL keyword
@@ -2357,9 +2357,9 @@ named \`timestamp\`:
 `
   },
   {
-    path: 'sql/alter-table-disable-deduplication.md',
-    title: 'ALTER TABLE DEDUP DISABLE',
-    headers: ['Syntax'],
+    path: "sql/alter-table-disable-deduplication.md",
+    title: "ALTER TABLE DEDUP DISABLE",
+    headers: ["Syntax"],
     content: `Disable storage level data deduplication on inserts
 
 ## Syntax
@@ -2379,9 +2379,9 @@ page
 `
   },
   {
-    path: 'sql/alter-table-drop-column.md',
-    title: 'ALTER TABLE DROP COLUMN',
-    headers: ['Syntax'],
+    path: "sql/alter-table-drop-column.md",
+    title: "ALTER TABLE DROP COLUMN",
+    headers: ["Syntax"],
     content: `Deletes a column from an existing table.
 
 Dropping columns will also attempt to remove files belonging to the column from
@@ -2415,9 +2415,9 @@ ALTER TABLE ratings DROP COLUMN movieId;
 `
   },
   {
-    path: 'sql/alter-table-drop-partition.md',
-    title: 'ALTER TABLE DROP PARTITION',
-    headers: ['Syntax', 'Drop partition by name', 'Drop partitions using boolean expression'],
+    path: "sql/alter-table-drop-partition.md",
+    title: "ALTER TABLE DROP PARTITION",
+    headers: ["Syntax", "Drop partition by name", "Drop partitions using boolean expression"],
     content: `Drops one or more partitions from an existing table.
 
 Similar to dropping columns, dropping of partitions is a non-blocking and
@@ -2479,9 +2479,9 @@ WHERE timestamp < to_timestamp('2018-01-01:00:00:00', 'yyyy-MM-dd:HH:mm:ss');
 `
   },
   {
-    path: 'sql/alter-table-enable-deduplication.md',
-    title: 'ALTER TABLE DEDUP ENABLE',
-    headers: ['Syntax', 'See also'],
+    path: "sql/alter-table-enable-deduplication.md",
+    title: "ALTER TABLE DEDUP ENABLE",
+    headers: ["Syntax", "See also"],
     content: `Enable storage level data deduplication on inserts and configures \`UPSERT KEYS\`.
 
 :::note
@@ -2528,9 +2528,9 @@ page
 `
   },
   {
-    path: 'sql/alter-table-rename-column.md',
-    title: 'ALTER TABLE RENAME COLUMN',
-    headers: ['Syntax'],
+    path: "sql/alter-table-rename-column.md",
+    title: "ALTER TABLE RENAME COLUMN",
+    headers: ["Syntax"],
     content: `Rename a column in an existing table.
 
 :::caution
@@ -2555,9 +2555,9 @@ ALTER TABLE measurements RENAME COLUMN sensor TO hum_sensor_1;
 `
   },
   {
-    path: 'sql/alter-table-resume-wal.md',
-    title: 'ALTER TABLE RESUME WAL',
-    headers: ['Syntax', 'Description', 'Diagnosing corrupted WAL transactions'],
+    path: "sql/alter-table-resume-wal.md",
+    title: "ALTER TABLE RESUME WAL",
+    headers: ["Syntax", "Description", "Diagnosing corrupted WAL transactions"],
     content: `Restarts transactions of a [WAL table](/docs/concept/write-ahead-log/) after
 recovery from errors.
 
@@ -2672,9 +2672,9 @@ Note that in rare cases, subsequent transactions may also have corrupted WAL seg
 `
   },
   {
-    path: 'sql/alter-table-set-param.md',
-    title: 'ALTER TABLE SET PARAM',
-    headers: ['Syntax', 'Syntax'],
+    path: "sql/alter-table-set-param.md",
+    title: "ALTER TABLE SET PARAM",
+    headers: ["Syntax", "Syntax"],
     content: `\`ALTER TABLE SET PARAM\` sets table parameters via SQL.
 
 :::note
@@ -2751,9 +2751,9 @@ ALTER TABLE my_table SET PARAM o3MaxLag = 20s;
 `
   },
   {
-    path: 'sql/alter-table-set-ttl.md',
-    title: 'ALTER TABLE SET TTL',
-    headers: ['Syntax', 'Description'],
+    path: "sql/alter-table-set-ttl.md",
+    title: "ALTER TABLE SET TTL",
+    headers: ["Syntax", "Description"],
     content: `Sets the time-to-live (TTL) period on a table.
 
 Refer to the [section on TTL](/docs/concept/ttl/) for a conceptual overview.
@@ -2836,9 +2836,9 @@ ALTER TABLE weather SET TTL 12h;
 `
   },
   {
-    path: 'sql/alter-table-set-type.md',
-    title: 'ALTER TABLE SET TYPE',
-    headers: ['Syntax', 'Description'],
+    path: "sql/alter-table-set-type.md",
+    title: "ALTER TABLE SET TYPE",
+    headers: ["Syntax", "Description"],
     content: `Converts a non-WAL table to WAL, or a WAL table to non-WAL.
 
 :::info
@@ -2891,9 +2891,9 @@ ALTER TABLE weather SET TYPE BYPASS WAL;
 `
   },
   {
-    path: 'sql/alter-table-squash-partitions.md',
-    title: 'ALTER TABLE SQUASH PARTITIONS',
-    headers: ['Syntax'],
+    path: "sql/alter-table-squash-partitions.md",
+    title: "ALTER TABLE SQUASH PARTITIONS",
+    headers: ["Syntax"],
     content: `Merges partition parts back into the physical partition.
 
 This SQL keyword is designed to use for downgrading QuestDB to a version earlier
@@ -2943,9 +2943,9 @@ SHOW PARTITIONS FROM x;
 `
   },
   {
-    path: 'sql/asof-join.md',
-    title: 'ASOF JOIN keyword',
-    headers: ['JOIN overview', 'ASOF JOIN', 'SPLICE JOIN'],
+    path: "sql/asof-join.md",
+    title: "ASOF JOIN keyword",
+    headers: ["JOIN overview", "ASOF JOIN", "SPLICE JOIN"],
     content: `ASOF JOIN is a powerful SQL keyword that allows you to join two time-series
 tables.
 
@@ -3436,9 +3436,9 @@ information on SPLICE JOIN.
 `
   },
   {
-    path: 'sql/cancel-query.md',
-    title: 'CANCEL QUERY',
-    headers: ['Syntax', 'Description'],
+    path: "sql/cancel-query.md",
+    title: "CANCEL QUERY",
+    headers: ["Syntax", "Description"],
     content: `Gracefully stops the execution of a running query.
 
 ## Syntax
@@ -3521,9 +3521,9 @@ cancellation was set. Otherwise, it returns \`false\`.
 `
   },
   {
-    path: 'sql/case.md',
-    title: 'CASE keyword',
-    headers: ['Syntax', 'Description'],
+    path: "sql/case.md",
+    title: "CASE keyword",
+    headers: ["Syntax", "Description"],
     content: `## Syntax
 
 ![Flow chart showing the syntax of CASE](/images/docs/diagrams/case.svg)
@@ -3586,9 +3586,9 @@ Result
 `
   },
   {
-    path: 'sql/cast.md',
-    title: 'CAST keyword',
-    headers: ['Syntax', 'Explicit conversion', 'Implicit conversion', 'Alternate syntax'],
+    path: "sql/cast.md",
+    title: "CAST keyword",
+    headers: ["Syntax", "Explicit conversion", "Implicit conversion", "Alternate syntax"],
     content: `Type conversion. Can be either:
 
 - [Explicit](#explicit-conversion) via \`cast()\`
@@ -3717,9 +3717,9 @@ It's all preference, however many consider the short hand to be more readable.
 `
   },
   {
-    path: 'sql/checkpoint.md',
-    title: 'CHECKPOINT keyword',
-    headers: ['CHECKPOINT syntax', 'CHECKPOINT overview', 'CHECKPOINT examples'],
+    path: "sql/checkpoint.md",
+    title: "CHECKPOINT keyword",
+    headers: ["CHECKPOINT syntax", "CHECKPOINT overview", "CHECKPOINT examples"],
     content: `Checkpoint SQL toggles the database into and out of "checkpoint mode". In this
 mode the databases file system can be safely backed up using external tools,
 such as disk snapshots or copy utilities.
@@ -3812,9 +3812,9 @@ CHECKPOINT RELEASE
 `
   },
   {
-    path: 'sql/copy.md',
-    title: 'COPY keyword',
-    headers: ['Syntax', 'Description', 'Options'],
+    path: "sql/copy.md",
+    title: "COPY keyword",
+    headers: ["Syntax", "Description", "Options"],
     content: `:::caution
 
 For partitioned tables, the best \`COPY\` performance can be achieved only on a
@@ -4008,9 +4008,9 @@ SELECT * FROM 'sys.text_import_log' WHERE id = '55ca24e5ba328050' LIMIT -1;
 `
   },
   {
-    path: 'sql/create-mat-view.md',
-    title: 'CREATE MATERIALIZED VIEW',
-    headers: ['Syntax', 'Metadata', 'Creating a view', 'Alternative refresh strategies', 'Period materialized views', 'Initial refresh', 'Base table', 'Partitioning', 'Time To Live (TTL)', 'IF NOT EXISTS', 'Materialized view names', 'OWNED BY (Enterprise)', 'SYMBOL column capacity', 'Query constraints'],
+    path: "sql/create-mat-view.md",
+    title: "CREATE MATERIALIZED VIEW",
+    headers: ["Syntax", "Metadata", "Creating a view", "Alternative refresh strategies", "Period materialized views", "Initial refresh", "Base table", "Partitioning", "Time To Live (TTL)", "IF NOT EXISTS", "Materialized view names", "OWNED BY (Enterprise)", "SYMBOL column capacity", "Query constraints"],
     content: `:::info
 
 Materialized View support is now generally available (GA) and ready for
@@ -4405,9 +4405,9 @@ about them.
 `
   },
   {
-    path: 'sql/create-table.md',
-    title: 'CREATE TABLE reference',
-    headers: ['Syntax', 'Write-Ahead Log (WAL) Settings', 'Designated timestamp', 'Partitioning', 'Time To Live (TTL)', 'Deduplication', 'IF NOT EXISTS', 'Table name', 'Column name', 'Type definition', 'Column indexes', 'OWNED BY', 'CREATE TABLE AS', 'CREATE TABLE LIKE', 'WITH table parameter', 'Table target volume'],
+    path: "sql/create-table.md",
+    title: "CREATE TABLE reference",
+    headers: ["Syntax", "Write-Ahead Log (WAL) Settings", "Designated timestamp", "Partitioning", "Time To Live (TTL)", "Deduplication", "IF NOT EXISTS", "Table name", "Column name", "Type definition", "Column indexes", "OWNED BY", "CREATE TABLE AS", "CREATE TABLE LIKE", "WITH table parameter", "Table target volume"],
     content: `To create a new table in the database, the \`CREATE TABLE\` keywords followed by
 column definitions are used.
 
@@ -5047,9 +5047,9 @@ Additional notes about defining the alias and volume root paths:
 `
   },
   {
-    path: 'sql/datatypes.md',
-    title: 'Data types',
-    headers: ['N-dimensional array', 'VARCHAR and STRING considerations', 'TIMESTAMP and DATE considerations', 'Limitations for variable-sized types', 'Type nullability', 'The UUID type', 'IPv4'],
+    path: "sql/datatypes.md",
+    title: "Data types",
+    headers: ["N-dimensional array", "VARCHAR and STRING considerations", "TIMESTAMP and DATE considerations", "Limitations for variable-sized types", "Type nullability", "The UUID type", "IPv4"],
     content: `| Type Name         | Storage bits    | Nullable | Description                                                                                                                                                                                                                     |
 |-------------------|-----------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | \`boolean\`         | \`1\`             | No       | Boolean \`true\` or \`false\`.                                                                                                                                                                                                      |
@@ -5224,9 +5224,9 @@ pre-existing IPv4 column by sending IPs as strings.
 `
   },
   {
-    path: 'sql/declare.md',
-    title: 'DECLARE keyword',
-    headers: ['Syntax', 'Mechanics', 'Limitations'],
+    path: "sql/declare.md",
+    title: "DECLARE keyword",
+    headers: ["Syntax", "Mechanics", "Limitations"],
     content: `\`DECLARE\` specifies a series of variable bindings used throughout your query. 
 
 This syntax is supported within \`SELECT\` queries.
@@ -5537,9 +5537,9 @@ CREATE TABLE trades AS (
 `
   },
   {
-    path: 'sql/distinct.md',
-    title: 'DISTINCT keyword',
-    headers: ['Syntax'],
+    path: "sql/distinct.md",
+    title: "DISTINCT keyword",
+    headers: ["Syntax"],
     content: `\`SELECT DISTINCT\` is used to return only distinct (i.e different) values from a
 column as part of a [SELECT statement](/docs/reference/sql/select/).
 
@@ -5572,9 +5572,9 @@ WHERE score > 3;
 `
   },
   {
-    path: 'sql/drop-mat-view.md',
-    title: 'DROP MATERIALIZED VIEW',
-    headers: ['Syntax', 'IF EXISTS', 'See also'],
+    path: "sql/drop-mat-view.md",
+    title: "DROP MATERIALIZED VIEW",
+    headers: ["Syntax", "IF EXISTS", "See also"],
     content: `:::info
 
 Materialized View support is now generally available (GA) and ready for production use.
@@ -5618,9 +5618,9 @@ materialized views.
 `
   },
   {
-    path: 'sql/drop.md',
-    title: 'DROP TABLE keyword',
-    headers: ['Syntax', 'Description', 'See also'],
+    path: "sql/drop.md",
+    title: "DROP TABLE keyword",
+    headers: ["Syntax", "Description", "See also"],
     content: `\`DROP TABLE\` permanently deletes a table and its contents. \`DROP ALL TABLES\`
 permanently deletes all tables, all materialized views, and their contents on disk.
 
@@ -5668,9 +5668,9 @@ To delete the data inside a table but keep the table and its structure, use
 `
   },
   {
-    path: 'sql/explain.md',
-    title: 'EXPLAIN keyword',
-    headers: ['Syntax', 'Limitations:', 'See also'],
+    path: "sql/explain.md",
+    title: "EXPLAIN keyword",
+    headers: ["Syntax", "Limitations:", "See also"],
     content: `\`EXPLAIN\` displays the execution plan of an \`INSERT\`, \`SELECT\`, or \`UPDATE\`
 statement.
 
@@ -5934,8 +5934,8 @@ This section includes links to additional information such as tutorials:
 `
   },
   {
-    path: 'sql/fill.md',
-    title: 'FILL keyword',
+    path: "sql/fill.md",
+    title: "FILL keyword",
     headers: [],
     content: `Queries using a [SAMPLE BY](/docs/reference/sql/sample-by/) aggregate on data
 which has missing records may return a discontinuous series of results. The
@@ -5951,9 +5951,9 @@ documentation.
 `
   },
   {
-    path: 'sql/group-by.md',
-    title: 'GROUP BY keyword',
-    headers: ['Syntax'],
+    path: "sql/group-by.md",
+    title: "GROUP BY keyword",
+    headers: ["Syntax"],
     content: `Groups aggregation calculations by one or several keys. In QuestDB, this clause
 is [optional](/docs/concept/sql-extensions/#group-by-is-optional).
 
@@ -6022,9 +6022,9 @@ GROUP BY a, b;
 `
   },
   {
-    path: 'sql/insert.md',
-    title: 'INSERT keyword',
-    headers: ['Syntax'],
+    path: "sql/insert.md",
+    title: "INSERT keyword",
+    headers: ["Syntax"],
     content: `\`INSERT\` ingests selected data into a database table.
 
 ## Syntax
@@ -6198,9 +6198,9 @@ INSERT BATCH 4096 o3MaxLag '1s' INTO confirmed_trades
 `
   },
   {
-    path: 'sql/join.md',
-    title: 'JOIN keyword',
-    headers: ['Syntax', 'Execution order', 'Implicit joins', 'Using the `ON` clause for the `JOIN` predicate', 'ASOF JOIN', '(INNER) JOIN', 'LEFT (OUTER) JOIN', 'CROSS JOIN', 'LT JOIN', 'SPLICE JOIN'],
+    path: "sql/join.md",
+    title: "JOIN keyword",
+    headers: ["Syntax", "Execution order", "Implicit joins", "Using the `ON` clause for the `JOIN` predicate", "ASOF JOIN", "(INNER) JOIN", "LEFT (OUTER) JOIN", "CROSS JOIN", "LT JOIN", "SPLICE JOIN"],
     content: `QuestDB supports the type of joins you can frequently find in
 [relational databases](/glossary/relational-database/): \`INNER\`, \`LEFT (OUTER)\`,
 \`CROSS\`. Additionally, it implements joins which are particularly useful for
@@ -6695,9 +6695,9 @@ need additional filtering on the two tables, the \`ON\` clause can also be used.
 `
   },
   {
-    path: 'sql/latest-on.md',
-    title: 'LATEST ON keyword',
-    headers: ['Syntax', 'Description'],
+    path: "sql/latest-on.md",
+    title: "LATEST ON keyword",
+    headers: ["Syntax", "Description"],
     content: `Retrieves the latest entry by timestamp for a given key or combination of keys,
 for scenarios where multiple time series are stored in the same table.
 
@@ -6948,9 +6948,9 @@ query.
 `
   },
   {
-    path: 'sql/limit.md',
-    title: 'LIMIT keyword',
-    headers: ['Syntax'],
+    path: "sql/limit.md",
+    title: "LIMIT keyword",
+    headers: ["Syntax"],
     content: `Specify the number and position of records returned by a
 [SELECT statement](/docs/reference/sql/select/).
 
@@ -6994,9 +6994,9 @@ SELECT * FROM ratings LIMIT -7, -3;
 `
   },
   {
-    path: 'sql/order-by.md',
-    title: 'ORDER BY keyword',
-    headers: ['Syntax', 'Notes'],
+    path: "sql/order-by.md",
+    title: "ORDER BY keyword",
+    headers: ["Syntax", "Notes"],
     content: `Sort the results of a query in ascending or descending order.
 
 ## Syntax
@@ -7026,9 +7026,9 @@ ratings ORDER BY userId, rating DESC;
 `
   },
   {
-    path: 'sql/over.md',
-    title: 'Over Keyword - Window Functions',
-    headers: ['Deep Dive: What is a Window Function?', 'Syntax', 'Supported functions', 'Components of a window function', 'Frame types and behavior', 'Frame boundaries', 'Exclusion options', 'Notes and restrictions'],
+    path: "sql/over.md",
+    title: "Over Keyword - Window Functions",
+    headers: ["Deep Dive: What is a Window Function?", "Syntax", "Supported functions", "Components of a window function", "Frame types and behavior", "Frame boundaries", "Exclusion options", "Notes and restrictions"],
     content: `Window functions perform calculations across sets of table rows that are related to the current row. Unlike aggregate functions that return a single result for a group of rows, window functions return a value for every row while considering a window of rows defined by the OVER clause.
 
 We'll cover high-level, introductory information about window functions, and then move on to composition.
@@ -7515,9 +7515,9 @@ WHERE timestamp in yesterday();
 `
   },
   {
-    path: 'sql/overview.md',
-    title: 'Query & SQL Overview',
-    headers: ['QuestDB Web Console', 'PostgreSQL', 'REST HTTP API', 'Apache Parquet', 'What\'s next?'],
+    path: "sql/overview.md",
+    title: "Query & SQL Overview",
+    headers: ["QuestDB Web Console", "PostgreSQL", "REST HTTP API", "Apache Parquet", "What's next?"],
     content: `import Screenshot from "@theme/Screenshot"
 
 import Tabs from "@theme/Tabs"
@@ -7950,9 +7950,9 @@ Looking for visuals?
 `
   },
   {
-    path: 'sql/refresh-mat-view.md',
-    title: 'REFRESH MATERIALIZED VIEW',
-    headers: ['Syntax', 'See also'],
+    path: "sql/refresh-mat-view.md",
+    title: "REFRESH MATERIALIZED VIEW",
+    headers: ["Syntax", "See also"],
     content: `:::info
 
 Materialized View support is now generally available (GA) and ready for
@@ -8012,9 +8012,9 @@ materialized views.
 `
   },
   {
-    path: 'sql/reindex.md',
-    title: 'REINDEX',
-    headers: ['Syntax', 'Options'],
+    path: "sql/reindex.md",
+    title: "REINDEX",
+    headers: ["Syntax", "Options"],
     content: `Rebuilds one or more [index](/docs/concept/indexes/) columns of the given table.
 This operation is intended to be used after a hardware or software crash, when
 the index data are corrupted and the table cannot be opened for writes.
@@ -8061,9 +8061,9 @@ REINDEX TABLE trades COLUMN instruments PARTITION '2021-12-17' LOCK EXCLUSIVE;
 `
   },
   {
-    path: 'sql/rename.md',
-    title: 'RENAME TABLE keyword',
-    headers: ['Syntax'],
+    path: "sql/rename.md",
+    title: "RENAME TABLE keyword",
+    headers: ["Syntax"],
     content: `\`RENAME TABLE\` is used to change the name of a table.
 
 ## Syntax
@@ -8078,9 +8078,9 @@ RENAME TABLE 'test.csv' TO 'myTable';
 `
   },
   {
-    path: 'sql/sample-by.md',
-    title: 'SAMPLE BY keyword',
-    headers: ['Syntax', 'Sample units', 'FROM-TO', 'Fill options', 'Sample calculation', 'ALIGN TO FIRST OBSERVATION', 'ALIGN TO CALENDAR', 'Performance optimization', 'See also'],
+    path: "sql/sample-by.md",
+    title: "SAMPLE BY keyword",
+    headers: ["Syntax", "Sample units", "FROM-TO", "Fill options", "Sample calculation", "ALIGN TO FIRST OBSERVATION", "ALIGN TO CALENDAR", "Performance optimization", "See also"],
     content: `\`SAMPLE BY\` is used on [time-series data](/blog/what-is-time-series-data/) to summarize large datasets into
 aggregates of homogeneous time chunks as part of a
 [SELECT statement](/docs/reference/sql/select/).
@@ -8675,9 +8675,9 @@ This section includes links to additional information such as tutorials:
 `
   },
   {
-    path: 'sql/select.md',
-    title: 'SELECT keyword',
-    headers: ['Syntax', 'Simple select', 'Boolean expressions', 'Aggregation', 'Supported clauses', 'Additional time-series clauses'],
+    path: "sql/select.md",
+    title: "SELECT keyword",
+    headers: ["Syntax", "Simple select", "Boolean expressions", "Aggregation", "Supported clauses", "Additional time-series clauses"],
     content: `\`SELECT\` allows you to specify a list of columns and expressions to be selected
 and evaluated from a table.
 
@@ -9011,9 +9011,9 @@ For more information, refer to the
 `
   },
   {
-    path: 'sql/show.md',
-    title: 'SHOW keyword',
-    headers: ['Syntax', 'Description', 'See also'],
+    path: "sql/show.md",
+    title: "SHOW keyword",
+    headers: ["Syntax", "Description", "See also"],
     content: `This keyword provides table, column, and partition information including
 metadata. The \`SHOW\` keyword is useful for checking the
 [designated timestamp setting](/docs/concept/designated-timestamp/) column, the
@@ -9325,9 +9325,9 @@ as part of a function:
 `
   },
   {
-    path: 'sql/snapshot.md',
-    title: 'SNAPSHOT keyword',
-    headers: ['Syntax'],
+    path: "sql/snapshot.md",
+    title: "SNAPSHOT keyword",
+    headers: ["Syntax"],
     content: `This is a *deprecated* syntax to prepare the database for a full backup or a filesystem (disk) snapshot. 
 \`SNAPSHOT\` SQL syntax has been superceded by [\`CHECKPOINT\` SQL syntax](/docs/reference/sql/checkpoint/)
 
@@ -9341,9 +9341,9 @@ _For a detailed guide backup creation and restoration? Check out our
 `
   },
   {
-    path: 'sql/truncate.md',
-    title: 'TRUNCATE TABLE keyword',
-    headers: ['Syntax', 'Notes', 'See also'],
+    path: "sql/truncate.md",
+    title: "TRUNCATE TABLE keyword",
+    headers: ["Syntax", "Notes", "See also"],
     content: `\`TRUNCATE TABLE\` permanently deletes the contents of a table without deleting
 the table itself.
 
@@ -9369,9 +9369,9 @@ To delete both the data and the table structure, use
 `
   },
   {
-    path: 'sql/union-except-intersect.md',
-    title: 'UNION EXCEPT INTERSECT keywords',
-    headers: ['Syntax', 'Keyword execution priority', 'Clauses', 'Alias'],
+    path: "sql/union-except-intersect.md",
+    title: "UNION EXCEPT INTERSECT keywords",
+    headers: ["Syntax", "Keyword execution priority", "Clauses", "Alias"],
     content: `## Overview
 
 \`UNION\`, \`EXCEPT\`, and \`INTERSECT\` perform set operations.
@@ -9641,9 +9641,9 @@ The output shows \`alias_1\`.
 `
   },
   {
-    path: 'sql/update.md',
-    title: 'UPDATE keyword',
-    headers: ['Syntax'],
+    path: "sql/update.md",
+    title: "UPDATE keyword",
+    headers: ["Syntax"],
     content: `Updates data in a database table.
 
 ## Syntax
@@ -9704,9 +9704,9 @@ WHERE up.ts = s.ts AND s.symbol = up.symbol;
 `
   },
   {
-    path: 'sql/vacuum-table.md',
-    title: 'VACUUM TABLE',
-    headers: ['Syntax', 'Description'],
+    path: "sql/vacuum-table.md",
+    title: "VACUUM TABLE",
+    headers: ["Syntax", "Description"],
     content: `\`VACUUM TABLE\` reclaims storage by scanning file systems and deleting duplicate
 directories and files.
 
@@ -9745,9 +9745,9 @@ VACUUM TABLE trades;
 `
   },
   {
-    path: 'sql/where.md',
-    title: 'WHERE keyword',
-    headers: ['Syntax', 'Symbol and string', 'Numeric', 'Boolean', 'Timestamp and date'],
+    path: "sql/where.md",
+    title: "WHERE keyword",
+    headers: ["Syntax", "Symbol and string", "Numeric", "Boolean", "Timestamp and date"],
     content: `\`WHERE\` clause filters data. Filter expressions are required to return boolean
 result.
 
@@ -10233,9 +10233,9 @@ A row with timestamp 2024-04-03T00:00:00.990000Z would also return in boundary.
 `
   },
   {
-    path: 'sql/with.md',
-    title: 'WITH keyword',
-    headers: ['Syntax'],
+    path: "sql/with.md",
+    title: "WITH keyword",
+    headers: ["Syntax"],
     content: `Supports Common Table Expressions (CTEs), e.i., naming one or several
 sub-queries to be used with a [\`SELECT\`](/docs/reference/sql/select/),
 [\`INSERT\`](/docs/reference/sql/insert/), or

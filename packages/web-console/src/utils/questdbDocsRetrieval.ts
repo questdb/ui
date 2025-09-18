@@ -48,9 +48,31 @@ export function getSpecificDocumentation(category: DocCategory, items: string[])
   
   for (const item of items) {
     const normalizedItem = item.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    const parts = item.split(/\s+-\s+/)
+    const hasTitleAndSection = parts.length >= 2
+    const queryTitle = hasTitleAndSection ? parts[0].trim() : null
+    const querySection = hasTitleAndSection ? parts.slice(1).join(' - ').trim() : null
     
     // Find files containing this item
     for (const file of categoryDocs) {
+      // Handle explicit "Title - Section" lookups
+      if (hasTitleAndSection && queryTitle && querySection) {
+        if (file.title.toLowerCase() === queryTitle.toLowerCase()) {
+          const matchingHeaderFromTitleSection = file.headers.find(h =>
+            h.toLowerCase() === querySection.toLowerCase() ||
+            h.toLowerCase().replace(/[^a-z0-9_]/g, '_') === querySection.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+          )
+          if (matchingHeaderFromTitleSection && !processedPaths.has(`${file.path}::${matchingHeaderFromTitleSection}`)) {
+            processedPaths.add(`${file.path}::${matchingHeaderFromTitleSection}`)
+            const sectionContent = extractSection(file.content, matchingHeaderFromTitleSection)
+            if (sectionContent) {
+              chunks.push(`### ${file.path} - ${matchingHeaderFromTitleSection}\n\n${sectionContent}`)
+              continue
+            }
+          }
+        }
+      }
+      
       // Check if file name matches
       const fileKey = file.path.split('/').pop()?.replace('.md', '').replace(/-/g, '_')
       const hasItemInPath = fileKey === normalizedItem

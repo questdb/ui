@@ -1,5 +1,5 @@
 // Auto-generated documentation data for operators
-// Generated on 2025-09-11T17:23:20.110Z
+// Generated on 2025-09-18T21:16:04.082Z
 
 export interface DocFile {
   path: string
@@ -10,9 +10,9 @@ export interface DocFile {
 
 export const operatorsDocs: DocFile[] = [
   {
-    path: 'operators/bitwise.md',
-    title: 'Bitwise Operators',
-    headers: ['`~` NOT', '`&` AND', '`^` XOR', '`|` OR'],
+    path: "operators/bitwise.md",
+    title: "Bitwise Operators",
+    headers: ["`~` NOT", "`&` AND", "`^` XOR", "`|` OR"],
     content: `This page describes the available operators to assist with performing bitwise
 operations on numeric values.
 
@@ -82,9 +82,9 @@ SELECT 5 | 3
 `
   },
   {
-    path: 'operators/comparison.md',
-    title: 'Comparison Operators',
-    headers: ['`IN` (list)', '`=` Equals', '`>` Greater than', '`>=` Greater than or equal to', '`<` Lesser than', '`<=` Lesser than or equal to', '`<>` or `!=` Not equals', '`IN` (value1, value2, ...)'],
+    path: "operators/comparison.md",
+    title: "Comparison Operators",
+    headers: ["`IN` (list)", "`=` Equals", "`>` Greater than", "`>=` Greater than or equal to", "`<` Lesser than", "`<=` Lesser than or equal to", "`<>` or `!=` Not equals", "`IN` (value1, value2, ...)"],
     content: `This page describes the available operators to assist with comparison
 operations.
 
@@ -332,9 +332,9 @@ WHERE ts = '2018-01-01' or ts = '2018-01-01T12:00' or ts = '2018-01-02';
 `
   },
   {
-    path: 'operators/date-time.md',
-    title: 'Date and Time Operators',
-    headers: ['`BETWEEN` value1 `AND` value2', '`IN` (timeRange)', '`IN` (timeRangeWithModifier)', '`IN` (interval)'],
+    path: "operators/date-time.md",
+    title: "Date and Time Operators",
+    headers: ["`BETWEEN` value1 `AND` value2", "`IN` (timeRange)", "`IN` (timeRangeWithModifier)", "`IN` (interval)"],
     content: `This page describes the available operators to assist with performing time-based
 calculations.
 
@@ -549,9 +549,9 @@ LIMIT -1;
 `
   },
   {
-    path: 'operators/ipv4.md',
-    title: 'IPv4 Operators',
-    headers: ['`<` Less than', '`<=` Less than or equal', '`>` Greater than', '`>=` Greater than or equal', '`=` Equals', '`!=` Does not equal', '`<<` Left strict IP address contained by', '`>>` Right strict IP address contained by', '`<<=` Left IP address contained by or equal', '`<<=` Right IP address contained by or equal', '`&` Bitwise AND', '`~` Bitwise NOT', '`|` Bitwise OR', '`+` Add offset to an IP address', '`-` Subtract offset from IP address', '`-` Difference between two IP addresses', 'Return netmask - netmask(string)'],
+    path: "operators/ipv4.md",
+    title: "IPv4 Operators",
+    headers: ["`<` Less than", "`<=` Less than or equal", "`>` Greater than", "`>=` Greater than or equal", "`=` Equals", "`!=` Does not equal", "`<<` Left strict IP address contained by", "`>>` Right strict IP address contained by", "`<<=` Left IP address contained by or equal", "`<<=` Right IP address contained by or equal", "`&` Bitwise AND", "`~` Bitwise NOT", "`|` Bitwise OR", "`+` Add offset to an IP address", "`-` Subtract offset from IP address", "`-` Difference between two IP addresses", "Return netmask - netmask(string)"],
     content: `This document outlines the IPv4 data type operators.
 
 The IP addresses can be in the range of \`0.0.0.1\` - \`255.255.255.255\`.
@@ -831,9 +831,9 @@ address.
 `
   },
   {
-    path: 'operators/logical.md',
-    title: 'Logical Operators',
-    headers: ['`OR` Logical OR', '`AND` Logical AND', '`NOT` Logical NOT'],
+    path: "operators/logical.md",
+    title: "Logical Operators",
+    headers: ["`OR` Logical OR", "`AND` Logical AND", "`NOT` Logical NOT"],
     content: `## \`OR\` Logical OR
 
 \`OR\` represents a logical OR operation, which takes two predicates and filters for either one being true.
@@ -892,9 +892,9 @@ SELECT NOT TRUE
 `
   },
   {
-    path: 'operators/misc.md',
-    title: 'Misc Operators',
-    headers: ['`.` Prefix', '`::` Cast'],
+    path: "operators/misc.md",
+    title: "Misc Operators",
+    headers: ["`.` Prefix", "`::` Cast"],
     content: `## \`.\` Prefix
 
 The \`.\` operator is used to prefix columns with a table name, for example when performing joins.
@@ -929,9 +929,9 @@ SELECT 5::float, cast(5 as float)
 `
   },
   {
-    path: 'operators/numeric.md',
-    title: 'Numeric Operators',
-    headers: ['`*` Multiply', '`/` Divide', '`%` Modulo', '`+` Add', '`-` Subtract', '`-` Negate'],
+    path: "operators/numeric.md",
+    title: "Numeric Operators",
+    headers: ["`*` Multiply", "`/` Divide", "`%` Modulo", "`+` Add", "`-` Subtract", "`-` Negate"],
     content: `These operations work for any numeric types. Also, addition and multiplication
 work for N-dimensional arrays. The result will be an array where each element is
 the result of applying the operation to the elements at the same coordinates in
@@ -1023,9 +1023,9 @@ SELECT -5
 `
   },
   {
-    path: 'operators/precedence.md',
-    title: 'Operator Precedence Table',
-    headers: ['Pre-8.0 notice'],
+    path: "operators/precedence.md",
+    title: "Operator Precedence Table",
+    headers: ["Pre-8.0 notice"],
     content: `The following tables provide information about which operators are available, and their corresponding precedences.
 
 For IPv4 operators, this list is not comprehensive, and users should refer directly to the [IPv4](/docs/reference/operators/ipv4/) documentation itself.
@@ -1097,8 +1097,8 @@ See the next section for the current precedence.
 `
   },
   {
-    path: 'operators/spatial.md',
-    title: 'Spatial Operators',
+    path: "operators/spatial.md",
+    title: "Spatial Operators",
     headers: [],
     content: `This page describes the available operators to perform spatial
 calculations. For more information on this type of data, see the
@@ -1188,9 +1188,9 @@ LATEST ON ts PARTITON BY uuid;
 `
   },
   {
-    path: 'operators/text.md',
-    title: 'Text Operators',
-    headers: ['`||` Concat', '`~` Regex match', '`!~` Regex doesn\'t match', '`LIKE`', '`ILIKE`'],
+    path: "operators/text.md",
+    title: "Text Operators",
+    headers: ["`||` Concat", "`~` Regex match", "`!~` Regex doesn't match", "`LIKE`", "`ILIKE`"],
     content: `## \`||\` Concat
 
 \`||\` concatenates strings, similar to [concat()](/docs/reference/function/text/#concat).

@@ -14,7 +14,7 @@ import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
-import { useAIStatus, AIOperationStatus } from "../../../providers/AIStatusProvider"
+import { useAIStatus, AIOperationStatus, isBlockingAIStatus } from "../../../providers/AIStatusProvider"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
@@ -43,7 +43,7 @@ const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | nu
   `}
 `
 
-const StatusIndicator = styled.div<{ $aborted: boolean }>`
+const StatusIndicator = styled.div<{ $aborted: boolean, $loading: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -51,7 +51,33 @@ const StatusIndicator = styled.div<{ $aborted: boolean }>`
   ${({ $aborted }) => $aborted && css`
     color: ${color("red")};
   `}
-`
+  
+  ${({ $loading }) => $loading && css`
+    @keyframes slide {
+      0% { 
+        background-position: 200% center;
+      }
+      100% { 
+        background-position: -200% center;
+      }
+    }
+    
+    background: linear-gradient(
+      90deg,
+      ${color("gray2")} 0%,
+      ${color("gray2")} 40%,
+      ${color("white")} 50%,
+      ${color("gray2")} 60%,
+      ${color("gray2")} 100%
+    );
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-fill-color: transparent;
+    animation: slide 3s linear infinite;
+  `}
+`;
 
 const StatusLoader = styled(Loader3)`
   width: 2rem;
@@ -393,7 +419,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary, executionRefs, onBufferCon
         />
       )}
       {aiStatus && (
-        <StatusIndicator $aborted={aiStatus === AIOperationStatus.Aborted}>
+        <StatusIndicator $aborted={aiStatus === AIOperationStatus.Aborted} $loading={isBlockingAIStatus(aiStatus)}>
           {aiStatus === AIOperationStatus.Aborted ? <CloseOutline size="18px" /> : <StatusLoader />}
           {aiStatus}
         </StatusIndicator>
