@@ -9,9 +9,9 @@ import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
 import { toast } from "../Toast"
 import { useLocalStorage, DEFAULT_AI_ASSISTANT_SETTINGS } from "../../providers/LocalStorageProvider"
-import { StoreKey } from "../../utils/localStorage/types"
 import { testApiKey } from "../../utils/claude"
 import { PopperHover } from "../PopperHover"
+import { StoreKey } from "../../utils/localStorage/types"
 
 const Wrapper = styled.div`
   margin-top: 0.5rem;
@@ -156,11 +156,10 @@ export const SetupAIAssistant = () => {
   const [inputValue, setInputValue] = useState(aiAssistantSettings.apiKey || "")
   const [selectedModel, setSelectedModel] = useState(aiAssistantSettings.model || DEFAULT_AI_ASSISTANT_SETTINGS.model)
   const [grantSchemaAccess, setGrantSchemaAccess] = useState(aiAssistantSettings.grantSchemaAccess !== false)
-  const [maxTokens, setMaxTokens] = useState(aiAssistantSettings.maxTokens || DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens)
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const dirty = inputValue !== aiAssistantSettings.apiKey || selectedModel !== aiAssistantSettings.model || grantSchemaAccess !== aiAssistantSettings.grantSchemaAccess || maxTokens !== aiAssistantSettings.maxTokens
+  const dirty = inputValue !== aiAssistantSettings.apiKey || selectedModel !== aiAssistantSettings.model || grantSchemaAccess !== aiAssistantSettings.grantSchemaAccess
 
   const handleToggle = (newActive: boolean) => {
     if (newActive) {
@@ -191,8 +190,7 @@ export const SetupAIAssistant = () => {
         const newSettings = {
           apiKey: key,
           model: selectedModel,
-          grantSchemaAccess: grantSchemaAccess,
-          maxTokens: maxTokens
+          grantSchemaAccess: grantSchemaAccess
         }
         updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
         toast.success("Settings saved successfully")
@@ -221,7 +219,6 @@ export const SetupAIAssistant = () => {
     setInputValue(aiAssistantSettings.apiKey)
     setSelectedModel(aiAssistantSettings.model)
     setGrantSchemaAccess(aiAssistantSettings.grantSchemaAccess)
-    setMaxTokens(aiAssistantSettings.maxTokens)
     setError(null)
     handleToggle(false)
   }
@@ -231,7 +228,6 @@ export const SetupAIAssistant = () => {
     setInputValue(DEFAULT_AI_ASSISTANT_SETTINGS.apiKey)
     setSelectedModel(DEFAULT_AI_ASSISTANT_SETTINGS.model)
     setGrantSchemaAccess(DEFAULT_AI_ASSISTANT_SETTINGS.grantSchemaAccess)
-    setMaxTokens(DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens)
     setError(null)
     toast.success("All settings cleared")
   }
@@ -339,25 +335,7 @@ export const SetupAIAssistant = () => {
             </Box>
           </FormGroup>
 
-          <FormGroup>
-            <FormLabel htmlFor="max-tokens-input">
-              Max Tokens Per Message
-            </FormLabel>
-            <StyledInput
-              id="max-tokens-input"
-              data-hook="max-tokens-input"
-              type="number"
-              min="100"
-              value={maxTokens}
-              onChange={(e) => {
-                const value = parseInt(e.target.value) || DEFAULT_AI_ASSISTANT_SETTINGS.maxTokens
-                setMaxTokens(Math.max(value, 100))
-              }}
-            />
-            <DisclaimerText color="gray2">
-              Maximum number of tokens for single prompt
-            </DisclaimerText>
-          </FormGroup>
+          
 
           <DisclaimerText color="gray2">
             This AI assistant may occasionally produce inaccurate information. Please verify important details and review all generated queries before execution.

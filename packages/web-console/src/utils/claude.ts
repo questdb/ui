@@ -282,7 +282,6 @@ async function handleToolCalls(
   schemaClient: SchemaToolsClient,
   conversationHistory: any[],
   model: string,
-  maxTokens: number,
   setStatus: StatusCallback,
   abortSignal?: AbortSignal
 ): Promise<Anthropic.Messages.Message | ClaudeAPIError> {
@@ -411,14 +410,13 @@ async function handleToolCalls(
 
   const followUpMessage = await createAnthropicMessage(anthropic, {
     model,
-    max_tokens: maxTokens,
     tools: schemaClient ? ALL_TOOLS : DOC_TOOLS,
     messages: updatedHistory,
-    temperature: 0.3
+    temperature: 0.3,
   })
 
   if (followUpMessage.stop_reason === 'tool_use') {
-    return handleToolCalls(followUpMessage, anthropic, schemaClient, updatedHistory, model, maxTokens, setStatus, abortSignal)
+    return handleToolCalls(followUpMessage, anthropic, schemaClient, updatedHistory, model, setStatus, abortSignal)
   }
 
   return followUpMessage
@@ -501,15 +499,14 @@ export const explainQuery = async ({
 
     const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       system: getExplainQueryPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
       messages: initialMessages,
-      temperature: 0.3
+      temperature: 0.3,
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, settings.maxTokens, setStatus, abortSignal)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
 
     const responseError = response as ClaudeAPIError
@@ -539,7 +536,6 @@ export const explainQuery = async ({
 
     const formattingResponse = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'assistant' as const,
@@ -553,7 +549,7 @@ export const explainQuery = async ({
           role: 'assistant' as const,
           content: '{'
         },
-      ]
+      ],
     })
 
     const fullContent = formattingResponse.content.reduce((acc, block) => {
@@ -627,15 +623,14 @@ export const generateSQL = async ({
 
     const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       system: getGenerateSQLPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
       messages: initialMessages,
-      temperature: 0.2
+      temperature: 0.2,
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, settings.maxTokens, setStatus, abortSignal)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
     
     const responseError = response as ClaudeAPIError
@@ -655,7 +650,6 @@ export const generateSQL = async ({
     
     const formattingResponse = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'assistant' as const,
@@ -669,7 +663,7 @@ export const generateSQL = async ({
           role: 'assistant' as const,
           content: '{'
         }
-      ]
+      ],
     })
     
     const fullContent = formattingResponse.content.reduce((acc, block) => {
@@ -768,15 +762,14 @@ ${word ? `The error occurred at word: ${word}` : ''}`
 
     const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       system: getFixQueryPrompt(settings.grantSchemaAccess),
       tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
       messages: initialMessages,
-      temperature: 0.2
+      temperature: 0.2,
     })
 
     const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, settings.maxTokens, setStatus, abortSignal)
+      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
     
     const responseError = response as ClaudeAPIError
@@ -796,7 +789,6 @@ ${word ? `The error occurred at word: ${word}` : ''}`
     
     const formattingResponse = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'assistant' as const,
@@ -810,7 +802,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
           role: 'assistant' as const,
           content: '{'
         }
-      ]
+      ],
     })
     
     const fullContent = formattingResponse.content.reduce((acc, block) => {
@@ -866,19 +858,16 @@ class MaxTokensError extends Error {
 
 async function createAnthropicMessage(
   anthropic: Anthropic,
-  params: Anthropic.MessageCreateParams
+  params: Omit<Anthropic.MessageCreateParams, 'max_tokens'> & { max_tokens?: number }
 ): Promise<Anthropic.Messages.Message> {
   const message = await anthropic.messages.create({
     ...params,
-    stream: false
+    stream: false,
+    max_tokens: params.max_tokens ?? 8192
   })
   
   if (message.stop_reason === 'refusal') {
     throw new RefusalError('The model refused to generate a response for this request.')
-  }
-  
-  if (message.stop_reason === 'max_tokens') {
-    throw new MaxTokensError('The response exceeded the maximum token limit. Please try generating shorter queries.')
   }
   
   return message
@@ -978,7 +967,6 @@ export const explainTableSchema = async ({
 
     const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
-      max_tokens: settings.maxTokens,
       messages: [
         {
           role: 'user' as const,
@@ -989,7 +977,7 @@ export const explainTableSchema = async ({
           content: '{"'
         }
       ],
-      temperature: 0.3
+      temperature: 0.3,
     })
 
     const fullContent = '{"' + message.content.reduce((acc, block) => {
@@ -1089,13 +1077,13 @@ export const testApiKey = async (apiKey: string, model: string): Promise<{ valid
 
     await createAnthropicMessage(anthropic, {
       model,
-      max_tokens: 10,
       messages: [
         {
           role: 'user',
           content: 'Test'
         }
-      ]
+      ],
+      max_tokens: 10
     })
 
     return { valid: true }
@@ -1107,12 +1095,6 @@ export const testApiKey = async (apiKey: string, model: string): Promise<{ valid
       }
     }
 
-    if (error instanceof MaxTokensError) {
-      return { 
-        valid: true,
-      }
-    }
-    
     if (error instanceof Anthropic.RateLimitError) {
       return { 
         valid: true
