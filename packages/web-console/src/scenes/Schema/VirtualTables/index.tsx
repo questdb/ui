@@ -19,7 +19,7 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from ".
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
 import { SchemaExplanationDialog } from '../SchemaExplanationDialog'
-import { explainTableSchema, isClaudeError, ClaudeAPIError, TableSchemaExplanation } from '../../../utils/claude'
+import { explainTableSchema, isAiAssistantError, AiAssistantAPIError, TableSchemaExplanation } from '../../../utils/aiAssistant'
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { useAIStatus, isBlockingAIStatus } from '../../../providers/AIStatusProvider'
 
@@ -207,8 +207,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       setStatus,
     })
 
-    if (isClaudeError(response)) {
-      const error = response as ClaudeAPIError
+    if (isAiAssistantError(response)) {
+      const error = response as AiAssistantAPIError
       toast.error(error.message, { autoClose: 10000 })
       return
     }

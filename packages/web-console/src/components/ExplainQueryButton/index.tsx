@@ -5,8 +5,8 @@ import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
-import type { ClaudeAPIError, ClaudeExplanation } from "../../utils/claude"
-import { explainQuery, formatExplanationAsComment, createSchemaClient, isClaudeError } from "../../utils/claude"
+import type { AiAssistantAPIError, AiAssistantExplanation } from "../../utils/aiAssistant"
+import { explainQuery, formatExplanationAsComment, createSchemaClient, isAiAssistantError } from "../../utils/aiAssistant"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
@@ -75,8 +75,8 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
       abortSignal: abortController?.signal
     })
 
-    if (isClaudeError(response)) {
-      const error = response as ClaudeAPIError
+    if (isAiAssistantError(response)) {
+      const error = response as AiAssistantAPIError
       if (error.type !== 'aborted') {
         toast.error(error.message, { autoClose: 10000 })
       }
@@ -87,9 +87,9 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
       return
     }
 
-    const result = response as ClaudeExplanation
+    const result = response as AiAssistantExplanation
     if (!result.explanation) {
-      toast.error("No explanation received from Anthropic API", { autoClose: 10000 })
+      toast.error("No explanation received from AI Assistant", { autoClose: 10000 })
       editorRef.current?.updateOptions({
         readOnly: false,
         readOnlyMessage: undefined

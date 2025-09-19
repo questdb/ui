@@ -9,7 +9,7 @@ import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
 import { toast } from "../Toast"
 import { useLocalStorage, DEFAULT_AI_ASSISTANT_SETTINGS } from "../../providers/LocalStorageProvider"
-import { testApiKey } from "../../utils/claude"
+import { testApiKey } from "../../utils/aiAssistant"
 import { PopperHover } from "../PopperHover"
 import { StoreKey } from "../../utils/localStorage/types"
 

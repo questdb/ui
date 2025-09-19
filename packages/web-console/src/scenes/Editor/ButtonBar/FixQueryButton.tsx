@@ -4,13 +4,13 @@ import { Button } from "@questdb/react-components"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { useEditor } from "../../../providers"
-import type { ClaudeAPIError, GeneratedSQL } from "../../../utils/claude"
-import { isClaudeError, createSchemaClient, fixQuery } from "../../../utils/claude"
+import type { AiAssistantAPIError, GeneratedSQL } from "../../../utils/aiAssistant"
+import { isAiAssistantError, createSchemaClient, fixQuery } from "../../../utils/aiAssistant"
 import { toast } from "../../../components/Toast"
 import { QuestContext } from "../../../providers"
 import { selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
-import { formatExplanationAsComment } from "../../../utils/claude"
+import { formatExplanationAsComment } from "../../../utils/aiAssistant"
 import { createQueryKeyFromRequest } from "../../../scenes/Editor/Monaco/utils"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 import type { Request } from "../../../scenes/Editor/Monaco/utils"
@@ -136,8 +136,8 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
       word,
     })
 
-    if (isClaudeError(response)) {
-      const error = response as ClaudeAPIError
+    if (isAiAssistantError(response)) {
+      const error = response as AiAssistantAPIError
       if (error.type !== 'aborted') {
         toast.error(error.message, { autoClose: 10000 })
       }
@@ -203,7 +203,7 @@ export const FixQueryButton = ({ executionRefs, onBufferContentChange }: Props) 
     })
     
     if (!result.sql) {
-      toast.error("No fixed query or explanation received from Anthropic API", { autoClose: 10000 })
+      toast.error("No fixed query or explanation received from AI Assistant", { autoClose: 10000 })
       return
     }
 

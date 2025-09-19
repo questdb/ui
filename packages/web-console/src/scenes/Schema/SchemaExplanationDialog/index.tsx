@@ -10,7 +10,7 @@ import {
 import styled from "styled-components"
 import { AutoAwesome } from "@styled-icons/material"
 import { Check } from "@styled-icons/boxicons-regular"
-import { TableSchemaExplanation } from "../../../utils/claude"
+import { TableSchemaExplanation } from "../../../utils/aiAssistant"
 
 const StyledDialogContent = styled(Dialog.Content)`
   max-width: 800px;

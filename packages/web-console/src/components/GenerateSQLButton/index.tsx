@@ -5,8 +5,8 @@ import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
-import type { ClaudeAPIError, GeneratedSQL } from "../../utils/claude"
-import { generateSQL, formatExplanationAsComment, createSchemaClient, isClaudeError } from "../../utils/claude"
+import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
+import { generateSQL, formatExplanationAsComment, createSchemaClient, isAiAssistantError } from "../../utils/aiAssistant"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
@@ -107,8 +107,8 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
       abortSignal: abortController?.signal
     })
 
-    if (isClaudeError(response)) {
-      const error = response as ClaudeAPIError
+    if (isAiAssistantError(response)) {
+      const error = response as AiAssistantAPIError
       if (error.type !== 'aborted') {
         toast.error(error.message, { autoClose: 10000 })
       }
@@ -117,7 +117,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
 
     const result = response as GeneratedSQL
     if (!result.sql) {
-      toast.error("No query received from Anthropic API", { autoClose: 10000 })
+      toast.error("No query received from AI Assistant", { autoClose: 10000 })
       return
     }
 

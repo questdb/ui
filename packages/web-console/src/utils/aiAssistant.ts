@@ -11,13 +11,13 @@ import {
   DocCategory 
 } from './questdbDocsRetrieval'
 
-export interface ClaudeAPIError {
+export interface AiAssistantAPIError {
   type: 'rate_limit' | 'invalid_key' | 'network' | 'unknown' | 'aborted'
   message: string
   details?: any
 }
 
-export interface ClaudeExplanation {
+export interface AiAssistantExplanation {
   explanation: string
 }
 
@@ -116,7 +116,7 @@ const DOC_TOOLS = [
 
 const ALL_TOOLS = [...SCHEMA_TOOLS, ...DOC_TOOLS]
 
-export function isClaudeError(response: ClaudeAPIError | ClaudeExplanation | GeneratedSQL | Partial<GeneratedSQL>)  {
+export function isAiAssistantError(response: AiAssistantAPIError | AiAssistantExplanation | GeneratedSQL | Partial<GeneratedSQL>)  {
   if ('type' in response && 'message' in response) {
     return true
   }
@@ -284,7 +284,7 @@ async function handleToolCalls(
   model: string,
   setStatus: StatusCallback,
   abortSignal?: AbortSignal
-): Promise<Anthropic.Messages.Message | ClaudeAPIError> {
+): Promise<Anthropic.Messages.Message | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(block => block.type === 'tool_use')
   const toolResults = []
 
@@ -292,7 +292,7 @@ async function handleToolCalls(
     return {
       type: 'aborted',
       message: 'Operation was cancelled'
-    } as ClaudeAPIError
+    } as AiAssistantAPIError
   }
 
   for (const toolUse of toolUseBlocks) {
@@ -422,7 +422,7 @@ async function handleToolCalls(
   return followUpMessage
 }
 
-const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback, abortSignal?: AbortSignal): Promise<T | ClaudeAPIError> => {
+const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback, abortSignal?: AbortSignal): Promise<T | AiAssistantAPIError> => {
   let retries = 0
   while (retries <= MAX_RETRIES) {
     try {
@@ -430,7 +430,7 @@ const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback
         return {
           type: 'aborted',
           message: 'Operation was cancelled'
-        } as ClaudeAPIError
+        } as AiAssistantAPIError
       }
 
       return await fn()
@@ -438,7 +438,7 @@ const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback
       retries++
       if (retries > MAX_RETRIES || isNonRetryableError(error)) {
         setStatus(null)
-        return handleClaudeError(error)
+        return handleAiAssistantError(error)
       }
 
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * retries))
@@ -464,7 +464,7 @@ export const explainQuery = async ({
   schemaClient?: SchemaToolsClient,
   setStatus: StatusCallback,
   abortSignal?: AbortSignal
-}): Promise<ClaudeExplanation | ClaudeAPIError> => {
+}): Promise<AiAssistantExplanation | AiAssistantAPIError> => {
   if (!settings.apiKey || !query) {
     return {
       type: 'invalid_key',
@@ -477,7 +477,7 @@ export const explainQuery = async ({
     return {
       type: 'aborted',
       message: 'Operation was cancelled'
-    } as ClaudeAPIError
+    } as AiAssistantAPIError
   }
   setStatus(AIOperationStatus.Processing)
 
@@ -509,7 +509,7 @@ export const explainQuery = async ({
       ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
 
-    const responseError = response as ClaudeAPIError
+    const responseError = response as AiAssistantAPIError
     if (responseError.type === 'aborted') {
       return responseError
     }
@@ -530,7 +530,7 @@ export const explainQuery = async ({
       return {
         type: 'aborted',
         message: 'Operation was cancelled'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
     setStatus(AIOperationStatus.FormattingResponse)
 
@@ -564,7 +564,7 @@ export const explainQuery = async ({
         return {
           type: 'aborted',
           message: 'Operation was cancelled'
-        } as ClaudeAPIError
+        } as AiAssistantAPIError
       }
       const json = JSON.parse(fullContent)
       setStatus(null)
@@ -574,7 +574,7 @@ export const explainQuery = async ({
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
   }, setStatus, abortSignal)
 }
@@ -591,7 +591,7 @@ export const generateSQL = async ({
   schemaClient?: SchemaToolsClient,
   setStatus: StatusCallback,
   abortSignal?: AbortSignal
-}): Promise<GeneratedSQL | ClaudeAPIError> => {
+}): Promise<GeneratedSQL | AiAssistantAPIError> => {
   if (!settings.apiKey || !description) {
     return {
       type: 'invalid_key',
@@ -604,7 +604,7 @@ export const generateSQL = async ({
     return {
       type: 'aborted',
       message: 'Operation was cancelled'
-    } as ClaudeAPIError
+    } as AiAssistantAPIError
   }
   setStatus(AIOperationStatus.Processing)
 
@@ -633,7 +633,7 @@ export const generateSQL = async ({
       ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
     
-    const responseError = response as ClaudeAPIError
+    const responseError = response as AiAssistantAPIError
     if (responseError.type === 'aborted') {
       return responseError
     }
@@ -644,7 +644,7 @@ export const generateSQL = async ({
       return {
         type: 'aborted',
         message: 'Operation was cancelled'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
     setStatus(AIOperationStatus.FormattingResponse)
     
@@ -678,7 +678,7 @@ export const generateSQL = async ({
         return {
           type: 'aborted',
           message: 'Operation was cancelled'
-        } as ClaudeAPIError
+        } as AiAssistantAPIError
       }
       setStatus(null)
       const json = JSON.parse(fullContent)
@@ -698,7 +698,7 @@ export const generateSQL = async ({
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
   }, setStatus, abortSignal)
 }
@@ -719,7 +719,7 @@ export const fixQuery = async ({
   setStatus: StatusCallback,
   abortSignal?: AbortSignal,
   word: string | null,
-}): Promise<Partial<GeneratedSQL> | ClaudeAPIError> => {
+}): Promise<Partial<GeneratedSQL> | AiAssistantAPIError> => {
   if (!settings.apiKey || !query || !errorMessage) {
     return {
       type: 'invalid_key',
@@ -732,7 +732,7 @@ export const fixQuery = async ({
     return {
       type: 'aborted',
       message: 'Operation was cancelled'
-    } as ClaudeAPIError
+    } as AiAssistantAPIError
   }
   setStatus(AIOperationStatus.Processing)
 
@@ -772,7 +772,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
       ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
       : message
     
-    const responseError = response as ClaudeAPIError
+    const responseError = response as AiAssistantAPIError
     if (responseError.type === 'aborted') {
       return responseError
     }
@@ -783,7 +783,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
       return {
         type: 'aborted',
         message: 'Operation was cancelled'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
     setStatus(AIOperationStatus.FormattingResponse)
     
@@ -817,7 +817,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
         return {
           type: 'aborted',
           message: 'Operation was cancelled'
-        } as ClaudeAPIError
+        } as AiAssistantAPIError
       }
       setStatus(null)
       const json = JSON.parse(fullContent)
@@ -837,7 +837,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
   }, setStatus, abortSignal)
 }
@@ -873,7 +873,7 @@ async function createAnthropicMessage(
   return message
 }
 
-function handleClaudeError(error: any): ClaudeAPIError {
+function handleAiAssistantError(error: any): AiAssistantAPIError {
   if (error instanceof RefusalError) {
     return {
       type: 'unknown',
@@ -941,7 +941,7 @@ export const explainTableSchema = async ({
   isMatView: boolean,
   settings: AiAssistantSettings,
   setStatus: StatusCallback,
-}): Promise<TableSchemaExplanation | ClaudeAPIError> => {
+}): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
   if (!settings.apiKey || !schema) {
     return {
       type: 'invalid_key',
@@ -1000,7 +1000,7 @@ export const explainTableSchema = async ({
       return {
         type: 'unknown',
         message: 'Failed to parse assistant response.'
-      } as ClaudeAPIError
+      } as AiAssistantAPIError
     }
   }, setStatus)
 }
