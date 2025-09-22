@@ -1,7 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { Client } from './questdb/client'
 import { Type } from './questdb/types'
 import type { AiAssistantSettings } from '../providers/LocalStorageProvider/types'
+import { MODEL_OPTIONS } from '../components/SetupAIAssistant'
+import type { ModelOption } from '../components/SetupAIAssistant'
 import { formatSql } from './formatSql'
 import type { Request } from '../scenes/Editor/Monaco/utils'
 import { AIOperationStatus } from '../providers/AIStatusProvider'
@@ -42,6 +45,117 @@ export interface SchemaToolsClient {
 }
 
 type StatusCallback = (status: AIOperationStatus | null) => void
+
+type ProviderClients = {
+  provider: 'anthropic'
+  anthropic: Anthropic
+} | {
+  provider: 'openai'
+  openai: OpenAI
+}
+
+const ExplainFormat = {
+  format: {
+    type: "json_schema" as const,
+    name: "explain_format",
+    schema: {
+      type: "object",
+      properties: {
+        explanation: { type: "string" }
+      },
+      required: ["explanation"],
+      additionalProperties: false
+    },
+    strict: true
+  }
+}
+
+const GeneratedSQLFormat = {
+  format: {
+    type: "json_schema" as const,
+    name: "generated_sql_format",
+    schema: {
+      type: "object",
+      properties: {
+        sql: { type: "string" },
+        explanation: { type: "string" }
+      },
+      required: ["sql", "explanation"],
+      additionalProperties: false
+    },
+    strict: true
+  }
+}
+
+const FixSQLFormat = {
+  format: {
+    type: "json_schema" as const,
+    name: "fix_sql_format",
+    schema: {
+      type: "object",
+      properties: {
+        sql: { type: ["string", "null"] },
+        explanation: { type: "string" }
+      },
+      required: ["explanation", "sql"],
+      additionalProperties: false
+    },
+    strict: true
+  }
+}
+
+const ExplainTableSchemaFormat = {
+  format: {
+    type: "json_schema" as const,
+    name: "explain_table_schema_format",
+    schema: {
+      type: "object",
+      properties: {
+        explanation: { type: "string" },
+        columns: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              description: { type: "string" },
+              data_type: { type: "string" }
+            },
+            required: ["name", "description", "data_type"],
+            additionalProperties: false
+          }
+        },
+        storage_details: {
+          type: "array",
+          items: { type: "string" }
+        }
+      },
+      required: ["explanation", "columns", "storage_details"],
+      additionalProperties: false
+    },
+    strict: true
+  }
+}
+
+const inferProviderFromModel = (model: string): 'anthropic' | 'openai' => {
+  const found: ModelOption | undefined = MODEL_OPTIONS.find(m => m.value === model)
+  if (found) return found.provider
+  return model.startsWith('claude') ? 'anthropic' : 'openai'
+}
+
+const createProviderClients = (settings: AiAssistantSettings): ProviderClients => {
+  const provider = inferProviderFromModel(settings.model)
+  if (provider === 'openai') {
+    return {
+      provider,
+      openai: new OpenAI({ apiKey: settings.apiKey, dangerouslyAllowBrowser: true })
+    }
+  }
+  return {
+    provider,
+    anthropic: new Anthropic({ apiKey: settings.apiKey, dangerouslyAllowBrowser: true })
+  }
+}
 
 const getStatusFromCategory = (category: DocCategory) => {
   switch (category) {
@@ -115,6 +229,24 @@ const DOC_TOOLS = [
 ]
 
 const ALL_TOOLS = [...SCHEMA_TOOLS, ...DOC_TOOLS]
+
+const toOpenAIFunctions = (tools: typeof ALL_TOOLS) => {
+  return tools.map(t => ({
+    type: 'function' as const,
+    name: t.name,
+    description: t.description,
+    parameters: t.input_schema,
+  }))
+}
+
+const normalizeSql = (sql: string) => {
+  if (!sql) return ''
+  let result = sql.trim()
+  if (result.endsWith(';')) {
+    result = result.slice(0, -1)
+  }
+  return formatSql(result) + ';'
+}
 
 export function isAiAssistantError(response: AiAssistantAPIError | AiAssistantExplanation | GeneratedSQL | Partial<GeneratedSQL>)  {
   if ('type' in response && 'message' in response) {
@@ -212,7 +344,7 @@ When given a QuestDB SQL query with an error, fix the query to resolve the error
 
 Important guidelines:
 1. Analyze the error message carefully to understand what went wrong
-2. Generate only valid QuestDB SQL syntax referring to the documentation
+2. Generate only valid QuestDB SQL syntax by always referring to the documentation
 3. Preserve the original intent of the query while fixing the error
 4. Follow QuestDB best practices and syntax rules referring to the documentation
 5. Consider common issues like:
@@ -273,13 +405,64 @@ const handleRateLimit = async () => {
 const isNonRetryableError = (error: any) => {
   return error instanceof RefusalError || 
          error instanceof MaxTokensError || 
-         error instanceof Anthropic.AuthenticationError
+         error instanceof Anthropic.AuthenticationError ||
+         (typeof OpenAI !== 'undefined' && error instanceof (OpenAI as any).AuthenticationError)
+}
+
+const executeTool = async (
+  toolName: string,
+  input: any,
+  schemaClient: SchemaToolsClient | undefined,
+  setStatus: StatusCallback
+): Promise<{ content: string; is_error?: boolean }> => {
+  try {
+    switch (toolName) {
+      case 'get_tables': {
+        setStatus(AIOperationStatus.RetrievingTables)
+        if (!schemaClient) {
+          return { content: 'Error: Schema access is not granted. This tool is not available.', is_error: true }
+        }
+        const result = await schemaClient.getTables()
+        return { content: JSON.stringify(result, null, 2) }
+      }
+      case 'get_table_schema': {
+        setStatus(AIOperationStatus.InvestigatingTableSchema)
+        const tableName = input?.table_name
+        if (!schemaClient) {
+          return { content: 'Error: Schema access is not granted. This tool is not available.', is_error: true }
+        }
+        if (!tableName) {
+          return { content: 'Error: table_name parameter is required', is_error: true }
+        }
+        const result = await schemaClient.getTableSchema(tableName)
+        return { content: result || `Table '${tableName}' not found or schema unavailable` }
+      }
+      case 'get_questdb_toc': {
+        setStatus(AIOperationStatus.RetrievingDocumentation)
+        const tocContent = getQuestDBTableOfContents()
+        return { content: tocContent }
+      }
+      case 'get_questdb_documentation': {
+        const { category, items } = input || {}
+        if (!category || !items || !Array.isArray(items)) {
+          return { content: 'Error: category and items parameters are required', is_error: true }
+        }
+        setStatus(getStatusFromCategory(category as DocCategory))
+        const documentation = getSpecificDocumentation(category as DocCategory, items)
+        return { content: documentation }
+      }
+      default:
+        return { content: `Unknown tool: ${toolName}`, is_error: true }
+    }
+  } catch (error) {
+    return { content: `Tool execution error: ${error instanceof Error ? error.message : 'Unknown error'}`, is_error: true }
+  }
 }
 
 async function handleToolCalls(
   message: Anthropic.Messages.Message,
   anthropic: Anthropic,
-  schemaClient: SchemaToolsClient,
+  schemaClient: SchemaToolsClient | undefined,
   conversationHistory: any[],
   model: string,
   setStatus: StatusCallback,
@@ -297,102 +480,13 @@ async function handleToolCalls(
 
   for (const toolUse of toolUseBlocks) {
     if ('name' in toolUse) {
-      let result: any
-
-      try {
-        switch (toolUse.name) {
-          case 'get_tables':
-            setStatus(AIOperationStatus.RetrievingTables)
-            if (!schemaClient) {
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: 'Error: Schema access is not granted. This tool is not available.',
-                is_error: true
-              })
-            } else {
-              result = await schemaClient.getTables()
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: JSON.stringify(result, null, 2)
-              })
-            }
-            break
-
-          case 'get_table_schema':
-            setStatus(AIOperationStatus.InvestigatingTableSchema)
-            const tableName = (toolUse.input as any)?.table_name
-            if (!schemaClient) {
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: 'Error: Schema access is not granted. This tool is not available.',
-                is_error: true
-              })
-            } else if (!tableName) {
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: 'Error: table_name parameter is required',
-                is_error: true
-              })
-            } else {
-              result = await schemaClient.getTableSchema(tableName)
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: result || `Table '${tableName}' not found or schema unavailable`
-              })
-            }
-            break
-
-          case 'get_questdb_toc':
-            setStatus(AIOperationStatus.RetrievingDocumentation)
-            const tocContent = getQuestDBTableOfContents()
-            toolResults.push({
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: tocContent
-            })
-            break
-
-          case 'get_questdb_documentation':
-            const { category, items } = (toolUse.input as any) || {}
-            if (!category || !items || !Array.isArray(items)) {
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: 'Error: category and items parameters are required',
-                is_error: true
-              })
-            } else {
-              setStatus(getStatusFromCategory(category as DocCategory))
-              const documentation = getSpecificDocumentation(category as DocCategory, items)
-              toolResults.push({
-                type: 'tool_result' as const,
-                tool_use_id: toolUse.id,
-                content: documentation
-              })
-            }
-            break
-
-          default:
-            toolResults.push({
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: `Unknown tool: ${toolUse.name}`,
-              is_error: true
-            })
-        }
-      } catch (error) {
-        toolResults.push({
-          type: 'tool_result' as const,
-          tool_use_id: toolUse.id,
-          content: `Tool execution error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          is_error: true
-        })
-      }
+      const exec = await executeTool(toolUse.name, (toolUse as any).input, schemaClient, setStatus)
+      toolResults.push({
+        type: 'tool_result' as const,
+        tool_use_id: (toolUse as any).id,
+        content: exec.content,
+        is_error: exec.is_error
+      })
     }
   }
 
@@ -422,6 +516,29 @@ async function handleToolCalls(
   return followUpMessage
 }
 
+const extractOpenAIToolCalls = (response: OpenAI.Responses.Response): { id: string; name: string; arguments: any }[] => {
+  const calls = []
+  for (const item of response.output) {
+    if (item?.type === 'function_call') {
+      const args = typeof item.arguments === 'string' ? safeJsonParse(item.arguments) : (item.arguments || {})
+      calls.push({ id: item.call_id, name: item.name, arguments: args })
+    }
+  }
+  return calls
+}
+
+const getOpenAIText = (response: OpenAI.Responses.Response): { type: 'refusal' | 'text', message: string } => {
+  const out = response.output || []
+  if (out.find((item: any) => item?.type === 'refusal' || item?.type === 'message' && item.content.some((c: any) => c.type === 'refusal'))) {
+    return { type: 'refusal', message: 'The model refused to generate a response for this request.' }
+  }
+  return { type: 'text', message: response.output_text }
+}
+
+const safeJsonParse = (text: string) => {
+  try { return JSON.parse(text) } catch { return {} }
+}
+
 const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback, abortSignal?: AbortSignal): Promise<T | AiAssistantAPIError> => {
   let retries = 0
   while (retries <= MAX_RETRIES) {
@@ -449,6 +566,205 @@ const tryWithRetries = async <T>(fn: () => Promise<T>, setStatus: StatusCallback
   return {
     type: 'unknown',
     message: `Failed to get response after ${retries} retries`
+  }
+}
+
+interface OpenAIFlowConfig<T> {
+  systemInstructions: string
+  initialUserContent: string
+  responseFormat: { format: any }
+  postProcess?: (formatted: T) => any
+}
+
+interface AnthropicFlowConfig<T> {
+  systemInstructions: string
+  initialUserContent: string
+  formattingPrompt: string
+  postProcess?: (formatted: T) => any
+}
+
+interface ExecuteAnthropicFlowParams<T> {
+  anthropic: Anthropic,
+  model: string,
+  config: AnthropicFlowConfig<T>
+  settings: AiAssistantSettings
+  schemaClient?: SchemaToolsClient,
+  setStatus: StatusCallback
+  abortSignal?: AbortSignal
+}
+
+interface ExecuteOpenAIFlowParams<T> {
+  openai: OpenAI,
+  model: string,
+  config: OpenAIFlowConfig<T>
+  settings: AiAssistantSettings
+  schemaClient?: SchemaToolsClient,
+  setStatus: StatusCallback
+  abortSignal?: AbortSignal
+} 
+
+const executeOpenAIFlow = async <T>({
+  openai,
+  model,
+  config,
+  settings,
+  schemaClient,
+  setStatus,
+  abortSignal,
+}: ExecuteOpenAIFlowParams<T>): Promise<T | AiAssistantAPIError> => {
+  let input: OpenAI.Responses.ResponseInput = [
+    {
+      role: 'user',
+      content: config.initialUserContent
+    }
+  ]
+  
+  const tools = settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS
+  let lastResponse = await openai.responses.create({
+    model: model as any,
+    instructions: config.systemInstructions,
+    input,
+    tools: toOpenAIFunctions(tools) as any,
+    text: config.responseFormat,
+  } as any)
+  input = [ ...input, ...lastResponse.output ]
+
+  while (true) {
+    if (abortSignal?.aborted) {
+      return {
+        type: 'aborted',
+        message: 'Operation was cancelled'
+      } as AiAssistantAPIError
+    }
+
+    const toolCalls = extractOpenAIToolCalls(lastResponse)
+    if (!toolCalls.length) break
+    const tool_outputs = [] as any[]
+    for (const tc of toolCalls) {
+      const exec = await executeTool(tc.name, tc.arguments, schemaClient, setStatus)
+      tool_outputs.push({ type: 'function_call_output', call_id: tc.id, output: exec.content })
+    }
+    input = [ ...input, ...tool_outputs ]
+    lastResponse = await openai.responses.create({
+      model: model as any,
+      instructions: config.systemInstructions,
+      input,
+      tools: toOpenAIFunctions(tools) as any,
+      text: config.responseFormat,
+    } as any)
+    input = [ ...input, ...lastResponse.output ]
+  }
+
+  if (abortSignal?.aborted) {
+    return {
+      type: 'aborted',
+      message: 'Operation was cancelled'
+    } as AiAssistantAPIError
+  }
+
+  const text = getOpenAIText(lastResponse)
+  if (text.type === 'refusal') {
+    return {
+      type: 'unknown',
+      message: text.message
+    } as AiAssistantAPIError
+  }
+
+  const rawOutput = text.message
+  try {
+    const json = JSON.parse(rawOutput)
+    setStatus(null)
+    if (config.postProcess) {
+      return config.postProcess(json) as T
+    }
+    return json as T
+  } catch (error) {
+    setStatus(null)
+    return {
+      type: 'unknown',
+      message: 'Failed to parse assistant response.'
+    } as AiAssistantAPIError
+  }
+}
+
+const executeAnthropicFlow = async <T>({
+  anthropic,
+  model,
+  config,
+  settings,
+  schemaClient,
+  setStatus,
+  abortSignal,
+}: ExecuteAnthropicFlowParams<T>): Promise<T | AiAssistantAPIError> => {
+  const initialMessages = [
+    { role: 'user' as const, content: config.initialUserContent }
+  ]
+
+  const message = await createAnthropicMessage(anthropic, {
+    model: model,
+    system: config.systemInstructions,
+    tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
+    messages: initialMessages,
+    temperature: 0.3,
+  })
+
+  const response = message.stop_reason === 'tool_use'
+    ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
+    : message
+
+  const responseError = response as AiAssistantAPIError
+  if (responseError.type === 'aborted') {
+    return responseError
+  }
+
+  if (abortSignal?.aborted) {
+    return {
+      type: 'aborted',
+      message: 'Operation was cancelled'
+    } as AiAssistantAPIError
+  }
+  setStatus(AIOperationStatus.FormattingResponse)
+
+  const responseMessage = response as Anthropic.Messages.Message
+  const formattingResponse = await createAnthropicMessage(anthropic, {
+    model: settings.model,
+    messages: [
+      { role: 'assistant', content: responseMessage.content },
+      { role: 'user', content: config.formattingPrompt },
+      { role: 'assistant', content: '{' }
+    ],
+    temperature: 0.3,
+  })
+
+  const fullContent = formattingResponse.content.reduce((acc, block) => {
+    if (block.type === 'text' && 'text' in block) {
+      acc += block.text
+    }
+    return acc
+  }, '{')
+
+  console.log({ fullContent })
+  console.log({  json: JSON.parse(fullContent) })
+
+  try {
+    if (abortSignal?.aborted) {
+      return {
+        type: 'aborted',
+        message: 'Operation was cancelled'
+      } as AiAssistantAPIError
+    }
+    const json = JSON.parse(fullContent)
+    setStatus(null)
+    if (config.postProcess) {
+      return config.postProcess(json) as T
+    }
+    return json as T
+  } catch (error) {
+    setStatus(null)
+    return {
+      type: 'unknown',
+      message: 'Failed to parse assistant response.'
+    } as AiAssistantAPIError
   }
 }
 
@@ -482,100 +798,40 @@ export const explainQuery = async ({
   setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
-    const anthropic = new Anthropic({
-      apiKey: settings.apiKey,
-      dangerouslyAllowBrowser: true
-    })
+    const clients = createProviderClients(settings)
     const content = query.selection
-      ? `Explain this portion of the query:\n\n\`\`\`sql\n${query.selection.queryText}\n\`\`\` in this query:\n\n\`\`\`sql\n${query.query}\n\`\`\` with 2-4 sentences`
+      ? `Explain this portion of the query:\n\n\`\`\`sql\n${query.selection.queryText}\n\`\`\` within this query:\n\n\`\`\`sql\n${query.query}\n\`\`\` with 2-4 sentences`
       : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${query.query}\n\`\`\``
 
-    const initialMessages = [
-      {
-        role: 'user' as const,
-        content
-      }
-    ]
-
-    const message = await createAnthropicMessage(anthropic, {
-      model: settings.model,
-      system: getExplainQueryPrompt(settings.grantSchemaAccess),
-      tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
-      messages: initialMessages,
-      temperature: 0.3,
-    })
-
-    const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
-      : message
-
-    const responseError = response as AiAssistantAPIError
-    if (responseError.type === 'aborted') {
-      return responseError
-    }
-
-    const responseMessage = response as Anthropic.Messages.Message
-    const explanation = responseMessage.content
-      .filter(block => block.type === 'text')
-      .map(block => {
-        if ('text' in block) {
-          return block.text
-        }
-        return ''
+    if (clients.provider === 'openai') {
+      return await executeOpenAIFlow<{ explanation: string }>({
+        openai: clients.openai,
+        model: settings.model,
+        config: {
+          systemInstructions: getExplainQueryPrompt(settings.grantSchemaAccess),
+          initialUserContent: content,
+          responseFormat: ExplainFormat,
+        },
+        settings,
+        schemaClient,
+        setStatus,
+        abortSignal
       })
-      .join('\n')
-      .trim()
-
-    if (abortSignal?.aborted) {
-      return {
-        type: 'aborted',
-        message: 'Operation was cancelled'
-      } as AiAssistantAPIError
     }
-    setStatus(AIOperationStatus.FormattingResponse)
 
-    const formattingResponse = await createAnthropicMessage(anthropic, {
+    return await executeAnthropicFlow<{ explanation: string }>({
+      anthropic: clients.anthropic,
       model: settings.model,
-      messages: [
-        {
-          role: 'assistant' as const,
-          content: explanation
-        },
-        {
-          role: 'user' as const,
-          content: 'Return a JSON string with the following structure:\n{ "explanation": "The explanation of the query" }'
-        },
-        {
-          role: 'assistant' as const,
-          content: '{'
-        },
-      ],
+      config: {
+        systemInstructions: getExplainQueryPrompt(settings.grantSchemaAccess),
+        initialUserContent: content,
+        formattingPrompt:  'Please give the 2-4 sentences summary of this query explanation in format { explanation: "The summarized explanation" }',
+      },
+      settings,
+      schemaClient,
+      setStatus,
+      abortSignal
     })
-
-    const fullContent = formattingResponse.content.reduce((acc, block) => {
-      if (block.type === 'text' && 'text' in block) {
-        acc += block.text
-      }
-      return acc
-    }, '{')
-
-    try {
-      if (abortSignal?.aborted) {
-        return {
-          type: 'aborted',
-          message: 'Operation was cancelled'
-        } as AiAssistantAPIError
-      }
-      const json = JSON.parse(fullContent)
-      setStatus(null)
-      return { explanation: json.explanation }
-    } catch (error) {
-      setStatus(null)
-      return {
-        type: 'unknown',
-        message: 'Failed to parse assistant response.'
-      } as AiAssistantAPIError
-    }
   }, setStatus, abortSignal)
 }
 
@@ -609,97 +865,46 @@ export const generateSQL = async ({
   setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
-    const anthropic = new Anthropic({
-      apiKey: settings.apiKey,
-      dangerouslyAllowBrowser: true
-    })
+    const clients = createProviderClients(settings)
+    const initialUserContent = `For the following description, generate the corresponding QuestDB SQL query and 2-4 sentences explanation:\n\n\`\`\`\n${description}\n\`\`\``
+    const postProcess = (formatted: { sql: string; explanation: string }) => {
+      if (!formatted || !formatted.sql) {
+        return { sql: '', explanation: formatted?.explanation || '' }
+      }
+      return { sql: normalizeSql(formatted.sql), explanation: formatted.explanation || '' }
+    }
 
-    const initialMessages = [
-      {
-        role: 'user' as const,
-        content: description
+    if (clients.provider === 'openai') {
+      return await executeOpenAIFlow<{ sql: string; explanation: string }>({
+        openai: clients.openai,
+        model: settings.model,
+        config: {
+          systemInstructions: getGenerateSQLPrompt(settings.grantSchemaAccess),
+          initialUserContent,
+          responseFormat: GeneratedSQLFormat,
+          postProcess
+        },
+        settings,
+        schemaClient,
+        setStatus,
+        abortSignal
+      })
+    }
+
+    return await executeAnthropicFlow<{ sql: string; explanation: string }>({
+      anthropic: clients.anthropic,
+      model: settings.model,
+      config: {
+        systemInstructions: getGenerateSQLPrompt(settings.grantSchemaAccess),
+        initialUserContent,
+        formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }',
+        postProcess
       },
-    ]
-
-    const message = await createAnthropicMessage(anthropic, {
-      model: settings.model,
-      system: getGenerateSQLPrompt(settings.grantSchemaAccess),
-      tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
-      messages: initialMessages,
-      temperature: 0.2,
+      settings,
+      schemaClient,
+      setStatus,
+      abortSignal
     })
-
-    const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
-      : message
-    
-    const responseError = response as AiAssistantAPIError
-    if (responseError.type === 'aborted') {
-      return responseError
-    }
-
-    const responseMessage = response as Anthropic.Messages.Message
-    
-    if (abortSignal?.aborted) {
-      return {
-        type: 'aborted',
-        message: 'Operation was cancelled'
-      } as AiAssistantAPIError
-    }
-    setStatus(AIOperationStatus.FormattingResponse)
-    
-    const formattingResponse = await createAnthropicMessage(anthropic, {
-      model: settings.model,
-      messages: [
-        {
-          role: 'assistant' as const,
-          content: responseMessage.content
-        },
-        {
-          role: 'user' as const,
-          content: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }'
-        },
-        {
-          role: 'assistant' as const,
-          content: '{'
-        }
-      ],
-    })
-    
-    const fullContent = formattingResponse.content.reduce((acc, block) => {
-      if (block.type === 'text' && 'text' in block) {
-        acc += block.text
-      }
-      return acc
-    }, '{')
-
-    try {
-      if (abortSignal?.aborted) {
-        return {
-          type: 'aborted',
-          message: 'Operation was cancelled'
-        } as AiAssistantAPIError
-      }
-      setStatus(null)
-      const json = JSON.parse(fullContent)
-      let sql = formatSql(json.sql) || ''
-      if (sql) {
-        sql = sql.trim()
-        if (!sql.endsWith(';')) {
-          sql = sql + ';'
-        }
-      }
-      return {
-        sql,
-        explanation: json.explanation || ''
-      }
-    } catch (error) {
-      setStatus(null)
-      return {
-        type: 'unknown',
-        message: 'Failed to parse assistant response.'
-      } as AiAssistantAPIError
-    }
   }, setStatus, abortSignal)
 }
 
@@ -737,15 +942,8 @@ export const fixQuery = async ({
   setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
-    const anthropic = new Anthropic({
-      apiKey: settings.apiKey,
-      dangerouslyAllowBrowser: true
-    })
-
-    const initialMessages = [
-      {
-        role: 'user' as const,
-        content: `SQL Query:
+    const clients = createProviderClients(settings)
+    const initialUserContent = `SQL Query:
 \`\`\`sql
 ${query}
 \`\`\`
@@ -755,82 +953,135 @@ Error Message:
 ${errorMessage}
 \`\`\`
 
-Analyze the error and fix the query if possible, otherwise provide an explanation why it was failed.
+Analyze the error and return the fixed SQL query if possible, always provide a 2-4 sentences explanation why it was failed and how it was fixed.
 ${word ? `The error occurred at word: ${word}` : ''}`
-      }
-    ]
+    const postProcess = (formatted: { explanation: string, sql?: string }) => {
+      return { ...(formatted?.sql ? { sql: formatSql(formatted.sql) } : {}), explanation: formatted?.explanation || '' }
+    }
 
-    const message = await createAnthropicMessage(anthropic, {
+    if (clients.provider === 'openai') {
+      return await executeOpenAIFlow<{ explanation: string, sql?: string }>({
+        openai: clients.openai,
+        model: settings.model,
+        config: {
+          systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
+          initialUserContent,
+          responseFormat: FixSQLFormat,
+          postProcess 
+        },
+        settings,
+        schemaClient,
+        setStatus,
+        abortSignal
+      })
+    }
+
+    return await executeAnthropicFlow<{ explanation: string, sql?: string }>({
+      anthropic: clients.anthropic,
       model: settings.model,
-      system: getFixQueryPrompt(settings.grantSchemaAccess),
-      tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
-      messages: initialMessages,
-      temperature: 0.2,
+      config: {
+        systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
+        initialUserContent,
+        formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }',
+        postProcess
+      },
+      settings,
+      schemaClient,
+      setStatus,
+      abortSignal
     })
+  }, setStatus, abortSignal)
+}
 
-    const response = settings.grantSchemaAccess && schemaClient && message.stop_reason === 'tool_use'
-      ? await handleToolCalls(message, anthropic, schemaClient, initialMessages, settings.model, setStatus, abortSignal)
-      : message
-    
-    const responseError = response as AiAssistantAPIError
-    if (responseError.type === 'aborted') {
-      return responseError
+export const explainTableSchema = async ({
+  tableName,
+  schema,
+  isMatView,
+  settings,
+  setStatus,
+}: {
+  tableName: string,
+  schema: string,
+  isMatView: boolean,
+  settings: AiAssistantSettings,
+  setStatus: StatusCallback,
+}): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
+  if (!settings.apiKey) {
+    return {
+      type: 'invalid_key',
+      message: 'API key is missing'
+    }
+  }
+  if (!tableName || !schema) {
+    return {
+      type: 'unknown',
+      message: 'Cannot find schema for the table'
+    }
+  }
+
+  await handleRateLimit()
+  setStatus(AIOperationStatus.Processing)
+
+  return tryWithRetries(async () => {
+    const clients = createProviderClients(settings)
+
+    if (clients.provider === 'openai') {
+      const prompt = getExplainSchemaPrompt(tableName, schema, isMatView)
+      
+      const formattingOutput = await clients.openai.responses.parse({
+        model: settings.model,
+        instructions: getExplainSchemaPrompt(tableName, schema, isMatView),
+        input: [
+          { role: 'user', content: prompt }
+        ],
+        text: ExplainTableSchemaFormat,
+      })
+      
+      const formatted = formattingOutput.output_parsed as TableSchemaExplanation | null
+      setStatus(null)
+      if (!formatted) {
+        return {
+          type: 'unknown',
+          message: 'Failed to parse assistant response.'
+        } as AiAssistantAPIError
+      }
+      return { 
+        explanation: formatted.explanation || '', 
+        columns: formatted.columns || [], 
+        storage_details: formatted.storage_details || [] 
+      }
     }
 
-    const responseMessage = response as Anthropic.Messages.Message
-    
-    if (abortSignal?.aborted) {
-      return {
-        type: 'aborted',
-        message: 'Operation was cancelled'
-      } as AiAssistantAPIError
-    }
-    setStatus(AIOperationStatus.FormattingResponse)
-    
-    const formattingResponse = await createAnthropicMessage(anthropic, {
+    const anthropic = clients.anthropic
+    const message = await createAnthropicMessage(anthropic, {
       model: settings.model,
       messages: [
         {
-          role: 'assistant' as const,
-          content: responseMessage.content
-        },
-        {
           role: 'user' as const,
-          content: 'If the query needs to be fixed, return a JSON string with the following structure:\n{"sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }'
+          content: getExplainSchemaPrompt(tableName, schema, isMatView)
         },
         {
           role: 'assistant' as const,
-          content: '{'
+          content: '{"'
         }
       ],
+      temperature: 0.3,
     })
-    
-    const fullContent = formattingResponse.content.reduce((acc, block) => {
+
+    const fullContent = '{"' + message.content.reduce((acc, block) => {
       if (block.type === 'text' && 'text' in block) {
         acc += block.text
       }
       return acc
-    }, '{')
+    }, '')
 
     try {
-      if (abortSignal?.aborted) {
-        return {
-          type: 'aborted',
-          message: 'Operation was cancelled'
-        } as AiAssistantAPIError
-      }
-      setStatus(null)
       const json = JSON.parse(fullContent)
-      let sql = json.sql
-      if (sql) {
-        sql = sql.trim()
-        if (sql.endsWith(';')) {
-          sql = sql.slice(0, -1)
-        }
-      }
-      return {
-        ...(sql ? { sql: formatSql(sql) } : {}),
-        explanation: json.explanation || ''
+      setStatus(null)
+      return { 
+        explanation: json.explanation || '',
+        columns: json.columns || [],
+        storage_details: json.storage_details || []
       }
     } catch (error) {
       setStatus(null)
@@ -839,7 +1090,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
         message: 'Failed to parse assistant response.'
       } as AiAssistantAPIError
     }
-  }, setStatus, abortSignal)
+  }, setStatus)
 }
 
 class RefusalError extends Error {
@@ -868,6 +1119,9 @@ async function createAnthropicMessage(
   
   if (message.stop_reason === 'refusal') {
     throw new RefusalError('The model refused to generate a response for this request.')
+  }
+  if (message.stop_reason === 'max_tokens') {
+    throw new MaxTokensError('The response exceeded the maximum token limit. Please try generating shorter queries or increase token limits.')
   }
   
   return message
@@ -922,87 +1176,18 @@ function handleAiAssistantError(error: any): AiAssistantAPIError {
     }
   }
 
+  if (error instanceof OpenAI.APIError) {
+    return {
+      type: 'unknown',
+      message: `OpenAI API error: ${error.message}`,
+    }
+  }
+
   return {
     type: 'unknown',
     message: 'An unexpected error occurred. Please try again.',
     details: error
   }
-}
-
-export const explainTableSchema = async ({
-  tableName,
-  schema,
-  isMatView,
-  settings,
-  setStatus,
-}: {
-  tableName: string,
-  schema: string,
-  isMatView: boolean,
-  settings: AiAssistantSettings,
-  setStatus: StatusCallback,
-}): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
-  if (!settings.apiKey || !schema) {
-    return {
-      type: 'invalid_key',
-      message: 'API key or schema is missing'
-    }
-  }
-
-  if (!settings.grantSchemaAccess) {
-    return {
-      type: 'unknown',
-      message: 'Schema access is not granted to the AI Assistant'
-    }
-  }
-
-  await handleRateLimit()
-  setStatus(AIOperationStatus.Processing)
-
-  return tryWithRetries(async () => {
-    const anthropic = new Anthropic({
-      apiKey: settings.apiKey,
-      dangerouslyAllowBrowser: true
-    })
-
-    const message = await createAnthropicMessage(anthropic, {
-      model: settings.model,
-      messages: [
-        {
-          role: 'user' as const,
-          content: getExplainSchemaPrompt(tableName, schema, isMatView)
-        },
-        {
-          role: 'assistant' as const,
-          content: '{"'
-        }
-      ],
-      temperature: 0.3,
-    })
-
-    const fullContent = '{"' + message.content.reduce((acc, block) => {
-      if (block.type === 'text' && 'text' in block) {
-        acc += block.text
-      }
-      return acc
-    }, '')
-
-    try {
-      const json = JSON.parse(fullContent)
-      setStatus(null)
-      return { 
-        explanation: json.explanation || '',
-        columns: json.columns || [],
-        storage_details: json.storage_details || []
-      }
-    } catch (error) {
-      setStatus(null)
-      return {
-        type: 'unknown',
-        message: 'Failed to parse assistant response.'
-      } as AiAssistantAPIError
-    }
-  }, setStatus)
 }
 
 export const formatExplanationAsComment = (explanation: string, prefix: string = 'AI Explanation'): string => {
@@ -1070,21 +1255,31 @@ export const formatExplanationAsComment = (explanation: string, prefix: string =
 
 export const testApiKey = async (apiKey: string, model: string): Promise<{ valid: boolean; error?: string }> => {
   try {
-    const anthropic = new Anthropic({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true
-    })
-
-    await createAnthropicMessage(anthropic, {
-      model,
-      messages: [
-        {
-          role: 'user',
-          content: 'Test'
-        }
-      ],
-      max_tokens: 10
-    })
+    // Infer provider from model choice
+    if (inferProviderFromModel(model) === 'anthropic') {
+      const anthropic = new Anthropic({
+        apiKey: apiKey,
+        dangerouslyAllowBrowser: true
+      })
+  
+      await createAnthropicMessage(anthropic, {
+        model,
+        messages: [
+          {
+            role: 'user',
+            content: 'Test'
+          }
+        ],
+        max_tokens: 10
+      })
+    } else {
+      const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true })
+      await openai.responses.create({
+        model: model,
+        input: [ { role: 'user', content: 'Test' } ],
+        max_output_tokens: 16
+      })
+    }
 
     return { valid: true }
   } catch (error) {
@@ -1099,6 +1294,14 @@ export const testApiKey = async (apiKey: string, model: string): Promise<{ valid
       return { 
         valid: true
       }
+    }
+
+    const status = (error as any)?.status || (error as any)?.error?.status
+    if (status === 401) {
+      return { valid: false, error: 'Invalid API key' }
+    }
+    if (status === 429) {
+      return { valid: true }
     }
 
     return { 

@@ -1,5 +1,5 @@
 // Auto-generated documentation data for operators
-// Generated on 2025-09-18T21:16:04.082Z
+// Generated on 2025-09-21T12:37:52.978Z
 
 export interface DocFile {
   path: string

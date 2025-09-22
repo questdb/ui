@@ -1,5 +1,5 @@
 // Auto-generated documentation data for functions
-// Generated on 2025-09-18T21:16:04.078Z
+// Generated on 2025-09-21T12:37:52.974Z
 
 export interface DocFile {
   path: string

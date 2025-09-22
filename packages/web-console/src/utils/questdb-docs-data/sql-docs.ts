@@ -1,5 +1,5 @@
 // Auto-generated documentation data for sql
-// Generated on 2025-09-18T21:16:04.091Z
+// Generated on 2025-09-21T12:37:52.986Z
 
 export interface DocFile {
   path: string

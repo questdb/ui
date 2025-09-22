@@ -43,6 +43,7 @@ const StyledInput = styled(Input)<{ $hasError?: boolean }>`
   background: ${({ theme }) => theme.color.selection};
   border: 1px solid ${({ theme, $hasError }) => $hasError ? theme.color.red : theme.color.gray1};
   border-radius: 0.4rem;
+  padding-right: 3.5rem;
   color: ${({ theme }) => theme.color.foreground};
 
   &::placeholder {
@@ -60,7 +61,7 @@ const StyledInput = styled(Input)<{ $hasError?: boolean }>`
 const ActionButton = styled(Button)`
   position: absolute;
   top: 50%;
-  height: 3rem;
+  height: 2.8rem;
   transform: translateY(-50%);
   padding: 0 0.75rem;
   right: 0.1rem;
@@ -140,14 +141,28 @@ const DisclaimerText = styled(Text)`
   line-height: 1.5;
 `
 
-const MODEL_OPTIONS = [
-  { label: "Claude Opus 4.1", value: "claude-opus-4-1" },
-  { label: "Claude Opus 4.0", value: "claude-opus-4-0" },
-  { label: "Claude Sonnet 4.0", value: "claude-sonnet-4-0" },
-  { label: "Claude 3.7 Sonnet (Latest)", value: "claude-3-7-sonnet-latest" },
-  { label: "Claude 3.5 Haiku (Latest)", value: "claude-3-5-haiku-latest" },
-  { label: "Claude 3.5 Sonnet (Latest)", value: "claude-3-5-sonnet-latest" },
+export type ModelOption = {
+  label: string
+  value: string
+  provider: 'anthropic' | 'openai'
+}
+
+export const MODEL_OPTIONS: ModelOption[] = [
+  { label: "Claude Opus 4.1", value: "claude-opus-4-1", provider: 'anthropic' },
+  { label: "Claude Opus 4.0", value: "claude-opus-4-0", provider: 'anthropic' },
+  { label: "Claude Sonnet 4.0", value: "claude-sonnet-4-0", provider: 'anthropic' },
+  { label: "Claude 3.7 Sonnet (Latest)", value: "claude-3-7-sonnet-latest", provider: 'anthropic' },
+  { label: "Claude 3.5 Haiku (Latest)", value: "claude-3-5-haiku-latest", provider: 'anthropic' },
+  { label: "Claude 3.5 Sonnet (Latest)", value: "claude-3-5-sonnet-latest", provider: 'anthropic' },
+  { label: "GPT 5", value: "gpt-5", provider: 'openai' },
+  { label: "GPT 5 Mini", value: "gpt-5-mini", provider: 'openai' },
+  { label: "GPT 5 Nano", value: "gpt-5-nano", provider: 'openai' },
+  { label: "GPT 4.1", value: "gpt-4.1", provider: 'openai' },
 ]
+
+const providerForModel = (model: ModelOption['value']): 'anthropic' | 'openai' => {
+    return MODEL_OPTIONS.find(m => m.value === model)!.provider
+  }
 
 export const SetupAIAssistant = () => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
@@ -251,14 +266,28 @@ export const SetupAIAssistant = () => {
       <Wrapper>
         <StyledForm onSubmit={handleSave}>
           <FormGroup>
+            <FormLabel htmlFor="model-select">
+              Model
+            </FormLabel>
+            <StyledSelect
+              id="model-select"
+              name="model-select"
+              data-hook="anthropic-model-select"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              options={MODEL_OPTIONS}
+            />
+          </FormGroup>
+
+          <FormGroup>
             <FormLabel>
-              Anthropic API Key
+              {providerForModel(selectedModel) === 'anthropic' ? 'Anthropic API Key' : 'OpenAI API Key'}
             </FormLabel>
             
             <InputWrapper>
               <StyledInput
-                id="anthropic-api-key-input"
-                data-hook="anthropic-api-key-input"
+                id="ai-provider-api-key-input"
+                data-hook="ai-provider-api-key-input"
                 ref={inputRef}
                 type={showApiKey ? "text" : "password"}
                 value={inputValue}
@@ -272,7 +301,7 @@ export const SetupAIAssistant = () => {
                 type="button"
                 skin="secondary"
                 onClick={() => setShowApiKey(!showApiKey)}
-                data-hook="anthropic-api-key-toggle"
+                data-hook="ai-provider-api-key-toggle"
               >
                 {showApiKey ? <EyeOff size="16px" /> : <Eye size="16px" />}
               </ActionButton>
@@ -280,32 +309,18 @@ export const SetupAIAssistant = () => {
             {error && <ErrorText>{error}</ErrorText>}
             
             <DisclaimerText color="gray2">
-              Enter your Anthropic API key to enable AI Assistant. 
+              {providerForModel(selectedModel) === 'anthropic' ? 'Enter your Anthropic API key to enable AI Assistant.' : 'Enter your OpenAI API key to enable AI Assistant.'} 
               Get your API key from{" "}
               <a 
-                href="https://console.anthropic.com/settings/keys" 
+                href={providerForModel(selectedModel) === 'anthropic' ? "https://console.anthropic.com/settings/keys" : "https://platform.openai.com/api-keys"}
                 target="_blank" 
                 rel="noopener noreferrer"
                 style={{ color: "inherit", textDecoration: "underline" }}
               >
-                Anthropic Console
+                {providerForModel(selectedModel) === 'anthropic' ? 'Anthropic' : 'OpenAI'}
               </a>.
               Your key is stored locally in your browser and never sent to QuestDB servers.
             </DisclaimerText>
-          </FormGroup>
-
-          <FormGroup>
-            <FormLabel htmlFor="model-select">
-              Model
-            </FormLabel>
-            <StyledSelect
-              id="model-select"
-              name="model-select"
-              data-hook="anthropic-model-select"
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              options={MODEL_OPTIONS}
-            />
           </FormGroup>
 
           <FormGroup>
