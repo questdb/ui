@@ -17,7 +17,7 @@ import {
 export interface AiAssistantAPIError {
   type: 'rate_limit' | 'invalid_key' | 'network' | 'unknown' | 'aborted'
   message: string
-  details?: any
+  details?: string
 }
 
 export interface AiAssistantExplanation {
@@ -236,16 +236,17 @@ const toOpenAIFunctions = (tools: typeof ALL_TOOLS) => {
     name: t.name,
     description: t.description,
     parameters: t.input_schema,
-  }))
+    strict: true,
+  })) as OpenAI.Responses.Tool[]
 }
 
-const normalizeSql = (sql: string) => {
+const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
   if (!sql) return ''
   let result = sql.trim()
   if (result.endsWith(';')) {
     result = result.slice(0, -1)
   }
-  return formatSql(result) + ';'
+  return formatSql(result) + (insertSemicolon ? ';' : '')
 }
 
 export function isAiAssistantError(response: AiAssistantAPIError | AiAssistantExplanation | GeneratedSQL | Partial<GeneratedSQL>)  {
@@ -291,30 +292,28 @@ export function createSchemaClient(
   }
 }
 
-const getExplainQueryPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query, explain what it does in clear, concise plain English.
+const DOCS_INSTRUCTION_ANTHROPIC = `
+CRITICAL: Always follow this two-phase documentation approach:
+1. Use get_questdb_toc to see available functions/keywords/operators
+2. Use get_questdb_documentation to get details for specific items you'll use`
+
+const DOCS_INSTRUCTION_OPENAI = `
+Use the file_search tool to consult QuestDB documentation from the attached knowledge base. Prefer citing specific functions, operators, and SQL keywords. Include brief citations if available.`
+
+const getExplainQueryPrompt = (provider: 'openai' | 'anthropic') => {
+  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query, explain what it does in clear, concise plain English.
 
 Focus on the business logic and what the query achieves, not the SQL syntax itself. Pay special attention to QuestDB-specific features such as:
 - Time-series operations (SAMPLE BY, LATEST ON, designated timestamp columns)
 - Time-based filtering and aggregations
 - Real-time data ingestion patterns
 - Performance optimizations specific to time-series data
+`
+  return provider === 'openai' ? base + DOCS_INSTRUCTION_OPENAI : base + DOCS_INSTRUCTION_ANTHROPIC
+}
 
-You have access to tools that can help you understand QuestDB features:
-- get_questdb_toc: Get a table of contents of all QuestDB documentation (USE THIS FIRST!)
-- get_questdb_documentation: Get specific documentation for functions, operators, or SQL keywords
-${grantSchemaAccess ? `- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table` : ''}
-
-Refer to QuestDB documentation about functions, operators
-IMPORTANT: For documentation, use a two-phase approach:
-1. First use get_questdb_toc to see what's available
-2. Then use get_questdb_documentation to get specific items you need
-
-Example: To understand SAMPLE BY:
-- First: get_questdb_toc → find "sample_by" in SQL section
-- Then: get_questdb_documentation(category="sql", items=["sample_by"])`
-
-const getGenerateSQLPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. 
+const getGenerateSQLPrompt = (provider: 'openai' | 'anthropic') => {
+  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. 
 When given a natural language description, generate the corresponding QuestDB SQL query.
 
 Important guidelines:
@@ -323,23 +322,14 @@ Important guidelines:
 - Follow QuestDB best practices for performance referring to the documentation
 - Use proper timestamp handling for time-series data
 - Use correct data types and functions specific to QuestDB referring to the documentation. Do not use any word that is not in the documentation.
-
-You have access to tools that can help you understand QuestDB features:
-- get_questdb_toc: Get a table of contents of all QuestDB documentation
-- get_questdb_documentation: Get specific documentation for functions, operators, or SQL keywords
-${grantSchemaAccess ? `- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table` : ''}
-
-CRITICAL: Always follow this two-phase documentation approach:
-1. Use get_questdb_toc to see available functions/keywords/operators
-2. Use get_questdb_documentation to get details for specific items you'll use
-
-Example workflow:
-- Need a time function? → get_questdb_toc → find relevant functions → get_questdb_documentation(category="functions", items=["dateadd", "datediff"])
-- Need SAMPLE BY syntax? → get_questdb_documentation(category="sql", items=["sample_by"])
 `
+  const openaiInstruction = `
+Use the file_search tool to consult QuestDB documentation from the attached knowledge base to ensure correctness, and cite sources if available.`
+  return provider === 'openai' ? base + openaiInstruction : base + DOCS_INSTRUCTION_ANTHROPIC
+}
 
-const getFixQueryPrompt = (grantSchemaAccess: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
+const getFixQueryPrompt = (provider: 'openai' | 'anthropic') => {
+  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
 When given a QuestDB SQL query with an error, fix the query to resolve the error.
 
 Important guidelines:
@@ -353,20 +343,11 @@ Important guidelines:
    - Data type mismatches
    - Missing quotes around string literals
    - Incorrect function usage
-
-You have access to tools that can help you understand QuestDB features:
-- get_questdb_toc: Get a table of contents of all QuestDB documentation
-- get_questdb_documentation: Get specific documentation for functions, operators, or SQL keywords
-${grantSchemaAccess ? `- get_tables: Get a list of all tables and materialized views
-- get_table_schema: Get the full DDL schema for a specific table` : ''}
-
-Do not use any function, operator, or SQL keyword that is not in the documentation.
-When fixing queries with errors:
-1. If error mentions unknown function/keyword → use get_questdb_toc to check available options
-2. Get documentation only for the specific item causing the error
-
-Example: "Unknown function 'date_diff'" → get_questdb_toc → see it's actually "datediff" → get_questdb_documentation(category="functions", items=["datediff"])
 `
+  const openaiInstruction = `
+Use the file_search tool to consult QuestDB documentation from the attached knowledge base. Provide brief citations when applicable.`
+  return provider === 'openai' ? base + openaiInstruction : base + DOCS_INSTRUCTION_ANTHROPIC
+}
 
 const getExplainSchemaPrompt = (tableName: string, schema: string, isMatView: boolean) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
 Briefly explain the following ${isMatView ? 'materialized view' : 'table'} schema in detail. Include:
@@ -480,10 +461,10 @@ async function handleToolCalls(
 
   for (const toolUse of toolUseBlocks) {
     if ('name' in toolUse) {
-      const exec = await executeTool(toolUse.name, (toolUse as any).input, schemaClient, setStatus)
+      const exec = await executeTool(toolUse.name, toolUse.input, schemaClient, setStatus)
       toolResults.push({
         type: 'tool_result' as const,
-        tool_use_id: (toolUse as any).id,
+        tool_use_id: toolUse.id,
         content: exec.content,
         is_error: exec.is_error
       })
@@ -603,6 +584,65 @@ interface ExecuteOpenAIFlowParams<T> {
   abortSignal?: AbortSignal
 } 
 
+const VECTOR_STORE_NAME = 'vs_qdb_ai_assistant'
+
+const getVectorStore = async (openai: OpenAI) => {
+  let storedId = window.localStorage.getItem(VECTOR_STORE_NAME)
+  let vectorStore: OpenAI.VectorStores.VectorStore | null = null
+  if (storedId) {
+    try {
+      vectorStore = await openai.vectorStores.retrieve(storedId)
+      if (vectorStore.status === 'expired') {
+        await openai.vectorStores.delete(vectorStore.id)
+        vectorStore = null
+      }
+    } catch (error) {
+      if ((error as any).status === 404) {
+        // Vector store does not exist
+      } else {
+        throw error
+      }
+    }
+  }
+  if (!vectorStore) {
+    vectorStore = await openai.vectorStores.create({ name: VECTOR_STORE_NAME })
+  }
+  window.localStorage.setItem(VECTOR_STORE_NAME, vectorStore.id)
+
+  const webConsoleVersion = process.env.WEB_CONSOLE_VERSION || 'dev'
+  const files = await openai.vectorStores.files.list(vectorStore.id, { limit: 1 })
+  const version = files.data.length > 0 ? files.data[0].attributes?.version : null
+  if (version === webConsoleVersion) {
+    return { id: vectorStore.id }
+  }
+
+  const response = await fetch('/assets/reference-full.md')
+  const blob = await response.blob()
+  const file = new File([blob], 'reference-full.md', { type: 'text/markdown' })
+  const createdFile = await openai.files.create({file, purpose: 'assistants' })
+
+  await openai.vectorStores.files.create(
+    vectorStore.id,
+    { file_id: createdFile.id, attributes: { version: webConsoleVersion } }
+  )
+  let completed = false
+  while (!completed) {
+    const files = await openai.vectorStores.files.list(vectorStore.id, { limit: 1 })
+    const file = files.data[0]
+    if (file.status === 'completed') {
+      completed = true
+    } else if (file.status === 'failed') {
+      throw new Error('Failed to upload file to vector store')
+    } else if (file.status === "cancelled") {
+      throw new Error('File upload to vector store was cancelled')
+    } else if (file.status === "in_progress") {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+
+  return { id: vectorStore.id }
+}
+
 const executeOpenAIFlow = async <T>({
   openai,
   model,
@@ -619,12 +659,22 @@ const executeOpenAIFlow = async <T>({
     }
   ]
   
-  const tools = settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS
+  const openaiTools: OpenAI.Responses.Tool[] = []
+  const { id: vectorStoreId } = await getVectorStore(openai)
+  openaiTools.push({
+    type: 'file_search',
+    vector_store_ids: [vectorStoreId],
+    max_num_results: 3,
+  })
+  if (settings.grantSchemaAccess && schemaClient) {
+    openaiTools.push(...toOpenAIFunctions(SCHEMA_TOOLS))
+  }
+
   let lastResponse = await openai.responses.create({
     model: model as any,
     instructions: config.systemInstructions,
     input,
-    tools: toOpenAIFunctions(tools) as any,
+    tools: openaiTools as any,
     text: config.responseFormat,
   } as any)
   input = [ ...input, ...lastResponse.output ]
@@ -649,7 +699,7 @@ const executeOpenAIFlow = async <T>({
       model: model as any,
       instructions: config.systemInstructions,
       input,
-      tools: toOpenAIFunctions(tools) as any,
+      tools: openaiTools as any,
       text: config.responseFormat,
     } as any)
     input = [ ...input, ...lastResponse.output ]
@@ -808,7 +858,7 @@ export const explainQuery = async ({
         openai: clients.openai,
         model: settings.model,
         config: {
-          systemInstructions: getExplainQueryPrompt(settings.grantSchemaAccess),
+          systemInstructions: getExplainQueryPrompt('openai'),
           initialUserContent: content,
           responseFormat: ExplainFormat,
         },
@@ -823,7 +873,7 @@ export const explainQuery = async ({
       anthropic: clients.anthropic,
       model: settings.model,
       config: {
-        systemInstructions: getExplainQueryPrompt(settings.grantSchemaAccess),
+        systemInstructions: getExplainQueryPrompt('anthropic'),
         initialUserContent: content,
         formattingPrompt:  'Please give the 2-4 sentences summary of this query explanation in format { explanation: "The summarized explanation" }',
       },
@@ -879,7 +929,7 @@ export const generateSQL = async ({
         openai: clients.openai,
         model: settings.model,
         config: {
-          systemInstructions: getGenerateSQLPrompt(settings.grantSchemaAccess),
+          systemInstructions: getGenerateSQLPrompt('openai'),
           initialUserContent,
           responseFormat: GeneratedSQLFormat,
           postProcess
@@ -895,7 +945,7 @@ export const generateSQL = async ({
       anthropic: clients.anthropic,
       model: settings.model,
       config: {
-        systemInstructions: getGenerateSQLPrompt(settings.grantSchemaAccess),
+        systemInstructions: getGenerateSQLPrompt('anthropic'),
         initialUserContent,
         formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }',
         postProcess
@@ -956,7 +1006,7 @@ ${errorMessage}
 Analyze the error and return the fixed SQL query if possible, always provide a 2-4 sentences explanation why it was failed and how it was fixed.
 ${word ? `The error occurred at word: ${word}` : ''}`
     const postProcess = (formatted: { explanation: string, sql?: string }) => {
-      return { ...(formatted?.sql ? { sql: formatSql(formatted.sql) } : {}), explanation: formatted?.explanation || '' }
+      return { ...(formatted?.sql ? { sql: normalizeSql(formatted.sql, false) } : {}), explanation: formatted?.explanation || '' }
     }
 
     if (clients.provider === 'openai') {
@@ -964,7 +1014,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
         openai: clients.openai,
         model: settings.model,
         config: {
-          systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
+          systemInstructions: getFixQueryPrompt('openai'),
           initialUserContent,
           responseFormat: FixSQLFormat,
           postProcess 
@@ -980,7 +1030,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
       anthropic: clients.anthropic,
       model: settings.model,
       config: {
-        systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
+        systemInstructions: getFixQueryPrompt('anthropic'),
         initialUserContent,
         formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }',
         postProcess
@@ -1172,7 +1222,6 @@ function handleAiAssistantError(error: any): AiAssistantAPIError {
     return {
       type: 'unknown',
       message: `API error: ${error.message}`,
-      details: error
     }
   }
 
