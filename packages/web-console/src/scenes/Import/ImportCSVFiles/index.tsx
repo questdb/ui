@@ -67,7 +67,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           }
 
           const result = await quest.query<Parameter>(
-            `show groups ${username}`,
+            `show groups '${username}'`,
           )
           if (result.type === "dql" && result.count > 0) {
             const groups = result.data.map(row => Object.values(row)[0] as string)

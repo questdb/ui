@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import Dexie from "dexie"
+import { Dexie } from "dexie"
 import type { Table } from "dexie"
 import type { Buffer } from "./buffers"
 import { makeBuffer, fallbackBuffer } from "./buffers"
@@ -38,6 +38,7 @@ export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
   read_notifications!: Table<{ newsId: string }, number>
+  ready: boolean = false
 
   constructor() {
     super("web-console")
@@ -136,6 +137,7 @@ export class Storage extends Dexie {
 
       // clear search params from the address bar
       window.history.replaceState({}, "", url)
+      this.ready = true
     })
   }
 }

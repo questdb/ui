@@ -20,4 +20,5 @@ export enum EventType {
   TAB_FOCUS = "tab.focus",
   TAB_BLUR = "tab.blur",
   METRICS_REFRESH_DATA = "metrics.refresh.data",
+  BUFFERS_UPDATED = "buffers.updated",
 }

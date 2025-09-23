@@ -39,7 +39,7 @@ const noop = (_: any) => {}
 
 const newTabButtonTemplate = `
     <div class="new-tab-button-wrapper">
-      <button class="new-tab-button">✚</button>
+      <button class="new-tab-button" data-hook="new-tab-button">✚</button>
     </div>
   `
 
@@ -397,9 +397,16 @@ class ChromeTabs {
 
     const faviconEl = tabEl.querySelector(".chrome-tab-favicon") as HTMLElement
     const { favicon, faviconClass, className } = tabProperties
+    
+    const currentClasses = tabEl.className.split(' ')
+    const baseClasses = currentClasses.filter(cls => 
+      cls.startsWith('chrome-tab') || cls === 'dragging' || cls === 'phantom-tab'
+    )
+    
     if (className) {
-      // add className to existing classes
-      tabEl.className = [tabEl.className, className].join(" ")
+      tabEl.className = [...baseClasses, ...className.split(' ')].join(' ')
+    } else {
+      tabEl.className = baseClasses.join(' ')
     }
     faviconEl.className = "chrome-tab-favicon"
     faviconEl!.style!.backgroundImage = ""
@@ -486,6 +493,9 @@ class ChromeTabs {
     }
 
     this.draggabillies.forEach((d) => d.destroy())
+    if (tabEls.find(el => el.classList.contains("temporary-tab"))) {
+      return
+    }
 
     tabEls.forEach((tabEl, originalIndex) => {
       const originalTabPositionX = tabPositions[originalIndex]

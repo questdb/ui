@@ -17,6 +17,28 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.2 - 2025.08.29
+### Fixed
+- infinite state updates in metrics [#469](https://github.com/questdb/ui/pull/469)
+
+
+## 1.1.1 - 2025.08.28
+### Fixed
+- remove indexed db backwards/forwards compatibility issue [#467](https://github.com/questdb/ui/pull/467)
+- use quotes in table name when resuming WAL [#466](https://github.com/questdb/ui/pull/466)
+
+
+## 1.1.0 - 2025.08.18
+### Added
+- search across multiple tabs [#459](https://github.com/questdb/ui/pull/459)
+
+
+## 1.0.2 - 2025.08.15
+### Fixed
+- add pulse to example queries button if not visited [#457](https://github.com/questdb/ui/pull/457)
+- perform uniqueness check on column names trimmed and case-insensitive [#454](https://github.com/questdb/ui/pull/454)
+
+
 ## 1.0.1 - 2025.07.10
 ### Fixed
 - declare variable highlighting in editor & query parameter parsing in chart request [#452](https://github.com/questdb/ui/pull/452)

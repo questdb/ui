@@ -98,7 +98,7 @@ export const SuspensionDialog = ({
     const queryStart = `ALTER ${kind === "matview" ? "MATERIALIZED VIEW" : "TABLE"}`
     try {
       const response = await quest.query(
-        `${queryStart} ${walTableData.name} RESUME WAL${
+        `${queryStart} '${walTableData.name}' RESUME WAL${
           values.resume_transaction_id
             ? ` FROM TRANSACTION ${values.resume_transaction_id}`
             : ""

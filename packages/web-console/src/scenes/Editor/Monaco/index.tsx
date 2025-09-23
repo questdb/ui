@@ -1,8 +1,10 @@
-import Editor, { loader, Monaco } from "@monaco-editor/react"
+import Editor from "@monaco-editor/react"
+import type { Monaco } from "@monaco-editor/react"
+import { loader } from "@monaco-editor/react"
 import { Box, Button, Checkbox, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
-import React, { useContext, useEffect, useRef, useState } from "react"
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
@@ -72,7 +74,6 @@ const Content = styled(PaneContent)`
   position: relative;
   overflow: hidden;
   background: #2c2e3d;
-
   .monaco-editor .squiggly-error {
     background: none;
     border-bottom: 0.3rem ${color("red")} solid;
@@ -99,6 +100,11 @@ const Content = styled(PaneContent)`
 
   .selectionSuccessHighlight {
     background-color: rgba(80, 250, 123, 0.15);
+    border-radius: 2px;
+  }
+
+  .searchHighlight {
+    background-color: rgba(255, 184, 108, 0.5);
     border-radius: 2px;
   }
 
@@ -182,6 +188,8 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     activeBuffer,
     updateBuffer,
     editorReadyTrigger,
+    queryParamProcessedRef,
+    isNavigatingFromSearchRef,
   } = editorContext
   const { quest } = useContext(QuestContext)
   const [request, setRequest] = useState<Request | undefined>()
@@ -220,6 +228,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   const dropdownPositionRef = useRef<{ x: number; y: number } | null>(null)
   const dropdownQueriesRef = useRef<Request[]>([])
   const isContextMenuDropdownRef = useRef<boolean>(false)
+  const cleanupActionsRef = useRef<(() => void)[]>([])
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -540,15 +549,21 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     monacoRef.current = monaco
     editorRef.current = editor
     monaco.editor.setTheme("dracula")
+    editor.updateOptions({ 
+      find: {
+        addExtraSpaceOnTop: false,
+      }
+    })
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
     setEditorReady(true)
     editorReadyTrigger(editor)
+    isNavigatingFromSearchRef.current = false
 
     // Support legacy bus events for non-react codebase
-    registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning })
-    registerEditorActions({
+    cleanupActionsRef.current.push(registerLegacyEventBusEvents({ editor, insertTextAtCursor, toggleRunning }))
+    cleanupActionsRef.current.push(registerEditorActions({
       editor,
       monaco,
       runQuery: () => {
@@ -565,8 +580,9 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
           handleTriggerRunScript(true)
         }
       },
-      editorContext,
-    })
+      deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
+      addBuffer: () => editorContext.addBuffer(),
+    }))
     
     editor.onContextMenu((e) => {
       if (e.target.element && e.target.element.classList.contains("cursorQueryGlyph")) {
@@ -719,7 +735,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
       }, 10)
     })
 
-    editor.onDidScrollChange((e) => {
+    editor.onDidScrollChange(() => {
       if (scrollTimeoutRef.current) {
         window.clearTimeout(scrollTimeoutRef.current)
       }
@@ -756,18 +772,20 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     // Support multi-line queries (URL encoded)
     const query = params.get("query")
     const model = editor.getModel()
-    if (query && model) {
+    if (query && model && !queryParamProcessedRef.current) {
       const trimmedQuery = query.trim()
       // Find if the query is already in the editor
       const matches = findMatches(model, trimmedQuery)
       if (matches && matches.length > 0) {
         editor.setSelection(matches[0].range)
+        editor.revealPositionInCenter({ lineNumber: matches[0].range.startLineNumber, column: matches[0].range.startColumn })
         // otherwise, append the query
       } else {
         appendQuery(editor, trimmedQuery, { appendAt: "end" })
         const newValue = editor.getValue()
         updateBuffer(activeBuffer.id as number, { value: newValue })
       }
+      queryParamProcessedRef.current = true
     }
 
     const initialVisibleRanges = editor.getVisibleRanges()
@@ -1339,7 +1357,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     editorRef.current?.updateOptions({ readOnly: !!request })
   }, [request])
 
-  const setCompletionProvider = async () => {
+  const setCompletionProvider = useCallback(async () => {
     if (editorReady && monacoRef?.current && editorRef?.current) {
       schemaCompletionHandle?.dispose()
       setRefreshingTables(true)
@@ -1351,7 +1369,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
       )
       setRefreshingTables(false)
     }
-  }
+  }, [editorReady, schemaCompletionHandle, tables, columns])
 
   useEffect(() => {
     if (!refreshingTables) {
@@ -1373,6 +1391,12 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     window.addEventListener("focus", setCompletionProvider)
     return () => {
       window.removeEventListener("focus", setCompletionProvider)
+    }
+  }, [setCompletionProvider])
+
+  useEffect(() => {
+    return () => {
+      cleanupActionsRef.current.forEach(cleanup => cleanup())
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current)
       }
@@ -1388,13 +1412,17 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
       if (decorationCollectionRef.current) {
         decorationCollectionRef.current.clear()
       }
+      editorRef.current?.getModel()?.dispose()
+      editorRef.current?.dispose()
+      editorRef.current = null
+      monacoRef.current = null
     }
   }, [])
 
   return (
     <>
-      <Content onClick={handleEditorClick}>
-        <ButtonBar onTriggerRunScript={handleTriggerRunScript} />
+      <Content className="monaco-content" onClick={handleEditorClick}>
+        <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
         <Editor
           beforeMount={beforeMount}
           defaultLanguage={QuestDBLanguageName}

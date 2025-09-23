@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useCallback, useEffect } from "react"
+import React, { useCallback, useEffect, useRef } from "react"
 import styled from "styled-components"
 import Footer from "../Footer"
 import Console from "../Console"
@@ -33,7 +33,7 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
-import { EditorProvider } from "../../providers"
+import { EditorProvider, SearchProvider } from "../../providers"
 import { Help } from "./help"
 import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
@@ -99,32 +99,34 @@ const Layout = () => {
   }, [])
 
   return (
-    <EditorProvider>
-      <TopBar />
-      <Warnings />
-      <Root>
-        <Main sideOpened={activeSidebar !== undefined}>
-          <ImageZoom />
-          <Page>
-            <Console />
-          </Page>
-        </Main>
+    <SearchProvider>
+      <EditorProvider>
+        <TopBar />
+        <Warnings />
+        <Root>
+          <Main sideOpened={activeSidebar !== undefined}>
+            <ImageZoom />
+            <Page>
+              <Console />
+            </Page>
+          </Main>
 
-        <Drawer id="side-panel-right" />
+          <Drawer id="side-panel-right" />
 
-        <Sidebar align="top">
-          <Help />
+          <Sidebar align="top">
+            <Help />
 
-          <News />
+            <News />
 
-          <CreateTableDialog />
-        </Sidebar>
-      </Root>
+            <CreateTableDialog />
+          </Sidebar>
+        </Root>
 
-      <SideMenu />
+        <SideMenu />
 
-      <Footer />
-    </EditorProvider>
+        <Footer />
+      </EditorProvider>
+    </SearchProvider>
   )
 }
 

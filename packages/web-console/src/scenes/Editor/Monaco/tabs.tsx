@@ -64,6 +64,7 @@ export const Tabs = () => {
     setActiveBuffer,
     addBuffer,
     updateBuffer,
+    updateBuffersPositions,
     deleteBuffer,
     archiveBuffer,
   } = useEditor()
@@ -90,23 +91,33 @@ export const Tabs = () => {
   const repositionActiveBuffers = async (excludedId: string) => {
     const sortedActiveBuffers = buffers
       .filter(
-        (buffer) => !buffer.archived && buffer.id !== parseInt(excludedId),
+        (buffer) => (!buffer.archived || buffer.isTemporary) && buffer.id !== parseInt(excludedId),
       )
       .sort((a, b) => a.position - b.position)
 
-    for (const buffer of sortedActiveBuffers) {
-      const index = sortedActiveBuffers.indexOf(buffer)
-      if (buffer.id) {
-        await updateBuffer(buffer.id, { position: index })
-      }
+    const positions = sortedActiveBuffers
+      .map((buffer, index) => ({
+        id: buffer.id as number,
+        position: index
+      }))
+      .filter(p => p.id !== undefined)
+    
+    if (positions.length > 0) {
+      await updateBuffersPositions(positions)
     }
   }
 
   const close = async (id: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (!buffer || buffers.filter((buffer) => !buffer.archived).length === 1) {
+    if (!buffer || buffers.filter((buffer) => !buffer.archived || buffer.isTemporary).length === 1) {
       return
     }
+    
+    if (buffer.isTemporary) {
+      await updateBuffer(parseInt(id), { isTemporary: false }, true)
+      return
+    }
+    
     buffer?.value !== "" ||
     (buffer.metricsViewState?.metrics &&
       buffer.metricsViewState.metrics.length > 0)
@@ -132,12 +143,23 @@ export const Tabs = () => {
       return
     }
     let newTabs = buffers
-      .filter((tab) => tab.id !== parseInt(tabId) && !tab.archived)
-      .sort((a, b) => a.position - b.position)
+      .filter((tab) => tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary))
+      .sort((a, b) => {
+        if (a.isTemporary) {
+          return 1
+        }
+        if (b.isTemporary) {
+          return -1
+        }
+        return a.position - b.position
+      })
     newTabs.splice(toIndex, 0, beforeTab)
-    newTabs.forEach(async (tab, index) => {
-      await updateBuffer(tab.id as number, { position: index })
-    })
+    
+    const positions = newTabs.map((tab, index) => ({
+      id: tab.id as number,
+      position: index
+    }))
+    await updateBuffersPositions(positions)
   }
 
   const rename = async (id: string, title: string) => {
@@ -169,17 +191,36 @@ export const Tabs = () => {
         onTabRename={rename}
         onNewTab={addBuffer}
         tabs={buffers
-          .filter((buffer) => !buffer.archived)
-          .sort((a, b) => a.position - b.position)
+          .filter((buffer) => !buffer.archived || buffer.isTemporary)
+          .sort((a, b) => {
+            if (a.isTemporary) {
+              return 1
+            }
+            if (b.isTemporary) {
+              return -1
+            }
+            return a.position - b.position
+          })
           .map(
-            (buffer) =>
-              ({
+            (buffer) => {
+              const classNames = []
+              if (buffer.metricsViewState) {
+                classNames.push("metrics-tab")
+              }
+              if (buffer.isTemporary) {
+                classNames.push("temporary-tab")
+              }
+              
+              const className = classNames.length > 0 ? classNames.join(" ") : undefined
+              
+              return {
                 id: buffer.id?.toString(),
                 favicon: mapTabIconToType(buffer),
                 title: buffer.label,
                 active: activeBuffer.id === buffer.id,
-                className: buffer.metricsViewState ? "metrics-tab" : "",
-              } as Tab),
+                className,
+              } as Tab
+            }
           )}
       />
       <DropdownMenu.Root modal={false} onOpenChange={setHistoryOpen}>
@@ -210,7 +251,7 @@ export const Tabs = () => {
                   await updateBuffer(buffer.id as number, {
                     archived: false,
                     archivedAt: undefined,
-                    position: buffers.length - 1,
+                    position: buffers.filter(b => !b.archived || b.isTemporary).length,
                   })
                   await setActiveBuffer(buffer)
                 }}

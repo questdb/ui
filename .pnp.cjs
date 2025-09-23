@@ -6586,10 +6586,10 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["@questdb/sql-grammar", [\
-      ["npm:1.2.5", {\
-        "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.2.5-de01dec652-df497b04f4.zip/node_modules/@questdb/sql-grammar/",\
+      ["npm:1.3.0", {\
+        "packageLocation": "./.yarn/cache/@questdb-sql-grammar-npm-1.3.0-d8dbb0e4d2-821049d1a7.zip/node_modules/@questdb/sql-grammar/",\
         "packageDependencies": [\
-          ["@questdb/sql-grammar", "npm:1.2.5"]\
+          ["@questdb/sql-grammar", "npm:1.3.0"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -6612,7 +6612,7 @@ const RAW_RUNTIME_STATE =
           ["@pmmmwh/react-refresh-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:0.5.11"],\
           ["@popperjs/core", "npm:2.4.2"],\
           ["@questdb/react-components", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#workspace:packages/react-components"],\
-          ["@questdb/sql-grammar", "npm:1.2.5"],\
+          ["@questdb/sql-grammar", "npm:1.3.0"],\
           ["@radix-ui/react-context-menu", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.1.5"],\
           ["@radix-ui/react-dialog", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.0.5"],\
           ["@radix-ui/react-dropdown-menu", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.1.15"],\
@@ -6662,8 +6662,8 @@ const RAW_RUNTIME_STATE =
           ["cross-env", "npm:7.0.2"],\
           ["css-loader", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:3.5.3"],\
           ["date-fns", "npm:4.1.0"],\
-          ["dexie", "npm:3.2.4"],\
-          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
+          ["dexie", "npm:4.2.0"],\
+          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0"],\
           ["dotenv", "npm:10.0.0"],\
           ["draggabilly", "npm:3.0.0"],\
           ["echarts", "npm:5.4.3"],\
@@ -16970,29 +16970,29 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["dexie", [\
-      ["npm:3.2.4", {\
-        "packageLocation": "./.yarn/cache/dexie-npm-3.2.4-05177fe3ec-361f7e05fd.zip/node_modules/dexie/",\
+      ["npm:4.2.0", {\
+        "packageLocation": "./.yarn/cache/dexie-npm-4.2.0-47130d509d-b69511f40b.zip/node_modules/dexie/",\
         "packageDependencies": [\
-          ["dexie", "npm:3.2.4"]\
+          ["dexie", "npm:4.2.0"]\
         ],\
         "linkType": "HARD"\
       }]\
     ]],\
     ["dexie-react-hooks", [\
-      ["npm:1.1.6", {\
-        "packageLocation": "./.yarn/cache/dexie-react-hooks-npm-1.1.6-3fe966852c-e8432c8ed9.zip/node_modules/dexie-react-hooks/",\
+      ["npm:4.2.0", {\
+        "packageLocation": "./.yarn/cache/dexie-react-hooks-npm-4.2.0-4dbbe66cd4-2e0536c3ed.zip/node_modules/dexie-react-hooks/",\
         "packageDependencies": [\
-          ["dexie-react-hooks", "npm:1.1.6"]\
+          ["dexie-react-hooks", "npm:4.2.0"]\
         ],\
         "linkType": "SOFT"\
       }],\
-      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6", {\
-        "packageLocation": "./.yarn/__virtual__/dexie-react-hooks-virtual-1bb013645e/0/cache/dexie-react-hooks-npm-1.1.6-3fe966852c-e8432c8ed9.zip/node_modules/dexie-react-hooks/",\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0", {\
+        "packageLocation": "./.yarn/__virtual__/dexie-react-hooks-virtual-aab0b51b4b/0/cache/dexie-react-hooks-npm-4.2.0-4dbbe66cd4-2e0536c3ed.zip/node_modules/dexie-react-hooks/",\
         "packageDependencies": [\
-          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:1.1.6"],\
+          ["dexie-react-hooks", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.2.0"],\
           ["@types/dexie", null],\
           ["@types/react", "npm:17.0.2"],\
-          ["dexie", "npm:3.2.4"],\
+          ["dexie", "npm:4.2.0"],\
           ["react", "npm:17.0.2"]\
         ],\
         "packagePeers": [\

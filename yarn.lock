@@ -3217,10 +3217,10 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@questdb/sql-grammar@npm:1.2.5":
-  version: 1.2.5
-  resolution: "@questdb/sql-grammar@npm:1.2.5"
-  checksum: 10/df497b04f4acf5e2f93eafa8184d8f0a524f3e78d75c4a1409649d3fbf8460d5c81f06b8228671c2e4a7f14c118a118075c4572306516d2fbaafe6875b0bb7f2
+"@questdb/sql-grammar@npm:1.3.0":
+  version: 1.3.0
+  resolution: "@questdb/sql-grammar@npm:1.3.0"
+  checksum: 10/821049d1a7cef24c497965173215f3d954c789432c3ceb75dd3a883de7fd5a2454ee71eb4c0ce5dbe0ad55d0e022832b7cbd11694075e46444cb0489310ae976
   languageName: node
   linkType: hard
 
@@ -3241,7 +3241,7 @@ __metadata:
     "@pmmmwh/react-refresh-webpack-plugin": "npm:^0.5.11"
     "@popperjs/core": "npm:2.4.2"
     "@questdb/react-components": "workspace:^"
-    "@questdb/sql-grammar": "npm:1.2.5"
+    "@questdb/sql-grammar": "npm:1.3.0"
     "@radix-ui/react-context-menu": "npm:2.1.5"
     "@radix-ui/react-dialog": "npm:^1.0.3"
     "@radix-ui/react-dropdown-menu": "npm:^2.1.15"
@@ -3291,8 +3291,8 @@ __metadata:
     cross-env: "npm:7.0.2"
     css-loader: "npm:3.5.3"
     date-fns: "npm:4.1.0"
-    dexie: "npm:^3.2.4"
-    dexie-react-hooks: "npm:^1.1.6"
+    dexie: "npm:^4.0.11"
+    dexie-react-hooks: "npm:^4.2.0"
     dotenv: "npm:^10.0.0"
     draggabilly: "npm:^3.0.0"
     echarts: "npm:^5.2.2"
@@ -10530,21 +10530,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"dexie-react-hooks@npm:^1.1.6":
-  version: 1.1.6
-  resolution: "dexie-react-hooks@npm:1.1.6"
+"dexie-react-hooks@npm:^4.2.0":
+  version: 4.2.0
+  resolution: "dexie-react-hooks@npm:4.2.0"
   peerDependencies:
     "@types/react": ">=16"
-    dexie: ^3.2 || ^4.0.1-alpha
+    dexie: ">=4.2.0-alpha.1 <5.0.0"
     react: ">=16"
-  checksum: 10/e8432c8ed98bae6a646a0bd3af8e08ba64536c839f745e72d2c87315f9b59d5c9858a085257d499bf288e60a9fdd9889846cdd8d5f9fcb0792e156fc5c6dc152
+  checksum: 10/2e0536c3edce8b109cc9a0cede609e7e1543cc586bb7da2f014de4280bb12a98e48325e9e65124723f54bd6d327cde4aded76680206ecc6f1418bc9213d59b60
   languageName: node
   linkType: hard
 
-"dexie@npm:^3.2.4":
-  version: 3.2.4
-  resolution: "dexie@npm:3.2.4"
-  checksum: 10/361f7e05fda5db20d9d90ce3e39f4539d1a56acad35a6e4ba26e48ab74c55d81e6daba502a7412be6c0e67ebad3e232e6dbbc1b50426f5743cc0f166cd4e8671
+"dexie@npm:^4.0.11":
+  version: 4.2.0
+  resolution: "dexie@npm:4.2.0"
+  checksum: 10/b69511f40b855a2dfe4e7aaadda6c7073d7418abd699480181160f8f34a058eb205d3e2cd5697fa1d6ebe281dd7835052fa2e9b47f3c400fc0263e8413f62f92
   languageName: node
   linkType: hard
 

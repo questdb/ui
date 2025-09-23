@@ -22,8 +22,6 @@
  *
  ******************************************************************************/
 
-export type TopPanel = "tables" | undefined
-
 export type Sidebar = "news" | "create" | undefined
 
 export type BottomPanel = "result" | "zeroState" | "import"
@@ -37,7 +35,6 @@ export type ImageToZoom = {
 
 export type ConsoleStateShape = Readonly<{
   sideMenuOpened: boolean
-  activeTopPanel: TopPanel
   activeSidebar: Sidebar
   activeBottomPanel: BottomPanel
   imageToZoom: ImageToZoom | undefined
@@ -45,7 +42,6 @@ export type ConsoleStateShape = Readonly<{
 
 export enum ConsoleAT {
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
-  SET_ACTIVE_TOP_PANEL = "CONSOLE/SET_ACTIVE_TOP_PANEL",
   SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
   SET_IMAGE_TO_ZOOM = "CONSOLE/SET_IMAGE_TO_ZOOM",
@@ -53,11 +49,6 @@ export enum ConsoleAT {
 
 type ToggleSideMenuAction = Readonly<{
   type: ConsoleAT.TOGGLE_SIDE_MENU
-}>
-
-type setActiveTopPanelAction = Readonly<{
-  payload: TopPanel
-  type: ConsoleAT.SET_ACTIVE_TOP_PANEL
 }>
 
 type setActiveSidebarAction = Readonly<{
@@ -77,7 +68,6 @@ type setImageToZoomAction = Readonly<{
 
 export type ConsoleAction =
   | ToggleSideMenuAction
-  | setActiveTopPanelAction
   | setActiveSidebarAction
   | setActiveBottomPanelAction
   | setImageToZoomAction
