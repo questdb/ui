@@ -3,12 +3,14 @@ import { Form } from "../../components/Form"
 import {IconWithTooltip, Link, Text} from "../../components"
 import { Box } from "../../components/Box"
 import { Button } from "@questdb/react-components"
-import { DEFAULT_TIMESTAMP_FORMAT } from "./const"
+import { DEFAULT_TIMESTAMP_FORMAT, DEFAULT_TIMESTAMP_FORMAT_NS } from "../../scenes/Import/ImportCSVFiles/const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
 import { Controls } from "./controls"
 import { Action } from "./types"
 import { DocsLink } from "./docs-link"
+import { isTimestamp } from "../../scenes/Import/ImportCSVFiles/utils"
+import { getTimestampFormat } from "../../scenes/Import/ImportCSVFiles/utils"
 
 const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "AUTO", value: "" },
@@ -29,6 +31,7 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "VARCHAR", value: "VARCHAR" },
   { label: "SYMBOL", value: "SYMBOL" },
   { label: "TIMESTAMP", value: "TIMESTAMP" },
+  { label: "TIMESTAMP_NS", value: "TIMESTAMP_NS" },
   { label: "UUID", value: "UUID" },
 ]
 
@@ -85,6 +88,7 @@ export const Column = ({
       key={column.name}
       odd={index % 2 !== 0}
       disabled={disabled}
+      data-hook={`table-schema-dialog-column-${index}`}
       onFocus={() => onFocus(index)}
     >
       <Index>
@@ -117,7 +121,7 @@ export const Column = ({
           </Form.Item>
         </Controls>
 
-        {column.type === "TIMESTAMP" && (
+        {isTimestamp(column.type) && (
           <Box flexDirection="column" gap="1rem">
             <TimestampControls>
               {action === "import" && (
@@ -128,7 +132,7 @@ export const Column = ({
                     defaultValue={
                       column.pattern !== ""
                         ? column.pattern
-                        : DEFAULT_TIMESTAMP_FORMAT
+                        : getTimestampFormat(column.type)
                     }
                     required
                   />
@@ -139,6 +143,7 @@ export const Column = ({
                 icon={
                   <Button
                     disabled={name === ""}
+                    data-hook={`table-schema-dialog-column-${index}-designated-button`}
                     skin={
                       timestamp !== "" &&
                       column.name !== "" &&

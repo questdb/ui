@@ -1,10 +1,15 @@
 import { SchemaColumn } from "components/TableSchemaDialog/types"
+import { DEFAULT_TIMESTAMP_FORMAT, DEFAULT_TIMESTAMP_FORMAT_NS } from "./const"
 
 export const isGeoHash = (type: string) => type.startsWith("GEOHASH")
 
 const arrayRegex = /^[a-z][a-z0-9]*(\[\])+$/i
 
 export const isArray = (type: string) => arrayRegex.test(type)
+
+export const isTimestamp = (type: string) => ["TIMESTAMP", "TIMESTAMP_NS"].includes(type)
+
+export const getTimestampFormat = (type: string) => type === "TIMESTAMP_NS" ? DEFAULT_TIMESTAMP_FORMAT_NS : DEFAULT_TIMESTAMP_FORMAT
 
 export const extractPrecionFromGeohash = (geohash: string) => {
   const regex = /\(([^)]+)\)/g
