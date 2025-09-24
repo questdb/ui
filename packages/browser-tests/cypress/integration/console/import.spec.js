@@ -7,9 +7,10 @@ describe("questdb import", () => {
 
   afterEach(() => {
     cy.loadConsoleWithAuth();
-    cy.typeQuery("drop all tables;");
-    cy.runLine();
+    cy.typeQueryDirectly("drop all tables;");
+    cy.clickRunIconInLine(1);
     cy.getByDataHook("success-notification").should("be.visible");
+    cy.clearEditor();
   });
 
   it("display import panel", () => {
