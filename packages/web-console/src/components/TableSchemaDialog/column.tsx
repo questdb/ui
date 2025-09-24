@@ -128,7 +128,7 @@ export const Column = ({
                 <Form.Item name={`schemaColumns.${index}.pattern`}>
                   <Form.Input
                     name={`schemaColumns.${index}.pattern`}
-                    placeholder="Pattern"
+                    placeholder="Dataset pattern"
                     defaultValue={
                       column.pattern !== ""
                         ? column.pattern
