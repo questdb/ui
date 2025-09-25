@@ -20,7 +20,7 @@ import { Panel } from "../../components/Panel"
 import { Actions } from "./actions"
 
 const StyledContentWrapper = styled(Drawer.ContentWrapper)`
-  --columns: auto 120px; /* magic numbers to fit input, type dropdown and remove button nicely */
+  --columns: auto 140px; /* magic numbers to fit input, type dropdown and remove button nicely */
 `
 
 const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
@@ -185,6 +185,7 @@ export const Dialog = ({
       trigger={
         trigger ?? (
           <Button
+            data-hook="table-schema-dialog-trigger"
             skin={columnCount > 0 ? "transparent" : "secondary"}
             prefixIcon={
               columnCount > 0 ? <Edit size="18px" /> : <TableIcon size="18px" />
