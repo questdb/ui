@@ -10,7 +10,8 @@ import { pick, UploadResult, FileCheckStatus, Parameter } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import { DEFAULT_TIMESTAMP_FORMAT, MAX_UNCOMMITTED_ROWS } from "./const"
+import { getTimestampFormat, isTimestamp } from "./utils"
+import { MAX_UNCOMMITTED_ROWS } from "./const"
 import { useIsVisible } from "../../../components"
 import {
   extractPrecionFromGeohash,
@@ -123,7 +124,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
                   return columnResponse.data.map((column) => ({
                     name: column.column,
                     type: mapColumnTypeToUI(column.type),
-                    pattern: DEFAULT_TIMESTAMP_FORMAT,
+                    pattern: getTimestampFormat(column.type),
                     precision: isGeoHash(column.type)
                       ? extractPrecionFromGeohash(column.type)
                       : "",
@@ -273,10 +274,10 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
                           ...{
                             type: mapColumnTypeToUI(c.type),
                             pattern:
-                              c.type === "TIMESTAMP"
+                              isTimestamp(c.type)
                                 ? match?.pattern
                                   ? match?.pattern
-                                  : DEFAULT_TIMESTAMP_FORMAT
+                                  : getTimestampFormat(c.type)
                                 : "",
                             precision: isGeoHash(c.type)
                               ? extractPrecionFromGeohash(c.type)

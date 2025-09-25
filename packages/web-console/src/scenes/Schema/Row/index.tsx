@@ -212,7 +212,7 @@ const TYPE_ICONS = {
     icon: Tag
   },
   time: {
-    types: ["TIMESTAMP", "INTERVAL"],
+    types: ["TIMESTAMP", "INTERVAL", "TIMESTAMP_NS"],
     icon: SortDown
   },
   network: {
@@ -255,7 +255,7 @@ const ColumnIcon = ({
   if (isDesignatedTimestamp) {
     return (
       <IconWithTooltip
-        icon={<SortDownIcon size="14px" />}
+        icon={<SortDownIcon data-hook="designated-timestamp-icon" size="14px" />}
         placement="top"
         tooltip="Designated timestamp"
       />
