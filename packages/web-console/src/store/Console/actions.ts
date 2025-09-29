@@ -27,6 +27,7 @@ import {
   ImageToZoom,
   Sidebar,
   BottomPanel,
+  ImportType,
 } from "./types"
 
 const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
@@ -37,6 +38,11 @@ const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
 const setActiveBottomPanel = (panel: BottomPanel): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL,
+})
+
+const setImportType = (type: ImportType): ConsoleAction => ({
+  payload: type,
+  type: ConsoleAT.SET_IMPORT_TYPE,
 })
 
 const setImageToZoom = (image?: ImageToZoom): ConsoleAction => ({
@@ -52,5 +58,6 @@ export default {
   toggleSideMenu,
   setActiveSidebar,
   setActiveBottomPanel,
+  setImportType,
   setImageToZoom,
 }

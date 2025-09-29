@@ -66,28 +66,32 @@ export const Start = () => {
       </StyledHeading>
       <Actions>
         <Action
-          onClick={() =>
+          onClick={() => {
+            dispatch(actions.console.setImportType("parquet"))
             dispatch(actions.console.setActiveBottomPanel("import"))
-          }
+          }}
         >
           <img
             alt="File upload icon"
             width="60"
-            height="80"
-            src="assets/upload.svg"
+            height="72"
+            src="assets/parquet-file.svg"
           />
-          <Heading level={5}>Import CSV</Heading>
+          <Heading level={5}>Import Parquet</Heading>
         </Action>
         <Action
-          onClick={() => dispatch(actions.console.setActiveSidebar("create"))}
+          onClick={() => {
+            dispatch(actions.console.setImportType("csv"))
+            dispatch(actions.console.setActiveBottomPanel("import"))
+          }}
         >
           <img
-            alt="Create table icon"
+            alt="File upload icon"
             width="60"
-            height="80"
-            src="assets/create-table.svg"
+            height="72"
+            src="assets/csv-file.svg"
           />
-          <Heading level={5}>Create table</Heading>
+          <Heading level={5}>Import CSV</Heading>
         </Action>
       </Actions>
     </Items>

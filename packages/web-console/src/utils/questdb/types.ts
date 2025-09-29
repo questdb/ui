@@ -298,7 +298,7 @@ export type UploadResultColumn = {
   errors: number
 }
 
-export type UploadResult = {
+export type CSVUploadResult = {
   columns: UploadResultColumn[]
   header: boolean
   location: string
@@ -306,6 +306,16 @@ export type UploadResult = {
   rowsRejected: number
   status: string
 }
+
+export type ParquetUploadResult = {
+  operation: "parquet_import"
+  status: string
+  file: string
+  size: number
+  location: string
+}
+
+export type FileUploadResult = CSVUploadResult | ParquetUploadResult
 
 export type Parameter = {
   property_path: string

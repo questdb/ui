@@ -38,4 +38,6 @@ export const API = `https://${BASE}.questdb.io`
 // the console will understand
 export const API_VERSION = "2"
 
+export const API_ROUTE_V1 = "/api/v1"
+
 export const BUTTON_ICON_SIZE = "26px"

@@ -6,7 +6,7 @@ import { ProcessedFile } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
-import { pick, UploadResult, FileCheckStatus, Parameter } from "../../../utils"
+import { pick, FileCheckStatus, Parameter, FileUploadResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
@@ -28,8 +28,8 @@ import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 type State = "upload" | "list"
 
 type Props = {
-  onViewData: (result: UploadResult) => void
-  onUpload: (result: UploadResult) => void
+  onViewData: (query: string) => void
+  onUpload: (result: FileUploadResult) => void
 }
 
 const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
@@ -96,7 +96,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           return {
             ...f,
             ...file,
-          }
+          } as ProcessedFile
         }
         return f
       }),
@@ -108,8 +108,9 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   }
 
   const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
+    const csvFiles = files.filter(file => file.type === "text/csv")
     return await Promise.all(
-      files.map(async (file) => {
+      csvFiles.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
 
         const schema =
@@ -168,6 +169,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         return {
           id: uuid(),
+          type: "csv" as const,
           fileObject: file,
           table_name: file.name,
           table_owner: ownedByList[0],
@@ -190,7 +192,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           uploaded: false,
           uploadResult: undefined,
           uploadProgress: 0,
-        }
+        } as ProcessedFile
       }),
     )
   }
@@ -220,6 +222,12 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     }
   }, [isVisible])
 
+  useEffect(() => {
+    if (filesDropped.length === 0) {
+      setState("upload")
+    }
+  }, [filesDropped])
+
   return (
     <Root ref={rootRef}>
       {state === "upload" && (
@@ -240,7 +248,6 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           ownedByList={ownedByList}
           onFileUpload={async (id) => {
             const file = filesDropped.find((f) => f.id === id) as ProcessedFile
-
             if (file.isUploading) {
               return
             }
@@ -290,13 +297,13 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
               })
               setIsUploading(file, false)
               onUpload(response)
-            } catch (err) {
+            } catch (err: any) {
               setIsUploading(file, false)
               setFileProperties(file.id, {
                 uploaded: false,
                 uploadResult: undefined,
                 uploadProgress: 0,
-                error: "Upload error",
+                error: err.statusText || "Upload error",
               })
             }
           }}
@@ -312,15 +319,20 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             const processedFiles = await Promise.all(
               filesDropped.map(async (file) => {
                 if (file.id === id) {
-                  // Only check for file existence if table name is changed
-                  const result = partialFile.table_name
-                    ? await quest.checkCSVFile(partialFile.table_name)
-                    : await Promise.resolve({ status: file.status })
-                  return {
-                    ...file,
-                    ...partialFile,
-                    status: result.status,
-                    error: partialFile.table_name ? undefined : file.error, // reset prior error if table name is changed
+                  if ('table_name' in partialFile && partialFile.table_name) {
+                    // Only check for file existence if table name is changed
+                    const result = await quest.checkCSVFile(partialFile.table_name)
+                    return {
+                      ...file,
+                      ...partialFile,
+                      status: result.status,
+                      error: undefined, // reset prior error if table name is changed
+                    } as ProcessedFile
+                  } else {
+                    return {
+                      ...file,
+                      ...partialFile,
+                    } as ProcessedFile
                   }
                 } else {
                   return file

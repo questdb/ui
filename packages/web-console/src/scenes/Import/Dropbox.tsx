@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from "react"
 import styled from "styled-components"
-import { Box } from "../../../components/Box"
-import { ProcessedFile } from "./types"
+import { Box } from "../../components/Box"
 
 const getFileDuplicates = (
   inputFiles: FileList,
@@ -13,39 +12,37 @@ const getFileDuplicates = (
   return duplicates
 }
 
-const Root = styled(Box).attrs({ flexDirection: "column" })<{
-  isDragging: boolean
-}>`
+const Root = styled(Box).attrs({ flexDirection: "column" })<{ $isDragging: boolean }>`
   flex: 1;
   width: 100%;
-  padding: 4rem 0 0;
   gap: 2rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
-  border: 3px dashed ${({ isDragging }) => (isDragging ? "#7f839b" : "#333543")};
+  background: ${({ theme, $isDragging }) => $isDragging ? theme.color.selectionDarker : theme.color.backgroundLighter};
   box-shadow: inset 0 0 10px 0 #1b1c23;
   transition: all 0.15s ease-in-out;
 `
 
 type Props = {
-  files: ProcessedFile[]
+  existingFileNames: string[]
   onFilesDropped: (files: File[]) => void
-  dialogOpen: boolean
+  dialogOpen?: boolean
+  enablePaste?: boolean
   render: (props: {
     duplicates: File[]
     addToQueue: (inputFiles: FileList) => void
+    uploadInputRef: React.RefObject<HTMLInputElement>
   }) => React.ReactNode
 }
 
-export const DropBox = ({
-  files,
+export const Dropbox = ({
+  existingFileNames,
   onFilesDropped,
-  dialogOpen,
+  dialogOpen = false,
+  enablePaste = true,
   render,
 }: Props) => {
   const [isDragging, setIsDragging] = useState(false)
   const [duplicates, setDuplicates] = useState<File[]>([])
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
-  const filenames = useRef<string[]>(files.map((f) => f.table_name))
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -61,7 +58,7 @@ export const DropBox = ({
   }
 
   const addToQueue = (inputFiles: FileList) => {
-    const duplicates = getFileDuplicates(inputFiles, filenames.current)
+    const duplicates = getFileDuplicates(inputFiles, existingFileNames)
     setDuplicates(duplicates)
     onFilesDropped(
       Array.from(inputFiles).filter((f) => !duplicates.includes(f)),
@@ -78,22 +75,22 @@ export const DropBox = ({
   }
 
   useEffect(() => {
+    if (!enablePaste) return
+    
     return () => {
       window.removeEventListener("paste", handlePaste)
     }
-  }, [])
+  }, [enablePaste])
 
   useEffect(() => {
+    if (!enablePaste) return
+    
     if (dialogOpen) {
       window.removeEventListener("paste", handlePaste)
     } else {
       window.addEventListener("paste", handlePaste)
     }
-  }, [dialogOpen])
-
-  useEffect(() => {
-    filenames.current = files.map((f) => f.table_name)
-  }, [files])
+  }, [dialogOpen, enablePaste])
 
   return (
     <Root
@@ -101,10 +98,10 @@ export const DropBox = ({
       onDragOver={handleDrag}
       onDragLeave={handleDrag}
       onDrop={handleDrop}
-      isDragging={isDragging}
       data-hook="import-dropbox"
+      $isDragging={isDragging}
     >
-      {render({ duplicates, addToQueue })}
+      {render({ duplicates, addToQueue, uploadInputRef })}
     </Root>
   )
 }

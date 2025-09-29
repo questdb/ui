@@ -3,7 +3,7 @@ import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
-import { API_VERSION } from "../../consts"
+import { API_ROUTE_V1, API_VERSION } from "../../consts"
 import {
   Type,
   ErrorResult,
@@ -19,7 +19,7 @@ import {
   FileCheckResponse,
   UploadModeSettings,
   UploadOptions,
-  UploadResult,
+  CSVUploadResult,
   Value,
   Preferences,
   Permission,
@@ -372,7 +372,7 @@ export class Client {
     partitionBy,
     timestamp,
     onProgress,
-  }: UploadOptions): Promise<UploadResult> {
+  }: UploadOptions): Promise<CSVUploadResult> {
     const formData = new FormData()
     if (schema) {
       formData.append("schema", JSON.stringify(schema))
@@ -529,6 +529,63 @@ export class Client {
     } catch (error) {
       return Promise.reject(error)
     }
+  }
+
+  async uploadParquetFiles(
+    files: { file: File; name: string }[],
+    overwrite: boolean,
+    onProgress?: (progress: number) => void
+  ): Promise<any> {
+    const formData = new FormData()
+    files.forEach(({ file, name }) => {
+      formData.append(name, file)
+    })
+
+    return new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest()
+      request.open("POST", `${API_ROUTE_V1}/imports?overwrite=${overwrite}`)
+      request.withCredentials = true
+      
+      Object.keys(this.commonHeaders).forEach((key) => {
+        request.setRequestHeader(key, this.commonHeaders[key])
+      })
+      
+      if (onProgress) {
+        request.upload.addEventListener("progress", (e) => {
+          const percent_completed = (e.loaded / e.total) * 100
+          onProgress(percent_completed)
+        })
+      }
+      
+      request.onload = () => {
+        if (request.status >= 200 && request.status < 300) {
+          try {
+            const response = JSON.parse(request.responseText)
+            resolve(response)
+          } catch (error) {
+            reject({
+              status: request.status,
+              statusText: "Invalid JSON response",
+            })
+          }
+        } else {
+          reject({
+            status: request.status,
+            statusText: request.statusText,
+            response: request.responseText,
+          })
+        }
+      }
+      
+      request.onerror = () => {
+        reject({
+          status: request.status,
+          statusText: request.statusText || "Upload error",
+        })
+      }
+      
+      request.send(formData)
+    })
   }
 }
 

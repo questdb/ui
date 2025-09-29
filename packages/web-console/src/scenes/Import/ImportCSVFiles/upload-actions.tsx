@@ -27,7 +27,7 @@ export const UploadActions = ({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onSubmit={onSettingsChange}
-        file={file}
+        file={file as ProcessedFile}
       />
       <Button
         disabled={file.isUploading}

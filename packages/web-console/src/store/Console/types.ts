@@ -26,6 +26,8 @@ export type Sidebar = "news" | "create" | undefined
 
 export type BottomPanel = "result" | "zeroState" | "import"
 
+export type ImportType = "csv" | "parquet"
+
 export type ImageToZoom = {
   src: string
   alt: string
@@ -37,6 +39,7 @@ export type ConsoleStateShape = Readonly<{
   sideMenuOpened: boolean
   activeSidebar: Sidebar
   activeBottomPanel: BottomPanel
+  importType: ImportType
   imageToZoom: ImageToZoom | undefined
 }>
 
@@ -44,6 +47,7 @@ export enum ConsoleAT {
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
   SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
+  SET_IMPORT_TYPE = "CONSOLE/SET_IMPORT_TYPE",
   SET_IMAGE_TO_ZOOM = "CONSOLE/SET_IMAGE_TO_ZOOM",
 }
 
@@ -61,6 +65,11 @@ type setActiveBottomPanelAction = Readonly<{
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL
 }>
 
+type setImportTypeAction = Readonly<{
+  payload: ImportType
+  type: ConsoleAT.SET_IMPORT_TYPE
+}>
+
 type setImageToZoomAction = Readonly<{
   payload?: ImageToZoom
   type: ConsoleAT.SET_IMAGE_TO_ZOOM
@@ -70,4 +79,5 @@ export type ConsoleAction =
   | ToggleSideMenuAction
   | setActiveSidebarAction
   | setActiveBottomPanelAction
+  | setImportTypeAction
   | setImageToZoomAction
