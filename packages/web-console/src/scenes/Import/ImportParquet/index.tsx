@@ -195,7 +195,7 @@ export const ImportParquet = ({ onViewData }: Props) => {
     )
     
     if (successCount === files.length) {
-      setStatus({ type: "success", message: `Uploaded ${files.length} files successfully` })
+      setStatus({ type: "success", message: `Uploaded ${files.length} file${files.length > 1 ? "s" : ""} successfully` })
     } else if (failedFiles.length > 0) {
       setStatus({ type: "error", message: `Failed after uploading ${successCount}/${files.length} files` })
     }

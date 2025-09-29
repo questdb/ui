@@ -318,7 +318,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             const processedFiles = await Promise.all(
               filesDropped.map(async (file) => {
                 if (file.id === id) {
-                  if ('table_name' in partialFile && partialFile.table_name) {
+                  if (partialFile.table_name) {
                     // Only check for file existence if table name is changed
                     const result = await quest.checkCSVFile(partialFile.table_name)
                     return {
