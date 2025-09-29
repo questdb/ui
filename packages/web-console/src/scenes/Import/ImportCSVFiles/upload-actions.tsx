@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { Button } from "@questdb/react-components"
 import { PopperHover, Tooltip } from "../../../components"
 import { Box } from "../../../components/Box"
@@ -8,7 +8,7 @@ import { UploadSettingsDialog } from "./upload-settings-dialog"
 import { UploadModeSettings } from "../../../utils"
 
 type Props = {
-  file: ProcessedFile
+  file: ProcessedCSV
   onUpload: (filename: string) => void
   onRemove: (filename: string) => void
   onSettingsChange: (settings: UploadModeSettings) => void
@@ -27,7 +27,7 @@ export const UploadActions = ({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onSubmit={onSettingsChange}
-        file={file as ProcessedFile}
+        file={file}
       />
       <Button
         disabled={file.isUploading}

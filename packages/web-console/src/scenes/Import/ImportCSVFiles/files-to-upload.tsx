@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { Heading } from "@questdb/react-components"
 import { Text } from "../../../components"
 import { Box } from "../../../components/Box"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { Dropbox } from "../Dropbox"
 import { DropboxUploadArea } from "../DropboxUploadArea"
 import { CSVUploadList } from "./CSVUploadList"
@@ -20,11 +20,11 @@ const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
 `
 
 type Props = {
-  files: ProcessedFile[]
+  files: ProcessedCSV[]
   onDialogToggle: (open: boolean) => void
   onFileRemove: (filename: string) => void
   onFileUpload: (filename: string) => void
-  onFilePropertyChange: (id: string, file: Partial<ProcessedFile>) => void
+  onFilePropertyChange: (id: string, file: Partial<ProcessedCSV>) => void
   onFilesDropped: (files: File[]) => void
   onViewData: (query: string) => void
   dialogOpen: boolean
@@ -74,7 +74,7 @@ export const FilesToUpload = ({
               ownedByList={ownedByList}
               onFileRemove={onFileRemove}
               onFileUpload={onFileUpload}
-              onFilePropertyChange={(id, file) => onFilePropertyChange(id, file as Partial<ProcessedFile>)}
+              onFilePropertyChange={(id, file) => onFilePropertyChange(id, file as Partial<ProcessedCSV>)}
               onViewData={onViewData}
               onDialogToggle={onDialogToggle}
             />

@@ -23,6 +23,7 @@ import {
   Value,
   Preferences,
   Permission,
+  ParquetUploadResult,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
 
@@ -535,7 +536,7 @@ export class Client {
     files: { file: File; name: string }[],
     overwrite: boolean,
     onProgress?: (progress: number) => void
-  ): Promise<any> {
+  ): Promise<ParquetUploadResult> {
     const formData = new FormData()
     files.forEach(({ file, name }) => {
       formData.append(name, file)
@@ -561,7 +562,7 @@ export class Client {
         if (request.status >= 200 && request.status < 300) {
           try {
             const response = JSON.parse(request.responseText)
-            resolve(response)
+            resolve(response as ParquetUploadResult)
           } catch (error) {
             reject({
               status: request.status,

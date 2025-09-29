@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Box } from "../../../components/Box"
 import { FilesToUpload } from "./files-to-upload"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
@@ -38,7 +38,7 @@ const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
 
 export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const { quest } = useContext(QuestContext)
-  const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
+  const [filesDropped, setFilesDropped] = useState<ProcessedCSV[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const tables = useSelector(selectors.query.getTables)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -89,28 +89,27 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     getOwnedByList()
   }, [])
 
-  const setFileProperties = (id: string, file: Partial<ProcessedFile>) => {
+  const setFileProperties = (id: string, file: Partial<ProcessedCSV>) => {
     setFilesDropped((files) =>
       files.map((f) => {
         if (f.id === id) {
           return {
             ...f,
             ...file,
-          } as ProcessedFile
+          }
         }
         return f
       }),
     )
   }
 
-  const setIsUploading = (file: ProcessedFile, isUploading: boolean) => {
+  const setIsUploading = (file: ProcessedCSV, isUploading: boolean) => {
     setFileProperties(file.id, { isUploading })
   }
 
-  const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
-    const csvFiles = files.filter(file => file.type === "text/csv")
+  const getFileConfigs = async (files: File[]): Promise<ProcessedCSV[]> => {
     return await Promise.all(
-      csvFiles.map(async (file) => {
+      files.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
 
         const schema =
@@ -169,7 +168,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         return {
           id: uuid(),
-          type: "csv" as const,
+          type: "csv",
           fileObject: file,
           table_name: file.name,
           table_owner: ownedByList[0],
@@ -192,7 +191,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           uploaded: false,
           uploadResult: undefined,
           uploadProgress: 0,
-        } as ProcessedFile
+        }
       }),
     )
   }
@@ -247,7 +246,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onDialogToggle={setDialogOpen}
           ownedByList={ownedByList}
           onFileUpload={async (id) => {
-            const file = filesDropped.find((f) => f.id === id) as ProcessedFile
+            const file = filesDropped.find((f) => f.id === id) as ProcessedCSV
             if (file.isUploading) {
               return
             }
@@ -308,7 +307,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             }
           }}
           onFileRemove={(id) => {
-            const file = filesDropped.find((f) => f.id === id) as ProcessedFile
+            const file = filesDropped.find((f) => f.id === id) as ProcessedCSV
             setFilesDropped(
               filesDropped.filter(
                 (f) => f.fileObject.name !== file.fileObject.name,
@@ -327,12 +326,12 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
                       ...partialFile,
                       status: result.status,
                       error: undefined, // reset prior error if table name is changed
-                    } as ProcessedFile
+                    }
                   } else {
                     return {
                       ...file,
                       ...partialFile,
-                    } as ProcessedFile
+                    }
                   }
                 } else {
                   return file

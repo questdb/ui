@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { Dropbox } from "../Dropbox"
 import { DropboxUploadArea } from "../DropboxUploadArea"
 import { Text } from "@questdb/react-components"
@@ -26,7 +26,7 @@ const InfoText = styled(Text)`
 `
 
 type Props = {
-  files: ProcessedFile[]
+  files: ProcessedCSV[]
   onFilesDropped: (files: File[]) => void
   dialogOpen: boolean
 }

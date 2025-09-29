@@ -308,11 +308,7 @@ export type CSVUploadResult = {
 }
 
 export type ParquetUploadResult = {
-  operation: "parquet_import"
-  status: string
-  file: string
-  size: number
-  location: string
+  data: { type: string, id: string }[]
 }
 
 export type FileUploadResult = CSVUploadResult | ParquetUploadResult

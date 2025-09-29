@@ -5,7 +5,7 @@ import { Column } from "@questdb/react-components/dist/components/Table"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 import { Grid, Information } from "@styled-icons/remix-line"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { CSVUploadResult, UploadModeSettings } from "../../../utils"
 import { RenameTableDialog } from "./rename-table-dialog"
 import { FileStatus } from "../FileStatus"
@@ -50,11 +50,11 @@ const FileTextBox = styled(Box)`
 `
 
 interface Props {
-  files: ProcessedFile[]
+  files: ProcessedCSV[]
   ownedByList: string[]
   onFileRemove: (id: string) => void
   onFileUpload: (id: string) => void
-  onFilePropertyChange: (id: string, file: Partial<ProcessedFile>) => void
+  onFilePropertyChange: (id: string, file: Partial<ProcessedCSV>) => void
   onViewData: (query: string) => void
   onDialogToggle: (open: boolean) => void
 }
@@ -79,7 +79,7 @@ export const CSVUploadList = ({
     return null
   }
 
-  const columns: Column<ProcessedFile>[] = [
+  const columns: Column<ProcessedCSV>[] = [
     {
       header: "CSV File",
       align: "flex-start",
@@ -122,11 +122,11 @@ export const CSVUploadList = ({
                       <UploadResultDialog file={data} />
                       <Button
                         skin="secondary"
-                        disabled={(data.uploadResult as CSVUploadResult)?.status !== "OK"}
+                        disabled={data.uploadResult?.status !== "OK"}
                         prefixIcon={<Grid size="18px" />}
                         onClick={() => {
-                          const csvResult = data.uploadResult as CSVUploadResult
-                          onViewData(`"${csvResult.location}"`)
+                          const csvResult = data.uploadResult
+                          onViewData(`"${csvResult?.location}"`)
                         }}
                       >
                         Result

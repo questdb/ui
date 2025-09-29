@@ -8,7 +8,7 @@ import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { Text } from "../../components/Text"
 import { ColorShape } from "../../types/styled"
-import { ProcessedFile } from "./ImportCSVFiles/types"
+import { ProcessedCSV } from "./ImportCSVFiles/types"
 import { ProcessedParquet } from "./ImportParquet/types"
 
 export enum BadgeType {
@@ -56,7 +56,7 @@ const FileTextBox = styled(Box)`
 `
 
 const mapStatusToLabel = (
-  file: ProcessedFile | ProcessedParquet,
+  file: ProcessedCSV | ProcessedParquet,
 ):
   | {
       label: string
@@ -102,7 +102,7 @@ const mapStatusToLabel = (
   // For CSV files
   else if (!file.isUploading && file.uploaded && file.uploadResult) {
     let label = "Imported"
-    const csvResult = file.uploadResult as CSVUploadResult
+    const csvResult = file.uploadResult
     label += ` ${csvResult.rowsImported.toLocaleString()} row${
       csvResult.rowsImported > 1 ||
       csvResult.rowsImported === 0
@@ -167,7 +167,7 @@ const mapStatusToColor = (type: BadgeType): keyof ColorShape => {
   }
 }
 
-export const FileStatus = ({ file }: { file: ProcessedFile | ProcessedParquet }) => {
+export const FileStatus = ({ file }: { file: ProcessedCSV | ProcessedParquet }) => {
   const [expanded, setExpanded] = useState(false)
   const mappedStatus = mapStatusToLabel(file)
   const statusDetails = file.error

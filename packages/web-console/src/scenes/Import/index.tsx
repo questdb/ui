@@ -4,8 +4,7 @@ import { ImportCSVFiles } from "./ImportCSVFiles"
 import { ImportParquet } from "./ImportParquet"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-
-export type ImportType = "csv" | "parquet"
+import { ImportType } from "../../store/Console/types"
 
 interface Props {
   type: ImportType

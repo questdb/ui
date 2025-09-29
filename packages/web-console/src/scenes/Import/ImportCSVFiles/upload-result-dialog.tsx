@@ -1,5 +1,5 @@
 import React from "react"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { Button, Table } from "@questdb/react-components"
 import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
 import { Search } from "@styled-icons/remix-line"
@@ -66,7 +66,7 @@ const NotificationCircle = styled.span`
 `
 
 type Props = {
-  file: ProcessedFile
+  file: ProcessedCSV
 }
 
 export const UploadResultDialog = ({ file }: Props) => {

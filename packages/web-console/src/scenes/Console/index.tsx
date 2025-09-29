@@ -270,6 +270,7 @@ const Console = () => {
                   <DropdownMenu.Portal>
                     <DropdownMenu.Content>
                       <DropdownMenu.Item
+                        data-hook="import-parquet-button"
                         onSelect={() => {
                           dispatch(actions.console.setImportType("parquet"))
                           dispatch(actions.console.setActiveBottomPanel("import"))
@@ -278,6 +279,7 @@ const Console = () => {
                         Import Parquet
                       </DropdownMenu.Item>
                       <DropdownMenu.Item
+                        data-hook="import-csv-button"
                         onSelect={() => {
                           dispatch(actions.console.setImportType("csv"))
                           dispatch(actions.console.setActiveBottomPanel("import"))

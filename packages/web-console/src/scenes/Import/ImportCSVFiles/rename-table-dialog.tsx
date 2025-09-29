@@ -1,5 +1,5 @@
 import React from "react"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { Dialog, ForwardRef, Button, Overlay } from "@questdb/react-components"
 import { Edit } from "@styled-icons/remix-line"
 import { Undo } from "@styled-icons/boxicons-regular"
@@ -27,9 +27,9 @@ const StyledDescription = styled(Dialog.Description)`
 
 type Props = {
   open: boolean
-  onOpenChange: (file?: ProcessedFile) => void
+  onOpenChange: (file?: ProcessedCSV) => void
   onNameChange: (name: string) => void
-  file: ProcessedFile
+  file: ProcessedCSV
 }
 
 const schema = Joi.object({

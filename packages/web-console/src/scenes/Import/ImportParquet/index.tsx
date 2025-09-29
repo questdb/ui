@@ -11,6 +11,7 @@ import { useContext } from "react"
 import { QuestContext } from "../../../providers"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { theme } from "../../../theme"
+import { uuid } from "../ImportCSVFiles/utils"
 
 const Root = styled(Box).attrs({ gap: "3rem", flexDirection: "column" })`
   flex: 1;
@@ -50,7 +51,7 @@ export const ImportParquet = ({ onViewData }: Props) => {
 
   const handleFilesDropped = useCallback((droppedFiles: File[]) => {
     const newFiles: ProcessedParquet[] = droppedFiles.map((file) => ({
-      id: Math.random().toString(36).substr(2, 9),
+      id: uuid(),
       fileObject: file,
       file_name: file.name,
     }))
@@ -60,11 +61,14 @@ export const ImportParquet = ({ onViewData }: Props) => {
   }, [])
 
   const handleRemoveFile = useCallback((id: string) => {
-    setFiles((prevFiles) => prevFiles.filter((f) => f.id !== id))
-    if (files.length === 1) {
-      setState("upload")
-    }
-  }, [files])
+    setFiles((prevFiles) => {
+      const newFiles = prevFiles.filter((f) => f.id !== id)
+      if (newFiles.length === 0) {
+        setState("upload")
+      }
+      return newFiles
+    })
+  }, [])
 
   const handleFileNameChange = useCallback((id: string, name: string) => {
     setFiles((prevFiles) =>

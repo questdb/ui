@@ -1,7 +1,7 @@
 import { CSVUploadResult, UploadModeSettings } from "utils"
 import { SchemaColumn } from "../../../components/TableSchemaDialog/types"
 
-export type ProcessedFile = {
+export type ProcessedCSV = {
   id: string
   fileObject: File
   status: string
