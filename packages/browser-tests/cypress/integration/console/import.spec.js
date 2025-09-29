@@ -15,6 +15,10 @@ describe("questdb import", () => {
 
   it("display import panel", () => {
     cy.getByDataHook("import-panel-button").click();
+    cy.getByDataHook("import-csv-button").should("be.visible");
+    cy.getByDataHook("import-parquet-button").should("be.visible");
+
+    cy.getByDataHook("import-csv-button").click();
     cy.getByDataHook("import-dropbox").should("be.visible");
     cy.getByDataHook("import-browse-from-disk").should("be.visible");
 
@@ -27,6 +31,10 @@ describe("questdb import", () => {
 
   it("should import csv with a nanosecond timestamp", () => {
     cy.getByDataHook("import-panel-button").click();
+    cy.getByDataHook("import-csv-button").should("be.visible");
+    cy.getByDataHook("import-parquet-button").should("be.visible");
+
+    cy.getByDataHook("import-csv-button").click();
     cy.getByDataHook("import-dropbox").should("be.visible");
     cy.getByDataHook("import-browse-from-disk").should("be.visible");
 

@@ -74,7 +74,7 @@ export const FilesToUpload = ({
               ownedByList={ownedByList}
               onFileRemove={onFileRemove}
               onFileUpload={onFileUpload}
-              onFilePropertyChange={(id, file) => onFilePropertyChange(id, file as Partial<ProcessedCSV>)}
+              onFilePropertyChange={(id, file) => onFilePropertyChange(id, file)}
               onViewData={onViewData}
               onDialogToggle={onDialogToggle}
             />
