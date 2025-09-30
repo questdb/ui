@@ -21,7 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { StoreShape, Sidebar, BottomPanel, ImageToZoom } from "types"
+import { StoreShape, Sidebar, BottomPanel, ImageToZoom, ImportType } from "types"
 
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
   store.console.sideMenuOpened
@@ -32,6 +32,9 @@ const getActiveSidebar: (store: StoreShape) => Sidebar = (store) =>
 const getActiveBottomPanel: (store: StoreShape) => BottomPanel = (store) =>
   store.console.activeBottomPanel
 
+const getImportType: (store: StoreShape) => ImportType = (store) =>
+  store.console.importType
+
 const getImageToZoom: (store: StoreShape) => ImageToZoom | undefined = (
   store,
 ) => store.console.imageToZoom
@@ -40,5 +43,6 @@ export default {
   getSideMenuOpened,
   getActiveSidebar,
   getActiveBottomPanel,
+  getImportType,
   getImageToZoom,
 }

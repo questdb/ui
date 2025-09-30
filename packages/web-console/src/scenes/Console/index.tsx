@@ -13,11 +13,12 @@ import { actions, selectors } from "../../store"
 import { Tooltip } from "../../components"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, PieChart, Search, FileSearch } from "@styled-icons/remix-line"
+import { Database2, Grid, PieChart, FileSearch } from "@styled-icons/remix-line"
 import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
-import { Import } from "./import"
+import { Import } from "../Import"
+import { DropdownMenu } from "../../components/DropdownMenu"
 import { BottomPanel } from "../../store/Console/types"
 import { Allotment, AllotmentHandle } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
@@ -78,6 +79,7 @@ const Console = () => {
     useLocalStorage()
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
+  const importType = useSelector(selectors.console.getImportType)
   const { consoleConfig } = useSettings()
   const { isSearchPanelOpen, setSearchPanelOpen, searchPanelRef } = useSearch()
 
@@ -231,29 +233,64 @@ const Console = () => {
                     <Tooltip>{tooltipText}</Tooltip>
                   </PopperHover>
                 ))}
-              <PopperHover
-                placement="right"
-                trigger={
-                  <PrimaryToggleButton
-                    readOnly={consoleConfig.readOnly}
-                    {...(!consoleConfig.readOnly && {
-                      onClick: () => {
-                        dispatch(actions.console.setActiveBottomPanel("import"))
-                      },
-                    })}
-                    selected={activeBottomPanel === "import"}
-                    data-hook="import-panel-button"
+              {consoleConfig.readOnly ? (
+                <PopperHover
+                  placement="right"
+                  trigger={
+                    <PrimaryToggleButton
+                      readOnly={consoleConfig.readOnly}
+                      selected={activeBottomPanel === "import"}
+                      data-hook="import-panel-button"
+                    >
+                      <ImportIcon size={BUTTON_ICON_SIZE} />
+                    </PrimaryToggleButton>
+                  }
+                >
+                  <Tooltip>
+                    To use this feature, turn off read-only mode in the configuration file
+                  </Tooltip>
+                </PopperHover>
+              ) : (
+                <DropdownMenu.Root>
+                  <PopperHover
+                    placement="right"
+                    trigger={
+                      <DropdownMenu.Trigger asChild>
+                        <PrimaryToggleButton
+                          selected={activeBottomPanel === "import"}
+                          data-hook="import-panel-button"
+                        >
+                          <ImportIcon size={BUTTON_ICON_SIZE} />
+                        </PrimaryToggleButton>
+                      </DropdownMenu.Trigger>
+                    }
                   >
-                    <ImportIcon size={BUTTON_ICON_SIZE} />
-                  </PrimaryToggleButton>
-                }
-              >
-                <Tooltip>
-                  {consoleConfig.readOnly
-                    ? "To use this feature, turn off read-only mode in the configuration file"
-                    : "Import files from CSV"}
-                </Tooltip>
-              </PopperHover>
+                    <Tooltip>Import data</Tooltip>
+                  </PopperHover>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content>
+                      <DropdownMenu.Item
+                        data-hook="import-parquet-button"
+                        onSelect={() => {
+                          dispatch(actions.console.setImportType("parquet"))
+                          dispatch(actions.console.setActiveBottomPanel("import"))
+                        }}
+                      >
+                        Import Parquet
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        data-hook="import-csv-button"
+                        onSelect={() => {
+                          dispatch(actions.console.setImportType("csv"))
+                          dispatch(actions.console.setActiveBottomPanel("import"))
+                        }}
+                      >
+                        Import CSV
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              )}
             </Sidebar>
             <Tab ref={resultRef}>
               {result && <Result viewMode={resultViewMode} />}
@@ -262,7 +299,7 @@ const Console = () => {
               <ZeroState />
             </Tab>
             <Tab ref={importRef}>
-              <Import />
+              <Import type={importType} />
             </Tab>
           </Bottom>
         </Allotment.Pane>

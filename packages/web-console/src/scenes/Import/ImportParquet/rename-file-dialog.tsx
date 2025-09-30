@@ -1,5 +1,5 @@
 import React from "react"
-import { ProcessedCSV } from "./types"
+import { ProcessedParquet } from "./types"
 import { Dialog, ForwardRef, Button, Overlay } from "@questdb/react-components"
 import { Edit } from "@styled-icons/remix-line"
 import { Undo } from "@styled-icons/boxicons-regular"
@@ -7,18 +7,8 @@ import { Text } from "../../../components/Text"
 import { Form } from "../../../components/Form"
 import { Box } from "../../../components/Box"
 import Joi from "joi"
-import { isValidTableName } from "../../../components/TableSchemaDialog/isValidTableName"
 import styled from "styled-components"
 import { shortenText } from "../../../utils"
-
-const List = styled.ul`
-  list-style-position: inside;
-  padding-left: 0;
-
-  li {
-    margin-bottom: 1rem;
-  }
-`
 
 const StyledDescription = styled(Dialog.Description)`
   display: grid;
@@ -27,43 +17,37 @@ const StyledDescription = styled(Dialog.Description)`
 
 type Props = {
   open: boolean
-  onOpenChange: (file?: ProcessedCSV) => void
+  onOpenChange: (file?: ProcessedParquet) => void
   onNameChange: (name: string) => void
-  file: ProcessedCSV
+  file: ProcessedParquet
 }
 
 const schema = Joi.object({
   name: Joi.string()
     .required()
-    .custom((value, helpers) => {
-      if (!isValidTableName(value)) {
-        return helpers.error("string.validTableName")
-      }
-      return value
-    })
     .messages({
       "string.empty": "Please enter a name",
-      "string.validTableName": "Invalid table name",
     }),
 })
 
-export const RenameTableDialog = ({
+export const RenameFileDialog = ({
   open,
   onOpenChange,
   onNameChange,
   file,
 }: Props) => {
-  const name = file.table_name ?? file.fileObject.name
+  const name = file.file_name
   return (
     <Dialog.Root open={open}>
       <Dialog.Trigger asChild>
         <ForwardRef>
           <Button
+            data-hook="import-parquet-rename-file"
             skin="transparent"
             prefixIcon={<Edit size="14px" />}
             onClick={() => onOpenChange(file)}
           >
-            {shortenText(name, 20)}
+            {shortenText(name, 50)}
           </Button>
         </ForwardRef>
       </Dialog.Trigger>
@@ -78,7 +62,7 @@ export const RenameTableDialog = ({
           onInteractOutside={() => onOpenChange(undefined)}
         >
           <Form<{ name: string }>
-            name="rename-table"
+            name="rename-file"
             defaultValues={{ name }}
             onSubmit={(values) => {
               onNameChange(values.name)
@@ -89,28 +73,20 @@ export const RenameTableDialog = ({
             <Dialog.Title>
               <Box>
                 <Edit size={20} />
-                Change table name
+                Change import path
               </Box>
             </Dialog.Title>
 
             <StyledDescription>
-              <Form.Item name="name" label="Table name">
-                <Form.Input name="name" />
+              <Form.Item name="name" label="Import path">
+                <Form.Input name="name" data-hook="import-parquet-rename-file-input" />
               </Form.Item>
-              <Text color="foreground">
-                <List>
-                  <li>Max 127 characters</li>
-                  <li>Must not contain dot at the beginning</li>
-                  <li>
-                    Must not contain the following characters:{" "}
-                    <strong>{`? , ' " \\ / : ) ( + * & ~ \r \n`}</strong>
-                  </li>
-                  <li>No control characters and UTF-8 BOM (Byte Order Mark)</li>
-                  <li>
-                    Cannot be named <strong>telemetry</strong> or{" "}
-                    <strong>telemetry_config</strong>
-                  </li>
-                </List>
+              <Text color="gray2">
+                This path is a relative path to the <code style={{ backgroundColor: "rgba(255, 255, 255, 0.1)", color: "#8be9fd" }}>sql.copy.input.root</code> directory.
+                <br />
+                <br />
+                Example: <code style={{ backgroundColor: "rgba(255, 255, 255, 0.1)", color: "#8be9fd" }}>subdir/test.parquet</code>
+                {' '}will import the data into <code style={{ backgroundColor: "rgba(255, 255, 255, 0.1)", color: "#8be9fd" }}>{"{"}sql.copy.input.root{"}"}/subdir/test.parquet</code>
               </Text>
             </StyledDescription>
 
@@ -130,6 +106,7 @@ export const RenameTableDialog = ({
                   <Form.Submit
                     prefixIcon={<Edit size={18} />}
                     variant="success"
+                    data-hook="import-parquet-rename-file-submit"
                   >
                     Change
                   </Form.Submit>

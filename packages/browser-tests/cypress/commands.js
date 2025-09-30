@@ -546,3 +546,35 @@ Cypress.Commands.add("createTabWithContent", (content, title) => {
     cy.get(".chrome-tab[active] .chrome-tab-rename").should("not.be.visible");
   }
 });
+
+Cypress.Commands.add("uploadParquetFile", (filenames) => {
+  const files = Array.isArray(filenames) ? filenames : [filenames];
+  files.forEach((file) => {
+    cy.get('[data-hook="import-dropbox"] input[type="file"]')
+      .last()
+      .selectFile(`cypress/fixtures/${file}`, {
+        force: true,
+      });
+  });
+});
+
+Cypress.Commands.add("mockParquetUploadSuccess", (options = {}) => {
+  cy.intercept("POST", "**/api/v1/imports*", {
+    statusCode: 201,
+    body: {
+      data: [
+        {
+          type: "import",
+          id: options.fileName || "trades-original.parquet",
+        },
+      ],
+    },
+  }).as("parquetUpload");
+});
+
+Cypress.Commands.add("mockParquetUploadError", ({ status, body }) => {
+  cy.intercept("POST", "**/api/v1/imports*", {
+    statusCode: status,
+    body: body,
+  }).as("parquetUploadError");
+});

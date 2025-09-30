@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { Button, Select, Switch, Input } from "@questdb/react-components"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
@@ -44,7 +44,7 @@ const InputWrapper = styled.div`
 type Props = {
   open: boolean
   onOpenChange: (value: boolean) => void
-  file: ProcessedFile
+  file: ProcessedCSV
   onSubmit: (settings: UploadModeSettings) => void
 }
 

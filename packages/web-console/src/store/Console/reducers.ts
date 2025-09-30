@@ -28,6 +28,7 @@ export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
   activeSidebar: undefined,
   activeBottomPanel: "zeroState",
+  importType: "csv",
   imageToZoom: undefined,
 }
 
@@ -54,6 +55,13 @@ const _console = (
       return {
         ...state,
         activeBottomPanel: action.payload,
+      }
+    }
+
+    case ConsoleAT.SET_IMPORT_TYPE: {
+      return {
+        ...state,
+        importType: action.payload,
       }
     }
 

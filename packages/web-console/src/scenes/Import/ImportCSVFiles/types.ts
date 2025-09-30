@@ -1,10 +1,14 @@
-import { UploadResult, UploadModeSettings } from "utils"
+import { CSVUploadResult, UploadModeSettings } from "utils"
 import { SchemaColumn } from "../../../components/TableSchemaDialog/types"
 
-export type ProcessedFile = {
+export type ProcessedCSV = {
   id: string
   fileObject: File
   status: string
+  isUploading: boolean
+  uploaded: boolean
+  uploadProgress: number
+  error?: string
   table_name: string
   table_owner: string
   settings: UploadModeSettings
@@ -13,18 +17,6 @@ export type ProcessedFile = {
   timestamp: string
   ttlValue: number
   ttlUnit: string
-  isUploading: boolean
-  uploaded: boolean
-  uploadResult?: UploadResult
-  uploadProgress: number
-  error?: string
+  uploadResult?: CSVUploadResult
   exists: boolean
-}
-
-// TODO: Refactor @questdb/react-components/Badge to ditch enum as prop value
-export enum BadgeType {
-  SUCCESS = "success",
-  INFO = "info",
-  WARNING = "warning",
-  ERROR = "error",
 }

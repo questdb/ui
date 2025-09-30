@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Box } from "../../../components/Box"
 import { FilesToUpload } from "./files-to-upload"
-import { ProcessedFile } from "./types"
+import { ProcessedCSV } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
 import { useContext } from "react"
 import { QuestContext } from "../../../providers"
-import { pick, UploadResult, FileCheckStatus, Parameter } from "../../../utils"
+import { pick, FileCheckStatus, Parameter, FileUploadResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
@@ -28,8 +28,8 @@ import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
 type State = "upload" | "list"
 
 type Props = {
-  onViewData: (result: UploadResult) => void
-  onUpload: (result: UploadResult) => void
+  onViewData: (query: string) => void
+  onUpload: (result: FileUploadResult) => void
 }
 
 const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
@@ -38,7 +38,7 @@ const Root = styled(Box).attrs({ gap: "4rem", flexDirection: "column" })`
 
 export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
   const { quest } = useContext(QuestContext)
-  const [filesDropped, setFilesDropped] = useState<ProcessedFile[]>([])
+  const [filesDropped, setFilesDropped] = useState<ProcessedCSV[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const tables = useSelector(selectors.query.getTables)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -89,7 +89,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     getOwnedByList()
   }, [])
 
-  const setFileProperties = (id: string, file: Partial<ProcessedFile>) => {
+  const setFileProperties = (id: string, file: Partial<ProcessedCSV>) => {
     setFilesDropped((files) =>
       files.map((f) => {
         if (f.id === id) {
@@ -103,11 +103,11 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     )
   }
 
-  const setIsUploading = (file: ProcessedFile, isUploading: boolean) => {
+  const setIsUploading = (file: ProcessedCSV, isUploading: boolean) => {
     setFileProperties(file.id, { isUploading })
   }
 
-  const getFileConfigs = async (files: File[]): Promise<ProcessedFile[]> => {
+  const getFileConfigs = async (files: File[]): Promise<ProcessedCSV[]> => {
     return await Promise.all(
       files.map(async (file) => {
         const result = await quest.checkCSVFile(file.name)
@@ -168,6 +168,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         return {
           id: uuid(),
+          type: "csv",
           fileObject: file,
           table_name: file.name,
           table_owner: ownedByList[0],
@@ -220,6 +221,12 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
     }
   }, [isVisible])
 
+  useEffect(() => {
+    if (filesDropped.length === 0) {
+      setState("upload")
+    }
+  }, [filesDropped])
+
   return (
     <Root ref={rootRef}>
       {state === "upload" && (
@@ -239,8 +246,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
           onDialogToggle={setDialogOpen}
           ownedByList={ownedByList}
           onFileUpload={async (id) => {
-            const file = filesDropped.find((f) => f.id === id) as ProcessedFile
-
+            const file = filesDropped.find((f) => f.id === id) as ProcessedCSV
             if (file.isUploading) {
               return
             }
@@ -290,18 +296,18 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
               })
               setIsUploading(file, false)
               onUpload(response)
-            } catch (err) {
+            } catch (err: any) {
               setIsUploading(file, false)
               setFileProperties(file.id, {
                 uploaded: false,
                 uploadResult: undefined,
                 uploadProgress: 0,
-                error: "Upload error",
+                error: err.statusText || "Upload error",
               })
             }
           }}
           onFileRemove={(id) => {
-            const file = filesDropped.find((f) => f.id === id) as ProcessedFile
+            const file = filesDropped.find((f) => f.id === id) as ProcessedCSV
             setFilesDropped(
               filesDropped.filter(
                 (f) => f.fileObject.name !== file.fileObject.name,
@@ -312,15 +318,20 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             const processedFiles = await Promise.all(
               filesDropped.map(async (file) => {
                 if (file.id === id) {
-                  // Only check for file existence if table name is changed
-                  const result = partialFile.table_name
-                    ? await quest.checkCSVFile(partialFile.table_name)
-                    : await Promise.resolve({ status: file.status })
-                  return {
-                    ...file,
-                    ...partialFile,
-                    status: result.status,
-                    error: partialFile.table_name ? undefined : file.error, // reset prior error if table name is changed
+                  if (partialFile.table_name) {
+                    // Only check for file existence if table name is changed
+                    const result = await quest.checkCSVFile(partialFile.table_name)
+                    return {
+                      ...file,
+                      ...partialFile,
+                      status: result.status,
+                      error: undefined, // reset prior error if table name is changed
+                    }
+                  } else {
+                    return {
+                      ...file,
+                      ...partialFile,
+                    }
                   }
                 } else {
                   return file
