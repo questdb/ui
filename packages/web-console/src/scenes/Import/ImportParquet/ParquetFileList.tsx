@@ -92,7 +92,7 @@ export const ParquetFileList = ({
       render: ({ data }) => {
         const fileInfo = (
           <FileTextBox align="center" gap="1rem">
-            <Text color="foreground">
+            <Text color="foreground" data-hook="import-parquet-file-name">
               {shortenText(data.fileObject.name, 40)}
             </Text>
             <FileSize color="gray2" size="sm">
@@ -117,6 +117,7 @@ export const ParquetFileList = ({
                   <FileStatus file={data} />
                   {data.uploaded && (
                     <Button
+                      data-hook="import-parquet-view-data"
                       prefixIcon={<Eye size="18px" />}
                       skin="secondary"
                       onClick={() => onViewData(`SELECT * FROM read_parquet('${data.file_name}')`)}
@@ -155,6 +156,7 @@ export const ParquetFileList = ({
           {data.error && (
             <Button
               skin="secondary"
+              data-hook="import-parquet-retry-upload"
               onClick={() => onSingleFileUpload(data.id)}
               disabled={isUploading}
             >
@@ -166,6 +168,7 @@ export const ParquetFileList = ({
             trigger={
               <Button
                 skin="secondary"
+                data-hook="import-parquet-remove-file"
                 onClick={() => onRemoveFile(data.id)}
               >
                 <Close size="18px" />

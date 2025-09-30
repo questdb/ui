@@ -181,11 +181,11 @@ export const FileStatus = ({ file }: { file: ProcessedCSV | ProcessedParquet }) 
       <StyledBadge type={mappedStatus.type}>
         <StyledBox>
           {mappedStatus.icon} {mappedStatus.label}
-          {statusDetails && <ChevronIcon size="16px" $expanded={expanded} onClick={() => setExpanded(!expanded)} $color={mapStatusToColor(mappedStatus.type)} />}
+          {statusDetails && <ChevronIcon data-hook="import-file-status-expand" size="16px" $expanded={expanded} onClick={() => setExpanded(!expanded)} $color={mapStatusToColor(mappedStatus.type)} />}
         </StyledBox>
         {expanded && statusDetails && (
           <FileTextBox flexDirection="column" gap="1rem" align="flex-start">
-            <Text color="red" size="sm">
+            <Text color="red" size="sm" data-hook="import-file-status-details">
               {statusDetails}
             </Text>
           </FileTextBox>

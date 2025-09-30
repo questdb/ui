@@ -298,36 +298,38 @@ export const ImportParquet = ({ onViewData }: Props) => {
                 />
               </Box>
               <ControlPanel>
-            <Box align="center" gap="2rem">
-              {status && (
-                <Box align="center" gap="0.5rem">
-                  {status.type === "success" && <CheckmarkIcon size="18px" />}
-                  {status.type === "error" && <CloseIcon size="18px" />}
-                  {status.type === "warning" && <span style={{ color: theme.color.orange }}><Loader size="18px" /></span>}
-                  <Text color={status.type === "error" ? "red" : status.type === "success" ? "green" : "orange"}>
-                    {status.message}
-                  </Text>
+                <Box align="center" gap="2rem">
+                  {status && (
+                    <Box align="center" gap="0.5rem">
+                      {status.type === "success" && <CheckmarkIcon size="18px" />}
+                      {status.type === "error" && <CloseIcon size="18px" />}
+                      {status.type === "warning" && <span style={{ color: theme.color.orange }}><Loader size="18px" /></span>}
+                      <Text data-hook="import-parquet-status" color={status.type === "error" ? "red" : status.type === "success" ? "green" : "orange"}>
+                        {status.message}
+                      </Text>
+                    </Box>
+                  )}
+                  <Box align="center" gap="1rem">
+                    <Switch
+                      dataHook="import-parquet-overwrite"
+                      checked={overwrite}
+                      onChange={(checked) => setOverwrite(checked)}
+                    />
+                    <Text color="foreground">
+                      Overwrite existing files
+                    </Text>
+                  </Box>
                 </Box>
-              )}
-              <Box align="center" gap="1rem">
-                <Switch
-                  checked={overwrite}
-                  onChange={(checked) => setOverwrite(checked)}
-                />
-                <Text color="foreground">
-                  Overwrite existing files
-                </Text>
-              </Box>
-            </Box>
-            
-            <UploadButton
-              skin="primary"
-              size="md"
-              onClick={handleUploadAll}
-              disabled={isUploading || files.length === 0}
-            >
-              {isUploading ? "Uploading..." : "Import all files"}
-            </UploadButton>
+                
+                <UploadButton
+                  skin="primary"
+                  size="md"
+                  data-hook="import-parquet-upload-all"
+                  onClick={handleUploadAll}
+                  disabled={isUploading || files.length === 0}
+                >
+                  {isUploading ? "Uploading..." : "Import all files"}
+                </UploadButton>
               </ControlPanel>
 
               <ParquetFileList

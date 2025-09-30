@@ -42,6 +42,7 @@ export const RenameFileDialog = ({
       <Dialog.Trigger asChild>
         <ForwardRef>
           <Button
+            data-hook="import-parquet-rename-file"
             skin="transparent"
             prefixIcon={<Edit size="14px" />}
             onClick={() => onOpenChange(file)}
@@ -78,7 +79,7 @@ export const RenameFileDialog = ({
 
             <StyledDescription>
               <Form.Item name="name" label="Import path">
-                <Form.Input name="name" />
+                <Form.Input name="name" data-hook="import-parquet-rename-file-input" />
               </Form.Item>
               <Text color="gray2">
                 This path is a relative path to the <code style={{ backgroundColor: "rgba(255, 255, 255, 0.1)", color: "#8be9fd" }}>sql.copy.input.root</code> directory.
@@ -105,6 +106,7 @@ export const RenameFileDialog = ({
                   <Form.Submit
                     prefixIcon={<Edit size={18} />}
                     variant="success"
+                    data-hook="import-parquet-rename-file-submit"
                   >
                     Change
                   </Form.Submit>
