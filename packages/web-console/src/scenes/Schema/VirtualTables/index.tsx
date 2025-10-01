@@ -14,7 +14,8 @@ import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROU
 import { useSchema } from "../SchemaContext";
 import { QuestContext } from "../../../providers";
 import { PartitionBy } from "../../../utils/questdb/types";
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectors } from "../../../store";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
@@ -112,6 +113,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const dispatch = useDispatch()
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
+  const allColumns = useSelector(selectors.query.getColumns)
 
   const [columnsReady, setColumnsReady] = useState(false)
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
@@ -127,8 +129,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     const filtered = tables.filter((table: QuestDB.Table) => {
       const normalizedTableName = table.table_name.toLowerCase()
       const normalizedQuery = query.toLowerCase()
+      const tableNameMatches = normalizedTableName.includes(normalizedQuery)
+      const columnMatches = query && allColumns.some(col => 
+        col.table_name === table.table_name && 
+        col.column_name.toLowerCase().includes(normalizedQuery)
+      )
+
       return (
-        normalizedTableName.includes(normalizedQuery) &&
+        (tableNameMatches || columnMatches) &&
         (filterSuspendedOnly
           ? table.walEnabled &&
             walTables?.find((t) => t.name === table.table_name)
@@ -144,7 +152,28 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }, [[], []] as QuestDB.Table[][]).map(tables => 
       tables.sort((a, b) => a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()))
     )
-  }, [tables, query, filterSuspendedOnly, walTables])
+  }, [tables, query, filterSuspendedOnly, walTables, allColumns])
+
+  const tablesWithColumnMatches = useMemo(() => {
+    if (!query) return new Set<string>()
+
+    const normalizedQuery = query.toLowerCase()
+    const matchingTables = new Set<string>()
+
+    // Find tables where columns match (regardless of whether table name matches)
+    tables.forEach(table => {
+      const hasColumnMatch = allColumns.some(col => 
+        col.table_name === table.table_name && 
+        col.column_name.toLowerCase().includes(normalizedQuery)
+      )
+
+      if (hasColumnMatch) {
+        matchingTables.add(table.table_name)
+      }
+    })
+
+    return matchingTables
+  }, [tables, query, allColumns])
 
   const flattenedItems = useMemo(() => {
     if (!columnsReady) return [];
@@ -425,6 +454,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   useEffect(() => {
     if (state.view === View.ready) {
+      let isCancelled = false;
       const fetchColumnsForExpandedTables = async () => {
         const newTree: SchemaTree = {
           [TABLES_GROUP_KEY]: {
@@ -432,14 +462,28 @@ const VirtualTables: FC<VirtualTablesProps> = ({
             kind: 'folder',
             name: `Tables (${regularTables.length})`,
             isExpanded: regularTables.length === 0 ? false : getSectionExpanded(TABLES_GROUP_KEY),
-            children: regularTables.map(table => createTableNode(table, TABLES_GROUP_KEY, false, materializedViews, walTables))
+            children: regularTables.map(table => {
+              const node = createTableNode(table, TABLES_GROUP_KEY, false, materializedViews, walTables)
+
+              if (tablesWithColumnMatches.has(table.table_name)) {
+                node.isExpanded = true // In-memory only
+              }
+              return node
+            })
           },
           [MATVIEWS_GROUP_KEY]: {
             id: MATVIEWS_GROUP_KEY,
             kind: 'folder',
             name: `Materialized views (${matViewTables.length})`,
             isExpanded: matViewTables.length === 0 ? false : getSectionExpanded(MATVIEWS_GROUP_KEY),
-            children: matViewTables.map(table => createTableNode(table, MATVIEWS_GROUP_KEY, true, materializedViews, walTables))
+            children: matViewTables.map(table => {
+              const node = createTableNode(table, MATVIEWS_GROUP_KEY, true, materializedViews, walTables)
+
+              if (tablesWithColumnMatches.has(table.table_name)) {
+                node.isExpanded = true
+              }
+              return node
+            })
           }
         };
 
@@ -448,9 +492,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
         for (const table of allTables) {
           const columnsId = `${table.matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}:${table.table_name}:columns`
-          if (getSectionExpanded(columnsId)) {
+          const shouldExpand = getSectionExpanded(columnsId) || tablesWithColumnMatches.has(table.table_name)
+
+          if (shouldExpand) {
             const fetchPromise = fetchColumns(table.table_name).then(columns => {
-              if (columns) {
+              // If the effect was cancelled (stale due to rapid input changes),
+              // skip applying results to avoid ghost expansions.
+              if (!isCancelled && columns) {
                 const result = getNodeFromSchemaTree(newTree, columnsId)
                 if (result) {
                   result.node.children = createColumnNodes(table, columnsId, columns)
@@ -463,13 +511,20 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         }
 
         await Promise.all(fetchPromises)
-        setSchemaTree(newTree)
-        setColumnsReady(true)
+
+        if (!isCancelled) {
+          setSchemaTree(newTree)
+          setColumnsReady(true)
+        }
       };
 
       fetchColumnsForExpandedTables()
+
+      return () => {
+        isCancelled = true;
+      }
     }
-  }, [state.view, regularTables, matViewTables, materializedViews]);
+  }, [state.view, regularTables, matViewTables, materializedViews, tablesWithColumnMatches]);
 
   if (state.view === View.loading || (state.view === View.ready && !columnsReady)) {
     return <Loading />
