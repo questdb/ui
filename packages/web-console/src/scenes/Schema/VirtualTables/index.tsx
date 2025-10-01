@@ -12,7 +12,7 @@ import { createTableNode, createColumnNodes, getNodeFromSchemaTree, updateAndGet
 import { useRetainLastFocus } from "./useRetainLastFocus"
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 import { useSchema } from "../SchemaContext";
-import { QuestContext } from "../../../providers";
+import { QuestContext, useEditor } from "../../../providers";
 import { PartitionBy } from "../../../utils/questdb/types";
 import { useDispatch } from 'react-redux';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
@@ -112,6 +112,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const dispatch = useDispatch()
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
+  const { appendQuery } = useEditor()
 
   const [columnsReady, setColumnsReady] = useState(false)
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
@@ -183,6 +184,28 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       toast.error(`Cannot show columns from table '${name}'`)
     }
     return []
+  }
+
+  const TOP_N_DEFAULT = 1000
+
+  const buildSelectQuery = (
+    tableName: string,
+    options?: { orderByColumn?: string; order?: "ASC" | "DESC"; limit?: number },
+  ) => {
+    const tableRef = `${tableName}`
+    const limit = options?.limit ?? TOP_N_DEFAULT
+    if (options?.orderByColumn) {
+      return `SELECT * FROM ${tableRef} ORDER BY ${options.orderByColumn} ${options.order} LIMIT ${limit};`
+    }
+    return `SELECT * FROM ${tableRef} LIMIT ${limit};`
+  }
+
+  const handleAppendQuery = (
+    tableName: string,
+    opts?: { orderByColumn?: string; order?: "ASC" | "DESC"; limit?: number },
+  ) => {
+    const sql = buildSelectQuery(tableName, opts)
+    appendQuery(sql, { appendAt: "end" })
   }
 
   const toggleNodeExpansion = useCallback(async (id: string) => {
@@ -382,6 +405,28 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               >
                 Copy schema
               </MenuItem>
+              <MenuItem
+                data-hook="table-context-menu-view-data"
+                onClick={() => handleAppendQuery(item.name)}
+              >
+                View data (Top 1000)
+              </MenuItem>
+              {item.designatedTimestamp && (
+                <>
+                  <MenuItem
+                    data-hook="table-context-menu-view-data-ts-desc"
+                    onClick={() => handleAppendQuery(item.name, { orderByColumn: item.designatedTimestamp, order: "DESC" })}
+                  >
+                    View latest by timestamp (Top 1000)
+                  </MenuItem>
+                  <MenuItem
+                    data-hook="table-context-menu-view-data-ts-asc"
+                    onClick={() => handleAppendQuery(item.name, { orderByColumn: item.designatedTimestamp, order: "ASC" })}
+                  >
+                    View earliest by timestamp (Top 1000)
+                  </MenuItem>
+                </>
+              )}
               <MenuItem 
                 data-hook="table-context-menu-resume-wal"
                 onClick={() => item.walTableData?.suspended && setTimeout(() => setOpenedSuspensionDialog(item.id))}
