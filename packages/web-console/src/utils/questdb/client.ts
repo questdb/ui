@@ -339,6 +339,10 @@ export class Client {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
   }
 
+  async showSymbolColumnDetails(table: string, column: string): Promise<QueryResult<{designated: boolean, symbolCached: boolean, symbolCapacity: number, indexed: boolean}>> {
+    return await this.query<Column>(`WITH cols as (SHOW COLUMNS FROM '${table}') SELECT symbolCached, symbolCapacity, indexed FROM cols WHERE column = '${column}';`)
+  }
+
   async showMatViewDDL(table: string): Promise<QueryResult<{ddl: string}>> {
     return await this.query<{ddl: string}>(`SHOW CREATE MATERIALIZED VIEW '${table}';`)
   }

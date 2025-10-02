@@ -145,6 +145,7 @@ const Schema = ({
   const { autoRefreshTables, updateSettings } = useLocalStorage()
   const [focusListenerActive, setFocusListenerActive] = useState(false)
   const listenerActiveRef = useRef(false)
+  const latestFocusChangeTimestampRef = useRef<number>(0)
   const { addBuffer } = useEditor()
   const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } = useSchema()
 
@@ -279,7 +280,9 @@ const Schema = ({
   }, [])
 
   const focusListener = useCallback(() => {
-    if (listenerActiveRef.current) {
+    const now = Date.now()
+    if (listenerActiveRef.current && now - latestFocusChangeTimestampRef.current > 10_000) {
+      latestFocusChangeTimestampRef.current = now
       void fetchTables()
       void fetchColumns()
     }
