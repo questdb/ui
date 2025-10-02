@@ -62,7 +62,7 @@ type Props = Readonly<{
   isLoading?: boolean
   type?: string
   errors?: string[]
-  value?: string
+  value?: string | React.ReactNode
 }>
 
 const Type = styled(Text)`
@@ -290,6 +290,7 @@ const Row = ({
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
   const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(id ?? "")
+  const matchesSearch = ["column", "table", "matview"].includes(kind) && query && name.toLowerCase().includes(query.toLowerCase())
 
   const selected = !!(selectedTables.find((t: {name: string, type: TreeNodeKind}) =>
     t.name === name
@@ -349,6 +350,8 @@ const Row = ({
       ref={wrapperRef}
       data-hook={dataHook ?? "schema-row"}
       data-kind={kind}
+      data-search-match={matchesSearch}
+      data-expanded={expanded}
       data-index={index}
       data-id={id}
       className={className}
@@ -444,11 +447,14 @@ const Row = ({
             {kind === "detail" && (
               <InfoCircle size="14px" />
             )}
-            <Highlighter
-              highlightClassName="highlight"
-              searchWords={[query ?? ""]}
-              textToHighlight={name}
-            />
+            {["column", "table", "matview"].includes(kind)
+              ? <Highlighter
+                  highlightClassName="highlight"
+                  searchWords={[query ?? ""]}
+                  textToHighlight={name}
+                />
+              : name
+            }
           </StyledTitle>
 
           {type && (
@@ -457,7 +463,7 @@ const Row = ({
             </Type>
           )}
 
-          {kind === "detail" && (
+          {kind === "detail" && !isLoading && (
             <Text color="gray2">
               {value}
             </Text>

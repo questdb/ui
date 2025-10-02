@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tables = [
@@ -108,6 +108,39 @@ describe("questdb schema with working tables", () => {
       "have.length.least",
       tables.length
     );
+  });
+
+  it("should show tables with column matches", () => {
+    cy.get('input[name="table_filter"]').type("timestamp");
+    cy.expandTables();
+
+    cy.get('.sash-horizontal[data-testid="sash"]')
+      .realMouseDown({ button: "left", position: "center" })
+      .realMouseMove(0, 300, { position: "center" })
+      .realMouseUp();
+
+    cy.get('[data-search-match="true"]').should("have.length", 2);
+    cy.get('[data-search-match="true"]').should("contain", "timestamp");
+    cy.get('[data-search-match="true"]').should(
+      "contain",
+      "MeasurementTimestamp"
+    );
+    cy.get('[data-expanded="true"][data-kind="table"]').should(
+      "have.length",
+      2
+    );
+    cy.get('[data-expanded="true"][data-kind="table"]').should(
+      "contain",
+      "btc_trades"
+    );
+    cy.get('[data-expanded="true"][data-kind="table"]').should(
+      "contain",
+      "chicago_weather_stations"
+    );
+
+    cy.getByDataHook("schema-search-clear-button").click();
+    cy.getByDataHook("schema-table-title").should("have.length", 4);
+    cy.get('[data-expanded="true"][data-kind="table"]').should("not.exist");
   });
 
   after(() => {
@@ -530,7 +563,8 @@ describe("materialized views", () => {
   });
 
   it("should show a warning icon and tooltip when the view is invalidated", () => {
-    cy.intercept({
+    cy.intercept(
+      {
         method: "GET",
         pathname: "/exec",
         query: {
