@@ -23,6 +23,7 @@ import {
   Value,
   Preferences,
   Permission,
+  SymbolColumnDetails,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
 
@@ -337,6 +338,10 @@ export class Client {
 
   async showColumns(table: string): Promise<QueryResult<Column>> {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
+  }
+
+  async showSymbolColumnDetails(table: string, column: string): Promise<QueryResult<{symbolCached: boolean, symbolCapacity: number, indexed: boolean}>> {
+    return await this.query<SymbolColumnDetails>(`WITH cols as (SHOW COLUMNS FROM '${table}') SELECT symbolCached, symbolCapacity, indexed FROM cols WHERE column = '${column}';`)
   }
 
   async showMatViewDDL(table: string): Promise<QueryResult<{ddl: string}>> {
