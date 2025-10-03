@@ -19,6 +19,10 @@ const tableSchemas = {
   my_publics: "CREATE TABLE IF NOT EXISTS 'my_publics' (public STRING);",
   my_secrets: "CREATE TABLE IF NOT EXISTS 'my_secrets' (secret STRING);",
   my_secrets2: "CREATE TABLE IF NOT EXISTS 'my_secrets2' (secret STRING);",
+  contains_magicword:
+    "CREATE TABLE IF NOT EXISTS 'contains_magicword' (ts TIMESTAMP, magicword VARCHAR) timestamp (ts) PARTITION BY DAY;",
+  contains_simpleword:
+    "CREATE TABLE IF NOT EXISTS 'contains_simpleword' (timestamp TIMESTAMP, simpleword VARCHAR) timestamp (timestamp) PARTITION BY DAY;",
 };
 
 const materializedViewSchemas = {

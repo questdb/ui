@@ -200,6 +200,12 @@ export type Column = {
   upsertKey: boolean
 }
 
+export type SymbolColumnDetails = {
+  symbolCached: boolean
+  symbolCapacity: number
+  indexed: boolean
+}
+
 export type Options = {
   limit?: string
   explain?: boolean

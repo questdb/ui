@@ -23,11 +23,12 @@
  ******************************************************************************/
 
 import { QueryAction, QueryAT, QueryStateShape, RunningType } from "../../types"
+import type { InformationSchemaColumn } from "utils/questdb"
 
 export const initialState: QueryStateShape = {
   notifications: [],
   tables: [],
-  columns: [],
+  columns: {},
   running: RunningType.NONE,
   queryNotifications: {},
   activeNotification: null,
@@ -230,9 +231,14 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     }
 
     case QueryAT.SET_COLUMNS: {
+      const { columns } = action.payload
+      const categorizedColumns = columns.reduce((acc, column) => {
+        acc[column.table_name] = [...(acc[column.table_name] || []), column]
+        return acc
+      }, {} as Record<string, InformationSchemaColumn[]>)
       return {
         ...state,
-        columns: action.payload.columns,
+        columns: categorizedColumns,
       }
     }
 
