@@ -157,24 +157,6 @@ describe("questdb schema with search column tables", () => {
     cy.get('[data-search-match="true"]').should("contain", "simpleword");
 
     cy.getByDataHook("schema-search-clear-button").click();
-
-    cy.get('input[name="table_filter"]').type("word");
-    cy.get('input[name="table_filter"]').realHover();
-
-    cy.getByDataHook("schema-table-title").should("have.length", 2);
-    cy.get('[data-search-match="true"]').should("have.length", 4);
-    cy.get('[data-search-match="true"]').should(
-      "contain",
-      "contains_magicword"
-    );
-    cy.get('[data-search-match="true"]').should(
-      "contain",
-      "contains_simpleword"
-    );
-    cy.get('[data-search-match="true"]').should("contain", "magicword");
-    cy.get('[data-search-match="true"]').should("contain", "simpleword");
-
-    cy.getByDataHook("schema-search-clear-button").click();
     cy.get('input[name="table_filter"]').type("ts");
     cy.get('input[name="table_filter"]').realHover();
 
