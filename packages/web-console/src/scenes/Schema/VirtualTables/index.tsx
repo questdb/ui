@@ -1,7 +1,7 @@
 import React, { FC, useCallback, useEffect, useMemo, useState, useContext, useRef } from 'react';
 import { Virtuoso, VirtuosoHandle, ListRange } from 'react-virtuoso';
 import styled from 'styled-components';
-import { Loader3, FileCopy, Restart } from '@styled-icons/remix-line';
+import { Loader3, FileCopy, Restart, FileText } from '@styled-icons/remix-line';
 import { spinAnimation, toast } from '../../../components';
 import { color, ErrorResult } from '../../../utils';
 import * as QuestDB from "../../../utils/questdb";
@@ -20,11 +20,11 @@ import {
 import { useRetainLastFocus } from "./useRetainLastFocus"
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 import { useSchema } from "../SchemaContext";
-import { QuestContext } from "../../../providers";
-import { PartitionBy, SymbolColumnDetails } from "../../../utils/questdb/types";
-import { useSelector } from 'react-redux';
-import { selectors } from "../../../store";
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
+import { QuestContext, useEditor } from "../../../providers";
+import { PartitionBy } from "../../../utils/questdb/types";
+import { useDispatch } from 'react-redux';
+import actions from '../../../store/actions'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem, ContextMenuSub, ContextMenuSubContent, MenuSubTrigger } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
 
@@ -139,7 +139,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 }) => {
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
-  const allColumns = useSelector(selectors.query.getColumns)
+  const { appendQuery, editorRef } = useEditor()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(null)
@@ -234,6 +234,93 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
     return []
   }, [fetchSymbolColumnDetails])
+
+  const TOP_N_DEFAULT = 1000
+
+  const appendTemplateAndPlaceCursorAtEnd = (template: string) => {
+    appendQuery(template, { appendAt: "end" })
+    // Move cursor to end of the newly inserted template
+    const editor = editorRef.current
+    if (editor) {
+      // appendQuery selects the inserted region; collapse to its end for caret placement
+      const selection = editor.getSelection()
+      if (selection) {
+        const end = selection.getEndPosition()
+        editor.setSelection({
+          startLineNumber: end.lineNumber,
+          endLineNumber: end.lineNumber,
+          startColumn: end.column,
+          endColumn: end.column,
+        })
+      }
+      // Ensure focus after Radix ContextMenu closes (avoid tree re-focusing)
+      setTimeout(() => requestAnimationFrame(() => editor.focus()), 0)
+    }
+  }
+
+  const appendTemplateAndPlaceCursorAfterLimit = (template: string, limitMarker: string) => {
+    appendQuery(template, { appendAt: "end" })
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (editor && model) {
+      const selection = editor.getSelection()
+      if (selection) {
+        const selectionText = model.getValueInRange(selection)
+        const selectionStartOffset = model.getOffsetAt({ lineNumber: selection.startLineNumber, column: selection.startColumn })
+        const idx = selectionText.indexOf(limitMarker)
+        const semiIdx = selectionText.lastIndexOf(";")
+        if (idx !== -1) {
+          const caretOffset = selectionStartOffset + idx + limitMarker.length
+          const caretPos = model.getPositionAt(caretOffset)
+          // Place caret at the number position (between LIMIT and ';')
+          editor.setSelection({
+            startLineNumber: caretPos.lineNumber,
+            endLineNumber: caretPos.lineNumber,
+            startColumn: caretPos.column,
+            endColumn: caretPos.column,
+          })
+        } else if (semiIdx !== -1) {
+          // Fallback: place before semicolon
+          const caretOffset = selectionStartOffset + semiIdx
+          const caretPos = model.getPositionAt(caretOffset)
+          editor.setSelection({
+            startLineNumber: caretPos.lineNumber,
+            endLineNumber: caretPos.lineNumber,
+            startColumn: caretPos.column,
+            endColumn: caretPos.column,
+          })
+        }
+      }
+      setTimeout(() => requestAnimationFrame(() => editor.focus()), 0)
+    }
+  }
+
+  const handleAppendSelectAllAndRun = (tableName: string) => {
+    const sql = `SELECT * FROM ${tableName};`
+    appendQuery(sql, { appendAt: "end" })
+    // Trigger run immediately
+    setTimeout(() => dispatch(actions.query.toggleRunning()), 0)
+  }
+
+  const handleAppendFirstN = (tableName: string) => {
+    const sql = `SELECT * FROM ${tableName} LIMIT ;`
+    appendTemplateAndPlaceCursorAfterLimit(sql, "LIMIT ")
+  }
+
+  const handleAppendFirstNLatestFirst = (tableName: string, ts: string) => {
+    const sql = `SELECT * FROM ${tableName} ORDER BY ${ts} DESC LIMIT ;`
+    appendTemplateAndPlaceCursorAfterLimit(sql, "LIMIT ")
+  }
+
+  const handleAppendLastN = (tableName: string) => {
+    const sql = `SELECT * FROM ${tableName} LIMIT -;`
+    appendTemplateAndPlaceCursorAfterLimit(sql, "LIMIT -")
+  }
+
+  const handleAppendLastNLatestFirst = (tableName: string, ts: string) => {
+    const sql = `SELECT * FROM ${tableName} ORDER BY ${ts} DESC LIMIT -;`
+    appendTemplateAndPlaceCursorAfterLimit(sql, "LIMIT -")
+  }
 
   const toggleNodeExpansion = useCallback(async (id: string) => {
     const isExpanded = getSectionExpanded(id)
@@ -452,6 +539,30 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               >
                 Copy schema
               </MenuItem>
+              <ContextMenuSub>
+                <MenuSubTrigger icon={<FileText size={16} />}>Queries</MenuSubTrigger>
+                <ContextMenuSubContent>
+                  <MenuItem onClick={() => handleAppendSelectAllAndRun(item.name)}>
+                    Select all rows
+                  </MenuItem>
+                  <MenuItem onClick={() => handleAppendFirstN(item.name)}>
+                    Select first N rows
+                  </MenuItem>
+                  {item.designatedTimestamp && (
+                    <MenuItem onClick={() => handleAppendFirstNLatestFirst(item.name, item.designatedTimestamp!)}>
+                      Select first N rows (Latest first)
+                    </MenuItem>
+                  )}
+                  <MenuItem onClick={() => handleAppendLastN(item.name)}>
+                    Select last N rows
+                  </MenuItem>
+                  {item.designatedTimestamp && (
+                    <MenuItem onClick={() => handleAppendLastNLatestFirst(item.name, item.designatedTimestamp!)}>
+                      Select last N rows (Latest first)
+                    </MenuItem>
+                  )}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
               <MenuItem 
                 data-hook="table-context-menu-resume-wal"
                 onClick={() => item.walTableData?.suspended && setTimeout(() => setOpenedSuspensionDialog(item.id))}
