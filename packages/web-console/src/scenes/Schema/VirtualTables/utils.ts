@@ -1,6 +1,6 @@
 import { getSectionExpanded } from "../localStorageUtils"
-import type { InformationSchemaColumn } from "../../../utils/questdb/types"
-import { TreeNode, SchemaTree, FlattenedTreeItem, SymbolColumnDetails } from "../VirtualTables"
+import type { InformationSchemaColumn, SymbolColumnDetails } from "../../../utils/questdb/types"
+import { TreeNode, SchemaTree, FlattenedTreeItem } from "../VirtualTables"
 import * as QuestDB from "../../../utils/questdb"
 
 export const createSymbolDetailsNodes = (details: SymbolColumnDetails, parentId: string): TreeNode[] => {
@@ -64,7 +64,7 @@ export const createSymbolDetailsPlaceholderNodes = (parentId: string): TreeNode[
   ];
 }
 
-const createColumnNodes = (table: QuestDB.Table, parentId: string, columns: InformationSchemaColumn[]): TreeNode[] => {
+ const createColumnNodes = (table: QuestDB.Table, parentId: string, columns: InformationSchemaColumn[]): TreeNode[] => {
   return columns.map(column => {
     const columnId = `${parentId}:${column.column_name}`
     const isExpanded = getSectionExpanded(columnId)

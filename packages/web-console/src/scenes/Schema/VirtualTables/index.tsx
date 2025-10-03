@@ -21,7 +21,7 @@ import { useRetainLastFocus } from "./useRetainLastFocus"
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 import { useSchema } from "../SchemaContext";
 import { QuestContext } from "../../../providers";
-import { PartitionBy } from "../../../utils/questdb/types";
+import { PartitionBy, SymbolColumnDetails } from "../../../utils/questdb/types";
 import { useSelector } from 'react-redux';
 import { selectors } from "../../../store";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
@@ -73,12 +73,6 @@ export type FlattenedTreeItem = {
   walEnabled?: boolean
   type?: string
 };
-
-export type SymbolColumnDetails = {
-  symbolCached: boolean
-  symbolCapacity: number
-  indexed: boolean
-}
 
 export type TreeNode = FlattenedTreeItem & {
   children: TreeNode[]
@@ -546,14 +540,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }
   }, [state.view, regularTables, matViewTables, materializedViews, walTables, allColumns]);
 
-  const allColumnsRef = useRef(allColumns)
   useEffect(() => {
-    if (allColumnsRef.current === allColumns) {
-      allColumnsRef.current = allColumns
-      return
-    }
-    allColumnsRef.current = allColumns
-
     symbolColumnDetailsRef.current.clear()
     fetchedSymbolsRef.current.clear()
   }, [allColumns])
