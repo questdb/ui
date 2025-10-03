@@ -17,6 +17,17 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.3 - 2025.10.03
+### Added
+- add column name search to Schema filter [#478](https://github.com/questdb/ui/pull/478)
+- add loading indicator and notification for a single query when running multiple queries [#456](https://github.com/questdb/ui/pull/456)
+
+### Fixed
+- handle timestamp_ns format in CSV imports [#474](https://github.com/questdb/ui/pull/474)
+- update sql grammar, fix highlighting of array operations and sampling rate [#472](https://github.com/questdb/ui/pull/472)
+- fix for users with space in their name are unable to import CSV file [#473](https://github.com/questdb/ui/pull/473)
+
+
 ## 1.1.2 - 2025.08.29
 ### Fixed
 - infinite state updates in metrics [#469](https://github.com/questdb/ui/pull/469)
