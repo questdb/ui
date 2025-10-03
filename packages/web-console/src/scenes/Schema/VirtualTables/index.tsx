@@ -8,13 +8,22 @@ import * as QuestDB from "../../../utils/questdb";
 import { State, View } from "../../Schema";
 import LoadingError from "../LoadingError";
 import Row, { TreeNodeKind } from "../Row";
-import { createTableNode, createColumnNodes, getNodeFromSchemaTree, updateAndGetSchemaTree, findRowIndexById, flattenTree } from "./utils";
+import {
+  createTableNode,
+  updateAndGetSchemaTree,
+  getNodeFromSchemaTree,
+  findRowIndexById,
+  flattenTree,
+  createSymbolDetailsNodes,
+  createSymbolDetailsPlaceholderNodes
+} from "./utils";
 import { useRetainLastFocus } from "./useRetainLastFocus"
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 import { useSchema } from "../SchemaContext";
 import { QuestContext } from "../../../providers";
-import { PartitionBy } from "../../../utils/questdb/types";
-import { useDispatch } from 'react-redux';
+import { PartitionBy, SymbolColumnDetails } from "../../../utils/questdb/types";
+import { useSelector } from 'react-redux';
+import { selectors } from "../../../store";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
@@ -28,13 +37,32 @@ type VirtualTablesProps = {
   loadingError: ErrorResult | null
 }
 
+type BaseTreeColumn = {
+  column: string
+  type: Exclude<string, 'TIMESTAMP' | 'SYMBOL'>
+}
+
+type TimestampColumn = BaseTreeColumn & {
+  designated: boolean
+  type: 'TIMESTAMP'
+}
+
+type SymbolColumn = BaseTreeColumn & {
+  symbolCached: boolean
+  symbolCapacity: number
+  indexed: boolean
+  type: 'SYMBOL'
+}
+
+export type TreeColumn = TimestampColumn | SymbolColumn | BaseTreeColumn
+
 export type FlattenedTreeItem = {
   id: string
   kind: TreeNodeKind
   name: string
   value?: string
   table?: QuestDB.Table
-  column?: QuestDB.Column
+  column?: TreeColumn
   matViewData?: QuestDB.MaterializedView
   walTableData?: QuestDB.WalTable
   parent?: string
@@ -109,51 +137,53 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   state,
   loadingError,
 }) => {
-  const dispatch = useDispatch()
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
+  const allColumns = useSelector(selectors.query.getColumns)
 
-  const [columnsReady, setColumnsReady] = useState(false)
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(null)
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<string | null>(null)
 
+  const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(new Map())
+  const fetchedSymbolsRef = useRef<Set<string>>(new Set())
+  const schemaTreeRef = useRef<SchemaTree>(schemaTree)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const rangeRef = useRef<ListRange | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   useRetainLastFocus({ virtuosoRef, focusedIndex, setFocusedIndex, wrapperRef })
 
   const [regularTables, matViewTables] = useMemo(() => {
-    const filtered = tables.filter((table: QuestDB.Table) => {
+    return tables.reduce((acc, table: QuestDB.Table) => {
       const normalizedTableName = table.table_name.toLowerCase()
       const normalizedQuery = query.toLowerCase()
-      return (
-        normalizedTableName.includes(normalizedQuery) &&
-        (filterSuspendedOnly
-          ? table.walEnabled &&
-            walTables?.find((t) => t.name === table.table_name)
-              ?.suspended
-          : true)
-      )
-    })
+      const tableNameMatches = normalizedTableName.includes(normalizedQuery)
+      const columnMatches = !!query && !!(allColumns[table.table_name]?.some(col => 
+        col.column_name.toLowerCase().includes(normalizedQuery)
+      ))
+      const shownIfFilteredSuspendedOnly = filterSuspendedOnly
+        ? table.walEnabled &&
+          walTables?.find((t) => t.name === table.table_name)
+            ?.suspended
+        : true
+      const shownIfFilteredWithQuery = tableNameMatches || columnMatches
 
-    return filtered.reduce((acc, table) => {
-      const index = table.matView ? 1 : 0
-      acc[index].push(table)
+      if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
+        acc[table.matView ? 1 : 0].push({ ...table, hasColumnMatches: columnMatches })
+        return acc
+      }
       return acc
-    }, [[], []] as QuestDB.Table[][]).map(tables => 
+    }, [[], []] as (QuestDB.Table & { hasColumnMatches: boolean })[][]).map(tables => 
       tables.sort((a, b) => a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()))
     )
-  }, [tables, query, filterSuspendedOnly, walTables])
+  }, [tables, query, filterSuspendedOnly, walTables, allColumns])
 
   const flattenedItems = useMemo(() => {
-    if (!columnsReady) return [];
-    
     return Object.values(schemaTree).reduce((acc, node) => {
       acc.push(...flattenTree(node));
       return acc;
     }, [] as FlattenedTreeItem[]);
-  }, [schemaTree, columnsReady]);
+  }, [schemaTree])
 
   const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
     try {
@@ -173,42 +203,63 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }
   }
 
-  const fetchColumns = async (name: string) => {
+  const fetchSymbolColumnDetails = useCallback(async (tableName: string, columnName: string): Promise<SymbolColumnDetails | null> => {
     try {
-      const response = await quest.showColumns(name)
-      if (response && response.type === QuestDB.Type.DQL) {
-        return response.data
+      const response = await quest.showSymbolColumnDetails(tableName, columnName)
+      if (response && response.type === QuestDB.Type.DQL && response.data.length > 0) {
+        return response.data[0]
       }
     } catch (error: any) {
-      toast.error(`Cannot show columns from table '${name}'`)
+      toast.error(`Cannot fetch column details from table '${tableName}' for column ${columnName}`)
     }
+    return null
+  }, [quest])
+
+  const getOrFetchSymbolDetails = useCallback(async (
+    id: string,
+    tableName: string,
+    columnName: string
+  ): Promise<TreeNode[]> => {
+    fetchedSymbolsRef.current.add(id)
+    const cached = symbolColumnDetailsRef.current.get(id)
+    if (cached) {
+      return createSymbolDetailsNodes(cached, id)
+    }
+
+    const details = await fetchSymbolColumnDetails(tableName, columnName)
+    if (details) {
+      symbolColumnDetailsRef.current.set(id, details)
+      return createSymbolDetailsNodes(details, id)
+    }
+
     return []
-  }
+  }, [fetchSymbolColumnDetails])
 
   const toggleNodeExpansion = useCallback(async (id: string) => {
     const isExpanded = getSectionExpanded(id)
     const willBeExpanded = !isExpanded
-    
+
     let newTree = { ...schemaTree }
     const modifiedKeys = setSectionExpanded(id, willBeExpanded)
     modifiedKeys.forEach(key => {
       newTree = updateAndGetSchemaTree(newTree, key, node => ({ ...node, isExpanded: willBeExpanded }))
     })
-    
-    if (id.endsWith(':columns')) {
-      const parts = id.split(':');
-      const tableName = parts[parts.length - 2]
+
+    const splittedId = id.split(':')
+    const isColumnDetail = splittedId.length > 2 && splittedId.slice(-2)[0] === 'columns'
+
+    if (isColumnDetail) {
+      let children: TreeNode[]
       if (!willBeExpanded) {
-        newTree = updateAndGetSchemaTree(newTree, id, node => ({ ...node, children: [] }))
+        fetchedSymbolsRef.current.delete(id)
+        children = []
       } else {
-        const columns = await fetchColumns(tableName);
-        if (columns) {
-          newTree = updateAndGetSchemaTree(newTree, id, node => ({ ...node, children: createColumnNodes(node.table!, id, columns) }))
-        }
+        children = createSymbolDetailsPlaceholderNodes(id)
       }
+      newTree = updateAndGetSchemaTree(newTree, id, node => ({ ...node, children })) 
     }
     setSchemaTree(newTree)
-  }, [schemaTree]);
+  }, [schemaTree])
 
   const navigateInTree = useCallback((options: TreeNavigationOptions) => {
     if (!virtuosoRef.current) {
@@ -291,7 +342,25 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   const renderRow = useCallback((index: number) => {
     const item = flattenedItems[index];
-    
+
+    if (item.kind === 'column' && item.isExpanded && item.type === 'SYMBOL' && !fetchedSymbolsRef.current.has(item.id)) {
+      const result = getNodeFromSchemaTree(schemaTreeRef.current, item.id)
+      if (result) {
+        const isLoading = result.node.children.some(child => child.isLoading)
+        if (isLoading) {
+          const splittedId = item.id.split(':')
+          const columnName = splittedId.slice(-1)[0]
+          const tableName = splittedId.slice(-3)[0]
+
+          getOrFetchSymbolDetails(item.id, tableName, columnName).then(children => {
+            setSchemaTree(currentTree =>
+              updateAndGetSchemaTree(currentTree, item.id, node => ({ ...node, children }))
+            )
+          })
+        }
+      }
+    }
+
     if (item.kind === 'detail') {
       return (
         <Row
@@ -299,13 +368,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           index={index}
           name={item.value ? `${item.name}:` : item.name}
           value={item.value}
+          isLoading={item.isLoading}
           id={item.id}
           onExpandCollapse={() => {}}
           navigateInTree={navigateInTree}
         />
       );
     }
-    
+
     if (item.id === TABLES_GROUP_KEY || item.id === MATVIEWS_GROUP_KEY) {
       const isTable = item.id === TABLES_GROUP_KEY
       return (
@@ -322,7 +392,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         />
       );
     }
-    
+
     if (item.kind === 'folder') {
       return (
         <Row
@@ -406,13 +476,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           onExpandCollapse={() => toggleNodeExpansion(item.id)}
           designatedTimestamp={item.designatedTimestamp}
           type={item.type}
+          isLoading={item.isLoading}
           id={item.id}
           navigateInTree={navigateInTree}
         />
       );
     }
     
-    return null;
+    return null
   }, [
     flattenedItems,
     regularTables,
@@ -421,57 +492,64 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     openedContextMenu,
     openedSuspensionDialog,
     navigateInTree,
+    getOrFetchSymbolDetails,
   ]);
 
   useEffect(() => {
     if (state.view === View.ready) {
-      const fetchColumnsForExpandedTables = async () => {
-        const newTree: SchemaTree = {
-          [TABLES_GROUP_KEY]: {
-            id: TABLES_GROUP_KEY,
-            kind: 'folder',
-            name: `Tables (${regularTables.length})`,
-            isExpanded: regularTables.length === 0 ? false : getSectionExpanded(TABLES_GROUP_KEY),
-            children: regularTables.map(table => createTableNode(table, TABLES_GROUP_KEY, false, materializedViews, walTables))
-          },
-          [MATVIEWS_GROUP_KEY]: {
-            id: MATVIEWS_GROUP_KEY,
-            kind: 'folder',
-            name: `Materialized views (${matViewTables.length})`,
-            isExpanded: matViewTables.length === 0 ? false : getSectionExpanded(MATVIEWS_GROUP_KEY),
-            children: matViewTables.map(table => createTableNode(table, MATVIEWS_GROUP_KEY, true, materializedViews, walTables))
-          }
-        };
-
-        const allTables = [...regularTables, ...matViewTables]
-        const fetchPromises: Promise<void>[] = []
-
-        for (const table of allTables) {
-          const columnsId = `${table.matView ? MATVIEWS_GROUP_KEY : TABLES_GROUP_KEY}:${table.table_name}:columns`
-          if (getSectionExpanded(columnsId)) {
-            const fetchPromise = fetchColumns(table.table_name).then(columns => {
-              if (columns) {
-                const result = getNodeFromSchemaTree(newTree, columnsId)
-                if (result) {
-                  result.node.children = createColumnNodes(table, columnsId, columns)
-                  result.node.isExpanded = true
-                }
+      const newTree: SchemaTree = {
+        [TABLES_GROUP_KEY]: {
+          id: TABLES_GROUP_KEY,
+          kind: 'folder',
+          name: `Tables (${regularTables.length})`,
+          isExpanded: regularTables.length === 0 ? false : getSectionExpanded(TABLES_GROUP_KEY),
+          children: regularTables.map(table => {
+            const node = createTableNode(table, TABLES_GROUP_KEY, false, materializedViews, walTables, allColumns[table.table_name] ?? [])
+            if (table.hasColumnMatches) {
+              node.isExpanded = true
+              // Also mark the columns folder as expanded (but not persisted)
+              const columnsFolder = node.children.find(child => child.id.endsWith(':columns'))
+              if (columnsFolder) {
+                columnsFolder.isExpanded = true
               }
-            })
-            fetchPromises.push(fetchPromise)
-          }
+            }
+            return node
+          })
+        },
+        [MATVIEWS_GROUP_KEY]: {
+          id: MATVIEWS_GROUP_KEY,
+          kind: 'folder',
+          name: `Materialized views (${matViewTables.length})`,
+          isExpanded: matViewTables.length === 0 ? false : getSectionExpanded(MATVIEWS_GROUP_KEY),
+          children: matViewTables.map(table => {
+            const node = createTableNode(table, MATVIEWS_GROUP_KEY, true, materializedViews, walTables, allColumns[table.table_name] ?? [])
+            if (table.hasColumnMatches) {
+              node.isExpanded = true
+              const columnsFolder = node.children.find(child => child.id.endsWith(':columns'))
+              if (columnsFolder) {
+                columnsFolder.isExpanded = true
+              }
+            }
+            return node
+          })
         }
-
-        await Promise.all(fetchPromises)
-        setSchemaTree(newTree)
-        setColumnsReady(true)
       };
 
-      fetchColumnsForExpandedTables()
+      fetchedSymbolsRef.current.clear()
+      setSchemaTree(newTree)
     }
-  }, [state.view, regularTables, matViewTables, materializedViews]);
+  }, [state.view, regularTables, matViewTables, materializedViews, walTables, allColumns]);
 
-  if (state.view === View.loading || (state.view === View.ready && !columnsReady)) {
+  useEffect(() => {
+    symbolColumnDetailsRef.current.clear()
+    fetchedSymbolsRef.current.clear()
+  }, [allColumns])
+
+  useEffect(() => {
+    schemaTreeRef.current = schemaTree
+  }, [schemaTree])
+
+  if (state.view === View.loading) {
     return <Loading />
   }
 

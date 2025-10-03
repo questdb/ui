@@ -1,55 +1,89 @@
 import { getSectionExpanded } from "../localStorageUtils"
+import type { InformationSchemaColumn, SymbolColumnDetails } from "../../../utils/questdb/types"
 import { TreeNode, SchemaTree, FlattenedTreeItem } from "../VirtualTables"
 import * as QuestDB from "../../../utils/questdb"
 
-export const createColumnNodes = (table: QuestDB.Table, parentId: string, columns: QuestDB.Column[]): TreeNode[] => {
+export const createSymbolDetailsNodes = (details: SymbolColumnDetails, parentId: string): TreeNode[] => {
+  return [
+    {
+      id: `${parentId}:indexed`,
+      kind: 'detail',
+      name: 'Indexed',
+      parent: parentId,
+      value: details.indexed ? 'Yes' : 'No',
+      children: []
+    },
+    {
+      id: `${parentId}:symbolCapacity`,
+      kind: 'detail',
+      name: 'Symbol capacity',
+      parent: parentId,
+      value: details.symbolCapacity.toString(),
+      children: []
+    },
+    {
+      id: `${parentId}:symbolCached`,
+      kind: 'detail',
+      name: 'Cached',
+      parent: parentId,
+      value: details.symbolCached ? 'Yes' : 'No',
+      children: []
+    }
+  ];
+}
+
+export const createSymbolDetailsPlaceholderNodes = (parentId: string): TreeNode[] => {
+  return [
+    {
+      id: `${parentId}:indexed`,
+      kind: 'detail',
+      name: 'Indexed',
+      isLoading: true,
+      parent: parentId,
+      value: 'Loading...',
+      children: []
+    },
+    {
+      id: `${parentId}:symbolCapacity`,
+      kind: 'detail',
+      name: 'Symbol capacity',
+      isLoading: true,
+      parent: parentId,
+      value: 'Loading...',
+      children: []
+    },
+    {
+      id: `${parentId}:symbolCached`,
+      kind: 'detail',
+      name: 'Cached',
+      isLoading: true,
+      parent: parentId,
+      value: 'Loading...',
+      children: []
+    }
+  ];
+}
+
+ const createColumnNodes = (table: QuestDB.Table, parentId: string, columns: InformationSchemaColumn[]): TreeNode[] => {
   return columns.map(column => {
-    const columnId = `${parentId}:${column.column}`;
-    
+    const columnId = `${parentId}:${column.column_name}`
+    const isExpanded = getSectionExpanded(columnId)
+
     const columnNode: TreeNode = {
       id: columnId,
       kind: 'column',
-      name: column.column,
-      column,
+      table,
+      name: column.column_name,
       parent: parentId,
-      isExpanded: getSectionExpanded(columnId),
+      isExpanded,
       designatedTimestamp: table.designatedTimestamp,
-      type: column.type,
-      children: []
-    };
-
-    if (column.type === 'SYMBOL') {
-      columnNode.children = [
-        {
-          id: `${columnId}:indexed`,
-          kind: 'detail',
-          name: 'Indexed',
-          parent: columnId,
-          value: column.indexed ? 'Yes' : 'No',
-          children: []
-        },
-        {
-          id: `${columnId}:symbolCapacity`,
-          kind: 'detail',
-          name: 'Symbol capacity',
-          parent: columnId,
-          value: column.symbolCapacity.toString(),
-          children: []
-        },
-        {
-          id: `${columnId}:symbolCached`,
-          kind: 'detail',
-          name: 'Cached',
-          parent: columnId,
-          value: column.symbolCached ? 'Yes' : 'No',
-          children: []
-        }
-      ];
+      type: column.data_type,
+      children: isExpanded && column.data_type === 'SYMBOL' ? createSymbolDetailsPlaceholderNodes(columnId) : []
     }
 
-    return columnNode;
-  });
-  };
+    return columnNode
+  })
+}
 
 const createStorageDetailsNodes = (
   table: QuestDB.Table,
@@ -80,7 +114,8 @@ export const createTableNode = (
   parentId: string,
   isMatView: boolean = false,
   materializedViews: QuestDB.MaterializedView[] | undefined,
-  walTables: QuestDB.WalTable[] | undefined
+  walTables: QuestDB.WalTable[] | undefined,
+  tableColumns: InformationSchemaColumn[]
 ): TreeNode => {
   const tableId = `${parentId}:${table.table_name}`
   const matViewData = isMatView ? materializedViews?.find(mv => mv.view_name === table.table_name) : undefined
@@ -110,7 +145,7 @@ export const createTableNode = (
         table: table,
         parent: tableId,
         isExpanded: getSectionExpanded(columnsId),
-        children: []
+        children: createColumnNodes(table, columnsId, tableColumns)
       },
       {
         id: storageDetailsId,
