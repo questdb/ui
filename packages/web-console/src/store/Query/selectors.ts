@@ -53,7 +53,7 @@ const getRunning: (store: StoreShape) => RunningType = (store) =>
 
 const getTables: (store: StoreShape) => Table[] = (store) => store.query.tables
 
-const getColumns: (store: StoreShape) => InformationSchemaColumn[] = (store) =>
+const getColumns: (store: StoreShape) => Record<string, InformationSchemaColumn[]> = (store) =>
   store.query.columns
 
 export default {

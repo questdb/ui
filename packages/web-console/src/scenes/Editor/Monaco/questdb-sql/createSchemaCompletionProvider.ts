@@ -18,7 +18,7 @@ const isInColumnListing = (text: string) =>
 export const createSchemaCompletionProvider = (
   editor: editor.IStandaloneCodeEditor,
   tables: Table[] = [],
-  informationSchemaColumns: InformationSchemaColumn[] = [],
+  informationSchemaColumns: Record<string, InformationSchemaColumn[]> = {},
 ) => {
   const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
@@ -131,8 +131,9 @@ export const createSchemaCompletionProvider = (
                 suggestions: [
                   ...(isInColumnListing(textUntilPosition)
                     ? getColumnCompletions({
-                        columns: informationSchemaColumns.filter((item) =>
-                          tableContext.includes(item.table_name),
+                        columns: tableContext.reduce(
+                          (acc, tableName) => [...acc, ...(informationSchemaColumns[tableName] ?? [])],
+                          [] as InformationSchemaColumn[]
                         ),
                         range,
                         withTableName,
@@ -146,7 +147,10 @@ export const createSchemaCompletionProvider = (
               return {
                 suggestions: [
                   ...getColumnCompletions({
-                    columns: informationSchemaColumns,
+                    columns: Object.values(informationSchemaColumns).reduce(
+                      (acc, columns) => [...acc, ...columns],
+                      [] as InformationSchemaColumn[]
+                    ),
                     range,
                     withTableName: false,
                     priority: CompletionItemPriority.High,

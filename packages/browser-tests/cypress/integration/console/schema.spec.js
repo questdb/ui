@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
 const baseUrl = `http://localhost:9999${contextPath}`;
 
 const tables = [
@@ -9,6 +9,8 @@ const tables = [
   "ecommerce_stats",
   "gitlog",
 ];
+
+const searchColumnTables = ["contains_magicword", "contains_simpleword"];
 
 const materializedViews = ["btc_trades_mv"];
 
@@ -113,6 +115,62 @@ describe("questdb schema with working tables", () => {
   after(() => {
     cy.loadConsoleWithAuth();
     tables.forEach((table) => {
+      cy.dropTable(table);
+    });
+  });
+});
+
+describe("questdb schema with search column tables", () => {
+  before(() => {
+    cy.loadConsoleWithAuth();
+    searchColumnTables.forEach((table) => {
+      cy.createTable(table);
+    });
+    cy.refreshSchema();
+  });
+
+  it("should show tables with column matches", () => {
+    cy.get('input[name="table_filter"]').type("magicword");
+    cy.expandTables();
+    cy.get('input[name="table_filter"]').realHover();
+
+    cy.get('[data-search-match="true"]').should("have.length", 2);
+    cy.get('[data-search-match="true"]')
+      .should("contain", "contains_magicword")
+      .should("have.attr", "data-search-match", "true");
+    cy.get('[data-search-match="true"]').should("contain", "magicword");
+
+    cy.getByDataHook("schema-search-clear-button").click();
+    cy.getByDataHook("schema-table-title").should(
+      "have.length",
+      searchColumnTables.length
+    );
+    cy.get('[data-expanded="true"][data-kind="table"]').should("not.exist");
+
+    cy.get('input[name="table_filter"]').type("simpleword");
+    cy.get('input[name="table_filter"]').realHover();
+
+    cy.get('[data-search-match="true"]').should("have.length", 2);
+    cy.get('[data-search-match="true"]')
+      .should("contain", "contains_simpleword")
+      .should("have.attr", "data-search-match", "true");
+    cy.get('[data-search-match="true"]').should("contain", "simpleword");
+
+    cy.getByDataHook("schema-search-clear-button").click();
+    cy.get('input[name="table_filter"]').type("ts");
+    cy.get('input[name="table_filter"]').realHover();
+
+    cy.getByDataHook("schema-table-title").should("have.length", 1);
+    cy.get('[data-search-match="true"]').should("contain", "ts");
+  });
+
+  afterEach(() => {
+    cy.getByDataHook("schema-search-clear-button").click();
+  });
+
+  after(() => {
+    cy.loadConsoleWithAuth();
+    searchColumnTables.forEach((table) => {
       cy.dropTable(table);
     });
   });
@@ -530,7 +588,8 @@ describe("materialized views", () => {
   });
 
   it("should show a warning icon and tooltip when the view is invalidated", () => {
-    cy.intercept({
+    cy.intercept(
+      {
         method: "GET",
         pathname: "/exec",
         query: {
