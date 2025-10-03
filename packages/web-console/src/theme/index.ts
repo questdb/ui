@@ -51,6 +51,7 @@ const color: ColorShape = {
   pink: "#d14671",
   pink50: "rgba(209, 70, 113, 0.25)",
   pinkDarker: "#be2f5b",
+  pinkPrimary: "#c93261",
   pinkLighter: "#ff79c6",
   transparent: "transparent",
   white: "#fafafa",
