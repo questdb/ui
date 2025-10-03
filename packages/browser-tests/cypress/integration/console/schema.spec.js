@@ -132,6 +132,7 @@ describe("questdb schema with search column tables", () => {
   it("should show tables with column matches", () => {
     cy.get('input[name="table_filter"]').type("magicword");
     cy.expandTables();
+    cy.getByDataHook('input[name="table_filter"]').realHover();
 
     cy.get('[data-search-match="true"]').should("have.length", 2);
     cy.get('[data-search-match="true"]')
@@ -147,6 +148,7 @@ describe("questdb schema with search column tables", () => {
     cy.get('[data-expanded="true"][data-kind="table"]').should("not.exist");
 
     cy.get('input[name="table_filter"]').type("simpleword");
+    cy.getByDataHook('input[name="table_filter"]').realHover();
 
     cy.get('[data-search-match="true"]').should("have.length", 2);
     cy.get('[data-search-match="true"]')
@@ -157,6 +159,8 @@ describe("questdb schema with search column tables", () => {
     cy.getByDataHook("schema-search-clear-button").click();
 
     cy.get('input[name="table_filter"]').type("word");
+    cy.getByDataHook('input[name="table_filter"]').realHover();
+
     cy.getByDataHook("schema-table-title").should("have.length", 2);
     cy.get('[data-search-match="true"]').should("have.length", 4);
     cy.get('[data-search-match="true"]').should(
@@ -172,8 +176,14 @@ describe("questdb schema with search column tables", () => {
 
     cy.getByDataHook("schema-search-clear-button").click();
     cy.get('input[name="table_filter"]').type("ts");
+    cy.getByDataHook('input[name="table_filter"]').realHover();
+
     cy.getByDataHook("schema-table-title").should("have.length", 1);
     cy.get('[data-search-match="true"]').should("contain", "ts");
+  });
+
+  afterEach(() => {
+    cy.getByDataHook("schema-search-clear-button").click();
   });
 
   after(() => {
