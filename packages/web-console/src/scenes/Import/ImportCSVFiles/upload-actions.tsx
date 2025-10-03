@@ -31,6 +31,7 @@ export const UploadActions = ({
       />
       <Button
         disabled={file.isUploading}
+        data-hook="import-upload-button"
         skin="primary"
         prefixIcon={<Upload2 size="18px" />}
         onClick={() => onUpload(file.id)}
