@@ -124,7 +124,7 @@ export function quickVis(
       return !isNaN(parsed) && parsed > 0
     }
     if (typeof value === 'number') {
-      return value > 0 && value < 9999999999999 // Reasonable timestamp range
+      return value > 0 && value < 9999999999999
     }
     return false
   }
@@ -144,16 +144,18 @@ export function quickVis(
       return timestamp.toString()
     }
 
+    // Helper function to pad numbers with leading zeros
+    const pad = (num: number): string => num.toString().padStart(2, '0')
+
     switch (format) {
       case 'HH:mm:ss':
-        return date.toLocaleTimeString('en-US', { hour12: false })
+        return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
       case 'HH:mm':
-        return date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+        return `${pad(date.getHours())}:${pad(date.getMinutes())}`
       case 'yyyy-MM-dd HH:mm:ss':
         return date.toLocaleString('sv-SE') // ISO-like format
       case 'MM/dd HH:mm':
-        return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) + 
-               ' ' + date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+        return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
       case 'MMM dd, yyyy':
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       case 'relative':
@@ -180,13 +182,15 @@ export function quickVis(
     const now = new Date().getTime()
     const diff = Math.abs(now - timestamp)
     
+    // Helper function to pad numbers with leading zeros
+    const pad = (num: number): string => num.toString().padStart(2, '0')
+    
     if (diff < 3600000) { // < 1 hour: show time with seconds
-      return date.toLocaleTimeString('en-US', { hour12: false })
-    } else if (diff < 86400000) { // < 1 day: show time
-      return date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+    } else if (diff < 86400000) { // < 1 day: show time without seconds
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}`
     } else if (diff < 2592000000) { // < 30 days: show date + time
-      return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) + 
-             ' ' + date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+      return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
     } else { // > 30 days: show date only
       return date.toLocaleDateString('sv-SE').substring(0, 10) // yyyy-MM-dd
     }
@@ -243,7 +247,7 @@ export function quickVis(
               name: xAxis,
               data: formattedData,
               axisLabel: {
-                rotate: data.length > 10 ? 45 : 0, // Rotate labels for better readability
+                rotate: data.length > 10 ? 45 : 0,
                 interval: 'auto'
               }
             }
@@ -408,7 +412,7 @@ export function quickVis(
 
     yAxisPicker.set(x.slice(1).map((item) => item.text))
 
-    // Set up time format picker options
+    // Time format picker options
     const timeFormatOptions = [
       { text: "Auto", value: "auto" },
       { text: "2021-11-21 14:04:09", value: "yyyy-MM-dd HH:mm:ss" },
@@ -459,7 +463,7 @@ export function quickVis(
     eventBus.subscribe(EventType.MSG_QUERY_DATASET, updatePickers)
     btnDraw.click(btnDrawClick)
     
-    // Add event listener for X-axis selection to toggle time format visibility
+    // Event listener for X-axis selection to toggle time format visibility
     xAxisPicker.onChange = (info: any) => {
       if (cachedResponse && cachedResponse.columns) {
         const timeColumns = detectTimeColumns(cachedResponse.columns)
