@@ -335,6 +335,21 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                     multiple
                   />
                 </div>
+                <div className="form-group time-format-group">
+                  <label>Time Format</label>
+                  <select
+                    id="_qvis_frm_time_format"
+                    data-hook="chart-panel-time-format-select"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="yyyy-MM-dd HH:mm:ss">2021-11-21 14:04:09</option>
+                    <option value="HH:mm:ss">14:04:09</option>
+                    <option value="HH:mm">14:04</option>
+                    <option value="MM/dd HH:mm">11/21 14:04</option>
+                    <option value="MMM dd, yyyy">Nov 21, 2021</option>
+                    <option value="relative">Relative (5m ago)</option>
+                  </select>
+                </div>
                 <button
                   className="button-primary js-chart-draw"
                   id="_qvis_frm_draw"
