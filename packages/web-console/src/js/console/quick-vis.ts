@@ -81,6 +81,7 @@ export function quickVis(
   let cachedResponse: any
   let cachedQuery: AnyIfEmpty
   let requestActive: boolean = false
+  let selectedTimeFormat: string = "auto"
 
   const chartTypePicker = new SlimSelect({
     select: "#_qvis_frm_chart_type",
@@ -94,6 +95,10 @@ export function quickVis(
     select: "#_qvis_frm_axis_y",
   })
 
+  const timeFormatPicker = new SlimSelect({
+    select: "#_qvis_frm_time_format",
+  })
+
   function resize() {
     echart.resize()
   }
@@ -101,6 +106,89 @@ export function quickVis(
   function addToSet(array: string | any[], set: Set<unknown>) {
     for (let i = 0; i < array.length; i++) {
       set.add(array[i])
+    }
+  }
+
+  function detectTimeColumns(columns: any[]) {
+    return columns.filter(col => {
+      // Detect timestamp columns by type or name patterns
+      return col.type === 'TIMESTAMP' || 
+             col.type === 'TIMESTAMP_NS' ||
+             /timestamp|time|date|created|updated/i.test(col.name)
+    })
+  }
+
+  function isValidTimestamp(value: any): boolean {
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value)
+      return !isNaN(parsed) && parsed > 0
+    }
+    if (typeof value === 'number') {
+      return value > 0 && value < 9999999999999 // Reasonable timestamp range
+    }
+    return false
+  }
+
+  function formatTimestamp(timestamp: any, format: string): string {
+    let date: Date
+    
+    if (typeof timestamp === 'string') {
+      date = new Date(timestamp)
+    } else if (typeof timestamp === 'number') {
+      date = new Date(timestamp)
+    } else {
+      return timestamp.toString()
+    }
+
+    if (isNaN(date.getTime())) {
+      return timestamp.toString()
+    }
+
+    switch (format) {
+      case 'HH:mm:ss':
+        return date.toLocaleTimeString('en-US', { hour12: false })
+      case 'HH:mm':
+        return date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+      case 'yyyy-MM-dd HH:mm:ss':
+        return date.toLocaleString('sv-SE') // ISO-like format
+      case 'MM/dd HH:mm':
+        return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) + 
+               ' ' + date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+      case 'MMM dd, yyyy':
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      case 'relative':
+        return formatRelativeTime(date.getTime())
+      case 'auto':
+      default:
+        return autoDetectTimeFormat(date.getTime())
+    }
+  }
+
+  function formatRelativeTime(timestamp: number): string {
+    const now = new Date().getTime()
+    const diff = now - timestamp
+    const absDiff = Math.abs(diff)
+    
+    if (absDiff < 60000) return `${Math.floor(absDiff/1000)}s ago`
+    if (absDiff < 3600000) return `${Math.floor(absDiff/60000)}m ago`
+    if (absDiff < 86400000) return `${Math.floor(absDiff/3600000)}h ago`
+    return `${Math.floor(absDiff/86400000)}d ago`
+  }
+
+  function autoDetectTimeFormat(timestamp: number): string {
+    const date = new Date(timestamp)
+    const now = new Date().getTime()
+    const diff = Math.abs(now - timestamp)
+    
+    if (diff < 3600000) { // < 1 hour: show time with seconds
+      return date.toLocaleTimeString('en-US', { hour12: false })
+    } else if (diff < 86400000) { // < 1 day: show time
+      return date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+    } else if (diff < 2592000000) { // < 30 days: show date + time
+      return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }) + 
+             ' ' + date.toLocaleTimeString('en-US', { hour12: false, second: undefined })
+    } else { // > 30 days: show date only
+      return date.toLocaleDateString('sv-SE').substring(0, 10) // yyyy-MM-dd
     }
   }
 
@@ -137,10 +225,34 @@ export function quickVis(
             data[i] = dataset[i][xAxisDataIndex]
           }
 
-          optionXAxis = {
-            type: "category",
-            name: xAxis,
-            data: data,
+          // Check if this is a time column
+          const timeColumns = detectTimeColumns(columns)
+          const isTimeColumn = timeColumns.some(col => col.name === xAxis)
+          
+          if (isTimeColumn) {
+            // For time columns, format the data and use time axis
+            const formattedData = data.map(value => {
+              if (isValidTimestamp(value)) {
+                return formatTimestamp(value, selectedTimeFormat)
+              }
+              return value
+            })
+            
+            optionXAxis = {
+              type: "category",
+              name: xAxis,
+              data: formattedData,
+              axisLabel: {
+                rotate: data.length > 10 ? 45 : 0, // Rotate labels for better readability
+                interval: 'auto'
+              }
+            }
+          } else {
+            optionXAxis = {
+              type: "category",
+              name: xAxis,
+              data: data,
+            }
           }
         } else {
           optionXAxis = {}
@@ -228,6 +340,7 @@ export function quickVis(
     setDrawBtnToCancel()
     requestActive = true
     chartType = chartTypePicker.selected()
+    selectedTimeFormat = timeFormatPicker.selected()
 
     // check if the only change is chart type
     const selectedXAxis = xAxisPicker.selected()
@@ -295,6 +408,29 @@ export function quickVis(
 
     yAxisPicker.set(x.slice(1).map((item) => item.text))
 
+    // Set up time format picker options
+    const timeFormatOptions = [
+      { text: "Auto", value: "auto" },
+      { text: "2021-11-21 14:04:09", value: "yyyy-MM-dd HH:mm:ss" },
+      { text: "14:04:09", value: "HH:mm:ss" },
+      { text: "14:04", value: "HH:mm" },
+      { text: "11/21 14:04", value: "MM/dd HH:mm" },
+      { text: "Nov 21, 2021", value: "MMM dd, yyyy" },
+      { text: "Relative (5m ago)", value: "relative" }
+    ]
+    timeFormatPicker.setData(timeFormatOptions)
+    
+    // Show/hide time format picker based on time column detection
+    const timeColumns = detectTimeColumns(columns)
+    const timeFormatGroup = document.querySelector('.time-format-group')
+    if (timeFormatGroup) {
+      if (timeColumns.length > 0) {
+        timeFormatGroup.classList.add('visible')
+      } else {
+        timeFormatGroup.classList.remove('visible')
+      }
+    }
+
     // stash query text so that we can use this later to server for chart column values
     query = data.query
     clearChart()
@@ -322,6 +458,24 @@ export function quickVis(
     echart = echarts.init(viewport, eChartsMacarons)
     eventBus.subscribe(EventType.MSG_QUERY_DATASET, updatePickers)
     btnDraw.click(btnDrawClick)
+    
+    // Add event listener for X-axis selection to toggle time format visibility
+    xAxisPicker.onChange = (info: any) => {
+      if (cachedResponse && cachedResponse.columns) {
+        const timeColumns = detectTimeColumns(cachedResponse.columns)
+        const isTimeColumn = timeColumns.some(col => col.name === info.value)
+        const timeFormatGroup = document.querySelector('.time-format-group')
+        
+        if (timeFormatGroup) {
+          if (isTimeColumn) {
+            timeFormatGroup.classList.add('visible')
+          } else {
+            timeFormatGroup.classList.remove('visible')
+          }
+        }
+      }
+    }
+    
     clearChart()
   }
 
