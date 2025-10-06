@@ -4,17 +4,17 @@ const toggleTelemetry = (enabled) => {
   // expected dataset format of the first row:
   // [id, enabled, version, os, package, instance_name, instance_type, instance_desc]
   cy.interceptQuery("telemetry_config LIMIT -1", "telemetryConfig", (req) => {
-    req.reply({
+    return req.reply({
       query: "telemetry_config LIMIT -1",
       columns: [
-        { name: "id", type: "STRING" },
+        { name: "id", type: "LONG256" },
         { name: "enabled", type: "BOOLEAN" },
-        { name: "version", type: "STRING" },
-        { name: "os", type: "STRING" },
-        { name: "package", type: "STRING" },
-        { name: "instance_name", type: "STRING" },
-        { name: "instance_type", type: "STRING" },
-        { name: "instance_desc", type: "STRING" },
+        { name: "version", type: "SYMBOL" },
+        { name: "os", type: "SYMBOL" },
+        { name: "package", type: "SYMBOL" },
+        { name: "instance_name", type: "SYMBOL" },
+        { name: "instance_type", type: "SYMBOL" },
+        { name: "instance_desc", type: "SYMBOL" },
       ],
       dataset: [
         [
