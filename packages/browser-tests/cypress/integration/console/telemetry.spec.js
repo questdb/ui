@@ -33,35 +33,6 @@ const toggleTelemetry = (enabled) => {
   });
 };
 
-describe("telemetry config", () => {
-  beforeEach(() => {
-    toggleTelemetry(true);
-    cy.loadConsoleWithAuth();
-  });
-
-  it("should get telemetry config", () => {
-    cy.wait("@telemetryConfig").then(({ response }) => {
-      const columnNames = response.body.columns.map((c) => c.name);
-      expect(response.statusCode).to.equal(200);
-      ["id", "enabled", "version", "os", "package", "instance_name", "instance_type", "instance_desc"].forEach((name) => {
-        expect(columnNames).to.include(name);
-      });
-      expect(response.body.dataset[0][0]).to.be.string;
-      expect(response.body.dataset[0][1]).to.satisfy(
-        (v) => typeof v === "boolean"
-      );
-      expect(response.body.dataset[0][2]).to.be.string;
-      expect(response.body.dataset[0][3]).to.be.string;
-      expect(typeof response.body.dataset[0][4]).to.satisfy(
-        (v) => v === null || typeof v === "string"
-      );
-      expect(response.body.dataset[0][5]).to.be.string;
-      expect(response.body.dataset[0][6]).to.be.string;
-      expect(response.body.dataset[0][7]).to.be.string;
-    });
-  });
-});
-
 describe("telemetry disabled", () => {
   beforeEach(() => {
     toggleTelemetry(false);

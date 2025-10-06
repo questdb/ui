@@ -179,6 +179,9 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
           `${API}/add`,
           {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
               columns: result.columns,
               dataset: result.dataset,
