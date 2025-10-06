@@ -2,12 +2,33 @@
 
 const toggleTelemetry = (enabled) => {
   // expected dataset format of the first row:
-  // [id, enabled, version, os, package]
+  // [id, enabled, version, os, package, instance_name, instance_type, instance_desc]
   cy.interceptQuery("telemetry_config LIMIT -1", "telemetryConfig", (req) => {
-    return req.continue((res) => {
-      // enable telemetry to kick-start the process on the client side
-      res.body.dataset[0][1] = enabled;
-      return res;
+    req.reply({
+      query: "telemetry_config LIMIT -1",
+      columns: [
+        { name: "id", type: "STRING" },
+        { name: "enabled", type: "BOOLEAN" },
+        { name: "version", type: "STRING" },
+        { name: "os", type: "STRING" },
+        { name: "package", type: "STRING" },
+        { name: "instance_name", type: "STRING" },
+        { name: "instance_type", type: "STRING" },
+        { name: "instance_desc", type: "STRING" },
+      ],
+      dataset: [
+        [
+          "mock-id-123",
+          enabled,
+          "1.0.0",
+          "mock-os",
+          "mock-package",
+          "mock-instance",
+          "mock-type",
+          "mock-desc",
+        ],
+      ],
+      count: 1,
     });
   });
 };
