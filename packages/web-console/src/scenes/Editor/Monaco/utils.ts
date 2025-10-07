@@ -273,7 +273,9 @@ export const getQueriesFromPosition = (
       }
 
       case "'": {
-        inQuote = !inQuote
+        if (!inMultiLineComment && !inSingleLineComment) {
+          inQuote = !inQuote
+        }
         column++
         break
       }
