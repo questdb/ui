@@ -112,10 +112,27 @@ const SideMenuMenuButton = styled(TransparentButton)`
   }
 `
 
+const CTAButton = styled.a`
+  height: 3rem;
+  padding: 0 0.8rem;
+  border: 1px solid ${color("pinkPrimary")};
+  border-radius: 0.4rem;
+  color: ${color("white")};
+  text-decoration: none;
+  font-weight: 600;
+  line-height: 2.7rem;
+
+  &:hover {
+    background: ${color("pinkPrimary")};
+    color: ${color("white")};
+  }
+`
+
 const MenuItems = styled.div`
   display: grid;
   grid-auto-flow: column;
   align-items: center;
+  gap: 1.6rem;
 `
 
 const Menu = () => {
@@ -195,6 +212,12 @@ const Menu = () => {
             },
           }}
         />
+        {consoleConfig.ctaBanner && <CTAButton
+          href="https://questdb.com/enterprise/contact"
+          target="_blank"
+        >
+          Book a demo
+        </CTAButton>}
       </MenuItems>
 
       {sm && (

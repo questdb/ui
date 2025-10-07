@@ -25,6 +25,9 @@ export const getTelemetryTimestamp = (serverInfo: Readonly<TelemetryConfigShape>
       `${API}/config`,
       {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(serverInfo),
       },
       false,

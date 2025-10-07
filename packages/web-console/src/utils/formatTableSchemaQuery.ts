@@ -1,5 +1,6 @@
 import { trim } from "ramda"
 import { formatSql } from "../utils"
+import { isTimestamp } from "../scenes/Import/ImportCSVFiles/utils"
 
 type Column = {
   column: string
@@ -35,7 +36,7 @@ export const formatTableSchemaQuery = ({
 }: Props) => {
   const hasValidTimestamp =
     timestamp &&
-    schemaColumns.find((c) => c.column === timestamp && c.type === "TIMESTAMP")
+    schemaColumns.find((c) => c.column === timestamp && isTimestamp(c.type))
 
   let query = `CREATE TABLE '${name}' (`
 

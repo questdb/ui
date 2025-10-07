@@ -1,2 +1,3 @@
 export const DEFAULT_TIMESTAMP_FORMAT = "yyyy-MM-ddTHH:mm:ss.SSSUUUz"
+export const DEFAULT_TIMESTAMP_FORMAT_NS = "yyyy-MM-ddTHH:mm:ss.SSSUUUNNNz"
 export const MAX_UNCOMMITTED_ROWS = 500000

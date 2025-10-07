@@ -177,6 +177,18 @@ const Content = styled(PaneContent)`
     background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiNmZjU1NTUiLz4KICAgICAgICA8cmVjdCB4PSIxNyIgeT0iNCIgd2lkdGg9IjIiIGhlaWdodD0iNSIgZmlsbD0id2hpdGUiIHJ4PSIwLjUiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjExIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPgogICAgPC9nPgo8L3N2Zz4=");
   }
 
+  .cursorQueryGlyph.loading-glyph:after {
+    height: 22px;
+    width: 22px;
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPgogIDxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIC8+CiAgPHBhdGggZD0iTTEyIDJhMSAxIDAgMCAxIDEgMXYzYTEgMSAwIDAgMS0yIDBWM2ExIDEgMCAwIDEgMS0xem0wIDE1YTEgMSAwIDAgMSAxIDF2M2ExIDEgMCAwIDEtMiAwdi0zYTEgMSAwIDAgMSAxLTF6bTguNjYtMTBhMSAxIDAgMCAxLS4zNjYgMS4zNjZsLTIuNTk4IDEuNWExIDEgMCAxIDEtMS0xLjczMmwyLjU5OC0xLjVBMSAxIDAgMCAxIDIwLjY2IDd6TTcuNjcgMTQuNWExIDEgMCAwIDEtLjM2NiAxLjM2NmwtMi41OTggMS41YTEgMSAwIDEgMS0xLTEuNzMybDIuNTk4LTEuNWExIDEgMCAwIDEgMS4zNjYuMzY2ek0yMC42NiAxN2ExIDEgMCAwIDEtMS4zNjYuMzY2bC0yLjU5OC0xLjVhMSAxIDAgMCAxIDEtMS43MzJsMi41OTggMS41QTEgMSAwIDAgMSAyMC42NiAxN3pNNy42NyA5LjVhMSAxIDAgMCAxLTEuMzY2LjM2NmwtMi41OTgtMS41YTEgMSAwIDEgMSAxLTEuNzMybDIuNTk4IDEuNUExIDEgMCAwIDEgNy42NyA5LjV6IiAvPgo8L3N2Zz4=");
+    animation: loading-glyph-spin 3s linear infinite;
+  }
+
+  @keyframes loading-glyph-spin {
+    from { transform: rotate(0); }
+    to { transform: rotate(360deg); }
+  }
+
   .cancelQueryGlyph {
     &:after {
       background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
@@ -918,6 +930,17 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     let notification: Partial<NotificationShape> & { content: ReactNode, query: QueryKey } | null = null
     dispatch(actions.query.setResult(undefined))
 
+    dispatch(actions.query.setActiveNotification({
+      type: NotificationType.LOADING,
+        query: `${activeBufferRef.current.label}@${0}-${0}`,
+        content: (
+          <Box gap="1rem" align="center">
+            <Text color="foreground">Running query "{effectiveQueryText.length > 30 ? `${effectiveQueryText.slice(0, 30)}...` : effectiveQueryText}"</Text>
+          </Box>
+        ),
+        createdAt: new Date(),
+    }))
+
     try {
       const result = await quest.queryRaw(normalizeQueryText(effectiveQueryText), { limit: "0,1000", explain: true })
 
@@ -1047,7 +1070,9 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
   const handleRunScript = async () => {
     let successfulQueries = 0
     let failedQueries = 0
-    if (!editorRef.current) return
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
     const queriesToRun = queriesToRunRef.current && queriesToRunRef.current.length > 1 ? queriesToRunRef.current : undefined
     const runningAllQueries = !queriesToRun    
     // Clear all notifications & execution refs for the buffer
@@ -1061,30 +1086,36 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     
     isRunningScriptRef.current = true
 
-    notificationTimeoutRef.current = window.setTimeout(() => {
-      dispatch(
-        actions.query.setActiveNotification({
-          type: NotificationType.LOADING,
-          query: `${activeBufferRef.current.label}@${0}-${0}`,
-          content: (
-            <Box gap="1rem" align="center">
-              <Text color="foreground">Running queries...</Text>
-            </Box>
-          ),
-          createdAt: new Date(),
-        }),
-      )
-      notificationTimeoutRef.current = null
-    }, 1000)
-    const startTime = Date.now()
-
-    const queries = queriesToRun ?? getAllQueries(editorRef.current)
+    const queries = queriesToRun ?? getAllQueries(editor)
     let lastQuery: Request | undefined
     let individualQueryResults: Array<IndividualQueryResult> = []
 
+    editor.updateOptions({ readOnly: true })
+
+    const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i]
+      editor.revealPositionInCenterIfOutsideViewport({ lineNumber: query.row + 1, column: query.column })
+      const queryGlyph = editor.getLineDecorations(query.row + 1)?.find(d => d.options.glyphMarginClassName?.includes("cursorQueryGlyph"))
+      let delta = null
+      if (queryGlyph) {
+        delta = editor.createDecorationsCollection([{
+          range: new monaco.Range(
+            query.row + 1,
+            1,
+            query.row + 1,
+            1
+          ),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName: 'cursorQueryGlyph loading-glyph',
+          },
+        }])
+      }
       const result = await runIndividualQuery(query, i === queries.length - 1)
+      if (delta) {
+        delta.clear()
+      }
       individualQueryResults.push(result)
       if (result.success) {
         successfulQueries++
@@ -1098,11 +1129,6 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     }
 
     const duration = (Date.now() - startTime) * 1e6
-
-    if (notificationTimeoutRef.current) {
-      window.clearTimeout(notificationTimeoutRef.current)
-      notificationTimeoutRef.current = null
-    }
 
     const lastResult = individualQueryResults[individualQueryResults.length - 1]
     if (lastResult && lastResult.result?.type === QuestDB.Type.DQL) {
@@ -1126,17 +1152,15 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
         dispatch(actions.query.addNotification({ ...notification!, updateActiveNotification: false }, activeBuffer.id as number))
       })
 
-    if (editorRef.current && lastQuery) {
-      const position = {
-        lineNumber: lastQuery.row + 1,
-        column: lastQuery.column
-      }
-      editorRef.current.focus()
-      editorRef.current.revealPosition(position)
-      if (runningAllQueries) {
-        editorRef.current.setPosition(position, "script")
-      }
+    const lastFailureIndex = individualQueryResults.reduce((acc, result, index) => result.success ? acc : index, -1)
+    if (lastFailureIndex !== -1) {
+      editor.setPosition({
+        lineNumber: queries[lastFailureIndex].row + 1,
+        column: queries[lastFailureIndex].column,
+      }, "script")
     }
+    editor.focus()
+    editor.revealPositionInCenterIfOutsideViewport(editor.getPosition()!)
 
     const completedGracefully = queries.length === individualQueryResults.length
     if (completedGracefully || (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)) {
@@ -1163,6 +1187,7 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     isRunningScriptRef.current = false
     scriptStopRef.current = false
     stopAfterFailureRef.current = true
+    editor.updateOptions({ readOnly: false })
   }
 
   useEffect(() => {
@@ -1216,6 +1241,7 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
       const isRunningExplain = running === RunningType.EXPLAIN
 
       if (request?.query) {
+        editorRef.current?.updateOptions({ readOnly: true })
         const parentQuery = request.query
         const parentQueryKey = createQueryKeyFromRequest(editorRef.current, request)
         const originalQueryText = request.selection ? request.selection.queryText : request.query
@@ -1427,6 +1453,7 @@ const MonacoEditor = ({ executionRefs, pendingFixRef }: {
     if (monacoRef?.current && editorRef?.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
+    editorRef.current?.updateOptions({ readOnly: !!request })
   }, [request])
 
   const setCompletionProvider = useCallback(async () => {

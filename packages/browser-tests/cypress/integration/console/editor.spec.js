@@ -296,14 +296,8 @@ describe("run all queries in tab", () => {
     cy.typeQuery("select 1;\nselect a;\nselect 3;");
 
     // When
-    cy.getByDataHook("button-run-query-dropdown").click();
-    cy.getByDataHook("button-run-script").click();
-    // Then
-    cy.getByRole("dialog").should("be.visible");
-    cy.getByDataHook("stop-after-failure-checkbox").should("be.checked");
+    cy.clickRunScript();
 
-    // When
-    cy.getByDataHook("run-all-queries-confirm").click();
     // Then
     cy.getByDataHook("error-notification")
       .invoke("text")
@@ -321,14 +315,8 @@ describe("run all queries in tab", () => {
     cy.typeQuery("select 1;\nselect a;\nselect 3;");
 
     // When
-    cy.getByDataHook("button-run-query-dropdown").click();
-    cy.getByDataHook("button-run-script").click();
-    // Then
-    cy.getByRole("dialog").should("be.visible");
-    cy.getByDataHook("stop-after-failure-checkbox").uncheck();
+    cy.clickRunScript(true);
 
-    // When
-    cy.getByDataHook("run-all-queries-confirm").click();
     // Then
     cy.getByDataHook("success-notification")
       .invoke("text")
@@ -339,6 +327,81 @@ describe("run all queries in tab", () => {
     cy.get(".success-glyph").should("have.length", 2);
     cy.get(".error-glyph").should("have.length", 1);
     cy.get(".cursorQueryGlyph").should("have.length", 3);
+  });
+
+  it("should scroll to the running query and show the loading notification", () => {
+    // Given
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000);
+      });
+    });
+    cy.typeQuery(
+      "select 1;\n\n\n\n\n\n\n\n\nselect 2;\n\n\n\n\n\n\n\n\n\nselect 3;"
+    );
+
+    // When
+    cy.clickRunScript();
+
+    // Then
+    cy.getByDataHook("loading-notification").should(
+      "contain",
+      `Running query "select 1"`
+    );
+    cy.getRunIconInLine(1).should("be.visible");
+    // Then
+    cy.getByDataHook("loading-notification").should(
+      "contain",
+      `Running query "select 2"`
+    );
+    cy.getRunIconInLine(10).should("be.visible");
+    // Then
+    cy.getByDataHook("loading-notification").should(
+      "contain",
+      `Running query "select 3"`
+    );
+    cy.getRunIconInLine(20).should("be.visible");
+  });
+
+  it("should disable editing when running script", () => {
+    // Given
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000);
+      });
+    });
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;");
+
+    // When
+    cy.clickRunScript();
+
+    // Then
+    cy.typeQuery("should not be visible");
+    cy.getEditorContent().should("not.contain", "should not be visible");
+  });
+
+  it("should move cursor to the failed query after running script", () => {
+    // Given
+    cy.typeQuery("select 1;\nselect a;\nselect 2;");
+    cy.clickLine(1);
+
+    // When
+    cy.clickRunScript();
+
+    // Then
+    cy.get(".active-line-number").should("contain", "2");
+  });
+
+  it("should keep the cursor position if all queries are successful", () => {
+    // Given
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;");
+    cy.clickLine(1);
+
+    // When
+    cy.clickRunScript();
+
+    // Then
+    cy.get(".active-line-number").should("contain", "1");
   });
 });
 
@@ -561,7 +624,7 @@ describe("autocomplete", () => {
     const assertFrom = () =>
       cy.getAutocomplete().within(() => {
         cy.getMonacoListRow()
-          .should("have.length", 3)
+          .should("have.length", 4)
           .eq(0)
           .should("contain", "FROM");
       });
@@ -1094,14 +1157,8 @@ describe("multiple run buttons with dynamic query log", () => {
   it("should keep execution info per tab", () => {
     // When
     cy.typeQuery("select 1;\nselect a;\nselect 3;");
-    cy.getByDataHook("button-run-query-dropdown").click();
-    cy.getByDataHook("button-run-script").click();
-    // Then
-    cy.getByRole("dialog").should("be.visible");
-    cy.getByDataHook("stop-after-failure-checkbox").uncheck();
+    cy.clickRunScript(true);
 
-    // When
-    cy.getByDataHook("run-all-queries-confirm").click();
     // Then
     cy.getByDataHook("success-notification")
       .invoke("text")

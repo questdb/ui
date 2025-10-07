@@ -73,7 +73,7 @@ export type QueryNotifications = Readonly<{
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
-  columns: InformationSchemaColumn[]
+  columns: Record<string, InformationSchemaColumn[]>
   result?: QueryRawResult
   running: RunningType
   queryNotifications: Record<number, Record<QueryKey, QueryNotifications>>

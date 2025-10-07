@@ -21,7 +21,8 @@ const server = http.createServer((req, res) => {
     reqPathName.startsWith("/exec") ||
     reqPathName.startsWith("/settings") ||
     reqPathName.startsWith("/warnings") ||
-    reqPathName.startsWith("/chk")
+    reqPathName.startsWith("/chk") ||
+    reqPathName.startsWith("/imp")
   ) {
     // proxy /exec requests to localhost:9000
     const options = {
@@ -43,9 +44,9 @@ const server = http.createServer((req, res) => {
   ) {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     // TODO: should be able to set the response from the test
-    //  add something like /setUserInfo?info={sub: "user2", groups: "bla"}
+    //  add something like /setUserInfo?info={sub: "jane doe", groups: ["bla"]}
     res.end(JSON.stringify({
-      sub: "user1",
+      sub: "john doe",
       groups: ["group1", "group2"]
     }))
   } else {

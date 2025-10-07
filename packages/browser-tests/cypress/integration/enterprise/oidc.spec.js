@@ -81,7 +81,7 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
-      cy.getGridRow(0).should("contain", "user1");
+      cy.getGridRow(0).should("contain", "john doe");
 
       cy.logout();
     });
@@ -120,7 +120,7 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
-      cy.getGridRow(0).should("contain", "user1");
+      cy.getGridRow(0).should("contain", "john doe");
 
       cy.logout();
       cy.getByDataHook("button-sso-continue").should("be.visible");
@@ -151,7 +151,7 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
-      cy.getGridRow(0).should("contain", "user1");
+      cy.getGridRow(0).should("contain", "john doe");
 
       cy.logout();
       cy.getByDataHook("button-sso-continue").should("be.visible");
@@ -188,7 +188,7 @@ describe("OIDC", () => {
       cy.get('input[type="file"]').selectFile("cypress/fixtures/test.csv", { force: true });
       cy.getByDataHook("import-table-column-schema").should("be.visible");
       cy.getByDataHook("import-table-column-owner").should("be.visible");
-      cy.contains("option", "user1").should("not.exist");
+      cy.contains("option", "john doe").should("not.exist");
       cy.contains("option", "group1").should("exist");
     });
   });
@@ -239,7 +239,7 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
-      cy.getGridRow(0).should("contain", "user1");
+      cy.getGridRow(0).should("contain", "john doe");
 
       cy.logout();
       cy.getByDataHook("auth-login").should("be.visible");
@@ -265,7 +265,7 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
-      cy.getGridRow(0).should("contain", "user1");
+      cy.getGridRow(0).should("contain", "john doe");
 
       cy.logout();
       cy.getByDataHook("auth-login").should("be.visible");
@@ -282,7 +282,7 @@ describe("OIDC", () => {
       cy.logout();
       cy.getByDataHook("auth-login").should("be.visible");
       cy.getByDataHook("button-sso-continue").should("be.visible");
-      cy.getByDataHook("button-sso-continue").contains("Continue as user1");
+      cy.getByDataHook("button-sso-continue").contains("Continue as john doe");
       cy.getByDataHook("button-sso-login").should("be.visible");
       cy.getByDataHook("button-sso-login").contains("Choose a different account");
       cy.getEditor().should("not.exist");
@@ -291,7 +291,7 @@ describe("OIDC", () => {
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
-      cy.getGridRow(0).should("contain", "user1");
+      cy.getGridRow(0).should("contain", "john doe");
     });
 
     it("should force SSO re-authentication with state error", () => {
