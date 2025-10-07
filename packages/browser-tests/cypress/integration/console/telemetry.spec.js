@@ -31,6 +31,21 @@ const toggleTelemetry = (enabled) => {
       count: 1,
     });
   });
+
+  if (enabled) {
+    cy.intercept(
+      {
+        method: "POST",
+        url: "**/config",
+        hostname: /(alurin|fara)\.questdb\.io/,
+      },
+      (req) => {
+        req.reply({
+          lastUpdated: null,
+        });
+      }
+    ).as("telemetryRemoteConfig");
+  }
 };
 
 describe("telemetry disabled", () => {
@@ -56,6 +71,7 @@ describe("telemetry enabled", () => {
 
   it("should start telemetry when enabled", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
+      cy.wait("@telemetryRemoteConfig");
       cy.wait("@addTelemetry").then(({ request }) => {
         const payload = request.body;
         expect(payload.id).to.equal(response.body.dataset[0][0]);
