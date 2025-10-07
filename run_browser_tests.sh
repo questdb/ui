@@ -34,9 +34,7 @@ echo "Proxy started, PID=$PID1"
 
 # Switch dev mode on
 export QDB_DEV_MODE_ENABLED=true
-
-# Enable Materialized Views
-export QDB_CAIRO_MAT_VIEW_ENABLED=true
+export QDB_TELEMETRY_ENABLED=false
 
 # Running tests which assume authentication is off
 rm -rf tmp/dbroot/*
@@ -49,6 +47,7 @@ read -p "Press any key to continue... " -n1 -s
 # Switch OSS authentication on
 export QDB_HTTP_USER=admin
 export QDB_HTTP_PASSWORD=quest
+export QDB_TELEMETRY_ENABLED=false
 
 # Running tests which assume that OSS authentication is on
 rm -rf tmp/dbroot/*
