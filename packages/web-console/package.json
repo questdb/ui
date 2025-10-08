@@ -14,11 +14,10 @@
     "node": ">=16.13.1"
   },
   "scripts": {
-    "build-docs": "node scripts/build-docs-ts.js",
-    "build": "npm run build-docs && cross-env NODE_ENV=production COMMIT_HASH=$(git rev-parse --short HEAD) webpack",
+    "build": "cross-env NODE_ENV=production COMMIT_HASH=$(git rev-parse --short HEAD) webpack",
     "postbuild": "node post-build.js",
-    "start": "npm run build-docs && COMMIT_HASH=$(git rev-parse --short HEAD) webpack-dev-server --progress",
-    "start:prod": "npm run build-docs && cross-env NODE_ENV=production COMMIT_HASH=$(git rev-parse --short HEAD) webpack-dev-server --progress",
+    "start": "COMMIT_HASH=$(git rev-parse --short HEAD) webpack-dev-server --progress",
+    "start:prod": "cross-env NODE_ENV=production COMMIT_HASH=$(git rev-parse --short HEAD) webpack-dev-server --progress",
     "test": "TZ=UTC && jest --watch --runInBand",
     "test:prod": "TZ=UTC && jest --ci --runInBand"
   },

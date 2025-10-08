@@ -8,10 +8,11 @@ import type { ModelOption } from '../components/SetupAIAssistant'
 import { formatSql } from './formatSql'
 import type { Request } from '../scenes/Editor/Monaco/utils'
 import { AIOperationStatus } from '../providers/AIStatusProvider'
-import { 
-  getQuestDBTableOfContents, 
+import {
+  getQuestDBTableOfContents,
   getSpecificDocumentation,
-  DocCategory 
+  getReferenceFull,
+  DocCategory
 } from './questdbDocsRetrieval'
 
 export interface AiAssistantAPIError {
@@ -235,7 +236,7 @@ const toOpenAIFunctions = (tools: typeof ALL_TOOLS) => {
     type: 'function' as const,
     name: t.name,
     description: t.description,
-    parameters: t.input_schema,
+    parameters: { ...t.input_schema, additionalProperties: false },
     strict: true,
   })) as OpenAI.Responses.Tool[]
 }
@@ -317,7 +318,7 @@ const getGenerateSQLPrompt = (provider: 'openai' | 'anthropic') => {
 When given a natural language description, generate the corresponding QuestDB SQL query.
 
 Important guidelines:
-- Generate only valid QuestDB SQL syntax referring to the documentation
+- Generate only valid QuestDB SQL syntax referring to the documentation about functions, operators, and SQL keywords
 - Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
 - Follow QuestDB best practices for performance referring to the documentation
 - Use proper timestamp handling for time-series data
@@ -334,7 +335,7 @@ When given a QuestDB SQL query with an error, fix the query to resolve the error
 
 Important guidelines:
 1. Analyze the error message carefully to understand what went wrong
-2. Generate only valid QuestDB SQL syntax by always referring to the documentation
+2. Generate only valid QuestDB SQL syntax by always referring to the documentation about functions, operators, and SQL keywords
 3. Preserve the original intent of the query while fixing the error
 4. Follow QuestDB best practices and syntax rules referring to the documentation
 5. Consider common issues like:
@@ -420,7 +421,7 @@ const executeTool = async (
       }
       case 'get_questdb_toc': {
         setStatus(AIOperationStatus.RetrievingDocumentation)
-        const tocContent = getQuestDBTableOfContents()
+        const tocContent = await getQuestDBTableOfContents()
         return { content: tocContent }
       }
       case 'get_questdb_documentation': {
@@ -429,7 +430,7 @@ const executeTool = async (
           return { content: 'Error: category and items parameters are required', is_error: true }
         }
         setStatus(getStatusFromCategory(category as DocCategory))
-        const documentation = getSpecificDocumentation(category as DocCategory, items)
+        const documentation = await getSpecificDocumentation(category as DocCategory, items)
         return { content: documentation }
       }
       default:
@@ -609,15 +610,15 @@ const getVectorStore = async (openai: OpenAI) => {
   }
   window.localStorage.setItem(VECTOR_STORE_NAME, vectorStore.id)
 
-  const webConsoleVersion = process.env.WEB_CONSOLE_VERSION || 'dev'
+  const webConsoleVersion = process.env.NODE_ENV === 'production' ? process.env.WEB_CONSOLE_VERSION || 'dev' : 'dev'
   const files = await openai.vectorStores.files.list(vectorStore.id, { limit: 1 })
   const version = files.data.length > 0 ? files.data[0].attributes?.version : null
   if (version === webConsoleVersion) {
     return { id: vectorStore.id }
   }
 
-  const response = await fetch('/assets/reference-full.md')
-  const blob = await response.blob()
+  const referenceFullContent = await getReferenceFull()
+  const blob = new Blob([referenceFullContent], { type: 'text/markdown' })
   const file = new File([blob], 'reference-full.md', { type: 'text/markdown' })
   const createdFile = await openai.files.create({file, purpose: 'assistants' })
 
@@ -875,7 +876,7 @@ export const explainQuery = async ({
       config: {
         systemInstructions: getExplainQueryPrompt('anthropic'),
         initialUserContent: content,
-        formattingPrompt:  'Please give the 2-4 sentences summary of this query explanation in format { explanation: "The summarized explanation" }',
+        formattingPrompt:  'Please give the 2-4 sentences summary of this query explanation in format { "explanation": "The summarized explanation" }. The result should be a valid JSON string.',
       },
       settings,
       schemaClient,
@@ -947,7 +948,7 @@ export const generateSQL = async ({
       config: {
         systemInstructions: getGenerateSQLPrompt('anthropic'),
         initialUserContent,
-        formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }',
+        formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }. The result should be a valid JSON string.',
         postProcess
       },
       settings,
@@ -1032,7 +1033,7 @@ ${word ? `The error occurred at word: ${word}` : ''}`
       config: {
         systemInstructions: getFixQueryPrompt('anthropic'),
         initialUserContent,
-        formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }',
+        formattingPrompt: 'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }. The result should be a valid JSON string.',
         postProcess
       },
       settings,
@@ -1316,10 +1317,9 @@ export const testApiKey = async (apiKey: string, model: string): Promise<{ valid
         messages: [
           {
             role: 'user',
-            content: 'Test'
+            content: 'ping'
           }
         ],
-        max_tokens: 10
       })
     } else {
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true })
