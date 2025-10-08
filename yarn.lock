@@ -206,6 +206,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@anthropic-ai/sdk@npm:^0.57.0":
+  version: 0.57.0
+  resolution: "@anthropic-ai/sdk@npm:0.57.0"
+  bin:
+    anthropic-ai-sdk: bin/cli
+  checksum: 10/3ff430ded97067467e1731acd906a5ad2e5dfd2f0283ce0ce90f292e7ec57f5ddfdc76094c093f141eac272f6038d9780f7516468bfda0128fb25db6078d041d
+  languageName: node
+  linkType: hard
+
 "@babel/cli@npm:^7.17.10":
   version: 7.23.0
   resolution: "@babel/cli@npm:7.23.0"
@@ -3228,6 +3237,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@questdb/web-console@workspace:packages/web-console"
   dependencies:
+    "@anthropic-ai/sdk": "npm:^0.57.0"
     "@babel/cli": "npm:^7.17.10"
     "@babel/core": "npm:^7.20.12"
     "@babel/preset-env": "npm:^7.20.2"
@@ -3322,6 +3332,7 @@ __metadata:
     lodash.merge: "npm:^4.6.2"
     mini-css-extract-plugin: "npm:^2.6.0"
     monaco-editor: "npm:^0.44.0"
+    openai: "npm:^5.21.0"
     posthog-js: "npm:^1.131.2"
     prettier: "npm:^2.5.1"
     prop-types: "npm:^15.8.1"
@@ -17454,6 +17465,23 @@ __metadata:
     is-docker: "npm:^2.1.1"
     is-wsl: "npm:^2.2.0"
   checksum: 10/acd81a1d19879c818acb3af2d2e8e9d81d17b5367561e623248133deb7dd3aefaed527531df2677d3e6aaf0199f84df57b6b2262babff8bf46ea0029aac536c9
+  languageName: node
+  linkType: hard
+
+"openai@npm:^5.21.0":
+  version: 5.21.0
+  resolution: "openai@npm:5.21.0"
+  peerDependencies:
+    ws: ^8.18.0
+    zod: ^3.23.8
+  peerDependenciesMeta:
+    ws:
+      optional: true
+    zod:
+      optional: true
+  bin:
+    openai: bin/cli
+  checksum: 10/570d194f396199ea5a807ce57a93de893caaa8304881f126e859cabd6ea7c980c94b9f7e1836cd0aa91e506c4433fd7e2cb1f7ec15d25ef21ee840eb9329b96e
   languageName: node
   linkType: hard
 

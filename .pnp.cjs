@@ -354,6 +354,15 @@ const RAW_RUNTIME_STATE =
         "linkType": "HARD"\
       }]\
     ]],\
+    ["@anthropic-ai/sdk", [\
+      ["npm:0.57.0", {\
+        "packageLocation": "./.yarn/cache/@anthropic-ai-sdk-npm-0.57.0-b4dfdf7616-3ff430ded9.zip/node_modules/@anthropic-ai/sdk/",\
+        "packageDependencies": [\
+          ["@anthropic-ai/sdk", "npm:0.57.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
     ["@babel/cli", [\
       ["npm:7.23.0", {\
         "packageLocation": "./.yarn/cache/@babel-cli-npm-7.23.0-5f9206645f-a08dab5b18.zip/node_modules/@babel/cli/",\
@@ -6599,6 +6608,7 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./packages/web-console/",\
         "packageDependencies": [\
           ["@questdb/web-console", "workspace:packages/web-console"],\
+          ["@anthropic-ai/sdk", "npm:0.57.0"],\
           ["@babel/cli", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:7.23.0"],\
           ["@babel/core", "npm:7.23.0"],\
           ["@babel/preset-env", "virtual:e49d39393ba37529f9a804f2bb1b00429525eeeacf4cbbbcc8cdb6781e1e2afa26e9710d4bd0ec7b88be3aaf8e9c0266d2a7856806e05f8a0512234efc8d0f28#npm:7.22.20"],\
@@ -6693,6 +6703,7 @@ const RAW_RUNTIME_STATE =
           ["lodash.merge", "npm:4.6.2"],\
           ["mini-css-extract-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:2.7.6"],\
           ["monaco-editor", "npm:0.44.0"],\
+          ["openai", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.21.0"],\
           ["posthog-js", "npm:1.131.2"],\
           ["prettier", "npm:2.8.8"],\
           ["prop-types", "npm:15.8.1"],\
@@ -25015,6 +25026,32 @@ const RAW_RUNTIME_STATE =
           ["define-lazy-prop", "npm:2.0.0"],\
           ["is-docker", "npm:2.2.1"],\
           ["is-wsl", "npm:2.2.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["openai", [\
+      ["npm:5.21.0", {\
+        "packageLocation": "./.yarn/cache/openai-npm-5.21.0-292957eb48-570d194f39.zip/node_modules/openai/",\
+        "packageDependencies": [\
+          ["openai", "npm:5.21.0"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.21.0", {\
+        "packageLocation": "./.yarn/__virtual__/openai-virtual-7671170818/0/cache/openai-npm-5.21.0-292957eb48-570d194f39.zip/node_modules/openai/",\
+        "packageDependencies": [\
+          ["openai", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.21.0"],\
+          ["@types/ws", null],\
+          ["@types/zod", null],\
+          ["ws", null],\
+          ["zod", null]\
+        ],\
+        "packagePeers": [\
+          "@types/ws",\
+          "@types/zod",\
+          "ws",\
+          "zod"\
         ],\
         "linkType": "HARD"\
       }]\

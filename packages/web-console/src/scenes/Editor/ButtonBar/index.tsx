@@ -1,29 +1,98 @@
-import React, { useCallback, useState, useEffect } from "react"
-import styled from "styled-components"
+import React, { useCallback, useState, useEffect, useRef } from "react"
+import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
-import { Stop } from "@styled-icons/remix-line"
+import { CloseOutline } from "@styled-icons/evaicons-outline"
+import { Stop, Loader3 } from "@styled-icons/remix-line"
 import { CornerDownLeft } from "@styled-icons/evaicons-solid"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
-import { PopperToggle } from "../../../components"
+import { PopperToggle, spinAnimation } from "../../../components"
+import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
+import { GenerateSQLButton } from "../../../components/GenerateSQLButton"
+import { FixQueryButton } from "./FixQueryButton"
 import { Box, Button } from "@questdb/react-components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import { useAIStatus, AIOperationStatus, isBlockingAIStatus } from "../../../providers/AIStatusProvider"
+import type { ExecutionRefs } from "../../../scenes/Editor"
 
-const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null }>`
-  position: absolute;
-  top: ${({ $searchWidgetType }) => $searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
-  right: 2.4rem;
-  z-index: 1;
-  transition: top .1s linear;
+type ButtonBarProps = {
+  onTriggerRunScript: (runAll?: boolean) => void
+  isTemporary: boolean | undefined
+  executionRefs?: React.MutableRefObject<ExecutionRefs>
+  onBufferContentChange?: (value?: string) => void
+}
+
+const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null, $aiAssistantEnabled: boolean }>`
+  ${({ $aiAssistantEnabled, $searchWidgetType }) => !$aiAssistantEnabled ? css`
+    position: absolute;
+    top: ${$searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
+    right: 2.4rem;
+    z-index: 1;
+    transition: top .1s linear;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  ` : css`
+    padding: 1rem 0;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin: 0 2.4rem;
+  `}
+`
+
+const StatusIndicator = styled.div<{ $aborted: boolean, $loading: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: ${color("gray2")};
+  ${({ $aborted }) => $aborted && css`
+    color: ${color("red")};
+  `}
+  
+  ${({ $loading }) => $loading && css`
+    @keyframes slide {
+      0% { 
+        background-position: 200% center;
+      }
+      100% { 
+        background-position: -200% center;
+      }
+    }
+    
+    background: linear-gradient(
+      90deg,
+      ${color("gray2")} 0%,
+      ${color("gray2")} 40%,
+      ${color("white")} 50%,
+      ${color("gray2")} 60%,
+      ${color("gray2")} 100%
+    );
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-fill-color: transparent;
+    animation: slide 3s linear infinite;
+  `}
+`;
+
+const StatusLoader = styled(Loader3)`
+  width: 2rem;
+  color: ${color("pink")};
+  ${spinAnimation};
 `
 
 const ButtonGroup = styled.div`
   display: flex;
   gap: 0;
+  margin-left: auto;
 `
 
 const SuccessButton = styled(Button)`
+  margin-left: auto;
   background-color: ${color("greenDarker")};
   border-color: ${color("greenDarker")};
   color: ${color("foreground")};
@@ -31,7 +100,7 @@ const SuccessButton = styled(Button)`
   &:hover:not(:disabled) {
     background-color: ${color("green")};
     border-color: ${color("green")};
-    color: ${color("gray1")};
+    color: ${color("selectionDarker")};
   }
   
   &:disabled {
@@ -55,6 +124,7 @@ const SuccessButton = styled(Button)`
 `
 
 const StopButton = styled(Button)`
+  margin-left: auto;
   background-color: ${color("red")};
   border-color: ${color("red")};
   color: ${color("foreground")};
@@ -120,7 +190,7 @@ const DropdownMenu = styled.div`
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
-  background: ${color("gray1")};
+  background: ${({ theme }) => theme.color.selectionDarker};
   border-radius: 0.2rem;
   font-size: 1.2rem;
   height: 1.8rem;
@@ -141,19 +211,26 @@ const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
-  [RunningType.QUERY]: "Cmd+Enter",
-  [RunningType.SCRIPT]: "Cmd+Shift+Enter",
+  [RunningType.QUERY]: "Run query (Cmd+Enter)",
+  [RunningType.SCRIPT]: "Run all queries (Cmd+Shift+Enter)",
 } : {
-  [RunningType.QUERY]: "Ctrl+Enter",
-  [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
+  [RunningType.QUERY]: "Run query (Ctrl+Enter)",
+  [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
 }
 
-const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (runAll?: boolean) => void, isTemporary: boolean | undefined }) => {
+const ButtonBar = ({ onTriggerRunScript, isTemporary, executionRefs, onBufferContentChange }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
+  const { aiAssistantSettings } = useLocalStorage()
+  const { status: aiStatus } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const [searchWidgetType, setSearchWidgetType] = useState<"find" | "replace" | null>(null)
+  const observerRef = useRef<MutationObserver | null>(null)
+  const aiAssistantEnabled = !!aiAssistantSettings.apiKey && !!aiAssistantSettings.model
+  
+  const hasQueryError = activeNotification?.type === 'error' && !activeNotification?.isExplain
 
   const handleClickQueryButton = useCallback(() => {
     if (queriesToRun.length > 1) {
@@ -173,6 +250,14 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
   }, [])
 
   useEffect(() => {
+    if (aiAssistantEnabled) {
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
+      return
+    }
+
     const checkFindWidgetVisibility = () => {
       const findWidget = document.querySelector('.find-widget')
       const isVisible = !!findWidget && findWidget.classList.contains('visible')
@@ -213,11 +298,15 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
       attributeFilter: ['class'],
       attributeOldValue: false
     })
+    observerRef.current = observer
 
     return () => {
-      observer.disconnect()
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
     }
-  }, [])
+  }, [aiAssistantEnabled])
 
   const renderRunScriptButton = () => {
     if (running === RunningType.SCRIPT) {
@@ -316,7 +405,25 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
   }
 
   return (
-    <ButtonBarWrapper $searchWidgetType={searchWidgetType}>
+    <ButtonBarWrapper $searchWidgetType={searchWidgetType} $aiAssistantEnabled={aiAssistantEnabled}>
+      <GenerateSQLButton 
+        onBufferContentChange={onBufferContentChange}
+      />
+      <ExplainQueryButton 
+          onBufferContentChange={onBufferContentChange}
+        />
+      {hasQueryError && queriesToRun.length === 1 && (
+        <FixQueryButton
+          executionRefs={executionRefs}
+          onBufferContentChange={onBufferContentChange}
+        />
+      )}
+      {aiStatus && (
+        <StatusIndicator $aborted={aiStatus === AIOperationStatus.Aborted} $loading={isBlockingAIStatus(aiStatus)}>
+          {aiStatus === AIOperationStatus.Aborted ? <CloseOutline size="18px" /> : <StatusLoader />}
+          {aiStatus}
+        </StatusIndicator>
+      )}
       {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
     </ButtonBarWrapper>
   )

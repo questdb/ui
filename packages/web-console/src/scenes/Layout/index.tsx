@@ -42,6 +42,7 @@ import "allotment/dist/style.css"
 
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { AIStatusProvider } from "../../providers/AIStatusProvider"
 
 const Page = styled.div`
   display: flex;
@@ -101,6 +102,7 @@ const Layout = () => {
   return (
     <SearchProvider>
       <EditorProvider>
+        <AIStatusProvider>
         <TopBar />
         <Warnings />
         <Root>
@@ -124,7 +126,8 @@ const Layout = () => {
 
         <SideMenu />
 
-        <Footer />
+          <Footer />
+        </AIStatusProvider>
       </EditorProvider>
     </SearchProvider>
   )

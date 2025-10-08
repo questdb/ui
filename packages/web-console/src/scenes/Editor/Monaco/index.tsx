@@ -8,12 +8,13 @@ import React, { useCallback, useContext, useEffect, useRef, useState } from "rea
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import type { ExecutionRefs } from "../../Editor"
+import type { ExecutionRefs, PendingFix } from "../../Editor"
 import { PaneContent, Text } from "../../../components"
 import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
@@ -72,6 +73,8 @@ export const LINE_NUMBER_HARD_LIMIT = 99999
 
 const Content = styled(PaneContent)`
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: #2c2e3d;
   .monaco-editor .squiggly-error {
@@ -106,6 +109,44 @@ const Content = styled(PaneContent)`
   .searchHighlight {
     background-color: rgba(255, 184, 108, 0.5);
     border-radius: 2px;
+  }
+
+  .aiQueryHighlight {
+    background-color: rgba(241, 250, 140, 0.5);
+    border-radius: 2px;
+  }
+
+  .ai-fix-suggestion {
+    background-color: rgba(80, 250, 123, 0.15);
+    border-radius: 2px;
+  }
+
+  .fix-action-button {
+    height: 2.4rem;
+    padding: 1px 6px;
+    font-size: 1.4rem;
+    color: #f8f8f2;
+    border-radius: 4px;
+    cursor: pointer;
+    &.accept-fix {
+      background-color: #00aa3b;
+      border: 1px solid #00aa3b;
+    }
+
+    &.reject-fix {
+      background-color: #ff5555;
+      border: 1px solid #ff5555;
+    }
+
+    &:hover {
+      filter: brightness(1.3);
+    }
+  }
+
+  div[widgetid="fix-query-buttons"] { 
+    display: inline-flex !important;
+    width: 30rem;
+    gap: 1rem !important;
   }
 
   .cursorQueryGlyph,
@@ -176,9 +217,18 @@ const StyledDialogButton = styled(Button)`
   }
 `
 
+const EditorWrapper = styled.div`
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+`
+
 const DEFAULT_LINE_CHARS = 5
 
-const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject<ExecutionRefs> }) => {
+const MonacoEditor = ({ executionRefs, pendingFixRef }: { 
+  executionRefs: React.MutableRefObject<ExecutionRefs>
+  pendingFixRef: React.MutableRefObject<PendingFix | null>
+}) => {
   const editorContext = useEditor()
   const {
     buffers,
@@ -192,6 +242,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     isNavigatingFromSearchRef,
   } = editorContext
   const { quest } = useContext(QuestContext)
+  const { abortOperation: abortAIOperation } = useAIStatus()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
@@ -229,6 +280,19 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
   const dropdownQueriesRef = useRef<Request[]>([])
   const isContextMenuDropdownRef = useRef<boolean>(false)
   const cleanupActionsRef = useRef<(() => void)[]>([])
+  
+  const handleBufferContentChange = (value: string | undefined) => {
+    const lineCount = editorRef.current?.getModel()?.getLineCount()
+    if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
+      if (editorRef.current && currentBufferValueRef.current !== undefined) {
+        editorRef.current.setValue(currentBufferValueRef.current)
+      }
+      toast.error("Maximum line limit reached")
+      return
+    }
+    currentBufferValueRef.current = value
+    updateBuffer(activeBuffer.id as number, { value })
+  }
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -728,6 +792,8 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
     })
 
     editor.onDidChangeModel(() => {
+      abortAIOperation()
+      
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
           applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -766,6 +832,39 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
         scrollTimeoutRef.current = null
       }, 200)
     })
+
+    if (pendingFixRef.current && pendingFixRef.current.originalBufferId === activeBuffer.id) {
+      const { modifiedContent, queryStartOffset, originalQuery } = pendingFixRef.current
+      const model = editor.getModel()
+      if (!model) return
+      const isValid = model.getValue().slice(queryStartOffset, queryStartOffset + originalQuery.length) === originalQuery
+      
+      if (isValid) {
+        const model = editor.getModel()
+        if (model) {
+          const startPosition = model.getPositionAt(queryStartOffset)
+          const endPosition = model.getPositionAt(queryStartOffset + originalQuery.length)
+          
+          editor.executeEdits('fix-query', [{
+            range: {
+              startLineNumber: startPosition.lineNumber,
+              startColumn: startPosition.column,
+              endLineNumber: endPosition.lineNumber,
+              endColumn: endPosition.column
+            },
+            text: modifiedContent,
+            forceMoveMarkers: true
+          }])
+          handleBufferContentChange(model.getValue())
+          editor.revealPositionInCenter(startPosition)
+        }
+        toast.success("Fix applied successfully")
+      } else {
+        toast.error("Query has been changed. Fix cannot be applied.")
+      }
+      
+      pendingFixRef.current = null
+    }
 
     // Insert query, if one is found in the URL
     const params = new URLSearchParams(window.location.search)
@@ -1396,6 +1495,7 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
   useEffect(() => {
     return () => {
+      abortAIOperation()
       cleanupActionsRef.current.forEach(cleanup => cleanup())
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current)
@@ -1421,45 +1521,41 @@ const MonacoEditor = ({ executionRefs }: { executionRefs: React.MutableRefObject
 
   return (
     <>
-      <Content className="monaco-content" onClick={handleEditorClick}>
-        <ButtonBar onTriggerRunScript={handleTriggerRunScript} isTemporary={activeBuffer.isTemporary} />
-        <Editor
-          beforeMount={beforeMount}
-          defaultLanguage={QuestDBLanguageName}
-          onMount={onMount}
-          saveViewState={false}
-          onChange={(value) => {
-            const lineCount = editorRef.current?.getModel()?.getLineCount()
-            if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
-              if (editorRef.current && currentBufferValueRef.current !== undefined) {
-                editorRef.current.setValue(currentBufferValueRef.current)
-              }
-              toast.error("Maximum line limit reached")
-              return
-            }
-            currentBufferValueRef.current = value
-            updateBuffer(activeBuffer.id as number, { value })
-          }}
-          options={{
-            // initially null, but will be set during onMount with editor.setModel
-            model: null,
-            fixedOverflowWidgets: true,
-            fontSize: 14,
-            lineHeight: 24,
-            fontFamily: theme.fontMonospace,
-            glyphMargin: true,
-            renderLineHighlight: "gutter",
-            useShadowDOM: false,
-            minimap: {
-              enabled: false,
-            },
-            selectOnLineNumbers: false,
-            scrollBeyondLastLine: false,
-            tabSize: 2,
-            lineNumbersMinChars: lineNumbersMinChars,
-          }}
-          theme="vs-dark"
+      <Content onClick={handleEditorClick}>
+        <ButtonBar
+          onTriggerRunScript={handleTriggerRunScript}
+          isTemporary={activeBuffer.isTemporary}
+          executionRefs={executionRefs}
+          onBufferContentChange={handleBufferContentChange}
         />
+        <EditorWrapper>
+          <Editor
+            beforeMount={beforeMount}
+            defaultLanguage={QuestDBLanguageName}
+            onMount={onMount}
+            saveViewState={false}
+            onChange={handleBufferContentChange}
+            options={{
+              // initially null, but will be set during onMount with editor.setModel
+              model: null,
+              fixedOverflowWidgets: true,
+              fontSize: 14,
+              lineHeight: 24,
+              fontFamily: theme.fontMonospace,
+              glyphMargin: true,
+              renderLineHighlight: "gutter",
+              useShadowDOM: false,
+              minimap: {
+                enabled: false,
+              },
+              selectOnLineNumbers: false,
+              scrollBeyondLastLine: false,
+              tabSize: 2,
+              lineNumbersMinChars: lineNumbersMinChars,
+            }}
+            theme="vs-dark"
+          />
+        </EditorWrapper>
         <Loader show={!!request || !tables} />
       </Content>
       

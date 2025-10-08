@@ -190,6 +190,7 @@ module.exports = {
       "process.env": {
         NODE_ENV: JSON.stringify(process.env.NODE_ENV),
         COMMIT_HASH: JSON.stringify(process.env.COMMIT_HASH),
+        WEB_CONSOLE_VERSION: JSON.stringify(require("./package.json").version),
       },
     }),
 
