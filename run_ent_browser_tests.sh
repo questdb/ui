@@ -33,6 +33,7 @@ echo "Proxy started, PID=$PID1"
 
 # Switch dev mode on
 export QDB_DEV_MODE_ENABLED=true
+export QDB_TELEMETRY_ENABLED=false
 
 # OIDC config
 export QDB_ACL_OIDC_ENABLED=true
