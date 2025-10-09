@@ -7,7 +7,7 @@ const StyledContent = styled(ContextMenuPrimitive.Content)`
   border-radius: 0.5rem;
   padding: 0.4rem;
   box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36); /* vscode-widget-shadow */
-  z-index: 9999;
+  z-index: 10000;
   min-width: 160px;
 `
 
@@ -59,7 +59,8 @@ const StyledSubTrigger = styled(ContextMenuPrimitive.SubTrigger)`
     background-image: url("data:image/svg+xml;base64,PHN2ZyBmaWxsPSIjZmZmIiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cGF0aCBkPSJNMTAuNTkgMTJsLTQuMjktNC4yOWExIDEgMCAxIDEgMS40MS0xLjQxbDUgNWEgMSAxIDAgMCAxIDAgMS40MWwtNS41IDUuNWExIDEgMCAxIDEtMS40MS0xLjQxTDEwLjU5IDEyeiIgLz4KPC9zdmc+");
   }
 
-  &[data-highlighted] {
+  &[data-highlighted],
+  &[data-state="open"] {
     background: #043c5c;
     border: 1px solid #8be9fd;
   }

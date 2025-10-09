@@ -17,16 +17,19 @@ import {
   createSymbolDetailsNodes,
   createSymbolDetailsPlaceholderNodes
 } from "./utils";
+import type { TreeNode, SchemaTree, FlattenedTreeItem } from "./utils";
 import { useRetainLastFocus } from "./useRetainLastFocus"
 import { getSectionExpanded, setSectionExpanded, TABLES_GROUP_KEY, MATVIEWS_GROUP_KEY } from "../localStorageUtils";
 import { useSchema } from "../SchemaContext";
 import { QuestContext, useEditor } from "../../../providers";
 import { PartitionBy } from "../../../utils/questdb/types";
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import actions from '../../../store/actions'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem, ContextMenuSub, ContextMenuSubContent, MenuSubTrigger } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from '../SuspensionDialog'
+import { selectors } from '../../../store'
+import type { SymbolColumnDetails } from '../../../utils/questdb/types'
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -56,28 +59,6 @@ type SymbolColumn = BaseTreeColumn & {
 
 export type TreeColumn = TimestampColumn | SymbolColumn | BaseTreeColumn
 
-export type FlattenedTreeItem = {
-  id: string
-  kind: TreeNodeKind
-  name: string
-  value?: string
-  table?: QuestDB.Table
-  column?: TreeColumn
-  matViewData?: QuestDB.MaterializedView
-  walTableData?: QuestDB.WalTable
-  parent?: string
-  isExpanded?: boolean
-  isLoading?: boolean
-  designatedTimestamp?: string
-  partitionBy?: PartitionBy
-  walEnabled?: boolean
-  type?: string
-};
-
-export type TreeNode = FlattenedTreeItem & {
-  children: TreeNode[]
-}
-
 export type TreeNavigationOptions =
   | { to: "start" }
   | { to: "end" }
@@ -86,10 +67,6 @@ export type TreeNavigationOptions =
   | { to: "parent", id: string }
   | { to: "pageUp" }
   | { to: "pageDown" }
-
-export type SchemaTree = {
-  [key: string]: TreeNode
-}
 
 const SectionHeader = styled(Row)<{ $disabled: boolean }>`
   cursor: ${({ $disabled }) => $disabled ? 'not-allowed' : 'default'};
@@ -101,9 +78,9 @@ const SectionHeader = styled(Row)<{ $disabled: boolean }>`
 `
 
 const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
-  ${({ $contextMenuOpen, theme }) => $contextMenuOpen && `
-    background: ${theme.color.tableSelection};
-    border: 1px solid ${theme.color.cyan};
+  ${({ $contextMenuOpen, theme }) => $contextMenuOpen && theme && `
+    background: ${theme.color?.tableSelection || '#f0f0f0'};
+    border: 1px solid ${theme.color?.cyan || '#00d4aa'};
   `}
 `
 
@@ -114,7 +91,7 @@ const FlexSpacer = styled.div`
 const Loader = styled(Loader3)`
   margin-left: 1rem;
   align-self: center;
-  color: ${color("foreground")};
+  color: ${({ theme }) => theme?.color?.foreground || '#333'};
   ${spinAnimation};
 `
 
@@ -140,6 +117,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
   const { appendQuery, editorRef } = useEditor()
+  const dispatch = useDispatch()
+  const allColumns = useSelector(selectors.query.getColumns) || {}
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(null)
@@ -154,28 +133,37 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   useRetainLastFocus({ virtuosoRef, focusedIndex, setFocusedIndex, wrapperRef })
 
   const [regularTables, matViewTables] = useMemo(() => {
-    return tables.reduce((acc, table: QuestDB.Table) => {
-      const normalizedTableName = table.table_name.toLowerCase()
-      const normalizedQuery = query.toLowerCase()
-      const tableNameMatches = normalizedTableName.includes(normalizedQuery)
-      const columnMatches = !!query && !!(allColumns[table.table_name]?.some(col => 
-        col.column_name.toLowerCase().includes(normalizedQuery)
-      ))
-      const shownIfFilteredSuspendedOnly = filterSuspendedOnly
-        ? table.walEnabled &&
-          walTables?.find((t) => t.name === table.table_name)
-            ?.suspended
-        : true
-      const shownIfFilteredWithQuery = tableNameMatches || columnMatches
-
-      if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
-        acc[table.matView ? 1 : 0].push({ ...table, hasColumnMatches: columnMatches })
-        return acc
+    try {
+      if (!tables || !Array.isArray(tables)) {
+        return [[], []]
       }
-      return acc
-    }, [[], []] as (QuestDB.Table & { hasColumnMatches: boolean })[][]).map(tables => 
-      tables.sort((a, b) => a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()))
-    )
+      
+      return tables.reduce((acc, table: QuestDB.Table) => {
+        const normalizedTableName = table.table_name.toLowerCase()
+        const normalizedQuery = query.toLowerCase()
+        const tableNameMatches = normalizedTableName.includes(normalizedQuery)
+        const columnMatches = !!query && !!(allColumns?.[table.table_name]?.some((col: any) => 
+          col.column_name.toLowerCase().includes(normalizedQuery)
+        ))
+        const shownIfFilteredSuspendedOnly = filterSuspendedOnly
+          ? table.walEnabled &&
+            walTables?.find((t) => t.name === table.table_name)
+              ?.suspended
+          : true
+        const shownIfFilteredWithQuery = tableNameMatches || columnMatches
+
+        if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
+          acc[table.matView ? 1 : 0].push({ ...table, hasColumnMatches: columnMatches })
+          return acc
+        }
+        return acc
+      }, [[], []] as (QuestDB.Table & { hasColumnMatches: boolean })[][]).map(tables => 
+        tables.sort((a, b) => a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()))
+      )
+    } catch (error) {
+      console.error('Error in regularTables/matViewTables calculation:', error)
+      return [[], []]
+    }
   }, [tables, query, filterSuspendedOnly, walTables, allColumns])
 
   const flattenedItems = useMemo(() => {
@@ -236,6 +224,26 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }, [fetchSymbolColumnDetails])
 
   const TOP_N_DEFAULT = 1000
+
+  const buildSelectQuery = (
+    tableName: string,
+    options?: { orderByColumn?: string; order?: "ASC" | "DESC"; limit?: number },
+  ) => {
+    const tableRef = `${tableName}`
+    const limit = options?.limit ?? TOP_N_DEFAULT
+    if (options?.orderByColumn) {
+      return `SELECT * FROM ${tableRef} ORDER BY ${options.orderByColumn} ${options.order} LIMIT ${limit};`
+    }
+    return `SELECT * FROM ${tableRef} LIMIT ${limit};`
+  }
+
+  const handleAppendQuery = (
+    tableName: string,
+    opts?: { orderByColumn?: string; order?: "ASC" | "DESC"; limit?: number },
+  ) => {
+    const sql = buildSelectQuery(tableName, opts)
+    appendQuery(sql, { appendAt: "end" })
+  }
 
   const appendTemplateAndPlaceCursorAtEnd = (template: string) => {
     appendQuery(template, { appendAt: "end" })
@@ -563,14 +571,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   )}
                 </ContextMenuSubContent>
               </ContextMenuSub>
-              <MenuItem 
-                data-hook="table-context-menu-resume-wal"
-                onClick={() => item.walTableData?.suspended && setTimeout(() => setOpenedSuspensionDialog(item.id))}
-                icon={<Restart size={16} />}
-                disabled={!item.walTableData?.suspended}
-              >
-                Resume WAL
-              </MenuItem>
             </ContextMenuContent>
           </ContextMenu>
         </>
@@ -615,7 +615,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           name: `Tables (${regularTables.length})`,
           isExpanded: regularTables.length === 0 ? false : getSectionExpanded(TABLES_GROUP_KEY),
           children: regularTables.map(table => {
-            const node = createTableNode(table, TABLES_GROUP_KEY, false, materializedViews, walTables, allColumns[table.table_name] ?? [])
+            const node = createTableNode(table, TABLES_GROUP_KEY, false, materializedViews, walTables, allColumns?.[table.table_name] ?? [])
             if (table.hasColumnMatches) {
               node.isExpanded = true
               // Also mark the columns folder as expanded (but not persisted)
@@ -633,7 +633,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           name: `Materialized views (${matViewTables.length})`,
           isExpanded: matViewTables.length === 0 ? false : getSectionExpanded(MATVIEWS_GROUP_KEY),
           children: matViewTables.map(table => {
-            const node = createTableNode(table, MATVIEWS_GROUP_KEY, true, materializedViews, walTables, allColumns[table.table_name] ?? [])
+            const node = createTableNode(table, MATVIEWS_GROUP_KEY, true, materializedViews, walTables, allColumns?.[table.table_name] ?? [])
             if (table.hasColumnMatches) {
               node.isExpanded = true
               const columnsFolder = node.children.find(child => child.id.endsWith(':columns'))
