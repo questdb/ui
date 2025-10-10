@@ -369,12 +369,15 @@ Cypress.Commands.add(
 );
 
 Cypress.Commands.add(
-  "clearStorageAndVisit",
-  (url, clearLocalStorage = true) => {
+  "handleStorageAndVisit",
+  (url, clearLocalStorage = true, localStorageItems = {}) => {
     cy.visit(url, {
       onBeforeLoad: (win) => {
         if (clearLocalStorage) {
           win.localStorage.clear();
+        }
+        for (const [key, value] of Object.entries(localStorageItems)) {
+          win.localStorage.setItem(key, value);
         }
         win.indexedDB.deleteDatabase("web-console");
       },
@@ -382,15 +385,18 @@ Cypress.Commands.add(
   }
 );
 
-Cypress.Commands.add("loadConsoleWithAuth", (clearWarnings = false) => {
-  cy.clearStorageAndVisit(baseUrl);
-  cy.loginWithUserAndPassword();
-  if (clearWarnings) {
-    cy.clearSimulatedWarnings();
-    cy.clearStorageAndVisit(baseUrl, false);
-    cy.getEditor().should("be.visible");
+Cypress.Commands.add(
+  "loadConsoleWithAuth",
+  (clearWarnings = false, localStorageItems = {}) => {
+    cy.handleStorageAndVisit(baseUrl, true, localStorageItems);
+    cy.loginWithUserAndPassword();
+    if (clearWarnings) {
+      cy.clearSimulatedWarnings();
+      cy.handleStorageAndVisit(baseUrl, false, localStorageItems);
+      cy.getEditor().should("be.visible");
+    }
   }
-});
+);
 
 Cypress.Commands.add(
   "loadConsoleAsAdminAndCreateSSOGroup",
