@@ -1,5 +1,5 @@
 // Auto-generated table of contents
-// Generated on 2025-09-21T12:37:52.988Z
+// Generated on 2025-10-10T09:50:25.795Z
 
 export const questdbTocList = {
   "functions": [
@@ -183,17 +183,20 @@ export const questdbTocList = {
     "Timestamp, date and time functions - millis",
     "Timestamp, date and time functions - minute",
     "Timestamp, date and time functions - month",
+    "Timestamp, date and time functions - nanos",
     "Timestamp, date and time functions - now",
     "Timestamp, date and time functions - pg_postmaster_start_time",
     "Timestamp, date and time functions - second",
     "Timestamp, date and time functions - sysdate",
     "Timestamp, date and time functions - systimestamp",
+    "Timestamp, date and time functions - systimestamp_ns",
     "Timestamp, date and time functions - timestamp_ceil",
     "Timestamp, date and time functions - timestamp_floor",
     "Timestamp, date and time functions - timestamp_shuffle",
     "Timestamp, date and time functions - to_date",
     "Timestamp, date and time functions - to_str",
     "Timestamp, date and time functions - to_timestamp",
+    "Timestamp, date and time functions - to_timestamp_ns",
     "Timestamp, date and time functions - to_timezone",
     "Timestamp, date and time functions - to_utc",
     "Timestamp, date and time functions - today, tomorrow, yesterday",

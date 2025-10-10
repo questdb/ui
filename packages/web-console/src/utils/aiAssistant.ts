@@ -235,7 +235,7 @@ const toOpenAIFunctions = (tools: typeof ALL_TOOLS) => {
     type: 'function' as const,
     name: t.name,
     description: t.description,
-    parameters: t.input_schema,
+    parameters: { ...t.input_schema, additionalProperties: false },
     strict: true,
   })) as OpenAI.Responses.Tool[]
 }
@@ -793,9 +793,6 @@ const executeAnthropicFlow = async <T>({
     return acc
   }, '{')
 
-  console.log({ fullContent })
-  console.log({  json: JSON.parse(fullContent) })
-
   try {
     if (abortSignal?.aborted) {
       return {
@@ -875,7 +872,7 @@ export const explainQuery = async ({
       config: {
         systemInstructions: getExplainQueryPrompt('anthropic'),
         initialUserContent: content,
-        formattingPrompt:  'Please give the 2-4 sentences summary of this query explanation in format { explanation: "The summarized explanation" }',
+        formattingPrompt: 'Please give the 2-4 sentences summary of this query explanation in format { "explanation": "The summarized explanation" }. The result should be a valid JSON string.'
       },
       settings,
       schemaClient,
@@ -1316,17 +1313,15 @@ export const testApiKey = async (apiKey: string, model: string): Promise<{ valid
         messages: [
           {
             role: 'user',
-            content: 'Test'
+            content: 'Ping'
           }
         ],
-        max_tokens: 10
       })
     } else {
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true })
       await openai.responses.create({
         model: model,
-        input: [ { role: 'user', content: 'Test' } ],
-        max_output_tokens: 16
+        input: [ { role: 'user', content: 'ping' } ],
       })
     }
 

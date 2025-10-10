@@ -1,5 +1,5 @@
 // Auto-generated documentation data for operators
-// Generated on 2025-09-21T12:37:52.978Z
+// Generated on 2025-10-10T09:50:25.782Z
 
 export interface DocFile {
   path: string
@@ -539,13 +539,12 @@ If we adjust the interval to be not in range, we get no result:
 
 \`\`\`questdb-sql title="Check if timestamp is in interval failure" demo
 SELECT true as is_in_interval FROM trades
-WHERE '2022-05-17T00:00:00Z'::timestamp IN interval('2022', '2023')
+WHERE '2018-05-17T00:00:00Z'::timestamp IN interval('2022', '2023')
 LIMIT -1;
 \`\`\`
 
 | is_in_interval |
 | -------------- |
-|                |
 `
   },
   {

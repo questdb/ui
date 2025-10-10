@@ -1,5 +1,5 @@
 // Auto-generated documentation data for sql
-// Generated on 2025-09-21T12:37:52.986Z
+// Generated on 2025-10-10T09:50:25.792Z
 
 export interface DocFile {
   path: string
@@ -1843,8 +1843,8 @@ ALTER TABLE ratings ADD COLUMN comment SYMBOL NOCACHE INDEX;
 
 ## Syntax
 
-![Flow chart showing the syntax of the ALTER TABLE keyword](/images/docs/diagrams/alterTable.svg)
-![Flow chart showing the syntax of the ALTER TABLE with ADD INDEX keyword](/images/docs/diagrams/alterTableAddIndex.svg)
+![Flow chart showing the syntax of the ALTER TABLE ALTER COLUMN ADD INDEX keyword](/images/docs/diagrams/alterTableAddIndex.svg)
+
 
 Adding an [index](/docs/concept/indexes/) is an atomic, non-blocking, and
 non-waiting operation. Once complete, the SQL optimizer will start using the new
@@ -1866,8 +1866,7 @@ ALTER TABLE trades ALTER COLUMN instrument ADD INDEX;
 
 ## Syntax
 
-![Flow chart showing the syntax of the ALTER TABLE keyword](/images/docs/diagrams/alterTable.svg)
-![Flow chart showing the syntax of NOCACHE | CACHE](/images/docs/diagrams/alterTableNoCache.svg)
+![Flow chart showing the syntax of ALTER TABLE ALTER COLUMN NOCACHE | CACHE](/images/docs/diagrams/alterTableNoCache.svg)
 
 - \`columnName\` is the \`symbol\` data type.
 - By default, a symbol column is cached.
@@ -2195,18 +2194,19 @@ result in data loss marked with \`L\`.
 Numeric types support a wide range of conversions, but many of them can result
 in the data / precision loss.
 
-| From \\ To | boolean | byte | short | int | float | long | double | date | timestamp |
-| --------- | ------- | ---- | ----- | --- | ----- | ---- | ------ | ---- | --------- |
-| boolean   |         | X    | X     | X   | X     | X    | X      | X    | X         |
-| byte      | L       |      | X     | X   | X     | X    | X      | X    | X         |
-| short     | L       | L    |       | X   | X     | X    | X      | X    | X         |
-| int       | L       | L    | L     |     | L     | X    | X      | X    | X         |
-| float     | L       | L    | L     | L   |       | L    | X      | L    | L         |
-| long      | L       | L    | L     | L   | L     |      | L      | X    | X         |
-| double    | L       | L    | L     | L   | X     | L    |        | L    | L         |
+| From \\ To | boolean | byte | short | int | float | long | double | date | timestamp | timestamp_ns |
+| --------- | ------- | ---- | ----- | --- | ----- | ---- | ------ | ---- | --------- | ------------ |
+| boolean   |         | X    | X     | X   | X     | X    | X      | X    | X         | X            |
+| byte      | L       |      | X     | X   | X     | X    | X      | X    | X         | X            |
+| short     | L       | L    |       | X   | X     | X    | X      | X    | X         | X            |
+| int       | L       | L    | L     |     | L     | X    | X      | X    | X         | X            |
+| float     | L       | L    | L     | L   |       | L    | X      | L    | L         | L            |
+| long      | L       | L    | L     | L   | L     |      | L      | X    | X         | X            |
+| double    | L       | L    | L     | L   | X     | L    |        | L    | L         | L            |
 
-Conversions between \`TIMESTAMP\` and \`DATE\` types and numeric types are fully
-supported. Timestamp values are represented in microseconds since the EPOCH,
+Conversions between \`TIMESTAMP\`, \`TIMESTAMP_NS\`, and \`DATE\` types and numeric types are fully
+supported. Timestamp values are represented in microseconds since the EPOCH, Timestamp_ns values
+are represented in nanoseconds since the EPOCH,
 while Date values are represented in milliseconds since the EPOCH. The EPOCH is
 defined as \`1970-01-01T00:00:00.000000Z\`.
 
@@ -2214,40 +2214,42 @@ Additionally, when converting from \`BOOLEAN\` values to numerics, \`false\` is
 represented as \`0\`, and \`true\` is represented as \`1\`. On the way back \`0\` and
 \`NULL\` are converted to \`false\` and all other values converted to \`true\`.
 
-| From \\ To | boolean | byte | short | int | float | long | double | date | timestamp |
-| --------- | ------- | ---- | ----- | --- | ----- | ---- | ------ | ---- | --------- |
-| date      | L       | L    | L     | L   | L     | X    | X      |      | X         |
-| timestamp | L       | L    | L     | L   | L     | X    | X      | L    |           |
+| From \\ To    | boolean | byte | short | int | float | long | double | date | timestamp | timestamp_ns |
+| ------------ | ------- | ---- | ----- | --- | ----- | ---- | ------ | ---- | --------- | ------------ |
+| date         | L       | L    | L     | L   | L     | X    | X      |      | X         | X            |
+| timestamp    | L       | L    | L     | L   | L     | X    | X      | L    |           |              |
+| timestamp_ns | L       | L    | L     | L   | L     | X    | X      | L    | L         |              |
 
 Conversions to \`SYMBOL\`, \`STRING\` and \`VARCHAR\` are supported from most of the
 data types.
 
-| From \\ To | symbol | string | varchar |
-| --------- | ------ | ------ | ------- |
-| boolean   | X      | X      | X       |
-| byte      | X      | X      | X       |
-| short     | X      | X      | X       |
-| int       | X      | X      | X       |
-| float     | X      | X      | X       |
-| long      | X      | X      | X       |
-| date      | X      | X      | X       |
-| timestamp | X      | X      | X       |
-| double    | X      | X      | X       |
-| ipv4      | X      | X      | X       |
-| char      | X      | X      | X       |
-| uuid      | X      | X      | X       |
-| symbol    |        | X      | X       |
-| string    | X      |        | X       |
-| varchar   | X      | X      |         |
+| From \\ To    | symbol | string | varchar |
+| ------------ | ------ | ------ | ------- |
+| boolean      | X      | X      | X       |
+| byte         | X      | X      | X       |
+| short        | X      | X      | X       |
+| int          | X      | X      | X       |
+| float        | X      | X      | X       |
+| long         | X      | X      | X       |
+| date         | X      | X      | X       |
+| timestamp    | X      | X      | X       |
+| timestamp_ns | X      | X      | X       |
+| double       | X      | X      | X       |
+| ipv4         | X      | X      | X       |
+| char         | X      | X      | X       |
+| uuid         | X      | X      | X       |
+| symbol       |        | X      | X       |
+| string       | X      |        | X       |
+| varchar      | X      | X      |         |
 
 However conversion from \`SYMBOL\`, \`STRING\` and \`VARCHAR\` to other types can
 result in \`NULL\` values for inconvertable string values.
 
-| From \\ To | boolean | byte | short | char | int | float | long | date | timestamp | double | uuid |
-| --------- | ------- | ---- | ----- | ---- | --- | ----- | ---- | ---- | --------- | ------ | ---- |
-| string    | L       | L    | L     | L    | L   | L     | L    | L    | L         | L      | L    |
-| varchar   | L       | L    | L     | L    | L   | L     | L    | L    | L         | L      | L    |
-| symbol    | L       | L    | L     | L    | L   | L     | L    | L    | L         | L      | L    |
+| From \\ To | boolean | byte | short | char | int | float | long | date | timestamp | timestamp_ns | double | uuid |
+| --------- | ------- | ---- | ----- | ---- | --- | ----- | ---- | ---- | --------- | ------------ | ------ | ---- |
+| string    | L       | L    | L     | L    | L   | L     | L    | L    | L         | L            | L      | L    |
+| varchar   | L       | L    | L     | L    | L   | L     | L    | L    | L         | L            |  L      | L    |
+| symbol    | L       | L    | L     | L    | L   | L     | L    | L    | L         | L            |  L      | L    |
 
 When column type change results into range overflow or precision loss, the same
 rules as explicit [CAST](/docs/reference/sql/cast/) apply.
@@ -2564,7 +2566,7 @@ recovery from errors.
 ## Syntax
 
 ![Flow chart showing the syntax of the ALTER TABLE keyword](/images/docs/diagrams/alterTable.svg)
-![Flow chart showing the syntax of ALTER TABLE with RESUME WAL keyword](/images/docs/diagrams/alterTableResumeWal.svg)
+![Flow chart showing the syntax of ALTER TABLE with RESUME WAL keyword](/images/docs/diagrams/resumeWal.svg)
 
 ## Description
 
@@ -2952,7 +2954,7 @@ tables.
 It is a variant of the [\`JOIN\` keyword](/docs/reference/sql/join/) and shares
 many of its execution traits.
 
-This document will demonstrate how to utilize them, and link to other relevant
+This document will demonstrate how to utilize it, and link to other relevant
 JOIN context.
 
 ## JOIN overview
@@ -2963,10 +2965,10 @@ The JOIN operation is broken into three components:
 - Join clause
 - Where clause
 
-This document will demonstrate the JOIN clause, where the other keywords
+This document will demonstrate the JOIN clause, while the other keywords
 demonstrate their respective clauses.
 
-Visualized, a JOIN operation looks like this:
+Visually, a JOIN operation looks like this:
 
 ![Flow chart showing the syntax of the high-level syntax of the JOIN keyword](/images/docs/diagrams/joinOverview.svg)
 
@@ -3002,12 +3004,12 @@ Read more about execution order in the
 ## ASOF JOIN
 
 \`ASOF JOIN\` joins two time-series on their timestamp, using the following
-logic: for each row in the first time-series,
+logic: for each row in the first time-series...
 
 1. consider all timestamps in the second time-series **earlier or equal to**
 the first one
 2. choose **the latest** such timestamp
-3. If the optional \`TOLERANCE\` clause is specified, an additional condition applies: 
+3. If the optional \`TOLERANCE\` clause is specified, an additional condition applies:
    the chosen record from t2 must satisfy \`t1.ts - t2.ts <= tolerance_value\`. If no record
    from t2 meets this condition (along with \`t2.ts <= t1.ts\`), then the row from t1 will not have a match.
 
@@ -3015,265 +3017,174 @@ the first one
 
 Let's use an example with two tables:
 
-- \`trades\`: trade events on a single stock
-- \`order_book\`: level-1 order book snapshots for that stock
+- \`market_data\`: Multi-level L2 FX order book snapshots per symbol
+- \`core_price\`: Quote streamer per symbol and ECN
 
-\`trades\` data:
+\`market_data\` data: For the purposes of these examples, we will focus only on the best bid price.
+
+\`\`\`questdb-sql title="Best Bid Price per Symbol from Market Data" demo
+SELECT timestamp, symbol, bids[1,1] as best_bid_price
+FROM
+ market_data limit 20;
+ \`\`\`
 
 <div className="blue-table">
-
-|    timestamp    |  price | size |
-| --------------- | ------ | ---- |
-| 08:00:00.007140 | 175.97 |  400 |
-| 08:00:00.609618 | 178.55 |  400 |
-| 08:00:00.672131 | 176.09 |  400 |
-| 08:00:00.672147 | 176.03 |  400 |
-| 08:00:01.146931 | 175.45 |  400 |
-| 08:00:01.495188 | 177.90 |  400 |
-| 08:00:01.991977 | 175.35 |  400 |
-| 08:00:01.991991 | 175.36 |  400 |
-| 08:00:02.039451 | 175.36 |  400 |
-| 08:00:02.836413 | 175.55 |  400 |
-| 08:00:03.447858 | 176.79 |  400 |
-| 08:00:04.782191 | 181.00 |   15 |
-| 08:00:05.408871 | 175.77 |  400 |
-| 08:00:06.007145 | 176.52 |  400 |
-| 08:00:06.740159 | 184.00 |    1 |
-| 08:00:07.593841 | 175.75 |  400 |
-| 08:00:10.310291 | 176.38 |   29 |
-| 08:00:10.550535 | 175.86 |  400 |
-| 08:00:10.761790 | 175.94 |  400 |
-| 08:00:12.046660 | 176.15 |  400 |
-| 08:00:12.897624 | 176.62 |  400 |
-| 08:00:13.838193 | 176.51 |   25 |
-| 08:00:15.125509 | 176.17 |  400 |
-| 08:00:16.727077 | 176.48 |  400 |
-| 08:00:18.813886 | 176.68 |  400 |
-| 08:00:22.180535 | 176.05 |  400 |
-| 08:00:25.125634 | 176.16 |  400 |
-| 08:00:26.117889 | 176.33 |    1 |
-| 08:00:26.184839 | 176.52 |  400 |
-| 08:00:26.185102 | 176.41 |   25 |
-
+| timestamp                   | symbol | best_bid_price |
+| --------------------------- | ------ | -------------- |
+| 2025-09-16T14:00:00.006068Z | USDJPY | 145.67         |
+| 2025-09-16T14:00:00.008934Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.014362Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.016543Z | USDJPY | 145.67         |
+| 2025-09-16T14:00:00.017379Z | EURUSD | 1.1869         |
+| 2025-09-16T14:00:00.020635Z | USDJPY | 145.67         |
+| 2025-09-16T14:00:00.021059Z | EURUSD | 1.1869         |
+| 2025-09-16T14:00:00.032753Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.035691Z | EURUSD | 1.1869         |
+| 2025-09-16T14:00:00.038910Z | EURUSD | 1.1869         |
+| 2025-09-16T14:00:00.041939Z | USDJPY | 145.67         |
+| 2025-09-16T14:00:00.042338Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.053509Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.060495Z | EURUSD | 1.1869         |
+| 2025-09-16T14:00:00.065560Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.068744Z | USDJPY | 145.67         |
+| 2025-09-16T14:00:00.073389Z | USDJPY | 145.67         |
+| 2025-09-16T14:00:00.073536Z | EURUSD | 1.1869         |
+| 2025-09-16T14:00:00.077558Z | GBPUSD | 1.3719         |
+| 2025-09-16T14:00:00.078433Z | GBPUSD | 1.3719         |
 </div>
 
-\`order_book\` data:
+\`core_price\` data: We will focus only on the bid_price
+
+\`\`\`questdb-sql title="Bid Price per Symbol from Core Prices" demo
+select timestamp, symbol, bid_price from
+core_price limit 20;
+\`\`\`
 
 <div className="pink-table">
 
-| timestamp | bid_price | bid_size | ask_price | ask_size |
-| --------- | --------- | -------- | --------- | -------- |
-| 08:00:00  |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:01  |    176.33 |     4744 |    176.6  |     8404 |
-| 08:00:02  |    176.07 |      136 |    176.76 |     4946 |
-| 08:00:03  |    176.07 |       84 |    176.75 |     2182 |
-| 08:00:04  |    176.07 |      112 |    176.59 |     2734 |
-| 08:00:05  |    176.38 |      212 |    176.5  |     6966 |
-| 08:00:06  |    176.33 |      176 |    176.52 |     8174 |
-| 08:00:07  |    176.33 |      276 |    176.67 |     7345 |
-| 08:00:08  |    176.33 |       48 |    176.67 |     1600 |
-| 08:00:09  |    176.35 |       66 |    176.67 |     2400 |
-| 08:00:10  |    176.36 |      695 |    176.38 |    20698 |
-| 08:00:11  |    176.35 |       98 |    176.59 |     2800 |
-| 08:00:12  |    176.48 |      104 |    176.59 |     4040 |
-| 08:00:13  |    176.48 |      165 |    176.38 |     6035 |
-| 08:00:14  |    176.35 |       56 |    176.38 |      720 |
-| 08:00:15  |    176.35 |      119 |    176.38 |     1530 |
-| 08:00:16  |    176.35 |      133 |    176.38 |     3710 |
-| 08:00:18  |    176.35 |       84 |    176.38 |     1880 |
-| 08:00:19  |    176.35 |       14 |    176.38 |      180 |
-| 08:00:20  |    176.35 |       14 |    176.38 |      180 |
-| 08:00:21  |    176.35 |      112 |    176.38 |     1440 |
-| 08:00:22  |    176.35 |      133 |    176.38 |     1710 |
-| 08:00:25  |    176.35 |      122 |    176.38 |     3929 |
-| 08:00:26  |    176.35 |      300 |    176.37 |     6952 |
-| 08:00:28  |    176.07 |       28 |    176.37 |      496 |
+| timestamp                   | symbol | bid_price |
+| --------------------------- | ------ | --------- |
+| 2025-09-16T14:00:00.009328Z | USDJPY | 145.39    |
+| 2025-09-16T14:00:00.043761Z | USDJPY | 145.67    |
+| 2025-09-16T14:00:00.056230Z | EURUSD | 1.1863    |
+| 2025-09-16T14:00:00.057539Z | USDJPY | 145.57    |
+| 2025-09-16T14:00:00.069197Z | GBPUSD | 1.3682    |
+| 2025-09-16T14:00:00.083291Z | EURUSD | 1.1835    |
+| 2025-09-16T14:00:00.098121Z | GBPUSD | 1.3691    |
+| 2025-09-16T14:00:00.105339Z | EURUSD | 1.185     |
+| 2025-09-16T14:00:00.111114Z | EURUSD | 1.1863    |
+| 2025-09-16T14:00:00.129785Z | GBPUSD | 1.3709    |
+| 2025-09-16T14:00:00.145194Z | GBPUSD | 1.3689    |
+| 2025-09-16T14:00:00.148178Z | GBPUSD | 1.3694    |
+| 2025-09-16T14:00:00.155810Z | USDJPY | 145.51    |
+| 2025-09-16T14:00:00.178333Z | USDJPY | 145.48    |
+| 2025-09-16T14:00:00.185806Z | GBPUSD | 1.3687    |
+| 2025-09-16T14:00:00.191322Z | EURUSD | 1.185     |
+| 2025-09-16T14:00:00.220899Z | GBPUSD | 1.3697    |
+| 2025-09-16T14:00:00.222574Z | USDJPY | 145.65    |
+| 2025-09-16T14:00:00.249440Z | EURUSD | 1.1853    |
+| 2025-09-16T14:00:00.274688Z | EURUSD | 1.184     |
 
 </div>
 
-We want to join each trade event to the relevant order book snapshot. All
+We want to join each market data snapshot to the relevant core price. All
 we have to write is
 
-\`\`\`questdb-sql title="A basic ASOF JOIN example"
-trades ASOF JOIN order_book
+\`\`\`questdb-sql title="A basic ASOF JOIN example" demo
+SELECT
+  m.timestamp, m.symbol, bids[1,1] AS best_bid_price,
+  p.timestamp, p.symbol, p.bid_price
+FROM
+  market_data m ASOF JOIN core_price p
+LIMIT 20;
 \`\`\`
 
 and we get this result:
 
 <div className="table-alternate">
 
-|     timestamp   |  price | size | timestamp1 | bid_price | bid_size | ask_price | ask_size |
-| --------------- | ------ | ---- | ---------- | --------- | -------- | --------- | -------- |
-| 08:00:00.007140 | 175.97 |  400 |   08:00:00 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:00.609618 | 178.55 |  400 |   08:00:00 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:00.672131 | 176.09 |  400 |   08:00:00 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:00.672147 | 176.03 |  400 |   08:00:00 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:01.146931 | 175.45 |  400 |   08:00:01 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:01.495188 | 177.90 |  400 |   08:00:01 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:01.991977 | 175.35 |  400 |   08:00:01 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:01.991991 | 175.36 |  400 |   08:00:01 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:02.039451 | 175.36 |  400 |   08:00:02 |    176.07 |      136 |    176.76 |     4946 |
-| 08:00:02.836413 | 175.55 |  400 |   08:00:02 |    176.07 |      136 |    176.76 |     4946 |
-| 08:00:03.447858 | 176.79 |  400 |   08:00:03 |    176.07 |       84 |    176.75 |     2182 |
-| 08:00:04.782191 | 181.00 |   15 |   08:00:04 |    176.07 |      112 |    176.59 |     2734 |
-| 08:00:05.408871 | 175.77 |  400 |   08:00:05 |    176.38 |      212 |    176.50 |     6966 |
-| 08:00:06.007145 | 176.52 |  400 |   08:00:06 |    176.33 |      176 |    176.52 |     8174 |
-| 08:00:06.740159 | 184.00 |    1 |   08:00:06 |    176.33 |      176 |    176.52 |     8174 |
-| 08:00:07.593841 | 175.75 |  400 |   08:00:07 |    176.33 |      276 |    176.67 |     7345 |
-| 08:00:10.310291 | 176.38 |   29 |   08:00:10 |    176.36 |      695 |    176.38 |    20698 |
-| 08:00:10.550535 | 175.86 |  400 |   08:00:10 |    176.36 |      695 |    176.38 |    20698 |
-| 08:00:10.761790 | 175.94 |  400 |   08:00:10 |    176.36 |      695 |    176.38 |    20698 |
-| 08:00:12.046660 | 176.15 |  400 |   08:00:12 |    176.48 |      104 |    176.59 |     4040 |
-| 08:00:12.897624 | 176.62 |  400 |   08:00:12 |    176.48 |      104 |    176.59 |     4040 |
-| 08:00:13.838193 | 176.51 |   25 |   08:00:13 |    176.48 |      165 |    176.38 |     6035 |
-| 08:00:15.125509 | 176.17 |  400 |   08:00:15 |    176.35 |      119 |    176.38 |     1530 |
-| 08:00:16.727077 | 176.48 |  400 |   08:00:16 |    176.35 |      133 |    176.38 |     3710 |
-| 08:00:18.813886 | 176.68 |  400 |   08:00:18 |    176.35 |       84 |    176.38 |     1880 |
-| 08:00:22.180535 | 176.05 |  400 |   08:00:22 |    176.35 |      133 |    176.38 |     1710 |
-| 08:00:25.125634 | 176.16 |  400 |   08:00:25 |    176.35 |      122 |    176.38 |     3929 |
-| 08:00:26.117889 | 176.33 |    1 |   08:00:26 |    176.35 |      300 |    176.37 |     6952 |
-| 08:00:26.184839 | 176.52 |  400 |   08:00:26 |    176.35 |      300 |    176.37 |     6952 |
-| 08:00:26.185102 | 176.41 |   25 |   08:00:26 |    176.35 |      300 |    176.37 |     6952 |
+| timestamp                   | symbol | best_bid_price | timestamp_2                 | symbol_2 | bid_price |
+| --------------------------- | ------ | -------------- | --------------------------- | -------- | --------- |
+| 2025-09-16T14:00:00.006068Z | USDJPY | 145.67         | 2025-09-16T14:00:00.004409Z | CADJPY   | 106.49    |
+| 2025-09-16T14:00:00.008934Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.008094Z | NZDUSD   | 0.5926    |
+| 2025-09-16T14:00:00.014362Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.013547Z | CADJPY   | 106.41    |
+| 2025-09-16T14:00:00.016543Z | USDJPY | 145.67         | 2025-09-16T14:00:00.015730Z | CADJPY   | 106.6     |
+| 2025-09-16T14:00:00.017379Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.017359Z | EURGBP   | 0.8726    |
+| 2025-09-16T14:00:00.020635Z | USDJPY | 145.67         | 2025-09-16T14:00:00.017813Z | EURCHF   | 0.9363    |
+| 2025-09-16T14:00:00.021059Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.017813Z | EURCHF   | 0.9363    |
+| 2025-09-16T14:00:00.032753Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.031278Z | USDSGD   | 1.2865    |
+| 2025-09-16T14:00:00.035691Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.034997Z | GBPJPY   | 200.45    |
+| 2025-09-16T14:00:00.038910Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.037147Z | EURNZD   | 1.9588    |
+| 2025-09-16T14:00:00.041939Z | USDJPY | 145.67         | 2025-09-16T14:00:00.039227Z | USDTRY   | 41.133    |
+| 2025-09-16T14:00:00.042338Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.042233Z | EURGBP   | 0.8726    |
+| 2025-09-16T14:00:00.053509Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.052584Z | USDSEK   | 9.221     |
+| 2025-09-16T14:00:00.060495Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.059674Z | NZDCAD   | 0.8171    |
+| 2025-09-16T14:00:00.065560Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.061656Z | EURGBP   | 0.8733    |
+| 2025-09-16T14:00:00.068744Z | USDJPY | 145.67         | 2025-09-16T14:00:00.068729Z | GBPCHF   | 1.0722    |
+| 2025-09-16T14:00:00.073389Z | USDJPY | 145.67         | 2025-09-16T14:00:00.072195Z | EURGBP   | 0.8737    |
+| 2025-09-16T14:00:00.073536Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.072195Z | EURGBP   | 0.8737    |
+| 2025-09-16T14:00:00.077558Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.077447Z | NZDUSD   | 0.5936    |
+| 2025-09-16T14:00:00.078433Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.077447Z | NZDUSD   | 0.5936    |
 
 </div>
+
+Note the result doesn't really make sense, as we are joining each row in \`market_data\` with the row in \`core_price\` with
+exact or immediately before timestamp, regardless of the symbol. If our join does not depend only on timestamp, but also
+on matching columns, we need to add extra keywords.
 
 ### Using \`ON\` for matching column value
 
-The tables in the above example are just about one stock; in reality the same
-table covers many stocks, and you want the results not to get mixed between
-them. This is what the \`ON\` clause is for -- you can point out the key (ticker)
+By using the \`ON\` clause, you can point out the key (\`symbol\` in our example)
 column and get results separate for each key.
 
-Here's the trades table expanded to include two stocks, and a new \`symbol\` column:
-
-<div className="pink-table">
-
-|    timestamp    | symbol |  price | size |
-| --------------- | ------ | ------ | ---- |
-| 08:00:00.007168 |   AAPL | 176.91 |  400 |
-| 08:00:00.834205 |   AAPL | 175.93 |  400 |
-| 08:00:00.988111 |   AAPL | 176.47 |  100 |
-| 08:00:01.199577 |   AAPL | 175.46 |  400 |
-| 08:00:01.495172 |   AAPL | 177.95 |  400 |
-| 08:00:01.538683 |   GOOG | 175.82 |  400 |
-| 08:00:01.555565 |   AAPL | 176.33 |   25 |
-| 08:00:02.006636 |   GOOG |  150.0 |   10 |
-| 08:00:02.039451 |   AAPL | 175.36 |  400 |
-| 08:00:02.460454 |   GOOG | 175.45 |  400 |
-| 08:00:03.012909 |   GOOG |  175.5 |    1 |
-| 08:00:03.494927 |   GOOG |  185.0 |    5 |
-| 08:00:03.524212 |   AAPL | 175.48 |  400 |
-| 08:00:04.648333 |   AAPL | 175.66 |  400 |
-| 08:00:04.943421 |   GOOG | 175.48 |  400 |
-| 08:00:05.884890 |   AAPL | 176.54 |   28 |
-| 08:00:05.961856 |   GOOG | 175.66 |  400 |
-| 08:00:06.589806 |   GOOG | 175.65 |  400 |
-| 08:00:06.740159 |   AAPL |  184.0 |    1 |
-| 08:00:07.342978 |   GOOG | 176.55 |  400 |
-| 08:00:07.345877 |   AAPL | 176.73 |  400 |
-| 08:00:10.419065 |   AAPL | 176.41 |  400 |
-| 08:00:11.636237 |   AAPL | 176.69 |  400 |
-| 08:00:11.683078 |   GOOG | 176.67 |  400 |
-| 08:00:13.650868 |   AAPL | 176.52 |  124 |
-| 08:00:13.650880 |   AAPL | 176.59 |  124 |
-| 08:00:14.055762 |   AAPL | 176.66 |  400 |
-| 08:00:14.083022 |   GOOG | 176.81 |  400 |
-| 08:00:15.088091 |   GOOG | 176.52 |  400 |
-| 08:00:15.125494 |   AAPL | 176.12 |  400 |
-| 08:00:15.147691 |   GOOG | 176.54 |  400 |
-
-</div>
-
-Order book, similarly extended with the \`symbol\` column:
-
-<div className="blue-table">
-
-| timestamp | symbol | bid_price | bid_size | ask_price | ask_size |
-| --------- | ------ | --------- | -------- | --------- | -------- |
-|  08:00:00 |   AAPL |    176.47 |     5542 |    176.82 |    13054 |
-|  08:00:01 |   GOOG |    130.32 |     7516 |    130.9  |    25652 |
-|  08:00:01 |   AAPL |    176.33 |     4744 |    176.6  |     8404 |
-|  08:00:02 |   GOOG |    130.59 |     9046 |    130.68 |     9264 |
-|  08:00:02 |   AAPL |    176.07 |      136 |    176.76 |     4946 |
-|  08:00:03 |   GOOG |    130.34 |     4086 |    130.82 |    12676 |
-|  08:00:03 |   AAPL |    176.07 |       84 |    176.75 |     2182 |
-|  08:00:04 |   GOOG |    130.29 |      350 |    130.79 |     8780 |
-|  08:00:04 |   AAPL |    176.07 |      112 |    176.59 |     2734 |
-|  08:00:05 |   GOOG |    130.29 |      182 |    130.68 |     6060 |
-|  08:00:05 |   AAPL |    176.38 |      212 |    176.5  |     6966 |
-|  08:00:06 |   GOOG |    130.48 |      394 |    130.65 |     6828 |
-|  08:00:06 |   AAPL |    176.33 |      176 |    176.52 |     8174 |
-|  08:00:07 |   GOOG |    130.52 |      366 |    130.61 |    21260 |
-|  08:00:07 |   AAPL |    176.33 |      276 |    176.67 |     7345 |
-|  08:00:08 |   GOOG |    130.48 |      480 |    130.76 |    13032 |
-|  08:00:08 |   AAPL |    176.33 |       48 |    176.67 |     1600 |
-|  08:00:09 |   GOOG |    130.48 |      216 |    130.74 |     6458 |
-|  08:00:09 |   AAPL |    176.35 |       66 |    176.67 |     2400 |
-|  08:00:10 |   GOOG |    130.48 |       72 |    130.74 |     2400 |
-|  08:00:10 |   AAPL |    176.36 |      695 |    176.38 |    20698 |
-|  08:00:11 |   GOOG |    130.51 |     1236 |    130.52 |    26596 |
-|  08:00:11 |   AAPL |    176.35 |       98 |    176.59 |     2800 |
-|  08:00:12 |   GOOG |    130.5 |       378 |    130.68 |    22000 |
-|  08:00:12 |   AAPL |    176.48 |      104 |    176.59 |     4040 |
-|  08:00:13 |   GOOG |    130.6 |       174 |    130.68 |     5200 |
-|  08:00:13 |   AAPL |    176.48 |      165 |    176.38 |     6035 |
-|  08:00:14 |   GOOG |    130.6 |       138 |    130.62 |     8616 |
-|  08:00:14 |   AAPL |    176.35 |       56 |    176.38 |      720 |
-|  08:00:15 |   GOOG |    130.6 |       394 |    130.52 |     9374 |
-
-</div>
-
-And here's the ASOF JOIN query with the \`ON\` clause added:
+Here's the ASOF JOIN query with the \`ON\` clause added:
 
 \`\`\`questdb-sql title="ASOF JOIN with symbol matching" demo
-SELECT t.timestamp, t.symbol, price, size, bid_price, bid_size, ask_price, ask_size
-FROM trades t ASOF JOIN order_book ON (symbol);
+SELECT
+  m.timestamp, m.symbol, bids[1,1] AS best_bid_price,
+  p.timestamp, p.symbol, p.bid_price
+FROM
+  market_data m ASOF JOIN core_price p
+ON (symbol)
+LIMIT 20;
 \`\`\`
 
 Result:
 
 <div className="table-alternate">
 
-|    timestamp    | symbol |  price | size | bid_price | bid_size | ask_price | ask_size |
-| --------------- | ------ | ------ | ---- | --------- | -------- | --------- | -------- |
-| 08:00:00.007168 |   AAPL | 176.91 |  400 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:00.834205 |   AAPL | 175.93 |  400 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:00.988111 |   AAPL | 176.47 |  100 |    176.47 |     5542 |    176.82 |    13054 |
-| 08:00:01.199577 |   AAPL | 175.46 |  400 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:01.495172 |   AAPL | 177.95 |  400 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:01.538683 |   GOOG | 175.82 |  400 |    130.32 |     7516 |    130.90 |    25652 |
-| 08:00:01.555565 |   AAPL | 176.33 |   25 |    176.33 |     4744 |    176.60 |     8404 |
-| 08:00:02.006636 |   GOOG | 150.00 |   10 |    130.59 |     9046 |    130.68 |     9264 |
-| 08:00:02.039451 |   AAPL | 175.36 |  400 |    176.07 |      136 |    176.76 |     4946 |
-| 08:00:02.460454 |   GOOG | 175.45 |  400 |    130.59 |     9046 |    130.68 |     9264 |
-| 08:00:03.012909 |   GOOG | 175.50 |    1 |    130.34 |     4086 |    130.82 |    12676 |
-| 08:00:03.494927 |   GOOG | 185.00 |    5 |    130.34 |     4086 |    130.82 |    12676 |
-| 08:00:03.524212 |   AAPL | 175.48 |  400 |    176.07 |       84 |    176.75 |     2182 |
-| 08:00:04.648333 |   AAPL | 175.66 |  400 |    176.07 |      112 |    176.59 |     2734 |
-| 08:00:04.943421 |   GOOG | 175.48 |  400 |    130.29 |      350 |    130.79 |     8780 |
-| 08:00:05.884890 |   AAPL | 176.54 |   28 |    176.38 |      212 |    176.50 |     6966 |
-| 08:00:05.961856 |   GOOG | 175.66 |  400 |    130.29 |      182 |    130.68 |     6060 |
-| 08:00:06.589806 |   GOOG | 175.65 |  400 |    130.48 |      394 |    130.65 |     6828 |
-| 08:00:06.740159 |   AAPL | 184.00 |    1 |    176.33 |      176 |    176.52 |     8174 |
-| 08:00:07.342978 |   GOOG | 176.55 |  400 |    130.52 |      366 |    130.61 |    21260 |
-| 08:00:07.345877 |   AAPL | 176.73 |  400 |    176.33 |      276 |    176.67 |     7345 |
-| 08:00:10.419065 |   AAPL | 176.41 |  400 |    176.36 |      695 |    176.38 |    20698 |
-| 08:00:11.636237 |   AAPL | 176.69 |  400 |    176.35 |       98 |    176.59 |     2800 |
-| 08:00:11.683078 |   GOOG | 176.67 |  400 |    130.51 |     1236 |    130.52 |    26596 |
-| 08:00:13.650868 |   AAPL | 176.52 |  124 |    176.48 |      165 |    176.38 |     6035 |
-| 08:00:13.650880 |   AAPL | 176.59 |  124 |    176.48 |      165 |    176.38 |     6035 |
-| 08:00:14.055762 |   AAPL | 176.66 |  400 |    176.35 |       56 |    176.38 |      720 |
-| 08:00:14.083022 |   GOOG | 176.81 |  400 |    130.60 |      138 |    130.62 |     8616 |
-| 08:00:15.088091 |   GOOG | 176.52 |  400 |    130.60 |      394 |    130.52 |     9374 |
-| 08:00:15.125494 |   AAPL | 176.12 |  400 |    176.35 |       56 |    176.38 |      720 |
-| 08:00:15.147691 |   GOOG | 176.54 |  400 |    130.60 |      394 |    130.52 |     9374 |
+| timestamp                   | symbol | best_bid_price | timestamp_2                 | symbol_2 | bid_price |
+| --------------------------- | ------ | -------------- | --------------------------- | -------- | --------- |
+| 2025-09-16T14:00:00.006068Z | USDJPY | 145.67         | null                        | null     | null      |
+| 2025-09-16T14:00:00.008934Z | GBPUSD | 1.3719         | null                        | null     | null      |
+| 2025-09-16T14:00:00.014362Z | GBPUSD | 1.3719         | null                        | null     | null      |
+| 2025-09-16T14:00:00.016543Z | USDJPY | 145.67         | 2025-09-16T14:00:00.009328Z | USDJPY   | 145.39    |
+| 2025-09-16T14:00:00.017379Z | EURUSD | 1.1869         | null                        | null     | null      |
+| 2025-09-16T14:00:00.020635Z | USDJPY | 145.67         | 2025-09-16T14:00:00.009328Z | USDJPY   | 145.39    |
+| 2025-09-16T14:00:00.021059Z | EURUSD | 1.1869         | null                        | null     | null      |
+| 2025-09-16T14:00:00.032753Z | GBPUSD | 1.3719         | null                        | null     | null      |
+| 2025-09-16T14:00:00.035691Z | EURUSD | 1.1869         | null                        | null     | null      |
+| 2025-09-16T14:00:00.038910Z | EURUSD | 1.1869         | null                        | null     | null      |
+| 2025-09-16T14:00:00.041939Z | USDJPY | 145.67         | 2025-09-16T14:00:00.009328Z | USDJPY   | 145.39    |
+| 2025-09-16T14:00:00.042338Z | GBPUSD | 1.3719         | null                        | null     | null      |
+| 2025-09-16T14:00:00.053509Z | GBPUSD | 1.3719         | null                        | null     | null      |
+| 2025-09-16T14:00:00.060495Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.056230Z | EURUSD   | 1.1863    |
+| 2025-09-16T14:00:00.065560Z | GBPUSD | 1.3719         | null                        | null     | null      |
+| 2025-09-16T14:00:00.068744Z | USDJPY | 145.67         | 2025-09-16T14:00:00.057539Z | USDJPY   | 145.57    |
+| 2025-09-16T14:00:00.073389Z | USDJPY | 145.67         | 2025-09-16T14:00:00.057539Z | USDJPY   | 145.57    |
+| 2025-09-16T14:00:00.073536Z | EURUSD | 1.1869         | 2025-09-16T14:00:00.056230Z | EURUSD   | 1.1863    |
+| 2025-09-16T14:00:00.077558Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.069197Z | GBPUSD   | 1.3682    |
+| 2025-09-16T14:00:00.078433Z | GBPUSD | 1.3719         | 2025-09-16T14:00:00.069197Z | GBPUSD   | 1.3682    |
 
 </div>
+
+Note how the first few rows for each symbol don't match anything on the \`core_price\` table, as there are no rows
+with timestamps equal or earlier than the timestamp on the \`market_data\` table for those first rows.
 
 ### How ASOF JOIN uses timestamps
 
 \`ASOF JOIN\` requires tables or subqueries to be ordered by time. The best way to meet this requirement is to use a
-[designated timestamp](/docs/concept/designated-timestamp/), which is set when you create a table. 
+[designated timestamp](/docs/concept/designated-timestamp/), which is set when you create a table.
 This not only enforces the chronological order of your data but also tells QuestDB which column to use for time-series
 operations automatically.
 
@@ -3287,18 +3198,19 @@ hood using this hidden timestamp, which is then omitted from the final result se
 
 This makes most \`ASOF JOIN\` queries simple and intuitive.
 
-\`\`\`questdb-sql title="ASOF JOIN with designated timestamp"
--- The 'trades' table has 'trade_ts' as its designated timestamp.
--- Even though 'trade_ts' is not selected in the subquery,
+\`\`\`questdb-sql title="ASOF JOIN with designated timestamp" demo
+-- The 'market_data' table has 'timestamp' as its designated timestamp.
+-- Even though 'timestamp' is not selected in the subquery,
 -- it is used implicitly for the ASOF JOIN.
-WITH trades_subset AS (
-  SELECT symbol, price, amount FROM trades
+WITH market_subset AS (
+  SELECT symbol,bids
+  FROM market_data
 )
 SELECT *
-FROM trades_subset ASOF JOIN quotes ON (symbol);
+FROM market_subset ASOF JOIN core_price ON (symbol);
 \`\`\`
 
-In more complicated subqueries, the implicit propagation of the designated timestamp may not work QuestDB responses with an error
+In more complicated subqueries, the implicit propagation of the designated timestamp may not work QuestDB responds with an error
 \`left side of time series join has no timestamp\`. In such cases, your subquery should explicitly include the designated
 timestamp column in the \`SELECT\` clause to ensure it is used for the join.
 
@@ -3314,7 +3226,6 @@ Example: Joining on \`ingestion_time\` instead of the default \`trade_ts\`
 WITH trades_ordered_by_ingestion AS (
   SELECT symbol, price, ingestion_time
   FROM trades
-  WHERE symbol = 'QDB'
   -- This ORDER BY clause tells QuestDB to use 'ingestion_time'
   -- as the new designated timestamp for this subquery.
   ORDER BY ingestion_time ASC
@@ -3336,15 +3247,20 @@ You should only use this when you can guarantee that your data is already sorted
 
 The primary use case is performance optimization on a table that has no designated timestamp in its schema, but where
 you know the data is physically stored in chronological order. Using the \`timestamp()\` hint avoids a costly ORDER BY
-operation.
+operation. This can be the case, for example, with external Parquet files where you know data is already sorted by
+timestamp.
 
-\`\`\`questdb-sql title="ASOF JOIN with timestamp()"
--- Use this ONLY IF 'my_unsorted_table' has NO designated timestamp,
--- but you can guarantee its data is already physically ordered by 'event_time'.
+\`\`\`questdb-sql title="ASOF JOIN with timestamp()" demo
+-- Use this ONLY IF the left-side table has NO designated timestamp,
+-- but you can guarantee its data is already physically ordered by the
+-- column you declare.
 
 SELECT *
-FROM (my_unsorted_table timestamp(event_time))
-ASOF JOIN another_table ON (symbol);
+FROM (
+      (SELECT * from read_parquet('trades.parquet') )
+      timestamp(timestamp)
+      )
+ASOF JOIN trades ON (symbol);
 \`\`\`
 
 To summarize:
@@ -3365,47 +3281,22 @@ t2.ts if both conditions are met: \`t2.ts <= t1.ts\` and \`t1.ts - t2.ts <= tole
 This ensures that the matched record from the right table is not only the latest one on or before t1.ts, but also within
 the specified time window.
 
-\`\`\`questdb-sql title="ASOF JOIN with a TOLERANCE parameter"
-SELECT ...
-FROM table1
-ASOF JOIN table2 TOLERANCE 10s
-[WHERE ...]
+TOLERANCE works both with or without the ON clause:
+
+\`\`\`questdb-sql title="ASOF JOIN with keys and 50 milliseconds of TOLERANCE" demo
+SELECT market_data.timestamp, market_data.symbol, bids, core_price.*
+FROM market_data
+ASOF JOIN core_price ON (symbol) TOLERANCE 50T
+WHERE market_data.timestamp IN today();
 \`\`\`
 
-TOLERANCE also works together with the ON clause:
-\`\`\`questdb-sql title="ASOF JOIN with keys and a TOLERANCE parameter"
-SELECT ...
-FROM table1
-ASOF JOIN table2 ON (key_column) TOLERANCE 1m
-[WHERE ...]
-\`\`\`
+The interval_literal must be a valid QuestDB interval string, like '5s' (5 seconds), '100T' (100 milliseconds), '2m'
+(2 minutes), '3h' (3 hours), or '1d' (1 day).
 
-The interval_literal must be a valid QuestDB interval string, like '5s' (5 seconds), '100ms' (100 milliseconds), '2m' (
-2 minutes), '3h' (3 hours), or '1d' (1 day).
-
-
-#### Example using TOLERANCE:
-
-Consider the \`trades\` and \`order_book\` tables from the previous examples. If we want to join trades to order book snapshots
-that occurred no more than 1 second before the trade:
-
-\`\`\`questdb-sql title="TOLERANCE example"
-SELECT t.timestamp, t.price, t.size, ob.timestamp AS ob_ts, ob.bid_price, ob.bid_size
-FROM trades t
-ASOF JOIN order_book ob TOLERANCE 1s;
-\`\`\`
-
-Let's analyze a specific trade: trades at \`08:00:01.146931\`.
-Without \`TOLERANCE\`, it joins with \`order_book\` at \`08:00:01\`. The time difference is 0.146931s.
-If we set \`TOLERANCE\` '100ms', this trade would not find a match, because 0.146931s (146.931ms) is greater than 100ms. The
-previous \`order_book\` entry at \`08:00:00\` would be even further away (1.146931s).
-
-Another trade: trades at \`08:00:00.007140\`.
-Without \`TOLERANCE\`, it joins with order_book at \`08:00:00\`. The time difference is 0.007140s (7.14ms).
-If we set \`TOLERANCE\` '5ms', this trade would not find a match because 7.14ms > 5ms.
 
 #### Supported Units for interval_literal
 The \`TOLERANCE\` interval literal supports the following time unit qualifiers:
+- n: Nanoseconds
 - U: Microseconds
 - T: Milliseconds
 - s: Seconds
@@ -3414,7 +3305,7 @@ The \`TOLERANCE\` interval literal supports the following time unit qualifiers:
 - d: Days
 - w: Weeks
 
-For example, '100U' is 100 microseconds, '50T' is 50 milliseconds, '2s' is 2 seconds, '30m' is 30 minutes,
+For example, '500n' is 500 nanoseconds, '100U' is 100 microseconds, '50T' is 50 milliseconds, '2s' is 2 seconds, '30m' is 30 minutes,
 '1h' is 1 hour, '7d' is 7 days, and '2w' is 2 weeks. Please note that months (M) and years (Y) are not supported as
 units for the \`TOLERANCE\` clause.
 
@@ -3615,15 +3506,16 @@ Types can be converted from one to another using the \`cast()\` function.
 
 \`\`\`questdb-sql title="Queries"
 SELECT
-cast(3L + 2L AS INT),
-cast(1578506142000000 AS TIMESTAMP),
-cast('10.2' AS DOUBLE),
-cast('行' AS INT);
+cast(3L + 2L AS INT) cast1,
+cast(1578506142000000 AS TIMESTAMP) cast2,
+cast(1578506142000000 AS TIMESTAMP_NS) cast3,
+cast('10.2' AS DOUBLE) cast4,
+cast('1' AS INT) cast5;
 \`\`\`
 
-| cast | cast1                       | cast2 | cast3 |
-| ---- | --------------------------- | ----- | ----- |
-| 5    | 2020-01-08T17:55:42.000000Z | 10.2  | 34892 |
+| cast1 | cast2                       | cast3                          | cast4 | cast5 |
+| ----- | --------------------------- | ------------------------------ | ----- | ----- |
+| 5     | 2020-01-08T17:55:42.000000Z | 1970-01-19T06:28:26.142000000Z | 10.2  | 1     |
 
 Explicit casting of an expression to a smaller
 [data type](/docs/reference/sql/datatypes/) may result in loss of data when the
@@ -4675,6 +4567,17 @@ Internally the table name is used as a directory name on the file system. It can
 contain both ASCII and Unicode characters. The table name **must be unique** and
 an error is returned if a table already exists with the requested name.
 
+Validation rules:
+- Length: subject to filesystem limits (typically ≤255).
+- Spaces: **not** allowed at the start or end.
+- Period \`.\`: only a **single** dot is allowed **not** at the start or end and **not** next to another dot.
+- Disallowed characters: \`?\`, \`,\`, \`'\`, \`"\`, \`\\\`, \`/\`, \`:\`, \`)\`, \`(\`, \`+\`, \`*\`, \`%\`, \`~\`, \`\\u0000\`, \`\\u0001\`,
+\`\\u0002\`, \`\\u0003\`, \`\\u0004\`, \`\\u0005\`, \`\\u0006\`, \`\\u0007\`, \`\\u0008\`, \`\\t\`, \`\\u000B\`, \`\\u000c\`, \`\\r\`, \`\\n\`,
+\`\\u000e\`, \`\\u000f\`, \`\\u007f\`, \`0xfeff\` (UTF-8 BOM).
+
+Some clients may have trouble parsing table names that contain unusual characters, even if those names are valid in
+QuestDB. For best results, we recommend using only alphanumeric characters along with \`-\`, \`_\`, or \`.\`.
+
 In addition, table names are case insensitive: \`example\`, \`exAmPlE\`, \`EXAMplE\`
 and \`EXAMPLE\` are all treated the same. Table names containing spaces or period
 \`.\` character must be enclosed in **double quotes**, for example:
@@ -4694,6 +4597,17 @@ Tables may have up to **2,147,483,647** columns. Column names are also case
 insensitive. For example: \`example\`, \`exAmPlE\`, \`EXAMplE\` and \`EXAMPLE\` are all
 treated the same. However, column names **must be** unique within each table and
 **must not contain** a period \`.\` character.
+
+Validation rules:
+  - Length: subject to filesystem limits (typically ≤255).
+	-	Period \`.\` : not allowed.
+	-	Hyphen \`-\`: not allowed.
+	-	Other disallowed characters: \`?\`, \`.\`, \`,\`, \`'\`, \`"\`, \`\\\`, \`/\`, \`:\`, \`)\`, \`(\`, \`+\`, \`-\`, \`*\`, \`%\`, \`~\`,
+  \`\\u0000\`, \`\\u0001\`, \`\\u0002\`, \`\\u0003\`, \`\\u0004\`, \`\\u0005\`, \`\\u0006\`, \`\\u0007\`, \`\\u0008\`, \`\\t\`, \`\\u000B\`,
+  \`\\u000c\`, \`\\n\`, \`\\r\`, \`\\u000e\`, \`\\u000f\`, \`\\u007f\`, \`0xfeff\` (UTF-8 BOM).
+
+Some clients may have trouble parsing column names that contain unusual characters, even if those names are valid in
+QuestDB. For best results, we recommend using only alphanumeric characters along with \`-\`, or \`_\`.
 
 ## Type definition
 
@@ -5065,6 +4979,7 @@ Additional notes about defining the alias and volume root paths:
 | \`long\`            | \`64\`            | Yes      | Signed integer, \`-9,223,372,036,854,775,808\` to \`9,223,372,036,854,775,807\`.                                                                                                                                                    |
 | \`date\`            | \`64\`            | Yes      | Signed offset in **milliseconds** from [Unix Epoch](https://en.wikipedia.org/wiki/Unix_time).                                                                                                                                   |
 | \`timestamp\`       | \`64\`            | Yes      | Signed offset in **microseconds** from [Unix Epoch](https://en.wikipedia.org/wiki/Unix_time).                                                                                                                                   |
+| \`timestamp_ns\`    | \`64\`            | Yes      | Signed offset in **nanoseconds** from [Unix Epoch](https://en.wikipedia.org/wiki/Unix_time).                                                                                                                                   |
 | \`double\`          | \`64\`            | Yes      | Double precision IEEE 754 floating point value.                                                                                                                                                                                 |
 | \`uuid\`            | \`128\`           | Yes      | [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier) values. See also [the UUID type](#the-uuid-type).                                                                                                           |
 | \`binary\`          | \`64+n*8\`        | Yes      | Length-prefixed sequence of bytes whose length is stored as signed 64-bit integer with maximum value of \`0x7fffffffffffffffL\`.                                                                                                  |
@@ -5096,7 +5011,8 @@ While the \`date\` type is available, we highly recommend using the \`timestamp\
 instead. The only material advantage of \`date\` is a wider time range, but
 \`timestamp\` is adequate in virtually all cases. It has microsecond resolution
 (vs. milliseconds for \`date\`), and is fully supported by all date/time
-functions, while support for \`date\` is limited.
+functions, while support for \`date\` is limited. If nanosecond precision is
+required, we recommend using the \`timestamp_ns\` data type.
 
 ## Limitations for variable-sized types
 
@@ -5129,6 +5045,7 @@ Many nullable types reserve a value that marks them \`NULL\`:
 | \`long\`           | \`0x8000000000000000L\`                                                | Minimum possible value a \`long\` can take, -2^63.                                         |
 | \`date\`           | \`0x8000000000000000L\`                                                | Minimum possible value a \`long\` can take, -2^63.                                         |
 | \`timestamp\`      | \`0x8000000000000000L\`                                                | Minimum possible value a \`long\` can take, -2^63.                                         |
+| \`timestamp_ns\`   | \`0x8000000000000000L\`                                                | Minimum possible value a \`long\` can take, -2^63.                                         |
 | \`int\`            | \`0x80000000\`                                                         | Minimum possible value an \`int\` can take, -2^31.                                         |
 | \`uuid\`           | \`80000000-0000-0000-8000-000000000000\`                               | Both 64 highest bits and 64 lowest bits set to -2^63.                                    |
 | \`char\`           | \`0x0000\`                                                             | The zero char (\`NUL\` in ASCII).                                                          |
@@ -5637,7 +5554,8 @@ permanently deletes all tables, all materialized views, and their contents on di
 ### IF EXISTS
 
 An optional \`IF EXISTS\` clause may be added directly after the \`DROP TABLE\`
-keywords to indicate that the selected table should be dropped if it exists.
+keywords to indicate that the selected table should be dropped only if it exists.
+Without \`IF EXISTS\`, QuestDB will throw an error if the table does not exist.
 
 ## Description
 
@@ -5692,7 +5610,7 @@ In a plan such as:
 | Async JIT Filter                                                           |
 | &nbsp;&nbsp;filter: 100 \`<\` l                                              |
 | &nbsp;&nbsp;workers: 1                                                     |
-| &nbsp;&nbsp;&nbsp;&nbsp;DataFrame                                          |
+| &nbsp;&nbsp;&nbsp;&nbsp;PageFrame                                          |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Row forward scan           |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frame forward scan on: tab |
 
@@ -5700,7 +5618,7 @@ there are:
 
 - 4 nodes:
   - Async JIT Filter
-  - DataFrame
+  - PageFrame
   - Row forward scan
   - Frame forward scan
 - 2 properties (both belong to Async JIT Filter node):
@@ -5728,7 +5646,7 @@ The following list contains some plan node types:
 - \`Count\` - returns the count of records in subnode.
 - \`Cursor-order scan\` - scans table records using row ids taken from an index,
   in index order - first all row ids linked to index value A, then B, etc.
-- \`DataFrame\` - full or partial table scan. It contains two children:
+- \`PageFrame\` - full or partial table scan. It contains two children:
   - row cursor - which iterates over rows inside a frame (e.g.
     \`Row forward scan\`).
   - frame cursor - which iterates over table partitions or partition chunks
@@ -5762,7 +5680,7 @@ Other node types should be easy to link to SQL and database concepts, e.g.
 
 Many nodes, especially join and sort, have 'light' and 'heavy' variants, e.g.
 \`Hash Join Light\` and \`Hash Join\`. The former is used when child node(s) support
-efficient random access lookups (e.g. \`DataFrame\`) so storing row id in the
+efficient random access lookups (e.g. \`PageFrame\`) so storing row id in the
 buffer is enough; otherwise, the whole record needs to be copied and the 'heavy'
 factory is used.
 
@@ -5785,15 +5703,15 @@ CREATE TABLE trades (
 
 The following query highlight the plan for \`ORDER BY\` for the table:
 
-\`\`\`questdb-sql
-EXPLAIN SELECT * FROM trades ORDER BY ts DESC;
+\`\`\`questdb-sql title="Explain Order By" demo
+EXPLAIN SELECT * FROM trades ORDER BY timestamp DESC;
 \`\`\`
 
-| QUERY PLAN                                             |
-| ------------------------------------------------------ |
-| DataFrame                                              |
-| &nbsp;&nbsp;&nbsp;&nbsp;Row backward scan              |
-| &nbsp;&nbsp;&nbsp;&nbsp;Frame backward scan on: trades |
+\`\`\`text
+PageFrame
+    Row backward scan
+    Frame backward scan on: trades
+\`\`\`
 
 The plan shows that no sort is required and the result is produced by scanning
 the table backward. The scanning direction is possible because the data in the
@@ -5801,21 +5719,21 @@ the table backward. The scanning direction is possible because the data in the
 
 Now, let's check the plan for \`trades\` with a simple filter:
 
-\`\`\`questdb-sql
+\`\`\`questdb-sql title="Explain Simple Filter" demo
 EXPLAIN SELECT * FROM trades WHERE amount > 100.0;
 \`\`\`
 
-| QUERY PLAN                                                                    |
-| ----------------------------------------------------------------------------- |
-| Async JIT Filter                                                              |
-| &nbsp;&nbsp;filter: 100.0 \`<\` amount                                          |
-| &nbsp;&nbsp;workers: 1                                                        |
-| &nbsp;&nbsp;&nbsp;&nbsp;DataFrame                                             |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Row forward scan              |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frame forward scan on: trades |
+\`\`\`text
+Async JIT Filter workers: 47
+  filter: 100.0<amount [pre-touch]
+    PageFrame
+        Row forward scan
+        Frame forward scan on: trades
+\`\`\`
+
 
 In this example, the plan shows that the \`trades\` table undergoes a full scan
-(\`DataFrame\` and subnodes) and the data is processed by the parallelized
+(\`PageFrame\` and subnodes) and the data is processed by the parallelized
 JIT-compiled filter.
 
 ### Using \`EXPLAIN\` for the plan for \`CREATE\` and \`INSERT\`
@@ -5824,7 +5742,7 @@ Apart from \`SELECT\`, \`EXPLAIN\` also works on \`CREATE\` and \`INSERT\` state
 Single-row inserts are straightforward. The examples in this section show the
 plan for more complicated \`CREATE\` and \`INSERT\` queries.
 
-\`\`\`questdb-sql
+\`\`\`questdb-sql title="Explain Create Table" demo
 EXPLAIN CREATE TABLE trades AS
 (
   SELECT
@@ -5837,19 +5755,19 @@ EXPLAIN CREATE TABLE trades AS
 ) TIMESTAMP(timestamp) PARTITION BY DAY;
 \`\`\`
 
-| QUERY PLAN                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------- |
-| Create table: trades                                                                                                             |
-| &nbsp;&nbsp;&nbsp;&nbsp;VirtualRecord                                                                                            |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;functions: [rnd_symbol([a,b]),rnd_symbol([Buy,Sell]),rnd_double(),rnd_double(),x::timestamp] |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;long_sequence count: 10                                                          |
+\`\`\`text
+Create table: trades
+    VirtualRecord
+      functions: [rnd_symbol([a,b]),rnd_symbol([Buy,Sell]),memoize(rnd_double()),memoize(rnd_double()),x::timestamp]
+        long_sequence count: 10
+\`\`\`
 
 The plan above shows that the data is fetched from a \`long_sequence\` cursor,
 with random data generating functions called in \`VirtualRecord\`.
 
 The same applies to the following query:
 
-\`\`\`questdb-sql
+\`\`\`questdb-sql title="Explain Insert Into"
 EXPLAIN INSERT INTO trades
   SELECT
     rnd_symbol('a', 'b') symbol,
@@ -5860,12 +5778,12 @@ EXPLAIN INSERT INTO trades
   FROM long_sequence(10);
 \`\`\`
 
-| QUERY PLAN                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------- |
-| Insert into table: trades                                                                                                        |
-| &nbsp;&nbsp;&nbsp;&nbsp;VirtualRecord                                                                                            |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;functions: [rnd_symbol([a,b]),rnd_symbol([Buy,Sell]),rnd_double(),rnd_double(),x::timestamp] |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;long_sequence count: 10                                                          |
+\`\`\`text
+Insert into table: trades
+    VirtualRecord
+      functions: [rnd_symbol([a,b]),rnd_symbol([Buy,Sell]),memoize(rnd_double()),memoize(rnd_double()),x::timestamp]
+        long_sequence count: 10
+\`\`\`
 
 Of course, statements could be much more complex than that. Consider the
 following \`UPDATE\` query:
@@ -5874,22 +5792,22 @@ following \`UPDATE\` query:
 EXPLAIN UPDATE trades SET amount = 0 WHERE timestamp IN '2022-11-11';
 \`\`\`
 
-| QUERY PLAN                                                                                                                                 |
-| ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Update table: trades                                                                                                                       |
-| &nbsp;&nbsp;&nbsp;&nbsp;VirtualRecord                                                                                                      |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;functions: [0]                                                                                         |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DataFrame                                                                                  |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Row forward scan                                                   |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Interval forward scan on: trades                                   |
-| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;intervals: [static=[1668124800000000,1668211199999999] |
+\`\`\`text
+Update table: trades
+  VirtualRecord
+    functions: [0]
+      PageFrame
+        Row forward scan
+        Interval forward scan on: trades
+          intervals: [static=[1668124800000000,1668211199999999]
+\`\`\`
 
 The important bit here is \`Interval forward scan\`. It means that the table is
 forward scanned only between points designated by the
 \`timestamp IN '2022-11-11'\` predicate, that is between
 \`2022-11-11 00:00:00,000000\` and \`2022-11-11 23:59:59,999999\` (shown as raw
 epoch micro values in the plan above). \`VirtualRecord\` is only used to pass 0
-constant for each row coming from \`DataFrame\`.
+constant for each row coming from \`PageFrame\`.
 
 ## Limitations:
 
@@ -5911,7 +5829,7 @@ Under the hood, the plan nodes are called \`Factories\`. Most plan nodes can be
 mapped to implementation by adding the \`RecordCursorFactory\` or
 \`FrameCursorFactory\` suffix, e.g.
 
-- \`DataFrame\` -> \`DataFrameRecordCursorFactory\`
+- \`PageFrame\` -> \`PageFrameRecordCursorFactory\`
 - \`Async JIT Filter\` -> \`AsyncJitFilteredRecordCursorFactory\`
 - \`SampleByFillNoneNotKeyed\` -> \`SampleByFillNoneNotKeyedRecordCursorFactory\`
   while some are a bit harder to identify, e.g.
@@ -8025,7 +7943,7 @@ write should be performed on the selected table.
 
 ## Syntax
 
-![Flow chart showing the syntax of the REINDEX keyword](/images/docs/diagrams/reindex.svg)
+![Flow chart showing the syntax of the REINDEX keyword](/images/docs/diagrams/reindexTable.svg)
 
 ## Options
 
@@ -9351,6 +9269,12 @@ the table itself.
 
 ![Flow chart showing the syntax of the TRUNCATE TABLE keyword](/images/docs/diagrams/truncateTable.svg)
 
+### IF EXISTS
+
+An optional \`IF EXISTS\` clause may be added directly after the \`TRUNCATE TABLE\`
+keywords to indicate that the selected table should be truncated only if it exists.
+Without \`IF EXISTS\`, QuestDB will throw an error if the table does not exist.
+
 ## Notes
 
 This command irremediably deletes the data in the target table. In doubt, make
@@ -9359,9 +9283,14 @@ sure you have created [backups](/docs/operations/backup/) of your data.
 ## Examples
 
 \`\`\`questdb-sql
-TRUNCATE TABLE ratings;
+TRUNCATE TABLE trades;
 \`\`\`
 
+This example will not throw an error, even if the table does not exist:
+
+\`\`\`questdb-sql
+TRUNCATE TABLE IF EXISTS trades_non_existent;
+\`\`\`
 ## See also
 
 To delete both the data and the table structure, use
@@ -9903,28 +9832,6 @@ SELECT * FROM users WHERE age = 23;
 \`\`\`questdb-sql title="NOT Equal to 23"
 SELECT * FROM users WHERE age != 23;
 \`\`\`
-
-<!--
-QuestDB does not support \`eq()\`. This section is therefore commented out and can be uncommented when we add the functionality.
-### Proximity
-
-Evaluates whether the column value is within a range of the target value. This
-is useful to simulate equality on \`double\` and \`float\` values.
-
-![Flow chart showing the syntax of the WHERE clause with an EQ comparison](/images/docs/diagrams/whereEqDoublePrecision.svg)
-
-\`\`\`questdb-sql title="Equal to 23 with 0.00001 precision"
-SELECT * FROM users WHERE eq(age, 23, 0.00001);
-\`\`\`
-
-:::tip
-
-When performing multiple equality checks of double values against integer
-constants, it may be preferable to store double values as long integers with a
-scaling factor.
-
-:::
--->
 
 ## Boolean
 

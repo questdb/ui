@@ -1,5 +1,5 @@
 // Auto-generated documentation data for functions
-// Generated on 2025-09-21T12:37:52.974Z
+// Generated on 2025-10-10T09:50:25.778Z
 
 export interface DocFile {
   path: string
@@ -1692,7 +1692,7 @@ FROM transactions
   {
     path: "function/date-time.md",
     title: "Timestamp, date and time functions",
-    headers: ["Timestamp format", "Timestamp to Date conversion", "date_trunc", "dateadd", "datediff", "day", "day_of_week", "day_of_week_sunday_first", "days_in_month", "extract", "hour", "interval", "interval_start", "interval_end", "is_leap_year", "micros", "millis", "minute", "month", "now", "pg_postmaster_start_time", "second", "today, tomorrow, yesterday", "today, tomorrow, yesterday with timezone", "sysdate", "systimestamp", "timestamp_ceil", "timestamp_floor", "timestamp_shuffle", "to_date", "to_str", "to_timestamp", "to_timezone", "to_utc", "week_of_year", "year"],
+    headers: ["Timestamp format", "Timestamp to Date conversion", "date_trunc", "dateadd", "datediff", "day", "day_of_week", "day_of_week_sunday_first", "days_in_month", "extract", "hour", "interval", "interval_start", "interval_end", "is_leap_year", "micros", "millis", "minute", "month", "nanos", "now", "pg_postmaster_start_time", "second", "today, tomorrow, yesterday", "today, tomorrow, yesterday with timezone", "sysdate", "systimestamp", "systimestamp_ns", "timestamp_ceil", "timestamp_floor", "timestamp_shuffle", "to_date", "to_str", "to_timestamp", "to_timestamp_ns", "to_timezone", "to_utc", "week_of_year", "year"],
     content: `This page describes the available functions to assist with performing time-based
 calculations using timestamps.
 
@@ -1775,23 +1775,25 @@ Here are more examples, showing just the last part starting with the \`.\`:
 ## Timestamp to Date conversion
 
 As described at the [data types section](/docs/reference/sql/datatypes), the
-only difference between \`TIMESTAMP\` and \`DATE\` in QuestDB type system is the
-resolution. Whilst \`TIMESTAMP\` stores resolution as an offset from Unix epoch in
-microseconds, \`DATE\` stores the offset in milliseconds.
+only difference between \`TIMESTAMP\`, \`TIMESTAMP_NS\`, and \`DATE\` in QuestDB type
+system is the resolution. Whilst \`TIMESTAMP\` stores resolution as an offset from Unix epoch in
+microseconds, \`TIMESTAMP_NS\` stores it as an offset in nanoseconds, and \`DATE\` stores the
+offset in milliseconds.
 
-Since both types are backed by a signed long, this means the \`DATE\` type has a
+Since the three types are backed by a signed long, this means the \`DATE\` type has a
 wider range. A \`DATE\` column can store about ±2.9 million years from the Unix
-epoch, whereas a \`TIMESTAMP\` has an approximate range of ±290,000 years.
+epoch, whereas a \`TIMESTAMP\` has an approximate range of ±290,000 years, and a
+\`TIMESTAMP_NS\` has an approximate range of ±2262 years.
 
 For most purposes a \`TIMESTAMP\` is preferred, as it offers a wider range of
 functions whilst still being 8 bytes in size.
 
-Be aware that, when using a \`TIMESTAMP\` as the designated timestamp, you cannot
-set it to any value before the Unix epoch (\`1970-01-01T00:00:00.000000Z\`).
+Be aware that, when using a \`TIMESTAMP\` or \`TIMESTAMP_NS\` as the designated
+timestamp, you cannot set it to any value before the Unix epoch (\`1970-01-01T00:00:00.000000Z\`).
 
-To explicitly convert from \`TIMESTAMP\` to \`DATE\`, you can use
-\`CAST(ts_column AS DATE)\`. To convert from \`DATE\` to \`TIMESTAMP\` you can
-\`CAST(date_column AS TIMESTAMP)\`.
+To explicitly convert from \`TIMESTAMP\` to \`DATE\` or \`TIMESTAMP_NS\`, you can use
+\`CAST(ts_column AS DATE)\` or \`CAST(ts_column AS TIMESTAMP_NS)\`. To convert from
+\`DATE\` or \`TIMESTAMP_NS\` to \`TIMESTAMP\` you can \`CAST(column AS TIMESTAMP_NS)\`.
 
 ### Programmatically convert from language-specific datetimes into QuestDB timestamps
 
@@ -1803,7 +1805,6 @@ reference.
 
 ---
 
-# Function Reference
 
 ## date_trunc
 
@@ -1827,12 +1828,14 @@ precision.
   - \`second\`
   - \`millisecond\`
   - \`microsecond\`
+  - \`nanosecond\`
 
-- \`timestamp\` is any timestamp value.
+- \`timestamp\` is any \`timestamp\`, \`timestamp_ns\`, or ISO-8601 string value.
 
 **Return value:**
 
-Return value type is \`timestamp\`
+Return value defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the timestamp argument is
+of type \`timestamp_ns\` or if the date passed as a string contains nanoseconds resolution.
 
 **Examples:**
 
@@ -1840,11 +1843,12 @@ Return value type is \`timestamp\`
 SELECT date_trunc('hour', '2022-03-11T22:00:30.555555Z') hour,
 date_trunc('month', '2022-03-11T22:00:30.555555Z') month,
 date_trunc('year','2022-03-11T22:00:30.555555Z') year;
+date_trunc('year','2022-03-11T22:00:30.555555000Z') year;
 \`\`\`
 
-| hour                        | month                       | year                        |
-| --------------------------- | --------------------------- | --------------------------- |
-| 2022-03-11T22:00:00.000000Z | 2022-03-01T00:00:00.000000Z | 2022-01-01T00:00:00.000000Z |
+| hour (timestamp_ns)         | month (timestamp_ns)        | year (timestamp_ns)         | year (timestamp_ns)            |
+| --------------------------- | --------------------------- | --------------------------- | ------------------------------ |
+| 2022-03-11T22:00:00.000000Z | 2022-03-01T00:00:00.000000Z | 2022-01-01T00:00:00.000000Z | 2022-01-01T00:00:00.000000000Z |
 
 ## dateadd
 
@@ -1867,6 +1871,7 @@ timezone-aware calculations, use the timezone parameter.
 
 - \`period\` is a \`char\`. Period to be added. Available periods are:
 
+  - \`n\`: nanoseconds
   - \`u\`: microseconds
   - \`T\`: milliseconds
   - \`s\`: second
@@ -1878,14 +1883,15 @@ timezone-aware calculations, use the timezone parameter.
   - \`y\`: year
 
 - \`n\` is an \`int\` indicating the number of periods to add.
-- \`startDate\` is a timestamp or date indicating the timestamp to add the period
+- \`startDate\` is a timestamp, timestamp_ns, or date indicating the timestamp to add the period
   to.
 - \`timezone\` (optional) is a string specifying the timezone to use for DST-aware
   calculations - for example, 'Europe/London'.
 
 **Return value:**
 
-Return value type is \`timestamp\`
+Return value type defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the \`startDate\`
+argument is a \`timetamp_ns\`.
 
 **Examples:**
 
@@ -1940,6 +1946,7 @@ between \`date1\` and \`date2\`.
 
 - \`period\` is a char. Period to be added. Available periods are:
 
+  - \`n\`: nanoseconds
   - \`u\`: microseconds
   - \`T\`: milliseconds
   - \`s\`: second
@@ -1950,11 +1957,11 @@ between \`date1\` and \`date2\`.
   - \`M\`: month
   - \`y\`: year
 
-- \`date1\` and \`date2\` are timestamps defining the dates to compare.
+- \`date1\` and \`date2\` are \`timestamp\`, \`timestamp_ns\`, \`date\`, or date literal strings defining the dates to compare.
 
 **Return value:**
 
-Return value type is \`int\`
+Return value type is \`long\`
 
 **Examples:**
 
@@ -1981,7 +1988,7 @@ SELECT datediff('M', '2020-01-23', '2020-02-27');
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2018,7 +2025,7 @@ SELECT day(ts), count() FROM transactions;
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2047,7 +2054,7 @@ SELECT to_str(ts,'EE'),day_of_week(ts) FROM myTable;
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2076,7 +2083,7 @@ timestamp or date.
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2124,7 +2131,7 @@ timestamp.
   - \`microseconds\`
   - \`milliseconds\`
 
-- \`timestamp\` is any timestamp value.
+- \`timestamp\` is any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date literal string value.
 
 **Return value:**
 
@@ -2153,7 +2160,7 @@ extract(second from '2023-03-11T22:00:30.555555Z') second;
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`timestamp\` is any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date literal string value.
 
 **Return value:**
 
@@ -2216,7 +2223,7 @@ SELECT interval('2024-10-08T11:09:47.573Z', '2024-10-09T11:09:47.573Z')
 
 **Return value:**
 
-Return value type is \`timestamp\`.
+Return value type is \`timestamp\` or \`timestamp_ns\`, depending on the type of values in the interval.
 
 **Examples:**
 
@@ -2241,7 +2248,7 @@ SELECT
 
 **Return value:**
 
-Return value type is \`timestamp\`.
+Return value type is \`timestamp\` or \`timestamp_ns\`, depending on the type of values in the interval.
 
 **Examples:**
 
@@ -2263,7 +2270,7 @@ SELECT
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2293,7 +2300,7 @@ timestamp from \`0\` to \`999\`.
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2338,7 +2345,7 @@ timestamp from \`0\` to \`999\`.
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2384,7 +2391,7 @@ SELECT millis(ts), count() FROM transactions;
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2420,7 +2427,7 @@ SELECT minute(ts), count() FROM transactions;
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2448,6 +2455,33 @@ SELECT month(ts), count() FROM transactions;
 | ...   | ...   |
 | 11    | 9876  |
 | 12    | 2567  |
+
+## nanos
+
+\`nanos(value)\` - returns the \`nanos\` of the second for a given date or
+timestamp from \`0\` to \`999\`.
+
+**Arguments:**
+
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
+
+**Return value:**
+
+Return value type is \`int\`
+
+**Examples:**
+
+\`\`\`questdb-sql title="Nanos of the second"
+SELECT nanos(
+    to_timestamp_ns('2020-03-01:15:43:21.123456789', 'yyyy-MM-dd:HH:mm:ss.SSSUUUNNN')) as nanos
+FROM long_sequence(1);
+\`\`\`
+
+| nanos |
+| :----- |
+| 789    |
+
+
 
 ## now
 
@@ -2526,7 +2560,7 @@ timestamp from \`0\` to \`59\`.
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, or \`date\`
 
 **Return value:**
 
@@ -2692,6 +2726,41 @@ VALUES(systimestamp(), 123.5);
 | :-------------------------- | :------ |
 | 2020-01-02T19:28:48.727516Z | 123.5   |
 
+## systimestamp_ns
+
+\`systimestamp_ns()\` - offset from UTC Epoch in nanoseconds. Calculates
+\`UTC timestamp\` using system's real time clock. The value is affected by
+discontinuous jumps in the system time (e.g., if the system administrator
+manually changes the system time).
+
+\`systimestamp_ns()\` value can change within the query execution timeframe and
+should **NOT** be used in WHERE clause to filter designated timestamp column.
+
+:::tip
+
+Use now() with WHERE clause filter.
+
+:::
+
+**Arguments:**
+
+- \`systimestamp_ns()\` does not accept arguments.
+
+**Return value:**
+
+Return value type is \`timestamp_ns\`.
+
+**Examples:**
+
+\`\`\`questdb-sql title="Insert current system timestamp_ns"
+INSERT INTO readings
+VALUES(systimestamp_ns(), 123.5);
+\`\`\`
+
+| ts                             | reading |
+| :----------------------------- | :------ |
+| 2020-01-02T19:28:48.727516132Z | 123.5   |
+
 ## timestamp_ceil
 
 \`timestamp_ceil(unit, timestamp)\` - performs a ceiling calculation on a
@@ -2705,6 +2774,8 @@ A unit must be provided to specify which granularity to perform rounding.
 
 \`unit\` - may be one of the following:
 
+- \`n\` nanoseconds
+- \`U\` microseconds
 - \`T\` milliseconds
 - \`s\` seconds
 - \`m\` minutes
@@ -2713,18 +2784,21 @@ A unit must be provided to specify which granularity to perform rounding.
 - \`M\` months
 - \`y\` year
 
-\`timestamp\` - any timestamp value
+\`timestamp\` - any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date literal string value.
 
 **Return value:**
 
-Return value type is \`timestamp\`.
+Return value type defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the timestamp argument is of type
+\`timestamp_ns\` or if the date passed as a string contains nanoseconds resolution.
 
 **Examples:**
 
 \`\`\`questdb-sql
-WITH t AS (SELECT cast('2016-02-10T16:18:22.862145Z' AS timestamp) ts)
+WITH t AS (SELECT cast('2016-02-10T16:18:22.862145333Z' AS timestamp_ns) ts)
 SELECT
   ts,
+  timestamp_ceil('n', ts) c_nano,
+  timestamp_ceil('U', ts) c_micro,
   timestamp_ceil('T', ts) c_milli,
   timestamp_ceil('s', ts) c_second,
   timestamp_ceil('m', ts) c_minute,
@@ -2735,9 +2809,10 @@ SELECT
   FROM t
 \`\`\`
 
-| ts                          | c_milli                     | c_second                    | c_minute                    | c_hour                      | c_day                       | c_month                     | c_year                       |
-| :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :--------------------------- |
-| 2016-02-10T16:18:22.862145Z | 2016-02-10T16:18:22.863000Z | 2016-02-10T16:18:23.000000Z | 2016-02-10T16:19:00.000000Z | 2016-02-10T17:00:00.000000Z | 2016-02-11T00:00:00.000000Z | 2016-03-01T00:00:00.000000Z | 2017-01-01T00:00:00.000000Z" |
+| ts                             | c_nano                         | c_micro                        | c_milli                        | c_second                       | c_minute | c_hour | c_day | c_month | c_year |
+| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ | -------- | ------ | ----- | ------- | ------ |
+| 2016-02-10T16:18:22.862145333Z | 2016-02-10T16:18:22.862145333Z | 2016-02-10T16:18:22.862146000Z | 2016-02-10T16:18:22.863000000Z | 2016-02-10T16:18:23.000000000Z |
+
 
 ## timestamp_floor
 
@@ -2754,6 +2829,8 @@ rounding for.
 \`unit\` - is a time interval expression that may use one of the following
 suffices:
 
+- \`n\` nanoseconds
+- \`U\` microseconds
 - \`T\` milliseconds
 - \`s\` seconds
 - \`m\` minutes
@@ -2762,11 +2839,12 @@ suffices:
 - \`M\` months
 - \`y\` year
 
-\`timestamp\` - any timestamp value
+\`timestamp\` - any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date literal string value.
 
 **Return value:**
 
-Return value type is \`timestamp\`.
+Return value type defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the timestamp argument is of type
+\`timestamp_ns\` or if the date passed as a string contains nanoseconds resolution.
 
 **Examples:**
 
@@ -2783,24 +2861,27 @@ Gives:
 The number part of the expression is optional:
 
 \`\`\`questdb-sql
-WITH t AS (SELECT cast('2016-02-10T16:18:22.862145Z' AS timestamp) ts)
+WITH t AS (SELECT cast('2016-02-10T16:18:22.862145333Z' AS timestamp_ns) ts)
 SELECT
   ts,
-  timestamp_floor('T', ts) f_milli,
-  timestamp_floor('s', ts) f_second,
-  timestamp_floor('m', ts) f_minute,
-  timestamp_floor('h', ts) f_hour,
-  timestamp_floor('d', ts) f_day,
-  timestamp_floor('M', ts) f_month,
-  timestamp_floor('y', ts) f_year
+  timestamp_floor('n', ts) c_nano,
+  timestamp_floor('U', ts) c_micro,
+  timestamp_floor('T', ts) c_milli,
+  timestamp_floor('s', ts) c_second,
+  timestamp_floor('m', ts) c_minute,
+  timestamp_floor('h', ts) c_hour,
+  timestamp_floor('d', ts) c_day,
+  timestamp_floor('M', ts) c_month,
+  timestamp_floor('y', ts) c_year
   FROM t
 \`\`\`
 
 Gives:
 
-| ts                          | f_milli                     | f_second                    | f_minute                    | f_hour                      | f_day                       | f_month                     | f_year                      |
-| :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- | :-------------------------- |
-| 2016-02-10T16:18:22.862145Z | 2016-02-10T16:18:22.862000Z | 2016-02-10T16:18:22.000000Z | 2016-02-10T16:18:00.000000Z | 2016-02-10T16:00:00.000000Z | 2016-02-10T00:00:00.000000Z | 2016-02-01T00:00:00.000000Z | 2016-01-01T00:00:00.000000Z |
+| ts                             | c_nano                         | c_micro                        | c_milli                        | c_second                       | c_minute | c_hour | c_day | c_month | c_year |
+| ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ | ------------------------------ | -------- | ------ | ----- | ------- | ------ |
+| 2016-02-10T16:18:22.862145333Z | 2016-02-10T16:18:22.862145333Z | 2016-02-10T16:18:22.862145000Z | 2016-02-10T16:18:22.862000000Z | 2016-02-10T16:18:22.000000000Z |
+
 
 #### timestamp_floor with offset
 
@@ -2860,12 +2941,13 @@ inclusively between the two input timestamps.
 
 **Arguments:**
 
-- \`timestamp_1\` - any timestamp value
+- \`timestamp_1\` - any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date literal string value.
 - \`timestamp_2\` - a timestamp value that is not equal to \`timestamp_1\`
 
 **Return value:**
 
-Return value type is \`timestamp\`.
+Return value type defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the timestamp argument is of type
+\`timestamp_ns\` or if the date passed as a string contains nanoseconds resolution.
 
 **Examples:**
 
@@ -2876,6 +2958,7 @@ SELECT timestamp_shuffle('2023-03-31T22:00:30.555998Z', '2023-04-01T22:00:30.555
 | timestamp_shuffle           |
 | :-------------------------- |
 | 2023-04-01T11:44:41.893394Z |
+
 
 ## to_date
 
@@ -2954,7 +3037,7 @@ For more information about recognized timestamp formats, see the
 
 **Arguments:**
 
-- \`value\` is any \`date\` or \`timestamp\`
+- \`value\` is any \`date\`, \`timestamp\`, or \`timestamp_ns\` value
 - \`format\` is a timestamp format.
 
 **Return value:**
@@ -3004,7 +3087,7 @@ For more information about recognized timestamp formats, see the
 
 Return value type is \`timestamp\`. QuestDB provides \`timestamp\` with microsecond
 resolution. Input strings with nanosecond precision will be parsed but lose the
-precision.
+precision. Use [\`to_timestamp_ns\`](#to_timestamp_ns) if nanosecond precision is required.
 
 **Examples:**
 
@@ -3050,6 +3133,41 @@ converts \`string\` to \`timestamp\` if it is a partial or full form of
 offset, \`+01:00\` or \`Z\`. See more examples in
 [Native timestamp](/docs/reference/sql/where/#native-timestamp-format)
 
+
+## to_timestamp_ns
+
+\`to_timestamp_ns(string, format)\` - converts \`string\` to \`timestamp_ns\` by using the
+supplied \`format\` to extract the value with nanosecond precision.
+
+When the \`format\` definition does not match the \`string\` input, the result will
+be \`null\`.
+
+For more information about recognized timestamp formats, see the
+[timestamp format section](#timestamp-format).
+
+**Arguments:**
+
+- \`string\` is any string that represents a date and/or time.
+- \`format\` is a string that describes the timestamp format in which \`string\` is
+  expressed.
+
+**Return value:**
+
+Return value type is \`timestamp_ns\`. If nanoseconds are not needed, you can use
+[\`to_timestamp\`](#to_timestamp) instead.
+
+**Examples:**
+
+\`\`\`questdb-sql title="Pattern matching with nanosecond precision"
+SELECT to_timestamp_ns('2020-03-01:15:43:21.127329512', 'yyyy-MM-dd:HH:mm:ss.SSSUUUNNN') as timestamp_ns
+FROM long_sequence(1);
+\`\`\`
+
+| timestamp_ns                   |
+| :----------------------------- |
+| 2020-03-01T15:43:21.127329512Z |
+
+
 ## to_timezone
 
 \`to_timezone(timestamp, timezone)\` - converts a timestamp value to a specified
@@ -3059,13 +3177,14 @@ see the
 
 **Arguments:**
 
-- \`timestamp\` is any \`timestamp\` as Unix timestamp or string equivalent
+- \`timestamp\` is any \`timestamp\`, \`timestamp_ns\`, microsecond Epoch, or string equivalent
 - \`timezone\` may be \`Country/City\` tz database name, time zone abbreviation such
   as \`PST\` or in UTC offset in string format.
 
 **Return value:**
 
-Return value type is \`timestamp\`
+Return value defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the timestamp argument is
+of type \`timestamp_ns\` or if the date passed as a string contains nanoseconds resolution.
 
 **Examples:**
 
@@ -3109,13 +3228,14 @@ see the
 
 **Arguments:**
 
-- \`timestamp\` is any \`timestamp\` as Unix timestamp or string equivalent
+- \`timestamp\` is any \`timestamp\`, \`timestamp_ns\`, microsecond Epoch, or string equivalent
 - \`timezone\` may be \`Country/City\` tz database name, time zone abbreviation such
   as \`PST\` or in UTC offset in string format.
 
 **Return value:**
 
-Return value type is \`timestamp\`
+Return value defaults to \`timestamp\`, but it will return a \`timestamp_ns\` if the timestamp argument is
+of type \`timestamp_ns\` or if the date passed as a string contains nanoseconds resolution.
 
 **Examples:**
 
@@ -3157,7 +3277,7 @@ year.
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date string literal.
 
 **Return value:**
 
@@ -3179,7 +3299,7 @@ SELECT week_of_year('2023-03-31T22:00:30.555998Z');
 
 **Arguments:**
 
-- \`value\` is any \`timestamp\` or \`date\`
+- \`value\` is any \`timestamp\`, \`timestamp_ns\`, \`date\`, or date string literal.
 
 **Return value:**
 
@@ -7051,7 +7171,8 @@ series of timestamps that monotonically increase.
 
 **Return value:**
 
-The type of the return value is \`TIMESTAMP\`.
+The default type of the return value is \`TIMESTAMP\`. If a \`TIMESTAMP_NS\` or a date literal string with nanosecond
+resolution is passed as one of the arguments, the return value will be a \`TIMESTAMP_NS\`.
 
 **Examples:**
 
@@ -7113,7 +7234,8 @@ There are two timestamp-generating variants of \`generate_series\`:
 
 **Return value:**
 
-The type of the return value is \`TIMESTAMP\`.
+The default type of the return value is \`TIMESTAMP\`. If a \`TIMESTAMP_NS\` or a date literal string with nanosecond
+resolution is passed as one of the arguments, the return value will be a \`TIMESTAMP_NS\`.
 
 **Examples:**
 
@@ -7121,7 +7243,7 @@ The type of the return value is \`TIMESTAMP\`.
 generate_series('2025-01-01', '2025-02-01', '5d');
 \`\`\`
 
-| generate_series             |
+| generate_series (timestamp) |
 | --------------------------- |
 | 2025-01-01T00:00:00.000000Z |
 | 2025-01-06T00:00:00.000000Z |
@@ -7135,7 +7257,7 @@ generate_series('2025-01-01', '2025-02-01', '5d');
 generate_series('2025-01-01', '2025-02-01', '-5d');
 \`\`\`
 
-| generate_series             |
+| generate_series (timestamp) |
 | --------------------------- |
 | 2025-02-01T00:00:00.000000Z |
 | 2025-01-27T00:00:00.000000Z |
@@ -7153,7 +7275,7 @@ generate_series(
 );
 \`\`\`
 
-| generate_series             |
+| generate_series (timestamp) |
 | --------------------------- |
 | 2025-01-01T00:00:00.000000Z |
 | 2025-01-01T00:01:00.000000Z |
@@ -7170,7 +7292,7 @@ generate_series(
 );
 \`\`\`
 
-| generate_series             |
+| generate_series (timestamp) |
 | --------------------------- |
 | 2025-01-01T00:05:00.000000Z |
 | 2025-01-01T00:04:00.000000Z |
@@ -7178,6 +7300,34 @@ generate_series(
 | 2025-01-01T00:02:00.000000Z |
 | 2025-01-01T00:01:00.000000Z |
 | 2025-01-01T00:00:00.000000Z |
+
+
+\`\`\`questdb-sql title="Series using nanosecond timestamp" demo
+generate_series( '2025-01-01', '2025-02-01T00:00:00.000000000Z', '1s');
+\`\`\`
+
+| generate_series (timestamp_ns) |
+| ------------------------------ |
+| 2025-01-01T00:00:00.000000000Z |
+| 2025-01-06T00:00:00.000000000Z |
+| 2025-01-11T00:00:00.000000000Z |
+| 2025-01-16T00:00:00.000000000Z |
+| 2025-01-21T00:00:00.000000000Z |
+| 2025-01-26T00:00:00.000000000Z |
+| 2025-01-31T00:00:00.000000000Z |
+
+
+
+\`\`\`questdb-sql title="Series using nanosecond timestamp and nanosecond step" demo
+generate_series( to_timestamp_ns('2025-01-01T00:00:00', 'yyyy-MM-ddTHH:mm:ss'),
+ '2025-01-01T00:00:00.000001', '500n');
+ \`\`\`
+
+| generate_series                |
+| ------------------------------ |
+| 2025-01-01T00:00:00.000000000Z |
+| 2025-01-01T00:00:00.000000500Z |
+| 2025-01-01T00:00:00.000001000Z |
 `
   },
   {
@@ -7200,11 +7350,9 @@ generate_series(
   \`tables()\` and \`table_columns()\` functions which are described in the
   [meta functions](/docs/reference/function/meta/) documentation page.
 
-- The native timestamp format used by QuestDB is a Unix timestamp in microsecond
-  resolution. See
+- There are two timestamp resolutions available in QuestDB: microseconds and nanoseconds. See
   [Timestamps in QuestDB](/docs/guides/working-with-timestamps-timezones/#timestamps-in-questdb)
   for more details.
-
 :::
 
 ## Syntax
@@ -7229,14 +7377,14 @@ assigned.
 
 ## Optimization with WHERE clauses
 
-When filtering on a designated timestamp column in WHERE clauses, QuestDB automatically optimizes the query by applying time-based partition filtering. This optimization also works with subqueries that return timestamp values. 
+When filtering on a designated timestamp column in WHERE clauses, QuestDB automatically optimizes the query by applying time-based partition filtering. This optimization also works with subqueries that return timestamp values.
 
 For example:
 
 \`\`\`questdb-sql title="Timestamp optimization with WHERE clause" demo
-SELECT * 
-FROM trades 
-WHERE ts > (SELECT min(ts) FROM trades) 
+SELECT *
+FROM trades
+WHERE ts > (SELECT min(ts) FROM trades)
   AND ts < (SELECT max(ts) FROM trades);
 \`\`\`
 

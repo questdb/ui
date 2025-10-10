@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import styled from "styled-components"
 import { Box, Button, Input, Loader, Select, Checkbox } from "@questdb/react-components"
 import { Eye, EyeOff } from "@styled-icons/remix-line"
@@ -148,12 +148,11 @@ export type ModelOption = {
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
+  { label: "Claude Sonnet 4.5", value: "claude-sonnet-4-5-20250929", provider: 'anthropic'},
   { label: "Claude Opus 4.1", value: "claude-opus-4-1", provider: 'anthropic' },
   { label: "Claude Opus 4.0", value: "claude-opus-4-0", provider: 'anthropic' },
   { label: "Claude Sonnet 4.0", value: "claude-sonnet-4-0", provider: 'anthropic' },
   { label: "Claude 3.7 Sonnet (Latest)", value: "claude-3-7-sonnet-latest", provider: 'anthropic' },
-  { label: "Claude 3.5 Haiku (Latest)", value: "claude-3-5-haiku-latest", provider: 'anthropic' },
-  { label: "Claude 3.5 Sonnet (Latest)", value: "claude-3-5-sonnet-latest", provider: 'anthropic' },
   { label: "GPT 5", value: "gpt-5", provider: 'openai' },
   { label: "GPT 5 Mini", value: "gpt-5-mini", provider: 'openai' },
   { label: "GPT 5 Nano", value: "gpt-5-nano", provider: 'openai' },
@@ -165,29 +164,47 @@ const providerForModel = (model: ModelOption['value']): 'anthropic' | 'openai' =
   }
 
 export const SetupAIAssistant = () => {
-  const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const [active, setActive] = useState(false)
+
+  return (
+    <PopperToggle
+      active={active}
+      onToggle={setActive}
+      trigger={
+        <SettingsButton
+          skin="secondary"
+          prefixIcon={<AutoAwesome size="16px" color="#f1fa8c" />}
+          data-hook="anthropic-api-settings-button"
+          title="Anthropic API Settings"
+        >
+          Set up AI Assistant       
+        </SettingsButton>
+      }
+      placement="bottom-start"
+    >
+      <AIAssistantSettings setActive={setActive} />
+    </PopperToggle>
+  )
+}
+
+const AIAssistantSettings = ({ setActive }: { setActive: (active: boolean) => void }) => {
+  const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const [showApiKey, setShowApiKey] = useState(false)
   const [inputValue, setInputValue] = useState(aiAssistantSettings.apiKey || "")
-  const [selectedModel, setSelectedModel] = useState(aiAssistantSettings.model || DEFAULT_AI_ASSISTANT_SETTINGS.model)
+  const [selectedModel, _setSelectedModel] = useState(aiAssistantSettings.model || DEFAULT_AI_ASSISTANT_SETTINGS.model)
   const [grantSchemaAccess, setGrantSchemaAccess] = useState(aiAssistantSettings.grantSchemaAccess !== false)
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dirty = inputValue !== aiAssistantSettings.apiKey || selectedModel !== aiAssistantSettings.model || grantSchemaAccess !== aiAssistantSettings.grantSchemaAccess
 
-  const handleToggle = (newActive: boolean) => {
-    if (newActive) {
-      setTimeout(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-      }, 50)
+  const setSelectedModel = (model: string) => {
+    const oldProvider = providerForModel(selectedModel)
+    const newProvider = providerForModel(model)
+    if (oldProvider !== newProvider) {
+      setInputValue("")
     }
-    setActive(newActive)
-    if (!newActive) {
-      setShowApiKey(false)
-      setError(null)
-    }
+    _setSelectedModel(model)
   }
 
   const validateAndSaveKey = async (key: string) => {
@@ -226,16 +243,8 @@ export const SetupAIAssistant = () => {
     e.preventDefault()
     const result = await validateAndSaveKey(inputValue)
     if (result) {
-      handleToggle(false)
+      setActive(false)
     }
-  }
-
-  const handleCancel = () => {
-    setInputValue(aiAssistantSettings.apiKey)
-    setSelectedModel(aiAssistantSettings.model)
-    setGrantSchemaAccess(aiAssistantSettings.grantSchemaAccess)
-    setError(null)
-    handleToggle(false)
   }
 
   const handleClearAllSettings = () => {
@@ -247,149 +256,140 @@ export const SetupAIAssistant = () => {
     toast.success("All settings cleared")
   }
 
+  useEffect(() => {
+    setTimeout(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }, 50)
+  }, [])
+
   return (
-    <PopperToggle
-      active={active}
-      onToggle={handleToggle}
-      trigger={
-        <SettingsButton
-          skin="secondary"
-          prefixIcon={<AutoAwesome size="16px" color="#f1fa8c" />}
-          data-hook="anthropic-api-settings-button"
-          title="Anthropic API Settings"
-        >
-          Set up AI Assistant       
-        </SettingsButton>
-      }
-      placement="bottom-start"
-    >
-      <Wrapper>
-        <StyledForm onSubmit={handleSave}>
-          <FormGroup>
-            <FormLabel htmlFor="model-select">
-              Model
-            </FormLabel>
-            <StyledSelect
-              id="model-select"
-              name="model-select"
-              data-hook="anthropic-model-select"
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              options={MODEL_OPTIONS}
-            />
-          </FormGroup>
+    <Wrapper>
+      <StyledForm onSubmit={handleSave}>
+        <FormGroup>
+          <FormLabel htmlFor="model-select">
+            Model
+          </FormLabel>
+          <StyledSelect
+            id="model-select"
+            name="model-select"
+            data-hook="anthropic-model-select"
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            options={MODEL_OPTIONS}
+          />
+        </FormGroup>
 
-          <FormGroup>
-            <FormLabel>
-              {providerForModel(selectedModel) === 'anthropic' ? 'Anthropic API Key' : 'OpenAI API Key'}
-            </FormLabel>
-            
-            <InputWrapper>
-              <StyledInput
-                id="ai-provider-api-key-input"
-                data-hook="ai-provider-api-key-input"
-                ref={inputRef}
-                type={showApiKey ? "text" : "password"}
-                value={inputValue}
-                onChange={(e) => {
-                  setInputValue(e.target.value)
-                  setError(null)
-                }}
-                $hasError={!!error}
-              />
-              <ActionButton
-                type="button"
-                skin="secondary"
-                onClick={() => setShowApiKey(!showApiKey)}
-                data-hook="ai-provider-api-key-toggle"
-              >
-                {showApiKey ? <EyeOff size="16px" /> : <Eye size="16px" />}
-              </ActionButton>
-            </InputWrapper>
-            {error && <ErrorText>{error}</ErrorText>}
-            
-            <DisclaimerText color="gray2">
-              {providerForModel(selectedModel) === 'anthropic' ? 'Enter your Anthropic API key to enable AI Assistant.' : 'Enter your OpenAI API key to enable AI Assistant.'} 
-              Get your API key from{" "}
-              <a 
-                href={providerForModel(selectedModel) === 'anthropic' ? "https://console.anthropic.com/settings/keys" : "https://platform.openai.com/api-keys"}
-                target="_blank" 
-                rel="noopener noreferrer"
-                style={{ color: "inherit", textDecoration: "underline" }}
-              >
-                {providerForModel(selectedModel) === 'anthropic' ? 'Anthropic' : 'OpenAI'}
-              </a>.
-              Your key is stored locally in your browser and never sent to QuestDB servers.
-            </DisclaimerText>
-          </FormGroup>
-
-          <FormGroup>
-            <Box justifyContent="flex-start" align="center" alignSelf="flex-start" gap="0.5rem">
-              <StyledCheckbox
-                id="grant-schema-access"
-                data-hook="grant-schema-access-checkbox"
-                checked={grantSchemaAccess}
-                onChange={(e) => setGrantSchemaAccess(e.target.checked)}
-              />
-              <PopperHover
-                trigger={
-                  <StyledInfoCircle size="15" />
-                }
-              >
-                <Tooltip>
-                When enabled, the AI assistant can access your database schema information to provide more accurate suggestions and explanations. Schema information helps the AI understand your table structures, column names, and relationships.
-                </Tooltip>
-              </PopperHover>
-              <CheckboxLabel 
-                id="grant-schema-access-label"
-                htmlFor="grant-schema-access"
-                data-hook="grant-schema-access-label"
-              >
-                Grant schema access
-              </CheckboxLabel>
-            </Box>
-          </FormGroup>
-
+        <FormGroup>
+          <FormLabel>
+            {providerForModel(selectedModel) === 'anthropic' ? 'Anthropic API Key' : 'OpenAI API Key'}
+          </FormLabel>
           
-
+          <InputWrapper>
+            <StyledInput
+              id="ai-provider-api-key-input"
+              data-hook="ai-provider-api-key-input"
+              ref={inputRef}
+              type={showApiKey ? "text" : "password"}
+              value={inputValue}
+              onChange={(e) => {
+                setInputValue(e.target.value)
+                setError(null)
+              }}
+              $hasError={!!error}
+            />
+            <ActionButton
+              type="button"
+              skin="secondary"
+              onClick={() => setShowApiKey(!showApiKey)}
+              data-hook="ai-provider-api-key-toggle"
+            >
+              {showApiKey ? <EyeOff size="16px" /> : <Eye size="16px" />}
+            </ActionButton>
+          </InputWrapper>
+          {error && <ErrorText>{error}</ErrorText>}
+          
           <DisclaimerText color="gray2">
-            This AI assistant may occasionally produce inaccurate information. Please verify important details and review all generated queries before execution.
+            {providerForModel(selectedModel) === 'anthropic' ? 'Enter your Anthropic API key to enable AI Assistant.' : 'Enter your OpenAI API key to enable AI Assistant.'} 
+            Get your API key from{" "}
+            <a 
+              href={providerForModel(selectedModel) === 'anthropic' ? "https://console.anthropic.com/settings/keys" : "https://platform.openai.com/api-keys"}
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: "inherit", textDecoration: "underline" }}
+            >
+              {providerForModel(selectedModel) === 'anthropic' ? 'Anthropic' : 'OpenAI'}
+            </a>.
+            Your key is stored locally in your browser and never sent to QuestDB servers.
           </DisclaimerText>
+        </FormGroup>
 
-          <Buttons>
-            <Box>
-              {aiAssistantSettings.apiKey && (
-                <StyledButton
-                  type="button"
-                  onClick={handleClearAllSettings}
-                  skin="error"
-                  data-hook="anthropic-api-clear-button"
-                >
-                  Clear all settings
-                </StyledButton>
-              )}
-            </Box>
-            <ButtonGroup>
+        <FormGroup>
+          <Box justifyContent="flex-start" align="center" alignSelf="flex-start" gap="0.5rem">
+            <StyledCheckbox
+              id="grant-schema-access"
+              data-hook="grant-schema-access-checkbox"
+              checked={grantSchemaAccess}
+              onChange={(e) => setGrantSchemaAccess(e.target.checked)}
+            />
+            <PopperHover
+              trigger={
+                <StyledInfoCircle size="15" />
+              }
+            >
+              <Tooltip>
+              When enabled, the AI assistant can access your database schema information to provide more accurate suggestions and explanations. Schema information helps the AI understand your table structures, column names, and relationships.
+              </Tooltip>
+            </PopperHover>
+            <CheckboxLabel 
+              id="grant-schema-access-label"
+              htmlFor="grant-schema-access"
+              data-hook="grant-schema-access-label"
+            >
+              Grant schema access
+            </CheckboxLabel>
+          </Box>
+        </FormGroup>
+
+        
+
+        <DisclaimerText color="gray2">
+          This AI assistant may occasionally produce inaccurate information. Please verify important details and review all generated queries before execution.
+        </DisclaimerText>
+
+        <Buttons>
+          <Box>
+            {aiAssistantSettings.apiKey && (
               <StyledButton
                 type="button"
-                onClick={handleCancel}
-                skin="secondary"
-                data-hook="anthropic-api-cancel-button"
+                onClick={handleClearAllSettings}
+                skin="error"
+                data-hook="anthropic-api-clear-button"
               >
-                Cancel
+                Clear all settings
               </StyledButton>
-              <StyledButton
-                type="submit"
-                disabled={!inputValue || isValidating || !dirty}
-                prefixIcon={isValidating ? <Loader size="14px" /> : undefined}
-                data-hook="anthropic-api-save-button"
-              >
-                {isValidating ? "Validating..." : "Save"}
-              </StyledButton>
-            </ButtonGroup>
-          </Buttons>
-        </StyledForm>
-      </Wrapper>
-    </PopperToggle>
+            )}
+          </Box>
+          <ButtonGroup>
+            <StyledButton
+              type="button"
+              onClick={() => setActive(false)}
+              skin="secondary"
+              data-hook="anthropic-api-cancel-button"
+            >
+              Cancel
+            </StyledButton>
+            <StyledButton
+              type="submit"
+              disabled={!inputValue || isValidating || !dirty}
+              prefixIcon={isValidating ? <Loader size="14px" /> : undefined}
+              data-hook="anthropic-api-save-button"
+            >
+              {isValidating ? "Validating..." : "Save"}
+            </StyledButton>
+          </ButtonGroup>
+        </Buttons>
+      </StyledForm>
+    </Wrapper>
   )
 }
