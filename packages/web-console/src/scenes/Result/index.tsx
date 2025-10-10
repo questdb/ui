@@ -32,12 +32,14 @@ import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
 import { Markdown } from "@styled-icons/bootstrap/Markdown"
 import { Check } from "@styled-icons/bootstrap/Check"
+import { ArrowDownS } from "@styled-icons/remix-line"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PopperToggle,
   PrimaryToggleButton,
   Text,
   Tooltip,
@@ -98,6 +100,39 @@ const RowCount = styled(Text)`
   margin-right: 1rem;
 `
 
+const DownloadButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.7rem;
+`
+
+const DownloadMenu = styled.div`
+  min-width: 200px;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+  border: 1px solid ${({ theme }) => theme.color.gray1};
+  border-radius: 0.4rem;
+  overflow: hidden;
+`
+
+const DownloadMenuItem = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: ${({ theme }) => theme.color.foreground};
+  cursor: pointer;
+  font-size: 13px;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.selection};
+  }
+`
+
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { quest } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
@@ -105,6 +140,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const dispatch = useDispatch()
 
   useEffect(() => {
@@ -264,6 +300,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     }
   }, [result])
 
+  const handleDownload = (format: "csv" | "parquet") => {
+    const sql = gridRef?.current?.getSQL()
+    if (sql) {
+      quest.exportQuery(sql, format)
+    }
+    setDownloadMenuActive(false)
+  }
+
   return (
     <Root>
       <Wrapper>
@@ -285,25 +329,45 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </PopperHover>
             ))}
 
-          <PopperHover
-            delay={350}
-            placement="bottom"
+          <PopperToggle
+            active={downloadMenuActive}
+            onToggle={setDownloadMenuActive}
+            placement="bottom-end"
+            modifiers={[
+              {
+                name: "offset",
+                options: {
+                  offset: [0, 8],
+                },
+              },
+            ]}
             trigger={
-              <Button
-                skin="transparent"
-                onClick={() => {
-                  const sql = gridRef?.current?.getSQL()
-                  if (sql) {
-                    quest.exportQueryToCsv(sql)
-                  }
-                }}
+              <span>
+              <PopperHover
+                placement="top"
+                trigger={
+                  <DownloadButton skin="transparent">
+                    <Download2 size="18px" />
+                    <ArrowDownS size="18px" />
+                  </DownloadButton>
+                }
               >
-                <Download2 size="18px" />
-              </Button>
+                <Tooltip>Download result</Tooltip>
+              </PopperHover>
+              </span>
             }
           >
-            <Tooltip>Download result as a CSV file</Tooltip>
-          </PopperHover>
+            <DownloadMenu>
+              <DownloadMenuItem onClick={() => handleDownload("csv")}>
+                <img src="/assets/csv-file.svg" alt="CSV" width={18} height={18} />
+                Download as CSV
+              </DownloadMenuItem>
+              <DownloadMenuItem onClick={() => handleDownload("parquet")}>
+                <img src="assets/parquet-file.svg" alt="Parquet" width={18} height={18} />
+                Download as Parquet
+              </DownloadMenuItem>
+            </DownloadMenu>
+          </PopperToggle>
         </Actions>
 
         <Content>

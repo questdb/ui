@@ -453,10 +453,15 @@ export class Client {
     return { status: response.status, success: true }
   }
 
-  async exportQueryToCsv(query: string) {
+  async exportQuery(query: string, format: "csv" | "parquet") {
     try {
       const response: Response = await fetch(
-        `exp?${Client.encodeParams({ query, version: API_VERSION })}`,
+        `exp?${Client.encodeParams({
+          query,
+          version: API_VERSION,
+          fmt: format,
+          ...(format === "parquet" ? { parquetVersion: "1" } : {}),
+        })}`,
         { headers: this.commonHeaders },
       )
       const blob = await response.blob()
@@ -468,7 +473,7 @@ export class Client {
       a.href = url
       a.download = filename
         ? filename.replaceAll(`"`, "")
-        : `questdb-query-${new Date().getTime()}.csv`
+        : `questdb-query-${new Date().getTime()}.${format}`
       a.click()
       window.URL.revokeObjectURL(url)
     } catch (error) {
