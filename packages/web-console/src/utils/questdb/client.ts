@@ -25,7 +25,8 @@ import {
   Permission,
   SymbolColumnDetails,
 } from "./types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { updateServiceWorkerAuthToken, getIsServiceWorkerReady } from "../serviceWorker"
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -48,6 +49,7 @@ export class Client {
 
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
+    updateServiceWorkerAuthToken(headers.Authorization)
   }
 
   private refreshAuthToken = async () => {
@@ -453,31 +455,77 @@ export class Client {
     return { status: response.status, success: true }
   }
 
-  async exportQuery(query: string, format: "csv" | "parquet") {
+  async exportQuery(query: string, format: "csv" | "parquet"): Promise<Error | void> {
+    const requestKey = `questdb-query-${Date.now().toString()}`
+    const url = `exp?${Client.encodeParams({
+      query,
+      version: API_VERSION,
+      fmt: format,
+      filename: requestKey,
+      ...(format === "parquet" ? { parquetVersion: "1" } : {}),
+    })}`
+
+    if (getIsServiceWorkerReady()) {
+      return new Promise((resolve, reject) => {
+        const iframe = document.createElement('iframe')
+        iframe.style.display = 'none'
+
+        const cleanup = () => {
+          if (iframe.parentNode) {
+            document.body.removeChild(iframe)
+          }
+          navigator.serviceWorker.removeEventListener('message', eventListener)
+        }
+
+        const eventListener = (event: MessageEvent) => {
+          if (event.data.type === `DOWNLOAD_ERROR_${requestKey}`) {
+            cleanup()
+            reject(new Error(`Download failed with status code ${event.data.status}: ${event.data.message}`))
+          }
+          if (event.data.type === `DOWNLOAD_START_${requestKey}`) {
+            cleanup()
+            resolve()
+          }
+        }
+        navigator.serviceWorker.addEventListener('message', eventListener)
+
+        iframe.onerror = () => {
+          cleanup()
+          reject(new Error('Download failed'))
+        }
+
+        document.body.appendChild(iframe)
+        iframe.src = url
+      })
+    }
+
+    // Fallback to blob approach if service worker is not registered
+    const response: Response = await fetch(url, { headers: this.commonHeaders })
+    if (!response.ok) {
+      let message = response.statusText
+      try {
+        const json = await response.json()
+        message = json.error ?? message
+      } catch (_) {}
+      throw new Error(`Download failed with status code ${response.status}: ${message}`)
+    }
+
     try {
-      const response: Response = await fetch(
-        `exp?${Client.encodeParams({
-          query,
-          version: API_VERSION,
-          fmt: format,
-          ...(format === "parquet" ? { parquetVersion: "1" } : {}),
-        })}`,
-        { headers: this.commonHeaders },
-      )
       const blob = await response.blob()
       const filename = response.headers
         .get("Content-Disposition")
         ?.split("=")[1]
-      const url = window.URL.createObjectURL(blob)
+      const objUrl = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
-      a.href = url
+      a.href = objUrl
       a.download = filename
         ? filename.replaceAll(`"`, "")
         : `questdb-query-${new Date().getTime()}.${format}`
       a.click()
-      window.URL.revokeObjectURL(url)
+      window.URL.revokeObjectURL(objUrl)
     } catch (error) {
-      throw error
+      const message = error instanceof Error ? error.message : error as string
+      throw new Error(`Download failed while creating the file: ${message}`)
     }
   }
 

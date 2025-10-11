@@ -48,7 +48,7 @@ import { actions, selectors } from "../../store"
 import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
-import { Button } from "@questdb/react-components"
+import { Button, Box } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -57,6 +57,7 @@ import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
+import { toast, LoadingSpinner } from "../../components"
 
 const Root = styled.div`
   display: flex;
@@ -136,6 +137,8 @@ const DownloadMenuItem = styled.button`
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { quest } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
+  const [downloadingQueries, setDownloadingQueries] = useState<Set<string>>(new Set())
+  const [currentQuery, setCurrentQuery] = useState<string | undefined>()
   const result = useSelector(selectors.query.getResult)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
@@ -297,15 +300,31 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   useEffect(() => {
     if (result?.type === QuestDB.Type.DQL) {
       setCount(result.count)
+      setCurrentQuery(result.query)
     }
   }, [result])
 
-  const handleDownload = (format: "csv" | "parquet") => {
+  const handleDownload = async (format: "csv" | "parquet") => {
+    setDownloadMenuActive(false)
     const sql = gridRef?.current?.getSQL()
     if (sql) {
-      quest.exportQuery(sql, format)
+      try {
+        setDownloadingQueries((prev) => {
+          prev.add(sql)
+          return new Set(prev)
+        })
+        await quest.exportQuery(sql, format)
+      } catch (error) {
+        toast.error((error as Error).message)
+      } finally {
+        setDownloadingQueries((prev) => {
+          prev.delete(sql)
+          return new Set(prev)
+        })
+      }
+    } else {
+      toast.error("No SQL query found")
     }
-    setDownloadMenuActive(false)
   }
 
   return (
@@ -337,34 +356,35 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               {
                 name: "offset",
                 options: {
-                  offset: [0, 8],
+                  offset: [0, 4],
                 },
               },
             ]}
             trigger={
-              <span>
-              <PopperHover
-                placement="top"
-                trigger={
-                  <DownloadButton skin="transparent">
+              <DownloadButton skin="secondary" data-hook="result-download-button" disabled={!!currentQuery && downloadingQueries.has(currentQuery)}>
+                {currentQuery && downloadingQueries.has(currentQuery) ? (
+                  <Box align="center" gap="0.5rem" data-hook="download-loading-indicator">
+                    <LoadingSpinner size="18px" />
+                    <Text color="offWhite">Preparing download</Text>
+                  </Box>
+                ) : (
+                  <>
                     <Download2 size="18px" />
+                    Download
                     <ArrowDownS size="18px" />
-                  </DownloadButton>
-                }
-              >
-                <Tooltip>Download result</Tooltip>
-              </PopperHover>
-              </span>
+                  </>
+                )}
+              </DownloadButton>
             }
           >
             <DownloadMenu>
-              <DownloadMenuItem onClick={() => handleDownload("csv")}>
-                <img src="/assets/csv-file.svg" alt="CSV" width={18} height={18} />
-                Download as CSV
-              </DownloadMenuItem>
-              <DownloadMenuItem onClick={() => handleDownload("parquet")}>
+              <DownloadMenuItem onClick={() => handleDownload("parquet")} data-hook="download-parquet-button">
                 <img src="assets/parquet-file.svg" alt="Parquet" width={18} height={18} />
                 Download as Parquet
+              </DownloadMenuItem>
+              <DownloadMenuItem onClick={() => handleDownload("csv")} data-hook="download-csv-button">
+                <img src="/assets/csv-file.svg" alt="CSV" width={18} height={18} />
+                Download as CSV
               </DownloadMenuItem>
             </DownloadMenu>
           </PopperToggle>

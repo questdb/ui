@@ -197,6 +197,7 @@ module.exports = {
       new CopyWebpackPlugin({
         patterns: [
           { from: "./assets/", to: "assets/" },
+          { from: path.resolve(__dirname, "public"), to: "." },
           ...monacoConfig.assetCopyPatterns,
         ],
       }),
@@ -214,6 +215,7 @@ module.exports = {
       new CopyWebpackPlugin({
         patterns: [
           { from: "./assets/", to: "assets/" },
+          { from: path.resolve(__dirname, "public"), to: "." },
           ...monacoConfig.assetCopyPatterns,
           ...monacoConfig.sourceMapCopyPatterns,
         ],
