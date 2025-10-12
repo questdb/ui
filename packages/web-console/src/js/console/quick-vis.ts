@@ -190,6 +190,7 @@ export function quickVis(
           xAxis: optionXAxis,
           yAxis: {
             type: "value",
+            scale: true, // Enable dynamic scaling based on data values
           },
           series: series,
         }
