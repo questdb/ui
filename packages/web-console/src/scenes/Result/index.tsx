@@ -105,33 +105,28 @@ const DownloadButton = styled(Button)`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding-right: 0.7rem;
+  padding: 0 1rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 `
 
-const DownloadMenu = styled.div`
-  min-width: 200px;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.gray1};
-  border-radius: 0.4rem;
-  overflow: hidden;
+const DownloadDropdownButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 `
 
-const DownloadMenuItem = styled.button`
+const DownloadMenuItem = styled(Button)`
   display: flex;
   align-items: center;
   gap: 1.2rem;
   width: 100%;
-  padding: 0.75rem 1rem;
-  text-align: left;
-  background: transparent;
-  border: none;
-  color: ${({ theme }) => theme.color.foreground};
-  cursor: pointer;
-  font-size: 13px;
-
-  &:hover {
-    background: ${({ theme }) => theme.color.selection};
-  }
+  height: 3rem;
+  padding: 0 1rem;
+  font-size: 1.4rem;
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
@@ -145,6 +140,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const dispatch = useDispatch()
+  const isDownloading = !!currentQuery && downloadingQueries.has(currentQuery)
 
   useEffect(() => {
     const _grid = grid(
@@ -348,6 +344,24 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </PopperHover>
             ))}
 
+          <DownloadButton
+            skin="secondary"
+            data-hook="download-parquet-button"
+            disabled={isDownloading}
+            onClick={() => handleDownload("parquet")}
+          >
+            {isDownloading ? (
+              <Box align="center" gap="0.5rem" data-hook="download-loading-indicator">
+                <LoadingSpinner size="18px" />
+                <Text color="offWhite">Preparing the file</Text>
+              </Box>
+            ) : (
+              <>
+                <img src="assets/parquet-file.svg" alt="Parquet" aria-hidden="true" width={18} height={18} />
+                Download as Parquet
+              </>
+            )}
+          </DownloadButton>
           <PopperToggle
             active={downloadMenuActive}
             onToggle={setDownloadMenuActive}
@@ -361,32 +375,23 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               },
             ]}
             trigger={
-              <DownloadButton skin="secondary" data-hook="result-download-button" disabled={!!currentQuery && downloadingQueries.has(currentQuery)}>
-                {currentQuery && downloadingQueries.has(currentQuery) ? (
-                  <Box align="center" gap="0.5rem" data-hook="download-loading-indicator">
-                    <LoadingSpinner size="18px" />
-                    <Text color="offWhite">Preparing the file</Text>
-                  </Box>
-                ) : (
-                  <>
-                    <Download2 size="18px" />
-                    Download
-                    <ArrowDownS size="18px" />
-                  </>
-                )}
-              </DownloadButton>
+              <DownloadDropdownButton
+                skin="secondary"
+                data-hook="download-dropdown-button"
+                disabled={!!currentQuery && downloadingQueries.has(currentQuery)}
+              >
+                <ArrowDownS size="18px" />
+              </DownloadDropdownButton>
             }
           >
-            <DownloadMenu>
-              <DownloadMenuItem onClick={() => handleDownload("parquet")} data-hook="download-parquet-button">
-                <img src="assets/parquet-file.svg" alt="Parquet" width={18} height={18} />
-                Download as Parquet
-              </DownloadMenuItem>
-              <DownloadMenuItem onClick={() => handleDownload("csv")} data-hook="download-csv-button">
-                <img src="assets/csv-file.svg" alt="CSV" width={18} height={18} />
-                Download as CSV
-              </DownloadMenuItem>
-            </DownloadMenu>
+            <DownloadMenuItem
+              onClick={() => handleDownload("csv")}
+              data-hook="download-csv-button"
+              skin="secondary"
+            >
+              <img src="assets/csv-file.svg" alt="CSV" aria-hidden="true" width={18} height={18} />
+              Download as CSV
+            </DownloadMenuItem>
           </PopperToggle>
         </Actions>
 

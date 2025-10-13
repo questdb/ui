@@ -9,14 +9,15 @@ describe("download functionality", () => {
     cy.runLine();
 
     // Then
-    cy.getByDataHook("result-download-button").should("be.visible");
+    cy.getByDataHook("download-parquet-button").should("be.visible");
+    cy.getByDataHook("download-dropdown-button").should("be.visible");
+    cy.getByDataHook("download-csv-button").should("not.exist");
 
     // When
-    cy.getByDataHook("result-download-button").click();
+    cy.getByDataHook("download-dropdown-button").click();
 
     // Then
     cy.getByDataHook("download-csv-button").should("be.visible");
-    cy.getByDataHook("download-parquet-button").should("be.visible");
   });
 
   it("should trigger CSV download", () => {
@@ -33,7 +34,7 @@ describe("download functionality", () => {
     // When
     cy.typeQuery(query);
     cy.runLine();
-    cy.getByDataHook("result-download-button").click();
+    cy.getByDataHook("download-dropdown-button").click();
     cy.getByDataHook("download-csv-button").click();
 
     // Then
@@ -59,7 +60,6 @@ describe("download functionality", () => {
     // When
     cy.typeQuery(query);
     cy.runLine();
-    cy.getByDataHook("result-download-button").click();
     cy.getByDataHook("download-parquet-button").click();
 
     // Then
@@ -83,7 +83,7 @@ describe("download functionality", () => {
     // When
     cy.typeQuery("select x from long_sequence(5)");
     cy.runLine();
-    cy.getByDataHook("result-download-button").click();
+    cy.getByDataHook("download-dropdown-button").click();
     cy.getByDataHook("download-csv-button").click();
 
     // Then
@@ -106,7 +106,7 @@ describe("download functionality", () => {
     // When
     cy.typeQuery("select x from long_sequence(5)");
     cy.runLine();
-    cy.getByDataHook("result-download-button").click();
+    cy.getByDataHook("download-dropdown-button").click();
     cy.getByDataHook("download-csv-button").click();
 
     // Then
@@ -131,7 +131,6 @@ describe("download functionality", () => {
     // When
     cy.typeQuery("select * from long_sequence(10)");
     cy.runLine();
-    cy.getByDataHook("result-download-button").click();
     cy.getByDataHook("download-parquet-button").click();
 
     // Then
@@ -151,7 +150,7 @@ describe("download functionality", () => {
     // When
     cy.typeQuery(query);
     cy.runLine();
-    cy.getByDataHook("result-download-button").click();
+    cy.getByDataHook("download-dropdown-button").click();
     cy.getByDataHook("download-csv-button").click();
 
     // Then
