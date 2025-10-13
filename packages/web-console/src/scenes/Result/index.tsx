@@ -310,16 +310,16 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     if (sql) {
       try {
         setDownloadingQueries((prev) => {
-          prev.add(sql)
-          return new Set(prev)
+          return new Set(prev).add(sql)
         })
         await quest.exportQuery(sql, format)
       } catch (error) {
         toast.error((error as Error).message)
       } finally {
         setDownloadingQueries((prev) => {
-          prev.delete(sql)
-          return new Set(prev)
+          const newSet = new Set(prev)
+          newSet.delete(sql)
+          return newSet
         })
       }
     } else {

@@ -30,9 +30,9 @@ self.addEventListener('fetch', (event) => {
             let message = response.statusText
             try {
               const json = await response.json()
-              const error = json.error
-              if (error) {
-                message = error
+              const errorMessage = json.error
+              if (errorMessage) {
+                message = errorMessage
               }
             } catch (_) {}
 
