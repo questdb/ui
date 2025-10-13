@@ -25,7 +25,7 @@
 import $ from "jquery"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
-import styled from "styled-components"
+import styled, { keyframes } from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { HandPointLeft } from "@styled-icons/fa-regular"
@@ -109,6 +109,34 @@ const DownloadButton = styled(Button)`
   padding: 0 1rem;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+`
+
+const SlideKeyframes = keyframes`
+  from { 
+    background-position: 200% center;
+  }
+  to { 
+    background-position: -200% center;
+  }
+`
+
+const AnimatedText = styled(Text)`
+  background: linear-gradient(
+    90deg,
+    ${color("gray2")} 0%,
+    ${color("gray2")} 40%,
+    ${color("white")} 50%,
+    ${color("gray2")} 60%,
+    ${color("gray2")} 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-background-clip: text;
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-text-fill-color: transparent;
+  color: transparent !important;
+  animation: ${SlideKeyframes} 3s linear infinite;
 `
 
 const DownloadDropdownButton = styled(Button)`
@@ -352,9 +380,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             onClick={() => handleDownload("parquet")}
           >
             {isDownloading ? (
-              <Box align="center" gap="0.5rem" data-hook="download-loading-indicator">
+              <Box align="center" gap="0.5rem" data-hook="download-loading-indicator" style={{ lineHeight: '1.285' }}>
                 <LoadingSpinner size="18px" />
-                <Text color="offWhite">Preparing the file</Text>
+                <AnimatedText>Preparing the file</AnimatedText>
               </Box>
             ) : (
               <Box align="center" gap="0.5rem" style={{ lineHeight: '1.285' }}>
@@ -379,7 +407,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               <DownloadDropdownButton
                 skin="secondary"
                 data-hook="download-dropdown-button"
-                disabled={!!currentQuery && downloadingQueries.has(currentQuery)}
+                disabled={isDownloading}
               >
                 <ArrowDownS size="18px" />
               </DownloadDropdownButton>
