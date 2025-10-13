@@ -99,6 +99,7 @@ const TableFreezeColumnIcon = styled(TableFreezeColumn)`
 
 const RowCount = styled(Text)`
   margin-right: 1rem;
+  line-height: 1.285;
 `
 
 const DownloadButton = styled(Button)`
@@ -356,8 +357,8 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 <Text color="offWhite">Preparing the file</Text>
               </Box>
             ) : (
-              <Box align="center" gap="0.5rem">
-                <Download2 size="18px" />
+              <Box align="center" gap="0.5rem" style={{ lineHeight: '1.285' }}>
+                <Download2 height="18px" width="18px" />
                 Download as Parquet
               </Box>
             )}
