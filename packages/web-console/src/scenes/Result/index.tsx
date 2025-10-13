@@ -356,10 +356,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 <Text color="offWhite">Preparing the file</Text>
               </Box>
             ) : (
-              <>
-                <img src="assets/parquet-file.svg" alt="Parquet" aria-hidden="true" width={18} height={18} />
+              <Box align="center" gap="0.5rem">
+                <Download2 size="18px" />
                 Download as Parquet
-              </>
+              </Box>
             )}
           </DownloadButton>
           <PopperToggle
@@ -389,7 +389,6 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               data-hook="download-csv-button"
               skin="secondary"
             >
-              <img src="assets/csv-file.svg" alt="CSV" aria-hidden="true" width={18} height={18} />
               Download as CSV
             </DownloadMenuItem>
           </PopperToggle>
