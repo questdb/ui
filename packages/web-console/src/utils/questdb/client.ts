@@ -466,6 +466,15 @@ export class Client {
     })}`
 
     if (getIsServiceWorkerReady()) {
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+      if (isSafari) {
+        const a = document.createElement("a")
+        a.target = '_blank'
+        a.href = url
+        a.click()
+        return
+      }
+
       return new Promise((resolve, reject) => {
         const iframe = document.createElement('iframe')
         iframe.style.display = 'none'

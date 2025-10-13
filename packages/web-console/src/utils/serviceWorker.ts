@@ -1,5 +1,5 @@
-let serviceWorkerRegistration: ServiceWorkerRegistration | null = null;
-let pendingAuthToken: string | null = null;
+let serviceWorkerRegistration: ServiceWorkerRegistration | null = null
+let currentAuthToken: string | null = null
 
 export const registerDownloadServiceWorker = async (): Promise<void> => {
   if (!('serviceWorker' in navigator)) {
@@ -12,8 +12,14 @@ export const registerDownloadServiceWorker = async (): Promise<void> => {
       scope: '/',
     })
     serviceWorkerRegistration = registration
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      console.log('[SW] Controller changed')
+      sendAuthTokenToServiceWorker()
+    })
+
     await navigator.serviceWorker.ready
-    await processPendingAuthToken()
+    sendAuthTokenToServiceWorker()
   } catch (error) {
     console.error('Service Worker registration failed:', error)
   }
@@ -23,28 +29,21 @@ export const getIsServiceWorkerReady = () => {
   return serviceWorkerRegistration !== null && serviceWorkerRegistration.active !== null
 }
 
-const processPendingAuthToken = async (): Promise<void> => {
+const sendAuthTokenToServiceWorker = (): void => {
   if (!serviceWorkerRegistration?.active) {
     return
   }
 
-  if (pendingAuthToken) {
-    serviceWorkerRegistration.active?.postMessage({
-      type: 'SET_AUTH_TOKEN',
-      token: pendingAuthToken,
-    })
-    pendingAuthToken = null
-  }
+  serviceWorkerRegistration.active.postMessage({
+    type: 'SET_AUTH_TOKEN',
+    token: currentAuthToken,
+  })
 }
 
 export const updateServiceWorkerAuthToken = (token: string) => {
-  pendingAuthToken = token
+  currentAuthToken = token
 
   if (getIsServiceWorkerReady()) {
-    serviceWorkerRegistration?.active?.postMessage({
-      type: 'SET_AUTH_TOKEN',
-      token: token,
-    })
-    pendingAuthToken = null
+    sendAuthTokenToServiceWorker()
   }
 }
