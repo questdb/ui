@@ -469,7 +469,7 @@ export class Client {
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
       if (isSafari) {
         const a = document.createElement("a")
-        a.target = '_blank'
+        a.target = "_blank"
         a.href = url
         a.click()
         return
@@ -533,7 +533,7 @@ export class Client {
       a.click()
       window.URL.revokeObjectURL(objUrl)
     } catch (error) {
-      const message = error instanceof Error ? error.message : error as string
+      const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Download failed while creating the file: ${message}`)
     }
   }

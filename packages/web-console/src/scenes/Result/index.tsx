@@ -383,7 +383,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 Download as Parquet
               </DownloadMenuItem>
               <DownloadMenuItem onClick={() => handleDownload("csv")} data-hook="download-csv-button">
-                <img src="/assets/csv-file.svg" alt="CSV" width={18} height={18} />
+                <img src="assets/csv-file.svg" alt="CSV" width={18} height={18} />
                 Download as CSV
               </DownloadMenuItem>
             </DownloadMenu>
