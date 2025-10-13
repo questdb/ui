@@ -179,7 +179,10 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   }, [])
 
   const handleGenerateQueryOpen = useCallback((e?: KeyboardEvent) => {
-    if (e instanceof KeyboardEvent) {
+    if (e) {
+      if (!(e instanceof KeyboardEvent)) {
+        return
+      }
       if (!((e.metaKey || e.ctrlKey) && (e.key === 'g' || e.key === 'G'))) {
         return
       }

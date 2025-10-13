@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react"
 import styled from "styled-components"
 import { Box, Button, Input, Loader, Select, Checkbox } from "@questdb/react-components"
-import { Eye, EyeOff } from "@styled-icons/remix-line"
+import { Edit } from "@styled-icons/remix-line"
 import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { AutoAwesome } from "@styled-icons/material"
 import { Tooltip } from "../Tooltip"
@@ -38,14 +38,16 @@ const InputWrapper = styled.div`
   width: 100%;
 `
 
-const StyledInput = styled(Input)<{ $hasError?: boolean }>`
+const StyledInput = styled(Input)<{ $hasError?: boolean, $showApiKey?: boolean }>`
   width: 100%;
   background: ${({ theme }) => theme.color.selection};
   border: 1px solid ${({ theme, $hasError }) => $hasError ? theme.color.red : theme.color.gray1};
   border-radius: 0.4rem;
   padding-right: 3.5rem;
   color: ${({ theme }) => theme.color.foreground};
-
+  ${({ $showApiKey }) => $showApiKey && `
+    padding-right: 0.75rem;
+  `}
   &::placeholder {
     color: ${({ theme }) => theme.color.gray2};
     font-family: inherit;
@@ -65,6 +67,7 @@ const ActionButton = styled(Button)`
   transform: translateY(-50%);
   padding: 0 0.75rem;
   right: 0.1rem;
+  border-radius: 0.3rem;
 `
 
 const FormLabel = styled.label`
@@ -286,26 +289,46 @@ const AIAssistantSettings = ({ setActive }: { setActive: (active: boolean) => vo
           </FormLabel>
           
           <InputWrapper>
-            <StyledInput
-              id="ai-provider-api-key-input"
-              data-hook="ai-provider-api-key-input"
-              ref={inputRef}
-              type={showApiKey ? "text" : "password"}
-              value={inputValue}
-              onChange={(e) => {
-                setInputValue(e.target.value)
-                setError(null)
-              }}
-              $hasError={!!error}
-            />
-            <ActionButton
-              type="button"
-              skin="secondary"
-              onClick={() => setShowApiKey(!showApiKey)}
-              data-hook="ai-provider-api-key-toggle"
-            >
-              {showApiKey ? <EyeOff size="16px" /> : <Eye size="16px" />}
-            </ActionButton>
+            {showApiKey ? (
+              <StyledInput
+                id="ai-provider-api-key-input"
+                data-hook="ai-provider-api-key-input"
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => {
+                  setInputValue(e.target.value)
+                  setError(null)
+                }}
+                $hasError={!!error}
+                $showApiKey={true}
+              />
+            ) : (
+              <>
+                <StyledInput
+                  id="ai-provider-api-key-input-masked"
+                  data-hook="ai-provider-api-key-input-masked"
+                  disabled
+                  value={inputValue.replace(/./g, "•")}
+                  $showApiKey={false}
+                />
+                <ActionButton
+                  type="button"
+                  skin="secondary"
+                  onClick={() => {
+                    setShowApiKey(!showApiKey)
+                    if (!showApiKey) {
+                      setTimeout(() => {
+                        inputRef.current?.focus()
+                        inputRef.current?.select()
+                      })
+                    }
+                  }}
+                  data-hook="ai-provider-api-key-toggle"
+                >
+                  <Edit size="16px" />
+                </ActionButton>
+              </>
+            )}
           </InputWrapper>
           {error && <ErrorText>{error}</ErrorText>}
           
