@@ -365,7 +365,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 {currentQuery && downloadingQueries.has(currentQuery) ? (
                   <Box align="center" gap="0.5rem" data-hook="download-loading-indicator">
                     <LoadingSpinner size="18px" />
-                    <Text color="offWhite">Preparing download</Text>
+                    <Text color="offWhite">Preparing the file</Text>
                   </Box>
                 ) : (
                   <>
