@@ -542,7 +542,7 @@ export class Client {
       fmt: format,
       filename: requestKey,
       ...(!isAclEnabled ? { noAuth: true } : {}),
-      ...(format === "parquet" ? { parquetVersion: "1" } : {}),
+      ...(format === "parquet" ? { rmode: "nodelay" } : {}),
     })}`
 
     // No auth token, service worker will not intercept
