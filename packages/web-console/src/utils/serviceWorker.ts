@@ -1,5 +1,4 @@
 let serviceWorkerRegistration: ServiceWorkerRegistration | null = null
-let currentAuthToken: string | null = null
 
 export const registerDownloadServiceWorker = async (): Promise<void> => {
   if (!('serviceWorker' in navigator)) {
@@ -13,13 +12,7 @@ export const registerDownloadServiceWorker = async (): Promise<void> => {
     })
     serviceWorkerRegistration = registration
 
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('[SW] Controller changed')
-      sendAuthTokenToServiceWorker()
-    })
-
     await navigator.serviceWorker.ready
-    sendAuthTokenToServiceWorker()
   } catch (error) {
     console.error('Service Worker registration failed:', error)
   }
@@ -29,21 +22,36 @@ export const getIsServiceWorkerReady = () => {
   return serviceWorkerRegistration !== null && serviceWorkerRegistration.active !== null
 }
 
-const sendAuthTokenToServiceWorker = (): void => {
-  if (!serviceWorkerRegistration?.active) {
-    return
-  }
+export const setServiceWorkerAuth = (token: string, timeoutMs: number = 2000): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (!getIsServiceWorkerReady()) {
+      return reject()
+    }
+    let resolved = false
 
-  serviceWorkerRegistration.active.postMessage({
-    type: 'SET_AUTH_TOKEN',
-    token: currentAuthToken,
+    const onMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'AUTH_TOKEN_ACK') {
+        resolved = true
+        cleanup()
+        resolve()
+      }
+    }
+    const cleanup = () => {
+      navigator.serviceWorker.removeEventListener('message', onMessage)
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+
+    serviceWorkerRegistration?.active?.postMessage({
+      type: 'SET_AUTH_TOKEN',
+      token,
+    })
+
+    setTimeout(() => {
+      if (!resolved) {
+        console.warn('[SW] Auth token ack timed out')
+        cleanup()
+        reject()
+      }
+    }, timeoutMs)
   })
-}
-
-export const updateServiceWorkerAuthToken = (token: string) => {
-  currentAuthToken = token
-
-  if (getIsServiceWorkerReady()) {
-    sendAuthTokenToServiceWorker()
-  }
 }

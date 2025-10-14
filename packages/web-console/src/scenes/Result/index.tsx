@@ -53,6 +53,7 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
+import { useSettings } from "../../providers/SettingsProvider"
 import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
@@ -160,6 +161,7 @@ const DownloadMenuItem = styled(Button)`
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { quest } = useContext(QuestContext)
+  const { settings } = useSettings()
   const [count, setCount] = useState<number | undefined>()
   const [downloadingQueries, setDownloadingQueries] = useState<Set<string>>(new Set())
   const [currentQuery, setCurrentQuery] = useState<string | undefined>()
@@ -337,7 +339,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         setDownloadingQueries((prev) => {
           return new Set(prev).add(sql)
         })
-        await quest.exportQuery(sql, format)
+        await quest.exportQuery(sql, format, settings["acl.enabled"])
       } catch (error) {
         toast.error((error as Error).message)
       } finally {

@@ -1,4 +1,4 @@
-import { isServerError } from "../../utils"
+import { isServerError, platform } from "../../utils"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -26,7 +26,7 @@ import {
   SymbolColumnDetails,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
-import { updateServiceWorkerAuthToken, getIsServiceWorkerReady } from "../serviceWorker"
+import { getIsServiceWorkerReady, setServiceWorkerAuth } from "../serviceWorker"
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -49,7 +49,6 @@ export class Client {
 
   setCommonHeaders(headers: Record<string, string>) {
     this.commonHeaders = headers
-    updateServiceWorkerAuthToken(headers.Authorization)
   }
 
   private refreshAuthToken = async () => {
@@ -455,60 +454,21 @@ export class Client {
     return { status: response.status, success: true }
   }
 
-  async exportQuery(query: string, format: "csv" | "parquet"): Promise<Error | void> {
-    const requestKey = `questdb-query-${Date.now().toString()}`
-    const url = `exp?${Client.encodeParams({
-      query,
-      version: API_VERSION,
-      fmt: format,
-      filename: requestKey,
-      ...(format === "parquet" ? { parquetVersion: "1" } : {}),
-    })}`
+  openDownloadTab(url: string) {
+    const a = document.createElement("a")
+    a.target = "_blank"
+    a.href = url
+    a.click()
+  }
 
-    if (getIsServiceWorkerReady()) {
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-      if (isSafari) {
-        const a = document.createElement("a")
-        a.target = "_blank"
-        a.href = url
-        a.click()
-        return
-      }
+  createHiddenIframe() {
+    const iframe = document.createElement("iframe")
+    iframe.style.display = "none"
+    document.body.appendChild(iframe)
+    return iframe
+  }
 
-      return new Promise((resolve, reject) => {
-        const iframe = document.createElement('iframe')
-        iframe.style.display = 'none'
-
-        const cleanup = () => {
-          if (iframe.parentNode) {
-            document.body.removeChild(iframe)
-          }
-          navigator.serviceWorker.removeEventListener('message', eventListener)
-        }
-
-        const eventListener = (event: MessageEvent) => {
-          if (event.data.type === `DOWNLOAD_ERROR_${requestKey}`) {
-            cleanup()
-            reject(new Error(`Download failed with status code ${event.data.status}: ${event.data.message}`))
-          }
-          if (event.data.type === `DOWNLOAD_START_${requestKey}`) {
-            cleanup()
-            resolve()
-          }
-        }
-        navigator.serviceWorker.addEventListener('message', eventListener)
-
-        iframe.onerror = () => {
-          cleanup()
-          reject(new Error('Download failed'))
-        }
-
-        document.body.appendChild(iframe)
-        iframe.src = url
-      })
-    }
-
-    // Fallback to blob approach if service worker is not registered
+  async downloadWithBlob(url: string, format: "csv" | "parquet") {
     const response: Response = await fetch(url, { headers: this.commonHeaders })
     if (!response.ok) {
       let message = response.statusText
@@ -536,6 +496,78 @@ export class Client {
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Download failed while creating the file: ${message}`)
     }
+  }
+
+  async downloadWithServiceWorker(url: string, requestKey: string): Promise<Error | void> {
+    return new Promise((resolve, reject) => {
+      if (platform.isSafari) {
+        this.openDownloadTab(url)
+        resolve()
+      }
+      const iframe = this.createHiddenIframe()
+      const cleanup = () => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+        navigator.serviceWorker.removeEventListener('message', eventListener)
+      }
+
+      const eventListener = (event: MessageEvent) => {
+        if (event.data.type === `DOWNLOAD_ERROR_${requestKey}`) {
+          cleanup()
+          reject(new Error(`Download failed with status code ${event.data.status}: ${event.data.message}`))
+        }
+        if (event.data.type === `DOWNLOAD_START_${requestKey}`) {
+          cleanup()
+          resolve()
+        }
+      }
+      navigator.serviceWorker.addEventListener('message', eventListener)
+
+      iframe.onerror = () => {
+        cleanup()
+        reject(new Error('Download failed'))
+      }
+
+      iframe.src = url
+    })
+  }
+
+  async exportQuery(query: string, format: "csv" | "parquet", isAclEnabled: boolean | undefined): Promise<Error | void> {
+    const authToken = this.commonHeaders.Authorization
+    const requestKey = `questdb-query-${Date.now().toString()}`
+    const url = `exp?${Client.encodeParams({
+      query,
+      version: API_VERSION,
+      fmt: format,
+      filename: requestKey,
+      ...(!isAclEnabled ? { noAuth: true } : {}),
+      ...(format === "parquet" ? { parquetVersion: "1" } : {}),
+    })}`
+
+    // No auth token, service worker will not intercept
+    if (!isAclEnabled) {
+      if (platform.isSafari) {
+        this.openDownloadTab(url)
+        return
+      }
+      const iframe = this.createHiddenIframe()
+      iframe.src = url
+      return
+    }
+
+    // Authentication to be handled by service worker
+    if (getIsServiceWorkerReady()) {
+      try {
+        await setServiceWorkerAuth(authToken, 2000)
+      } catch (_) {
+        return this.downloadWithBlob(url, format)
+      }
+      return this.downloadWithServiceWorker(url, requestKey)
+    }
+
+    // Fallback to blob approach if service worker is not registered
+    return this.downloadWithBlob(url, format)
   }
 
   async getLatestRelease() {

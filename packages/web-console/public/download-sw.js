@@ -3,11 +3,21 @@ let authToken = null
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SET_AUTH_TOKEN') {
     authToken = event.data.token
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'AUTH_TOKEN_ACK',
+        })
+      })
+    })
   }
 })
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
+  if (url.searchParams.get('noAuth')) {
+    return
+  }
 
   if (url.pathname === '/exp' || url.pathname.endsWith('/exp')) {
     const requestKey = new URL(event.request.url).searchParams.get('filename')
