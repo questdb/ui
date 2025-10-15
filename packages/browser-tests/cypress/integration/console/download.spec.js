@@ -71,4 +71,27 @@ describe("download functionality", () => {
       );
     });
   });
+
+  it("should show error toast on bad request", () => {
+    // Given
+    cy.intercept("GET", "**/exp?*", (req) => {
+      const url = new URL(req.url);
+      url.searchParams.set("fmt", "badformat");
+      req.url = url.toString();
+    }).as("badExportRequest");
+
+    // When
+    cy.typeQuery("select x from long_sequence(5)");
+    cy.runLine();
+    cy.getByDataHook("download-dropdown-button").click();
+    cy.getByDataHook("download-csv-button").click();
+
+    // Then
+    cy.wait("@badExportRequest").then(() => {
+      cy.getByRole("alert").should(
+        "contain",
+        "An error occurred while downloading the file: unrecognised format [format=badformat]"
+      );
+    });
+  });
 });

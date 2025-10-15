@@ -313,15 +313,35 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     const url = `exp?${QuestDB.Client.encodeParams({
       query: sql,
       version: API_VERSION,
-      fmt: format,
+      fmt: `${format}`,
       filename: `questdb-query-${Date.now().toString()}`,
       ...(format === "parquet" ? { rmode: "nodelay" } : {}),
     })}`
 
-    const link = document.createElement("a")
-    link.href = url
-    link.target = "_blank"
-    link.click()
+    const iframe = document.createElement("iframe")
+    iframe.style.display = "none"
+    document.body.appendChild(iframe)
+
+    iframe.onerror = (e) => {
+      toast.error(`An error occurred while downloading the file: ${e}`)
+    }
+
+    iframe.onload = () => {
+      const content = iframe.contentDocument?.body?.textContent
+      if (content) {
+        let error = 'An error occurred while downloading the file'
+        try {
+          const contentJson = JSON.parse(content)
+          error += `: ${contentJson.error ?? content}`
+        } catch (_) {
+          error += `: ${content}`
+        }
+        toast.error(error)
+      }
+      document.body.removeChild(iframe)
+    }
+
+    iframe.src = url
   }
 
   return (
