@@ -112,6 +112,10 @@ const DownloadButton = styled(Button)`
   border-bottom-right-radius: 0;
 `
 
+const ArrowIcon = styled(ArrowDownS)<{ $open: boolean }>`
+  transform: ${({ $open }) => $open ? "rotate(180deg)" : "rotate(0deg)"};
+`
+
 const DownloadDropdownButton = styled(Button)`
   display: flex;
   align-items: center;
@@ -368,7 +372,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 skin="secondary"
                 data-hook="download-dropdown-button"
               >
-                <ArrowDownS size="18px" />
+                <ArrowIcon size="18px" $open={downloadMenuActive} />
               </DownloadDropdownButton>
             }
           >
