@@ -45,7 +45,6 @@ import Layout from "./scenes/Layout"
 import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
 import { AuthProvider, QuestProvider, SettingsProvider, PosthogProviderWrapper } from "./providers"
-import { registerDownloadServiceWorker } from "./utils/serviceWorker"
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,
@@ -63,8 +62,6 @@ const FadeSlow = createGlobalFadeTransition(
   "fade-slow",
   TransitionDuration.SLOW,
 )
-
-registerDownloadServiceWorker()
 
 ReactDOM.render(
   <ThemeProvider theme={theme}>

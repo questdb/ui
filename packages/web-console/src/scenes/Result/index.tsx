@@ -25,7 +25,7 @@
 import $ from "jquery"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
-import styled, { keyframes } from "styled-components"
+import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { HandPointLeft } from "@styled-icons/fa-regular"
@@ -53,12 +53,12 @@ import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
-import { useSettings } from "../../providers/SettingsProvider"
 import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
-import { toast, LoadingSpinner } from "../../components"
+import { toast } from "../../components"
+import { API_VERSION } from "../../consts"
 
 const Root = styled.div`
   display: flex;
@@ -112,34 +112,6 @@ const DownloadButton = styled(Button)`
   border-bottom-right-radius: 0;
 `
 
-const SlideKeyframes = keyframes`
-  from { 
-    background-position: 200% center;
-  }
-  to { 
-    background-position: -200% center;
-  }
-`
-
-const AnimatedText = styled(Text)`
-  background: linear-gradient(
-    90deg,
-    ${color("gray2")} 0%,
-    ${color("gray2")} 40%,
-    ${color("white")} 50%,
-    ${color("gray2")} 60%,
-    ${color("gray2")} 100%
-  );
-  background-size: 200% 100%;
-  background-clip: text;
-  /* stylelint-disable-next-line property-no-vendor-prefix */
-  -webkit-background-clip: text;
-  /* stylelint-disable-next-line property-no-vendor-prefix */
-  -webkit-text-fill-color: transparent;
-  color: transparent !important;
-  animation: ${SlideKeyframes} 3s linear infinite;
-`
-
 const DownloadDropdownButton = styled(Button)`
   display: flex;
   align-items: center;
@@ -161,17 +133,13 @@ const DownloadMenuItem = styled(Button)`
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { quest } = useContext(QuestContext)
-  const { settings } = useSettings()
   const [count, setCount] = useState<number | undefined>()
-  const [downloadingQueries, setDownloadingQueries] = useState<Set<string>>(new Set())
-  const [currentQuery, setCurrentQuery] = useState<string | undefined>()
   const result = useSelector(selectors.query.getResult)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const dispatch = useDispatch()
-  const isDownloading = !!currentQuery && downloadingQueries.has(currentQuery)
 
   useEffect(() => {
     const _grid = grid(
@@ -327,31 +295,29 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   useEffect(() => {
     if (result?.type === QuestDB.Type.DQL) {
       setCount(result.count)
-      setCurrentQuery(result.query)
     }
   }, [result])
 
-  const handleDownload = async (format: "csv" | "parquet") => {
+  const handleDownload = (format: "csv" | "parquet") => {
     setDownloadMenuActive(false)
     const sql = gridRef?.current?.getSQL()
-    if (sql) {
-      try {
-        setDownloadingQueries((prev) => {
-          return new Set(prev).add(sql)
-        })
-        await quest.exportQuery(sql, format, settings["acl.enabled"])
-      } catch (error) {
-        toast.error((error as Error).message)
-      } finally {
-        setDownloadingQueries((prev) => {
-          const newSet = new Set(prev)
-          newSet.delete(sql)
-          return newSet
-        })
-      }
-    } else {
-      toast.error("No SQL query found")
+    if (!sql) {
+      toast.error("No SQL query found to download")
+      return
     }
+
+    const url = `exp?${QuestDB.Client.encodeParams({
+      query: sql,
+      version: API_VERSION,
+      fmt: format,
+      filename: `questdb-query-${Date.now().toString()}`,
+      ...(format === "parquet" ? { rmode: "nodelay" } : {}),
+    })}`
+
+    const link = document.createElement("a")
+    link.href = url
+    link.target = "_blank"
+    link.click()
   }
 
   return (
@@ -378,20 +344,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           <DownloadButton
             skin="secondary"
             data-hook="download-parquet-button"
-            disabled={isDownloading}
             onClick={() => handleDownload("parquet")}
           >
-            {isDownloading ? (
-              <Box align="center" gap="0.5rem" data-hook="download-loading-indicator" style={{ lineHeight: '1.285' }}>
-                <LoadingSpinner size="18px" />
-                <AnimatedText>Preparing the file</AnimatedText>
-              </Box>
-            ) : (
-              <Box align="center" gap="0.5rem" style={{ lineHeight: '1.285' }}>
-                <Download2 height="18px" width="18px" />
-                Download as Parquet
-              </Box>
-            )}
+            <Box align="center" gap="0.5rem" style={{ lineHeight: '1.285' }}>
+              <Download2 height="18px" width="18px" />
+              Download as Parquet
+            </Box>
           </DownloadButton>
           <PopperToggle
             active={downloadMenuActive}
@@ -409,16 +367,15 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               <DownloadDropdownButton
                 skin="secondary"
                 data-hook="download-dropdown-button"
-                disabled={isDownloading}
               >
                 <ArrowDownS size="18px" />
               </DownloadDropdownButton>
             }
           >
             <DownloadMenuItem
-              onClick={() => handleDownload("csv")}
               data-hook="download-csv-button"
               skin="secondary"
+              onClick={() => handleDownload("csv")}
             >
               Download as CSV
             </DownloadMenuItem>

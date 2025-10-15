@@ -3,7 +3,6 @@ type Platform = {
   isWindows: boolean
   isIOS: boolean
   isLinux: boolean
-  isSafari: boolean
 }
 
 export const platform: Platform = {
@@ -11,7 +10,6 @@ export const platform: Platform = {
   isWindows: false,
   isIOS: false,
   isLinux: false,
-  isSafari: false,
 }
 
 if (typeof navigator === "object") {
@@ -23,5 +21,4 @@ if (typeof navigator === "object") {
       navigator.userAgent.indexOf("iPhone") >= 0) &&
     !!navigator.maxTouchPoints &&
     navigator.maxTouchPoints > 0
-  platform.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
 }
