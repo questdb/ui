@@ -313,7 +313,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     const url = `exp?${QuestDB.Client.encodeParams({
       query: sql,
       version: API_VERSION,
-      fmt: `${format}`,
+      fmt: format,
       filename: `questdb-query-${Date.now().toString()}`,
       ...(format === "parquet" ? { rmode: "nodelay" } : {}),
     })}`

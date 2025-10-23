@@ -76,7 +76,7 @@ describe("download functionality", () => {
     // Given
     cy.intercept("GET", "**/exp?*", (req) => {
       const url = new URL(req.url);
-      url.searchParams.set("fmt", "badformat");
+      url.searchParams.set("query", "badquery");
       req.url = url.toString();
     }).as("badExportRequest");
 
@@ -90,7 +90,7 @@ describe("download functionality", () => {
     cy.wait("@badExportRequest").then(() => {
       cy.getByRole("alert").should(
         "contain",
-        "An error occurred while downloading the file: unrecognised format [format=badformat]"
+        "An error occurred while downloading the file: table does not exist [table=badquery]"
       );
     });
   });
