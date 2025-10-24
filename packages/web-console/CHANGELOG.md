@@ -17,6 +17,15 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.4 - 2025.10.24
+### Added 
+- export parquet files [#484](https://github.com/questdb/ui/pull/484)
+
+### Fixed
+- unresponsive CSV imports [#484](https://github.com/questdb/ui/pull/484)
+- do not start a quote in comments [#483](https://github.com/questdb/ui/pull/483)
+
+
 ## 1.1.3 - 2025.10.03
 ### Added
 - add column name search to Schema filter [#478](https://github.com/questdb/ui/pull/478)
