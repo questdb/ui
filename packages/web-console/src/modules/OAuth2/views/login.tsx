@@ -240,7 +240,7 @@ export const Login = ({
     const { username, password } = values
     try {
       const response = await fetch(
-        `exec?query=${httpBasicAuthStrategy.query(username)}`,
+        `exec?query=${httpBasicAuthStrategy.query(username)}&session=true`,
         {
           headers: {
             Authorization: `Basic ${btoa(`${username}:${password}`)}`,
