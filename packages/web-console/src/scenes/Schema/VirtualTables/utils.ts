@@ -1,7 +1,34 @@
 import { getSectionExpanded } from "../localStorageUtils"
-import type { InformationSchemaColumn, SymbolColumnDetails } from "../../../utils/questdb/types"
-import { TreeNode, SchemaTree, FlattenedTreeItem } from "../VirtualTables"
+import type { InformationSchemaColumn, SymbolColumnDetails, PartitionBy } from "../../../utils/questdb/types"
 import * as QuestDB from "../../../utils/questdb"
+import { TreeNodeKind } from "../Row"
+
+type FlattenedTreeItem = {
+  id: string
+  kind: TreeNodeKind
+  name: string
+  value?: string
+  table?: QuestDB.Table
+  matViewData?: QuestDB.MaterializedView
+  walTableData?: QuestDB.WalTable
+  parent?: string
+  isExpanded?: boolean
+  isLoading?: boolean
+  designatedTimestamp?: string
+  partitionBy?: PartitionBy
+  walEnabled?: boolean
+  type?: string
+}
+
+type TreeNode = FlattenedTreeItem & {
+  children: TreeNode[]
+}
+
+export type SchemaTree = {
+  [key: string]: TreeNode
+}
+
+export type { TreeNode, FlattenedTreeItem }
 
 export const createSymbolDetailsNodes = (details: SymbolColumnDetails, parentId: string): TreeNode[] => {
   return [

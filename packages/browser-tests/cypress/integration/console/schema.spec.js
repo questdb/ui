@@ -112,6 +112,28 @@ describe("questdb schema with working tables", () => {
     );
   });
 
+  it("should append view data queries from context menu", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").rightclick();
+    cy.getByDataHook("table-context-menu-view-data")
+      .filter(":visible")
+      .click();
+    cy.getEditorContent().should("contain", "SELECT * FROM btc_trades LIMIT 1000;");
+    cy.clearEditor();
+
+    cy.getByDataHook("schema-table-title").contains("btc_trades").rightclick();
+    cy.getByDataHook("table-context-menu-view-data-ts-desc")
+      .filter(":visible")
+      .click();
+    cy.getEditorContent().should("contain", "SELECT * FROM btc_trades ORDER BY timestamp DESC LIMIT 1000;");
+    cy.clearEditor();
+
+    cy.getByDataHook("schema-table-title").contains("btc_trades").rightclick();
+    cy.getByDataHook("table-context-menu-view-data-ts-asc")
+      .filter(":visible")
+      .click();
+    cy.getEditorContent().should("contain", "SELECT * FROM btc_trades ORDER BY timestamp ASC LIMIT 1000;");
+  });
+
   after(() => {
     cy.loadConsoleWithAuth();
     tables.forEach((table) => {
@@ -362,6 +384,20 @@ describe("questdb schema with suspended tables with Linux OS error codes", () =>
       "chicago_weather_stations"
     );
     cy.getByDataHook("schema-filter-suspended-button").click();
+  });
+
+  it("should show view data options in context menu for suspended tables", () => {
+    cy.getByDataHook("schema-table-title").contains("btc_trades").rightclick();
+    cy.getByDataHook("table-context-menu-view-data")
+      .filter(":visible")
+      .should("contain", "View data (Top 1000)");
+    cy.getByDataHook("table-context-menu-view-data-ts-desc")
+      .filter(":visible")
+      .should("contain", "View latest by timestamp (Top 1000)");
+    cy.getByDataHook("table-context-menu-view-data-ts-asc")
+      .filter(":visible")
+      .should("contain", "View earliest by timestamp (Top 1000)");
+    cy.get("body").click(); // Close context menu
   });
 
   it("should show the suspension dialog on context menu click with details for btc_trades", () => {
