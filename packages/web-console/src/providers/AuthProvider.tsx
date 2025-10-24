@@ -196,6 +196,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           })
           const tokenResponse = await response.json()
           setAuthToken(tokenResponse, settings)
+          await startServerSession(tokenResponse)
         } catch (e) {
           throw e
         }
@@ -243,6 +244,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
+  const startServerSession = async (tokenResponse: AuthPayload) => {
+    // execute a simple query with session=true
+    await fetch(
+      `exec?query=select 2&session=true`,
+      {
+        headers: {
+          Authorization: `Bearer ${tokenResponse.groups_encoded_in_token ? tokenResponse.id_token : tokenResponse.access_token}`,
+        },
+      },
+    )
+  }
+
+  const destroyServerSession = () => {
+    // execute a simple query with session=false
+    fetch(`exec?query=select 2&session=false`).catch(
+      // ignore result
+    )
+  }
+
   const uiAuthLogin = () => {
     // Check if user is authenticated already with basic auth
     const token = getValue(StoreKey.REST_TOKEN)
@@ -277,6 +297,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (promptForLogin && settings["acl.oidc.client.id"]) {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
+    destroyServerSession()
     dispatch({ view: View.login })
   }
 
