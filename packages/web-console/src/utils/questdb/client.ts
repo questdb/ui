@@ -25,7 +25,7 @@ import {
   Permission,
   SymbolColumnDetails,
 } from "./types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -451,29 +451,6 @@ export class Client {
       return { status: response.status, message: errorMessage, success: false }
     }
     return { status: response.status, success: true }
-  }
-
-  async exportQueryToCsv(query: string) {
-    try {
-      const response: Response = await fetch(
-        `exp?${Client.encodeParams({ query, version: API_VERSION })}`,
-        { headers: this.commonHeaders },
-      )
-      const blob = await response.blob()
-      const filename = response.headers
-        .get("Content-Disposition")
-        ?.split("=")[1]
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filename
-        ? filename.replaceAll(`"`, "")
-        : `questdb-query-${new Date().getTime()}.csv`
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      throw error
-    }
   }
 
   async getLatestRelease() {

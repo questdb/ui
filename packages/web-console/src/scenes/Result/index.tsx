@@ -32,12 +32,14 @@ import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
 import { Markdown } from "@styled-icons/bootstrap/Markdown"
 import { Check } from "@styled-icons/bootstrap/Check"
+import { ArrowDownS } from "@styled-icons/remix-line"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PopperToggle,
   PrimaryToggleButton,
   Text,
   Tooltip,
@@ -46,7 +48,7 @@ import { actions, selectors } from "../../store"
 import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
-import { Button } from "@questdb/react-components"
+import { Button, Box } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -55,6 +57,8 @@ import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
+import { toast } from "../../components"
+import { API_VERSION } from "../../consts"
 
 const Root = styled.div`
   display: flex;
@@ -96,6 +100,39 @@ const TableFreezeColumnIcon = styled(TableFreezeColumn)`
 
 const RowCount = styled(Text)`
   margin-right: 1rem;
+  line-height: 1.285;
+`
+
+const DownloadButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+`
+
+const ArrowIcon = styled(ArrowDownS)<{ $open: boolean }>`
+  transform: ${({ $open }) => $open ? "rotate(180deg)" : "rotate(0deg)"};
+`
+
+const DownloadDropdownButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+`
+
+const DownloadMenuItem = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  width: 100%;
+  height: 3rem;
+  padding: 0 1rem;
+  font-size: 1.4rem;
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
@@ -105,6 +142,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const dispatch = useDispatch()
 
   useEffect(() => {
@@ -264,6 +302,48 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     }
   }, [result])
 
+  const handleDownload = (format: "csv" | "parquet") => {
+    setDownloadMenuActive(false)
+    const sql = gridRef?.current?.getSQL()
+    if (!sql) {
+      toast.error("No SQL query found to download")
+      return
+    }
+
+    const url = `exp?${QuestDB.Client.encodeParams({
+      query: sql,
+      version: API_VERSION,
+      fmt: format,
+      filename: `questdb-query-${Date.now().toString()}`,
+      ...(format === "parquet" ? { rmode: "nodelay" } : {}),
+    })}`
+
+    const iframe = document.createElement("iframe")
+    iframe.style.display = "none"
+    document.body.appendChild(iframe)
+
+    iframe.onerror = (e) => {
+      toast.error(`An error occurred while downloading the file: ${e}`)
+    }
+
+    iframe.onload = () => {
+      const content = iframe.contentDocument?.body?.textContent
+      if (content) {
+        let error = 'An error occurred while downloading the file'
+        try {
+          const contentJson = JSON.parse(content)
+          error += `: ${contentJson.error ?? content}`
+        } catch (_) {
+          error += `: ${content}`
+        }
+        toast.error(error)
+      }
+      document.body.removeChild(iframe)
+    }
+
+    iframe.src = url
+  }
+
   return (
     <Root>
       <Wrapper>
@@ -285,25 +365,45 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </PopperHover>
             ))}
 
-          <PopperHover
-            delay={350}
-            placement="bottom"
+          <DownloadButton
+            skin="secondary"
+            data-hook="download-parquet-button"
+            onClick={() => handleDownload("parquet")}
+          >
+            <Box align="center" gap="0.5rem" style={{ lineHeight: '1.285' }}>
+              <Download2 height="18px" width="18px" />
+              Download as Parquet
+            </Box>
+          </DownloadButton>
+          <PopperToggle
+            active={downloadMenuActive}
+            onToggle={setDownloadMenuActive}
+            placement="bottom-end"
+            modifiers={[
+              {
+                name: "offset",
+                options: {
+                  offset: [0, 4],
+                },
+              },
+            ]}
             trigger={
-              <Button
-                skin="transparent"
-                onClick={() => {
-                  const sql = gridRef?.current?.getSQL()
-                  if (sql) {
-                    quest.exportQueryToCsv(sql)
-                  }
-                }}
+              <DownloadDropdownButton
+                skin="secondary"
+                data-hook="download-dropdown-button"
               >
-                <Download2 size="18px" />
-              </Button>
+                <ArrowIcon size="18px" $open={downloadMenuActive} />
+              </DownloadDropdownButton>
             }
           >
-            <Tooltip>Download result as a CSV file</Tooltip>
-          </PopperHover>
+            <DownloadMenuItem
+              data-hook="download-csv-button"
+              skin="secondary"
+              onClick={() => handleDownload("csv")}
+            >
+              Download as CSV
+            </DownloadMenuItem>
+          </PopperToggle>
         </Actions>
 
         <Content>

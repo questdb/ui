@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Loader3 } from '@styled-icons/remix-line'
 import { Error as ErrorIcon } from '@styled-icons/boxicons-regular'
 import styled, { css } from 'styled-components'
 import { Input, Checkbox } from '@questdb/react-components'
@@ -11,7 +10,7 @@ import { eventBus } from '../../modules/EventBus'
 import { EventType } from '../../modules/EventBus/types'
 import { useSearch } from '../../providers'
 import { db } from '../../store/db'
-import { spinAnimation } from '../../components'
+import { LoadingSpinner } from '../../components'
 import { color } from '../../utils'
 import { useEffectIgnoreFirst } from '../../components/Hooks/useEffectIgnoreFirst'
 import { SearchTimeoutError, SearchCancelledError, terminateSearchWorker } from '../../utils/textSearch'
@@ -113,12 +112,6 @@ const SearchSummary = styled.div`
   font-size: 1.1rem;
 `
 
-const Loader = styled(Loader3)`
-  width: 2rem;
-  color: ${color("pink")};
-  ${spinAnimation};
-`
-
 const CheckboxWrapper = styled.div`
   display: flex;
   align-items: center;
@@ -189,7 +182,7 @@ const DelayedLoader = () => {
 
   return (
     <LoaderContainer>
-      <Loader />
+      <LoadingSpinner />
       Searching...
     </LoaderContainer>
   )

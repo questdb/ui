@@ -939,7 +939,9 @@ describe.skip("editor tabs history", () => {
 
 describe("handling comments", () => {
   beforeEach(() => {
-    cy.loadConsoleWithAuth();
+    cy.loadConsoleWithAuth(false, {
+      "splitter.results.basis": Number.MAX_SAFE_INTEGER.toString(),
+    });
   });
 
   beforeEach(() => {
@@ -1019,6 +1021,64 @@ describe("handling comments", () => {
     cy.getByDataHook("success-notification").should(
       "contain",
       `select\n\n --line;\n 2`
+    );
+  });
+
+  it("should correctly handle single quotes in multiline comments", () => {
+    cy.typeQueryDirectly(
+      "/* Today's aggregations for the BTC-USDT symbol downsampled in 15-minute intervals.\n We use the SQL extension SAMPLE BY to aggregate data at regular intervals. QuestDB\n ingests live market data.; */\nSELECT *\nFROM long_sequence(100);"
+    );
+    cy.getCursorQueryGlyph().should("have.length", 1);
+    cy.clickLine(1);
+    cy.getCursorQueryDecoration().should("have.length", 0);
+    cy.clickLine(4);
+    cy.getCursorQueryDecoration().should("have.length", 2);
+    cy.clickRunIconInLine(4);
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "SELECT *\nFROM long_sequence(100)"
+    );
+  });
+
+  it("should handle comprehensive edge cases: multiline comments, single line comments, quotes, and semicolons", () => {
+    cy.typeQueryDirectly(
+      "/* Comment with semicolon; and single quote ' */\n-- Line comment with quote ' and semicolon;\nSELECT 'another;test' AS col2;\n/* Multi\nline;\ncomment;\nwith ' quote */\nSELECT 1 AS col3;\nSELECT 'text'/* inline; ' */ AS col5;"
+    );
+
+    cy.getCursorQueryGlyph().should("have.length", 3);
+    cy.getCursorQueryDecoration().should("have.length", 0);
+
+    cy.clickLine(2);
+    cy.getCursorQueryDecoration().should("have.length", 0);
+
+    cy.clickLine(3);
+    cy.getCursorQueryDecoration().should("have.length", 1);
+    cy.clickRunIconInLine(3);
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "SELECT 'another;test' AS col2"
+    );
+
+    cy.clickLine(4);
+    cy.getCursorQueryDecoration().should("have.length", 0);
+
+    cy.clickLine(7);
+    cy.getCursorQueryDecoration().should("have.length", 0);
+
+    cy.clickLine(8);
+    cy.getCursorQueryDecoration().should("have.length", 1);
+    cy.clickRunIconInLine(8);
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "SELECT 1 AS col3"
+    );
+
+    cy.clickLine(9);
+    cy.getCursorQueryDecoration().should("have.length", 1);
+    cy.clickRunIconInLine(9);
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "SELECT 'text'/* inline; ' */ AS col5"
     );
   });
 });
