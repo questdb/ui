@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import styled from 'styled-components'
-import type { SearchMatch } from '../../services/search'
+import type { SearchMatch } from '../../utils/textSearch'
 import { useEditor } from '../../providers'
 import { InsertChart } from '@styled-icons/material'
 import { ChevronRight, ChevronDown } from '@styled-icons/boxicons-solid'

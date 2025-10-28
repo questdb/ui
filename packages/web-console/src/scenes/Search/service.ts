@@ -1,21 +1,6 @@
-import type { IRange } from 'monaco-editor'
-import type { Buffer } from '../store/buffers'
-import { findMatches, SearchTimeoutError, SearchCancelledError } from '../utils/textSearch'
-
-export interface SearchMatch {
-  bufferId: number
-  bufferLabel: string
-  range: IRange
-  text: string
-  previewText: string
-  matchStartInPreview: number
-  matchEndInPreview: number
-  isArchived?: boolean
-  archivedAt?: number
-  isTitleMatch?: boolean
-  isMetricsMatch?: boolean
-  isStale?: boolean
-}
+import type { SearchOptions, SearchMatch } from '../../utils/textSearch'
+import type { Buffer } from '../../store/buffers'
+import { findMatches, SearchTimeoutError, SearchCancelledError } from '../../utils/textSearch'
 
 export interface SearchResult {
   query: string
@@ -30,13 +15,6 @@ export interface SearchProgress {
   error?: Error
   bufferId?: number
   searchDuration?: number
-}
-
-export interface SearchOptions {
-  caseSensitive?: boolean
-  wholeWord?: boolean  
-  useRegex?: boolean
-  includeDeleted?: boolean
 }
 
 export class SearchService {

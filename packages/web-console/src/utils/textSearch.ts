@@ -1,5 +1,26 @@
-import type { SearchOptions } from '../services/search'
-import type { SearchMatch } from '../services/search'
+import type { IRange } from 'monaco-editor'
+
+export interface SearchOptions {
+  caseSensitive?: boolean
+  wholeWord?: boolean  
+  useRegex?: boolean
+  includeDeleted?: boolean
+}
+
+export interface SearchMatch {
+  bufferId: number
+  bufferLabel: string
+  range: IRange
+  text: string
+  previewText: string
+  matchStartInPreview: number
+  matchEndInPreview: number
+  isArchived?: boolean
+  archivedAt?: number
+  isTitleMatch?: boolean
+  isMetricsMatch?: boolean
+  isStale?: boolean
+}
 
 export interface TextMatch {
   startOffset: number
