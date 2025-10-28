@@ -1,6 +1,5 @@
 import React from "react"
-import { CenteredLayout, Text } from "../../../components"
-import { Box, Button } from "@questdb/react-components"
+import { CenteredLayout, Text, Button, Box } from "../../../components"
 import { User } from "@styled-icons/remix-line"
 
 export const Error = ({

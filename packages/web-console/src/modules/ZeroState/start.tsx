@@ -1,7 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { bezierTransition, Text } from "../../components"
-import { Box, Heading } from "@questdb/react-components"
+import { bezierTransition, Text, Box, Heading } from "../../components"
 import { actions } from "../../store"
 import { useDispatch } from "react-redux"
 

@@ -1,9 +1,8 @@
 import React from "react"
 import styled from "styled-components"
-import { Button, Box, Input } from "@questdb/react-components"
 import { Close, Filter3 } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { PopperHover, Tooltip } from "../../../components"
+import { Box, Button, PopperHover, Tooltip, Input } from "../../../components"
 import { useSchema } from "../SchemaContext"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 

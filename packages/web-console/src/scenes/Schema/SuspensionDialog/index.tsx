@@ -1,11 +1,15 @@
 import React from "react"
 import {
+  Box,
+  Text,
+  Link,
+  Form,
   Dialog,
   ForwardRef,
   Button,
   Overlay,
   Input,
-} from "@questdb/react-components"
+} from "../../../components"
 import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
@@ -15,14 +19,11 @@ import {
   Restart,
   Table,
 } from "@styled-icons/remix-line"
-import { Box } from "../../../components/Box"
-import { Form } from "../../../components/Form"
 import { useState, useContext, useEffect } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { ErrorResult } from "../../../utils"
-import { Text, Link } from "../../../components"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
 import { copyToClipboard } from "../../../utils/copyToClipboard"

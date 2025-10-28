@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import { Button } from "@questdb/react-components"
+import { Button } from "../../components"
 import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { copyToClipboard } from "../../utils/copyToClipboard"

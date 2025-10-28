@@ -36,6 +36,8 @@ import { ArrowDownS } from "@styled-icons/remix-line"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
+  Box,
+  Button,
   PaneContent,
   PaneWrapper,
   PopperHover,
@@ -48,7 +50,6 @@ import { actions, selectors } from "../../store"
 import { color, ErrorResult, QueryRawResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
-import { Button, Box } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"

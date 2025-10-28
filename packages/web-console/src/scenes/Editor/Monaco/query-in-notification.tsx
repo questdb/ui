@@ -1,7 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { Text } from "../../../components"
-import { Box } from "@questdb/react-components"
+import { Box, Text } from "../../../components"
 import { CopyButton } from "../../../components/CopyButton"
 
 const StyledText = styled(Text)`

@@ -9,13 +9,14 @@ export const PosthogProviderWrapper = ({
 }) => {
   const { settings } = useSettings()
   const posthogDisabled = !settings["posthog.enabled"] ?? true
+
+  if (!settings["posthog.api.key"]) {
+    return <>{children}</>
+  }
+
   return (
     <PostHogProvider
-      apiKey={
-        settings["posthog.api.key"] === null
-          ? undefined
-          : settings["posthog.api.key"]
-      }
+      apiKey={settings["posthog.api.key"]}
       options={{
         disable_persistence: posthogDisabled,
         disable_session_recording: posthogDisabled,

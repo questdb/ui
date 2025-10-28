@@ -12,18 +12,16 @@ import {
   StackOverflow,
 } from "@styled-icons/boxicons-logos"
 import {
+  DropdownMenu,
   Text,
   toast,
   PrimaryToggleButton,
   Link,
   PopperToggle,
-} from "../../components"
-import { DropdownMenu } from "../../components/DropdownMenu"
-import {
   FeedbackDialog,
   ForwardRef,
   Box,
-} from "@questdb/react-components"
+} from "../../components"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { IconWithTooltip, useKeyPress } from "../../components"
 import { useState, useCallback, useContext } from "react"

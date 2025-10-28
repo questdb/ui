@@ -24,7 +24,6 @@ mkdir tmp/dbroot
 
 # Build web console
 yarn install --immutable --immutable-cache
-yarn workspace @questdb/react-components run build
 yarn workspace @questdb/web-console run build
 
 # Start proxy

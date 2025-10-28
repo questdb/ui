@@ -16,14 +16,7 @@ in [`local-development-setup.md`](../../docs/local-development-setup.md) documen
 After the local development environment setup, you are ready to work on the packages of this project,
 including the web console.
 
-### 2. Build the production version of `@questdb/react-components`
-
-The web console uses the `@questdb/react-components` package, so build this dependency first.
-```
-yarn workspace @questdb/react-components build
-```
-
-### 3. Start development server
+### 2. Start development server
 
 Now we can start the web console.
 ```
@@ -50,7 +43,7 @@ unset QDB_HTTP_CONTEXT_WEB_CONSOLE
 yarn workspace @questdb/web-console start
 ```
 
-### 4. Run QuestDB in the background
+### 3. Run QuestDB in the background
 
 This package (`web-console`) is a GUI for QuestDB, it does not include QuestDB itself.\
 The web console will load from the dev server without the database, but because it is a tool
@@ -65,7 +58,7 @@ If you have [`docker`](https://docs.docker.com/get-docker/), then it is simply:
 docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
 ```
 
-### 5. Hack!
+### 4. Hack!
 
 You can start changing the code, and the web console will automatically refresh
 on [localhost:9999](http://localhost:9999).

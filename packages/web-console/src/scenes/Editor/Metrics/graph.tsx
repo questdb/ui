@@ -1,11 +1,10 @@
-import { Box, Button, Loader } from "@questdb/react-components"
 import { Error } from "@styled-icons/boxicons-regular"
 import { Information } from "@styled-icons/remix-line"
 import React, { useContext, useEffect, useRef, useState, useMemo } from "react"
 import styled, { ThemeContext } from "styled-components"
 import uPlot from "uplot"
 import UplotReact from "uplot-react"
-import { IconWithTooltip, Text } from "../../../components"
+import { IconWithTooltip, Loader, Text, Box, Button } from "../../../components"
 import { createUplotOptions, UplotOptions } from "./createUplotOptions"
 import type { DateRange, Widget } from "./types"
 import {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react"
-import { Button } from "@questdb/react-components"
+import { Button } from "../Button"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"

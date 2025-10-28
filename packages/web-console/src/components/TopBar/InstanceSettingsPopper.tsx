@@ -1,8 +1,6 @@
 import React, { useState, FormEvent, ReactNode, useRef, useEffect } from "react"
 import styled from "styled-components"
-import { Box, Button, Input, Loader, Select } from "@questdb/react-components"
-import { Text } from "../Text"
-import { PopperToggle } from "../PopperToggle"
+import { Box, Button, Input, Loader, PopperToggle, Select, Text } from "../../components"
 import { Preferences, InstanceType } from "../../utils/questdb/types"
 
 const Wrapper = styled.div`

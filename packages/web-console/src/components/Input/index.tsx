@@ -1,72 +1,46 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
+import styled, { css } from "styled-components";
+import React from "react";
 
-import React, { ComponentProps, forwardRef, Ref } from "react"
-import styled from "styled-components"
+type InputVariant = "transparent" | "error";
 
-import { ButtonProps, getButtonSize } from "../"
-import { color } from "../../utils"
+type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
+  variant?: InputVariant;
+};
 
-type Type = "text" | "number"
+const errorStyle = css`
+  border-color: ${({ theme }) => theme.color.red};
+  background-color: #ff555515;
+`;
 
-const defaultProps: { size: ButtonProps["size"]; type: Type } = {
-  size: "md",
-  type: "text",
-}
-
-type Props = Readonly<{
-  id?: string
-  placeholder?: string
-  size: ButtonProps["size"]
-  title?: string
-  type: Type
-}>
-
-const InputStyled = styled.input<Props>`
-  height: ${getButtonSize};
-  border: none;
-  padding: 0 1rem;
-  line-height: 1.5;
+export const Input = styled.input.attrs((props) => ({
+  "data-lpignore": !!props.autoComplete,
+}))<InputProps>`
+  background: ${({ theme }) => theme.color.selection};
+  border: 1px transparent solid;
+  padding: 0 0.75rem;
+  height: 3rem;
+  line-height: 3rem;
+  border-radius: 0.4rem;
   outline: none;
-  background: ${color("selection")};
-  border-radius: 4px;
-  color: ${color("foreground")};
-
-  &:focus {
-    box-shadow: inset 0 0 0 1px ${color("foreground")};
-  }
+  color: ${({ theme }) => theme.color.white};
+  flex: 1;
+  max-width: 100%;
 
   &::placeholder {
-    color: ${color("gray2")};
+    color: ${({ theme }) => theme.color.gray2};
   }
-`
 
-const InputWithRef = (
-  props: ComponentProps<typeof InputStyled>,
-  ref: Ref<HTMLInputElement>,
-) => <InputStyled {...defaultProps} {...props} ref={ref} />
+  &:focus {
+    border-color: ${({ theme }) => theme.color.pink};
+    background: ${({ theme }) => theme.color.selection};
+  }
 
-export const Input = forwardRef(InputWithRef)
+  ${({ variant, theme }) =>
+    variant === "transparent" &&
+    `
+    background: transparent;
+    border-color: ${theme.color.selection};
+  `}
 
-Input.defaultProps = defaultProps
+  ${({ variant }) => variant === "error" && errorStyle}
+`;

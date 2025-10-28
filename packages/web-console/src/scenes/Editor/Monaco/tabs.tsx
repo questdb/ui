@@ -6,7 +6,6 @@ import {
   File,
   History,
   LineChart,
-  Show,
   Trash,
 } from "@styled-icons/boxicons-regular"
 import {
@@ -14,8 +13,8 @@ import {
   Button,
   DropdownMenu,
   ForwardRef,
-} from "@questdb/react-components"
-import { Text } from "../../../components"
+  Text,
+} from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 import type { Buffer } from "../../../store/buffers"

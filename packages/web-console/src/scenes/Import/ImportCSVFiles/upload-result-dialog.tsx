@@ -1,11 +1,8 @@
 import React from "react"
 import { ProcessedFile } from "./types"
-import { Button, Table } from "@questdb/react-components"
-import type { Props as TableProps } from "@questdb/react-components/dist/components/Table"
+import type { TableProps } from "../../../components"
 import { Search } from "@styled-icons/remix-line"
-import { Box } from "../../../components/Box"
-import { Text } from "../../../components/Text"
-import { Drawer } from "../../../components"
+import { Text, Button, Box, Drawer, Table } from "../../../components"
 import styled from "styled-components"
 import { UploadResultColumn } from "../../../utils"
 

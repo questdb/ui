@@ -2,6 +2,7 @@ import {
   Text,
   Drawer,
   IconWithTooltip,
+  Loader,
   PrimaryToggleButton,
 } from "../../components"
 import styled from "styled-components"
@@ -11,7 +12,6 @@ import { NewsItem } from "../../utils"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
 import ReactMarkdown from "react-markdown"
-import { Loader } from "@questdb/react-components"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"

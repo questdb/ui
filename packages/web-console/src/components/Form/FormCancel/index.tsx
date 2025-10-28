@@ -1,6 +1,6 @@
 import React from "react"
-import type { Props as ButtonProps } from "@questdb/react-components/dist/components/Button"
-import { Button } from "@questdb/react-components"
+import type { ButtonProps } from "../../Button"
+import { Button } from "../../Button"
 import { useFormContext } from "react-hook-form"
 
 type Props<TFormValues> = {

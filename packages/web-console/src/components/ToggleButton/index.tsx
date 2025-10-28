@@ -23,12 +23,12 @@
  ******************************************************************************/
 
 import React, { forwardRef, Ref } from "react"
-import styled, { css, ThemeConsumer } from "styled-components"
+import styled, { css } from "styled-components"
 
 import type { Color, FontSize } from "../../types"
 import { color } from "../../utils"
 
-import { ButtonProps, getButtonSize } from "../Button"
+import { ButtonProps } from "../Button"
 import { bezierTransition } from "../Transition"
 
 type Direction = "top" | "right" | "bottom" | "left"
@@ -68,11 +68,11 @@ const baseStyles = css<Props>`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${({ selected, theme }) =>
+  background: ${({ selected }) =>
     selected ? "#2d303e" : "transparent"};
   border: none;
   outline: 0;
-  font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize]};
+  font-size: ${({ fontSize, theme }) => fontSize ? theme.fontSize[fontSize] : theme.fontSize.md};
   font-weight: 400;
   line-height: 1.15;
   width: 3.5rem;

@@ -1,8 +1,7 @@
 import React from "react"
 import { FileCheckStatus as FileStatusType } from "../../../utils"
-import { Badge } from "@questdb/react-components"
+import { Box, Badge } from "../../../components"
 import { BadgeType, ProcessedFile } from "./types"
-import { Box } from "../../../components/Box"
 import styled from "styled-components"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 

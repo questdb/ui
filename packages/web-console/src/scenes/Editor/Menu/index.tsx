@@ -30,10 +30,10 @@ import { Add, Close as _CloseIcon } from "@styled-icons/remix-line"
 import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
 
 import {
+  Button,
   PaneMenu,
   PopperToggle,
   TransitionDuration,
-  TransparentButton,
   useKeyPress,
   useScreenSize,
 } from "../../../components"
@@ -44,7 +44,6 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { DocSearch } from "@docsearch/react"
 import { useSettings } from "../../../providers"
-import { Button } from "@questdb/react-components"
 
 import "@docsearch/css"
 
@@ -88,7 +87,7 @@ const CloseIcon = styled(_CloseIcon)`
   color: ${color("foreground")};
 `
 
-const SideMenuMenuButton = styled(TransparentButton)`
+const SideMenuMenuButton = styled(Button)`
   padding: 0;
 
   .fade-enter {
@@ -218,7 +217,7 @@ const Menu = () => {
       </MenuItems>
 
       {sm && (
-        <SideMenuMenuButton onClick={handleSideMenuButtonClick}>
+        <SideMenuMenuButton skin="transparent" onClick={handleSideMenuButtonClick}>
           <CSSTransition
             classNames="fade"
             in={opened}

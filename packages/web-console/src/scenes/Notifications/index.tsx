@@ -32,6 +32,7 @@ import React, {
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import {
+  Button,
   PaneContent,
   PaneMenu,
   PaneWrapper,
@@ -40,7 +41,6 @@ import {
 } from "../../components"
 import { actions, selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
-import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
 import { useEditor } from "../../providers"

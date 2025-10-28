@@ -43,18 +43,17 @@ import {
   Refresh,
 } from "@styled-icons/remix-line"
 import {
+  Box,
+  Button,
   PaneContent,
   PaneWrapper,
   PopperHover,
   PrimaryToggleButton,
-  Text,
   Tooltip,
 } from "../../components"
 import { actions } from "../../store"
 import { copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import { Box } from "../../components/Box"
-import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"

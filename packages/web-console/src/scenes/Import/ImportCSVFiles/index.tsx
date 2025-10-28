@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box } from "../../../components/Box"
 import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
@@ -12,7 +11,7 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { getTimestampFormat, isTimestamp } from "./utils"
 import { MAX_UNCOMMITTED_ROWS } from "./const"
-import { useIsVisible } from "../../../components"
+import { Box, useIsVisible } from "../../../components"
 import {
   extractPrecionFromGeohash,
   isGeoHash,

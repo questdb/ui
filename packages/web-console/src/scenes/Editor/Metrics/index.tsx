@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from "react"
 import styled from "styled-components"
-import { Box, Button, Select } from "@questdb/react-components"
-import { Text, Link } from "../../../components"
+import { Text, Link, Box, Select, Button, ForwardRef, IconWithTooltip } from "../../../components"
 import { useEditor } from "../../../providers"
 import {
   RefreshRate,
@@ -18,12 +17,10 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { ExternalLink } from "@styled-icons/remix-line"
 import { AddChart } from "@styled-icons/material"
-import { IconWithTooltip } from "../../../components"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { formatISO } from "date-fns"
 import { DateTimePicker } from "./date-time-picker"
-import { ForwardRef } from "@questdb/react-components"
 import useElementVisibility from "../../../hooks/useElementVisibility"
 import { widgets } from "./widgets"
 

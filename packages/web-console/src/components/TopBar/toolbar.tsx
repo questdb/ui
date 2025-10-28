@@ -1,12 +1,12 @@
 import React, { useContext, useEffect, useState, useCallback } from "react"
 import styled from "styled-components"
 import { QuestContext, useAuth, useSettings } from "../../providers"
-import { Box, Button } from "@questdb/react-components"
 import * as QuestDB from "../../utils/questdb"
 import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
 import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { Tools, ShieldCheck } from "@styled-icons/bootstrap"
 import { Flask } from "@styled-icons/boxicons-solid"
+import { Box, Button } from "../../components"
 import { toast } from '../'
 import { Text } from "../Text"
 import { selectors } from "../../store"

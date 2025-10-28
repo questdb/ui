@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 import type { DefaultTheme as DefaultThemeShape } from "styled-components"
-
 import type { ColorShape, FontSizeShape } from "types"
 
 const color: ColorShape = {

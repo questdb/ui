@@ -5,8 +5,8 @@ import {
   Box,
   Button,
   Overlay,
-} from "@questdb/react-components"
-import { Text } from "../../../components"
+  Text,
+} from "../../../components"
 import styled from "styled-components"
 import { AddChart } from "@styled-icons/material"
 import { MetricType } from "./utils"

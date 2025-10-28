@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React from "react"
-import { Loader as LoaderIcon } from "@questdb/react-components"
+import { Loader as LoaderIcon } from "../../../../components"
 import { Wrapper, SideContent, Content } from "../styles"
 import { NotificationShape } from "types"
 import { Timestamp } from "../Timestamp"

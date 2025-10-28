@@ -86,8 +86,6 @@ development server with:
 yarn workspace @questdb/web-console start
 ```
 
-_You might need to run_ `yarn workspace @questdb/react-components build` _first._
-
 [localhost:9999](http://localhost:9999) should display the web console.
 
 ### 4. Hack!

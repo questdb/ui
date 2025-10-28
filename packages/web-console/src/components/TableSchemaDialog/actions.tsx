@@ -1,5 +1,5 @@
 import React from "react"
-import { Button } from "@questdb/react-components"
+import { Button } from "../Button"
 import { Box } from "../Box"
 import { DeleteBin2, Table as TableIcon } from "@styled-icons/remix-line"
 import { Form } from "../Form"

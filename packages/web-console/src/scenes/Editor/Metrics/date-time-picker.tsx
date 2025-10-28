@@ -8,17 +8,14 @@ import {
   MAX_DATE_RANGE,
 } from "./utils"
 import { DateRange } from "./types"
-import { Box, Button, Popover } from "@questdb/react-components"
 import {
   Calendar as CalendarIcon,
   Time,
   World,
 } from "@styled-icons/boxicons-regular"
 import { ArrowDropDown, ArrowDropUp } from "@styled-icons/remix-line"
-import { Text } from "../../../components"
+import { Box, Button, Calendar, Form, Popover, Text } from "../../../components"
 import { getLocalTimeZone, getLocalGMTOffset } from "../../../utils"
-import { Form } from "../../../components/Form"
-import { Calendar } from "../../../components/Calendar"
 import { formatISO, subMonths } from "date-fns"
 import { useFormContext } from "react-hook-form"
 import Joi from "joi"

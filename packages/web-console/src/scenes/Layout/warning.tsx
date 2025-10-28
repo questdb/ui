@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react"
 import styled from "styled-components"
-import { Box } from "@questdb/react-components"
 import { useSettings } from "../../providers"
 import { Close, ErrorWarning, ExternalLink } from "@styled-icons/remix-line"
 import { errorWorkarounds } from "../../utils/errorWorkarounds"
+import { Box } from "../../components"
 import { ErrorTag } from "utils"
 
 const WarningRoot = styled(Box).attrs({

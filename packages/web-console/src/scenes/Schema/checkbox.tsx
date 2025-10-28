@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { Box } from "@questdb/react-components"
+import { Box } from "../../components"
 import { color } from "../../utils"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 

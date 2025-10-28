@@ -21,7 +21,6 @@ export type ProcessedFile = {
   exists: boolean
 }
 
-// TODO: Refactor @questdb/react-components/Badge to ditch enum as prop value
 export enum BadgeType {
   SUCCESS = "success",
   INFO = "info",

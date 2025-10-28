@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useRef } from "react"
 import styled, { css } from "styled-components"
-import { Box, Input } from "@questdb/react-components"
 import { Table } from "@styled-icons/remix-line"
 import Highlighter from "react-highlight-words"
-import { useKeyPress } from "../../../components"
+import { useKeyPress, Box, Input } from "../../../components"
 
 type Option = {
   label: string
