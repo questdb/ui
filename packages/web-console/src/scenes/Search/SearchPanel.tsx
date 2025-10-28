@@ -10,7 +10,7 @@ import { EventType } from '../../modules/EventBus/types'
 import { useSearch } from '../../providers'
 import { db } from '../../store/db'
 import { color } from '../../utils'
-import { useEffectIgnoreFirst } from '../../components/Hooks/useEffectIgnoreFirst'
+import { useEffectIgnoreFirst } from '../../hooks'
 import { SearchTimeoutError, SearchCancelledError, terminateSearchWorker } from '../../utils/textSearch'
 
 export type BufferUpdatePayload =

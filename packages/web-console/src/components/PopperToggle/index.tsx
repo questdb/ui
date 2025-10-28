@@ -34,7 +34,7 @@ import ReactDOM from "react-dom"
 import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 
-import { usePopperStyles, useTransition } from "../Hooks"
+import { usePopperStyles, useTransition } from "../../hooks"
 import { TransitionDuration } from "../Transition"
 
 type Props = Readonly<{

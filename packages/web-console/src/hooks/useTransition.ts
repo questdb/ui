@@ -24,7 +24,7 @@
 
 import { MutableRefObject, useEffect } from "react"
 
-import { TransitionDuration } from "../Transition"
+import { TransitionDuration } from "../components/Transition"
 
 export const useTransition = (
   element: HTMLElement,

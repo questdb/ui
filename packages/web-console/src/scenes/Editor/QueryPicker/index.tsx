@@ -26,7 +26,8 @@ import React, { forwardRef, Ref, useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
 import { DownArrowSquare, UpArrowSquare } from "@styled-icons/boxicons-solid"
 
-import { Text, useKeyPress } from "../../../components"
+import { Text } from "../../../components"
+import { useKeyPress } from "../../../hooks"
 import { color } from "../../../utils"
 
 import QueryRow from "./Row"

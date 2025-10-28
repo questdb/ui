@@ -22,6 +22,8 @@
  *
  ******************************************************************************/
 
+export * from "./useEffectIgnoreFirst"
+export * from "./useElementVisibility"
 export * from "./useIsVisible"
 export * from "./useKeyPress"
 export * from "./usePopperStyles"

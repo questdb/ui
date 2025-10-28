@@ -11,7 +11,8 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { getTimestampFormat, isTimestamp } from "./utils"
 import { MAX_UNCOMMITTED_ROWS } from "./const"
-import { Box, useIsVisible } from "../../../components"
+import { Box } from "../../../components"
+import { useIsVisible } from "../../../hooks"
 import {
   extractPrecionFromGeohash,
   isGeoHash,

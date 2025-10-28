@@ -23,7 +23,8 @@ import {
   Box,
 } from "../../components"
 import { BUTTON_ICON_SIZE } from "../../consts"
-import { IconWithTooltip, useKeyPress } from "../../components"
+import { IconWithTooltip } from "../../components"
+import { useKeyPress } from "../../hooks"
 import { useState, useCallback, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { useSelector } from "react-redux"

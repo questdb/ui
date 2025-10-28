@@ -34,10 +34,10 @@ import { ThemeProvider } from "styled-components"
 import { GlobalStyle } from "./theme/global-styles"
 import {
   createGlobalFadeTransition,
-  ScreenSizeProvider,
   TransitionDuration,
   ToastContainer,
 } from "./components"
+import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
 import { StoreAction, StoreShape } from "./types"
 

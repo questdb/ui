@@ -34,9 +34,8 @@ import {
   PaneMenu,
   PopperToggle,
   TransitionDuration,
-  useKeyPress,
-  useScreenSize,
 } from "../../../components"
+import { useKeyPress, useScreenSize } from "../../../hooks"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"

@@ -37,8 +37,8 @@ import {
   PaneMenu,
   PaneWrapper,
   Text,
-  useScreenSize,
 } from "../../components"
+import { useScreenSize } from "../../hooks"
 import { actions, selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import Notification from "./Notification"

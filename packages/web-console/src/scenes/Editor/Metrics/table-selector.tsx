@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from "react"
 import styled, { css } from "styled-components"
 import { Table } from "@styled-icons/remix-line"
 import Highlighter from "react-highlight-words"
-import { useKeyPress, Box, Input } from "../../../components"
+import { Box, Input } from "../../../components"
+import { useKeyPress } from "../../../hooks"
 
 type Option = {
   label: string
