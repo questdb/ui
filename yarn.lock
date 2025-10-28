@@ -2289,12 +2289,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@monaco-editor/loader@npm:^1.5.0":
-  version: 1.6.1
-  resolution: "@monaco-editor/loader@npm:1.6.1"
+"@monaco-editor/loader@npm:1.4.0":
+  version: 1.4.0
+  resolution: "@monaco-editor/loader@npm:1.4.0"
   dependencies:
     state-local: "npm:^1.0.6"
-  checksum: 10/16e2bc752cf5826805be268b86fd313a7a6f6d19fc6e1254cc66c87c643c753142cea940e8d2e086a9d67c323700d3d1c1cbf51fd51b37a30f787fc41afab405
+  peerDependencies:
+    monaco-editor: ">= 0.21.0 < 1"
+  checksum: 10/32ad01de015fc187450aa1cc0aa763af167664b6a61efcb9e1523a0f51ca5d0b35ba11ed95889edd6d774dfe98f196ef58f1607243abcbdd3d6d743f82ba8285
   languageName: node
   linkType: hard
 

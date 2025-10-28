@@ -3946,11 +3946,24 @@ const RAW_RUNTIME_STATE =
       }]\
     ]],\
     ["@monaco-editor/loader", [\
-      ["npm:1.6.1", {\
-        "packageLocation": "./.yarn/cache/@monaco-editor-loader-npm-1.6.1-8c2d75a82f-16e2bc752c.zip/node_modules/@monaco-editor/loader/",\
+      ["npm:1.4.0", {\
+        "packageLocation": "./.yarn/cache/@monaco-editor-loader-npm-1.4.0-4aa209f578-32ad01de01.zip/node_modules/@monaco-editor/loader/",\
         "packageDependencies": [\
-          ["@monaco-editor/loader", "npm:1.6.1"],\
+          ["@monaco-editor/loader", "npm:1.4.0"]\
+        ],\
+        "linkType": "SOFT"\
+      }],\
+      ["virtual:5e5cb671c29c6b7217442df7ee3c7c8a81b96ddc7c43b19879a584a9c81c8dae33cb1f7100bb8baa8c72be2b26310531322722174caf12526d33f99f7d0c2db6#npm:1.4.0", {\
+        "packageLocation": "./.yarn/__virtual__/@monaco-editor-loader-virtual-83d8908888/0/cache/@monaco-editor-loader-npm-1.4.0-4aa209f578-32ad01de01.zip/node_modules/@monaco-editor/loader/",\
+        "packageDependencies": [\
+          ["@monaco-editor/loader", "virtual:5e5cb671c29c6b7217442df7ee3c7c8a81b96ddc7c43b19879a584a9c81c8dae33cb1f7100bb8baa8c72be2b26310531322722174caf12526d33f99f7d0c2db6#npm:1.4.0"],\
+          ["@types/monaco-editor", null],\
+          ["monaco-editor", "npm:0.44.0"],\
           ["state-local", "npm:1.0.7"]\
+        ],\
+        "packagePeers": [\
+          "@types/monaco-editor",\
+          "monaco-editor"\
         ],\
         "linkType": "HARD"\
       }]\
@@ -3967,7 +3980,7 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/__virtual__/@monaco-editor-react-virtual-5e5cb671c2/0/cache/@monaco-editor-react-npm-4.7.0-b3c86dba8d-d72392c4ed.zip/node_modules/@monaco-editor/react/",\
         "packageDependencies": [\
           ["@monaco-editor/react", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:4.7.0"],\
-          ["@monaco-editor/loader", "npm:1.6.1"],\
+          ["@monaco-editor/loader", "virtual:5e5cb671c29c6b7217442df7ee3c7c8a81b96ddc7c43b19879a584a9c81c8dae33cb1f7100bb8baa8c72be2b26310531322722174caf12526d33f99f7d0c2db6#npm:1.4.0"],\
           ["@types/monaco-editor", null],\
           ["@types/react", "npm:17.0.2"],\
           ["@types/react-dom", "npm:16.9.8"],\
