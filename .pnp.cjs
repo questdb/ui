@@ -4254,6 +4254,7 @@ const RAW_RUNTIME_STATE =
           ["html-webpack-plugin", "virtual:b7c775051d99785ec73273707ec685f06b84c737b39cc023ebc60bda25254288f27e86643fb15b7a00bd8a6d76cc119d4628443d858e76eb62af2718d7eb18cf#npm:5.6.4"],\
           ["intersection-observer", "npm:0.12.2"],\
           ["jest", "virtual:abd86f0db4e628a3d1844be9352358a814881ef2b82dee67188058dec9fd0f37a9154622d1055dbe04477d6e93c1d74ae4e55efba208fff05df26b9f136509a2#npm:29.7.0"],\
+          ["jest-util", "npm:29.7.0"],\
           ["joi", "npm:17.5.0"],\
           ["jquery", "npm:3.5.1"],\
           ["js-base64", "npm:3.7.8"],\
@@ -20225,7 +20226,7 @@ const RAW_RUNTIME_STATE =
           ["fast-json-stable-stringify", "npm:2.1.0"],\
           ["handlebars", "npm:4.7.8"],\
           ["jest", "virtual:abd86f0db4e628a3d1844be9352358a814881ef2b82dee67188058dec9fd0f37a9154622d1055dbe04477d6e93c1d74ae4e55efba208fff05df26b9f136509a2#npm:29.7.0"],\
-          ["jest-util", null],\
+          ["jest-util", "npm:29.7.0"],\
           ["json5", "npm:2.2.3"],\
           ["lodash.memoize", "npm:4.1.2"],\
           ["make-error", "npm:1.3.6"],\

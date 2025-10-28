@@ -2533,6 +2533,7 @@ __metadata:
     html-webpack-plugin: "npm:^5.5.0"
     intersection-observer: "npm:^0.12.2"
     jest: "npm:^29.7.0"
+    jest-util: "npm:29.7.0"
     joi: "npm:17.5.0"
     jquery: "npm:3.5.1"
     js-base64: "npm:^3.7.7"
@@ -10660,7 +10661,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jest-util@npm:^29.7.0":
+"jest-util@npm:29.7.0, jest-util@npm:^29.7.0":
   version: 29.7.0
   resolution: "jest-util@npm:29.7.0"
   dependencies:
