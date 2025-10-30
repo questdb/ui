@@ -54,8 +54,6 @@ const server = http.createServer((req, res) => {
     // serve static files from /dist folder
     const filePath = path.join(
       process.cwd(),
-      "packages",
-      "web-console",
       "dist",
       ["", "/"].some((p) => reqPathName === p)
         ? "index.html"

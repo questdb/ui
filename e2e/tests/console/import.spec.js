@@ -18,7 +18,7 @@ describe("questdb import", () => {
     cy.getByDataHook("import-dropbox").should("be.visible");
     cy.getByDataHook("import-browse-from-disk").should("be.visible");
 
-    cy.get('input[type="file"]').selectFile("cypress/fixtures/test.csv", {
+    cy.get('input[type="file"]').selectFile("e2e/fixtures/test.csv", {
       force: true,
     });
     cy.getByDataHook("import-table-column-schema").should("be.visible");
@@ -30,7 +30,7 @@ describe("questdb import", () => {
     cy.getByDataHook("import-dropbox").should("be.visible");
     cy.getByDataHook("import-browse-from-disk").should("be.visible");
 
-    cy.get('input[type="file"]').selectFile("cypress/fixtures/nanos.csv", {
+    cy.get('input[type="file"]').selectFile("e2e/fixtures/nanos.csv", {
       force: true,
     });
     cy.getByDataHook("import-table-column-schema").should("be.visible");

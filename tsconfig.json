@@ -18,5 +18,5 @@
     "baseUrl": "./src",
     "rootDir": "./src"
   },
-  "include": ["types", "src"]
+  "include": ["src"]
 }

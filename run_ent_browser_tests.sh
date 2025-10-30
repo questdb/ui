@@ -22,11 +22,11 @@ mvn clean package -e -f tmp/questdb-enterprise/pom.xml -DskipTests -P build-ent-
 mkdir tmp/dbroot
 
 # Build web console
-yarn install --immutable --immutable-cache
-yarn workspace @questdb/web-console run build
+yarn install --immutable
+yarn build
 
 # Start proxy
-node packages/web-console/serve-dist.js &
+node serve-dist.js &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 
@@ -55,7 +55,7 @@ JAR_JNI=org/questdb/jar-jni/1.1.1/jar-jni-1.1.1.jar
 
 $JAVA_HOME/bin/java -cp $CORE_CLASSES:$ENT_CLASSES:$MVN_REPO/$JAR_JNI com.questdb.EntServerMain -d tmp/dbroot &
 PID2="$!"
-yarn workspace browser-tests test:enterprise
+yarn test:e2e:enterprise
 kill -SIGTERM $PID2
 
 # Stop proxy

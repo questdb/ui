@@ -65,7 +65,7 @@ def check_not_older(
         oss_head: pygit2.Oid):
     ui_main_head = ui_repo.references['refs/remotes/origin/main'].peel().id
     ui_main_tree = ui_repo[ui_main_head].tree
-    questdb_main_commit_id = ui_main_tree['packages/browser-tests/questdb'].id
+    questdb_main_commit_id = ui_main_tree['e2e/questdb'].id
 
     if questdb_main_commit_id not in oss_master_commits:
         sys.stderr.write(

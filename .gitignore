@@ -7,3 +7,7 @@ node_modules
 .idea
 .DS_Store
 *.iml
+dist
+.tmp
+.sass-cache
+.env

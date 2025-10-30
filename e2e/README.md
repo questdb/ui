@@ -1,4 +1,4 @@
-# browser-tests
+# E2E Tests (Cypress)
 
 To run browser tests in a local dev environment:
 
@@ -11,11 +11,13 @@ To run browser tests in a local dev environment:
 
 * run `cypress` through `yarn`:
 ```
-yarn workspace browser-tests test
+yarn test:e2e          # console tests
+yarn test:e2e:auth     # auth tests
+yarn test:e2e:enterprise  # enterprise tests
 ```
 
 If you want to interact with cypress, you can start it like so:
 
 ```
-yarn workspace browser-tests run cypress open
+yarn cypress open
 ```

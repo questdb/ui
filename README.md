@@ -1,12 +1,6 @@
 # QuestDB UI
 
-This repository is a monorepo hosting the implementation of QuestDB user
-interface and surrounding tooling.
-
-Currently, there are these packages:
-
-* [`web-console`](./packages/web-console/README.md) - the GUI tool shipped with QuestDB
-* [`browser-tests`](./packages/browser-tests/README.md) - a utility based on cypress that helps to automate interactions and assert zero regressions
+This repository hosts the implementation of QuestDB user interface and surrounding tooling.
 
 ## Contributing
 
