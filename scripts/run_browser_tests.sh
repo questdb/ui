@@ -1,10 +1,18 @@
 #!/bin/bash -x
 
-# Run it from the 'ui' directory as:
+# Run it from the 'scripts' subdirectory as:
 # ./run_browser_tests.sh
 
 # You can also run it without building the QuestDB project (if it is already built):
 # ./run_browser_tests.sh -skipQuestDBBuild
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the parent directory (ui directory)
+UI_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+# Change to UI directory
+cd "$UI_DIR"
 
 # Cleanup
 rm -rf tmp/dbroot
@@ -27,7 +35,7 @@ yarn install --immutable
 yarn build
 
 # Start proxy
-node serve-dist.js &
+node scripts/serve-dist.js &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 
@@ -62,7 +70,7 @@ export QDB_HTTP_CONTEXT_WEB_CONSOLE=/context1
 # Restart proxy to pickup context path
 kill -SIGTERM $PID1
 sleep 1
-node serve-dist.js &
+node scripts/serve-dist.js &
 PID2="$!"
 echo "Proxy started, PID=$PID2"
 

@@ -1,6 +1,6 @@
 const fs = require("fs")
 const path = require("path")
-const monacoConfig = require("./monaco.config")
+const monacoConfig = require("../monaco.config")
 
 const removeLine = (filePath) => {
   // only interested in css and javascript files. Other files, like images or fonts are ignored

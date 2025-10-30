@@ -1,8 +1,16 @@
 #!/bin/bash -x
 
-# Run it from the 'ui' directory as:
+# Run it from the 'scripts' subdirectory as:
 # JAVA_HOME=<your java> MVN_REPO=<your maven repo> ./run_ent_browser_tests.sh
 # Example: JAVA_HOME=/opt/homebrew/opt/openjdk@17 MVN_REPO=/Users/john/.m2/repository ./run_ent_browser_tests.sh
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the parent directory (ui directory)
+UI_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+# Change to UI directory
+cd "$UI_DIR"
 
 # Cleanup
 rm -rf tmp/dbroot
@@ -26,7 +34,7 @@ yarn install --immutable
 yarn build
 
 # Start proxy
-node serve-dist.js &
+node scripts/serve-dist.js &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 

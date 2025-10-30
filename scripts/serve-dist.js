@@ -53,8 +53,7 @@ const server = http.createServer((req, res) => {
   } else {
     // serve static files from /dist folder
     const filePath = path.join(
-      process.cwd(),
-      "dist",
+      path.resolve(__dirname, "..", "dist"),
       ["", "/"].some((p) => reqPathName === p)
         ? "index.html"
         : reqPathName,
