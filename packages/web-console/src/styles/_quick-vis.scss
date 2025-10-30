@@ -34,6 +34,43 @@
 .quick-vis-controls {
   flex: 0 0 350px;
   padding: 2rem 1rem;
+
+  .form-group {
+    margin-bottom: 1.5rem;
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: #f8f8f2;
+    }
+
+    select {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #44475a;
+      border-radius: 4px;
+      background-color: #282a36;
+      color: #f8f8f2;
+      font-size: 14px;
+
+      option {
+        background-color: #282a36;
+        color: #f8f8f2;
+      }
+    }
+
+    &.time-format-group {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+
+      &.visible {
+        display: block;
+        opacity: 1;
+      }
+    }
+  }
 }
 
 #_qvis_frm_draw {
