@@ -5,6 +5,8 @@ import {
   SubmitHandler,
   UseFormProps,
   WatchObserver,
+  FieldValues,
+  FieldNamesMarkedBoolean,
 } from "react-hook-form"
 import { joiResolver } from "@hookform/resolvers/joi"
 import { Schema } from "joi"
@@ -17,12 +19,12 @@ import { FormSubmit } from "./FormSubmit"
 import { FormCancel } from "./FormCancel"
 import { FormTextArea } from "./FormTextArea"
 
-type DirtyChangeObserver<T = Record<string, any>> = (
+type DirtyChangeObserver<T extends FieldValues = FieldValues> = (
   isDirty: boolean,
-  dirtyFields: Partial<T> | Record<string, string>,
+  dirtyFields: FieldNamesMarkedBoolean<T>,
 ) => void
 
-export type Props<TFormValues> = {
+export type Props<TFormValues extends FieldValues> = {
   name: string
   method?: HTMLFormElement["method"]
   onSubmit: SubmitHandler<TFormValues>

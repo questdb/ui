@@ -8,7 +8,7 @@ export const PosthogProviderWrapper = ({
   children: React.ReactNode
 }) => {
   const { settings } = useSettings()
-  const posthogDisabled = !settings["posthog.enabled"] ?? true
+  const posthogDisabled = !settings["posthog.enabled"]
 
   if (!settings["posthog.api.key"]) {
     return <>{children}</>

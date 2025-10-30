@@ -23,8 +23,7 @@
  ******************************************************************************/
 
 const path = require("path")
-const pnp = require("pnpapi")
-const monacoPath = pnp.resolveToUnqualified("monaco-editor", __filename)
+const monacoPath = path.resolve(__dirname, "../../node_modules", "monaco-editor")
 const getPath = (...p) => path.join(monacoPath, ...p)
 
 module.exports = {

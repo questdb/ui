@@ -202,13 +202,7 @@ module.exports = {
       }),
 
     !config.isProduction &&
-      new ForkTsCheckerWebpackPlugin({
-        eslint: {
-          // @TODO
-          enabled: false,
-          files: "./src/**/*.ts[x]",
-        },
-      }),
+      new ForkTsCheckerWebpackPlugin(),
 
     !config.isProduction &&
       new CopyWebpackPlugin({

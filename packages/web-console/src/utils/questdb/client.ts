@@ -94,7 +94,7 @@ export class Client {
     this._controllers = []
   }
 
-  static transformQueryRawResult = <T>(
+  static transformQueryRawResult = <T extends Record<string, any>>(
     result: QueryRawResult,
   ): QueryResult<T> => {
     if (result.type === Type.DQL) {
@@ -124,7 +124,7 @@ export class Client {
     return result
   }
 
-  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
+  async query<T extends Record<string, any>>(query: string, options?: Options): Promise<QueryResult<T>> {
     const result = await this.queryRaw(query, options)
 
     return Client.transformQueryRawResult<T>(result)

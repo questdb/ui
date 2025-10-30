@@ -278,7 +278,7 @@ const News = () => {
                 <NewsText>
                   <ReactMarkdown
                     components={{
-                      a: ({ node, children, ...props }) => (
+                      a: ({ children, ...props }: React.ComponentProps<"a">) => (
                         <a
                           {...(props.href?.startsWith("http")
                             ? { target: "_blank", rel: "noopener noreferrer" }
