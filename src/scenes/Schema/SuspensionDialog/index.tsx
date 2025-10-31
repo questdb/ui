@@ -9,12 +9,12 @@ import {
   Button,
   Overlay,
   Input,
+  CopyButton
 } from "../../../components"
 import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import {
-  FileCopy,
   ExternalLink,
   Restart,
   Table,
@@ -26,7 +26,6 @@ import { EventType } from "../../../modules/EventBus/types"
 import { ErrorResult } from "../../../utils"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
-import { copyToClipboard } from "../../../utils/copyToClipboard"
 
 const StyledDialogContent = styled(Dialog.Content)`
   border-color: #723131;
@@ -231,16 +230,10 @@ export const SuspensionDialog = ({
                       disabled
                       value={walTableData.errorMessage}
                     />
-                    <Button
-                      skin="secondary"
-                      onClick={() => {
-                        copyToClipboard(
-                          walTableData.errorMessage ?? "",
-                        )
-                      }}
-                    >
-                      <FileCopy size="18px" />
-                    </Button>
+                    <CopyButton
+                      iconOnly
+                      text={walTableData.errorMessage ?? ""}
+                    />
                   </Box>
                 </Box>
               )}

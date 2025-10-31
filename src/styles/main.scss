@@ -22,7 +22,8 @@
  *
  ******************************************************************************/
 
-@import "~animate.css/source/_base.css";
+@use "sass:color";
+@import "animate.css/source/_base.css";
 
 $height: 3rem !default;
 $white: #44475a !default;
@@ -58,7 +59,7 @@ $spacing-s: 4px !default;
   cursor: default;
 }
 
-@import "~uplot/dist/uPlot.min.css";
+@import "uplot/dist/uPlot.min.css";
 
 @import "lib/react-chrome-tabs";
 @import "lib/react-calendar";

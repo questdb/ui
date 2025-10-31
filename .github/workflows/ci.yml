@@ -52,7 +52,7 @@ jobs:
         run: yarn test:unit
 
       - name: Run e2e tests - auth
-        run: node scripts/serve-dist.js & yarn test:e2e:auth
+        run: yarn preview & yarn test:e2e:auth
 
       - name: Stop QuestDB
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop

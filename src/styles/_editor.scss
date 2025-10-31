@@ -22,6 +22,8 @@
  *
  ******************************************************************************/
 
+@use "sass:color";
+
 .border-rounded-top-half {
   border-top-left-radius: $border-radius;
   border-top-right-radius: $border-radius;
@@ -199,7 +201,7 @@
   }
 
   &:active {
-    background: darken(#6272a4, 10%);
+    background: color.adjust(#6272a4, $lightness: -10%);
   }
 }
 

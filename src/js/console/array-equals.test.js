@@ -1,4 +1,4 @@
-const { arrayEquals } = require("./array-equals")
+import { arrayEquals } from "./array-equals"
 
 describe("arrayEquals", () => {
   const testCases = [

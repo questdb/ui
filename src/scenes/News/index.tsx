@@ -94,7 +94,7 @@ const News = () => {
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
-  let hoverTimeout: NodeJS.Timeout
+  let hoverTimeout: ReturnType<typeof setTimeout>
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)

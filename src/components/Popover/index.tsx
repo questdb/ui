@@ -19,6 +19,7 @@ const StyledPopoverContent = styled(RadixPopover.Content)`
   border: 1px solid ${({ theme }) => theme.color.selection};
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
   outline: none;
+  z-index: 1000;
 `;
 
 const StyledPopoverClose = styled(RadixPopover.Close).attrs({
@@ -65,22 +66,24 @@ export const Popover = ({
 }: Props) => (
   <RadixPopover.Root onOpenChange={onOpenChange} open={open}>
     <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
-    <StyledPopoverContent
-      style={{ width: width ?? "auto" }}
-      align={align}
-      sideOffset={10}
-    >
-      {(title || withCloseButton) && (
-        <Header>
-          {title && <Heading level={5}>{title}</Heading>}
-          {withCloseButton && (
-            <StyledPopoverClose>
-              <X size="18px" />
-            </StyledPopoverClose>
-          )}
-        </Header>
-      )}
-      <ContentWrapper>{children}</ContentWrapper>
-    </StyledPopoverContent>
+    <RadixPopover.Portal>
+      <StyledPopoverContent
+        style={{ width: width ?? "auto" }}
+        align={align}
+        sideOffset={10}
+      >
+        {(title || withCloseButton) && (
+          <Header>
+            {title && <Heading level={5}>{title}</Heading>}
+            {withCloseButton && (
+              <StyledPopoverClose>
+                <X size="18px" />
+              </StyledPopoverClose>
+            )}
+          </Header>
+        )}
+        <ContentWrapper>{children}</ContentWrapper>
+      </StyledPopoverContent>
+    </RadixPopover.Portal>
   </RadixPopover.Root>
 );

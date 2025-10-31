@@ -206,8 +206,8 @@ export const Help = () => {
             <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
-                  href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
-                  text={`Commit id: ${process.env.COMMIT_HASH}`}
+                  href={`https://github.com/questdb/ui/commit/${import.meta.env.COMMIT_HASH}`}
+                  text={`Commit id: ${import.meta.env.COMMIT_HASH}`}
                   icon={<Github size="18px" />}
                 />
               </ForwardRef>

@@ -193,7 +193,7 @@ export const Graph = ({
           <BeforeLabel>{beforeLabel}</BeforeLabel>
           <HeaderText>{chartTitle}</HeaderText>
           <IconWithTooltip
-            icon={<Information size="16px" />}
+            icon={<Information size="16px" style={{ flexShrink: 0 }} />}
             tooltip={widgetConfig.getDescription({
               lastValue,
               sampleBySeconds: getSamplingRateForPeriod(from, to),

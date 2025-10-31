@@ -34,7 +34,7 @@ yarn install --immutable
 yarn build
 
 # Start proxy
-node scripts/serve-dist.js &
+yarn preview &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 

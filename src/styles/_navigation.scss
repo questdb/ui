@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+@use "sass:color";
 
 .nav > li > a {
   color: $nav-text-color;
@@ -184,8 +185,8 @@
 }
 
 .nav > li.active {
-  border-left: 4px solid darken($navy, 2%);
-  background: darken($nav-bg, 3%);
+  border-left: 4px solid color.adjust($navy, $lightness: 2%);
+  background: color.adjust($nav-bg, $lightness: -3%);
 }
 
 .nav.nav-second-level > li.active {
@@ -308,7 +309,7 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
 }
 
 .canvas-menu.mini-navbar .nav-second-level {
-  background: darken($nav-bg, 3%);
+  background: color.adjust($nav-bg, $lightness: -3%);
 }
 
 .mini-navbar li.active .nav-second-level {
@@ -331,7 +332,7 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
 }
 
 .navbar-default .landing_link a {
-  background: lighten($navy, 3%);
+  background: color.adjust($navy, $lightness: 3%);
   color: white;
 }
 
@@ -342,7 +343,7 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
 
 .navbar-default .landing_link a span.label {
   background: #fff;
-  color: lighten($navy, 3%);
+  color: color.adjust($navy, $lightness: 3%);
 }
 
 .logo-element {

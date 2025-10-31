@@ -35,7 +35,7 @@ yarn install --immutable
 yarn build
 
 # Start proxy
-node scripts/serve-dist.js &
+yarn preview &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 
@@ -70,7 +70,7 @@ export QDB_HTTP_CONTEXT_WEB_CONSOLE=/context1
 # Restart proxy to pickup context path
 kill -SIGTERM $PID1
 sleep 1
-node scripts/serve-dist.js &
+yarn preview &
 PID2="$!"
 echo "Proxy started, PID=$PID2"
 

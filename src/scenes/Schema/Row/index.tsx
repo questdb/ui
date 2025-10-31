@@ -284,7 +284,7 @@ const Row = ({
 }: Props) => {
   const { query, selectOpen, selectedTables, handleSelectToggle, focusedIndex, setFocusedIndex } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)

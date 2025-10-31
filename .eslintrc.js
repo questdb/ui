@@ -66,7 +66,7 @@ module.exports = {
     "react/jsx-indent": ["error", 2],
     "react/jsx-indent-props": ["error", 2],
     "react/jsx-pascal-case": "error",
-    "react/jsx-sort-props": "error",
+    "react/jsx-sort-props": "off",
     "react/jsx-sort-default-props": "error",
     "react/jsx-wrap-multilines": "error",
     "react/jsx-tag-spacing": [

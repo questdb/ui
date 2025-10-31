@@ -1,4 +1,4 @@
-function arrayEquals(left, right) {
+export function arrayEquals(left, right) {
   // if the other array is a falsy value, return
   if (!left || !right) {
     return false
@@ -22,8 +22,4 @@ function arrayEquals(left, right) {
     }
   }
   return true
-}
-
-module.exports = {
-  arrayEquals,
 }
