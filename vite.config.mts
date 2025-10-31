@@ -1,4 +1,5 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
+import { loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { checker } from 'vite-plugin-checker'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
@@ -112,6 +113,12 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.COMMIT_HASH': JSON.stringify(env.COMMIT_HASH || ''),
     },
 
+    test: {
+      environment: 'node',
+      include: 'src/**/*.(test|spec).(ts|tsx|js|jsx)',
+      globals: true,
+    },
+
     server: {
       host: 'localhost',
       port: 9999,
@@ -156,3 +163,5 @@ export default defineConfig(({ mode }) => {
     },
   }
 })
+
+

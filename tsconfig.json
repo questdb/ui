@@ -17,8 +17,8 @@
     "target": "es5",
     "baseUrl": "./src",
     "rootDir": "./src",
-    "types": ["vite/client"]
+    "types": ["vite/client", "vitest/globals"]
   },
   "include": ["src", "src/vite-env.d.ts"],
-  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.js", "**/*.spec.ts", "**/*.spec.tsx", "**/*.spec.js", "node_modules"]
+  "exclude": ["node_modules"]
 }

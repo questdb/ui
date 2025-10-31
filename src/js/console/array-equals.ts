@@ -1,4 +1,4 @@
-export function arrayEquals(left, right) {
+export function arrayEquals(left: any[], right: any[]): boolean {
   // if the other array is a falsy value, return
   if (!left || !right) {
     return false
