@@ -11,29 +11,40 @@ export default defineConfig(({ mode }) => {
   const contextPath = env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ''
   const monacoPath = path.resolve(__dirname, 'node_modules', 'monaco-editor')
   const proxySettings = {
-    [`${contextPath}/imp`]: {
+    '/imp': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
     },
-    [`${contextPath}/exp`]: {
+    '/exp': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
     },
-    [`${contextPath}/exec`]: {
+    '/exec': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
     },
-    [`${contextPath}/chk`]: {
+    '/chk': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
     },
-    [`${contextPath}/settings`]: {
+    '/settings': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
     },
-    [`${contextPath}/warnings`]: {
+    '/warnings': {
       target: 'http://127.0.0.1:9000',
       changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
+    },
+    '/preferences': {
+      target: 'http://127.0.0.1:9000',
+      changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
     },
   }
 
@@ -54,11 +65,10 @@ export default defineConfig(({ mode }) => {
           ],
         },
       }),
-      !isProduction &&
-        checker({
-          typescript: true,
-          overlay: false,
-        }),
+      checker({
+        typescript: true,
+        overlay: false,
+      }),
       viteStaticCopy({
         targets: [
           {

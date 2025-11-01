@@ -19,6 +19,6 @@
     "rootDir": "./src",
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src", "src/vite-env.d.ts"],
+  "include": ["src"],
   "exclude": ["node_modules"]
 }
