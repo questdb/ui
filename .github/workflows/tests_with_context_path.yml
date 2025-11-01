@@ -23,10 +23,10 @@ jobs:
           cache: maven
 
       - name: Build QuestDB
-        run: mvn clean package -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries
+        run: mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
 
       - name: Extract QuestDB
-        run: tar -xzf packages/browser-tests/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
+        run: tar -xzf e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
 
       - name: Create DB Root
         run: mkdir tmp/dbroot
@@ -43,22 +43,19 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --immutable --immutable-cache
+        run: yarn install --immutable
 
-      - name: Build @questdb/react-components
-        run: yarn workspace @questdb/react-components run build
+      - name: Build
+        run: yarn build
 
-      - name: Build @questdb/web-console
-        run: yarn workspace @questdb/web-console run build
+      - name: Run bundle watcher
+        run: yarn bundlewatch
 
-      - name: Run bundle watcher on @questdb/web-console
-        run: yarn workspace @questdb/web-console bundlewatch
+      - name: Run unit tests
+        run: yarn test:unit
 
-      - name: Run @questdb/web-console unit tests
-        run: yarn workspace @questdb/web-console run test:prod
-
-      - name: Run browser-tests test - auth
-        run: node packages/web-console/serve-dist.js & yarn workspace browser-tests test:auth
+      - name: Run e2e tests - auth
+        run: yarn preview & yarn test:e2e:auth
 
       - name: Stop QuestDB
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
@@ -71,8 +68,8 @@ jobs:
           QDB_HTTP_PASSWORD: "quest"
           QDB_TELEMETRY_ENABLED: "false"
 
-      - name: Run browser-tests test
-        run: yarn workspace browser-tests test
+      - name: Run e2e tests
+        run: yarn test:e2e
 
       - name: Print Log Files
         if: success() || failure()
@@ -90,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cypress-screenshots
-          path: packages/browser-tests/cypress/screenshots
+          path: e2e/screenshots
           if-no-files-found: ignore
 
       - name: Stop QuestDB

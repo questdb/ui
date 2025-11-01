@@ -1,8 +1,6 @@
 {
   "eslint.packageManager": "yarn",
-  "eslint.nodePath": ".yarn/sdks",
   "prettier.semi": false,
-  "prettier.prettierPath": ".yarn/sdks/prettier",
   "workspace.workspaceFolderCheckCwd": false,
   "coc.preferences.formatOnSaveFiletypes": [
     "json",
@@ -11,7 +9,5 @@
     "typescript",
     "typescriptreact"
   ],
-  "eslint.format.enable": true,
-  "tsserver.useLocalTsdk": true,
-  "tsserver.tsdk": "${workspaceFolder}/.yarn/sdks/typescript/lib"
+  "eslint.format.enable": true
 }
