@@ -28,7 +28,8 @@
     "test:e2e:enterprise": "cypress run --spec 'e2e/tests/enterprise/*.spec.js'",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix"
+    "lint:fix": "eslint src/ --fix",
+    "lint:report": "node eslint-report.mjs && open eslint-report.html"
   },
   "dependencies": {
     "@date-fns/tz": "^1.2.0",
