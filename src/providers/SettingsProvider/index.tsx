@@ -144,11 +144,12 @@ export const SettingsProvider = ({
     const result = await fetchEndpoint<{
       config: Settings
       preferences: Preferences
+      "preferences.version": number
     }>("settings", connectionError)
     if (result) {
       const newSettings = result?.config
       const newPreferences = {
-        version: result?.preferences.version,
+        version: result["preferences.version"],
         ...result?.preferences,
       }
       setSettings(newSettings)
