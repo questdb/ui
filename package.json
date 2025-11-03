@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "lint:report": "node eslint-report.mjs && open eslint-report.html"
+    "prepare": "husky"
   },
   "dependencies": {
     "@date-fns/tz": "^1.2.0",
@@ -138,7 +138,9 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "^15.0.0",
+    "husky": "^9.1.7",
     "jiti": "^2.6.1",
+    "lint-staged": "^16.2.6",
     "prettier": "^3.3.0",
     "sass": "^1.93.2",
     "stylelint": "^13.13.1",
@@ -176,6 +178,11 @@
         "maxSize": "100KB",
         "compression": "none"
       }
+    ]
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --max-warnings=0"
     ]
   }
 }
