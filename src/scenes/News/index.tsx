@@ -177,7 +177,7 @@ const News = () => {
       mode="side"
       title="QuestDB News"
       open={newsOpened}
-      onOpenChange={async (newsOpened) => {
+      onOpenChange={(newsOpened) => {
         dispatch(
           actions.console.setActiveSidebar(newsOpened ? "news" : undefined),
         )
@@ -219,9 +219,9 @@ const News = () => {
           {(!isLoading || enterpriseNews) &&
             !hasError &&
             enterpriseNews &&
-            enterpriseNews.map((newsItem, index) => (
+            enterpriseNews.map((newsItem) => (
               <Item
-                key={`${index}-${newsItem.title}`}
+                key={newsItem.id}
                 unread={
                   unreadNewsIds.find((id) => newsItem.id === id) !== undefined
                 }
@@ -238,7 +238,7 @@ const News = () => {
                       alt={`${newsItem.title} thumbnail`}
                       width={newsItem.thumbnail[0].thumbnails.large.width}
                       height={newsItem.thumbnail[0].thumbnails.large.height}
-                      fadeIn={true}
+                      fadeIn
                       {...(newsItem && newsItem.thumbnail
                         ? {
                             onMouseOver: () => {
@@ -278,7 +278,10 @@ const News = () => {
                 <NewsText>
                   <ReactMarkdown
                     components={{
-                      a: ({ children, ...props }: React.ComponentProps<"a">) => (
+                      a: ({
+                        children,
+                        ...props
+                      }: React.ComponentProps<"a">) => (
                         <a
                           {...(props.href?.startsWith("http")
                             ? { target: "_blank", rel: "noopener noreferrer" }

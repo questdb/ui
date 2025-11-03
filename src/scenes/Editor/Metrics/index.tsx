@@ -1,6 +1,15 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from "react"
 import styled from "styled-components"
-import { Text, Link, Box, Select, Button, ForwardRef, IconWithTooltip } from "../../../components"
+import {
+  Text,
+  Link,
+  Box,
+  Select,
+  Button,
+  ForwardRef,
+  IconWithTooltip,
+} from "../../../components"
+import type { Buffer } from "../../../store/buffers"
 import { useEditor } from "../../../providers"
 import {
   RefreshRate,
@@ -40,8 +49,7 @@ const Toolbar = styled(Box).attrs({
   width: 100%;
   height: 4.5rem;
   padding: 0 2.5rem;
-  border-bottom: 1px solid
-    ${({ theme }: { theme: any }) => theme.color.backgroundDarker};
+  border-bottom: 1px solid ${({ theme }) => theme.color.backgroundDarker};
   box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
   white-space: nowrap;
   flex-shrink: 0;
@@ -50,7 +58,7 @@ const Toolbar = styled(Box).attrs({
 const Header = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }: { theme: any }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.foreground};
   margin-bottom: 1rem;
 `
 
@@ -58,7 +66,7 @@ const Charts = styled(Box).attrs({
   align: "flex-start",
   gap: "2.5rem",
 })<{ noMetrics: boolean; viewMode: MetricViewMode }>`
-  align-content: ${({ noMetrics }: { noMetrics: any }) =>
+  align-content: ${({ noMetrics }: { noMetrics: boolean }) =>
     noMetrics ? "center" : "flex-start"};
   padding: 2.5rem;
   overflow-y: auto;
@@ -67,7 +75,7 @@ const Charts = styled(Box).attrs({
   flex-wrap: wrap;
 
   > div {
-    width: ${({ viewMode }: { viewMode: any }) =>
+    width: ${({ viewMode }: { viewMode: MetricViewMode }) =>
       viewMode === MetricViewMode.GRID ? "calc(50% - 1.25rem)" : "100%"};
     flex-shrink: 0;
   }
@@ -81,7 +89,7 @@ const GlobalInfo = styled(Box).attrs({
 
   code {
     background: #505368;
-    color: ${({ theme }: { theme: any }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.foreground};
   }
 `
 
@@ -91,27 +99,27 @@ const MetricsUnavailable = () => {
       <Box gap="1.5rem" flexDirection="column">
         <Header>Metrics unavailable</Header>
         <Text color="foreground">
-        Enable Telemetry to access WAL table metrics.
-      </Text>
-      <Text color="foreground">
-        Set <code>telemetry.enabled=true</code> in your server.conf file
-        and restart the server.
-      </Text>
-      <Text color="foreground">
-        Alternatively, set <code>QDB_TELEMETRY_ENABLED=true</code> ENV var
-        for the same effect.
-      </Text>
-      <Link
-        color="cyan"
-        hoverColor="cyan"
-        href="https://questdb.io/docs/configuration/#telemetry"
-        rel="noreferrer"
-        target="_blank"
-      >
-        <Box align="center" gap="0.25rem">
-          <ExternalLink size="16px" />
-          Documentation
-        </Box>
+          Enable Telemetry to access WAL table metrics.
+        </Text>
+        <Text color="foreground">
+          Set <code>telemetry.enabled=true</code> in your server.conf file and
+          restart the server.
+        </Text>
+        <Text color="foreground">
+          Alternatively, set <code>QDB_TELEMETRY_ENABLED=true</code> ENV var for
+          the same effect.
+        </Text>
+        <Link
+          color="cyan"
+          hoverColor="cyan"
+          href="https://questdb.io/docs/configuration/#telemetry"
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Box align="center" gap="0.25rem">
+            <ExternalLink size="16px" />
+            Documentation
+          </Box>
         </Link>
       </Box>
     </GlobalInfo>
@@ -119,18 +127,21 @@ const MetricsUnavailable = () => {
 }
 
 export const Metrics = () => {
-  const { activeBuffer, updateBuffer, buffers, isNavigatingFromSearchRef } = useEditor()
+  const { activeBuffer, updateBuffer, buffers, isNavigatingFromSearchRef } =
+    useEditor()
   const [dialogOpen, setDialogOpen] = useState(false)
   const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const telemetryEnabled = telemetryConfig && telemetryConfig.enabled
   const metricsFilteredRef = useRef<boolean>(false)
   const intervalRef = useRef<ReturnType<typeof setInterval>>()
-  
-  const defaultDateFromRef = useRef(formatISO(new Date(Date.now() - 15 * 60 * 1000)))
+
+  const defaultDateFromRef = useRef(
+    formatISO(new Date(Date.now() - 15 * 60 * 1000)),
+  )
   const defaultDateToRef = useRef(formatISO(new Date()))
 
   const buffer = useMemo(
-    () => buffers.find((b: any) => b.id === activeBuffer?.id),
+    () => buffers.find((b: Buffer) => b.id === activeBuffer?.id),
     [buffers, activeBuffer?.id],
   )
   const {
@@ -150,16 +161,19 @@ export const Metrics = () => {
       : refreshRatesInSeconds[refreshRate]
     : 0
 
-  const updateMetrics = useCallback((metrics: Metric[]) => {
-    if (buffer?.id) {
-      updateBuffer(buffer?.id, {
-        metricsViewState: {
-          ...buffer?.metricsViewState,
-          metrics,
-        },
-      })
-    }
-  }, [buffer?.id, buffer?.metricsViewState, updateBuffer]) 
+  const updateMetrics = useCallback(
+    (metrics: Metric[]) => {
+      if (buffer?.id) {
+        void updateBuffer(buffer?.id, {
+          metricsViewState: {
+            ...buffer?.metricsViewState,
+            metrics,
+          },
+        })
+      }
+    },
+    [buffer?.id, buffer?.metricsViewState, updateBuffer],
+  )
 
   const refreshMetricsData = useCallback(() => {
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
@@ -168,53 +182,68 @@ export const Metrics = () => {
     })
   }, [])
 
-  const handleRemoveMetric = useCallback((metric: Metric) => {
-    if (buffer?.id && buffer?.metricsViewState?.metrics) {
-      updateMetrics(
-        buffer?.metricsViewState?.metrics
-          .filter((m: Metric) => m.position !== metric.position)
-          .map((m: Metric, index: number) => ({ ...m, position: index })),
-      )
-    }
-  }, [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics])
+  const handleRemoveMetric = useCallback(
+    (metric: Metric) => {
+      if (buffer?.id && buffer?.metricsViewState?.metrics) {
+        updateMetrics(
+          buffer?.metricsViewState?.metrics
+            .filter((m: Metric) => m.position !== metric.position)
+            .map((m: Metric, index: number) => ({ ...m, position: index })),
+        )
+      }
+    },
+    [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics],
+  )
 
-  const handleTableChange = useCallback((metric: Metric, tableId: number) => {
-    if (buffer?.id && buffer?.metricsViewState?.metrics) {
-      updateMetrics(
-        buffer?.metricsViewState?.metrics.map((m: any) =>
-          m.position === metric.position ? { ...m, tableId } : m,
-        ),
-      )
-    }
-  },
-  [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics])
+  const handleTableChange = useCallback(
+    (metric: Metric, tableId: number) => {
+      if (buffer?.id && buffer?.metricsViewState?.metrics) {
+        void updateMetrics(
+          buffer?.metricsViewState?.metrics.map((m: Metric) =>
+            m.position === metric.position ? { ...m, tableId } : m,
+          ),
+        )
+      }
+    },
+    [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics],
+  )
 
-  const handleColorChange = useCallback((metric: Metric, color: string) => {
-    if (buffer?.id && buffer?.metricsViewState?.metrics) {
-      updateMetrics(
-        buffer?.metricsViewState?.metrics.map((m: any) =>
-          m.position === metric.position ? { ...m, color } : m,
-        ),
-      )
-      refreshMetricsData()
-    }
-  },
-  [buffer?.id, buffer?.metricsViewState?.metrics, updateMetrics, refreshMetricsData])
+  const handleColorChange = useCallback(
+    (metric: Metric, color: string) => {
+      if (buffer?.id && buffer?.metricsViewState?.metrics) {
+        void updateMetrics(
+          buffer?.metricsViewState?.metrics.map((m: Metric) =>
+            m.position === metric.position ? { ...m, color } : m,
+          ),
+        )
+        refreshMetricsData()
+      }
+    },
+    [
+      buffer?.id,
+      buffer?.metricsViewState?.metrics,
+      updateMetrics,
+      refreshMetricsData,
+    ],
+  )
 
-  const handleDateFromToChange = useCallback((dateFrom: string, dateTo: string) => {
-    dateFromRef.current = dateFrom
-    dateToRef.current = dateTo
-    if (buffer?.id) {
-      updateBuffer(buffer.id, {
-        metricsViewState: {
-          ...buffer?.metricsViewState,
-          dateFrom,
-          dateTo,
-        },
-      })
-      refreshMetricsData()
-    }
-  }, [buffer?.id, buffer?.metricsViewState, updateBuffer, refreshMetricsData])
+  const handleDateFromToChange = useCallback(
+    async (dateFrom: string, dateTo: string) => {
+      dateFromRef.current = dateFrom
+      dateToRef.current = dateTo
+      if (buffer?.id) {
+        await updateBuffer(buffer.id, {
+          metricsViewState: {
+            ...buffer?.metricsViewState,
+            dateFrom,
+            dateTo,
+          },
+        })
+        refreshMetricsData()
+      }
+    },
+    [buffer?.id, buffer?.metricsViewState, updateBuffer, refreshMetricsData],
+  )
 
   const [elementRef, isVisible] = useElementVisibility(1000)
   const isVisibleRef = useRef(isVisible)
@@ -233,15 +262,16 @@ export const Metrics = () => {
       clearInterval(intervalRef.current)
       intervalRef.current = undefined
     }
-    if (refreshRate && refreshRate !== RefreshRate.OFF && refreshRateInSec > 0) {
-      intervalRef.current = setInterval(
-        () => {
-          if (isVisibleRef.current && telemetryEnabled) {
-            refreshMetricsData()
-          }
-        },
-        refreshRateInSec * 1000,
-      )
+    if (
+      refreshRate &&
+      refreshRate !== RefreshRate.OFF &&
+      refreshRateInSec > 0
+    ) {
+      intervalRef.current = setInterval(() => {
+        if (isVisibleRef.current && telemetryEnabled) {
+          refreshMetricsData()
+        }
+      }, refreshRateInSec * 1000)
     } else {
       clearInterval(intervalRef.current)
     }
@@ -257,7 +287,7 @@ export const Metrics = () => {
           .filter((metric: Metric) => widgets[metric.metricType])
           .map((metric: Metric) => ({ ...metric, removed: false }))
 
-        updateBuffer(buffer.id, {
+        void updateBuffer(buffer.id, {
           metricsViewState: {
             ...buffer?.metricsViewState,
             metrics,
@@ -284,12 +314,16 @@ export const Metrics = () => {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
-      }      
+      }
     }
   }, [])
 
   return (
-    <Root data-hook="metrics-root" {...(telemetryEnabled ? { ref: elementRef } : {})} className="metrics-root">
+    <Root
+      data-hook="metrics-root"
+      {...(telemetryEnabled ? { ref: elementRef } : {})}
+      className="metrics-root"
+    >
       {!telemetryEnabled ? (
         <MetricsUnavailable />
       ) : (
@@ -316,9 +350,9 @@ export const Metrics = () => {
                         label: `Refresh: ${rate}`,
                         value: rate,
                       }))}
-                      onChange={(e: any) => {
+                      onChange={(e) => {
                         if (buffer?.id) {
-                          updateBuffer(buffer.id, {
+                          void updateBuffer(buffer.id, {
                             metricsViewState: {
                               ...buffer?.metricsViewState,
                               refreshRate: e.target.value as RefreshRate,
@@ -351,12 +385,13 @@ export const Metrics = () => {
                     skin="secondary"
                     onClick={() => {
                       if (buffer?.id) {
-                        updateBuffer(buffer.id, {
+                        void updateBuffer(buffer.id, {
                           metricsViewState: {
                             ...buffer?.metricsViewState,
-                            viewMode: metricViewMode === MetricViewMode.GRID
-                              ? MetricViewMode.LIST
-                              : MetricViewMode.GRID,
+                            viewMode:
+                              metricViewMode === MetricViewMode.GRID
+                                ? MetricViewMode.LIST
+                                : MetricViewMode.GRID,
                           },
                         })
                       }
@@ -373,7 +408,8 @@ export const Metrics = () => {
                   <>
                     Toggle view mode
                     <br />
-                    to {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
+                    to{" "}
+                    {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
                   </>
                 }
                 placement="bottom"
@@ -400,7 +436,8 @@ export const Metrics = () => {
               [...metrics]
                 .sort((a: Metric, b: Metric) => a.position - b.position)
                 .filter(
-                  (metric: Metric) => widgets[metric.metricType] && !metric.removed,
+                  (metric: Metric) =>
+                    widgets[metric.metricType] && !metric.removed,
                 )
                 .map((metric: Metric) => {
                   return (

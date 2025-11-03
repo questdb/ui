@@ -99,12 +99,12 @@ export const Dialog = ({
 
   const resetToDefaults = () => {
     setDefaults({
-      name: name,
+      name,
       schemaColumns: schema,
-      partitionBy: partitionBy,
-      timestamp: timestamp,
-      ttlValue: ttlValue,
-      ttlUnit: ttlUnit,
+      partitionBy,
+      timestamp,
+      ttlValue,
+      ttlUnit,
       walEnabled:
         hasWalSetting && walEnabled !== undefined
           ? walEnabled.toString()
@@ -115,13 +115,15 @@ export const Dialog = ({
   const validationSchema = Joi.object({
     name: Joi.string()
       .required()
-      .custom((value, helpers) => {
+      .custom((value: string, helpers) => {
         if (!isValidTableName(value)) {
           return helpers.error("string.validTableName")
         }
         if (
           action === "add" &&
-          tables?.find((table) => table.table_name.toLowerCase() === value.toLowerCase())
+          tables?.find(
+            (table) => table.table_name.toLowerCase() === value.toLowerCase(),
+          )
         ) {
           return helpers.error("string.uniqueTableName")
         }
@@ -134,7 +136,7 @@ export const Dialog = ({
       }),
     partitionBy: Joi.string()
       .required()
-      .custom((value, helpers) => {
+      .custom((value: string, helpers) => {
         if (value !== "NONE" && currentValues.timestamp === "") {
           return helpers.error("string.timestampRequired")
         }
@@ -151,13 +153,16 @@ export const Dialog = ({
       .empty(),
     timestamp: Joi.string().allow(""),
     schemaColumns: Joi.array()
-      .custom((value, helpers) => {
+      .custom((value: SchemaColumn[], helpers) => {
         if (action === "add" && value.length === 0) {
           return helpers.error("array.required")
         }
         return value
       })
-      .unique((a, b) => a.name.trim().toLowerCase() === b.name.trim().toLowerCase())
+      .unique(
+        (a: SchemaColumn, b: SchemaColumn) =>
+          a.name.trim().toLowerCase() === b.name.trim().toLowerCase(),
+      )
       .messages({
         "array.required": "Please add at least one column",
         "array.unique": "Column names must be unique",
@@ -329,8 +334,8 @@ export const Dialog = ({
 
                   {action === "import" && (
                     <Text color="gray2">
-                      If you're changing the partitioning strategy, you'll need
-                      to set `Write mode` to `Overwrite` in Settings.
+                      If you are changing the partitioning strategy, you will
+                      need to set `Write mode` to `Overwrite` in Settings.
                     </Text>
                   )}
                 </Controls>

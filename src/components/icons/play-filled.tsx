@@ -15,4 +15,4 @@ export const PlayFilled = ({ size = 24, color = "currentColor" }: Props) => (
   >
     <path d="M6 2v20l16-10z" />
   </svg>
-) 
+)

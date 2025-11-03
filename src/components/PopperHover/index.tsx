@@ -101,10 +101,11 @@ export const PopperHover = ({
 
   useEffect(() => {
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       clearTimeout(transitionTimeoutId.current)
       clearTimeout(delayTimeoutId.current)
-      document.body.contains(container) && document.body.removeChild(container)
+      if (document.body.contains(container)) {
+        document.body.removeChild(container)
+      }
     }
   }, [container])
 

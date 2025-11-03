@@ -1,12 +1,12 @@
-import React from "react";
+import React from "react"
 
-type Level = 1 | 2 | 3 | 4 | 5;
+type Level = 1 | 2 | 3 | 4 | 5
 
 export type HeadingProps = {
-  level: Level;
-  children?: React.ReactNode;
-  dataHook?: string;
-};
+  level: Level
+  children?: React.ReactNode
+  dataHook?: string
+}
 
 const fontSizes: { [key in Level]: string } = {
   1: "3.8rem",
@@ -14,7 +14,7 @@ const fontSizes: { [key in Level]: string } = {
   3: "2.4rem",
   4: "2rem",
   5: "1.6rem",
-};
+}
 
 export const Heading = ({ level, children, dataHook, ...rest }: HeadingProps) =>
   React.createElement(
@@ -24,5 +24,5 @@ export const Heading = ({ level, children, dataHook, ...rest }: HeadingProps) =>
       "data-hook": dataHook,
       ...rest,
     },
-    children
-  );
+    children,
+  )

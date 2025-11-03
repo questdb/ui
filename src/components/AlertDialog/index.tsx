@@ -1,5 +1,5 @@
-import * as RadixAlertDialog from "@radix-ui/react-alert-dialog";
-import styled, { css } from "styled-components";
+import * as RadixAlertDialog from "@radix-ui/react-alert-dialog"
+import styled, { css } from "styled-components"
 
 const dialogShow = css`
   @keyframes dialogShow {
@@ -10,7 +10,7 @@ const dialogShow = css`
       opacity: 1;
     }
   }
-`;
+`
 
 const dialogHide = css`
   @keyframes dialogHide {
@@ -21,7 +21,7 @@ const dialogHide = css`
       opacity: 0;
     }
   }
-`;
+`
 
 export const AlertDialog = {
   Root: RadixAlertDialog.Root,
@@ -83,4 +83,4 @@ export const AlertDialog = {
   `,
   Cancel: RadixAlertDialog.Cancel,
   Action: RadixAlertDialog.Action,
-};
+}

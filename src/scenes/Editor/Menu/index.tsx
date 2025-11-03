@@ -75,7 +75,8 @@ const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
     }
   }
 
-  animation: ${({ $firstTimeVisitor }) => $firstTimeVisitor ? "pulse 2s infinite" : "none"};
+  animation: ${({ $firstTimeVisitor }) =>
+    $firstTimeVisitor ? "pulse 2s infinite" : "none"};
 `
 
 const MenuIcon = styled(_MenuIcon)`
@@ -207,16 +208,21 @@ const Menu = () => {
             },
           }}
         />
-        {consoleConfig.ctaBanner && <CTAButton
-          href="https://questdb.com/enterprise/contact"
-          target="_blank"
-        >
-          Book a demo
-        </CTAButton>}
+        {consoleConfig.ctaBanner && (
+          <CTAButton
+            href="https://questdb.com/enterprise/contact"
+            target="_blank"
+          >
+            Book a demo
+          </CTAButton>
+        )}
       </MenuItems>
 
       {sm && (
-        <SideMenuMenuButton skin="transparent" onClick={handleSideMenuButtonClick}>
+        <SideMenuMenuButton
+          skin="transparent"
+          onClick={handleSideMenuButtonClick}
+        >
           <CSSTransition
             classNames="fade"
             in={opened}

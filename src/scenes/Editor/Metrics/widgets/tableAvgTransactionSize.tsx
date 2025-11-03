@@ -12,7 +12,7 @@ export const tableAvgTransactionSize: Widget = {
       This chart tracks the mean size of transactions processed through the
       database API. While the database is optimized for both small and large
       transactions, larger batch sizes generally lead to better database
-      performance. Monitor this metric to understand your API's transaction
+      performance. Monitor this metric to understand your API&apos;s transaction
       patterns and identify opportunities for batch size optimization. Key
       aspects to observe:
       <ul>
@@ -61,9 +61,12 @@ export const tableAvgTransactionSize: Widget = {
       sample by ${sampleBySeconds}s FROM timestamp_floor('${sampleBySeconds}s', '${from}') TO timestamp_floor('${sampleBySeconds}s', '${to}') fill(0)
     `
   },
-  alignData: (data: TableAverageTransactionSize[]): uPlot.AlignedData => [
-    data.map((l) => new Date(l.created).getTime()),
-    data.map((l) => (l.avg_rows ? sqlValueToFixed(l.avg_rows) : 1)),
-  ],
+  alignData: (data): uPlot.AlignedData => {
+    const rows = data as TableAverageTransactionSize[]
+    return [
+      rows.map((l) => new Date(l.created).getTime()),
+      rows.map((l) => (l.avg_rows ? sqlValueToFixed(l.avg_rows) : 1)),
+    ]
+  },
   mapYValue: (rawValue: number) => rawValue,
 }

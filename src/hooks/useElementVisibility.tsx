@@ -1,61 +1,61 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react"
 
 const useElementVisibility = (refreshInterval: number = 1000) => {
-  const [isVisible, setIsVisible] = useState(true);
-  const elementRef = useRef<HTMLDivElement | null>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const rafIdRef = useRef<number | null>(null);
-  const lastFrameTimeRef = useRef(Date.now());
+  const [isVisible, setIsVisible] = useState(true)
+  const elementRef = useRef<HTMLDivElement | null>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const rafIdRef = useRef<number | null>(null)
+  const lastFrameTimeRef = useRef(Date.now())
 
   const checkRenderingStatus = useCallback(() => {
-    const now = Date.now();
-    const timeSinceLastFrame = now - lastFrameTimeRef.current;
-    lastFrameTimeRef.current = now;
+    const now = Date.now()
+    const timeSinceLastFrame = now - lastFrameTimeRef.current
+    lastFrameTimeRef.current = now
 
-    const isThrottled = timeSinceLastFrame > refreshInterval * 2;
+    const isThrottled = timeSinceLastFrame > refreshInterval * 2
 
     if (isThrottled !== !isVisible) {
-      setIsVisible(!isThrottled);
+      setIsVisible(!isThrottled)
     }
 
-    rafIdRef.current = requestAnimationFrame(checkRenderingStatus);
-  }, [refreshInterval, isVisible]);
+    rafIdRef.current = requestAnimationFrame(checkRenderingStatus)
+  }, [refreshInterval, isVisible])
 
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        entries.forEach(entry => {
-          setIsVisible(entry.isIntersecting);
-        });
+        entries.forEach((entry) => {
+          setIsVisible(entry.isIntersecting)
+        })
       },
       {
-        threshold: 0.1
-      }
-    );
+        threshold: 0.1,
+      },
+    )
 
     const handleVisibilityChange = () => {
-      setIsVisible(!document.hidden);
-    };
-
-    if (elementRef.current) {
-      observerRef.current.observe(elementRef.current);
+      setIsVisible(!document.hidden)
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    rafIdRef.current = requestAnimationFrame(checkRenderingStatus);
+    if (elementRef.current) {
+      observerRef.current.observe(elementRef.current)
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    rafIdRef.current = requestAnimationFrame(checkRenderingStatus)
 
     return () => {
       if (observerRef.current) {
-        observerRef.current.disconnect();
+        observerRef.current.disconnect()
       }
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
       if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
+        cancelAnimationFrame(rafIdRef.current)
       }
-    };
-  }, [checkRenderingStatus]);
+    }
+  }, [checkRenderingStatus])
 
-  return [elementRef, isVisible] as const;
-};
+  return [elementRef, isVisible] as const
+}
 
-export default useElementVisibility;
+export default useElementVisibility

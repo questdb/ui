@@ -1,5 +1,5 @@
-import React, { forwardRef } from "react";
-import type { ReactNode, ElementType, Ref } from "react";
+import React, { forwardRef } from "react"
+import type { ReactNode, ElementType, Ref } from "react"
 
 export const ForwardRef = forwardRef(
   <T,>(
@@ -8,7 +8,7 @@ export const ForwardRef = forwardRef(
       as = "span",
       ...props
     }: T & { children: ReactNode; as?: ElementType },
-    ref: Ref<HTMLDivElement>
+    ref: Ref<HTMLDivElement>,
   ) =>
     React.createElement(
       as,
@@ -16,7 +16,7 @@ export const ForwardRef = forwardRef(
         ...props,
         ref,
       },
-      children
-    )
-);
-ForwardRef.displayName = "ForwardRef";
+      children,
+    ),
+)
+ForwardRef.displayName = "ForwardRef"

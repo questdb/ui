@@ -14,7 +14,7 @@ export const QueryInNotification = ({ query }: { query: string }) => {
 
   return (
     <Box gap="1rem" align="center">
-      <CopyButton text={query} iconOnly={true} />
+      <CopyButton text={query} iconOnly />
       <StyledText color="foreground" title={query}>
         {query}
       </StyledText>

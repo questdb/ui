@@ -100,7 +100,7 @@ export const PopperToggle = ({
     (event: KeyboardEvent) => {
       if (event.key === "Escape" && _active) {
         setActive(false)
-        
+
         if (onToggle) {
           onToggle(false)
         }

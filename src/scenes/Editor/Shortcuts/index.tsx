@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { color } from "../../../utils"
 import { Text } from "../../../components"
 import { platform } from "../../../utils"
+import { keys } from "ramda"
 
 type ShortcutsList = { keys: string[][]; title: string }[]
 
@@ -134,14 +135,14 @@ const ShortcutsGroup = ({
     <ListTitle>
       <Text color="gray2">{title}</Text>
     </ListTitle>
-    {list.map((shortcutItem, index) => (
-      <Item key={`shortcut-${index}`}>
+    {list.map((shortcutItem) => (
+      <Item key={`shortcut-${keys.toString()}`}>
         <Text color="white">{shortcutItem.title}</Text>
         <ItemKeys>
-          {shortcutItem.keys.map((keyGroup, index) => (
-            <KeyGroup key={`keyGroup-${index}`}>
-              {keyGroup.map((key, index) => (
-                <Key key={`shortcutItem-key-${key}-${index}`}>
+          {shortcutItem.keys.map((keyGroup) => (
+            <KeyGroup key={`keyGroup-${keyGroup.toString()}}`}>
+              {keyGroup.map((key) => (
+                <Key key={`shortcutItem-key-${keyGroup.toString()}`}>
                   <Text color="black" size="xs" weight={600}>
                     {key}
                   </Text>

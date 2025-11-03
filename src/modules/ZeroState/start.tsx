@@ -17,14 +17,6 @@ const StyledHeading = styled(Heading)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const StyledText = styled(Text)`
-  line-height: 1.75;
-
-  a {
-    color: ${({ theme }) => theme.color.gray2};
-  }
-`
-
 const Actions = styled.div`
   display: grid;
   gap: 2rem;

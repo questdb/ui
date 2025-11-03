@@ -43,10 +43,10 @@ const defaultProps: {
 } = {
   direction: "bottom",
   fontSize: "md",
+  readOnly: false,
   selected: false,
   size: "md",
   type: "button",
-  readOnly: false,
 }
 
 type DefaultProps = typeof defaultProps
@@ -68,11 +68,11 @@ const baseStyles = css<Props>`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${({ selected }) =>
-    selected ? "#2d303e" : "transparent"};
+  background: ${({ selected }) => (selected ? "#2d303e" : "transparent")};
   border: none;
   outline: 0;
-  font-size: ${({ fontSize, theme }) => fontSize ? theme.fontSize[fontSize] : theme.fontSize.md};
+  font-size: ${({ fontSize, theme }) =>
+    fontSize ? theme.fontSize[fontSize] : theme.fontSize.md};
   font-weight: 400;
   line-height: 1.15;
   width: 3.5rem;
@@ -90,24 +90,23 @@ const baseStyles = css<Props>`
   }
 `
 
-const getTheme = (normal: ThemeShape, hover: ThemeShape) =>
-  css<Props>`
-    &:hover:not([disabled]) {
-      background: ${color(hover.background)};
-      opacity: 1;
-    }
+const getTheme = (normal: ThemeShape, hover: ThemeShape) => css<Props>`
+  &:hover:not([disabled]) {
+    background: ${color(hover.background)};
+    opacity: 1;
+  }
 
-    &:active:not([disabled]) {
-      filter: brightness(90%);
-    }
+  &:active:not([disabled]) {
+    filter: brightness(90%);
+  }
 
-    ${({ readOnly }) =>
-      readOnly &&
-      `
+  ${({ readOnly }) =>
+    readOnly &&
+    `
       filter: brightness(0.5);
       cursor: default;
     `}
-  `
+`
 
 const PrimaryToggleButtonStyled = styled.button<Props>`
   ${baseStyles};
@@ -124,7 +123,14 @@ const PrimaryToggleButtonStyled = styled.button<Props>`
 const PrimaryToggleButtonWithRef = (
   props: RenderRefProps,
   ref: Ref<HTMLButtonElement>,
-) => <PrimaryToggleButtonStyled {...defaultProps} {...props} ref={ref} data-selected={props.selected} />
+) => (
+  <PrimaryToggleButtonStyled
+    {...defaultProps}
+    {...props}
+    ref={ref}
+    data-selected={props.selected}
+  />
+)
 
 export const PrimaryToggleButton = forwardRef(PrimaryToggleButtonWithRef)
 

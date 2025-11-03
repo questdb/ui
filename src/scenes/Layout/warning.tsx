@@ -71,8 +71,11 @@ export const Warnings = () => {
     >
       {warnings
         .filter((warning) => open.includes(warning.tag))
-        .map((warning, index) => (
-          <WarningRoot key={index} data-hook="warning">
+        .map((warning) => (
+          <WarningRoot
+            key={`${warning.tag}-${warning.warning}`}
+            data-hook="warning"
+          >
             <Content>
               <ErrorWarning size="20px" />
               Warning:{" "}

@@ -1,4 +1,4 @@
-export function arrayEquals(left: any[], right: any[]): boolean {
+export function arrayEquals(left: unknown[], right: unknown[]): boolean {
   // if the other array is a falsy value, return
   if (!left || !right) {
     return false
@@ -9,11 +9,11 @@ export function arrayEquals(left: any[], right: any[]): boolean {
     return false
   }
 
-  for (var i = 0, l = left.length; i < l; i++) {
+  for (let i = 0, l = left.length; i < l; i++) {
     // Check if we have nested arrays
-    if (left[i] instanceof Array && right[i] instanceof Array) {
+    if (Array.isArray(left[i]) && Array.isArray(right[i])) {
       // recurse into the nested arrays
-      if (!left[i].equals(right[i])) {
+      if (!arrayEquals(left[i] as unknown[], right[i] as unknown[])) {
         return false
       }
     } else if (left[i] !== right[i]) {

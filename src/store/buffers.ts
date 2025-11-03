@@ -146,12 +146,13 @@ export const bufferStore = {
 
   getById: (id: number) => db.buffers.get(id),
 
-  getMetaById: (id: number) => db.buffers.get(id).then(buffer => ({
-    archived: buffer?.archived,
-    archivedAt: buffer?.archivedAt,
-    label: buffer?.label,
-    type: buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
-  })),
+  getMetaById: (id: number) =>
+    db.buffers.get(id).then((buffer) => ({
+      archived: buffer?.archived,
+      archivedAt: buffer?.archivedAt,
+      label: buffer?.label,
+      type: buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+    })),
 
   getActiveId: () =>
     db.editor_settings.where("key").equals("activeBufferId").first(),
@@ -163,7 +164,11 @@ export const bufferStore = {
       .modify({ value: id }),
 
   getBufferTypeById: (id: number) =>
-    db.buffers.get(id).then((buffer) => buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL),
+    db.buffers
+      .get(id)
+      .then((buffer) =>
+        buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+      ),
 
   update: (id: number, buffer: Partial<Buffer>) =>
     db.buffers.update(id, buffer),

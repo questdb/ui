@@ -10,7 +10,7 @@ import { CenteredLayout, Box, Text, Button } from "../../components"
 import { Refresh } from "@styled-icons/remix-line"
 import { setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { Preferences } from '../../utils'
+import { Preferences } from "../../utils"
 import QuestDBLogo from "./QuestDBLogo"
 
 enum View {
@@ -21,6 +21,12 @@ enum View {
 
 type State = { view: View; errorMessage?: React.ReactNode }
 
+type SettingsResponse = {
+  config: Settings
+  preferences: Preferences
+  "preferences.version": number
+}
+
 const initialState = { view: View.loading }
 
 const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
@@ -30,8 +36,21 @@ const SettingContext = createContext<{
   preferences: Preferences
   consoleConfig: ConsoleConfig
   warnings: Warning[]
-  refreshSettingsAndPreferences: () => Promise<{ settings: Settings, preferences: Preferences }>
-}>({ settings: {}, preferences: {}, consoleConfig: {}, warnings: [], refreshSettingsAndPreferences: () => Promise.resolve({ settings: {}, preferences: {} }) })
+  refreshSettingsAndPreferences: () => Promise<{
+    settings: Settings
+    preferences: Preferences
+  }>
+}>({
+  settings: {},
+  preferences: {},
+  consoleConfig: {},
+  warnings: [],
+  refreshSettingsAndPreferences: () =>
+    Promise.resolve({
+      settings: {},
+      preferences: {},
+    }),
+})
 
 const connectionError = (
   <>
@@ -57,14 +76,22 @@ export const SettingsProvider = ({
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => null,
     [View.ready]: () => (
-      <SettingContext.Provider value={{ settings, consoleConfig, warnings, preferences, refreshSettingsAndPreferences }}>
+      <SettingContext.Provider
+        value={{
+          settings,
+          consoleConfig,
+          warnings,
+          preferences,
+          refreshSettingsAndPreferences,
+        }}
+      >
         {children}
       </SettingContext.Provider>
     ),
     [View.error]: () => (
       <CenteredLayout>
         <Box flexDirection="column" gap="2rem">
-          <a href={"https://questdb.io"}>
+          <a href="https://questdb.io">
             <QuestDBLogo />
           </a>
           <Text align="center" size="lg">
@@ -84,14 +111,14 @@ export const SettingsProvider = ({
     ),
   }
 
-  const fetchEndpoint = async (
+  const fetchEndpoint = async <ResponseType = unknown,>(
     endpoint: string,
     errorMessage: React.ReactNode,
-  ) => {
+  ): Promise<ResponseType | undefined> => {
     try {
       const response = await fetch(endpoint)
       if (response.status === 200) {
-        return await response.json()
+        return (await response.json()) as ResponseType
       } else {
         dispatch({ view: View.error, errorMessage })
       }
@@ -102,7 +129,9 @@ export const SettingsProvider = ({
 
   const setPreferences = (preferences: Preferences) => {
     if (preferences?.instance_name) {
-      const suffix = preferences?.instance_type ? `${preferences.instance_type.charAt(0).toUpperCase()}${preferences.instance_type.slice(1)}` : 'QuestDB'
+      const suffix = preferences?.instance_type
+        ? `${preferences.instance_type.charAt(0).toUpperCase()}${preferences.instance_type.slice(1)}`
+        : "QuestDB"
       const newTitle = `${preferences.instance_name} | ${suffix}`
       if (document.title !== newTitle) {
         document.title = newTitle
@@ -112,36 +141,53 @@ export const SettingsProvider = ({
   }
 
   const refreshSettingsAndPreferences = async () => {
-    const result = await fetchEndpoint("settings", connectionError)
-    const newSettings = result.config
-    const newPreferences = { version: result["preferences.version"], ...result.preferences }
+    const result = await fetchEndpoint<{
+      config: Settings
+      preferences: Preferences
+    }>("settings", connectionError)
     if (result) {
+      const newSettings = result?.config
+      const newPreferences = {
+        version: result?.preferences.version,
+        ...result?.preferences,
+      }
       setSettings(newSettings)
       setPreferences(newPreferences)
       return {
         settings: newSettings,
-        preferences: newPreferences
+        preferences: newPreferences,
       }
     }
 
     return {
       settings: {},
-      preferences: {}
+      preferences: {},
     }
   }
 
   useEffect(() => {
     const fetchAll = async () => {
-      const settings = await fetchEndpoint("settings", connectionError)
-      const warnings = await fetchEndpoint("warnings", connectionError)
-      const consoleConfig = await fetchEndpoint(
+      const settings = await fetchEndpoint<SettingsResponse>(
+        "settings",
+        connectionError,
+      )
+      const warnings = await fetchEndpoint<Warning[]>(
+        "warnings",
+        connectionError,
+      )
+      const consoleConfig = await fetchEndpoint<ConsoleConfig>(
         "assets/console-configuration.json",
         consoleConfigError,
       )
       if (settings) {
         setSettings(settings.config)
-        setPreferences({ version: settings["preferences.version"], ...settings.preferences })
-        setValue(StoreKey.RELEASE_TYPE, settings.config["release.type"])
+        setPreferences({
+          version: settings["preferences.version"],
+          ...settings.preferences,
+        })
+        if (settings.config["release.type"]) {
+          setValue(StoreKey.RELEASE_TYPE, settings.config["release.type"])
+        }
       }
       if (warnings) {
         setWarnings(warnings)
@@ -151,7 +197,7 @@ export const SettingsProvider = ({
       }
     }
 
-    fetchAll().then(() => dispatch({ view: View.ready }))
+    void fetchAll().then(() => dispatch({ view: View.ready }))
   }, [])
 
   return <>{views[state.view]()}</>

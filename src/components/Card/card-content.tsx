@@ -1,11 +1,11 @@
-import styled, { css } from "styled-components";
-import { Color } from "../../types";
+import styled, { css } from "styled-components"
+import { Color } from "../../types"
 
 type Props = {
-  gap?: string;
-  background?: Color;
-  centered?: boolean;
-};
+  gap?: string
+  background?: Color
+  centered?: boolean
+}
 
 export const CardContent = styled.div.attrs<Props, Props>((props) => ({
   gap: props.gap ?? "2rem",
@@ -22,4 +22,4 @@ export const CardContent = styled.div.attrs<Props, Props>((props) => ({
       display: flex;
       justify-content: center;
     `}
-`;
+`

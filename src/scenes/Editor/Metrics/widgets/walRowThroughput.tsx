@@ -85,11 +85,14 @@ export const walRowThroughput: Widget = {
       FROM timestamp_floor('${sampleBySeconds}s', '${from}') TO timestamp_floor('${sampleBySeconds}s', '${to}') fill(0)
     `
   },
-  alignData: (data: WalRowThroughput[]): uPlot.AlignedData => [
-    data.map((l) => new Date(l.time).getTime()),
-    data.map((l) =>
-      l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
-    ),
-  ],
+  alignData: (data): uPlot.AlignedData => {
+    const rows = data as WalRowThroughput[]
+    return [
+      rows.map((l) => new Date(l.time).getTime()),
+      rows.map((l) =>
+        l.numOfRowsApplied ? sqlValueToFixed(l.numOfRowsApplied) : 0,
+      ),
+    ]
+  },
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

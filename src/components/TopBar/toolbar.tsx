@@ -2,17 +2,21 @@ import React, { useContext, useEffect, useState, useCallback } from "react"
 import styled from "styled-components"
 import { QuestContext, useAuth, useSettings } from "../../providers"
 import * as QuestDB from "../../utils/questdb"
+import type { DefaultTheme } from "styled-components"
 import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
 import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { Tools, ShieldCheck } from "@styled-icons/bootstrap"
 import { Flask } from "@styled-icons/boxicons-solid"
 import { Box, Button } from "../../components"
-import { toast } from '../'
+import { toast } from "../"
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
 import { IconWithTooltip } from "../IconWithTooltip"
-import { hasUIAuth, setSSOUserNameWithClientID } from "../../modules/OAuth2/utils"
+import {
+  hasUIAuth,
+  setSSOUserNameWithClientID,
+} from "../../modules/OAuth2/utils"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
 import { Preferences, InstanceType } from "../../utils"
@@ -27,7 +31,7 @@ const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;
   align-items: center;
   padding: 0.3rem;
-  background: ${({ $background }) => $background ?? 'inherit'};
+  background: ${({ $background }) => $background ?? "inherit"};
   border-radius: 0.4rem;
 `
 
@@ -39,7 +43,9 @@ const Root = styled(Box).attrs({ align: "center" })`
   overflow: hidden;
 `
 
-const CustomTooltipWrapper = styled.div<{ $badgeColors: { primary: string, secondary: string } }>`
+const CustomTooltipWrapper = styled.div<{
+  $badgeColors: { primary: string; secondary: string }
+}>`
   display: flex;
   flex-direction: column;
   padding: 1.5rem 0;
@@ -79,7 +85,9 @@ const Info = styled.div`
   gap: 1rem;
 `
 
-const Badge = styled(Box)<{ $badgeColors: { primary: string, secondary: string } }>`
+const Badge = styled(Box)<{
+  $badgeColors: { primary: string; secondary: string }
+}>`
   display: flex;
   align-items: center;
   padding: 0 1rem;
@@ -186,12 +194,14 @@ const Separator = styled.span<{ $color: string }>`
   margin: 0 1rem;
   height: 1.8rem;
   background: ${({ $color }) => $color};
-
 `
 
-const getSecondaryBadgeColor = (primaryColor: string | null, theme?: any): string => {
-  if (!primaryColor || !primaryColor.startsWith('rgb')) {
-    return theme?.color.foreground || "inherit";
+const getSecondaryBadgeColor = (
+  primaryColor: string | null,
+  theme: DefaultTheme,
+): string => {
+  if (!primaryColor || !primaryColor.startsWith("rgb")) {
+    return theme?.color.foreground || "inherit"
   }
 
   const matches = primaryColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
@@ -199,26 +209,26 @@ const getSecondaryBadgeColor = (primaryColor: string | null, theme?: any): strin
     const r = parseInt(matches[1], 10) / 255
     const g = parseInt(matches[2], 10) / 255
     const b = parseInt(matches[3], 10) / 255
-    
+
     // Convert RGB to sRGB for better perceptual accuracy
     const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
     const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
     const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
-    
+
     // Calculate relative luminance using WCAG formula
     const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
 
     if (luminance < 0.25) {
-      return theme?.color.foreground;
-    } else if (luminance < 0.50) {
-      return theme?.color.gray2;
+      return theme?.color.foreground
+    } else if (luminance < 0.5) {
+      return theme?.color.gray2
     } else if (luminance < 0.75) {
-      return theme?.color.gray1; 
+      return theme?.color.gray1
     } else {
-      return theme?.color.background;
+      return theme?.color.background
     }
   }
-  return theme?.color.foreground || "inherit";
+  return theme?.color.foreground || "inherit"
 }
 
 const useBadgeColors = (instance_rgb: string | null) => {
@@ -230,30 +240,30 @@ const useBadgeColors = (instance_rgb: string | null) => {
     }
   }
 
-  if (instance_rgb.startsWith('rgb')) {
+  if (instance_rgb.startsWith("rgb")) {
     return {
       primary: instance_rgb,
       secondary: getSecondaryBadgeColor(instance_rgb, theme),
     }
   }
 
-  if (instance_rgb === 'r') {
+  if (instance_rgb === "r") {
     return {
-      primary: 'rgb(199, 7, 45)',
+      primary: "rgb(199, 7, 45)",
       secondary: theme.color.foreground,
     }
   }
 
-  if (instance_rgb === 'g') {
+  if (instance_rgb === "g") {
     return {
-      primary: 'rgb(0, 170, 59)',
+      primary: "rgb(0, 170, 59)",
       secondary: theme.color.foreground,
     }
   }
 
-  if (instance_rgb === 'b') {
+  if (instance_rgb === "b") {
     return {
-      primary: 'rgb(0, 122, 255)',
+      primary: "rgb(0, 122, 255)",
       secondary: theme.color.foreground,
     }
   }
@@ -264,54 +274,85 @@ const useBadgeColors = (instance_rgb: string | null) => {
   }
 }
 
-const EnvironmentIcon = ({ instanceType, color, style }: { instanceType: InstanceType | undefined, color?: string, style?: React.CSSProperties }) => {
+const EnvironmentIcon = ({
+  instanceType,
+  color,
+  style,
+}: {
+  instanceType: InstanceType | undefined
+  color?: string
+  style?: React.CSSProperties
+}) => {
   switch (instanceType) {
     case "development":
       return <Tools size="18px" color={color} style={{ ...style }} />
     case "production":
       return <ShieldCheck size="18px" color={color} style={{ ...style }} />
     case "testing":
-      return <Flask size="18px" color={color} style={{ transform: 'scale(1.2)', ...style }} />
+      return (
+        <Flask
+          size="18px"
+          color={color}
+          style={{ transform: "scale(1.2)", ...style }}
+        />
+      )
     default:
-      return <InfoCircle size="18px" style={{ transform: 'translateY(-0.2rem)', ...style }} color={color} />
+      return (
+        <InfoCircle
+          size="18px"
+          style={{ transform: "translateY(-0.2rem)", ...style }}
+          color={color}
+        />
+      )
   }
-};
+}
 
-const CustomIconWithTooltip = ({ 
-  icon, 
-  placement, 
+const CustomIconWithTooltip = ({
+  icon,
+  placement,
   shownValues,
-}: { 
-  icon: React.ReactNode, 
-  placement: Placement,
-  shownValues: Preferences | null,
+}: {
+  icon: React.ReactNode
+  placement: Placement
+  shownValues: Preferences | null
 }) => {
   const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
 
   return (
-    <PopperHover 
-      placement={placement} 
-      trigger={icon} 
-    >
+    <PopperHover placement={placement} trigger={icon}>
       <CustomTooltipWrapper $badgeColors={badgeColors}>
         <FlexCol>
           {shownValues?.instance_type && (
             <Title>
               <EnvIconWrapper $background={badgeColors.primary}>
-                <EnvironmentIcon color={badgeColors.secondary} instanceType={shownValues?.instance_type} />
+                <EnvironmentIcon
+                  color={badgeColors.secondary}
+                  instanceType={shownValues?.instance_type}
+                />
               </EnvIconWrapper>
-              <Text color="foreground" weight={400}>You are connected to a QuestDB instance for {shownValues?.instance_type}</Text>
+              <Text color="foreground" weight={400}>
+                You are connected to a QuestDB instance for{" "}
+                {shownValues?.instance_type}
+              </Text>
             </Title>
           )}
           <Info>
             <FlexRow>
-              <Text color="foreground" weight={600}>Instance Name:</Text>
-              <Text color="foreground" size="md">{shownValues?.instance_name}</Text>
+              <Text color="foreground" weight={600}>
+                Instance Name:
+              </Text>
+              <Text color="foreground" size="md">
+                {shownValues?.instance_name}
+              </Text>
             </FlexRow>
             {shownValues?.instance_description && (
               <FlexRow>
-                <Text color="foreground" weight={600}>Description:</Text>
-                <Text color="foreground" size="md">{shownValues?.instance_description}</Text>
+                <Text color="foreground" weight={600}>
+                  Description:
+                </Text>
+                <Text color="foreground" size="md">
+                  {shownValues?.instance_description}
+                </Text>
               </FlexRow>
             )}
           </Info>
@@ -352,8 +393,9 @@ export const Toolbar = () => {
   const { autoRefreshTables } = useLocalStorage()
   const shownValues = settingsPopperActive ? previewValues : preferences
   const instanceTypeReadable = shownValues?.instance_type
-    ? shownValues.instance_type.charAt(0).toUpperCase() + shownValues.instance_type.slice(1)
-    : ''
+    ? shownValues.instance_type.charAt(0).toUpperCase() +
+      shownValues.instance_type.slice(1)
+    : ""
   const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
   const theme = useTheme()
 
@@ -372,7 +414,10 @@ export const Toolbar = () => {
         const ssoAuthenticated = ssoAuthState.isSSOAuthenticated()
         if (ssoAuthenticated && currentUser && settings["acl.oidc.client.id"]) {
           // it is an SSO user, we should update the SSO username
-          setSSOUserNameWithClientID(settings["acl.oidc.client.id"], currentUser)
+          setSSOUserNameWithClientID(
+            settings["acl.oidc.client.id"],
+            currentUser,
+          )
         }
         return currentUser
       }
@@ -383,8 +428,8 @@ export const Toolbar = () => {
   }
 
   const fetchEditSettingsPermission = async (currentUser: string | null) => {
-    const isReadonly = settings['http.settings.readonly'] === true
-    if (settings['release.type'] === 'OSS') {
+    const isReadonly = settings["http.settings.readonly"] === true
+    if (settings["release.type"] === "OSS") {
       setCanEditInstanceName(!isReadonly)
       return
     }
@@ -397,8 +442,10 @@ export const Toolbar = () => {
     try {
       const response = await quest.showPermissions(currentUser)
       // Admin user has no permissions listed
-      const canEdit = response.type === QuestDB.Type.DQL
-        && (response.count === 0 || response.data.some(d => d.permission === 'SETTINGS'))
+      const canEdit =
+        response.type === QuestDB.Type.DQL &&
+        (response.count === 0 ||
+          response.data.some((d) => d.permission === "SETTINGS"))
       setCanEditInstanceName(canEdit)
     } catch (e) {
       setCanEditInstanceName(false)
@@ -406,14 +453,14 @@ export const Toolbar = () => {
   }
 
   useEffect(() => {
-    fetchServerDetails().then(fetchEditSettingsPermission)
-    refreshSettingsAndPreferences()
+    void fetchServerDetails().then(fetchEditSettingsPermission)
+    void refreshSettingsAndPreferences()
   }, [])
 
   useEffect(() => {
     if (result && result.type === QuestDB.Type.DDL) {
-      fetchServerDetails()
-      refreshSettingsAndPreferences()
+      void fetchServerDetails()
+      void refreshSettingsAndPreferences()
     }
   }, [result])
 
@@ -424,52 +471,75 @@ export const Toolbar = () => {
         await handleToggle(false)
         toast.success("Instance information updated successfully.")
 
-        const response = await quest.query<TelemetryConfigShape>(`${TelemetryTable.CONFIG} limit -1`)
+        const response = await quest.query<TelemetryConfigShape>(
+          `${TelemetryTable.CONFIG} limit -1`,
+        )
         if (response.type === QuestDB.Type.DQL && response.count === 1) {
-          const serverInfo = response.data[0] as TelemetryConfigShape
+          const serverInfo = response.data[0]
           sendServerInfoTelemetry(serverInfo)
         }
         return
       }
 
-      const { preferences: newPreferences } = await refreshSettingsAndPreferences()
+      const { preferences: newPreferences } =
+        await refreshSettingsAndPreferences()
       setPreviewValues(newPreferences)
       if (result.status === 409) {
-        toast.error("Instance information is updated with the latest changes from the server. Please try updating it again.", { autoClose: 5000 })
+        toast.error(
+          "Instance information is updated with the latest changes from the server. Please try updating it again.",
+          { autoClose: 5000 },
+        )
         return
       }
 
       throw new Error(result.message)
     } catch (e) {
-      toast.error("Failed to update instance information: " + e, { autoClose: 5000 })
+      toast.error(`Failed to update instance information: ${e}`, {
+        autoClose: 5000,
+      })
     }
   }
 
-  const handleUpdateInstanceInfo = useCallback(async (inform: boolean = true) => {
-    const currentVersion = preferences?.version
-    const { preferences: newPreferences } = await refreshSettingsAndPreferences()
-    if (currentVersion !== newPreferences.version && inform) {
-      toast.info("Instance information is updated with the latest changes from the server.", { autoClose: 5000 })
-      const badge = document.querySelector('[data-hook="topbar-instance-badge"]')
-      if (badge) {
-        animateBadgeUpdate(badge as HTMLElement)
+  const handleUpdateInstanceInfo = useCallback(
+    async (inform: boolean = true) => {
+      const currentVersion = preferences?.version
+      const { preferences: newPreferences } =
+        await refreshSettingsAndPreferences()
+      if (currentVersion !== newPreferences.version && inform) {
+        toast.info(
+          "Instance information is updated with the latest changes from the server.",
+          { autoClose: 5000 },
+        )
+        const badge = document.querySelector(
+          '[data-hook="topbar-instance-badge"]',
+        )
+        if (badge) {
+          animateBadgeUpdate(badge as HTMLElement)
+        }
       }
-    }
-    return newPreferences
-  }, [refreshSettingsAndPreferences, preferences])
+      return newPreferences
+    },
+    [refreshSettingsAndPreferences, preferences],
+  )
 
   const handleUpdateInstanceInfoWithInform = useCallback(async () => {
     const newPreferences = await handleUpdateInstanceInfo(true)
-    if (settingsPopperActive && previewValues?.version !== newPreferences.version) {
+    if (
+      settingsPopperActive &&
+      previewValues?.version !== newPreferences.version
+    ) {
       setPreviewValues(newPreferences)
     }
   }, [handleUpdateInstanceInfo, settingsPopperActive, previewValues])
 
-  const handleToggle = useCallback(async (active: boolean) => {
-    const newPreferences = await handleUpdateInstanceInfo(active)
-    setPreviewValues(active ? newPreferences : null)
-    setSettingsPopperActive(active)
-  }, [handleUpdateInstanceInfo])
+  const handleToggle = useCallback(
+    async (active: boolean) => {
+      const newPreferences = await handleUpdateInstanceInfo(active)
+      setPreviewValues(active ? newPreferences : null)
+      setSettingsPopperActive(active)
+    },
+    [handleUpdateInstanceInfo],
+  )
 
   useEffect(() => {
     if (autoRefreshTables) {
@@ -494,42 +564,55 @@ export const Toolbar = () => {
         )}
       </Box>
       {preferences && (
-        <Badge
-          $badgeColors={badgeColors}
-          data-hook="topbar-instance-badge"
-        >
+        <Badge $badgeColors={badgeColors} data-hook="topbar-instance-badge">
           <Box>
-            {(shownValues?.instance_type) ? (
+            {shownValues?.instance_type ? (
               <CustomIconWithTooltip
-                icon={(
+                icon={
                   <div
                     data-hook="topbar-instance-icon"
-                    style={{ padding: '0.7rem' }}
+                    style={{ padding: "0.7rem" }}
                   >
                     <EnvironmentIcon
                       instanceType={shownValues?.instance_type}
                       color={badgeColors.secondary}
-                      style={shownValues?.instance_type === 'production' ? { transform: 'translateY(-0.1rem)' } : {}} 
+                      style={
+                        shownValues?.instance_type === "production"
+                          ? { transform: "translateY(-0.1rem)" }
+                          : {}
+                      }
                     />
                   </div>
-                )}
+                }
                 placement="bottom"
                 shownValues={shownValues}
               />
             ) : (
-              <div style={{ padding: '0.7rem' }}>
-                <ErrorIcon size="18px" color={theme.color.orange} style={{ transform: 'scale(1.3) translateY(-0.1rem)' }} />
+              <div style={{ padding: "0.7rem" }}>
+                <ErrorIcon
+                  size="18px"
+                  color={theme.color.orange}
+                  style={{ transform: "scale(1.3) translateY(-0.1rem)" }}
+                />
               </div>
             )}
           </Box>
-          {shownValues?.instance_name
-            ? <Box data-hook="topbar-instance-name" className="instance-name">
-                <Text className="instance-name-type">{instanceTypeReadable}</Text>
-                <Separator $color={badgeColors.secondary} />
-                <Text className="instance-name-text">{shownValues?.instance_name}</Text>
-              </Box>
-            : <Text data-hook="topbar-instance-name" className="instance-name placeholder">Instance name is not set</Text>
-          }
+          {shownValues?.instance_name ? (
+            <Box data-hook="topbar-instance-name" className="instance-name">
+              <Text className="instance-name-type">{instanceTypeReadable}</Text>
+              <Separator $color={badgeColors.secondary} />
+              <Text className="instance-name-text">
+                {shownValues?.instance_name}
+              </Text>
+            </Box>
+          ) : (
+            <Text
+              data-hook="topbar-instance-name"
+              className="instance-name placeholder"
+            >
+              Instance name is not set
+            </Text>
+          )}
           {canEditInstanceName && (
             <InstanceSettingsPopper
               active={settingsPopperActive}
@@ -537,7 +620,13 @@ export const Toolbar = () => {
               values={previewValues ?? preferences}
               onSave={handleSaveSettings}
               onValuesChange={setPreviewValues}
-              trigger={<Edit data-hook="topbar-instance-edit-icon" size="18px" className={`edit-icon ${shownValues?.instance_name ? '' : 'placeholder'}`} />}
+              trigger={
+                <Edit
+                  data-hook="topbar-instance-edit-icon"
+                  size="18px"
+                  className={`edit-icon ${shownValues?.instance_name ? "" : "placeholder"}`}
+                />
+              }
             />
           )}
         </Badge>

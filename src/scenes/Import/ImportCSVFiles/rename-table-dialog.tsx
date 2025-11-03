@@ -2,7 +2,15 @@ import React from "react"
 import { ProcessedFile } from "./types"
 import { Edit } from "@styled-icons/remix-line"
 import { Undo } from "@styled-icons/boxicons-regular"
-import { Text, Box, Button, Form, ForwardRef, Overlay, Dialog } from "../../../components"
+import {
+  Text,
+  Box,
+  Button,
+  Form,
+  ForwardRef,
+  Overlay,
+  Dialog,
+} from "../../../components"
 import Joi from "joi"
 import { isValidTableName } from "../../../components/TableSchemaDialog/isValidTableName"
 import styled from "styled-components"
@@ -32,7 +40,7 @@ type Props = {
 const schema = Joi.object({
   name: Joi.string()
     .required()
-    .custom((value, helpers) => {
+    .custom((value: string, helpers) => {
       if (!isValidTableName(value)) {
         return helpers.error("string.validTableName")
       }

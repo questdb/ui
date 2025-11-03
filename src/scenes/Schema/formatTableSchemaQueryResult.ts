@@ -1,5 +1,4 @@
 import { pick } from "./../../utils/pick"
-import { Column } from "./../../utils/questdb"
 import { formatTableSchemaQuery } from "./../../utils/formatTableSchemaQuery"
 /*******************************************************************************
  *     ___                  _   ____  ____
@@ -34,7 +33,7 @@ export const formatTableSchemaQueryResult = (
   ttlUnit: string,
   columns: QuestDB.Column[],
   walEnabled: boolean,
-  dedup: boolean
+  dedup: boolean,
 ): string => {
   const findTimestampColumn = columns.find((c) => c.designated)
   return formatTableSchemaQuery({

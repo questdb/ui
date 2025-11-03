@@ -12,7 +12,7 @@ type Props<TFormValues> = {
   onClick?: () => void
 }
 
-export const FormCancel = <TFormValues extends Record<string, any>>({
+export const FormCancel = <TFormValues extends Record<string, unknown>>({
   children,
   disabled,
   variant,

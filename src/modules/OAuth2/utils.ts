@@ -58,7 +58,7 @@ export const getAuthorisationURL = ({
     getBaseURL(settings) +
     settings["acl.oidc.authorization.endpoint"] +
     "?" +
-    urlParams
+    urlParams.toString()
   )
 }
 
@@ -86,13 +86,13 @@ export const hasUIAuth = (settings: Settings) =>
   settings["acl.enabled"] && !settings["acl.basic.auth.realm.enabled"]
 
 export const getSSOUserNameWithClientID = (clientId: string) => {
-    return localStorage.getItem(`${StoreKey.SSO_USERNAME}.${clientId}`) ?? ""
+  return localStorage.getItem(`${StoreKey.SSO_USERNAME}.${clientId}`) ?? ""
 }
 
 export const setSSOUserNameWithClientID = (clientId: string, value: string) => {
-    localStorage.setItem(`${StoreKey.SSO_USERNAME}.${clientId}`, value)
+  localStorage.setItem(`${StoreKey.SSO_USERNAME}.${clientId}`, value)
 }
 
 export const removeSSOUserNameWithClientID = (clientId: string) => {
-    localStorage.removeItem(`${StoreKey.SSO_USERNAME}.${clientId}`)
+  localStorage.removeItem(`${StoreKey.SSO_USERNAME}.${clientId}`)
 }

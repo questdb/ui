@@ -85,13 +85,29 @@ export default [
       ...reactHooks.configs.recommended.rules,
       ...jsxA11y.configs.recommended.rules,
 
-      '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-vars': [
+            "warn",
+            {
+                caughtErrors: "none",
+                argsIgnorePattern: "^_",
+                varsIgnorePattern: "^_",
+                caughtErrorsIgnorePattern: "^_"
+            }
+        ],
       '@typescript-eslint/strict-boolean-expressions': 'off',
       '@typescript-eslint/restrict-template-expressions': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/consistent-type-definitions': 'off',
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        {
+          "checksVoidReturn": false
+        }
+      ],
+      "@typescript-eslint/prefer-promise-reject-errors": "off",
+      "@typescript-eslint/no-unsafe-enum-comparison": "off",
 
       'react/display-name': 'off',
       'react/jsx-no-bind': 'off',
@@ -144,7 +160,7 @@ export default [
 
       'jsx-a11y/alt-text': 'warn',
       'jsx-a11y/anchor-has-content': 'warn',
-      'jsx-a11y/no-autofocus': 'warn',
+      'jsx-a11y/no-autofocus': 'off',
       'jsx-a11y/click-events-have-key-events': 'warn',
       'jsx-a11y/no-static-element-interactions': 'warn',
     },

@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
+type ImportMetaEnv = {
   readonly COMMIT_HASH: string
   readonly MODE: string
 }
 
-interface ImportMeta {
+type ImportMeta = {
   readonly env: ImportMetaEnv
 }
