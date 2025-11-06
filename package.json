@@ -27,8 +27,8 @@
     "test:e2e:auth": "cypress run --spec 'e2e/tests/auth/*.spec.js'",
     "test:e2e:enterprise": "cypress run --spec 'e2e/tests/enterprise/*.spec.js'",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "lint": "eslint src/ e2e/tests/",
+    "lint:fix": "eslint src/ e2e/tests/ --fix",
     "prepare": "husky"
   },
   "dependencies": {
