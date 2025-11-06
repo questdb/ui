@@ -1,9 +1,8 @@
 import React from "react"
 import styled from "styled-components"
-import { Button, Box, Input } from "@questdb/react-components"
-import { Close, Filter3 } from "@styled-icons/remix-line"
+import { Close } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { PopperHover, Tooltip } from "../../../components"
+import { Box, Button, PopperHover, Tooltip, Input } from "../../../components"
 import { useSchema } from "../SchemaContext"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
@@ -20,14 +19,6 @@ const Filter = styled.div`
   position: relative;
   display: flex;
   width: 100%;
-`
-
-const FilterIcon = styled(Filter3)`
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  left: 1rem;
-  color: ${({ theme }) => theme.color.gray2};
 `
 
 const CloseIcon = styled(Close)`
@@ -91,7 +82,9 @@ export const Toolbar = ({
             size="20px"
             onClick={() => {
               setQuery("")
-              queryRef.current?.value && (queryRef.current.value = "")
+              if (queryRef.current?.value) {
+                queryRef.current.value = ""
+              }
             }}
             data-hook="schema-search-clear-button"
           />
@@ -102,14 +95,17 @@ export const Toolbar = ({
           placeholder="Filter..."
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === 'Escape') {
-              if (queryRef.current?.value && queryRef.current.value.length > 0) {
+            if (e.key === "Escape") {
+              if (
+                queryRef.current?.value &&
+                queryRef.current.value.length > 0
+              ) {
                 setQuery("")
                 queryRef.current.value = ""
               } else {
                 updateLeftPanelState({
                   type: null,
-                  width: leftPanelState.width
+                  width: leftPanelState.width,
                 })
               }
             }

@@ -43,18 +43,17 @@ import {
   Refresh,
 } from "@styled-icons/remix-line"
 import {
+  Box,
+  Button,
   PaneContent,
   PaneWrapper,
   PopperHover,
   PrimaryToggleButton,
-  Text,
   Tooltip,
 } from "../../components"
 import { actions } from "../../store"
 import { copyToClipboard, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
-import { Box } from "../../components/Box"
-import { Button } from "@questdb/react-components"
 import { Panel } from "../../components/Panel"
 import { QuestContext } from "../../providers"
 import { eventBus } from "../../modules/EventBus"
@@ -75,7 +74,7 @@ import type { Duration } from "../../scenes/Editor/Metrics/types"
 import { useSchema } from "./SchemaContext"
 import { SchemaProvider } from "./SchemaContext"
 import { TreeNodeKind } from "./Row"
-import { toast } from '../../components/Toast'
+import { toast } from "../../components/Toast"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -93,9 +92,11 @@ const Wrapper = styled(PaneWrapper)<{
 }>`
   overflow-x: auto;
   height: 100%;
-  ${({ open }) => !open && css`
-    display: none;
-  `}
+  ${({ open }) =>
+    !open &&
+    css`
+      display: none;
+    `}
 `
 
 const Content = styled(PaneContent)<{
@@ -139,7 +140,8 @@ const Schema = ({
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
   const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
-  const [materializedViews, setMaterializedViews] = useState<QuestDB.MaterializedView[]>()
+  const [materializedViews, setMaterializedViews] =
+    useState<QuestDB.MaterializedView[]>()
   const dispatch = useDispatch()
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
@@ -147,7 +149,8 @@ const Schema = ({
   const listenerActiveRef = useRef(false)
   const latestFocusChangeTimestampRef = useRef<number>(0)
   const { addBuffer } = useEditor()
-  const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } = useSchema()
+  const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } =
+    useSchema()
 
   const fetchTables = async () => {
     try {
@@ -157,9 +160,8 @@ const Schema = ({
         setTables(response.data)
         dispatch(actions.query.setTables(response.data))
         // Fetch WAL info about the tables
-        const walTablesResponse = await quest.query<QuestDB.WalTable>(
-          "wal_tables()",
-        )
+        const walTablesResponse =
+          await quest.query<QuestDB.WalTable>("wal_tables()")
         if (walTablesResponse && walTablesResponse.type === QuestDB.Type.DQL) {
           // Filter out the system tables
           setWalTables(
@@ -201,9 +203,8 @@ const Schema = ({
 
     for (const query of queries) {
       try {
-        const response = await quest.query<QuestDB.InformationSchemaColumn>(
-          query,
-        )
+        const response =
+          await quest.query<QuestDB.InformationSchemaColumn>(query)
 
         if (response?.type === QuestDB.Type.DQL) {
           dispatch(actions.query.setColumns(response.data))
@@ -219,13 +220,14 @@ const Schema = ({
 
   const copySchemasToClipboard = async () => {
     if (!tables) return
-    let tablesWithError: {name: string, type: TreeNodeKind}[] = []
+    const tablesWithError: { name: string; type: TreeNodeKind }[] = []
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          const tableDDLResponse = table.type === 'table'
-            ? await quest.showTableDDL(table.name)
-            : await quest.showMatViewDDL(table.name)
+          const tableDDLResponse =
+            table.type === "table"
+              ? await quest.showTableDDL(table.name)
+              : await quest.showMatViewDDL(table.name)
           if (tableDDLResponse && tableDDLResponse.type === QuestDB.Type.DQL) {
             return tableDDLResponse.data[0].ddl
           }
@@ -235,11 +237,14 @@ const Schema = ({
       }),
     )
     if (tablesWithError.length === 0) {
-      copyToClipboard(ddls.join("\n\n"))
+      void copyToClipboard(ddls.join("\n\n"))
       toast.success("Schemas copied to clipboard")
-    
     } else {
-      toast.error("Cannot copy schemas from tables: " + tablesWithError.sort().join(", "))
+      const tableNames = tablesWithError
+        .map((t) => t.name)
+        .sort()
+        .join(", ")
+      toast.error(`Cannot copy schemas from tables: ${tableNames}`)
     }
     setSelectOpen(false)
   }
@@ -281,7 +286,10 @@ const Schema = ({
 
   const focusListener = useCallback(() => {
     const now = Date.now()
-    if (listenerActiveRef.current && now - latestFocusChangeTimestampRef.current > 10_000) {
+    if (
+      listenerActiveRef.current &&
+      now - latestFocusChangeTimestampRef.current > 10_000
+    ) {
       latestFocusChangeTimestampRef.current = now
       void fetchTables()
       void fetchColumns()
@@ -309,20 +317,26 @@ const Schema = ({
 
   const allSelectableTables = useMemo(() => {
     if (!tables) return []
-    
+
     const regularTables = tables
-      .filter(t => !materializedViews?.find(v => v.view_name === t.table_name))
-      .map(t => ({name: t.table_name, type: "table" as TreeNodeKind}))
-    
-    const matViews = materializedViews?.map(t => ({
-      name: t.view_name, 
-      type: "matview" as TreeNodeKind
-    })) ?? []
-    
+      .filter(
+        (t) => !materializedViews?.find((v) => v.view_name === t.table_name),
+      )
+      .map((t) => ({ name: t.table_name, type: "table" as TreeNodeKind }))
+
+    const matViews =
+      materializedViews?.map((t) => ({
+        name: t.view_name,
+        type: "matview" as TreeNodeKind,
+      })) ?? []
+
     return [...regularTables, ...matViews]
   }, [tables, materializedViews])
 
-  const suspendedTablesCount = useMemo(() => walTables?.filter((t) => t.suspended).length ?? 0, [walTables])
+  const suspendedTablesCount = useMemo(
+    () => walTables?.filter((t) => t.suspended).length ?? 0,
+    [walTables],
+  )
 
   useEffect(() => {
     if (suspendedTablesCount === 0 && filterSuspendedOnly) {
@@ -334,7 +348,14 @@ const Schema = ({
     <Wrapper ref={innerRef} {...rest}>
       <Panel.Header
         afterTitle={
-          <div style={{ display: "flex", marginRight: "1rem", justifyContent: "space-between", flex: 1 }}>
+          <div
+            style={{
+              display: "flex",
+              marginRight: "1rem",
+              justifyContent: "space-between",
+              flex: 1,
+            }}
+          >
             <Toolbar
               suspendedTablesCount={suspendedTablesCount}
               filterSuspendedOnly={filterSuspendedOnly}
@@ -370,14 +391,20 @@ const Schema = ({
                         skin="transparent"
                         data-hook="schema-select-all-button"
                         onClick={() => {
-                          selectedTables.length === allSelectableTables.length
-                            ? setSelectedTables([])
-                            : setSelectedTables(allSelectableTables)
+                          if (
+                            selectedTables.length === allSelectableTables.length
+                          ) {
+                            setSelectedTables([])
+                          } else {
+                            setSelectedTables(allSelectableTables)
+                          }
                         }}
                       >
                         <Checkbox
-                          visible={true}
-                          checked={selectedTables.length === allSelectableTables.length}
+                          visible
+                          checked={
+                            selectedTables.length === allSelectableTables.length
+                          }
                         />
                       </Button>
                     }
@@ -476,8 +503,7 @@ const Schema = ({
                     }
                   >
                     <Tooltip>
-                      Auto refresh{" "}
-                      {autoRefreshTables ? "enabled" : "disabled"}
+                      Auto refresh {autoRefreshTables ? "enabled" : "disabled"}
                     </Tooltip>
                   </PopperHover>
                 )}

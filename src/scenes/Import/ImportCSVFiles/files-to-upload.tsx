@@ -1,9 +1,16 @@
 import React, { useEffect, useRef } from "react"
 import styled from "styled-components"
-import { Heading, Table, Select, Button } from "@questdb/react-components"
-import { Column, Props as TableProps } from "@questdb/react-components/dist/components/Table"
-import { PopperHover, Text, Tooltip } from "../../../components"
-import { Box } from "../../../components/Box"
+import type { Column, TableProps } from "../../../components"
+import {
+  Box,
+  Button,
+  Heading,
+  PopperHover,
+  Select,
+  Table,
+  Text,
+  Tooltip,
+} from "../../../components"
 import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
 import { FileStatus } from "./file-status"
 import { Grid, Information } from "@styled-icons/remix-line"
@@ -137,26 +144,22 @@ export const FilesToUpload = ({
               {data.fileObject.name.length <= 20 && file}
               <Box gap="1rem" align="center">
                 <FileStatus file={data} />
-                {!data.isUploading &&
-                  data.uploadResult !== undefined && (
-                    <React.Fragment>
-                      <UploadResultDialog file={data} />
-                      <Button
-                        skin="secondary"
-                        prefixIcon={<Grid size="18px" />}
-                        onClick={() =>
-                          onViewData(
-                            data.uploadResult as UploadResult,
-                          )
-                        }
-                      >
-                        Result
-                      </Button>
-                    </React.Fragment>
-                  )}
+                {!data.isUploading && data.uploadResult !== undefined && (
+                  <React.Fragment>
+                    <UploadResultDialog file={data} />
+                    <Button
+                      skin="secondary"
+                      prefixIcon={<Grid size="18px" />}
+                      onClick={() =>
+                        onViewData(data.uploadResult as UploadResult)
+                      }
+                    >
+                      Result
+                    </Button>
+                  </React.Fragment>
+                )}
               </Box>
-              {(data.uploadResult &&
-                  data.uploadResult.rowsRejected > 0) ||
+              {(data.uploadResult && data.uploadResult.rowsRejected > 0) ||
                 (data.error && (
                   <FileTextBox
                     flexDirection="column"
@@ -166,11 +169,8 @@ export const FilesToUpload = ({
                     {data.uploadResult &&
                       data.uploadResult.rowsRejected > 0 && (
                         <Text color="orange" size="sm">
-                          {data.uploadResult.rowsRejected.toLocaleString()}{" "}
-                          row
-                          {data.uploadResult.rowsRejected > 1
-                            ? "s"
-                            : ""}{" "}
+                          {data.uploadResult.rowsRejected.toLocaleString()} row
+                          {data.uploadResult.rowsRejected > 1 ? "s" : ""}{" "}
                           rejected
                         </Text>
                       )}
@@ -208,42 +208,42 @@ export const FilesToUpload = ({
   )
 
   if (ownedByList && ownedByList.length > 0) {
-    columns.push(
-      {
-        header: (
-          <PopperHover
-            placement="top"
-            trigger={
-              <Box align="center" gap="0.5rem" data-hook="import-table-column-owner">
-                Table owner
-                <Information size="16px" />
-              </Box>
-            }
-          >
-            <Tooltip>
-              Required for external (non-database) users.
-            </Tooltip>
-          </PopperHover>
-        ),
-        align: "center",
-        width: "150px",
-        render: ({ data }) => (
-          <Select
-            name="table_owner"
-            defaultValue={ownedByList[0] ?? ""}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              onFilePropertyChange(data.id, {
-                table_owner: e.target.value,
-              })
-            }
-            options={Object.values(ownedByList).map((entity) => ({
-              label: entity,
-              value: entity,
-            }))}
-          />
-        ),
-      },
-    )
+    columns.push({
+      header: (
+        <PopperHover
+          placement="top"
+          trigger={
+            <Box
+              align="center"
+              gap="0.5rem"
+              data-hook="import-table-column-owner"
+            >
+              Table owner
+              <Information size="16px" />
+            </Box>
+          }
+        >
+          <Tooltip>Required for external (non-database) users.</Tooltip>
+        </PopperHover>
+      ),
+      align: "center",
+      width: "150px",
+      render: ({ data }) => (
+        <Select
+          name="table_owner"
+          defaultValue={ownedByList[0] ?? ""}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+            onFilePropertyChange(data.id, {
+              table_owner: e.target.value,
+            })
+          }
+          options={Object.values(ownedByList).map((entity) => ({
+            label: entity,
+            value: entity,
+          }))}
+        />
+      ),
+    })
   }
 
   columns.push(
@@ -252,15 +252,19 @@ export const FilesToUpload = ({
         <PopperHover
           placement="top"
           trigger={
-            <Box align="center" gap="0.5rem" data-hook="import-table-column-schema">
+            <Box
+              align="center"
+              gap="0.5rem"
+              data-hook="import-table-column-schema"
+            >
               Schema
               <Information size="16px" />
             </Box>
           }
         >
           <Tooltip>
-            Optional. By default, QuestDB will infer schema from the
-            CSV file structure
+            Optional. By default, QuestDB will infer schema from the CSV file
+            structure
           </Tooltip>
         </PopperHover>
       ),
@@ -312,9 +316,9 @@ export const FilesToUpload = ({
           <Tooltip>
             <strong>Append</strong>: data will be appended to the set.
             <br />
-            <strong>Overwrite</strong>: any existing data or structure
-            will be overwritten. Required for partitioning and
-            timestamp related changes.
+            <strong>Overwrite</strong>: any existing data or structure will be
+            overwritten. Required for partitioning and timestamp related
+            changes.
           </Tooltip>
         </PopperHover>
       ),
@@ -362,7 +366,7 @@ export const FilesToUpload = ({
       ),
     },
   )
-  
+
   return (
     <DropBox
       files={files}
@@ -378,7 +382,7 @@ export const FilesToUpload = ({
               if (e.target.files === null) return
               addToQueue(e.target.files)
             }}
-            multiple={true}
+            multiple
             ref={uploadInputRef}
             style={{ display: "none" }}
             value=""

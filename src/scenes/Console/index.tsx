@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { useDispatch } from "react-redux"
 import styled from "styled-components"
-import { useScreenSize, PopperHover } from "../../components"
+import { PopperHover } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
+import { useScreenSize } from "../../hooks"
 import { ZeroState } from "./zero-state"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -13,7 +14,7 @@ import { actions, selectors } from "../../store"
 import { Tooltip } from "../../components"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, PieChart, Search, FileSearch } from "@styled-icons/remix-line"
+import { Database2, Grid, PieChart, FileSearch } from "@styled-icons/remix-line"
 import { ResultViewMode } from "./types"
 import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
@@ -74,15 +75,20 @@ const viewModes: {
 const Console = () => {
   const dispatch = useDispatch()
   const { sm } = useScreenSize()
-  const { resultsSplitterBasis, updateSettings, leftPanelState, updateLeftPanelState } =
-    useLocalStorage()
+  const {
+    resultsSplitterBasis,
+    updateSettings,
+    leftPanelState,
+    updateLeftPanelState,
+  } = useLocalStorage()
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { consoleConfig } = useSettings()
   const { isSearchPanelOpen, setSearchPanelOpen, searchPanelRef } = useSearch()
 
-  const isDataSourcesPanelOpen = leftPanelState.type === LeftPanelType.DATASOURCES
-  
+  const isDataSourcesPanelOpen =
+    leftPanelState.type === LeftPanelType.DATASOURCES
+
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
   const zeroStateRef = React.useRef<HTMLDivElement>(null)
@@ -117,7 +123,7 @@ const Console = () => {
   return (
     <Root>
       <Allotment
-        vertical={true}
+        vertical
         onDragEnd={(sizes) => {
           updateSettings(StoreKey.RESULTS_SPLITTER_BASIS, sizes[0])
         }}
@@ -136,12 +142,12 @@ const Console = () => {
                         if (isDataSourcesPanelOpen) {
                           updateLeftPanelState({
                             type: null,
-                            width: leftPanelState.width
+                            width: leftPanelState.width,
                           })
                         } else {
                           updateLeftPanelState({
                             type: LeftPanelType.DATASOURCES,
-                            width: leftPanelState.width
+                            width: leftPanelState.width,
                           })
                         }
                       }}
@@ -180,7 +186,7 @@ const Console = () => {
                 if (sizes[0] !== 0) {
                   updateLeftPanelState({
                     type: leftPanelState.type,
-                    width: sizes[0]
+                    width: sizes[0],
                   })
                 }
               }}

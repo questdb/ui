@@ -3,9 +3,7 @@ import styled from "styled-components"
 import { ProcessedFile } from "./types"
 import { DropBox } from "./dropbox"
 import { Search2 } from "@styled-icons/remix-line"
-import { Box } from "../../../components/Box"
-import { Text } from "@questdb/react-components"
-import { Button, Heading } from "@questdb/react-components"
+import { Box, Button, Text, Heading } from "../../../components"
 import { Parameter } from "../../../utils"
 import { QuestContext } from "../../../providers"
 
@@ -66,7 +64,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
     }
   }
   useEffect(() => {
-    enableCopyIfParamExists()
+    void enableCopyIfParamExists()
   }, [])
 
   return (
@@ -93,7 +91,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
                 if (e.target.files === null) return
                 addToQueue(e.target.files)
               }}
-              multiple={true}
+              multiple
               ref={uploadInputRef}
               style={{ display: "none" }}
               value=""

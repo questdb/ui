@@ -38,41 +38,50 @@ export const initialState: QueryStateShape = {
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
   switch (action.type) {
     case QueryAT.ADD_NOTIFICATION: {
-      const { query: queryText, isExplain = false, updateActiveNotification = true, bufferId } = action.payload
-      
+      const {
+        query: queryText,
+        isExplain = false,
+        updateActiveNotification = true,
+        bufferId,
+      } = action.payload
+
       const notificationWithTimestamp = {
         ...action.payload,
-        createdAt: action.payload.createdAt || new Date()
+        createdAt: action.payload.createdAt || new Date(),
       }
       const { bufferId: _, ...cleanNotification } = notificationWithTimestamp
-      
+
       if (bufferId !== undefined) {
         const bufferNotifications = state.queryNotifications[bufferId] || {}
         const existingQueryNotifications = bufferNotifications[queryText] || {}
         const updatedQueryNotifications = {
           ...existingQueryNotifications,
           latest: cleanNotification,
-          [isExplain ? 'explain' : 'regular']: cleanNotification
+          [isExplain ? "explain" : "regular"]: cleanNotification,
         }
 
         return {
           ...state,
           notifications: [...state.notifications, cleanNotification],
-          queryNotifications: { 
-            ...state.queryNotifications, 
+          queryNotifications: {
+            ...state.queryNotifications,
             [bufferId]: {
               ...bufferNotifications,
-              [queryText]: updatedQueryNotifications
-            }
+              [queryText]: updatedQueryNotifications,
+            },
           },
-          ...(updateActiveNotification ? { activeNotification: cleanNotification } : {}),
+          ...(updateActiveNotification
+            ? { activeNotification: cleanNotification }
+            : {}),
         }
       }
-      
+
       return {
         ...state,
         notifications: [...state.notifications, cleanNotification],
-        ...(updateActiveNotification ? { activeNotification: cleanNotification } : {}),
+        ...(updateActiveNotification
+          ? { activeNotification: cleanNotification }
+          : {}),
       }
     }
 
@@ -88,18 +97,20 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     case QueryAT.CLEANUP_BUFFER_NOTIFICATIONS: {
       const { bufferId } = action.payload
       const bufferNotifications = state.queryNotifications[bufferId] || {}
-      
-      const filteredNotifications = state.notifications.filter(notification => 
-        !bufferNotifications[notification.query]
+
+      const filteredNotifications = state.notifications.filter(
+        (notification) => !bufferNotifications[notification.query],
       )
-      
+
       const updatedQueryNotifications = { ...state.queryNotifications }
       delete updatedQueryNotifications[bufferId]
-      
-      const updatedActiveNotification = state.activeNotification && bufferNotifications[state.activeNotification.query]
-        ? null
-        : state.activeNotification
-      
+
+      const updatedActiveNotification =
+        state.activeNotification &&
+        bufferNotifications[state.activeNotification.query]
+          ? null
+          : state.activeNotification
+
       return {
         ...state,
         notifications: filteredNotifications,
@@ -120,22 +131,22 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       const filteredNotifications = state.notifications.filter(
         (notification) => notification.query !== action.payload,
       )
-      
+
       if (bufferId !== undefined) {
         const bufferNotifications = state.queryNotifications[bufferId] || {}
         const updatedBufferNotifications = { ...bufferNotifications }
         delete updatedBufferNotifications[action.payload]
-        
+
         return {
           ...state,
           notifications: filteredNotifications,
           queryNotifications: {
             ...state.queryNotifications,
-            [bufferId]: updatedBufferNotifications
+            [bufferId]: updatedBufferNotifications,
           },
         }
       }
-      
+
       return {
         ...state,
         notifications: filteredNotifications,
@@ -151,43 +162,46 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       if (bufferId !== undefined) {
         const bufferNotifications = state.queryNotifications[bufferId] || {}
         const updatedBufferNotifications = { ...bufferNotifications }
-        
+
         if (updatedBufferNotifications[oldKey]) {
-          updatedBufferNotifications[newKey] = updatedBufferNotifications[oldKey]
+          updatedBufferNotifications[newKey] =
+            updatedBufferNotifications[oldKey]
           delete updatedBufferNotifications[oldKey]
         }
-        
-        const updatedNotifications = state.notifications.map(notification => 
-          notification.query === oldKey 
+
+        const updatedNotifications = state.notifications.map((notification) =>
+          notification.query === oldKey
             ? { ...notification, query: newKey }
-            : notification
+            : notification,
         )
-        
-        const updatedActiveNotification = state.activeNotification?.query === oldKey
-          ? { ...state.activeNotification, query: newKey }
-          : state.activeNotification
-        
+
+        const updatedActiveNotification =
+          state.activeNotification?.query === oldKey
+            ? { ...state.activeNotification, query: newKey }
+            : state.activeNotification
+
         return {
           ...state,
           notifications: updatedNotifications,
           queryNotifications: {
             ...state.queryNotifications,
-            [bufferId]: updatedBufferNotifications
+            [bufferId]: updatedBufferNotifications,
           },
           activeNotification: updatedActiveNotification,
         }
       }
-      
-      const updatedNotifications = state.notifications.map(notification => 
-        notification.query === oldKey 
+
+      const updatedNotifications = state.notifications.map((notification) =>
+        notification.query === oldKey
           ? { ...notification, query: newKey }
-          : notification
+          : notification,
       )
-      
-      const updatedActiveNotification = state.activeNotification?.query === oldKey
-        ? { ...state.activeNotification, query: newKey }
-        : state.activeNotification
-      
+
+      const updatedActiveNotification =
+        state.activeNotification?.query === oldKey
+          ? { ...state.activeNotification, query: newKey }
+          : state.activeNotification
+
       return {
         ...state,
         notifications: updatedNotifications,
@@ -232,10 +246,13 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
 
     case QueryAT.SET_COLUMNS: {
       const { columns } = action.payload
-      const categorizedColumns = columns.reduce((acc, column) => {
-        acc[column.table_name] = [...(acc[column.table_name] || []), column]
-        return acc
-      }, {} as Record<string, InformationSchemaColumn[]>)
+      const categorizedColumns = columns.reduce(
+        (acc, column) => {
+          acc[column.table_name] = [...(acc[column.table_name] || []), column]
+          return acc
+        },
+        {} as Record<string, InformationSchemaColumn[]>,
+      )
       return {
         ...state,
         columns: categorizedColumns,

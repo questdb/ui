@@ -105,10 +105,18 @@ const CtaBanner = ({ onClick }: Props) => (
     >
       Download
     </DownloadLink>
-    <EnterpriseLink href="https://questdb.com/enterprise" target="_blank" rel="noopener noreferrer">
+    <EnterpriseLink
+      href="https://questdb.com/enterprise"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
       Learn more about QuestDB Enterprise &rarr;
     </EnterpriseLink>
-    <EnterpriseLinkSmall href="https://questdb.com/enterprise" target="_blank" rel="noopener noreferrer">
+    <EnterpriseLinkSmall
+      href="https://questdb.com/enterprise"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
       QuestDB Enterprise &rarr;
     </EnterpriseLinkSmall>
     <CloseIcon onClick={onClick} size="22px" />

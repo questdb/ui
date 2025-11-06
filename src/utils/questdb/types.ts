@@ -114,7 +114,7 @@ export type QueryRawResult =
   | ErrorResult
   | NoticeResult
 
-export type QueryResult<T extends Record<string, any>> =
+export type QueryResult<T extends Record<string, unknown>> =
   | {
       columns: ColumnDefinition[]
       count: number

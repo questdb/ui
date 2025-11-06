@@ -1,14 +1,13 @@
 import React, { useEffect } from "react"
 import styled from "styled-components"
-import { Button } from "@questdb/react-components"
 import { User } from "@styled-icons/remix-line"
-import { Form } from "../../../components/Form"
 import Joi from "joi"
-import { Text } from "../../../components/Text"
+import { Text, Form, Button } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { useSettings } from "../../../providers"
 import { getSSOUserNameWithClientID } from "../utils"
+import { RawDqlResult } from "utils/questdb/types"
 
 const Header = styled.div`
   position: absolute;
@@ -57,7 +56,8 @@ const Container = styled.div`
 const Title = styled.h2`
   color: white;
   text-align: start;
-  font-weight: 600;`
+  font-weight: 600;
+`
 
 const SSOCard = styled.div`
   button {
@@ -205,9 +205,10 @@ export const Login = ({
   const { settings } = useSettings()
   const isEE = settings["release.type"] === "EE"
   const [errorMessage, setErrorMessage] = React.useState<string | undefined>()
-  const ssoUsername = settings["acl.oidc.enabled"] && settings["acl.oidc.client.id"]
-    ? getSSOUserNameWithClientID(settings["acl.oidc.client.id"])
-    : ""
+  const ssoUsername =
+    settings["acl.oidc.enabled"] && settings["acl.oidc.client.id"]
+      ? getSSOUserNameWithClientID(settings["acl.oidc.client.id"])
+      : ""
 
   const httpBasicAuthStrategy = isEE
     ? {
@@ -215,20 +216,17 @@ export const Login = ({
           `alter user '${username}' create token type rest with ttl '1d' refresh transient`,
         store: async (
           response: Response,
-          username: string,
-          password: string,
+          _username: string,
+          _password: string,
         ) => {
-          const token = (await response.json()).dataset[0][1]
+          const json = (await response.json()) as RawDqlResult
+          const token = json.dataset[0][1] as string
           setValue(StoreKey.REST_TOKEN, token)
         },
       }
     : {
         query: () => "select * from long_sequence(1)",
-        store: async (
-          response: Response,
-          username: string,
-          password: string,
-        ) => {
+        store: (_response: Response, username: string, password: string) => {
           setValue(
             StoreKey.BASIC_AUTH_HEADER,
             `Basic ${btoa(`${username}:${password}`)}`,
@@ -240,7 +238,7 @@ export const Login = ({
     const { username, password } = values
     try {
       const response = await fetch(
-        `exec?query=${httpBasicAuthStrategy.query(username)}`,
+        `exec?query=${httpBasicAuthStrategy.query(username)}&session=true`,
         {
           headers: {
             Authorization: `Basic ${btoa(`${username}:${password}`)}`,
@@ -271,7 +269,7 @@ export const Login = ({
   return settings["acl.basic.auth.realm.enabled"] ? null : (
     <div data-hook="auth-login">
       <Header>
-        <a href={"https://questdb.io"}>
+        <a href="https://questdb.io">
           <img
             alt="QuestDB logotype"
             height="20"
@@ -289,7 +287,7 @@ export const Login = ({
           */}
         {settings["acl.oidc.enabled"] && (
           <>
-            <Title style={{ marginBottom: '4rem' }}>Single Sign-On</Title>
+            <Title style={{ marginBottom: "4rem" }}>Single Sign-On</Title>
             <SSOCard>
               {!!ssoUsername && (
                 <StyledButton
@@ -303,13 +301,15 @@ export const Login = ({
               )}
               <StyledButton
                 data-hook="button-sso-login"
-                skin={!!ssoUsername ? "transparent" : "primary"}
-                prefixIcon={!!ssoUsername ? undefined : <User size="18px" />}
+                skin={ssoUsername ? "transparent" : "primary"}
+                prefixIcon={ssoUsername ? undefined : <User size="18px" />}
                 onClick={() => onOAuthLogin(true)}
               >
-                {!!ssoUsername ? "Choose a different account" : "Continue with SSO"}
+                {ssoUsername
+                  ? "Choose a different account"
+                  : "Continue with SSO"}
               </StyledButton>
-              <Line style={{ marginBottom: '4rem', marginTop: '2rem' }}>
+              <Line style={{ marginBottom: "4rem", marginTop: "2rem" }}>
                 <LineText color="gray2">or</LineText>
               </Line>
             </SSOCard>
@@ -324,16 +324,13 @@ export const Login = ({
             validationSchema={schema}
           >
             <Form.Item name="username" label="User name">
-              <Form.Input
-                name="username"
-                placeholder={"johndoe"}
-              />
+              <Form.Input name="username" placeholder="johndoe" />
             </Form.Item>
             <Form.Item name="password" label="Password">
               <Form.Input
                 name="password"
                 type="password"
-                placeholder={"••••••••"}
+                placeholder="••••••••"
               />
             </Form.Item>
             <Form.Submit variant="primary">Sign In</Form.Submit>

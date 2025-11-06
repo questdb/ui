@@ -140,8 +140,6 @@ export const getXAxisFormat = (
     format = "HH:mm"
   } else if (seconds <= 60 * 60 * 24) {
     format = "HH:mm"
-  } else if (seconds <= 60 * 60 * 24) {
-    format = "HH:mm"
   } else {
     format = "dd/MM"
   }
@@ -196,7 +194,7 @@ export function compactSQL(sql: string) {
       .replace(/\s*\(\s*/g, "(")
       .replace(/\s*\)\s*/g, ")")
       // Remove spaces around arithmetic operators (+, -, *, /, %)
-      .replace(/\s*([+\-*\/%])\s*/g, "$1")
+      .replace(/\s*([+\-*/%])\s*/g, "$1")
       // Remove spaces around comparison operators (=, >, <, >=, <=, <>, !=)
       .replace(/\s*(=|<>|!=|>=|<=|>|<)\s*/g, "$1")
       // Trim leading/trailing spaces
@@ -233,7 +231,7 @@ export const getSamplingRateForPeriod = (
 
 export const hasData = (data?: uPlot.AlignedData) => {
   if (!data || data[1].length === 0) return false
-  return data[1].length > 0 && data[1].some((value: any) => value !== null)
+  return data[1].length > 0 && data[1].some((value) => value !== null)
 }
 
 export const isDateToken = (token: string) => {

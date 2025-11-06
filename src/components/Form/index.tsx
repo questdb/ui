@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import React, { KeyboardEvent, useEffect } from "react"
 import {
   useForm,
@@ -5,6 +6,8 @@ import {
   SubmitHandler,
   UseFormProps,
   WatchObserver,
+  FieldValues,
+  FieldNamesMarkedBoolean,
 } from "react-hook-form"
 import { joiResolver } from "@hookform/resolvers/joi"
 import { Schema } from "joi"
@@ -17,12 +20,12 @@ import { FormSubmit } from "./FormSubmit"
 import { FormCancel } from "./FormCancel"
 import { FormTextArea } from "./FormTextArea"
 
-type DirtyChangeObserver<T = Record<string, any>> = (
+type DirtyChangeObserver<T extends FieldValues = FieldValues> = (
   isDirty: boolean,
-  dirtyFields: Partial<T> | Record<string, string>,
+  dirtyFields: FieldNamesMarkedBoolean<T>,
 ) => void
 
-export type Props<TFormValues> = {
+export type Props<TFormValues extends FieldValues> = {
   name: string
   method?: HTMLFormElement["method"]
   onSubmit: SubmitHandler<TFormValues>
@@ -35,7 +38,7 @@ export type Props<TFormValues> = {
 }
 
 export const Form = <
-  TFormValues extends Record<string, any> = Record<string, any>,
+  TFormValues extends Record<string, unknown> = Record<string, unknown>,
 >({
   name,
   method = "post",
@@ -47,7 +50,7 @@ export const Form = <
   defaultValues,
   preventSubmitOnEnter,
 }: Props<TFormValues>) => {
-  let props: UseFormProps<TFormValues> = {}
+  const props: UseFormProps<TFormValues> = {}
 
   if (defaultValues) {
     props.defaultValues = defaultValues
@@ -83,7 +86,7 @@ export const Form = <
   }
 
   if (Object.keys(methods.formState.errors).length > 0) {
-    console.log("Schema validation errors", methods.formState.errors)
+    console.warn("Schema validation errors", methods.formState.errors)
   }
 
   return (

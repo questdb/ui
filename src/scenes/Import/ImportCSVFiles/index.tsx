@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box } from "../../../components/Box"
 import { FilesToUpload } from "./files-to-upload"
 import { ProcessedFile } from "./types"
 import { SchemaColumn } from "components/TableSchemaDialog/types"
@@ -12,13 +11,13 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { getTimestampFormat, isTimestamp } from "./utils"
 import { MAX_UNCOMMITTED_ROWS } from "./const"
-import { useIsVisible } from "../../../components"
+import { Box } from "../../../components"
+import { useIsVisible } from "../../../hooks"
 import {
   extractPrecionFromGeohash,
   isGeoHash,
   mapColumnTypeToQuestDB,
   mapColumnTypeToUI,
-  uuid,
 } from "./utils"
 import { Upload } from "./upload"
 import { getValue } from "../../../utils/localStorage"
@@ -55,9 +54,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
     try {
       let ownedByNames: string[] = []
-      const userResult = await quest.query<Parameter>(
-        `select current_user()`,
-      )
+      const userResult = await quest.query<Parameter>(`select current_user()`)
       if (userResult.type === "dql" && userResult.count > 0) {
         const username = Object.values(userResult.data[0])[0] as string
         if (username) {
@@ -71,22 +68,22 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             `show groups '${username}'`,
           )
           if (result.type === "dql" && result.count > 0) {
-            const groups = result.data.map(row => Object.values(row)[0] as string)
+            const groups = result.data.map(
+              (row) => Object.values(row)[0] as string,
+            )
             ownedByNames = ownedByNames.concat(groups)
           }
         }
       }
 
-      setOwnedByList(
-        ownedByNames,
-      )
+      setOwnedByList(ownedByNames)
     } catch (ex) {
       return
     }
   }
 
   useEffect(() => {
-    getOwnedByList()
+    void getOwnedByList()
   }, [])
 
   const setFileProperties = (id: string, file: Partial<ProcessedFile>) => {
@@ -136,7 +133,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         const partitionBy =
           result.status === FileCheckStatus.EXISTS && tables
-            ? await (async () => {
+            ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.partitionBy ?? "NONE"
               })()
@@ -144,7 +141,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         const ttlValue =
           result.status === FileCheckStatus.EXISTS && tables
-            ? await (async () => {
+            ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.ttlValue ?? 0
               })()
@@ -152,7 +149,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         const ttlUnit =
           result.status === FileCheckStatus.EXISTS && tables
-            ? await (async () => {
+            ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.ttlUnit ?? "HOURS"
               })()
@@ -160,14 +157,14 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
         const timestamp =
           result.status === FileCheckStatus.EXISTS && tables
-            ? await (async () => {
+            ? (() => {
                 const table = tables.find((t) => t.table_name === file.name)
                 return table?.designatedTimestamp ?? ""
               })()
             : ""
 
         return {
-          id: uuid(),
+          id: crypto.randomUUID(),
           fileObject: file,
           table_name: file.name,
           table_owner: ownedByList[0],
@@ -216,7 +213,7 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
 
   useEffect(() => {
     if (isVisible) {
-      handleVisible()
+      void handleVisible()
     }
   }, [isVisible])
 
@@ -273,12 +270,11 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
                           ...pick(c, ["name"]),
                           ...{
                             type: mapColumnTypeToUI(c.type),
-                            pattern:
-                              isTimestamp(c.type)
+                            pattern: isTimestamp(c.type)
+                              ? match?.pattern
                                 ? match?.pattern
-                                  ? match?.pattern
-                                  : getTimestampFormat(c.type)
-                                : "",
+                                : getTimestampFormat(c.type)
+                              : "",
                             precision: isGeoHash(c.type)
                               ? extractPrecionFromGeohash(c.type)
                               : undefined,

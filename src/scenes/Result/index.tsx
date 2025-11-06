@@ -32,21 +32,24 @@ import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
 import { Markdown } from "@styled-icons/bootstrap/Markdown"
 import { Check } from "@styled-icons/bootstrap/Check"
+import { ArrowDownS } from "@styled-icons/remix-line"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
+  Box,
+  Button,
   PaneContent,
   PaneWrapper,
   PopperHover,
+  PopperToggle,
   PrimaryToggleButton,
   Text,
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { color, ErrorResult, QueryRawResult } from "../../utils"
+import { color, ErrorResult, QueryRawResult, RawErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
-import { Button } from "@questdb/react-components"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -55,6 +58,8 @@ import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
+import { toast } from "../../components"
+import { API_VERSION } from "../../consts"
 
 const Root = styled.div`
   display: flex;
@@ -96,6 +101,39 @@ const TableFreezeColumnIcon = styled(TableFreezeColumn)`
 
 const RowCount = styled(Text)`
   margin-right: 1rem;
+  line-height: 1.285;
+`
+
+const DownloadButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+`
+
+const ArrowIcon = styled(ArrowDownS)<{ $open: boolean }>`
+  transform: ${({ $open }) => ($open ? "rotate(180deg)" : "rotate(0deg)")};
+`
+
+const DownloadDropdownButton = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+`
+
+const DownloadMenuItem = styled(Button)`
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  width: 100%;
+  height: 3rem;
+  padding: 0 1rem;
+  font-size: 1.4rem;
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
@@ -105,6 +143,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const dispatch = useDispatch()
 
   useEffect(() => {
@@ -141,20 +180,26 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       quest,
     )
 
-    _grid.addEventListener("header.click", function (event: CustomEvent) {
-      eventBus.publish(
-        EventType.MSG_EDITOR_INSERT_COLUMN,
-        event.detail.columnName,
-      )
-    })
+    _grid.addEventListener(
+      "header.click",
+      function (event: CustomEvent<{ columnName: string }>) {
+        eventBus.publish(
+          EventType.MSG_EDITOR_INSERT_COLUMN,
+          event.detail.columnName,
+        )
+      },
+    )
 
     _grid.addEventListener("yield.focus", function () {
       eventBus.publish(EventType.MSG_EDITOR_FOCUS)
     })
 
-    _grid.addEventListener("freeze.state", function (event: CustomEvent) {
-      setGridFreezeLeftState(event.detail.freezeLeft)
-    })
+    _grid.addEventListener(
+      "freeze.state",
+      function (event: CustomEvent<{ freezeLeft: number }>) {
+        setGridFreezeLeftState(event.detail.freezeLeft)
+      },
+    )
   }, [])
 
   useEffect(() => {
@@ -193,11 +238,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <PrimaryToggleButton
           onClick={() => {
-            copyToClipboard(gridRef?.current?.getResultAsMarkdown() as string)
-              .then(() => {
-                setIsCopied(true)
-                setTimeout(() => setIsCopied(false), 1000)
-              })
+            void copyToClipboard(
+              gridRef?.current?.getResultAsMarkdown() as string,
+            ).then(() => {
+              setIsCopied(true)
+              setTimeout(() => setIsCopied(false), 1000)
+            })
           }}
         >
           {isCopied ? <Check size="18px" /> : <Markdown size="18px" />}
@@ -223,7 +269,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
-          onClick={gridRef?.current?.shuffleFocusedColumnToFront}
+          onClick={() => gridRef?.current?.shuffleFocusedColumnToFront()}
         >
           <HandPointLeft size="18px" />
         </Button>
@@ -234,7 +280,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
-          onClick={gridRef?.current?.clearCustomLayout}
+          onClick={() => gridRef?.current?.clearCustomLayout()}
         >
           <Reset size="18px" />
         </Button>
@@ -264,6 +310,52 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     }
   }, [result])
 
+  const handleDownload = (format: "csv" | "parquet") => {
+    setDownloadMenuActive(false)
+    const sql = gridRef?.current?.getSQL()
+    if (!sql) {
+      toast.error("No SQL query found to download")
+      return
+    }
+
+    const url = `exp?${QuestDB.Client.encodeParams({
+      query: sql,
+      version: API_VERSION,
+      fmt: format,
+      filename: `questdb-query-${Date.now().toString()}`,
+      ...(format === "parquet" ? { rmode: "nodelay" } : {}),
+    })}`
+
+    const iframe = document.createElement("iframe")
+    iframe.style.display = "none"
+    document.body.appendChild(iframe)
+
+    iframe.onerror = (e) => {
+      if (typeof e === "object") {
+        toast.error(`An error occurred while downloading the file`)
+      }
+      const error = e as string
+      toast.error(`An error occurred while downloading the file: ${error}`)
+    }
+
+    iframe.onload = () => {
+      const content = iframe.contentDocument?.body?.textContent
+      if (content) {
+        let error = "An error occurred while downloading the file"
+        try {
+          const contentJson = JSON.parse(content) as RawErrorResult
+          error += `: ${contentJson.error ?? content}`
+        } catch (_) {
+          error += `: ${content}`
+        }
+        toast.error(error)
+      }
+      document.body.removeChild(iframe)
+    }
+
+    iframe.src = url
+  }
+
   return (
     <Root>
       <Wrapper>
@@ -274,9 +366,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             </RowCount>
           )}
           {viewMode === "grid" &&
-            gridActions.map((action, index) => (
+            gridActions.map((action) => (
               <PopperHover
-                key={index}
+                key={action.tooltipText}
                 delay={350}
                 placement="bottom"
                 trigger={action.trigger}
@@ -285,25 +377,45 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </PopperHover>
             ))}
 
-          <PopperHover
-            delay={350}
-            placement="bottom"
+          <DownloadButton
+            skin="secondary"
+            data-hook="download-parquet-button"
+            onClick={() => handleDownload("parquet")}
+          >
+            <Box align="center" gap="0.5rem" style={{ lineHeight: "1.285" }}>
+              <Download2 height="18px" width="18px" />
+              Download as Parquet
+            </Box>
+          </DownloadButton>
+          <PopperToggle
+            active={downloadMenuActive}
+            onToggle={setDownloadMenuActive}
+            placement="bottom-end"
+            modifiers={[
+              {
+                name: "offset",
+                options: {
+                  offset: [0, 4],
+                },
+              },
+            ]}
             trigger={
-              <Button
-                skin="transparent"
-                onClick={() => {
-                  const sql = gridRef?.current?.getSQL()
-                  if (sql) {
-                    quest.exportQueryToCsv(sql)
-                  }
-                }}
+              <DownloadDropdownButton
+                skin="secondary"
+                data-hook="download-dropdown-button"
               >
-                <Download2 size="18px" />
-              </Button>
+                <ArrowIcon size="18px" $open={downloadMenuActive} />
+              </DownloadDropdownButton>
             }
           >
-            <Tooltip>Download result as a CSV file</Tooltip>
-          </PopperHover>
+            <DownloadMenuItem
+              data-hook="download-csv-button"
+              skin="secondary"
+              onClick={() => handleDownload("csv")}
+            >
+              Download as CSV
+            </DownloadMenuItem>
+          </PopperToggle>
         </Actions>
 
         <Content>
@@ -311,9 +423,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
 
           <div id="quick-vis">
             <div className="quick-vis-controls">
-              <form className="v-fit" role="form">
+              <form className="v-fit">
                 <div className="form-group">
-                  <label>Chart type</label>
+                  <label htmlFor="_qvis_frm_chart_type">Chart type</label>
                   <select id="_qvis_frm_chart_type">
                     <option>bar</option>
                     <option>line</option>
@@ -321,14 +433,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Labels</label>
+                  <label htmlFor="_qvis_frm_axis_x">Labels</label>
                   <select
                     id="_qvis_frm_axis_x"
                     data-hook="chart-panel-labels-select"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Series</label>
+                  <label htmlFor="_qvis_frm_axis_y">Series</label>
                   <select
                     id="_qvis_frm_axis_y"
                     data-hook="chart-panel-series-select"

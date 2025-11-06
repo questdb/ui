@@ -25,7 +25,6 @@
 import { QuestContext } from "../../../providers"
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { SecondaryButton } from "../../../components"
 import { ExternalLink, ArrowUpCircle } from "@styled-icons/remix-line"
 import { Release } from "../../../utils/questdb"
 import { Team } from "@styled-icons/remix-line"
@@ -33,6 +32,7 @@ import { BuildingMultiple } from "@styled-icons/fluentui-system-filled"
 import { ShieldLockFill } from "@styled-icons/bootstrap/ShieldLockFill"
 import { Versions } from "../../../providers/QuestProvider/types"
 import { getCanUpgrade } from "./services"
+import { Button } from "../../../components"
 
 const Wrapper = styled.div`
   display: flex;
@@ -44,7 +44,7 @@ const Wrapper = styled.div`
     margin-right: 1rem;
   }
 `
-const ReleaseNotesButton = styled(SecondaryButton)<{ enterprise?: boolean }>`
+const ReleaseNotesButton = styled(Button)<{ enterprise?: boolean }>`
   position: relative;
   ${({ enterprise }) => (enterprise ? `background: #322733;` : ``)}
   gap: 0.5rem;
@@ -133,6 +133,7 @@ const BuildVersion = () => {
         target="_blank"
       >
         <ReleaseNotesButton
+          skin="secondary"
           enterprise={enterpriseVersion}
           title={
             ["dev", "oss"].includes(buildVersion.type)

@@ -115,9 +115,12 @@ export const walTransactionThroughput: Widget = {
         ) sample by ${sampleBySeconds}s`
     }
   },
-  alignData: (data: WallTransactionThroughout[]): uPlot.AlignedData => [
-    data.map((l) => Date.parse(l.created)),
-    data.map((l) => sqlValueToFixed(l.commit_rate)),
-  ],
+  alignData: (data): uPlot.AlignedData => {
+    const rows = data as WallTransactionThroughout[]
+    return [
+      rows.map((l) => Date.parse(l.created)),
+      rows.map((l) => sqlValueToFixed(l.commit_rate)),
+    ]
+  },
   mapYValue: (rawValue: number) => formatNumbers(rawValue),
 }

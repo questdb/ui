@@ -5,8 +5,8 @@ import {
   Box,
   Button,
   Overlay,
-} from "@questdb/react-components"
-import { Text } from "../../../components"
+  Text,
+} from "../../../components"
 import styled from "styled-components"
 import { AddChart } from "@styled-icons/material"
 import { MetricType } from "./utils"
@@ -31,10 +31,10 @@ const Metric = styled(Box).attrs({ flexDirection: "column", gap: "0" })`
   cursor: pointer;
   border: 1px solid transparent;
   padding-bottom: 2rem;
-  background: ${({ theme }: { theme: any }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.backgroundLighter};
 
   &:hover {
-    border-color: ${({ theme }: { theme: any }) => theme.color.comment};
+    border-color: ${({ theme }) => theme.color.comment};
   }
 `
 
@@ -51,7 +51,7 @@ type Props = {
 export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
   const { activeBuffer, buffers, updateBuffer } = useEditor()
 
-  const buffer = buffers.find((b: any) => b.id === activeBuffer?.id)
+  const buffer = buffers.find((b) => b.id === activeBuffer?.id)
 
   const metrics = buffer?.metricsViewState?.metrics ?? []
   const previousMetric =
@@ -59,7 +59,7 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
 
   const color = previousMetric
     ? getColorForNewMetric(
-        metrics.map((m: any) => m.color),
+        metrics.map((m) => m.color),
         previousMetric.color,
       )
     : defaultColor

@@ -1,13 +1,12 @@
 import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
-import { ForwardRef, Overlay } from "@questdb/react-components"
 import { Close } from "@styled-icons/remix-line"
 import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
+import { ForwardRef, Overlay } from "../../components"
 import { ContentWrapper } from "./content-wrapper"
-import { PaneMenu } from "../../components/PaneMenu"
 import { Panel } from "../../components/Panel"
 
 type DrawerProps = {
@@ -80,11 +79,6 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
     outline: none;
   }
   `};
-`
-
-const Header = styled(PaneMenu)`
-  justify-content: space-between;
-  padding-left: 2rem;
 `
 
 const StyledClose = styled(RadixDialog.Close).attrs({

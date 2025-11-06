@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+/* eslint-disable */
 // @ts-nocheck
 
 import "echarts/lib/chart/bar"
@@ -48,8 +49,8 @@ export function quickVis(
   msgBus: ReturnType<typeof jQuery>,
   quest: QuestDB.Client,
 ) {
-  let bus = msgBus
-  let div = root
+  const bus = msgBus
+  const div = root
   const btnDraw = $("#_qvis_frm_draw")
   let viewport
   let echart: echarts.ECharts
@@ -130,7 +131,7 @@ export function quickVis(
         // prepare x-axis, there can only be one
         let optionXAxis
         if (xAxis != null) {
-          let xAxisDataIndex = map.get(xAxis)
+          const xAxisDataIndex = map.get(xAxis)
           // x-axis data
           const data = []
           for (i = 0; i < dataset.length; i++) {
@@ -140,19 +141,19 @@ export function quickVis(
           optionXAxis = {
             type: "category",
             name: xAxis,
-            data: data,
+            data,
           }
         } else {
           optionXAxis = {}
         }
 
-        let series = []
+        const series = []
         // prepare series data
         if (yAxis.length > 0) {
           for (i = 0; i < yAxis.length; i++) {
             const columnIndex = map.get(yAxis[i])
             if (columnIndex) {
-              let seriesData = []
+              const seriesData = []
               for (let j = 0; j < dataset.length; j++) {
                 seriesData[j] = dataset[j][columnIndex]
               }
@@ -190,8 +191,9 @@ export function quickVis(
           xAxis: optionXAxis,
           yAxis: {
             type: "value",
+            scale: true, // Enable dynamic scaling based on data values
           },
-          series: series,
+          series,
         }
         echart.setOption(option, true)
       }
@@ -285,7 +287,7 @@ export function quickVis(
   }
 
   function updatePickers(data: { columns: any; query: any }) {
-    let x = []
+    const x = []
     const columns = data.columns
     for (let i = 0; i < columns.length; i++) {
       x[i] = { text: columns[i].name, value: columns[i].name }

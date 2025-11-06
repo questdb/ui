@@ -1,8 +1,14 @@
 import React, { useState, FormEvent, ReactNode, useRef, useEffect } from "react"
 import styled from "styled-components"
-import { Box, Button, Input, Loader, Select } from "@questdb/react-components"
-import { Text } from "../Text"
-import { PopperToggle } from "../PopperToggle"
+import {
+  Box,
+  Button,
+  Input,
+  Loader,
+  PopperToggle,
+  Select,
+  Text,
+} from "../../components"
 import { Preferences, InstanceType } from "../../utils/questdb/types"
 
 const Wrapper = styled.div`
@@ -23,16 +29,22 @@ const ColorSelector = styled.div`
   align-self: center;
 `
 
-const ColorOption = styled.button<{ colorValue: string; selected: boolean; customColor?: string }>`
+const ColorOption = styled.button<{
+  colorValue: string
+  selected: boolean
+  customColor?: string
+}>`
   width: 3rem;
   height: 3rem;
   border-radius: 0.4rem;
   cursor: pointer;
-  border: 2px solid ${({ theme, selected }) => (selected ? theme.color.foreground : "transparent")};
+  border: 2px solid
+    ${({ theme, selected }) =>
+      selected ? theme.color.foreground : "transparent"};
   padding: 0;
   background: ${({ colorValue, theme, customColor }) => {
-    if (customColor) return customColor;
-    
+    if (customColor) return customColor
+
     switch (colorValue) {
       case "r":
         return "#c7072d"
@@ -46,7 +58,7 @@ const ColorOption = styled.button<{ colorValue: string; selected: boolean; custo
         return "transparent"
     }
   }};
-  
+
   &:focus-visible {
     outline: 1px solid ${({ theme }) => theme.color.cyan};
   }
@@ -58,7 +70,8 @@ const ColorWheelOption = styled.button<{ selected: boolean }>`
   height: 3rem;
   border-radius: 0.4rem;
   cursor: pointer;
-  border: ${({ selected, theme }) => selected ? `2px solid ${theme.color.foreground}` : "0"};
+  border: ${({ selected, theme }) =>
+    selected ? `2px solid ${theme.color.foreground}` : "0"};
   padding: 0;
   overflow: hidden;
 
@@ -74,13 +87,13 @@ const ColorWheelOption = styled.button<{ selected: boolean }>`
     width: 100%;
     height: 100%;
     background: conic-gradient(
-    #ff0000,
-    #ffff00,
-    #00ff00,
-    #00ffff,
-    #0000ff,
-    #ff00ff,
-    #ff0000
+      #ff0000,
+      #ffff00,
+      #00ff00,
+      #00ffff,
+      #0000ff,
+      #ff00ff,
+      #ff0000
     );
   }
 `
@@ -99,13 +112,13 @@ const ColorInputRow = styled.div`
   align-items: center;
 `
 
-const ColorSlider = styled.input.attrs({ type: 'range', min: 0, max: 255 })`
+const ColorSlider = styled.input.attrs({ type: "range", min: 0, max: 255 })`
   flex: 1;
   height: 1rem;
   appearance: none;
-  background: linear-gradient(to right, rgb(0,0,0), rgb(255,0,0));
+  background: linear-gradient(to right, rgb(0, 0, 0), rgb(255, 0, 0));
   border-radius: 0.5rem;
-  
+
   &::-webkit-slider-thumb {
     appearance: none;
     width: 1.8rem;
@@ -115,28 +128,32 @@ const ColorSlider = styled.input.attrs({ type: 'range', min: 0, max: 255 })`
     cursor: pointer;
     border: 1px solid ${({ theme }) => theme.color.gray1};
   }
-  
+
   &.red {
-    background: linear-gradient(to right, rgb(0,0,0), rgb(255,0,0));
+    background: linear-gradient(to right, rgb(0, 0, 0), rgb(255, 0, 0));
   }
-  
+
   &.green {
-    background: linear-gradient(to right, rgb(0,0,0), rgb(0,255,0));
+    background: linear-gradient(to right, rgb(0, 0, 0), rgb(0, 255, 0));
   }
-  
+
   &.blue {
-    background: linear-gradient(to right, rgb(0,0,0), rgb(0,0,255));
+    background: linear-gradient(to right, rgb(0, 0, 0), rgb(0, 0, 255));
   }
 `
 
-const ColorValueInput = styled.input.attrs({ type: 'number', min: 0, max: 255 })`
+const ColorValueInput = styled.input.attrs({
+  type: "number",
+  min: 0,
+  max: 255,
+})`
   width: 6rem;
   padding: 0.5rem;
   background: ${({ theme }) => theme.color.selection};
   border: 1px solid ${({ theme }) => theme.color.gray1};
   border-radius: 0.4rem;
   color: ${({ theme }) => theme.color.foreground};
-  
+
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.color.cyan};
@@ -214,8 +231,8 @@ const TextArea = styled.textarea`
   }
 `
 
-const FormLabel = styled.label<{ align?: 'left' | 'center' }>`
-  text-align: ${props => props.align || 'left'};
+const FormLabel = styled.label<{ align?: "left" | "center" }>`
+  text-align: ${(props) => props.align || "left"};
   width: 100%;
   font-size: 1.6rem;
 `
@@ -235,29 +252,33 @@ type Props = {
   trigger: ReactNode
 }
 
-export const InstanceSettingsPopper = ({ 
-  active, 
-  onToggle, 
-  values, 
-  onSave, 
+export const InstanceSettingsPopper = ({
+  active,
+  onToggle,
+  values,
+  onSave,
   onValuesChange,
   trigger,
 }: Props) => {
   const [isSaving, setIsSaving] = useState(false)
-  const [instanceNameError, setInstanceNameError] = useState<string | null>(null)
+  const [instanceNameError, setInstanceNameError] = useState<string | null>(
+    null,
+  )
   const [showCustomColor, setShowCustomColor] = useState(false)
   const [rgbValues, setRgbValues] = useState({ r: 0, g: 0, b: 0 })
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (values.instance_rgb && values.instance_rgb.startsWith('rgb')) {
+    if (values.instance_rgb && values.instance_rgb.startsWith("rgb")) {
       setShowCustomColor(true)
-      const matches = values.instance_rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+      const matches = values.instance_rgb.match(
+        /rgb\((\d+),\s*(\d+),\s*(\d+)\)/,
+      )
       if (matches) {
         setRgbValues({
           r: parseInt(matches[1], 10),
           g: parseInt(matches[2], 10),
-          b: parseInt(matches[3], 10)
+          b: parseInt(matches[3], 10),
         })
       }
     } else {
@@ -267,7 +288,7 @@ export const InstanceSettingsPopper = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    
+
     if (!values?.instance_name?.trim()) {
       setInstanceNameError("Instance name is required")
       return
@@ -286,7 +307,7 @@ export const InstanceSettingsPopper = ({
 
   const handleColorSelect = (color: string | undefined) => {
     onValuesChange({ ...values, instance_rgb: color })
-    if (color !== 'custom') {
+    if (color !== "custom") {
       setShowCustomColor(false)
     }
   }
@@ -296,7 +317,7 @@ export const InstanceSettingsPopper = ({
     onValuesChange({ ...values, instance_rgb: rgbColorString })
   }
 
-  const handleRgbChange = (component: 'r' | 'g' | 'b', value: number) => {
+  const handleRgbChange = (component: "r" | "g" | "b", value: number) => {
     const newValues = { ...rgbValues, [component]: value }
     setRgbValues(newValues)
     const newRgbColor = `rgb(${newValues.r}, ${newValues.g}, ${newValues.b})`
@@ -317,9 +338,9 @@ export const InstanceSettingsPopper = ({
   const rgbColorString = `rgb(${rgbValues.r}, ${rgbValues.g}, ${rgbValues.b})`
 
   return (
-    <PopperToggle 
-      active={active} 
-      onToggle={onToggle} 
+    <PopperToggle
+      active={active}
+      onToggle={onToggle}
       trigger={trigger}
       placement="bottom-start"
     >
@@ -350,16 +371,28 @@ export const InstanceSettingsPopper = ({
               ]}
               required
               value={values.instance_type}
-              onChange={(e) => onValuesChange({ ...values, instance_type: e.target.value as InstanceType })}
+              onChange={(e) =>
+                onValuesChange({
+                  ...values,
+                  instance_type: e.target.value as InstanceType,
+                })
+              }
             />
           </FormGroup>
           <FormGroup>
-            <FormLabel htmlFor="instance-description-input">Description</FormLabel>
+            <FormLabel htmlFor="instance-description-input">
+              Description
+            </FormLabel>
             <TextArea
               id="instance-description-input"
               data-hook="topbar-instance-description-input"
               value={values.instance_description}
-              onChange={(e) => onValuesChange({ ...values, instance_description: e.target.value })}
+              onChange={(e) =>
+                onValuesChange({
+                  ...values,
+                  instance_description: e.target.value,
+                })
+              }
               placeholder="Enter instance description"
             />
           </FormGroup>
@@ -369,8 +402,8 @@ export const InstanceSettingsPopper = ({
               <ColorOption
                 type="button"
                 colorValue="default"
-                selected={!values.instance_rgb || values.instance_rgb === ''}
-                onClick={() => handleColorSelect('')}
+                selected={!values.instance_rgb || values.instance_rgb === ""}
+                onClick={() => handleColorSelect("")}
                 data-hook="topbar-instance-color-option-default"
               />
               <ColorOption
@@ -396,53 +429,65 @@ export const InstanceSettingsPopper = ({
               />
               <ColorWheelOption
                 type="button"
-                selected={Boolean(values.instance_rgb?.startsWith('rgb'))}
+                selected={Boolean(values.instance_rgb?.startsWith("rgb"))}
                 onClick={handleCustomColorSelect}
                 data-hook="topbar-instance-color-option-custom"
               />
             </ColorSelector>
-            
+
             {showCustomColor && (
               <ColorPickerContainer>
                 <ColorInputRow>
                   <Text color="foreground">R</Text>
-                  <ColorSlider 
+                  <ColorSlider
                     className="red"
-                    value={rgbValues.r} 
-                    onChange={(e) => handleRgbChange('r', parseInt(e.target.value, 10))}
+                    value={rgbValues.r}
+                    onChange={(e) =>
+                      handleRgbChange("r", parseInt(e.target.value, 10))
+                    }
                     data-hook="topbar-instance-color-slider-r"
                   />
-                  <ColorValueInput 
+                  <ColorValueInput
                     value={rgbValues.r}
-                    onChange={(e) => handleRgbChange('r', parseInt(e.target.value, 10))}
+                    onChange={(e) =>
+                      handleRgbChange("r", parseInt(e.target.value, 10))
+                    }
                     data-hook="topbar-instance-color-input-r"
                   />
                 </ColorInputRow>
                 <ColorInputRow>
                   <Text color="foreground">G</Text>
-                  <ColorSlider 
+                  <ColorSlider
                     className="green"
-                    value={rgbValues.g} 
-                    onChange={(e) => handleRgbChange('g', parseInt(e.target.value, 10))}
+                    value={rgbValues.g}
+                    onChange={(e) =>
+                      handleRgbChange("g", parseInt(e.target.value, 10))
+                    }
                     data-hook="topbar-instance-color-slider-g"
                   />
-                  <ColorValueInput 
+                  <ColorValueInput
                     value={rgbValues.g}
-                    onChange={(e) => handleRgbChange('g', parseInt(e.target.value, 10))}
+                    onChange={(e) =>
+                      handleRgbChange("g", parseInt(e.target.value, 10))
+                    }
                     data-hook="topbar-instance-color-input-g"
                   />
                 </ColorInputRow>
                 <ColorInputRow>
                   <Text color="foreground">B</Text>
-                  <ColorSlider 
+                  <ColorSlider
                     className="blue"
-                    value={rgbValues.b} 
-                    onChange={(e) => handleRgbChange('b', parseInt(e.target.value, 10))}
+                    value={rgbValues.b}
+                    onChange={(e) =>
+                      handleRgbChange("b", parseInt(e.target.value, 10))
+                    }
                     data-hook="topbar-instance-color-slider-b"
                   />
-                  <ColorValueInput 
+                  <ColorValueInput
                     value={rgbValues.b}
-                    onChange={(e) => handleRgbChange('b', parseInt(e.target.value, 10))}
+                    onChange={(e) =>
+                      handleRgbChange("b", parseInt(e.target.value, 10))
+                    }
                     data-hook="topbar-instance-color-input-b"
                   />
                 </ColorInputRow>
@@ -450,17 +495,17 @@ export const InstanceSettingsPopper = ({
             )}
           </FormGroup>
           <Buttons>
-            <StyledButton 
+            <StyledButton
               type="submit"
-              prefixIcon={isSaving ? <Loader /> : undefined} 
+              prefixIcon={isSaving ? <Loader /> : undefined}
               data-hook="topbar-instance-save-button"
             >
               Save
             </StyledButton>
-            <StyledButton 
+            <StyledButton
               type="button"
-              onClick={() => onToggle(false)} 
-              skin="secondary" 
+              onClick={() => onToggle(false)}
+              skin="secondary"
               data-hook="topbar-instance-cancel-button"
             >
               Cancel
@@ -470,4 +515,4 @@ export const InstanceSettingsPopper = ({
       </Wrapper>
     </PopperToggle>
   )
-} 
+}

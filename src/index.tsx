@@ -34,17 +34,22 @@ import { ThemeProvider } from "styled-components"
 import { GlobalStyle } from "./theme/global-styles"
 import {
   createGlobalFadeTransition,
-  ScreenSizeProvider,
   TransitionDuration,
   ToastContainer,
 } from "./components"
+import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
 import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"
 import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
-import { AuthProvider, QuestProvider, SettingsProvider, PosthogProviderWrapper } from "./providers"
+import {
+  AuthProvider,
+  QuestProvider,
+  SettingsProvider,
+  PosthogProviderWrapper,
+} from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
   StoreAction,

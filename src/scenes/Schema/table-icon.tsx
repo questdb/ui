@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { Table } from "@styled-icons/remix-line"
 import { PopperHover } from "../../components/PopperHover"
 import { Tooltip } from "../../components/Tooltip"
-import { color } from '../../utils'
+import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 
 type TableIconProps = {
@@ -38,8 +38,18 @@ const Asterisk = styled.span`
 `
 
 const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
-  <svg viewBox="0 0 24 24" height={height} width={width} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM4 8h16V5H4v3zM4 10h16v9H4v-9z" fillRule="evenodd" clipRule="evenodd"/>
+  <svg
+    viewBox="0 0 24 24"
+    height={height}
+    width={width}
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM4 8h16V5H4v3zM4 10h16v9H4v-9z"
+      fillRule="evenodd"
+      clipRule="evenodd"
+    />
   </svg>
 )
 
@@ -50,7 +60,12 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
     width={width}
     xmlns="http://www.w3.org/2000/svg"
   >
-    <g stroke="currentColor" strokeWidth="2" fill="none" transform="translate(-2, -2)">
+    <g
+      stroke="currentColor"
+      strokeWidth="2"
+      fill="none"
+      transform="translate(-2, -2)"
+    >
       <line x1="3" y1="4" x2="22" y2="4" />
       <line x1="4" y1="4" x2="4" y2="22" />
       <line x1="21" y1="4" x2="21" y2="11" />
@@ -63,10 +78,19 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designatedTimestamp, isMaterializedView }) => {
+export const TableIcon: FC<TableIconProps> = ({
+  walEnabled,
+  partitionBy,
+  designatedTimestamp,
+  isMaterializedView,
+}) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
-  const partitionText = isPartitioned ? `Partitioned by \"${partitionBy.toLowerCase()}\"` : "Unpartitioned"
-  const timestampText = !!designatedTimestamp ? `ordered on \"${designatedTimestamp}\" column` : "unordered"
+  const partitionText = isPartitioned
+    ? `Partitioned by "${partitionBy.toLowerCase()}"`
+    : "Unpartitioned"
+  const timestampText = designatedTimestamp
+    ? `ordered on "${designatedTimestamp}" column`
+    : "unordered"
   const walText = walEnabled ? "WAL-based table" : "Legacy table format"
   const fullHeader = `${walText}. ${partitionText}, ${timestampText}.`
   const description = walEnabled
@@ -84,7 +108,9 @@ export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designa
         delay={1000}
         placement="bottom"
       >
-        <Tooltip>{partitionText}, {timestampText}.</Tooltip>
+        <Tooltip>
+          {partitionText}, {timestampText}.
+        </Tooltip>
       </PopperHover>
     )
   }
@@ -94,7 +120,11 @@ export const TableIcon: FC<TableIconProps> = ({ walEnabled, partitionBy, designa
       trigger={
         <Root data-hook="table-icon">
           {!walEnabled && <Asterisk>*</Asterisk>}
-          {isPartitioned ? <Table size="14px" /> : <NonPartitionedTableIcon height="14px" />}
+          {isPartitioned ? (
+            <Table size="14px" />
+          ) : (
+            <NonPartitionedTableIcon height="14px" />
+          )}
         </Root>
       }
       delay={1000}

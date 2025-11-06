@@ -2,6 +2,7 @@ import {
   Text,
   Drawer,
   IconWithTooltip,
+  Loader,
   PrimaryToggleButton,
 } from "../../components"
 import styled from "styled-components"
@@ -11,7 +12,6 @@ import { NewsItem } from "../../utils"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
 import ReactMarkdown from "react-markdown"
-import { Loader } from "@questdb/react-components"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
@@ -94,7 +94,7 @@ const News = () => {
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
-  let hoverTimeout: NodeJS.Timeout
+  let hoverTimeout: ReturnType<typeof setTimeout>
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)
@@ -177,7 +177,7 @@ const News = () => {
       mode="side"
       title="QuestDB News"
       open={newsOpened}
-      onOpenChange={async (newsOpened) => {
+      onOpenChange={(newsOpened) => {
         dispatch(
           actions.console.setActiveSidebar(newsOpened ? "news" : undefined),
         )
@@ -219,9 +219,9 @@ const News = () => {
           {(!isLoading || enterpriseNews) &&
             !hasError &&
             enterpriseNews &&
-            enterpriseNews.map((newsItem, index) => (
+            enterpriseNews.map((newsItem) => (
               <Item
-                key={`${index}-${newsItem.title}`}
+                key={newsItem.id}
                 unread={
                   unreadNewsIds.find((id) => newsItem.id === id) !== undefined
                 }
@@ -238,7 +238,7 @@ const News = () => {
                       alt={`${newsItem.title} thumbnail`}
                       width={newsItem.thumbnail[0].thumbnails.large.width}
                       height={newsItem.thumbnail[0].thumbnails.large.height}
-                      fadeIn={true}
+                      fadeIn
                       {...(newsItem && newsItem.thumbnail
                         ? {
                             onMouseOver: () => {
@@ -278,7 +278,10 @@ const News = () => {
                 <NewsText>
                   <ReactMarkdown
                     components={{
-                      a: ({ node, children, ...props }) => (
+                      a: ({
+                        children,
+                        ...props
+                      }: React.ComponentProps<"a">) => (
                         <a
                           {...(props.href?.startsWith("http")
                             ? { target: "_blank", rel: "noopener noreferrer" }

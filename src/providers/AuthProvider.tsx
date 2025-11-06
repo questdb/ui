@@ -30,10 +30,13 @@ import { useSettings } from "./SettingsProvider"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 
 type ContextProps = {
-  sessionData?: Partial<AuthPayload>,
-  logout: (promptForLogin?: boolean) => void,
-  refreshAuthToken: (settings: Settings, refreshToken: string | undefined) => Promise<AuthPayload>,
-  redirectToAuthorizationUrl: () => void,
+  sessionData?: Partial<AuthPayload>
+  logout: (promptForLogin?: boolean) => void
+  refreshAuthToken: (
+    settings: Settings,
+    refreshToken: string | undefined,
+  ) => Promise<AuthPayload>
+  redirectToAuthorizationUrl: () => void
 }
 
 enum View {
@@ -52,7 +55,7 @@ const initialState: { view: View; errorMessage?: string } = {
 const defaultValues: ContextProps = {
   sessionData: undefined,
   logout: () => {},
-  refreshAuthToken: async () => ({} as AuthPayload),
+  refreshAuthToken: () => Promise.resolve({} as AuthPayload),
   redirectToAuthorizationUrl: () => {},
 }
 
@@ -89,13 +92,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       ssoAuthState.setAuthPayload(tokenResponse)
       setSessionData(tokenResponse)
       // Remove the code from the URL
-      history.replaceState &&
+      if (history.replaceState) {
         history.replaceState(
           null,
           "",
           location.pathname +
             location.search.replace(/[?&]code=[^&]+/, "").replace(/^&/, "?"),
         )
+      }
     } else {
       const error = tokenResponse as unknown as OAuth2Error
       // display error message
@@ -107,13 +111,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const refreshAuthToken = async (settings: Settings, refreshToken: string | undefined) => {
+  const refreshAuthToken = async (
+    settings: Settings,
+    refreshToken: string | undefined,
+  ) => {
     const response = await getAuthToken(settings, {
       grant_type: "refresh_token",
       refresh_token: refreshToken,
       client_id: settings["acl.oidc.client.id"],
     })
-    const tokenResponse = await response.json()
+    const tokenResponse = (await response.json()) as AuthPayload
     setAuthToken(tokenResponse, settings)
     return tokenResponse
   }
@@ -126,7 +133,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Proceed with the OAuth2 flow only if it is enabled on the server
     if (settings["acl.oidc.enabled"]) {
-
       // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
       eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
         const oauthRedirectCount = getValue(StoreKey.OAUTH_REDIRECT_COUNT)
@@ -183,22 +189,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         }
 
-        try {
-          const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
-          const response = await getAuthToken(settings, {
-            grant_type: "authorization_code",
-            code,
-            code_verifier,
-            client_id: settings["acl.oidc.client.id"],
-            redirect_uri:
-              settings["acl.oidc.redirect.uri"] ||
-              window.location.origin + window.location.pathname,
-          })
-          const tokenResponse = await response.json()
-          setAuthToken(tokenResponse, settings)
-        } catch (e) {
-          throw e
-        }
+        const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
+        const response = await getAuthToken(settings, {
+          grant_type: "authorization_code",
+          code,
+          code_verifier,
+          client_id: settings["acl.oidc.client.id"],
+          redirect_uri:
+            settings["acl.oidc.redirect.uri"] ||
+            window.location.origin + window.location.pathname,
+        })
+        const tokenResponse = (await response.json()) as AuthPayload
+        setAuthToken(tokenResponse, settings)
+        await startServerSession(tokenResponse)
       } else if (oauth2Error.error) {
         // User has just been redirected back from the OAuth2 provider and there is an error
         const previousPrompt = getValue(StoreKey.OAUTH_PROMPT)
@@ -209,7 +212,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           redirectToAuthorizationUrl()
         } else {
           // If the error is not in response for a silent authorization code request, display the error
-          setErrorMessage(oauth2Error.error + ": " + oauth2Error.error_description)
+          setErrorMessage(
+            oauth2Error.error + ": " + oauth2Error.error_description,
+          )
           dispatch({ view: View.error })
         }
       } else if (ssoUsername && !getValue(StoreKey.REST_TOKEN)) {
@@ -241,6 +246,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       await basicAuthLogin()
     }
+  }
+
+  const startServerSession = async (tokenResponse: AuthPayload) => {
+    // execute a simple query with session=true
+    await fetch(`exec?query=select 2&session=true`, {
+      headers: {
+        Authorization: `Bearer ${tokenResponse.groups_encoded_in_token ? tokenResponse.id_token : tokenResponse.access_token}`,
+      },
+    })
+  }
+
+  const destroyServerSession = () => {
+    // execute a simple query with session=false
+    void fetch(`exec?query=select 2&session=false`).catch(() => {
+      // ignore result
+    })
   }
 
   const uiAuthLogin = () => {
@@ -277,6 +298,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (promptForLogin && settings["acl.oidc.client.id"]) {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
+    destroyServerSession()
     dispatch({ view: View.login })
   }
 
@@ -331,7 +353,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     [View.login]: () => (
       <Login
         onOAuthLogin={(loginWithDifferentAccount) => {
-          redirectToAuthorizationUrl(loginWithDifferentAccount ? "login" : undefined)
+          redirectToAuthorizationUrl(
+            loginWithDifferentAccount ? "login" : undefined,
+          )
         }}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })

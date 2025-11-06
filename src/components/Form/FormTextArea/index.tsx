@@ -1,6 +1,6 @@
 import React, { useEffect } from "react"
 import styled from "styled-components"
-import { Input as UnstyledInput } from "@questdb/react-components"
+import { Input as UnstyledInput } from "../../Input"
 import { useFormContext } from "react-hook-form"
 
 const TextArea = styled(UnstyledInput).attrs({

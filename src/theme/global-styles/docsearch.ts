@@ -20,15 +20,16 @@ export const DocSearchStyles = css`
     --docsearch-hit-shadow: none;
     /* Footer */
     --docsearch-footer-background: ${({ theme }) => theme.color.background};
-    --docsearch-footer-shadow: inset 0 1px 0 0 rgba(73, 76, 106, 0.5),
-      0 -4px 8px 0 rgba(0, 0, 0, 0.2);
+    --docsearch-footer-shadow:
+      inset 0 1px 0 0 rgba(73, 76, 106, 0.5), 0 -4px 8px 0 rgba(0, 0, 0, 0.2);
     /* Keys */
     --docsearch-key-gradient: linear-gradient(
       -26.5deg,
       #32343e 0%,
       rgb(38, 40, 51) 100%
     );
-    --docsearch-key-shadow: inset 0 -2px 0 0 #282d55, inset 0 0 1px 1px #51577d,
+    --docsearch-key-shadow:
+      inset 0 -2px 0 0 #282d55, inset 0 0 1px 1px #51577d,
       0 2px 2px 0 rgba(3, 4, 9, 0.3);
 
     // Allotment styling

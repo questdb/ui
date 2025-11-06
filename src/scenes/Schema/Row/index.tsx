@@ -28,13 +28,19 @@ import { SortDown, Bracket, InfoCircle } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
-import type { StyledIcon } from '@styled-icons/styled-icon'
-import { OneHundredTwentyThree, CalendarMinus, Globe, GeoAlt, Type as CharIcon, Tag } from '@styled-icons/bootstrap'
+import type { StyledIcon } from "@styled-icons/styled-icon"
+import {
+  OneHundredTwentyThree,
+  CalendarMinus,
+  Globe,
+  GeoAlt,
+  Type as CharIcon,
+  Tag,
+} from "@styled-icons/bootstrap"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
-import { Box } from "@questdb/react-components"
-import { Text, IconWithTooltip, spinAnimation } from "../../../components"
+import { Box, Text, IconWithTooltip, spinAnimation } from "../../../components"
 import { color } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
@@ -77,7 +83,11 @@ const Title = styled(Text)`
   }
 `
 
-const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean, $focused?: boolean }>`
+const Wrapper = styled.div<{
+  $level?: number
+  $selectOpen?: boolean
+  $focused?: boolean
+}>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -89,13 +99,17 @@ const Wrapper = styled.div<{ $level?: number, $selectOpen?: boolean, $focused?: 
   width: 100%;
   flex-grow: 1;
 
-  cursor: ${({ $selectOpen }) => $selectOpen ? "pointer" : "default"};
+  cursor: ${({ $selectOpen }) => ($selectOpen ? "pointer" : "default")};
 
-  ${({ $level }) => $level && `
+  ${({ $level }) =>
+    $level &&
+    `
     padding-left: ${$level * 1.5 + 1}rem;
   `}
 
-  ${({ $focused, theme }) => $focused && `
+  ${({ $focused, theme }) =>
+    $focused &&
+    `
     outline: none;
     background: ${theme.color.tableSelection};
     border: 1px solid ${theme.color.cyan};
@@ -127,11 +141,14 @@ const TableActions = styled.span`
   align-items: center;
 `
 
-const FlexRow = styled.div<{ $selectOpen?: boolean, $isTableKind?: boolean }>`
+const FlexRow = styled.div<{ $selectOpen?: boolean; $isTableKind?: boolean }>`
   display: flex;
   align-items: center;
   padding-right: 1rem;
-  transform: translateX(${({ $selectOpen, $isTableKind }) => $selectOpen && $isTableKind ? "1rem" : "0"});
+  transform: translateX(
+    ${({ $selectOpen, $isTableKind }) =>
+      $selectOpen && $isTableKind ? "1rem" : "0"}
+  );
   transition: transform 275ms ease-in-out;
 `
 
@@ -151,7 +168,7 @@ const ChevronRightIcon = styled(ChevronRight)<{ $expanded?: boolean }>`
   cursor: pointer;
   flex-shrink: 0;
   width: 1.5rem;
-  transform: rotateZ(${({ $expanded }) => $expanded ? "90deg" : "0deg"});
+  transform: rotateZ(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
   position: absolute;
   left: -2rem;
 `
@@ -190,72 +207,94 @@ const TypeIcon = styled.div<{ $type?: string }>`
   color: ${color("cyan")};
 
   svg {
-    color: ${({ $type }) => $type === 'SYMBOL' ? color("yellow") : color("cyan")};
+    color: ${({ $type }) =>
+      $type === "SYMBOL" ? color("yellow") : color("cyan")};
   }
 `
 
 const TYPE_ICONS = {
   number: {
-    types: ["BOOLEAN", "BYTE", "SHORT", "INT", "LONG", "LONG256", "DOUBLE", "FLOAT", "BINARY", "UUID"],
-    icon: OneHundredTwentyThree
+    types: [
+      "BOOLEAN",
+      "BYTE",
+      "SHORT",
+      "INT",
+      "LONG",
+      "LONG256",
+      "DOUBLE",
+      "FLOAT",
+      "BINARY",
+      "UUID",
+    ],
+    icon: OneHundredTwentyThree,
   },
   date: {
     types: ["DATE"],
-    icon: CalendarMinus
+    icon: CalendarMinus,
   },
   text: {
     types: ["CHAR", "VARCHAR", "STRING"],
-    icon: CharIcon
+    icon: CharIcon,
   },
   symbol: {
     types: ["SYMBOL"],
-    icon: Tag
+    icon: Tag,
   },
   time: {
     types: ["TIMESTAMP", "INTERVAL", "TIMESTAMP_NS"],
-    icon: SortDown
+    icon: SortDown,
   },
   network: {
     types: ["IPV4"],
-    icon: Globe
+    icon: Globe,
   },
   geo: {
     types: ["GEOHASH"],
-    icon: GeoAlt
+    icon: GeoAlt,
   },
   array: {
     types: ["ARRAY"],
     icon: Bracket,
-  }
+  },
 } as const
 
-const IconWrapper = ({ icon: Icon, size = "14px", type }: { icon: StyledIcon; size?: string; type?: string }) => (
+const IconWrapper = ({
+  icon: Icon,
+  size = "14px",
+  type,
+}: {
+  icon: StyledIcon
+  size?: string
+  type?: string
+}) => (
   <TypeIcon $type={type}>
     <Icon size={size} />
   </TypeIcon>
 )
 
 const getIcon = (type: string) => {
-  const iconConfig = Object.values(TYPE_ICONS).find(
-    ({ types }) => types.some((t) => t === mapColumnTypeToUI(type))
+  const iconConfig = Object.values(TYPE_ICONS).find(({ types }) =>
+    types.some((t) => t === mapColumnTypeToUI(type)),
   )
 
   return <IconWrapper icon={iconConfig?.icon ?? DotIcon} type={type} />
 }
 
-const ColumnIcon = ({ 
-  isDesignatedTimestamp, 
-  type 
-}: { 
-  isDesignatedTimestamp: boolean;
-  type?: string;
+const ColumnIcon = ({
+  isDesignatedTimestamp,
+  type,
+}: {
+  isDesignatedTimestamp: boolean
+  type?: string
 }) => {
   if (!type) return null
 
   if (isDesignatedTimestamp) {
     return (
       <IconWithTooltip
-        icon={<SortDownIcon data-hook="designated-timestamp-icon" size="14px" />}
+        icon={
+          <SortDownIcon data-hook="designated-timestamp-icon" size="14px" />
+        }
         placement="top"
         tooltip="Designated timestamp"
       />
@@ -283,26 +322,38 @@ const Row = ({
   id,
   index,
 }: Props) => {
-  const { query, selectOpen, selectedTables, handleSelectToggle, focusedIndex, setFocusedIndex } = useSchema()
+  const {
+    query,
+    selectOpen,
+    selectedTables,
+    handleSelectToggle,
+    focusedIndex,
+    setFocusedIndex,
+  } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const isExpandable = ["folder", "table", "matview"].includes(kind) || (kind === "column" && type === "SYMBOL")
+  const isExpandable =
+    ["folder", "table", "matview"].includes(kind) ||
+    (kind === "column" && type === "SYMBOL")
   const isTableKind = ["table", "matview"].includes(kind)
   const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(id ?? "")
-  const matchesSearch = ["column", "table", "matview"].includes(kind) && query && name.toLowerCase().includes(query.toLowerCase())
+  const matchesSearch =
+    ["column", "table", "matview"].includes(kind) &&
+    query &&
+    name.toLowerCase().includes(query.toLowerCase())
 
-  const selected = !!(selectedTables.find((t: {name: string, type: TreeNodeKind}) =>
-    t.name === name
-    && t.type === kind
-  ))
+  const selected = !!selectedTables.find(
+    (t: { name: string; type: TreeNodeKind }) =>
+      t.name === name && t.type === kind,
+  )
 
   const handleExpandCollapse = () => {
     if (!isExpandable) {
       return
     }
-    
-    onExpandCollapse()
+
+    void onExpandCollapse()
   }
 
   const handleClick = () => {
@@ -355,6 +406,7 @@ const Row = ({
       data-index={index}
       data-id={id}
       className={className}
+      // eslint-disable-next-line jsx-a11y/tabindex-no-positive
       tabIndex={100}
       onBlur={() => {
         if (focusedIndex === index) {
@@ -371,19 +423,22 @@ const Row = ({
       onKeyDown={(e) => {
         e.preventDefault()
 
-        if (isExpandable && (
-          e.key === "Enter"
-          || (e.key === "ArrowRight" && !expanded)
-          || (e.key === "ArrowLeft" && expanded)
-        )) {
+        if (
+          isExpandable &&
+          (e.key === "Enter" ||
+            (e.key === "ArrowRight" && !expanded) ||
+            (e.key === "ArrowLeft" && expanded))
+        ) {
           handleExpandCollapse()
         }
 
-        const shouldGoToParent = (!isExpandable || !expanded) && e.key === "ArrowLeft"
-        const shouldGoToNextSibling = ((!isExpandable || expanded) && e.key === "ArrowRight")
-          || e.key === "ArrowDown"
-          || e.key === "Tab"
-        
+        const shouldGoToParent =
+          (!isExpandable || !expanded) && e.key === "ArrowLeft"
+        const shouldGoToNextSibling =
+          ((!isExpandable || expanded) && e.key === "ArrowRight") ||
+          e.key === "ArrowDown" ||
+          e.key === "Tab"
+
         if (shouldGoToParent) {
           navigateInTree({ to: "parent", id })
         }
@@ -415,17 +470,20 @@ const Row = ({
       >
         {isTableKind && (
           <div style={{ position: "absolute", left: "-2rem" }}>
-            <Checkbox
-              visible={selectOpen}
-              checked={selected}
-            />
+            <Checkbox visible={selectOpen} checked={selected} />
           </div>
         )}
         <FlexRow $selectOpen={selectOpen} $isTableKind={isTableKind}>
-          {isExpandable && (!selectOpen || !isTableKind) && <ChevronRightIcon size="15px" $expanded={expanded} onClick={handleExpandCollapse} />}
+          {isExpandable && (!selectOpen || !isTableKind) && (
+            <ChevronRightIcon
+              size="15px"
+              $expanded={expanded}
+              onClick={handleExpandCollapse}
+            />
+          )}
 
           {kind === "column" && (
-            <ColumnIcon 
+            <ColumnIcon
               isDesignatedTimestamp={name === designatedTimestamp}
               type={type}
             />
@@ -444,17 +502,16 @@ const Row = ({
                 isMaterializedView={kind === "matview"}
               />
             )}
-            {kind === "detail" && (
-              <InfoCircle size="14px" />
+            {kind === "detail" && <InfoCircle size="14px" />}
+            {["column", "table", "matview"].includes(kind) ? (
+              <Highlighter
+                highlightClassName="highlight"
+                searchWords={[query ?? ""]}
+                textToHighlight={name}
+              />
+            ) : (
+              name
             )}
-            {["column", "table", "matview"].includes(kind)
-              ? <Highlighter
-                  highlightClassName="highlight"
-                  searchWords={[query ?? ""]}
-                  textToHighlight={name}
-                />
-              : name
-            }
           </StyledTitle>
 
           {type && (
@@ -464,9 +521,7 @@ const Row = ({
           )}
 
           {kind === "detail" && !isLoading && (
-            <Text color="gray2">
-              {value}
-            </Text>
+            <Text color="gray2">{value}</Text>
           )}
 
           {showLoader && <Loader size="18px" />}
@@ -484,14 +539,16 @@ const Row = ({
                 }
               >
                 <Tooltip>
-                  {errors.length > 1 ? errors.map((error) => (
-                    <ErrorItem key={error}>
-                      <ErrorIconWrapper>
-                        <ErrorIcon size="18px" />
-                      </ErrorIconWrapper>
-                      <Text color="foreground">{error}</Text>
-                    </ErrorItem>
-                  )) : (
+                  {errors.length > 1 ? (
+                    errors.map((error) => (
+                      <ErrorItem key={error}>
+                        <ErrorIconWrapper>
+                          <ErrorIcon size="18px" />
+                        </ErrorIconWrapper>
+                        <Text color="foreground">{error}</Text>
+                      </ErrorItem>
+                    ))
+                  ) : (
                     <Text color="foreground">{errors[0]}</Text>
                   )}
                 </Tooltip>

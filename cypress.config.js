@@ -8,13 +8,15 @@ module.exports = defineConfig({
   e2e: {
     defaultCommandTimeout: 30000,
     screenshotOnRunFailure: true,
+    screenshotsFolder: "e2e/screenshots",
+    videosFolder: "e2e/videos",
     video: false,
     baseUrl: baseUrl,
     chromeWebSecurity: false, //if it is true, cypress does not allow redirects
     viewportWidth: 1280,
     viewportHeight: 720,
-    specPattern: "cypress/integration/**/*.spec.js",
-    supportFile: "cypress/commands.js",
+    specPattern: "e2e/tests/**/*.spec.js",
+    supportFile: "e2e/commands.js",
     setupNodeEvents(on) {
       on("before:browser:launch", (browser = {}, launchOptions) => {
         if (browser.family === "chromium" && browser.name !== "electron") {

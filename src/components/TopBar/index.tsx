@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import Menu from "../../scenes/Editor/Menu"
-import { Box } from "@questdb/react-components"
+import { Box } from "../../components"
 import { Toolbar } from "./toolbar"
 import { BackButton } from "./back-button"
 import { useLiveQuery } from "dexie-react-hooks"

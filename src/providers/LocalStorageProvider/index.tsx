@@ -22,20 +22,17 @@
  *
  ******************************************************************************/
 
-import React, {
-  createContext,
-  PropsWithChildren,
-  useState,
-  useContext,
-  useCallback,
-} from "react"
+import React, { createContext, useState, useContext, useCallback } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { parseInteger } from "./utils"
-import { LocalConfig, SettingsType, LeftPanelState, LeftPanelType, AiAssistantSettings } from "./types"
-
-/* eslint-disable prettier/prettier */
-type Props = {}
+import {
+  AiAssistantSettings,
+  LocalConfig,
+  SettingsType,
+  LeftPanelState,
+  LeftPanelType,
+} from "./types"
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS = {
   apiKey: "",
@@ -53,8 +50,8 @@ const defaultConfig: LocalConfig = {
   aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
     type: LeftPanelType.DATASOURCES,
-    width: 350
-  }
+    width: 350,
+  },
 }
 
 type ContextProps = {
@@ -75,11 +72,11 @@ const defaultValues: ContextProps = {
   editorLine: 1,
   editorSplitterBasis: 350,
   resultsSplitterBasis: 350,
-  updateSettings: (key: StoreKey, value: SettingsType) => undefined,
+  updateSettings: (_key: StoreKey, _value: SettingsType) => undefined,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
   leftPanelState: defaultConfig.leftPanelState,
-  updateLeftPanelState: (state: LeftPanelState) => undefined,
+  updateLeftPanelState: (_state: LeftPanelState) => undefined,
   aiAssistantSettings: defaultConfig.aiAssistantSettings,
 }
 
@@ -87,7 +84,9 @@ export const LocalStorageContext = createContext<ContextProps>(defaultValues)
 
 export const LocalStorageProvider = ({
   children,
-}: PropsWithChildren<Props>) => {
+}: {
+  children: React.ReactNode
+}) => {
   const [editorCol, setEditorCol] = useState<number>(
     parseInteger(getValue(StoreKey.EDITOR_COL), defaultConfig.editorCol),
   )
@@ -118,7 +117,7 @@ export const LocalStorageProvider = ({
   )
 
   const getLeftPanelState = (): LeftPanelState => {
-    const stored = getValue("left.panel.state" as any)
+    const stored = getValue(StoreKey.LEFT_PANEL_STATE)
     if (stored) {
       try {
         return JSON.parse(stored) as LeftPanelState
@@ -129,7 +128,8 @@ export const LocalStorageProvider = ({
     return defaultConfig.leftPanelState
   }
 
-  const [leftPanelState, setLeftPanelState] = useState<LeftPanelState>(getLeftPanelState())
+  const [leftPanelState, setLeftPanelState] =
+    useState<LeftPanelState>(getLeftPanelState())
 
   const getAiAssistantSettings = (): AiAssistantSettings => {
     const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
@@ -160,7 +160,7 @@ export const LocalStorageProvider = ({
   }
 
   const updateLeftPanelState = useCallback((state: LeftPanelState) => {
-    setValue("left.panel.state" as any, JSON.stringify(state))
+    setValue(StoreKey.LEFT_PANEL_STATE, JSON.stringify(state))
     setLeftPanelState(state)
   }, [])
 
@@ -218,4 +218,3 @@ export const LocalStorageProvider = ({
 export const useLocalStorage = () => {
   return useContext(LocalStorageContext)
 }
-/* eslint-enable prettier/prettier */

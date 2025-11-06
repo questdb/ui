@@ -34,7 +34,7 @@ import ReactDOM from "react-dom"
 import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 
-import { usePopperStyles, useTransition } from "../Hooks"
+import { usePopperStyles, useTransition } from "../../hooks"
 import { TransitionDuration } from "../Transition"
 
 export type Placement = PopperJsPlacement
@@ -101,10 +101,11 @@ export const PopperHover = ({
 
   useEffect(() => {
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       clearTimeout(transitionTimeoutId.current)
       clearTimeout(delayTimeoutId.current)
-      document.body.contains(container) && document.body.removeChild(container)
+      if (document.body.contains(container)) {
+        document.body.removeChild(container)
+      }
     }
   }, [container])
 

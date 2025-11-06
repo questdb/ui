@@ -8,7 +8,7 @@ export const Import = () => (
   <PaneWrapper>
     <PaneContent>
       <ImportCSVFiles
-        onUpload={(result) => {
+        onUpload={() => {
           eventBus.publish(EventType.MSG_QUERY_SCHEMA)
         }}
         onViewData={(result) => {

@@ -4,8 +4,11 @@ import { constants, dataTypes, functions, keywords } from "@questdb/sql-grammar"
 import { escapeRegExpCharacters } from "../../../../utils/textSearch"
 
 const functionPattern = new RegExp(
-  `(${functions.filter(fn => !keywords.includes(fn)).map(escapeRegExpCharacters).join('|')})(\\s*)(?=\\s*\\()`,
-  'i'
+  `(${functions
+    .filter((fn) => !keywords.includes(fn))
+    .map(escapeRegExpCharacters)
+    .join("|")})(\\s*)(?=\\s*\\()`,
+  "i",
 )
 
 export const language: languages.IMonarchLanguage = {
@@ -155,9 +158,7 @@ export const language: languages.IMonarchLanguage = {
       [/WHEN\b/i, { token: "keyword.choice" }],
       [/THEN\b/i, { token: "keyword.choice" }],
     ],
-    array: [
-      [/ARRAY\s*\[/, { token: "keyword", next: "@arrayArguments" }],
-    ],
+    array: [[/ARRAY\s*\[/, { token: "keyword", next: "@arrayArguments" }]],
     arrayArguments: [
       { include: "@comments" },
       { include: "@whitespace" },

@@ -8,17 +8,14 @@ import {
   MAX_DATE_RANGE,
 } from "./utils"
 import { DateRange } from "./types"
-import { Box, Button, Popover } from "@questdb/react-components"
 import {
   Calendar as CalendarIcon,
   Time,
   World,
 } from "@styled-icons/boxicons-regular"
 import { ArrowDropDown, ArrowDropUp } from "@styled-icons/remix-line"
-import { Text } from "../../../components"
+import { Box, Button, Calendar, Form, Popover, Text } from "../../../components"
 import { getLocalTimeZone, getLocalGMTOffset } from "../../../utils"
-import { Form } from "../../../components/Form"
-import { Calendar } from "../../../components/Calendar"
 import { formatISO, subMonths } from "date-fns"
 import { useFormContext } from "react-hook-form"
 import Joi from "joi"
@@ -29,7 +26,7 @@ const Root = styled(Box).attrs({
   flexDirection: "column",
   align: "flex-start",
 })`
-  background: ${({ theme }: { theme: any }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.backgroundDarker};
   width: 50rem;
   padding: 1rem 1rem 0 1rem;
 `
@@ -58,7 +55,7 @@ const MetricDurations = styled.ul`
   list-style: none;
   margin: 0;
   padding: 0 0 0 1rem;
-  border-left: 1px solid ${({ theme }: { theme: any }) => theme.color.selection};
+  border-left: 1px solid ${({ theme }) => theme.color.selection};
 `
 
 const MetricDurationItem = styled.li<{ selected?: boolean }>`
@@ -150,11 +147,11 @@ const DatePickerItem = ({
               fromDate !== "Invalid date"
                 ? new Date(durationTokenToDate(dateFrom))
                 : new Date(),
-              toDate! == "Invalid date"
+              toDate == "Invalid date"
                 ? new Date(durationTokenToDate(dateTo))
                 : new Date(),
             ]}
-            selectRange={true}
+            selectRange
           />
         </Popover>
       </Box>
@@ -170,7 +167,7 @@ export const DateTimePicker = ({
   onDateFromToChange,
 }: DateRange & {
   // This can be either a date string or something like `now-2h` which does not exist on the list
-  onDateFromToChange: (dateFrom: string, dateTo: string) => void
+  onDateFromToChange: (dateFrom: string, dateTo: string) => Promise<void>
 }) => {
   const [mainOpen, setMainOpen] = useState(false)
   const [currentDateFrom, setCurrentDateFrom] = useState(dateFrom)
@@ -178,7 +175,7 @@ export const DateTimePicker = ({
 
   const handleSubmit = async (values: FormValues) => {
     if (values.dateFrom && values.dateTo) {
-      onDateFromToChange(
+      await onDateFromToChange(
         isDateToken(values.dateFrom)
           ? values.dateFrom
           : formatISO(values.dateFrom),
@@ -205,13 +202,15 @@ export const DateTimePicker = ({
   const schema = Joi.object({
     dateFrom: Joi.any()
       .required()
-      .custom((value: any, helpers: any) => {
+      .custom((value: string, helpers) => {
         const dateValue = durationTokenToDate(value)
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
         try {
           const timeTo = new Date(
-            durationTokenToDate(helpers.state.ancestors[0].dateTo),
+            durationTokenToDate(
+              (helpers.state.ancestors as unknown as FormValues[])[0].dateTo,
+            ),
           ).getTime()
           if (dateValue === "Invalid date") {
             return helpers.error("string.invalidDate")
@@ -232,12 +231,14 @@ export const DateTimePicker = ({
       .messages(errorMessages),
     dateTo: Joi.any()
       .required()
-      .custom((value: any, helpers: any) => {
+      .custom((value: string, helpers) => {
         const dateValue = durationTokenToDate(value)
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
         const timeFrom = new Date(
-          durationTokenToDate(helpers.state.ancestors[0].dateFrom),
+          durationTokenToDate(
+            (helpers.state.ancestors as unknown as FormValues[])[0].dateFrom,
+          ),
         ).getTime()
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
@@ -315,8 +316,8 @@ export const DateTimePicker = ({
                 <MetricDurationItem
                   key={label}
                   selected={dateFrom === mFrom && dateTo === mTo}
-                  onClick={() => {
-                    onDateFromToChange(mFrom, mTo)
+                  onClick={async () => {
+                    await onDateFromToChange(mFrom, mTo)
                     setMainOpen(false)
                   }}
                 >

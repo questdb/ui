@@ -1,31 +1,27 @@
 import React from "react"
 import {
+  Box,
+  Text,
+  Link,
+  Form,
   Dialog,
   ForwardRef,
   Button,
   Overlay,
   Input,
-} from "@questdb/react-components"
+  CopyButton,
+} from "../../../components"
 import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
-import {
-  FileCopy,
-  ExternalLink,
-  Restart,
-  Table,
-} from "@styled-icons/remix-line"
-import { Box } from "../../../components/Box"
-import { Form } from "../../../components/Form"
+import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
 import { useState, useContext, useEffect } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { ErrorResult } from "../../../utils"
-import { Text, Link } from "../../../components"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
-import { copyToClipboard } from "../../../utils/copyToClipboard"
 
 const StyledDialogContent = styled(Dialog.Content)`
   border-color: #723131;
@@ -151,7 +147,8 @@ export const SuspensionDialog = ({
           <Dialog.Title>
             <Box>
               <Table size={20} color="#FF5555" />
-              {kind === "table" ? "Table" : "Materialized view"} is suspended: {walTableData.name}
+              {kind === "table" ? "Table" : "Materialized view"} is suspended:{" "}
+              {walTableData.name}
             </Box>
           </Dialog.Title>
 
@@ -230,16 +227,10 @@ export const SuspensionDialog = ({
                       disabled
                       value={walTableData.errorMessage}
                     />
-                    <Button
-                      skin="secondary"
-                      onClick={() => {
-                        copyToClipboard(
-                          walTableData.errorMessage ?? "",
-                        )
-                      }}
-                    >
-                      <FileCopy size="18px" />
-                    </Button>
+                    <CopyButton
+                      iconOnly
+                      text={walTableData.errorMessage ?? ""}
+                    />
                   </Box>
                 </Box>
               )}

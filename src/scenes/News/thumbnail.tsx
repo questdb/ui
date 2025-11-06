@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import styled from "styled-components"
-import { Loader } from "@questdb/react-components"
+import { Loader } from "../../components"
 
 const Root = styled.div`
   display: flex;

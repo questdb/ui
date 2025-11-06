@@ -21,6 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Suggestion = Readonly<{ url: string }>
 
@@ -51,7 +52,7 @@ declare var bus: {
   trigger: (event: string, payload?: any) => void
 }
 
-interface ResizeObserverObserveOptions {
+type ResizeObserverObserveOptions = {
   box?: "content-box" | "border-box"
 }
 
@@ -60,14 +61,14 @@ type ResizeObserverCallback = (
   observer: ResizeObserver,
 ) => void
 
-interface ResizeObserverEntry {
+type ResizeObserverEntry = {
   readonly borderBoxSize: ResizeObserverEntryBoxSize
   readonly contentBoxSize: ResizeObserverEntryBoxSize
   readonly contentRect: DOMRectReadOnly
   readonly target: Element
 }
 
-interface ResizeObserverEntryBoxSize {
+type ResizeObserverEntryBoxSize = {
   blockSize: number
   inlineSize: number
 }

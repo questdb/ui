@@ -30,14 +30,13 @@ import { Add, Close as _CloseIcon } from "@styled-icons/remix-line"
 import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
 
 import {
+  Button,
   PaneMenu,
   PopperToggle,
   TransitionDuration,
-  TransparentButton,
-  useKeyPress,
-  useScreenSize,
   SetupAIAssistant,
 } from "../../../components"
+import { useKeyPress, useScreenSize } from "../../../hooks"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"
@@ -45,7 +44,6 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { DocSearch } from "@docsearch/react"
 import { useSettings } from "../../../providers"
-import { Button } from "@questdb/react-components"
 
 import "@docsearch/css"
 
@@ -79,7 +77,8 @@ const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
     }
   }
 
-  animation: ${({ $firstTimeVisitor }) => $firstTimeVisitor ? "pulse 2s infinite" : "none"};
+  animation: ${({ $firstTimeVisitor }) =>
+    $firstTimeVisitor ? "pulse 2s infinite" : "none"};
 `
 
 const MenuIcon = styled(_MenuIcon)`
@@ -90,7 +89,7 @@ const CloseIcon = styled(_CloseIcon)`
   color: ${color("foreground")};
 `
 
-const SideMenuMenuButton = styled(TransparentButton)`
+const SideMenuMenuButton = styled(Button)`
   padding: 0;
 
   .fade-enter {
@@ -212,16 +211,21 @@ const Menu = () => {
             },
           }}
         />
-        {consoleConfig.ctaBanner && <CTAButton
-          href="https://questdb.com/enterprise/contact"
-          target="_blank"
-        >
-          Book a demo
-        </CTAButton>}
+        {consoleConfig.ctaBanner && (
+          <CTAButton
+            href="https://questdb.com/enterprise/contact"
+            target="_blank"
+          >
+            Book a demo
+          </CTAButton>
+        )}
       </MenuItems>
 
       {sm && (
-        <SideMenuMenuButton onClick={handleSideMenuButtonClick}>
+        <SideMenuMenuButton
+          skin="transparent"
+          onClick={handleSideMenuButtonClick}
+        >
           <CSSTransition
             classNames="fade"
             in={opened}

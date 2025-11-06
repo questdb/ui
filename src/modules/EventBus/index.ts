@@ -8,18 +8,18 @@ class EventBus {
     this.emitter = new EventEmitter()
   }
 
-  publish<T extends any>(eventType: EventType, eventPayload?: T): void {
+  publish<T>(eventType: EventType, eventPayload?: T): void {
     this.emitter.emit(eventType, eventPayload)
   }
 
-  subscribe<T extends any>(
+  subscribe<T>(
     eventType: EventType,
     handler: (eventPayload?: T) => void,
   ): void {
     this.emitter.on(eventType, handler)
   }
 
-  unsubscribe<T extends any>(
+  unsubscribe<T>(
     eventType: EventType,
     handler?: (eventPayload?: T) => void,
   ): void {

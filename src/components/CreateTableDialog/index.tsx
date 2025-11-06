@@ -26,7 +26,15 @@ export const CreateTableDialog = () => {
   const { appendQuery } = useEditor()
 
   const handleAddTableSchema = (values: SchemaFormValues) => {
-    const { name, partitionBy, timestamp, ttlValue, ttlUnit, schemaColumns, walEnabled } = values
+    const {
+      name,
+      partitionBy,
+      timestamp,
+      ttlValue,
+      ttlUnit,
+      schemaColumns,
+      walEnabled,
+    } = values
     const tableSchemaQuery = formatTableSchemaQuery({
       name,
       partitionBy,
@@ -73,7 +81,7 @@ export const CreateTableDialog = () => {
     <TableSchemaDialog
       action="add"
       isEditLocked={false}
-      hasWalSetting={true}
+      hasWalSetting
       walEnabled={false}
       name=""
       partitionBy="NONE"

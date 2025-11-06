@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box } from "@questdb/react-components"
 import { useSelector, useDispatch } from "react-redux"
+import { Box } from "../../components"
 import { selectors, actions } from "../../store"
 import { Thumbnail } from "./thumbnail"
 

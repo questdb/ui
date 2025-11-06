@@ -29,18 +29,18 @@ import React, {
   useRef,
   useLayoutEffect,
 } from "react"
-import { useDispatch, useSelector } from "react-redux"
+import { useSelector } from "react-redux"
 import styled from "styled-components"
 import {
+  Button,
   PaneContent,
   PaneMenu,
   PaneWrapper,
   Text,
-  useScreenSize,
 } from "../../components"
-import { actions, selectors } from "../../store"
+import { useScreenSize } from "../../hooks"
+import { selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
-import { Button } from "@questdb/react-components"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
 import { useEditor } from "../../providers"
@@ -106,17 +106,25 @@ const ClearAllNotifications = styled.div`
   flex-shrink: 0;
 `
 
-const Notifications = ({ onClearNotifications }: { onClearNotifications: (bufferId: number) => void }) => {
+const Notifications = ({
+  onClearNotifications,
+}: {
+  onClearNotifications: (bufferId: number) => void
+}) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
-  const queryNotifications = useSelector(selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number)) || {}
+  const queryNotifications =
+    useSelector(
+      selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number),
+    ) || {}
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
-  const dispatch = useDispatch()
 
-  const bufferNotifications = notifications.filter(notification => queryNotifications[notification.query])
+  const bufferNotifications = notifications.filter(
+    (notification) => queryNotifications[notification.query],
+  )
 
   const scrollToBottom = () => {
     contentRef.current?.scrollTo({
@@ -153,10 +161,10 @@ const Notifications = ({ onClearNotifications }: { onClearNotifications: (buffer
         </Header>
         <LatestNotification data-hook="notifications-collapsed">
           {isMinimized && activeNotification && (
-            <Notification isMinimized={true} {...activeNotification} />
+            <Notification isMinimized {...activeNotification} />
           )}
         </LatestNotification>
-        {(bufferNotifications.length > 0 || !isMinimized) &&(
+        {(bufferNotifications.length > 0 || !isMinimized) && (
           <Button
             skin={`${isMinimized ? "secondary" : "transparent"}`}
             onClick={toggleMinimized}

@@ -36,7 +36,7 @@ type SuccessShape<T> = Readonly<{
   error: false
 }>
 
-export const fromFetch = <T extends Record<string, any>>(
+export const fromFetch = <T extends Record<string, unknown>>(
   uri: string,
   init: RequestInit = {},
   self = true,
@@ -62,6 +62,7 @@ export const fromFetch = <T extends Record<string, any>>(
         message: response.statusText,
       })
     }),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     catchError((error: Error) => {
       // Network or other error, handle appropriately
       console.error(error)

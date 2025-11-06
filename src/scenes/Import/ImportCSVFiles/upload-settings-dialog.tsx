@@ -1,13 +1,18 @@
 import React from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
-import { Button, Select, Switch, Input } from "@questdb/react-components"
-import { Box } from "../../../components/Box"
-import { Text } from "../../../components/Text"
+import {
+  Box,
+  Button,
+  Text,
+  Drawer,
+  Input,
+  Switch,
+  Select,
+} from "../../../components"
 import { Settings4 } from "@styled-icons/remix-line"
 import { Undo } from "@styled-icons/boxicons-regular"
 import { UploadModeSettings } from "../../../utils"
-import { Drawer } from "../../../components/Drawer"
 import { MAX_UNCOMMITTED_ROWS } from "./const"
 
 const SettingsIcon = styled(Settings4)`
@@ -276,7 +281,7 @@ export const UploadSettingsDialog = ({
                     {option.type === "select" && (
                       <Select
                         name={option.name}
-                        defaultValue={option.defaultValue as string}
+                        defaultValue={option.defaultValue}
                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                           setSettings({
                             ...settings,

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react"
 import styled from "styled-components"
-import { Box } from "@questdb/react-components"
 import { useSettings } from "../../providers"
 import { Close, ErrorWarning, ExternalLink } from "@styled-icons/remix-line"
 import { errorWorkarounds } from "../../utils/errorWorkarounds"
+import { Box } from "../../components"
 import { ErrorTag } from "utils"
 
 const WarningRoot = styled(Box).attrs({
@@ -71,8 +71,11 @@ export const Warnings = () => {
     >
       {warnings
         .filter((warning) => open.includes(warning.tag))
-        .map((warning, index) => (
-          <WarningRoot key={index} data-hook="warning">
+        .map((warning) => (
+          <WarningRoot
+            key={`${warning.tag}-${warning.warning}`}
+            data-hook="warning"
+          >
             <Content>
               <ErrorWarning size="20px" />
               Warning:{" "}

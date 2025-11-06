@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
-import { Box } from "@questdb/react-components"
 import { Check } from "@styled-icons/boxicons-regular"
+import { Box } from "../../../components"
 
 const primaryColors = ["#FF6B6B", "#4ECDC4", "#FFD93D", "#95D86E", "#FF8F40"]
 

@@ -12,20 +12,19 @@ import {
   StackOverflow,
 } from "@styled-icons/boxicons-logos"
 import {
+  DropdownMenu,
   Text,
   toast,
   PrimaryToggleButton,
   Link,
   PopperToggle,
-} from "../../components"
-import { DropdownMenu } from "../../components/DropdownMenu"
-import {
   FeedbackDialog,
   ForwardRef,
   Box,
-} from "@questdb/react-components"
+} from "../../components"
 import { BUTTON_ICON_SIZE } from "../../consts"
-import { IconWithTooltip, useKeyPress } from "../../components"
+import { IconWithTooltip } from "../../components"
+import { useKeyPress } from "../../hooks"
 import { useState, useCallback, useContext } from "react"
 import { QuestContext } from "../../providers"
 import { useSelector } from "react-redux"
@@ -115,7 +114,7 @@ export const Help = () => {
           email,
           message,
         }: {
-          email: string
+          email?: string
           message: string
         }) => {
           try {
@@ -207,8 +206,8 @@ export const Help = () => {
             <DropdownMenuItem asChild withlink="true">
               <ForwardRef>
                 <MenuLink
-                  href={`https://github.com/questdb/ui/commit/${process.env.COMMIT_HASH}`}
-                  text={`Commit id: ${process.env.COMMIT_HASH}`}
+                  href={`https://github.com/questdb/ui/commit/${import.meta.env.COMMIT_HASH}`}
+                  text={`Commit id: ${import.meta.env.COMMIT_HASH}`}
                   icon={<Github size="18px" />}
                 />
               </ForwardRef>

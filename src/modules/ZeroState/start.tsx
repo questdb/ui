@@ -1,7 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { bezierTransition, Text } from "../../components"
-import { Box, Heading } from "@questdb/react-components"
+import { bezierTransition, Text, Box, Heading } from "../../components"
 import { actions } from "../../store"
 import { useDispatch } from "react-redux"
 
@@ -16,14 +15,6 @@ const Items = styled.div`
 
 const StyledHeading = styled(Heading)`
   color: ${({ theme }) => theme.color.foreground};
-`
-
-const StyledText = styled(Text)`
-  line-height: 1.75;
-
-  a {
-    color: ${({ theme }) => theme.color.gray2};
-  }
 `
 
 const Actions = styled.div`

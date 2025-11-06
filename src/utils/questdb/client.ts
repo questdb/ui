@@ -25,7 +25,7 @@ import {
   Permission,
   SymbolColumnDetails,
 } from "./types"
-import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState";
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export class Client {
   private _controllers: AbortController[] = []
@@ -35,15 +35,16 @@ export class Client {
   refreshTokenMethod: () => Promise<Partial<AuthPayload>> = async (): Promise<
     Partial<AuthPayload>
   > => {
-    return {}
+    return Promise.resolve({})
   }
 
   private tokenNeedsRefresh() {
     const authPayload = ssoAuthState.getAuthPayload()
     return (
-        authPayload && authPayload.refresh_token
-      && new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
-      )
+      authPayload &&
+      authPayload.refresh_token &&
+      new Date(authPayload.expires_at).getTime() - new Date().getTime() < 30000
+    )
   }
 
   setCommonHeaders(headers: Record<string, string>) {
@@ -94,7 +95,7 @@ export class Client {
     this._controllers = []
   }
 
-  static transformQueryRawResult = <T>(
+  static transformQueryRawResult = <T extends Record<string, unknown>>(
     result: QueryRawResult,
   ): QueryResult<T> => {
     if (result.type === Type.DQL) {
@@ -124,7 +125,10 @@ export class Client {
     return result
   }
 
-  async query<T>(query: string, options?: Options): Promise<QueryResult<T>> {
+  async query<T extends Record<string, unknown>>(
+    query: string,
+    options?: Options,
+  ): Promise<QueryResult<T>> {
     const result = await this.queryRaw(query, options)
 
     return Client.transformQueryRawResult<T>(result)
@@ -180,7 +184,6 @@ export class Client {
       }
 
       if (error instanceof DOMException) {
-        // eslint-disable-next-line prefer-promise-reject-errors
         return Promise.reject({
           ...err,
           error:
@@ -192,7 +195,6 @@ export class Client {
 
       eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
-      // eslint-disable-next-line prefer-promise-reject-errors
       return Promise.reject(genericErrorPayload)
     } finally {
       const index = this._controllers.indexOf(controller)
@@ -219,7 +221,7 @@ export class Client {
         })
       }
       const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
-      let data;
+      let data
       try {
         data = JSON.parse(responseText) as RawResult
       } catch (error) {
@@ -250,7 +252,6 @@ export class Client {
       }
 
       if (data.error) {
-        // eslint-disable-next-line prefer-promise-reject-errors
         return Promise.reject({
           ...data,
           type: Type.ERROR,
@@ -303,7 +304,6 @@ export class Client {
       eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
     }
 
-    // eslint-disable-next-line prefer-promise-reject-errors
     return Promise.reject(errorPayload)
   }
 
@@ -340,32 +340,41 @@ export class Client {
     return await this.query<Column>(`SHOW COLUMNS FROM '${table}';`)
   }
 
-  async showSymbolColumnDetails(table: string, column: string): Promise<QueryResult<{symbolCached: boolean, symbolCapacity: number, indexed: boolean}>> {
-    return await this.query<SymbolColumnDetails>(`WITH cols as (SHOW COLUMNS FROM '${table}') SELECT symbolCached, symbolCapacity, indexed FROM cols WHERE column = '${column}';`)
+  async showSymbolColumnDetails(
+    table: string,
+    column: string,
+  ): Promise<
+    QueryResult<{
+      symbolCached: boolean
+      symbolCapacity: number
+      indexed: boolean
+    }>
+  > {
+    return await this.query<SymbolColumnDetails>(
+      `WITH cols as (SHOW COLUMNS FROM '${table}') SELECT symbolCached, symbolCapacity, indexed FROM cols WHERE column = '${column}';`,
+    )
   }
 
-  async showMatViewDDL(table: string): Promise<QueryResult<{ddl: string}>> {
-    return await this.query<{ddl: string}>(`SHOW CREATE MATERIALIZED VIEW '${table}';`)
+  async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
+    return await this.query<{ ddl: string }>(
+      `SHOW CREATE MATERIALIZED VIEW '${table}';`,
+    )
   }
 
-  async showTableDDL(table: string): Promise<QueryResult<{ddl: string}>> {
-    return await this.query<{ddl: string}>(`SHOW CREATE TABLE '${table}';`)
+  async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
+    return await this.query<{ ddl: string }>(`SHOW CREATE TABLE '${table}';`)
   }
 
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
-    try {
-      const response: Response = await fetch(
-        `chk?${Client.encodeParams({
-          f: "json",
-          j: name,
-          version: API_VERSION,
-        })}`,
-        { headers: this.commonHeaders },
-      )
-      return await response.json()
-    } catch (error) {
-      throw error
-    }
+    const response = await fetch(
+      `chk?${Client.encodeParams({
+        f: "json",
+        j: name,
+        version: API_VERSION,
+      })}`,
+      { headers: this.commonHeaders },
+    )
+    return (await response.json()) as FileCheckResponse
   }
 
   async uploadCSVFile({
@@ -402,18 +411,18 @@ export class Client {
     }
 
     return new Promise((resolve, reject) => {
-      let request = new XMLHttpRequest()
+      const request = new XMLHttpRequest()
       request.open("POST", `imp?${new URLSearchParams(params)}`)
       Object.keys(this.commonHeaders).forEach((key) => {
         request.setRequestHeader(key, this.commonHeaders[key])
       })
       request.upload.addEventListener("progress", (e) => {
-        let percent_completed = (e.loaded / e.total) * 100
+        const percent_completed = (e.loaded / e.total) * 100
         onProgress(percent_completed)
       })
       request.onload = (_e) => {
         if (request.status === 200) {
-          resolve(JSON.parse(request.response))
+          resolve(JSON.parse(request.response as string) as UploadResult)
         } else {
           reject({
             status: request.status,
@@ -431,16 +440,15 @@ export class Client {
     })
   }
 
-  async savePreferences(preferences: Preferences): Promise<{ status: number, message?: string, success: boolean }> {
-    const { version, ...prefs } = preferences;
-    const response: Response = await fetch(
-      `settings?version=${version}`,
-      {
-        method: "PUT",
-        headers: this.commonHeaders,
-        body: JSON.stringify(prefs),
-      },
-    )
+  async savePreferences(
+    preferences: Preferences,
+  ): Promise<{ status: number; message?: string; success: boolean }> {
+    const { version, ...prefs } = preferences
+    const response: Response = await fetch(`settings?version=${version}`, {
+      method: "PUT",
+      headers: this.commonHeaders,
+      body: JSON.stringify(prefs),
+    })
     if (!response.ok) {
       let errorMessage: string
       try {
@@ -451,29 +459,6 @@ export class Client {
       return { status: response.status, message: errorMessage, success: false }
     }
     return { status: response.status, success: true }
-  }
-
-  async exportQueryToCsv(query: string) {
-    try {
-      const response: Response = await fetch(
-        `exp?${Client.encodeParams({ query, version: API_VERSION })}`,
-        { headers: this.commonHeaders },
-      )
-      const blob = await response.blob()
-      const filename = response.headers
-        .get("Content-Disposition")
-        ?.split("=")[1]
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filename
-        ? filename.replaceAll(`"`, "")
-        : `questdb-query-${new Date().getTime()}.csv`
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      throw error
-    }
   }
 
   async getLatestRelease() {
@@ -492,31 +477,26 @@ export class Client {
     message,
     telemetryConfig,
   }: {
-    email: string
+    email?: string
     message: string
     telemetryConfig?: TelemetryConfigShape
   }) {
-    try {
-      const response: Response = await fetch(
-        `https://cloud.questdb.com/api/feedback`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            message,
-            telemetryConfig,
-            category: "web-console",
-          }),
+    const response: Response = await fetch(
+      `https://cloud.questdb.com/api/feedback`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      )
-      return (await response.json()) as { status: string }
-    } catch (error) {
-      // eslint-disable-next-line prefer-promise-reject-errors
-      throw error
-    }
+        body: JSON.stringify({
+          email,
+          message,
+          telemetryConfig,
+          category: "web-console",
+        }),
+      },
+    )
+    return (await response.json()) as { status: string }
   }
 
   async getNews({
@@ -537,10 +517,10 @@ export class Client {
   }
 }
 
-async function extractErrorMessage(response: Response) {
-  const contentType = response.headers.get('Content-Type')
-  if (contentType?.includes('application/json')) {
-    const { error } = await response.json()
+async function extractErrorMessage(response: Response): Promise<string> {
+  const contentType = response.headers.get("Content-Type")
+  if (contentType?.includes("application/json")) {
+    const { error } = (await response.json()) as { error: string }
     return error
   } else {
     return response.text()

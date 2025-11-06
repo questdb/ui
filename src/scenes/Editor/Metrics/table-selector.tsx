@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from "react"
 import styled, { css } from "styled-components"
-import { Box, Input } from "@questdb/react-components"
 import { Table } from "@styled-icons/remix-line"
 import Highlighter from "react-highlight-words"
-import { useKeyPress } from "../../../components"
+import { Box, Input } from "../../../components"
+import { useKeyPress } from "../../../hooks"
 
 type Option = {
   label: string
@@ -26,7 +26,7 @@ const Root = styled.div`
 `
 
 const TableIcon = styled(Table)`
-  color: ${({ theme }: { theme: any }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.gray2};
 `
 
 const StyledInput = styled(Input)<{ $highlight?: boolean }>`
@@ -34,19 +34,21 @@ const StyledInput = styled(Input)<{ $highlight?: boolean }>`
   background: transparent;
   font-weight: 600;
   font-size: 1.6rem;
-  color: ${({ theme }: { theme: any }) => theme.color.yellow};
+  color: ${({ theme }) => theme.color.yellow};
   text-transform: uppercase;
   width: 100%;
-  ${({ $highlight }) => $highlight && css`
-    background: transparent;
-    border-color: ${({ theme }: { theme: any }) => theme.color.comment};
-  `}
+  ${({ $highlight }) =>
+    $highlight &&
+    css`
+      background: transparent;
+      border-color: ${({ theme }) => theme.color.comment};
+    `}
 
   &:hover,
   &:active,
   &:focus {
     background: transparent;
-    border-color: ${({ theme }: { theme: any }) => theme.color.comment};
+    border-color: ${({ theme }) => theme.color.comment};
   }
 `
 
@@ -68,8 +70,8 @@ const Wrapper = styled.div`
 
 const Options = styled.ul`
   list-style: none;
-  background: ${({ theme }: { theme: any }) => theme.color.backgroundDarker};
-  box-shadow: 0 5px 5px 0 ${({ theme }: { theme: any }) => theme.color.black40};
+  background: ${({ theme }) => theme.color.backgroundDarker};
+  box-shadow: 0 5px 5px 0 ${({ theme }) => theme.color.black40};
   margin: 0;
   padding: 0.5rem;
   border-radius: 0.4rem;
@@ -80,19 +82,19 @@ const Item = styled.li<{ active: boolean; disabled: boolean }>`
   align-items: center;
   height: 3rem;
   padding: 0 1rem;
-  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-  ${({ active, theme }: { active: boolean; theme: any }) => `
+  font-family:
+    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  ${({ active, theme }) => `
     background: ${active ? theme.color.selection : "transparent"};
   `}
 
-  ${({ disabled, theme }: { disabled: boolean; theme: any }) => `
+  ${({ disabled, theme }) => `
     color: ${disabled ? theme.color.gray1 : theme.color.foreground};
     cursor: ${disabled ? "not-allowed" : "pointer"};
   `}
 `
 export const TableSelector = ({
-  tableId,
   defaultValue,
   options,
   onSelect,
@@ -192,7 +194,7 @@ export const TableSelector = ({
             inputRef.current?.select()
             setHasFocus(true)
           }}
-          onKeyUp={(e: any) => {
+          onKeyUp={(e) => {
             if (e.key === "Backspace") {
               if (query === "") {
                 setQuery("")
@@ -204,7 +206,7 @@ export const TableSelector = ({
               setHasFocus(false)
             }
           }}
-          onChange={(e: any) => {
+          onChange={(e) => {
             setQuery(e.target.value ?? "")
           }}
         />

@@ -1,10 +1,18 @@
 #!/bin/bash -x
 
-# Run it from the 'ui' directory as:
+# Run it from the 'scripts' subdirectory as:
 # ./run_browser_tests.sh
 
 # You can also run it without building the QuestDB project (if it is already built):
 # ./run_browser_tests.sh -skipQuestDBBuild
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the parent directory (ui directory)
+UI_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+# Change to UI directory
+cd "$UI_DIR"
 
 # Cleanup
 rm -rf tmp/dbroot
@@ -15,20 +23,19 @@ if [[ $1 = "-skipQuestDBBuild" ]]
 then
   echo "Skipping QuestDB build"
 else
-  mvn clean package -e -f packages/browser-tests/questdb/pom.xml -DskipTests -P build-binaries 2>&1
+  mvn clean package -e -f e2e/questdb/pom.xml -DskipTests -P build-binaries 2>&1
 fi
 
 # Unpack server
-tar xzf packages/browser-tests/questdb/core/target/questdb-*-rt-*.tar.gz -C tmp/
+tar xzf e2e/questdb/core/target/questdb-*-rt-*.tar.gz -C tmp/
 mkdir tmp/dbroot
 
 # Build web console
-yarn install --immutable --immutable-cache
-yarn workspace @questdb/react-components run build
-yarn workspace @questdb/web-console run build
+yarn install --immutable
+yarn build
 
 # Start proxy
-node packages/web-console/serve-dist.js &
+yarn preview &
 PID1="$!"
 echo "Proxy started, PID=$PID1"
 
@@ -39,7 +46,7 @@ export QDB_TELEMETRY_ENABLED=false
 # Running tests which assume authentication is off
 rm -rf tmp/dbroot/*
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
-yarn workspace browser-tests test:auth
+yarn test:e2e:auth
 ./tmp/questdb-*/bin/questdb.sh stop
 
 read -p "Press any key to continue... " -n1 -s
@@ -52,7 +59,7 @@ export QDB_TELEMETRY_ENABLED=false
 # Running tests which assume that OSS authentication is on
 rm -rf tmp/dbroot/*
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
-yarn workspace browser-tests test
+yarn test:e2e
 ./tmp/questdb-*/bin/questdb.sh stop
 
 read -p "Press any key to continue... " -n1 -s
@@ -63,14 +70,14 @@ export QDB_HTTP_CONTEXT_WEB_CONSOLE=/context1
 # Restart proxy to pickup context path
 kill -SIGTERM $PID1
 sleep 1
-node packages/web-console/serve-dist.js &
+yarn preview &
 PID2="$!"
 echo "Proxy started, PID=$PID2"
 
 # Running tests with context path
 rm -rf tmp/dbroot/*
 ./tmp/questdb-*/bin/questdb.sh start -d tmp/dbroot
-yarn workspace browser-tests test
+yarn test:e2e
 ./tmp/questdb-*/bin/questdb.sh stop
 
 # Stop proxy

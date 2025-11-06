@@ -29,7 +29,13 @@ import React, {
   useEffect,
   useRef,
 } from "react"
-import ChromeTabsClz, { TabProperties } from "./chrome-tabs"
+import ChromeTabsClz, {
+  TabProperties,
+  TabEventDetail,
+  TabRenameEventDetail,
+  TabReorderEventDetail,
+  TabContextMenuEventDetail,
+} from "./chrome-tabs"
 
 export type Listeners = {
   onTabActive?: (tabId: string) => void
@@ -57,9 +63,11 @@ const ChromeTabsWrapper = forwardRef<
     <div
       ref={ref}
       className={classList.join(" ")}
-      style={{ "--tab-content-margin": "9px", "paddingBottom": "3px" } as CSSProperties}
+      style={
+        { "--tab-content-margin": "9px", paddingBottom: "3px" } as CSSProperties
+      }
     >
-      <div className="chrome-tabs-content"></div>
+      <div className="chrome-tabs-content" />
     </div>
   )
 })
@@ -76,15 +84,21 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
 
   // activated
   useEffect(() => {
-    const listener = ({ detail }: any) => {
-      const tabEle = detail.tabEl as HTMLDivElement
-      const tabId = tabEle.getAttribute("data-tab-id") as string
-      listeners.onTabActive?.(tabId)
+    const listener = (event: Event) => {
+      const { detail } = event as CustomEvent<TabEventDetail>
+      const tabEle = detail.tabEl
+      const tabId = tabEle.getAttribute("data-tab-id")
+      if (tabId) {
+        listeners.onTabActive?.(tabId)
+      }
     }
-    const renameListener = ({ detail }: any) => {
+    const renameListener = (event: Event) => {
+      const { detail } = event as CustomEvent<TabRenameEventDetail>
       const { tabEl, title } = detail
-      const tabId = tabEl.getAttribute("data-tab-id") as string
-      listeners.onTabRename?.(tabId, title)
+      const tabId = tabEl.getAttribute("data-tab-id")
+      if (tabId) {
+        listeners.onTabRename?.(tabId, title)
+      }
     }
     const ele = chromeTabsRef.current?.el
     ele?.addEventListener("tabClick", listener)
@@ -93,14 +107,17 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
       ele?.removeEventListener("tabClick", listener)
       ele?.removeEventListener("tabRename", renameListener)
     }
-  }, [listeners.onTabActive])
+  }, [listeners.onTabActive, listeners.onTabRename])
 
   useEffect(() => {
     const ele = chromeTabsRef.current?.el
-    const listener = ({ detail }: any) => {
-      const { tabEl: tabEle, originIndex, destinationIndex } = detail
-      const tabId = tabEle.getAttribute("data-tab-id") as string
-      listeners.onTabReorder?.(tabId, originIndex, destinationIndex)
+    const listener = (event: Event) => {
+      const { detail } = event as CustomEvent<TabReorderEventDetail>
+      const { tabEl, originIndex, destinationIndex } = detail
+      const tabId = tabEl.getAttribute("data-tab-id")
+      if (tabId) {
+        listeners.onTabReorder?.(tabId, originIndex, destinationIndex)
+      }
     }
     ele?.addEventListener("tabReorder", listener)
     return () => {
@@ -110,10 +127,13 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
 
   useEffect(() => {
     const ele = chromeTabsRef.current?.el
-    const listener = ({ detail }: any) => {
-      const tabEle = detail.tabEl as HTMLDivElement
-      const tabId = tabEle.getAttribute("data-tab-id") as string
-      listeners.onTabClose?.(tabId)
+    const listener = (event: Event) => {
+      const { detail } = event as CustomEvent<TabEventDetail>
+      const tabEle = detail.tabEl
+      const tabId = tabEle.getAttribute("data-tab-id")
+      if (tabId) {
+        listeners.onTabClose?.(tabId)
+      }
     }
     ele?.addEventListener("tabClose", listener)
     return () => {
@@ -134,13 +154,16 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
 
   useEffect(() => {
     const ele = chromeTabsRef.current?.el
-    const listener = ({ detail }: any) => {
-      const tabEle = detail.tabEl as HTMLDivElement
+    const listener = (event: Event) => {
+      const { detail } = event as CustomEvent<TabContextMenuEventDetail>
+      const tabEle = detail.tabEl
       if (!tabEle) {
         return
       }
-      const tabId = tabEle.getAttribute("data-tab-id") as string
-      listeners.onContextMenu?.(tabId, detail.event)
+      const tabId = tabEle.getAttribute("data-tab-id")
+      if (tabId) {
+        listeners.onContextMenu?.(tabId, detail.event)
+      }
     }
     ele?.addEventListener("contextmenu", listener)
     return () => {
@@ -208,8 +231,7 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
     darkMode?: boolean
   }) {
     return <ChromeTabsWrapper {...props} ref={ref} />
-  },
-  [])
+  }, [])
 
   return {
     ChromeTabs,

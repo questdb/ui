@@ -14,6 +14,12 @@ import {
   compactSQL,
 } from "./utils"
 
+vi.mock("../../../consts", () => ({
+  API: "https://alurin.questdb.io",
+  API_VERSION: "2",
+  BUTTON_ICON_SIZE: "26px",
+}))
+
 describe("getAutoRefreshRate", () => {
   it("should set a correct auto refresh rate for relative periods", () => {
     expect(getAutoRefreshRate("now-5m", "now")).toBe("5s")

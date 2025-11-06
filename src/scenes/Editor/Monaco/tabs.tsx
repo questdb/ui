@@ -2,20 +2,14 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
-import {
-  File,
-  History,
-  LineChart,
-  Show,
-  Trash,
-} from "@styled-icons/boxicons-regular"
+import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
 import {
   Box,
   Button,
   DropdownMenu,
   ForwardRef,
-} from "@questdb/react-components"
-import { Text } from "../../../components"
+  Text,
+} from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 import type { Buffer } from "../../../store/buffers"
@@ -94,17 +88,19 @@ export const Tabs = () => {
   const repositionActiveBuffers = async (excludedId: string) => {
     const sortedActiveBuffers = buffers
       .filter(
-        (buffer) => (!buffer.archived || buffer.isTemporary) && buffer.id !== parseInt(excludedId),
+        (buffer) =>
+          (!buffer.archived || buffer.isTemporary) &&
+          buffer.id !== parseInt(excludedId),
       )
       .sort((a, b) => a.position - b.position)
 
     const positions = sortedActiveBuffers
       .map((buffer, index) => ({
         id: buffer.id as number,
-        position: index
+        position: index,
       }))
-      .filter(p => p.id !== undefined)
-    
+      .filter((p) => p.id !== undefined)
+
     if (positions.length > 0) {
       await updateBuffersPositions(positions)
     }
@@ -112,20 +108,28 @@ export const Tabs = () => {
 
   const close = async (id: string) => {
     const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
-    if (!buffer || buffers.filter((buffer) => !buffer.archived || buffer.isTemporary).length === 1) {
+    if (
+      !buffer ||
+      buffers.filter((buffer) => !buffer.archived || buffer.isTemporary)
+        .length === 1
+    ) {
       return
     }
-    
+
     if (buffer.isTemporary) {
       await updateBuffer(parseInt(id), { isTemporary: false }, true)
       return
     }
-    
-    buffer?.value !== "" ||
-    (buffer.metricsViewState?.metrics &&
-      buffer.metricsViewState.metrics.length > 0)
-      ? await archiveBuffer(parseInt(id))
-      : await deleteBuffer(parseInt(id))
+
+    if (
+      buffer?.value !== "" ||
+      (buffer.metricsViewState?.metrics &&
+        buffer.metricsViewState.metrics.length > 0)
+    ) {
+      await archiveBuffer(parseInt(id))
+    } else {
+      await deleteBuffer(parseInt(id))
+    }
     await repositionActiveBuffers(id)
     if (archivedBuffers.length >= 10) {
       await Promise.all(
@@ -145,8 +149,11 @@ export const Tabs = () => {
     if (!beforeTab) {
       return
     }
-    let newTabs = buffers
-      .filter((tab) => tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary))
+    const newTabs = buffers
+      .filter(
+        (tab) =>
+          tab.id !== parseInt(tabId) && (!tab.archived || tab.isTemporary),
+      )
       .sort((a, b) => {
         if (a.isTemporary) {
           return 1
@@ -157,10 +164,10 @@ export const Tabs = () => {
         return a.position - b.position
       })
     newTabs.splice(toIndex, 0, beforeTab)
-    
+
     const positions = newTabs.map((tab, index) => ({
       id: tab.id as number,
-      position: index
+      position: index,
     }))
     await updateBuffersPositions(positions)
   }
@@ -187,7 +194,7 @@ export const Tabs = () => {
     <Root>
       <ReactChromeTabs
         limit={40}
-        darkMode={true}
+        darkMode
         onTabClose={close}
         onTabReorder={reorder}
         onTabActive={active}
@@ -204,30 +211,29 @@ export const Tabs = () => {
             }
             return a.position - b.position
           })
-          .map(
-            (buffer) => {
-              const classNames = []
-              if (buffer.metricsViewState) {
-                classNames.push("metrics-tab")
-              }
-              if (buffer.isTemporary) {
-                classNames.push("temporary-tab")
-              }
-              if (buffer.isDiffBuffer) {
-                classNames.push("diff-tab")
-              }
-              
-              const className = classNames.length > 0 ? classNames.join(" ") : undefined
-              
-              return {
-                id: buffer.id?.toString(),
-                favicon: mapTabIconToType(buffer),
-                title: buffer.label,
-                active: activeBuffer.id === buffer.id,
-                className,
-              } as Tab
+          .map((buffer) => {
+            const classNames = []
+            if (buffer.metricsViewState) {
+              classNames.push("metrics-tab")
             }
-          )}
+            if (buffer.isTemporary) {
+              classNames.push("temporary-tab")
+            }
+            if (buffer.isDiffBuffer) {
+              classNames.push("diff-tab")
+            }
+
+            const className =
+              classNames.length > 0 ? classNames.join(" ") : undefined
+
+            return {
+              id: buffer.id?.toString(),
+              favicon: mapTabIconToType(buffer),
+              title: buffer.label,
+              active: activeBuffer.id === buffer.id,
+              className,
+            } as Tab
+          })}
       />
       <DropdownMenu.Root modal={false} onOpenChange={setHistoryOpen}>
         <DropdownMenu.Trigger asChild>
@@ -257,7 +263,9 @@ export const Tabs = () => {
                   await updateBuffer(buffer.id as number, {
                     archived: false,
                     archivedAt: undefined,
-                    position: buffers.filter(b => !b.archived || b.isTemporary).length,
+                    position: buffers.filter(
+                      (b) => !b.archived || b.isTemporary,
+                    ).length,
                   })
                   await setActiveBuffer(buffer)
                 }}

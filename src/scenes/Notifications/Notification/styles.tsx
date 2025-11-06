@@ -33,13 +33,14 @@ export const Wrapper = styled.div<{
   align-items: center;
   border-right: none;
   height: ${({ isMinimized }) => (isMinimized ? "auto" : "4.5rem")};
-  border-bottom: ${({ isMinimized, theme }) => isMinimized ? "none" : `1px solid ${theme.color.backgroundDarker}`};
+  border-bottom: ${({ isMinimized, theme }) =>
+    isMinimized ? "none" : `1px solid ${theme.color.backgroundDarker}`};
   padding: 0 1rem;
   flex-shrink: 0;
   width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
-  -ms-overflow-style: none; 
+  -ms-overflow-style: none;
   &::-webkit-scrollbar {
     display: none;
   }

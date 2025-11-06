@@ -1,6 +1,6 @@
 import React from "react"
 import { useFormContext } from "react-hook-form"
-import { Checkbox } from "@questdb/react-components"
+import { Checkbox } from "../../components"
 
 type Props = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string
@@ -9,7 +9,6 @@ type Props = React.InputHTMLAttributes<HTMLInputElement> & {
 
 export const FormCheckbox: React.FunctionComponent<Props> = ({
   name,
-  checked,
   ...rest
 }) => {
   const { register } = useFormContext()
