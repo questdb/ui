@@ -94,7 +94,7 @@ export const SettingsProvider = ({
           <a href="https://questdb.io">
             <QuestDBLogo />
           </a>
-          <Text align="center" size="lg">
+          <Text align="center" size="lg" color="offWhite">
             Error connecting to the database.
             <br />
             Please, check if the server is running correctly.
