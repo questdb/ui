@@ -1,0 +1,45 @@
+import { SchemaColumn } from "components/TableSchemaDialog/types"
+import { DEFAULT_TIMESTAMP_FORMAT, DEFAULT_TIMESTAMP_FORMAT_NS } from "./const"
+
+export const isGeoHash = (type: string) => type.startsWith("GEOHASH")
+
+const arrayRegex = /^[a-z][a-z0-9]*(\[\])+$/i
+
+export const isArray = (type: string) => arrayRegex.test(type)
+
+export const isTimestamp = (type: string) =>
+  ["TIMESTAMP", "TIMESTAMP_NS"].includes(type)
+
+export const getTimestampFormat = (type: string) =>
+  type === "TIMESTAMP_NS"
+    ? DEFAULT_TIMESTAMP_FORMAT_NS
+    : DEFAULT_TIMESTAMP_FORMAT
+
+export const extractPrecionFromGeohash = (geohash: string) => {
+  const regex = /\(([^)]+)\)/g
+  const matches = regex.exec(geohash)
+  if (matches && matches.length > 1) {
+    return matches[1]
+  }
+  return ""
+}
+
+export const mapColumnTypeToUI = (type: string) => {
+  if (isGeoHash(type)) {
+    return "GEOHASH"
+  }
+  if (isArray(type)) {
+    return "ARRAY"
+  }
+  return type.toUpperCase()
+}
+
+export const mapColumnTypeToQuestDB = (column: SchemaColumn) => {
+  if (column.type === "GEOHASH") {
+    return {
+      ...column,
+      type: `GEOHASH(${column.precision})`,
+    }
+  }
+  return column
+}

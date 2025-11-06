@@ -1,11 +1,11 @@
-name: Publish Packages to NPM
+name: Publish to NPM
 
 on:
   workflow_dispatch:
 
 jobs:
   publish:
-    name: Publish Packages to NPM
+    name: Publish to NPM
     runs-on: ubuntu-latest
 
     steps:
@@ -19,26 +19,15 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --immutable --immutable-cache
+        run: yarn install --immutable
 
-      - name: Build @questdb/react-components
-        run: yarn workspace @questdb/react-components run build
+      - name: Build
+        run: yarn build
 
-      - name: Build @questdb/web-console
-        run: yarn workspace @questdb/web-console run build
-
-      - name: Publish @questdb/react-components to npm
+      - name: Publish to npm
         uses: JS-DevTools/npm-publish@v1
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
           check-version: true
-          package: ./packages/react-components/package.json
-
-      - name: Publish @questdb/web-console to npm
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
-          check-version: true
-          package: ./packages/web-console/package.json 
+          package: ./package.json
