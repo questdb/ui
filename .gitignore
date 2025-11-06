@@ -1,11 +1,13 @@
 node_modules
 .yarn/*
-!.yarn/cache
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
-!.yarn/sdks
 !.yarn/versions
 .idea
 .DS_Store
 *.iml
+dist
+.tmp
+.sass-cache
+.env
