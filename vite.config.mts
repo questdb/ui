@@ -46,6 +46,15 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       rewrite: (path: string) => `${contextPath}${path}`,
     },
+    "/userinfo": {
+      bypass: function (_, res) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          sub: "john doe",
+          groups: ["group1", "group2"]
+        }))
+      }
+    }
   }
 
   return {
@@ -130,13 +139,13 @@ export default defineConfig(({ mode }) => {
     },
 
     server: {
-      host: 'localhost',
+      host: '127.0.0.1',
       port: 9999,
       proxy: proxySettings,
     },
 
     preview: {
-      host: 'localhost',
+      host: '127.0.0.1',
       port: 9999,
       proxy: proxySettings,
     },

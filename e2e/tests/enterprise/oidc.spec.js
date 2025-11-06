@@ -67,9 +67,6 @@ describe("OIDC", () => {
 
     it("should login via OIDC", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
@@ -77,7 +74,9 @@ describe("OIDC", () => {
         "token_type": "Bearer",
         "expires_in": 300
       });
-      cy.wait("@tokens");
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.getEditor().should("be.visible");
 
       cy.executeSQL("select current_user();");
@@ -88,15 +87,15 @@ describe("OIDC", () => {
 
     it("should request a new token on page reload, even if there is no refresh token", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
         "token_type": "Bearer",
         "expires_in": 0
       });
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.wait("@tokens");
       cy.getEditor().should("be.visible");
 
@@ -106,9 +105,6 @@ describe("OIDC", () => {
 
     it("should not force SSO re-authentication with 'Continue as <username>' button", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
@@ -116,6 +112,9 @@ describe("OIDC", () => {
         "token_type": "Bearer",
         "expires_in": 300
       });
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.wait("@tokens");
       cy.getEditor().should("be.visible");
 
@@ -137,9 +136,6 @@ describe("OIDC", () => {
 
     it("should force SSO re-authentication with 'Choose a different account' button", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
@@ -147,6 +143,9 @@ describe("OIDC", () => {
         "token_type": "Bearer",
         "expires_in": 300
       });
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.wait("@tokens");
       cy.getEditor().should("be.visible");
 
@@ -168,9 +167,6 @@ describe("OIDC", () => {
 
     it("display import panel", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
@@ -178,6 +174,9 @@ describe("OIDC", () => {
         "token_type": "Bearer",
         "expires_in": 300
       });
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.wait("@tokens");
       cy.getEditor().should("be.visible");
 
@@ -225,9 +224,6 @@ describe("OIDC", () => {
 
     it("should login via OIDC with state required", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
@@ -235,6 +231,9 @@ describe("OIDC", () => {
         "token_type": "Bearer",
         "expires_in": 300
       });
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.wait("@tokens");
       cy.getEditor().should("be.visible");
 
@@ -251,9 +250,6 @@ describe("OIDC", () => {
 
     it("should login via OIDC, then admin, then OIDC again without re-authenticating if the OAuth2 provider session is still alive", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`);
-      cy.getByDataHook("button-sso-login").click();
-      cy.wait("@authorizationCode");
-
       interceptTokenRequest({
         "access_token": "gslpJtzmmi6RwaPSx0dYGD4tEkom",
         "refresh_token": "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
@@ -261,6 +257,9 @@ describe("OIDC", () => {
         "token_type": "Bearer",
         "expires_in": 300
       });
+      cy.getByDataHook("button-sso-login").click();
+      cy.wait("@authorizationCode");
+
       cy.wait("@tokens");
       cy.getEditor().should("be.visible");
 
