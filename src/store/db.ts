@@ -55,16 +55,17 @@ export class Storage extends Dexie {
       })
       .upgrade((tx) => {
         let counter = 0
-        tx.table("buffers")
+        void tx
+          .table("buffers")
           .toCollection()
-          .modify((buffer) => {
+          .modify((buffer: Buffer) => {
             buffer.position = counter
             counter++
           })
       })
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
-    this.on("populate", () => {
+    this.on("populate", async () => {
       // populate initial buffer with value from localStorage, then clear it.
       // this is to migrate from localStorage to indexedDB
       const valueFromDeprecatedStorage = getValue(StoreKey.QUERY_TEXT)
@@ -72,7 +73,7 @@ export class Storage extends Dexie {
         localStorage.removeItem(StoreKey.QUERY_TEXT)
       }
 
-      this.buffers.add(
+      await this.buffers.add(
         makeBuffer({
           label: "SQL",
           value: valueFromDeprecatedStorage ?? "",
@@ -80,17 +81,17 @@ export class Storage extends Dexie {
         }),
       )
 
-      this.editor_settings.add({
+      await this.editor_settings.add({
         key: "activeBufferId",
         value: fallbackBuffer.id,
       })
 
-      this.editor_settings.add({
+      await this.editor_settings.add({
         key: "returnTo",
         value: "",
       })
 
-      this.editor_settings.add({
+      await this.editor_settings.add({
         key: "returnToLabel",
         value: "",
       })
@@ -100,7 +101,7 @@ export class Storage extends Dexie {
     // user should always have at least one buffer.
     this.on("ready", async () => {
       if ((await this.buffers.count()) === 0) {
-        this.buffers.add(
+        await this.buffers.add(
           makeBuffer({
             label: "SQL",
             value: "",
@@ -122,9 +123,12 @@ export class Storage extends Dexie {
               0
 
             if (hasValue) {
-              this.editor_settings.where("key").equals(key).modify({ value })
+              await this.editor_settings
+                .where("key")
+                .equals(key)
+                .modify({ value })
             } else {
-              this.editor_settings.add({
+              await this.editor_settings.add({
                 key,
                 value,
               })

@@ -24,8 +24,7 @@ const Root = styled(Box).attrs({
   gap: 0,
 })`
   position: relative;
-  background-color: ${({ theme }: { theme: any }) =>
-    theme.color.backgroundLighter};
+  background-color: ${({ theme }) => theme.color.backgroundLighter};
   height: 25rem;
 `
 
@@ -71,15 +70,15 @@ const Label = styled.div`
   bottom: 1rem;
   display: flex;
   gap: 0.5rem;
-  font-family: ${({ theme }: { theme: any }) => theme.font};
+  font-family: ${({ theme }) => theme.font};
 `
 
 const LabelValue = styled.span`
-  color: ${({ theme }: { theme: any }) => theme.color.cyan};
+  color: ${({ theme }) => theme.color.cyan};
 `
 
 const ErrorIcon = styled(Error)`
-  color: ${({ theme }: { theme: any }) => theme.color.red};
+  color: ${({ theme }) => theme.color.red};
 `
 
 type Props = DateRange & {
@@ -126,14 +125,18 @@ export const Graph = ({
     undefined,
   )
 
-  const resizeObserver = useMemo(() => new ResizeObserver((entries) => {
-    if (entries[0] && uPlotRef.current) {
-      uPlotRef.current.setSize({
-        width: entries[0].contentRect.width,
-        height: 200,
-      })
-    }
-  }), [])
+  const resizeObserver = useMemo(
+    () =>
+      new ResizeObserver((entries) => {
+        if (entries[0] && uPlotRef.current) {
+          uPlotRef.current.setSize({
+            width: entries[0].contentRect.width,
+            height: 200,
+          })
+        }
+      }),
+    [],
+  )
 
   const from = durationTokenToDate(dateFrom)
   const to = durationTokenToDate(dateTo)
@@ -239,7 +242,7 @@ export const Graph = ({
                 width: graphRootRef.current?.clientWidth ?? 0,
               }}
               data={data}
-              onCreate={(uplot: any) => {
+              onCreate={(uplot) => {
                 uPlotRef.current = uplot
               }}
             />

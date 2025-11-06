@@ -29,7 +29,7 @@ export const CopyButton = ({
       skin="secondary"
       data-hook="copy-value"
       onClick={(e) => {
-        copyToClipboard(text)
+        void copyToClipboard(text)
         e.stopPropagation()
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)

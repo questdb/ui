@@ -33,7 +33,7 @@ export const Actions = ({
     name: "schemaColumns",
   })
   const { getValues, setValue } = useFormContext()
-  const watchSchemaColumns = getValues()["schemaColumns"]
+  const watchSchemaColumns = getValues()["schemaColumns"] as SchemaColumn[]
 
   return (
     <Box gap="1rem">

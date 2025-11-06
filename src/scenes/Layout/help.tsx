@@ -114,7 +114,7 @@ export const Help = () => {
           email,
           message,
         }: {
-          email: string
+          email?: string
           message: string
         }) => {
           try {

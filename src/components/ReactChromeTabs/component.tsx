@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef } from "react"
 import { Listeners, useChromeTabs } from "./hooks"
 import isEqual from "lodash.isequal"
 import { TabProperties } from "./chrome-tabs"
@@ -93,7 +93,7 @@ export function Tabs({
       retainTabs.forEach((tab) => {
         removeTab(tab.id)
       })
-      ;(tabs as TabProperties[]).forEach((tab, index) => {
+      tabs.forEach((tab, index) => {
         const currentTab = tabsRef.current[index]
         if (!currentTab) {
           addTab(tab)
@@ -103,7 +103,7 @@ export function Tabs({
           }
         }
       })
-      ;(tabs as TabProperties[]).forEach((tab) => {
+      tabs.forEach((tab) => {
         if (tab.active) {
           activeTab(tab.id)
         }

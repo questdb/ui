@@ -43,7 +43,10 @@ import * as QuestDB from "../../utils/questdb"
 import { getValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { AuthPayload } from "../../modules/OAuth2/types"
-import { sendServerInfoTelemetry, getTelemetryTimestamp } from "../../utils/telemetry"
+import {
+  sendServerInfoTelemetry,
+  getTelemetryTimestamp,
+} from "../../utils/telemetry"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 const quest = new QuestDB.Client()
@@ -56,7 +59,7 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
     switchMap(() => {
       // Set an authorization header for the QuestDB client instance within the telemetry epic
       const authPayload = ssoAuthState.getAuthPayload()
-      const token = authPayload ?? {} as AuthPayload
+      const token = authPayload ?? ({} as AuthPayload)
       if (token.access_token) {
         quest.setCommonHeaders({
           Authorization: `Bearer ${token.groups_encoded_in_token ? token.id_token : token.access_token}`,
@@ -65,15 +68,15 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
         const restToken = getValue(StoreKey.REST_TOKEN)
         if (restToken) {
           quest.setCommonHeaders({
-            Authorization: `Bearer ${restToken}`
+            Authorization: `Bearer ${restToken}`,
           })
         } else {
-            const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-            if (basicAuth) {
-                quest.setCommonHeaders({
-                    Authorization: basicAuth,
-                })
-            }
+          const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
+          if (basicAuth) {
+            quest.setCommonHeaders({
+              Authorization: basicAuth,
+            })
+          }
         }
       }
       return from(
@@ -89,17 +92,18 @@ export const getServerInfo: Epic<StoreAction, TelemetryAction, StoreShape> = (
     }),
   )
 
-export const getLatestTelemetryTimestamp: Epic<StoreAction, TelemetryAction, StoreShape> = (
-  action$,
-  state$,
-) =>
+export const getLatestTelemetryTimestamp: Epic<
+  StoreAction,
+  TelemetryAction,
+  StoreShape
+> = (action$, state$) =>
   action$.pipe(
     ofType<StoreAction, SetTelemetryConfigAction>(TelemetryAT.SET_CONFIG),
     withLatestFrom(state$),
     switchMap(([_, state]) => {
       const serverInfo = selectors.telemetry.getConfig(state)
       if (serverInfo) {
-          sendServerInfoTelemetry(serverInfo)
+        sendServerInfoTelemetry(serverInfo)
       }
       return getTelemetryTimestamp(serverInfo)
     }),

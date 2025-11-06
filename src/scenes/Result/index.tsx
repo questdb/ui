@@ -47,7 +47,7 @@ import {
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { color, ErrorResult, QueryRawResult } from "../../utils"
+import { color, ErrorResult, QueryRawResult, RawErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
@@ -114,7 +114,7 @@ const DownloadButton = styled(Button)`
 `
 
 const ArrowIcon = styled(ArrowDownS)<{ $open: boolean }>`
-  transform: ${({ $open }) => $open ? "rotate(180deg)" : "rotate(0deg)"};
+  transform: ${({ $open }) => ($open ? "rotate(180deg)" : "rotate(0deg)")};
 `
 
 const DownloadDropdownButton = styled(Button)`
@@ -180,20 +180,26 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       quest,
     )
 
-    _grid.addEventListener("header.click", function (event: CustomEvent) {
-      eventBus.publish(
-        EventType.MSG_EDITOR_INSERT_COLUMN,
-        event.detail.columnName,
-      )
-    })
+    _grid.addEventListener(
+      "header.click",
+      function (event: CustomEvent<{ columnName: string }>) {
+        eventBus.publish(
+          EventType.MSG_EDITOR_INSERT_COLUMN,
+          event.detail.columnName,
+        )
+      },
+    )
 
     _grid.addEventListener("yield.focus", function () {
       eventBus.publish(EventType.MSG_EDITOR_FOCUS)
     })
 
-    _grid.addEventListener("freeze.state", function (event: CustomEvent) {
-      setGridFreezeLeftState(event.detail.freezeLeft)
-    })
+    _grid.addEventListener(
+      "freeze.state",
+      function (event: CustomEvent<{ freezeLeft: number }>) {
+        setGridFreezeLeftState(event.detail.freezeLeft)
+      },
+    )
   }, [])
 
   useEffect(() => {
@@ -232,11 +238,12 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <PrimaryToggleButton
           onClick={() => {
-            copyToClipboard(gridRef?.current?.getResultAsMarkdown() as string)
-              .then(() => {
-                setIsCopied(true)
-                setTimeout(() => setIsCopied(false), 1000)
-              })
+            void copyToClipboard(
+              gridRef?.current?.getResultAsMarkdown() as string,
+            ).then(() => {
+              setIsCopied(true)
+              setTimeout(() => setIsCopied(false), 1000)
+            })
           }}
         >
           {isCopied ? <Check size="18px" /> : <Markdown size="18px" />}
@@ -262,7 +269,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
-          onClick={gridRef?.current?.shuffleFocusedColumnToFront}
+          onClick={() => gridRef?.current?.shuffleFocusedColumnToFront()}
         >
           <HandPointLeft size="18px" />
         </Button>
@@ -273,7 +280,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
-          onClick={gridRef?.current?.clearCustomLayout}
+          onClick={() => gridRef?.current?.clearCustomLayout()}
         >
           <Reset size="18px" />
         </Button>
@@ -324,15 +331,19 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     document.body.appendChild(iframe)
 
     iframe.onerror = (e) => {
-      toast.error(`An error occurred while downloading the file: ${e}`)
+      if (typeof e === "object") {
+        toast.error(`An error occurred while downloading the file`)
+      }
+      const error = e as string
+      toast.error(`An error occurred while downloading the file: ${error}`)
     }
 
     iframe.onload = () => {
       const content = iframe.contentDocument?.body?.textContent
       if (content) {
-        let error = 'An error occurred while downloading the file'
+        let error = "An error occurred while downloading the file"
         try {
-          const contentJson = JSON.parse(content)
+          const contentJson = JSON.parse(content) as RawErrorResult
           error += `: ${contentJson.error ?? content}`
         } catch (_) {
           error += `: ${content}`
@@ -355,9 +366,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             </RowCount>
           )}
           {viewMode === "grid" &&
-            gridActions.map((action, index) => (
+            gridActions.map((action) => (
               <PopperHover
-                key={index}
+                key={action.tooltipText}
                 delay={350}
                 placement="bottom"
                 trigger={action.trigger}
@@ -371,7 +382,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             data-hook="download-parquet-button"
             onClick={() => handleDownload("parquet")}
           >
-            <Box align="center" gap="0.5rem" style={{ lineHeight: '1.285' }}>
+            <Box align="center" gap="0.5rem" style={{ lineHeight: "1.285" }}>
               <Download2 height="18px" width="18px" />
               Download as Parquet
             </Box>
@@ -412,9 +423,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
 
           <div id="quick-vis">
             <div className="quick-vis-controls">
-              <form className="v-fit" role="form">
+              <form className="v-fit">
                 <div className="form-group">
-                  <label>Chart type</label>
+                  <label htmlFor="_qvis_frm_chart_type">Chart type</label>
                   <select id="_qvis_frm_chart_type">
                     <option>bar</option>
                     <option>line</option>
@@ -422,14 +433,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Labels</label>
+                  <label htmlFor="_qvis_frm_axis_x">Labels</label>
                   <select
                     id="_qvis_frm_axis_x"
                     data-hook="chart-panel-labels-select"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Series</label>
+                  <label htmlFor="_qvis_frm_axis_y">Series</label>
                   <select
                     id="_qvis_frm_axis_y"
                     data-hook="chart-panel-series-select"

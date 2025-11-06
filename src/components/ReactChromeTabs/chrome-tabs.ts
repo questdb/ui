@@ -35,8 +35,6 @@ const TAB_SIZE_SMALLER = 60
 const TAB_SIZE_MINI = 48
 const NEW_TAB_BUTTON_AREA = 90
 
-const noop = (_: any) => {}
-
 const newTabButtonTemplate = `
     <div class="new-tab-button-wrapper">
       <button class="new-tab-button" data-hook="new-tab-button">✚</button>
@@ -78,13 +76,34 @@ const defaultTapProperties = {
   favicon: false,
 }
 
-export interface TabProperties {
+export type TabProperties = {
   id: string
   title: string
   active?: boolean
   favicon?: boolean | string
   faviconClass?: string
   className?: string
+}
+
+// Event detail types for CustomEvent
+export type TabEventDetail = {
+  tabEl: HTMLElement
+}
+
+export type TabRenameEventDetail = {
+  tabEl: HTMLElement
+  title: string
+}
+
+export type TabReorderEventDetail = {
+  tabEl: HTMLElement
+  originIndex: number
+  destinationIndex: number
+}
+
+export type TabContextMenuEventDetail = {
+  tabEl: HTMLElement
+  event: MouseEvent
 }
 
 let instanceId = 0
@@ -95,11 +114,13 @@ class ChromeTabs {
   limit?: number
   instanceId?: number
   draggabillies: Draggabilly[]
-  isDragging: any
-  draggabillyDragging: any
+  isDragging: boolean
+  draggabillyDragging: Draggabilly | null
 
   constructor() {
     this.draggabillies = []
+    this.isDragging = false
+    this.draggabillyDragging = null
   }
 
   init(el: HTMLElement, limit?: number) {
@@ -118,7 +139,7 @@ class ChromeTabs {
     this.setupDraggabilly()
   }
 
-  emit(eventName: string, data: any) {
+  emit(eventName: string, data: Record<string, unknown>) {
     this.el.dispatchEvent(new CustomEvent(eventName, { detail: data }))
   }
 
@@ -132,12 +153,12 @@ class ChromeTabs {
   }
 
   setupEvents() {
-    window.addEventListener("resize", (_) => {
+    window.addEventListener("resize", () => {
       this.cleanUpPreviouslyDraggedTabs()
       this.layoutTabs()
     })
 
-    const resizeObserver = new ResizeObserver((_) => {
+    const resizeObserver = new ResizeObserver(() => {
       this.cleanUpPreviouslyDraggedTabs()
       this.layoutTabs()
     })
@@ -164,7 +185,10 @@ class ChromeTabs {
         !target.classList.contains("chrome-tab-content")
       ) {
         this.tabEls.forEach((tabEl) => {
-          const val = tabEl.querySelector(".chrome-tab-rename").value
+          const inputEl =
+            tabEl.querySelector<HTMLInputElement>(".chrome-tab-rename")
+          if (!inputEl) return
+          const val = inputEl.value
           if (
             tabEl.getAttribute("is-renaming") !== null &&
             val.trim() !== "" &&
@@ -179,8 +203,10 @@ class ChromeTabs {
     })
   }
 
-  get tabEls() {
-    return Array.prototype.slice.call(this.el.querySelectorAll(".chrome-tab"))
+  get tabEls(): HTMLElement[] {
+    return Array.prototype.slice.call(
+      this.el.querySelectorAll(".chrome-tab"),
+    ) as HTMLElement[]
   }
 
   get tabContentEl() {
@@ -265,8 +291,10 @@ class ChromeTabs {
       if (contentWidth < TAB_SIZE_SMALLER) tabEl.setAttribute("is-smaller", "")
       if (contentWidth < TAB_SIZE_MINI) tabEl.setAttribute("is-mini", "")
 
-      tabEl.querySelector(".chrome-tab-close")!.style.display =
-        this.tabEls.length > 1 ? "block" : "none"
+      const closeEl = tabEl.querySelector<HTMLElement>(".chrome-tab-close")
+      if (closeEl) {
+        closeEl.style.display = this.tabEls.length > 1 ? "block" : "none"
+      }
     })
 
     let styleHTML = ""
@@ -397,25 +425,28 @@ class ChromeTabs {
 
     const faviconEl = tabEl.querySelector(".chrome-tab-favicon") as HTMLElement
     const { favicon, faviconClass, className } = tabProperties
-    
-    const currentClasses = tabEl.className.split(' ')
-    const baseClasses = currentClasses.filter(cls => 
-      cls.startsWith('chrome-tab') || cls === 'dragging' || cls === 'phantom-tab'
+
+    const currentClasses = tabEl.className.split(" ")
+    const baseClasses = currentClasses.filter(
+      (cls) =>
+        cls.startsWith("chrome-tab") ||
+        cls === "dragging" ||
+        cls === "phantom-tab",
     )
-    
+
     if (className) {
-      tabEl.className = [...baseClasses, ...className.split(' ')].join(' ')
+      tabEl.className = [...baseClasses, ...className.split(" ")].join(" ")
     } else {
-      tabEl.className = baseClasses.join(' ')
+      tabEl.className = baseClasses.join(" ")
     }
     faviconEl.className = "chrome-tab-favicon"
-    faviconEl!.style!.backgroundImage = ""
+    faviconEl.style.backgroundImage = ""
     if (favicon || faviconClass) {
       if (faviconClass) {
         faviconEl.className = ["chrome-tab-favicon", faviconClass].join(" ")
       }
       if (favicon) {
-        faviconEl!.style!.backgroundImage = `url('${favicon}')`
+        faviconEl.style.backgroundImage = `url('${favicon}')`
       }
       faviconEl?.removeAttribute("hidden")
     } else {
@@ -478,22 +509,27 @@ class ChromeTabs {
     const tabEls = this.tabEls
     const tabPositions = this.tabPositions
 
-    if (this.isDragging) {
+    if (this.isDragging && this.draggabillyDragging) {
       this.isDragging = false
       this.el.classList.remove("chrome-tabs-is-sorting")
-      this.draggabillyDragging.element.classList.remove(
-        "chrome-tab-is-dragging",
-      )
-      this.draggabillyDragging.element.style.transform = ""
-      this.draggabillyDragging.dragEnd()
-      this.draggabillyDragging.isDragging = false
-      this.draggabillyDragging.positionDrag = noop // Prevent Draggabilly from updating tabEl.style.transform in later frames
-      this.draggabillyDragging.destroy()
+      const draggabilly = this.draggabillyDragging as unknown as {
+        element: HTMLElement
+        dragEnd: () => void
+        isDragging: boolean
+        positionDrag: () => void
+        destroy: () => void
+      }
+      draggabilly.element.classList.remove("chrome-tab-is-dragging")
+      draggabilly.element.style.transform = ""
+      draggabilly.dragEnd()
+      draggabilly.isDragging = false
+      draggabilly.positionDrag = () => {} // Prevent Draggabilly from updating tabEl.style.transform in later frames
+      draggabilly.destroy()
       this.draggabillyDragging = null
     }
 
     this.draggabillies.forEach((d) => d.destroy())
-    if (tabEls.find(el => el.classList.contains("temporary-tab"))) {
+    if (tabEls.find((el) => el.classList.contains("temporary-tab"))) {
       return
     }
 
@@ -512,10 +548,10 @@ class ChromeTabs {
 
       this.draggabillies.push(draggabilly)
 
-      draggabilly.on("pointerDown", (_, pointer) => {
-        // @ts-ignore
-        const timeStamp = pointer.timeStamp
-        if (_.target === tabEl.querySelector(".chrome-tab-drag-handle")) {
+      draggabilly.on("pointerDown", (event, pointer) => {
+        // @ts-expect-error - timeStamp exists on pointer but not in types
+        const timeStamp = pointer.timeStamp as number
+        if (event.target === tabEl.querySelector(".chrome-tab-drag-handle")) {
           if (
             lastClickX === pointer.clientX &&
             lastClickY === pointer.clientY &&
@@ -524,7 +560,7 @@ class ChromeTabs {
           ) {
             tabEls.forEach((el) => this.hideRenameTab(el))
             this.showRenameTab(tabEl)
-            _.stopImmediatePropagation()
+            event.stopImmediatePropagation()
             wasActiveBefore = false
           }
           wasActiveBefore = tabEl.hasAttribute("active")
@@ -536,7 +572,7 @@ class ChromeTabs {
         // this.setCurrentTab(tabEl);
       })
 
-      draggabilly.on("dragStart", (_) => {
+      draggabilly.on("dragStart", () => {
         this.isDragging = true
         this.draggabillyDragging = draggabilly
         tabEl.classList.add("chrome-tab-is-dragging")
@@ -544,24 +580,24 @@ class ChromeTabs {
         this.emit("dragStart", {})
       })
 
-      draggabilly.on("dragEnd", (_) => {
+      draggabilly.on("dragEnd", () => {
         this.isDragging = false
         const finalTranslateX = parseFloat(tabEl.style.left)
         tabEl.style.transform = `translate3d(0, 0, 0)`
         this.emit("dragEnd", {})
 
         // Animate dragged tab back into its place
-        requestAnimationFrame((_) => {
+        requestAnimationFrame(() => {
           tabEl.style.left = "0"
           tabEl.style.transform = `translate3d(${finalTranslateX}px, 0, 0)`
 
-          requestAnimationFrame((_) => {
+          requestAnimationFrame(() => {
             tabEl.classList.remove("chrome-tab-is-dragging")
             this.el.classList.remove("chrome-tabs-is-sorting")
 
             tabEl.classList.add("chrome-tab-was-just-dragged")
 
-            requestAnimationFrame((_) => {
+            requestAnimationFrame(() => {
               tabEl.style.transform = ""
 
               this.layoutTabs()
@@ -599,9 +635,9 @@ class ChromeTabs {
     destinationIndex: number,
   ) {
     if (destinationIndex < originIndex) {
-      tabEl!.parentNode!.insertBefore(tabEl, this.tabEls[destinationIndex])
+      tabEl.parentNode!.insertBefore(tabEl, this.tabEls[destinationIndex])
     } else {
-      tabEl!.parentNode!.insertBefore(tabEl, this.tabEls[destinationIndex + 1])
+      tabEl.parentNode!.insertBefore(tabEl, this.tabEls[destinationIndex + 1])
     }
     this.emit("tabReorder", { tabEl, originIndex, destinationIndex })
     this.layoutTabs()

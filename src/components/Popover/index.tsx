@@ -1,16 +1,11 @@
-import styled from "styled-components";
-import * as RadixPopover from "@radix-ui/react-popover";
-import type { PopoverProps } from "@radix-ui/react-popover";
-import { X } from "@styled-icons/bootstrap/X";
-import React from "react";
-import { Heading } from "../Heading";
+import styled from "styled-components"
+import * as RadixPopover from "@radix-ui/react-popover"
+import type { PopoverProps } from "@radix-ui/react-popover"
+import { X } from "@styled-icons/bootstrap/X"
+import React from "react"
+import { Heading } from "../Heading"
 
-const ALIGN_OPTIONS: readonly ["start", "center", "end"] = [
-  "start",
-  "center",
-  "end",
-];
-export type Align = (typeof ALIGN_OPTIONS)[number];
+export type Align = "start" | "center" | "end"
 
 const StyledPopoverContent = styled(RadixPopover.Content)`
   display: flex;
@@ -20,7 +15,7 @@ const StyledPopoverContent = styled(RadixPopover.Content)`
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
   outline: none;
   z-index: 1000;
-`;
+`
 
 const StyledPopoverClose = styled(RadixPopover.Close).attrs({
   "aria-label": "Close",
@@ -29,7 +24,7 @@ const StyledPopoverClose = styled(RadixPopover.Close).attrs({
   appearance: initial;
   margin-left: auto;
   cursor: pointer;
-`;
+`
 
 const Header = styled.div`
   display: flex;
@@ -37,22 +32,22 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   border-bottom: 0.1rem ${({ theme }) => theme.color.background} solid;
-`;
+`
 
 const ContentWrapper = styled.div`
   width: 100%;
-`;
+`
 
 type Props = {
-  children: React.ReactNode;
-  withCloseButton?: boolean;
-  trigger: React.ReactNode;
-  width?: number | string;
-  title?: string;
-  open?: PopoverProps["open"];
-  onOpenChange?: (isOpen: boolean) => void;
-  align?: Align;
-};
+  children: React.ReactNode
+  withCloseButton?: boolean
+  trigger: React.ReactNode
+  width?: number | string
+  title?: string
+  open?: PopoverProps["open"]
+  onOpenChange?: (isOpen: boolean) => void
+  align?: Align
+}
 
 export const Popover = ({
   children,
@@ -86,4 +81,4 @@ export const Popover = ({
       </StyledPopoverContent>
     </RadixPopover.Portal>
   </RadixPopover.Root>
-);
+)

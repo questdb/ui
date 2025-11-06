@@ -84,11 +84,14 @@ export const tableWriteAmplification: Widget = {
         );
     `
   },
-  alignData: (data: TableWriteAmplification[]): uPlot.AlignedData => [
-    data.map((l) => new Date(l.created).getTime()),
-    data.map((l) =>
-      l.writeAmplification ? sqlValueToFixed(l.writeAmplification) : 1,
-    ),
-  ],
+  alignData: (data): uPlot.AlignedData => {
+    const rows = data as TableWriteAmplification[]
+    return [
+      rows.map((l) => new Date(l.created).getTime()),
+      rows.map((l) =>
+        l.writeAmplification ? sqlValueToFixed(l.writeAmplification) : 1,
+      ),
+    ]
+  },
   mapYValue: (rawValue: number) => rawValue,
 }

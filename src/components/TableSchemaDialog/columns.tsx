@@ -1,6 +1,6 @@
 import React, { useCallback } from "react"
 import styled from "styled-components"
-import { useFormContext } from "react-hook-form"
+import { FieldError, useFormContext } from "react-hook-form"
 import { Box } from "../Box"
 import { Form } from "../Form"
 import { Text } from ".."
@@ -24,13 +24,6 @@ const SchemaRoot = styled.div`
   height: 100%;
 `
 
-const AddBox = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})`
-  margin: auto;
-`
-
 const Error = styled(Drawer.GroupItem).attrs({ direction: "column" })`
   align-items: center;
 `
@@ -48,12 +41,12 @@ export const Columns = ({
 }) => {
   const { formState, getValues, setValue, watch } = useFormContext()
 
-  const watchTimestamp = watch("timestamp")
-  const watchSchemaColumns = getValues()["schemaColumns"]
+  const watchTimestamp = watch("timestamp") as string
+  const watchSchemaColumns = getValues()["schemaColumns"] as SchemaColumn[]
 
   const listItemContent = useCallback(
     (index: number) => {
-      const column = watch(`schemaColumns.${index}`)
+      const column = watch(`schemaColumns.${index}`) as SchemaColumn
 
       return (
         <>
@@ -79,7 +72,10 @@ export const Columns = ({
     ],
   )
 
-  const errors = formState.errors["schemaColumns"]
+  const schemaColumnsErrors = formState.errors.schemaColumns as unknown as
+    | FieldError[]
+    | FieldError
+    | undefined
 
   return (
     <>
@@ -93,10 +89,13 @@ export const Columns = ({
           </Text>
         </Disclaimer>
       )}
-      {errors &&
-        (Array.isArray(errors) ? errors : [errors]).map((error: any, index) => (
-          <Error key={index}>
-            <Text color="red">{error.message}</Text>
+      {schemaColumnsErrors &&
+        (Array.isArray(schemaColumnsErrors)
+          ? schemaColumnsErrors
+          : [schemaColumnsErrors]
+        ).map((error) => (
+          <Error key={error?.message}>
+            <Text color="red">{error?.message}</Text>
           </Error>
         ))}
       <SchemaRoot>
@@ -104,7 +103,7 @@ export const Columns = ({
           <VirtualList
             itemContent={listItemContent}
             totalCount={watchSchemaColumns.length}
-            followOutput={true}
+            followOutput
           />
         )}
       </SchemaRoot>

@@ -22,12 +22,7 @@
  *
  ******************************************************************************/
 
-import React, {
-  createContext,
-  PropsWithChildren,
-  useEffect,
-  useState,
-} from "react"
+import React, { createContext, useEffect, useState } from "react"
 import * as QuestDB from "../../utils/questdb"
 import { useAuth } from "../AuthProvider"
 import { AuthPayload } from "../../modules/OAuth2/types"
@@ -41,8 +36,6 @@ import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 
 const questClient = new QuestDB.Client()
-
-type Props = {}
 
 type ContextProps = {
   quest: QuestDB.Client
@@ -61,7 +54,7 @@ const defaultValues: ContextProps = {
 
 export const QuestContext = createContext<ContextProps>(defaultValues)
 
-export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
+export const QuestProvider: React.FC = ({ children }) => {
   const dispatch = useDispatch()
   const { settings } = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
@@ -81,7 +74,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
     setAuthCheckFinished(true)
   }
 
-  const setupClient = async (sessionData: Partial<AuthPayload>) => {
+  const setupClient = (sessionData: Partial<AuthPayload>) => {
     questClient.setCommonHeaders({
       Authorization: `Bearer ${sessionData.groups_encoded_in_token ? sessionData.id_token : sessionData.access_token}`,
     })
@@ -96,7 +89,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
   // User has been logged in with OAuth2
   useEffect(() => {
     if (sessionData) {
-      void setupClient(sessionData)
+      setupClient(sessionData)
     }
   }, [sessionData])
 
@@ -109,23 +102,25 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       })
       void finishAuthCheck()
     } else {
-        const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-        if (basicAuth) {
-            questClient.setCommonHeaders({
-                Authorization: basicAuth,
-            })
-            void finishAuthCheck()
-        }
+      const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
+      if (basicAuth) {
+        questClient.setCommonHeaders({
+          Authorization: basicAuth,
+        })
+        void finishAuthCheck()
+      }
     }
 
     // TODO: Remove this, use info from `/settings` (`type` and `version`) and run this hook on `settings` dep
     // Get the build version info
-    questClient.queryRaw("select build", { limit: "0,1000" }).then((result) => {
-      if (result.type === QuestDB.Type.DQL && result.count === 1) {
-        setBuildVersion(formatVersion(result.dataset[0][0] as string))
-        setCommitHash(formatCommitHash(result.dataset[0][0]))
-      }
-    })
+    void questClient
+      .queryRaw("select build", { limit: "0,1000" })
+      .then((result) => {
+        if (result.type === QuestDB.Type.DQL && result.count === 1) {
+          setBuildVersion(formatVersion(result.dataset[0][0] as string))
+          setCommitHash(formatCommitHash(result.dataset[0][0]))
+        }
+      })
   }, [])
 
   // Telemetry queries use SQL, and therefore need to have auth header set if needed.
@@ -135,7 +130,7 @@ export const QuestProvider = ({ children }: PropsWithChildren<Props>) => {
       dispatch(actions.telemetry.start())
     }
   }, [authCheckFinished])
-  
+
   if (!authCheckFinished) return null
 
   return (

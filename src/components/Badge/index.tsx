@@ -1,5 +1,5 @@
-import React from "react";
-import styled, { css, keyframes } from "styled-components";
+import React from "react"
+import styled, { css, keyframes } from "styled-components"
 
 export enum BadgeType {
   SUCCESS = "success",
@@ -9,12 +9,12 @@ export enum BadgeType {
 }
 
 type Props = {
-  type: BadgeType;
-  icon?: React.ReactNode;
-  pulsate?: boolean;
-  children?: React.ReactNode;
-  className?: string;
-};
+  type: BadgeType
+  icon?: React.ReactNode
+  pulsate?: boolean
+  children?: React.ReactNode
+  className?: string
+}
 
 const pulsate = keyframes`
   0% {
@@ -28,7 +28,7 @@ const pulsate = keyframes`
   100% {
     opacity: 0.075;
   }
-`;
+`
 
 const Root = styled.span<Pick<Props, "type" | "pulsate">>`
   display: flex;
@@ -97,7 +97,7 @@ const Root = styled.span<Pick<Props, "type" | "pulsate">>`
         animation: ${pulsate} 3s linear infinite;
       }
     `};
-`;
+`
 
 const Icon = styled.div<{ hasGap: boolean }>`
   display: flex;
@@ -109,7 +109,7 @@ const Icon = styled.div<{ hasGap: boolean }>`
     css`
       margin-right: 0.75rem;
     `}
-`;
+`
 
 export const Badge: React.FunctionComponent<Props> = ({
   type,
@@ -122,4 +122,4 @@ export const Badge: React.FunctionComponent<Props> = ({
     {icon && <Icon hasGap={React.Children.count(children) > 0}>{icon}</Icon>}
     {children}
   </Root>
-);
+)

@@ -58,10 +58,13 @@ export const walTransactionLatency: Widget = {
       fill(0)
     `
   },
-  alignData: (data: WalTransactionLatency[]): uPlot.AlignedData => [
-    data.map((l) => new Date(l.created).getTime()),
-    data.map((l) => sqlValueToFixed(l.latency)),
-  ],
+  alignData: (data): uPlot.AlignedData => {
+    const rows = data as WalTransactionLatency[]
+    return [
+      rows.map((l) => new Date(l.created).getTime()),
+      rows.map((l) => sqlValueToFixed(l.latency)),
+    ]
+  },
   mapYValue: (rawValue: number) => {
     if (rawValue >= 1000) {
       const seconds = rawValue / 1000

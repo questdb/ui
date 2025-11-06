@@ -41,15 +41,30 @@ type Props = Readonly<{
   style?: CSSProperties
 }>
 
-// Buffer ID -> QueryKey -> Execution State
-export type ExecutionRefs = Record<string, Record<QueryKey, { 
-  error?: ErrorResult, 
-  success?: boolean,
-  selection?: { startOffset: number, endOffset: number },
-  queryText: string,
+export type ExecutionInfo = {
+  error?: ErrorResult
+  success?: boolean
+  selection?: { startOffset: number; endOffset: number }
+  queryText: string
   startOffset: number
   endOffset: number
-}>>
+}
+
+// Buffer ID -> QueryKey -> Execution State
+export type ExecutionRefs = Record<
+  string,
+  Record<
+    QueryKey,
+    {
+      error?: ErrorResult
+      success?: boolean
+      selection?: { startOffset: number; endOffset: number }
+      queryText: string
+      startOffset: number
+      endOffset: number
+    }
+  >
+>
 
 const EditorPaneWrapper = styled(PaneWrapper)`
   height: 100%;
@@ -68,12 +83,12 @@ const Editor = ({
     dispatch(actions.query.cleanupBufferNotifications(bufferId))
     delete executionRefs.current[bufferId]
   }
-  
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const query = params.get("query")
     if (query && activeBuffer.metricsViewState) {
-      addBuffer({ label: "Query" })
+      void addBuffer({ label: "Query" })
     }
   }, [])
 
@@ -82,7 +97,9 @@ const Editor = ({
       <Tabs />
       {activeBuffer.editorViewState && <Monaco executionRefs={executionRefs} />}
       {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
-      {activeBuffer.editorViewState && <Notifications onClearNotifications={handleClearNotifications} />}
+      {activeBuffer.editorViewState && (
+        <Notifications onClearNotifications={handleClearNotifications} />
+      )}
     </EditorPaneWrapper>
   )
 }

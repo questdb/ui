@@ -9,7 +9,6 @@ type Props = React.InputHTMLAttributes<HTMLInputElement> & {
 
 export const FormCheckbox: React.FunctionComponent<Props> = ({
   name,
-  checked,
   ...rest
 }) => {
   const { register } = useFormContext()

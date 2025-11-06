@@ -1,12 +1,12 @@
-import { css } from "styled-components";
-import type { ColorShape } from "../../types";
+import { css } from "styled-components"
+import type { ColorShape } from "../../types"
 
-type Color = keyof ColorShape;
+type Color = keyof ColorShape
 
 const getColor =
   <T extends { color: ColorShape }>(color: Color) =>
   (props?: { theme: T }) =>
-    props ? props.theme.color[color] : "inherit";
+    props ? props.theme.color[color] : "inherit"
 
 export const skins = [
   "primary",
@@ -15,18 +15,18 @@ export const skins = [
   "error",
   "warning",
   "transparent",
-] as const;
+] as const
 
-export type Skin = (typeof skins)[number];
+export type Skin = (typeof skins)[number]
 
 const themes: {
   [key in Skin]: {
     [key in "normal" | "hover" | "disabled"]: {
-      background: Color;
-      border: Color;
-      color: Color;
-    };
-  };
+      background: Color
+      border: Color
+      color: Color
+    }
+  }
 } = {
   primary: {
     normal: {
@@ -130,10 +130,10 @@ const themes: {
       color: "gray1",
     },
   },
-};
+}
 
 export const makeSkin = (skin: Skin) => {
-  const theme = themes[skin] ?? themes.primary;
+  const theme = themes[skin] ?? themes.primary
 
   return css`
     background: ${getColor(theme.normal.background)};
@@ -157,5 +157,5 @@ export const makeSkin = (skin: Skin) => {
       color: ${getColor(theme.disabled.color)};
       border-color: ${getColor(theme.disabled.border)};
     }
-  `;
-};
+  `
+}

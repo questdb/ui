@@ -171,13 +171,13 @@ export const Column = ({
             </TimestampControls>
             {action === "import" && (
               <Text color="gray2">
-                  Example: {DEFAULT_TIMESTAMP_FORMAT}
-                  <br/>
-                  <DocsLink
-                      url="https://questdb.io/docs/reference/function/date-time/#timestamp-format"
-                      text="Timestamp format docs"
-                      tooltipText="Timestamp format documentation"
-                  />
+                Example: {DEFAULT_TIMESTAMP_FORMAT}
+                <br />
+                <DocsLink
+                  url="https://questdb.io/docs/reference/function/date-time/#timestamp-format"
+                  text="Timestamp format docs"
+                  tooltipText="Timestamp format documentation"
+                />
               </Text>
             )}
           </Box>

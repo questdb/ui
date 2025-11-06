@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import React, { KeyboardEvent, useEffect } from "react"
 import {
   useForm,
@@ -37,7 +38,7 @@ export type Props<TFormValues extends FieldValues> = {
 }
 
 export const Form = <
-  TFormValues extends Record<string, any> = Record<string, any>,
+  TFormValues extends Record<string, unknown> = Record<string, unknown>,
 >({
   name,
   method = "post",
@@ -49,7 +50,7 @@ export const Form = <
   defaultValues,
   preventSubmitOnEnter,
 }: Props<TFormValues>) => {
-  let props: UseFormProps<TFormValues> = {}
+  const props: UseFormProps<TFormValues> = {}
 
   if (defaultValues) {
     props.defaultValues = defaultValues
@@ -85,7 +86,7 @@ export const Form = <
   }
 
   if (Object.keys(methods.formState.errors).length > 0) {
-    console.log("Schema validation errors", methods.formState.errors)
+    console.warn("Schema validation errors", methods.formState.errors)
   }
 
   return (

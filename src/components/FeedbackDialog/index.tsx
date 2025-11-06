@@ -15,9 +15,9 @@ import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 
 type Values = {
-  email: string
+  email?: string
   message: string
-};
+}
 
 const minLength = 20
 const maxLength = 1000
@@ -39,7 +39,7 @@ const schema = Joi.object({
       "string.trim": "Please enter a message",
       "string.empty": "Please enter a message",
     }),
-});
+})
 
 const FormControl = styled.div`
   display: grid;
@@ -50,42 +50,42 @@ const FormControl = styled.div`
   span[data-np-uid] {
     display: none !important;
   }
-`;
+`
 
 const Label = styled.label<{ htmlFor: string }>`
   color: ${({ theme }) => theme.color.foreground};
-`;
+`
 
 const ChatIcon = styled(Chat)`
   color: ${({ theme }) => theme.color.foreground};
-`;
+`
 
 const StyledDialogContent = styled(AlertDialog.Content)`
   display: grid;
   gap: 1rem;
   background: #282a36;
-`;
+`
 
 const StyledCardContent = styled(Card.Content)<{ withAfterMessage: boolean }>`
   display: grid;
   gap: 2rem;
   width: 100%;
   ${({ withAfterMessage }) => !withAfterMessage && `padding-bottom: 0`}
-`;
+`
 
 const StyledTextArea = styled(TextArea)`
   min-height: 100px;
   max-height: 250px;
-`;
+`
 
 const Footer = ({
   message,
   isSubmitting,
   onConfirm,
 }: {
-  message: string;
-  isSubmitting: boolean;
-  onConfirm?: () => void;
+  message: string
+  isSubmitting: boolean
+  onConfirm?: () => void
 }) => {
   return (
     <AlertDialog.ActionButtons>
@@ -115,26 +115,26 @@ const Footer = ({
         </ForwardRef>
       </AlertDialog.Action>
     </AlertDialog.ActionButtons>
-  );
-};
+  )
+}
 
 type Props = {
   trigger?: ({
     setOpen,
   }: {
-    setOpen: (open: boolean) => void;
-  }) => React.ReactNode;
-  onSubmit: (values: Values) => Promise<void>;
-  title?: string;
-  subtitle?: string;
-  initialMessage?: string;
-  afterMessage?: React.ReactNode;
-  withEmailInput?: boolean;
-  open?: boolean;
-  onOpenChange: (open: boolean) => void;
-};
+    setOpen: (open: boolean) => void
+  }) => React.ReactNode
+  onSubmit: (values: Values) => Promise<void>
+  title?: string
+  subtitle?: string
+  initialMessage?: string
+  afterMessage?: React.ReactNode
+  withEmailInput?: boolean
+  open?: boolean
+  onOpenChange: (open: boolean) => void
+}
 
-type ErrorList = Record<string, string>;
+type ErrorList = Record<string, string>
 
 export const FeedbackDialog = ({
   withEmailInput,
@@ -147,46 +147,46 @@ export const FeedbackDialog = ({
   open,
   onOpenChange,
 }: Props) => {
-  const [errors, setErrors] = useState<ErrorList>({});
-  const [message, setMessage] = useState<string>(initialMessage ?? "");
-  const [isOpen, setIsOpen] = useState(open);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<ErrorList>({})
+  const [message, setMessage] = useState<string>(initialMessage ?? "")
+  const [isOpen, setIsOpen] = useState(open)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const validateFields = (
     schema: Joi.ObjectSchema,
     values: Record<string, string>,
-    fieldNames: string[]
+    fieldNames: string[],
   ): ErrorList => {
-    const newErrors: ErrorList = { ...errors };
-    const res = schema.validate(values, { abortEarly: false });
-    const errorsList: ErrorList = {};
+    const newErrors: ErrorList = { ...errors }
+    const res = schema.validate(values, { abortEarly: false })
+    const errorsList: ErrorList = {}
 
     if (res.error) {
       res.error.details.forEach((error) => {
-        const fieldName = error.path[0];
-        errorsList[fieldName] = error.message;
-      });
+        const fieldName = error.path[0]
+        errorsList[fieldName] = error.message
+      })
 
       fieldNames.forEach((fieldName) => {
-        const errorMessage = errorsList[fieldName] || "";
-        newErrors[fieldName] = errorMessage;
-      });
+        const errorMessage = errorsList[fieldName] || ""
+        newErrors[fieldName] = errorMessage
+      })
 
-      setErrors(newErrors);
-      return newErrors;
+      setErrors(newErrors)
+      return newErrors
     } else {
       fieldNames.forEach((fieldName) => {
-        delete newErrors[fieldName];
-      });
+        delete newErrors[fieldName]
+      })
 
-      setErrors(newErrors);
-      return newErrors;
+      setErrors(newErrors)
+      return newErrors
     }
-  };
+  }
 
   useEffect(() => {
-    setIsOpen(open);
-  }, [open]);
+    setIsOpen(open)
+  }, [open])
 
   return (
     <AlertDialog.Root open={isOpen} onOpenChange={onOpenChange}>
@@ -204,26 +204,27 @@ export const FeedbackDialog = ({
         <StyledDialogContent>
           <form
             name="feedback-dialog"
-            onSubmit={async (e: React.BaseSyntheticEvent) => {
-              e.preventDefault();
+            onSubmit={async (e: React.FormEvent<HTMLFormElement>) => {
+              e.preventDefault()
+              const form = e.target as HTMLFormElement
+              const message = form.message as HTMLTextAreaElement
+              const email = form.email as HTMLInputElement
               const errors = validateFields(
                 schema,
-                { message: e.target.message.value },
-                ["email", "message"]
-              );
+                { message: message.value, email: email.value },
+                ["email", "message"],
+              )
               if (Object.keys(errors).length === 0) {
                 try {
-                  setIsSubmitting(true);
+                  setIsSubmitting(true)
                   await onSubmit({
-                    email: withEmailInput ? e.target.email.value : undefined,
-                    message: e.target.message.value,
-                  });
-                  setIsOpen(false);
-                  onOpenChange(false);
-                } catch (error) {
-                  Promise.reject(error);
+                    email: withEmailInput ? email.value : undefined,
+                    message: message.value,
+                  })
+                  setIsOpen(false)
+                  onOpenChange(false)
                 } finally {
-                  setIsSubmitting(false);
+                  setIsSubmitting(false)
                 }
               }
             }}
@@ -245,8 +246,8 @@ export const FeedbackDialog = ({
                     type="button"
                     skin="transparent"
                     onClick={() => {
-                      setIsOpen(false);
-                      onOpenChange(false);
+                      setIsOpen(false)
+                      onOpenChange(false)
                     }}
                   >
                     <X size={18} />
@@ -281,8 +282,8 @@ export const FeedbackDialog = ({
                     placeholder="It would be great if I could..."
                     resize="vertical"
                     defaultValue={message}
-                    onChange={(e: React.BaseSyntheticEvent) => {
-                      setMessage(e.target.value);
+                    onChange={(e) => {
+                      setMessage(e.target.value)
                     }}
                   />
                   {errors && errors["message"] && (
@@ -308,10 +309,10 @@ export const FeedbackDialog = ({
                 isSubmitting={isSubmitting}
                 message={message}
                 onConfirm={() => {
-                  setErrors({});
-                  setMessage("");
-                  setIsOpen(false);
-                  onOpenChange(false);
+                  setErrors({})
+                  setMessage("")
+                  setIsOpen(false)
+                  onOpenChange(false)
                 }}
               />
             </Card>
@@ -319,5 +320,5 @@ export const FeedbackDialog = ({
         </StyledDialogContent>
       </AlertDialog.Portal>
     </AlertDialog.Root>
-  );
-};
+  )
+}

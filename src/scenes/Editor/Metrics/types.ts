@@ -39,7 +39,9 @@ export type Widget = {
     to,
   }: MethodArgs) => string
   querySupportsRollingAppend: boolean
-  alignData: (data: any) => uPlot.AlignedData
+  alignData: (
+    data: ResultType[MetricType][] | LastNotNull[],
+  ) => uPlot.AlignedData
   mapYValue: (rawValue: number) => number | string
 }
 

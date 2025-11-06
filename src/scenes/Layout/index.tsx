@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useEffect } from "react"
 import styled from "styled-components"
 import Footer from "../Footer"
 import Console from "../Console"

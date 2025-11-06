@@ -75,7 +75,7 @@ export type Color = keyof ColorShape
 export type FontSize = keyof FontSizeShape
 
 declare module "styled-components" {
-  export interface DefaultTheme {
+  interface DefaultTheme {
     baseFontSize: string
     color: ColorShape
     font: string

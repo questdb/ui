@@ -36,17 +36,14 @@ const valuePlugin = (
       const y = idx !== null && idx !== undefined ? u.data[1][idx] : null
       if ([y, x].every((v) => v !== null)) {
         try {
-          timeRef.current!.textContent = utcToLocal(
-            x as number,
-            DATETIME_FORMAT,
-          ) as string
+          timeRef.current.textContent = utcToLocal(x as number, DATETIME_FORMAT)
         } catch (e) {
-          timeRef.current!.textContent = x?.toString() ?? ""
+          timeRef.current.textContent = x?.toString() ?? ""
         }
-        valueRef.current!.textContent = mapYValue(y as number) as string
+        valueRef.current.textContent = mapYValue(y as number) as string
       } else {
-        timeRef.current!.textContent = null
-        valueRef.current!.textContent = null
+        timeRef.current.textContent = null
+        valueRef.current.textContent = null
       }
     },
   },
@@ -64,6 +61,7 @@ export const createUplotOptions = ({
   widgetConfig,
   theme,
 }: Params): UplotOptions => {
+  const DISTR_LOG = 3 as uPlot.Scale.Distr
   const baseAxisConfig: uPlot.Axis = {
     stroke: theme.color.gray2,
     labelFont: `600 12px ${theme.font}`,
@@ -83,9 +81,9 @@ export const createUplotOptions = ({
   const axes: uPlot.Axis[] = [
     {
       ...baseAxisConfig,
-      values: (_self: any, ticks: any) => {
-        let found: string[] = []
-        return ticks.map((rawValue: any, index: any) => {
+      values: (_self, ticks) => {
+        const found: string[] = []
+        return ticks.map((rawValue, index) => {
           const mapped = mapXValue(rawValue, index, ticks)
           if (mapped === null) {
             return null
@@ -101,8 +99,7 @@ export const createUplotOptions = ({
     },
     {
       ...baseAxisConfig,
-      values: (_self: any, ticks: any) =>
-        ticks.map((rawValue: any) => mapYValue(rawValue)),
+      values: (_self, ticks) => ticks.map((rawValue) => mapYValue(rawValue)),
     },
   ]
 
@@ -130,8 +127,10 @@ export const createUplotOptions = ({
       stroke: colors[0],
       fill: getFillColor(colors[0]),
       width: 0.6,
-      value: (_self: any, rawValue: any) =>
-        widgetConfig.distribution !== 3 ? mapYValue(rawValue) : rawValue,
+      value: (_self, rawValue) =>
+        widgetConfig.distribution !== DISTR_LOG
+          ? mapYValue(rawValue)
+          : rawValue,
     },
   }
 
@@ -142,10 +141,12 @@ export const createUplotOptions = ({
     },
     y: {
       distr: widgetConfig.distribution,
-      range: (u: any, min: any, max: any) => [
-        (u.data[0].length > 1 && widgetConfig.distribution !== 3 && min !== max
+      range: (u, min, max) => [
+        (u.data[0].length > 1 &&
+        widgetConfig.distribution !== DISTR_LOG &&
+        min !== max
           ? min
-          : widgetConfig.distribution !== 3
+          : widgetConfig.distribution !== DISTR_LOG
             ? 0
             : 1) || 0,
         max || 1,

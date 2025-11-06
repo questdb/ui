@@ -21,11 +21,10 @@ import { theme } from "../../theme"
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
 
-interface StyledIconProps
-  extends React.PropsWithRef<React.SVGProps<SVGSVGElement>> {
+type StyledIconProps = {
   size?: number | string
   title?: string | null
-}
+} & React.PropsWithRef<React.SVGProps<SVGSVGElement>>
 
 export type ToastOptions = RTToastOptions
 
@@ -42,7 +41,9 @@ export const ToastIcon = ({
 }) => {
   switch (type) {
     case BadgeType.SUCCESS:
-      return <CheckmarkOutline {...props} size={size} color={theme.color.green} />
+      return (
+        <CheckmarkOutline {...props} size={size} color={theme.color.green} />
+      )
     case BadgeType.WARNING:
       return <ErrorWarning {...props} size={size} color={theme.color.orange} />
     case BadgeType.ERROR:

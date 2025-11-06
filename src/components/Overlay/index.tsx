@@ -1,7 +1,7 @@
-import React from "react";
-import styled, { css } from "styled-components";
-import { Overlay as RadixDialogOverlay } from "@radix-ui/react-dialog";
-import { Overlay as RadixAlertDialogOverlay } from "@radix-ui/react-alert-dialog";
+import React from "react"
+import styled, { css } from "styled-components"
+import { Overlay as RadixDialogOverlay } from "@radix-ui/react-dialog"
+import { Overlay as RadixAlertDialogOverlay } from "@radix-ui/react-alert-dialog"
 
 const overlayShow = css`
   @keyframes overlayShow {
@@ -12,7 +12,7 @@ const overlayShow = css`
       opacity: 1;
     }
   }
-`;
+`
 
 const overlayHide = css`
   @keyframes overlayHide {
@@ -23,7 +23,7 @@ const overlayHide = css`
       opacity: 0;
     }
   }
-`;
+`
 
 const StyledOverlay = styled.div`
   background-color: ${({ theme }) => theme.color.black70};
@@ -41,12 +41,12 @@ const StyledOverlay = styled.div`
   &[data-state="closed"] {
     animation: overlayHide 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   }
-`;
+`
 
 export const Overlay = ({
   primitive,
 }: {
-  primitive: typeof RadixDialogOverlay | typeof RadixAlertDialogOverlay;
+  primitive: typeof RadixDialogOverlay | typeof RadixAlertDialogOverlay
 }) => {
-  return <StyledOverlay as={primitive} />;
-};
+  return <StyledOverlay as={primitive} />
+}

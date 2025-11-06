@@ -61,74 +61,88 @@ export const registerEditorActions = ({
   onTabClosed?: () => void
 }) => {
   const actions: IDisposable[] = []
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
-  })
+  editor.addCommand(
+    monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
+    () => {},
+  )
 
-  actions.push(editor.addAction({
-    id: Command.EXECUTE,
-    label: "Execute command",
-    keybindings: [
-      monaco.KeyCode.F9,
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-    ],
-    run: () => {
-      runQuery()
-    },
-  }))
+  actions.push(
+    editor.addAction({
+      id: Command.EXECUTE,
+      label: "Execute command",
+      keybindings: [
+        monaco.KeyCode.F9,
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+      ],
+      run: () => {
+        runQuery()
+      },
+    }),
+  )
 
-  actions.push(editor.addAction({
-    id: Command.RUN_SCRIPT,
-    label: "Run script",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
-    run: () => {
-      runScript()
-    },
-  }))
+  actions.push(
+    editor.addAction({
+      id: Command.RUN_SCRIPT,
+      label: "Run script",
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
+      ],
+      run: () => {
+        runScript()
+      },
+    }),
+  )
 
-  actions.push(editor.addAction({
-    id: Command.ADD_NEW_TAB,
-    label: "Add new tab",
-    keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
-    run: () => {
-      addBuffer()
-    },
-  }))
+  actions.push(
+    editor.addAction({
+      id: Command.ADD_NEW_TAB,
+      label: "Add new tab",
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
+      run: () => {
+        addBuffer()
+      },
+    }),
+  )
 
-  actions.push(editor.addAction({
-    id: Command.CLOSE_ACTIVE_TAB,
-    label: "Close current tab",
-    keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyW],
-    run: async () => {
-      const buffers = await bufferStore.getAll()
-      const activeId = await bufferStore.getActiveId()
-      if (
-        buffers.length > 1 &&
-        activeId?.value &&
-        typeof activeId?.value === "number"
-      ) {
-        deleteBuffer(activeId.value)
-        if (onTabClosed) {
-          onTabClosed()
+  actions.push(
+    editor.addAction({
+      id: Command.CLOSE_ACTIVE_TAB,
+      label: "Close current tab",
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyW],
+      run: async () => {
+        const buffers = await bufferStore.getAll()
+        const activeId = await bufferStore.getActiveId()
+        if (
+          buffers.length > 1 &&
+          activeId?.value &&
+          typeof activeId?.value === "number"
+        ) {
+          deleteBuffer(activeId.value)
+          if (onTabClosed) {
+            onTabClosed()
+          }
         }
-      }
-    },
-  }))
+      },
+    }),
+  )
 
-  actions.push(editor.addAction({
-    id: Command.SEARCH_DOCS,
-    label: "Search QuestDB Docs",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
-    run: () => {
-      const docSearchButton =
-        document.querySelector<HTMLButtonElement>(".DocSearch-Button")
-      if (docSearchButton) {
-        docSearchButton.click()
-      }
-    },
-  }))
+  actions.push(
+    editor.addAction({
+      id: Command.SEARCH_DOCS,
+      label: "Search QuestDB Docs",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
+      run: () => {
+        const docSearchButton =
+          document.querySelector<HTMLButtonElement>(".DocSearch-Button")
+        if (docSearchButton) {
+          docSearchButton.click()
+        }
+      },
+    }),
+  )
 
   return () => {
-    actions.forEach(action => {
+    actions.forEach((action) => {
       action.dispose()
     })
   }

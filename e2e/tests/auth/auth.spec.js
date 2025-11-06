@@ -1,13 +1,13 @@
 /// <reference types="cypress" />
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || "";
-const baseUrl = `http://localhost:9999${contextPath}`;
+const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
+const baseUrl = `http://localhost:9999${contextPath}`
 
 const interceptSettings = (payload) => {
   cy.intercept({ method: "GET", url: `${baseUrl}/settings` }, payload).as(
-    "settings"
-  );
-};
+    "settings",
+  )
+}
 
 describe("OSS", () => {
   before(() => {
@@ -16,15 +16,15 @@ describe("OSS", () => {
         "release.type": "OSS",
         "release.version": "1.2.3",
       },
-    });
-    cy.visit(baseUrl);
-  });
+    })
+    cy.visit(baseUrl)
+  })
 
   it("should display the console", () => {
-    cy.wait("@settings");
-    cy.getEditor().should("be.visible");
-  });
-});
+    cy.wait("@settings")
+    cy.getEditor().should("be.visible")
+  })
+})
 
 describe("Auth - UI", () => {
   before(() => {
@@ -41,16 +41,16 @@ describe("Auth - UI", () => {
         "acl.oidc.pkce.required": null,
         "acl.oidc.groups.encoded.in.token": false,
       },
-    });
-    cy.visit(baseUrl);
-  });
+    })
+    cy.visit(baseUrl)
+  })
 
   it("should display UI auth", () => {
-    cy.wait("@settings");
-    cy.getByDataHook("auth-login").should("be.visible");
-    cy.getEditor().should("not.exist");
-  });
-});
+    cy.wait("@settings")
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.getEditor().should("not.exist")
+  })
+})
 
 describe("Auth - OIDC", () => {
   before(() => {
@@ -67,17 +67,17 @@ describe("Auth - OIDC", () => {
         "acl.oidc.pkce.required": true,
         "acl.oidc.groups.encoded.in.token": false,
       },
-    });
-    cy.visit(baseUrl);
-  });
+    })
+    cy.visit(baseUrl)
+  })
 
   it("should display UI auth with OIDC support", () => {
-    cy.wait("@settings");
-    cy.getByDataHook("auth-login").should("be.visible");
-    cy.getByDataHook("button-sso-login").should("be.visible");
-    cy.getEditor().should("not.exist");
-  });
-});
+    cy.wait("@settings")
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.getByDataHook("button-sso-login").should("be.visible")
+    cy.getEditor().should("not.exist")
+  })
+})
 
 describe("Auth - Basic", () => {
   before(() => {
@@ -94,15 +94,15 @@ describe("Auth - Basic", () => {
         "acl.oidc.pkce.required": null,
         "acl.oidc.groups.encoded.in.token": false,
       },
-    });
-    cy.visit(baseUrl);
-  });
+    })
+    cy.visit(baseUrl)
+  })
 
   it("should display the console", () => {
-    cy.wait("@settings");
-    cy.getEditor().should("be.visible");
-  });
-});
+    cy.wait("@settings")
+    cy.getEditor().should("be.visible")
+  })
+})
 
 describe("Auth - Disabled", () => {
   before(() => {
@@ -119,15 +119,15 @@ describe("Auth - Disabled", () => {
         "acl.oidc.pkce.required": null,
         "acl.oidc.groups.encoded.in.token": false,
       },
-    });
-    cy.visit(baseUrl);
-  });
+    })
+    cy.visit(baseUrl)
+  })
 
   it("should display the console", () => {
-    cy.wait("@settings");
-    cy.getEditor().should("be.visible");
-  });
-});
+    cy.wait("@settings")
+    cy.getEditor().should("be.visible")
+  })
+})
 
 describe("Auth - Session Parameter (OAuth)", () => {
   describe("OAuth Login with session=true", () => {
@@ -145,8 +145,8 @@ describe("Auth - Session Parameter (OAuth)", () => {
           "acl.oidc.pkce.required": true,
           "acl.oidc.groups.encoded.in.token": false,
         },
-      });
-    });
+      })
+    })
 
     it("should call exec with session=true after OAuth token exchange", () => {
       cy.intercept(
@@ -155,8 +155,8 @@ describe("Auth - Session Parameter (OAuth)", () => {
           url: `${baseUrl}/exec?query=select%202&session=true`,
         },
         (req) => {
-          expect(req.headers).to.have.property("authorization");
-          expect(req.headers.authorization).to.match(/^Bearer /);
+          expect(req.headers).to.have.property("authorization")
+          expect(req.headers.authorization).to.match(/^Bearer /)
 
           req.reply({
             statusCode: 200,
@@ -169,9 +169,9 @@ describe("Auth - Session Parameter (OAuth)", () => {
               dataset: [[2]],
               count: 1,
             },
-          });
-        }
-      ).as("oauthSessionStart");
+          })
+        },
+      ).as("oauthSessionStart")
 
       cy.intercept(
         {
@@ -185,18 +185,18 @@ describe("Auth - Session Parameter (OAuth)", () => {
             token_type: "Bearer",
             expires_in: 3600,
           },
-        }
-      ).as("tokenExchange");
+        },
+      ).as("tokenExchange")
 
-      cy.visit(`${baseUrl}?code=test-auth-code&state=test-state`);
-      cy.wait("@settings");
+      cy.visit(`${baseUrl}?code=test-auth-code&state=test-state`)
+      cy.wait("@settings")
 
-      cy.wait("@tokenExchange");
+      cy.wait("@tokenExchange")
       cy.wait("@oauthSessionStart").then((interception) => {
-        expect(interception.request.url).to.include("session=true");
-        expect(interception.request.url).to.include("select%202");
-        expect(interception.response.headers).to.have.property("set-cookie");
-      });
-    });
-  });
-});
+        expect(interception.request.url).to.include("session=true")
+        expect(interception.request.url).to.include("select%202")
+        expect(interception.response.headers).to.have.property("set-cookie")
+      })
+    })
+  })
+})

@@ -72,7 +72,12 @@ const mapStatusToLabel = (
 export const FileStatus = ({ file }: { file: ProcessedFile }) => {
   const mappedStatus = mapStatusToLabel(file)
   return mappedStatus ? (
-    <Box gap="1rem" align="flex-start" flexDirection="column" data-hook="import-file-status">
+    <Box
+      gap="1rem"
+      align="flex-start"
+      flexDirection="column"
+      data-hook="import-file-status"
+    >
       <Badge type={mappedStatus.type}>
         <StyledBox>
           {mappedStatus.icon} {mappedStatus.label}

@@ -9,16 +9,12 @@ import {
   Button,
   Overlay,
   Input,
-  CopyButton
+  CopyButton,
 } from "../../../components"
 import { Undo } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
-import {
-  ExternalLink,
-  Restart,
-  Table,
-} from "@styled-icons/remix-line"
+import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
 import { useState, useContext, useEffect } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
@@ -151,7 +147,8 @@ export const SuspensionDialog = ({
           <Dialog.Title>
             <Box>
               <Table size={20} color="#FF5555" />
-              {kind === "table" ? "Table" : "Materialized view"} is suspended: {walTableData.name}
+              {kind === "table" ? "Table" : "Materialized view"} is suspended:{" "}
+              {walTableData.name}
             </Box>
           </Dialog.Title>
 

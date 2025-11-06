@@ -497,12 +497,7 @@ export function grid(rootElement, _paginationFn, id) {
       if (row) {
         const colLo = Math.min(columnCount, Math.max(visColumnLo, freezeLeft))
         const colHi = Math.min(colLo + visColumnCount, columnCount)
-        renderRow(
-          row,
-          i,
-          colLo,
-          colHi,
-        )
+        renderRow(row, i, colLo, colHi)
         renderRow(rowsLeft[i & dcn], i, 0, Math.min(freezeLeft, columnCount))
       }
     }
@@ -730,7 +725,10 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function getCellWidth(valueLen) {
-    return Math.max(defaults.minColumnWidth, Math.ceil(valueLen * defaults.cellWidthMultiplier))
+    return Math.max(
+      defaults.minColumnWidth,
+      Math.ceil(valueLen * defaults.cellWidthMultiplier),
+    )
   }
 
   function colFreezeMouseEnter(e) {
@@ -1059,10 +1057,12 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function renderFocusedCell() {
-    if (focusedCell
-        && focusedCell.parentElement
-        && focusedCell.parentElement.rowIndex === focusedRowIndex
-        && focusedCell.columnIndex === focusedColumnIndex) {
+    if (
+      focusedCell &&
+      focusedCell.parentElement &&
+      focusedCell.parentElement.rowIndex === focusedRowIndex &&
+      focusedCell.columnIndex === focusedColumnIndex
+    ) {
       addClass(focusedCell, ACTIVE_CELL_CLASS)
     } else if (focusedCell) {
       removeClass(focusedCell, ACTIVE_CELL_CLASS)
@@ -1084,12 +1084,14 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function getArrayString(cellData) {
-    return escapeHtml(JSON.stringify(cellData, (_, val) => {
-      if (Number.isInteger(val)) {
-        return val.toString() + ".0"
-      }
-      return val
-    }).replace(/"/g, ""))
+    return escapeHtml(
+      JSON.stringify(cellData, (_, val) => {
+        if (Number.isInteger(val)) {
+          return val.toString() + ".0"
+        }
+        return val
+      }).replace(/"/g, ""),
+    )
   }
 
   function getDisplayedCellValue(column, cellData, columnWidth = null) {
@@ -1101,23 +1103,38 @@ export function grid(rootElement, _paginationFn, id) {
 
     if (!isArray) {
       if (containsPrecision) {
-        return Number.isInteger(cellData) ? escapeHtml(cellData.toString() + ".0") : escapeHtml(cellData.toString())
+        return Number.isInteger(cellData)
+          ? escapeHtml(cellData.toString() + ".0")
+          : escapeHtml(cellData.toString())
       }
       return escapeHtml(cellData.toString())
     }
 
     const arrayString = getArrayString(cellData)
-    
-    const maxWidthToSpan = columnWidth ?? (viewport.getBoundingClientRect().width * 0.4)
-    const maxArrayTextLength = Math.ceil(maxWidthToSpan / defaults.cellWidthMultiplier)
+
+    const maxWidthToSpan =
+      columnWidth ?? viewport.getBoundingClientRect().width * 0.4
+    const maxArrayTextLength = Math.ceil(
+      maxWidthToSpan / defaults.cellWidthMultiplier,
+    )
 
     const openCloseBracketsLength = column.dim
-    const maxContentLength = maxArrayTextLength - (openCloseBracketsLength * 2 + 5) // "ARRAY" + opening and closing brackets
-    const content = arrayString.slice(openCloseBracketsLength, -openCloseBracketsLength)
+    const maxContentLength =
+      maxArrayTextLength - (openCloseBracketsLength * 2 + 5) // "ARRAY" + opening and closing brackets
+    const content = arrayString.slice(
+      openCloseBracketsLength,
+      -openCloseBracketsLength,
+    )
 
     if (content.length > maxContentLength) {
       const contentToShow = content.slice(0, maxContentLength)
-      return "ARRAY" + "[".repeat(column.dim) + contentToShow + "..." + "]".repeat(column.dim)
+      return (
+        "ARRAY" +
+        "[".repeat(column.dim) +
+        contentToShow +
+        "..." +
+        "]".repeat(column.dim)
+      )
     }
     return "ARRAY" + "[".repeat(column.dim) + content + "]".repeat(column.dim)
   }
@@ -1728,9 +1745,9 @@ export function grid(rootElement, _paginationFn, id) {
         clearTimeout(activeCellPulseClearTimer)
       }
       addClass(focusedCell, "qg-c-active-pulse")
-      
+
       let valueToCopy = focusedCell.innerHTML
-      
+
       if (focusedCell.classList.contains("qg-arr")) {
         const rowIndex = focusedCell.parentElement.rowIndex
         const columnIndex = focusedCell.columnIndex
@@ -1738,13 +1755,16 @@ export function grid(rootElement, _paginationFn, id) {
         const rowInPage = rowIndex % pageSize
 
         if (data[pageIndex] && data[pageIndex][rowInPage]) {
-          const originalCellData = data[pageIndex][rowInPage][columnPositions[columnIndex]]
-          valueToCopy = originalCellData === null ? "null" : "ARRAY" + getArrayString(originalCellData)
+          const originalCellData =
+            data[pageIndex][rowInPage][columnPositions[columnIndex]]
+          valueToCopy =
+            originalCellData === null
+              ? "null"
+              : "ARRAY" + getArrayString(originalCellData)
         }
       }
-      
-      copyToClipboard(valueToCopy)
-        .then(undefined)
+
+      copyToClipboard(valueToCopy).then(undefined)
 
       activeCellPulseClearTimer = setTimeout(() => {
         removeClass(focusedCell, "qg-c-active-pulse")
@@ -1963,7 +1983,7 @@ export function grid(rootElement, _paginationFn, id) {
         }
         offsets[i] = offset
         offset += w
-      } 
+      }
       offsets[columnCount] = offset
       return offsets
     }

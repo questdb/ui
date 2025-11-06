@@ -1,17 +1,17 @@
-import React from "react";
-import styled, { css } from "styled-components";
-import { Input } from "../Input";
-import { ArrowDropDown } from "@styled-icons/remix-line";
+import React from "react"
+import styled, { css } from "styled-components"
+import { Input } from "../Input"
+import { ArrowDropDown } from "@styled-icons/remix-line"
 
 export type SelectProps = {
-  name: string;
+  name: string
   options: {
-    label: React.ReactNode;
-    value: string | number;
-  }[];
-  prefixIcon?: React.ReactNode;
-  disabled?: boolean;
-} & React.SelectHTMLAttributes<HTMLSelectElement | HTMLInputElement>;
+    label: string
+    value: string | number
+  }[]
+  prefixIcon?: React.ReactNode
+  disabled?: boolean
+} & React.SelectHTMLAttributes<HTMLSelectElement | HTMLInputElement>
 
 const Root = styled.div<{ disabled?: boolean }>`
   position: relative;
@@ -43,10 +43,10 @@ const Root = styled.div<{ disabled?: boolean }>`
     pointer-events: none;
     fill: ${({ theme }) => theme.color.white};
   }
-`;
+`
 
 const StyledSelect = styled(Input).attrs({ as: "select" })<{
-  withPrefixIcon: boolean;
+  withPrefixIcon: boolean
 }>`
   position: relative;
   appearance: none;
@@ -69,13 +69,13 @@ const StyledSelect = styled(Input).attrs({ as: "select" })<{
       border-color: ${({ theme }) => theme.color.gray1};
       color: ${({ theme }) => theme.color.gray1};
     `}
-`;
+`
 
 export const Select = React.forwardRef(
   ({ options, prefixIcon, ...rest }: SelectProps, ref) => (
     <Root disabled={rest.disabled}>
       <StyledSelect
-        ref={ref as any}
+        ref={ref as React.Ref<HTMLInputElement>}
         withPrefixIcon={typeof prefixIcon !== "undefined"}
         {...rest}
       >
@@ -90,7 +90,7 @@ export const Select = React.forwardRef(
       {prefixIcon ? <span className="prefixIcon">{prefixIcon}</span> : null}
       <ArrowDropDown className="arrowDownIcon" size="28" />
     </Root>
-  )
-);
+  ),
+)
 
-Select.displayName = "Select";
+Select.displayName = "Select"

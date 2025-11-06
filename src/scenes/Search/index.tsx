@@ -1,2 +1,2 @@
-export { SearchPanel } from './SearchPanel'
-export { SearchResults } from './SearchResults'
+export { SearchPanel } from "./SearchPanel"
+export { SearchResults } from "./SearchResults"

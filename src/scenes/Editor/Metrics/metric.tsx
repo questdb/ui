@@ -1,4 +1,10 @@
-import React, { useContext, useEffect, useState, useMemo, useCallback } from "react"
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+} from "react"
 import { Metric as MetricItem } from "../../../store/buffers"
 import {
   compactSQL,
@@ -24,7 +30,13 @@ import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { TableSelector } from "./table-selector"
-import { Box, Button, ForwardRef, IconWithTooltip, Popover } from "../../../components"
+import {
+  Box,
+  Button,
+  ForwardRef,
+  IconWithTooltip,
+  Popover,
+} from "../../../components"
 import { ColorPalette } from "./color-palette"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -33,8 +45,7 @@ const MetricInfoRoot = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background-color: ${({ theme }: { theme: any }) =>
-    theme.color.backgroundLighter};
+  background-color: ${({ theme }) => theme.color.backgroundLighter};
   height: 25rem;
 `
 
@@ -73,22 +84,11 @@ export const Metric = ({
   const tables = useSelector(selectors.query.getTables)
 
   const tableName = tables.find(
-    (t: any): boolean => t.id === metric.tableId,
+    (t): boolean => t.id === metric.tableId,
   )?.table_name
   tableNameRef.current = tableName
 
   const widgetConfig = widgets[metric.metricType]
-
-  if (!dataRef.current && !loading && metric.tableId) {
-    metric.tableId = undefined
-    return (
-      <MetricInfoRoot>
-        <Error size="18px" />
-        Cannot load metric:{" "}
-        {widgetConfig ? widgetConfig.label : metric.metricType}
-      </MetricInfoRoot>
-    )
-  }
 
   const fetchMetric = useCallback(async () => {
     setLoading(true)
@@ -108,7 +108,7 @@ export const Metric = ({
           compactSQL(
             widgetConfig.getQuery({
               tableId: tableIdRef.current,
-              sampleBySeconds: sampleBySeconds,
+              sampleBySeconds,
               from: fromIso,
               to: toIso,
             }),
@@ -117,7 +117,7 @@ export const Metric = ({
       ])
 
       if (responses[0] && responses[0].type === QuestDB.Type.DQL) {
-        const data = responses[0].data as unknown as ResultType[MetricType][]
+        const data = responses[0].data
         if (data.length > 0 || !from || !to || !sampleBySeconds) {
           // when data exists and chart parameters are known we use the
           // available data, otherwise produce zero line
@@ -158,7 +158,7 @@ export const Metric = ({
 
   const refreshMetricsData = () => {
     if (tableNameRef.current) {
-      fetchMetric()
+      void fetchMetric()
     } else {
       dataRef.current = [[], []]
       setLoading(false)
@@ -170,7 +170,7 @@ export const Metric = ({
       tableNameRef.current = tableName
       tableIdRef.current = metric.tableId
       dataRef.current = [[], []]
-      fetchMetric()
+      void fetchMetric()
     }
   }, [tableName, widgetConfig])
 
@@ -187,12 +187,23 @@ export const Metric = ({
 
   const canZoomToData = false
   const tableOptions = useMemo(() => {
-    return tables.map((t: any) => ({
+    return tables.map((t) => ({
       label: t.table_name,
       value: t.id.toString(),
       disabled: !t.walEnabled,
     }))
   }, [tables])
+
+  if (!dataRef.current && !loading && metric.tableId) {
+    metric.tableId = undefined
+    return (
+      <MetricInfoRoot>
+        <Error size="18px" />
+        Cannot load metric:{" "}
+        {widgetConfig ? widgetConfig.label : metric.metricType}
+      </MetricInfoRoot>
+    )
+  }
 
   return (
     <Graph
@@ -214,9 +225,7 @@ export const Metric = ({
           loading={loading}
           options={tableOptions}
           placeholder="Select table"
-          onSelect={(value: any) =>
-            onTableChange(metric, parseInt(value as string))
-          }
+          onSelect={(value) => onTableChange(metric, parseInt(value))}
           defaultValue={tableNameRef.current || ""}
         />
       }

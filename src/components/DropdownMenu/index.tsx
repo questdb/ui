@@ -1,5 +1,5 @@
-import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu";
-import styled from "styled-components";
+import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu"
+import styled from "styled-components"
 
 export const DropdownMenu = {
   Root: RadixDropdownMenu.Root,
@@ -50,4 +50,4 @@ export const DropdownMenu = {
     background: ${({ theme }) => theme.color.selection};
     margin: 0.5rem 0;
   `,
-};
+}

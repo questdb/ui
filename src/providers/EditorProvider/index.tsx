@@ -3,7 +3,6 @@ import type { editor } from "monaco-editor"
 import React, {
   createContext,
   MutableRefObject,
-  PropsWithChildren,
   useContext,
   useEffect,
   useRef,
@@ -41,7 +40,10 @@ export type EditorContext = {
   appendQuery: (query: string, options?: AppendQueryOptions) => void
   buffers: Buffer[]
   activeBuffer: Buffer
-  setActiveBuffer: (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => Promise<void>
+  setActiveBuffer: (
+    buffer: Buffer,
+    options?: { focus?: boolean; fromSearch?: boolean },
+  ) => Promise<void>
   addBuffer: (
     buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
@@ -49,8 +51,14 @@ export type EditorContext = {
   deleteBuffer: (id: number) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
   deleteAllBuffers: () => Promise<void>
-  updateBuffer: (id: number, buffer?: Partial<Buffer>, setNewActiveBuffer?: boolean) => Promise<void>
-  updateBuffersPositions: (positions: { id: number; position: number }[]) => Promise<void>
+  updateBuffer: (
+    id: number,
+    buffer?: Partial<Buffer>,
+    setNewActiveBuffer?: boolean,
+  ) => Promise<void>
+  updateBuffersPositions: (
+    positions: { id: number; position: number }[],
+  ) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
   inFocus: boolean
   setTemporaryBuffer: (buffer: Buffer) => Promise<void>
@@ -83,20 +91,22 @@ const defaultValues = {
 
 const EditorContext = createContext<EditorContext>(defaultValues)
 
-export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
+export const EditorProvider: React.FC = ({ children }) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
-  const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(null)
-  
+  const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
+    null,
+  )
+
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
-    return rawBuffers.map(buffer => ({
+    return rawBuffers.map((buffer) => ({
       ...buffer,
-      isTemporary: buffer.id === temporaryBufferId
+      isTemporary: buffer.id === temporaryBufferId,
     }))
   }, [rawBuffers, temporaryBufferId])
-  
+
   const activeBufferId = useLiveQuery(
     () => bufferStore.getActiveId(),
     [],
@@ -109,20 +119,22 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
   const isNavigatingFromSearchRef = useRef(false)
 
   const ranOnce = useRef(false)
-  
+
   const getNextPosition = useCallback(() => {
     if (!buffers) return 0
-    const activeBuffers = buffers.filter(b => !b.archived || b.isTemporary)
-    return Math.max(...activeBuffers.map(b => b.position), -1) + 1
+    const activeBuffers = buffers.filter((b) => !b.archived || b.isTemporary)
+    return Math.max(...activeBuffers.map((b) => b.position), -1) + 1
   }, [buffers])
-  
+
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
     if (!ranOnce.current && buffers && activeBufferId) {
       const buffer =
         buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
-      const activeBuffers = buffers.filter(b => !b.archived)
-      setActiveBufferState(buffer.archived ? activeBuffers[0] ?? fallbackBuffer : buffer)
+      const activeBuffers = buffers.filter((b) => !b.archived)
+      setActiveBufferState(
+        buffer.archived ? (activeBuffers[0] ?? fallbackBuffer) : buffer,
+      )
       ranOnce.current = true
     }
   }, [buffers, activeBufferId])
@@ -131,7 +143,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
     return null
   }
 
-  const setActiveBuffer = async (buffer: Buffer, options?: { focus?: boolean; fromSearch?: boolean }) => {
+  const setActiveBuffer = async (
+    buffer: Buffer,
+    options?: { focus?: boolean; fromSearch?: boolean },
+  ) => {
     try {
       const currentActiveBufferId = (await bufferStore.getActiveId())?.value
 
@@ -165,7 +180,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
         if (buffer.editorViewState) {
           editorRef.current.restoreViewState(buffer.editorViewState)
         }
-        
+
         if (options?.focus !== false) {
           editorRef.current.focus()
         }
@@ -187,7 +202,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       await db.buffers
         .filter((buffer) =>
           buffer.label.startsWith(fallbackBuffer.label) &&
-            newBuffer?.metricsViewState
+          newBuffer?.metricsViewState
             ? buffer.metricsViewState !== undefined
             : true,
         )
@@ -217,9 +232,9 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       position,
     })
     const id = await db.buffers.add(buffer)
-    
+
     await setActiveBuffer(buffer, { focus: true })
-    
+
     // Select all text if requested (model is already created by setActiveBuffer)
     if (shouldSelectAll && editorRef.current) {
       const model = editorRef.current.getModel()
@@ -233,31 +248,38 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
 
   const deleteAllBuffers = async () => {
     await bufferStore.deleteAll()
-    eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'deleteAll' })
+    eventBus.publish(EventType.BUFFERS_UPDATED, { type: "deleteAll" })
   }
 
-  const updateBuffer: EditorContext["updateBuffer"] = async (id, payload, setNewActiveBuffer = false) => {
+  const updateBuffer: EditorContext["updateBuffer"] = async (
+    id,
+    payload,
+    setNewActiveBuffer = false,
+  ) => {
     const editorViewState = editorRef.current?.saveViewState()
     const bufferType = await bufferStore.getBufferTypeById(id)
     let newPosition = null
 
-    if (payload && 'isTemporary' in payload) {
-      if (payload.isTemporary) { // archived -> temporary
+    if (payload && "isTemporary" in payload) {
+      if (payload.isTemporary) {
+        // archived -> temporary
         setTemporaryBufferId(id)
       } else if (id === temporaryBufferId) {
-        if (payload?.archived === false) { // temporary -> permanent
+        if (payload?.archived === false) {
+          // temporary -> permanent
           newPosition = getNextPosition()
-        } else { // temporary -> archived
+        } else {
+          // temporary -> archived
           newPosition = -1
         }
         setTemporaryBufferId(null)
       }
     }
-    
-    const { isTemporary, ...dbPayload } = payload || {}
-    let effectivePayload = {
+
+    const { isTemporary: _, ...dbPayload } = payload || {}
+    const effectivePayload = {
       ...dbPayload,
-      ...(newPosition !== null ? { position: newPosition } : {})
+      ...(newPosition !== null ? { position: newPosition } : {}),
     }
 
     if (Object.keys(effectivePayload).length > 0) {
@@ -275,14 +297,14 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       window.clearTimeout(searchUpdateTimeoutRef.current)
     }
 
-    const searchUpdateKeys = ['value', 'label', 'archived']
+    const searchUpdateKeys = ["value", "label", "archived"]
     const keys = Object.keys(payload || {})
-    if (searchUpdateKeys.some(key => keys.includes(key))) {
+    if (searchUpdateKeys.some((key) => keys.includes(key))) {
       searchUpdateTimeoutRef.current = window.setTimeout(() => {
-        let metaUpdate = !(keys.length === 1 && keys[0] === 'value')
-        let contentUpdate = keys.includes('value')
+        const metaUpdate = !(keys.length === 1 && keys[0] === "value")
+        const contentUpdate = keys.includes("value")
         eventBus.publish(EventType.BUFFERS_UPDATED, {
-          type: 'update',
+          type: "update",
           metaUpdate,
           contentUpdate,
           bufferId: id,
@@ -299,7 +321,10 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       const nextActive = await db.buffers
         .toCollection()
         .filter((buffer) => {
-          return !buffer.archived && !(buffer.id === temporaryBufferId || buffer.id === id)
+          return (
+            !buffer.archived &&
+            !(buffer.id === temporaryBufferId || buffer.id === id)
+          )
         })
         .last()
       await setActiveBuffer(nextActive ?? fallbackBuffer)
@@ -315,33 +340,45 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
       position: -1,
     })
     await setActiveBufferOnRemoved(id)
-    eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'archive', bufferId: id })
+    eventBus.publish(EventType.BUFFERS_UPDATED, {
+      type: "archive",
+      bufferId: id,
+    })
   }
 
   const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
     await bufferStore.delete(id)
     await setActiveBufferOnRemoved(id)
-    eventBus.publish(EventType.BUFFERS_UPDATED, { type: 'delete', bufferId: id })
+    eventBus.publish(EventType.BUFFERS_UPDATED, {
+      type: "delete",
+      bufferId: id,
+    })
   }
 
-  const setTemporaryBuffer: EditorContext["setTemporaryBuffer"] = async (buffer) => {
+  const setTemporaryBuffer: EditorContext["setTemporaryBuffer"] = async (
+    buffer,
+  ) => {
     if (temporaryBufferId !== null && temporaryBufferId !== buffer.id) {
       await updateBuffer(temporaryBufferId, { isTemporary: false })
     }
     await updateBuffer(buffer.id as number, {
       isTemporary: true,
     })
-    
-    await setActiveBuffer({ ...buffer, isTemporary: true }, { focus: false, fromSearch: true })
+
+    await setActiveBuffer(
+      { ...buffer, isTemporary: true },
+      { focus: false, fromSearch: true },
+    )
   }
 
-  const updateBuffersPositions: EditorContext["updateBuffersPositions"] = async (positions) => {
-    await db.transaction('rw', db.buffers, async () => {
-      for (const { id, position } of positions) {
-        await db.buffers.update(id, { position })
-      }
-    })
-  }
+  const updateBuffersPositions: EditorContext["updateBuffersPositions"] =
+    async (positions) => {
+      await db.transaction("rw", db.buffers, async () => {
+        for (const { id, position } of positions) {
+          await db.buffers.update(id, { position })
+        }
+      })
+    }
 
   return (
     <EditorContext.Provider
@@ -377,7 +414,7 @@ export const EditorProvider = ({ children }: PropsWithChildren<{}>) => {
             editor.focus()
             setInFocus(true)
           }
-          
+
           editor.onDidFocusEditorWidget(() => setInFocus(true))
           editor.onDidBlurEditorWidget(() => setInFocus(false))
           if (activeBuffer.editorViewState) {

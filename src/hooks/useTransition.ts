@@ -45,7 +45,9 @@ export const useTransition = (
 
     if (!_active) {
       timeoutId.current = window.setTimeout(() => {
-        document.body.contains(element) && document.body.removeChild(element)
+        if (document.body.contains(element)) {
+          document.body.removeChild(element)
+        }
       }, TransitionDuration.REG)
     }
   }, [_active, element, timeoutId, update])

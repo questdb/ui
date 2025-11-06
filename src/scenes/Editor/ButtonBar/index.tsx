@@ -9,12 +9,19 @@ import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 
-const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null }>`
+const ButtonBarWrapper = styled.div<{
+  $searchWidgetType: "find" | "replace" | null
+}>`
   position: absolute;
-  top: ${({ $searchWidgetType }) => $searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
+  top: ${({ $searchWidgetType }) =>
+    $searchWidgetType === "replace"
+      ? "8.2rem"
+      : $searchWidgetType === "find"
+        ? "5.3rem"
+        : "1rem"};
   right: 2.4rem;
   z-index: 1;
-  transition: top .1s linear;
+  transition: top 0.1s linear;
 `
 
 const ButtonGroup = styled.div`
@@ -32,22 +39,22 @@ const SuccessButton = styled(Button)`
     border-color: ${color("green")};
     color: ${color("gray1")};
   }
-  
+
   &:disabled {
     background-color: ${color("greenDarker")};
     border-color: ${color("greenDarker")};
     color: ${color("foreground")};
     opacity: 0.6;
   }
-  
+
   svg {
     color: ${color("foreground")};
   }
-  
+
   &:hover:not(:disabled) svg {
     color: ${color("gray1")};
   }
-  
+
   &:disabled svg {
     color: ${color("foreground")};
   }
@@ -57,29 +64,29 @@ const StopButton = styled(Button)`
   background-color: ${color("red")};
   border-color: ${color("red")};
   color: ${color("foreground")};
-  
+
   &:hover:not(:disabled) {
     background-color: ${color("red")};
     border-color: ${color("red")};
     color: ${color("foreground")};
     filter: brightness(1.2);
   }
-  
+
   &:disabled {
     background-color: ${color("red")};
     border-color: ${color("red")};
     color: ${color("foreground")};
     opacity: 0.6;
   }
-  
+
   svg {
     color: ${color("foreground")};
   }
-  
+
   &:hover:not(:disabled) svg {
     color: ${color("foreground")};
   }
-  
+
   &:disabled svg {
     color: ${color("foreground")};
   }
@@ -96,7 +103,7 @@ const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
   padding: 0 0.5rem;
   min-width: auto;
   svg {
-    transform: ${({ $open }) => $open ? "rotate(180deg)" : "rotate(0deg)"};
+    transform: ${({ $open }) => ($open ? "rotate(180deg)" : "rotate(0deg)")};
   }
 `
 
@@ -128,7 +135,7 @@ const Key = styled(Box).attrs({ alignItems: "center" })`
   &:not(:last-child) {
     margin-right: 0.25rem;
   }
-  
+
   svg {
     color: ${color("green")} !important;
   }
@@ -139,20 +146,31 @@ const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
 `
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
-const shortcutTitles = platform.isMacintosh || platform.isIOS ? {
-  [RunningType.QUERY]: "Cmd+Enter",
-  [RunningType.SCRIPT]: "Cmd+Shift+Enter",
-} : {
-  [RunningType.QUERY]: "Ctrl+Enter",
-  [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
-}
+const shortcutTitles =
+  platform.isMacintosh || platform.isIOS
+    ? {
+        [RunningType.QUERY]: "Cmd+Enter",
+        [RunningType.SCRIPT]: "Cmd+Shift+Enter",
+      }
+    : {
+        [RunningType.QUERY]: "Ctrl+Enter",
+        [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
+      }
 
-const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (runAll?: boolean) => void, isTemporary: boolean | undefined }) => {
+const ButtonBar = ({
+  onTriggerRunScript,
+  isTemporary,
+}: {
+  onTriggerRunScript: (runAll?: boolean) => void
+  isTemporary: boolean | undefined
+}) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [dropdownActive, setDropdownActive] = useState(false)
-  const [searchWidgetType, setSearchWidgetType] = useState<"find" | "replace" | null>(null)
+  const [searchWidgetType, setSearchWidgetType] = useState<
+    "find" | "replace" | null
+  >(null)
 
   const handleClickQueryButton = useCallback(() => {
     if (queriesToRun.length > 1) {
@@ -173,10 +191,11 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
 
   useEffect(() => {
     const checkFindWidgetVisibility = () => {
-      const findWidget = document.querySelector('.find-widget')
-      const isVisible = !!findWidget && findWidget.classList.contains('visible')
-      const isReplace = !!findWidget && findWidget.classList.contains('replaceToggled')
-      
+      const findWidget = document.querySelector(".find-widget")
+      const isVisible = !!findWidget && findWidget.classList.contains("visible")
+      const isReplace =
+        !!findWidget && findWidget.classList.contains("replaceToggled")
+
       setSearchWidgetType(isVisible ? (isReplace ? "replace" : "find") : null)
     }
 
@@ -184,18 +203,23 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
       let shouldCheck = false
 
       mutations.forEach((mutation) => {
-        if (mutation.type === 'childList') {
+        if (mutation.type === "childList") {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType === Node.ELEMENT_NODE) {
               const element = node as Element
-              if (element.classList?.contains('find-widget') || element.querySelector?.('.find-widget')) {
+              if (
+                element.classList?.contains("find-widget") ||
+                element.querySelector?.(".find-widget")
+              ) {
                 shouldCheck = true
               }
             }
           })
-        } else if (mutation.type === 'attributes' && 
-                   mutation.target instanceof Element && 
-                   mutation.target.classList.contains('find-widget')) {
+        } else if (
+          mutation.type === "attributes" &&
+          mutation.target instanceof Element &&
+          mutation.target.classList.contains("find-widget")
+        ) {
           shouldCheck = true
         }
       })
@@ -209,8 +233,8 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class'],
-      attributeOldValue: false
+      attributeFilter: ["class"],
+      attributeOldValue: false,
     })
 
     return () => {
@@ -239,11 +263,13 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
         onClick={handleClickScriptButton}
         disabled={running !== RunningType.NONE || isTemporary}
       >
-          Run all queries
-        <RunShortcut> 
+        Run all queries
+        <RunShortcut>
           <Key>{ctrlCmd}</Key>
           <Key>⇧</Key>
-          <Key><CornerDownLeft size="16px" /></Key>
+          <Key>
+            <CornerDownLeft size="16px" />
+          </Key>
         </RunShortcut>
       </SuccessButton>
     )
@@ -275,7 +301,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
       }
       return "Run query"
     }
-    
+
     return (
       <ButtonGroup>
         <MainRunButton
@@ -283,12 +309,18 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
           data-hook="button-run-query"
           title={shortcutTitles[RunningType.QUERY]}
           onClick={handleClickQueryButton}
-          disabled={running !== RunningType.NONE || queriesToRun.length === 0 || isTemporary}
+          disabled={
+            running !== RunningType.NONE ||
+            queriesToRun.length === 0 ||
+            isTemporary
+          }
         >
           {getQueryButtonText()}
           <RunShortcut>
             <Key>{ctrlCmd}</Key>
-            <Key><CornerDownLeft size="16px" /></Key>
+            <Key>
+              <CornerDownLeft size="16px" />
+            </Key>
           </RunShortcut>
         </MainRunButton>
         <PopperToggle
@@ -306,9 +338,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
             </DropdownButton>
           }
         >
-          <DropdownMenu>
-            {renderRunScriptButton()}
-          </DropdownMenu>
+          <DropdownMenu>{renderRunScriptButton()}</DropdownMenu>
         </PopperToggle>
       </ButtonGroup>
     )
@@ -316,7 +346,9 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: { onTriggerRunScript: (r
 
   return (
     <ButtonBarWrapper $searchWidgetType={searchWidgetType}>
-      {running === RunningType.SCRIPT ? renderRunScriptButton() : renderRunQueryButton()}
+      {running === RunningType.SCRIPT
+        ? renderRunScriptButton()
+        : renderRunQueryButton()}
     </ButtonBarWrapper>
   )
 }

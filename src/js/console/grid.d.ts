@@ -1,4 +1,6 @@
-export interface IQuestDBGrid {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export type IQuestDBGrid = {
   focus(): void
 
   show(): void

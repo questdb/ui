@@ -22,8 +22,8 @@ export const getTableCompletions = ({
       insertText: openQuote
         ? item.table_name + (nextCharQuote ? "" : '"')
         : /^[a-z0-9_]+$/i.test(item.table_name)
-        ? item.table_name
-        : `"${item.table_name}"`,
+          ? item.table_name
+          : `"${item.table_name}"`,
       sortText: priority,
       range,
     }

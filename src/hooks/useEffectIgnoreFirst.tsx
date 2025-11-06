@@ -1,6 +1,9 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef } from "react"
 
-export const useEffectIgnoreFirst = (effect: () => void, deps?: React.DependencyList) => {
+export const useEffectIgnoreFirst = (
+  effect: () => void,
+  deps?: React.DependencyList,
+) => {
   const firstRender = useRef(true)
 
   useEffect(() => {

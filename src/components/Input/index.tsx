@@ -1,16 +1,16 @@
-import styled, { css } from "styled-components";
-import React from "react";
+import styled, { css } from "styled-components"
+import React from "react"
 
-type InputVariant = "transparent" | "error";
+type InputVariant = "transparent" | "error"
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  variant?: InputVariant;
-};
+  variant?: InputVariant
+}
 
 const errorStyle = css`
   border-color: ${({ theme }) => theme.color.red};
   background-color: #ff555515;
-`;
+`
 
 export const Input = styled.input.attrs((props) => ({
   "data-lpignore": !!props.autoComplete,
@@ -43,4 +43,4 @@ export const Input = styled.input.attrs((props) => ({
   `}
 
   ${({ variant }) => variant === "error" && errorStyle}
-`;
+`

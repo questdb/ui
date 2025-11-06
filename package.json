@@ -27,8 +27,9 @@
     "test:e2e:auth": "cypress run --spec 'e2e/tests/auth/*.spec.js'",
     "test:e2e:enterprise": "cypress run --spec 'e2e/tests/enterprise/*.spec.js'",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix"
+    "lint": "eslint src/ e2e/tests/",
+    "lint:fix": "eslint src/ e2e/tests/ --fix",
+    "prepare": "husky"
   },
   "dependencies": {
     "@date-fns/tz": "^1.2.0",
@@ -137,7 +138,9 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "^15.0.0",
+    "husky": "^9.1.7",
     "jiti": "^2.6.1",
+    "lint-staged": "^16.2.6",
     "prettier": "^3.3.0",
     "sass": "^1.93.2",
     "stylelint": "^13.13.1",
@@ -175,6 +178,11 @@
         "maxSize": "100KB",
         "compression": "none"
       }
+    ]
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --max-warnings=0"
     ]
   }
 }

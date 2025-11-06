@@ -1,7 +1,15 @@
 import React from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
-import { Box, Button, Text, Drawer, Input, Switch, Select } from "../../../components"
+import {
+  Box,
+  Button,
+  Text,
+  Drawer,
+  Input,
+  Switch,
+  Select,
+} from "../../../components"
 import { Settings4 } from "@styled-icons/remix-line"
 import { Undo } from "@styled-icons/boxicons-regular"
 import { UploadModeSettings } from "../../../utils"
@@ -273,7 +281,7 @@ export const UploadSettingsDialog = ({
                     {option.type === "select" && (
                       <Select
                         name={option.name}
-                        defaultValue={option.defaultValue as string}
+                        defaultValue={option.defaultValue}
                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                           setSettings({
                             ...settings,

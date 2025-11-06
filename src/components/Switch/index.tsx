@@ -1,14 +1,14 @@
-import React from "react";
-import styled from "styled-components";
-import * as SwitchPrimitive from "@radix-ui/react-switch";
+import React from "react"
+import styled from "styled-components"
+import * as SwitchPrimitive from "@radix-ui/react-switch"
 
 type Props = {
-  className?: string;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-  dataHook?: string;
-  checked?: boolean;
-};
+  className?: string
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+  dataHook?: string
+  checked?: boolean
+}
 
 const Root = styled(SwitchPrimitive.Root)`
   display: inline-flex;
@@ -36,7 +36,7 @@ const Root = styled(SwitchPrimitive.Root)`
   &[data-state="checked"][data-disabled] {
     filter: grayscale(0.8) contrast(0.4);
   }
-`;
+`
 
 const StyledThumb = styled(SwitchPrimitive.Thumb)`
   display: block;
@@ -59,7 +59,7 @@ const StyledThumb = styled(SwitchPrimitive.Thumb)`
   &[data-state="checked"][data-disabled] {
     filter: brightness(0.8);
   }
-`;
+`
 
 export const Switch = ({
   checked,
@@ -77,4 +77,4 @@ export const Switch = ({
   >
     <StyledThumb />
   </Root>
-);
+)

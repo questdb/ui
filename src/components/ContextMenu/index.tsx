@@ -1,6 +1,6 @@
-import React from 'react'
-import styled from 'styled-components'
-import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
+import React from "react"
+import styled from "styled-components"
+import * as ContextMenuPrimitive from "@radix-ui/react-context-menu"
 
 const StyledContent = styled(ContextMenuPrimitive.Content)`
   background-color: #343846; /* vscode-menu-background */
@@ -63,5 +63,5 @@ export const MenuItem = React.forwardRef<HTMLDivElement, MenuItemProps>(
       {icon && <IconWrapper>{icon}</IconWrapper>}
       {children}
     </StyledItem>
-  )
+  ),
 )

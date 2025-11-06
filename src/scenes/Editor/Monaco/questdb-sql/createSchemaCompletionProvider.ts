@@ -92,14 +92,6 @@ export const createSchemaCompletionProvider = (
           const openQuote = textUntilPosition.substr(-1) === '"'
           const nextCharQuote = nextChar == '"'
 
-          // get text value in the current line
-          const textInLine = model.getValueInRange({
-            startLineNumber: position.lineNumber,
-            startColumn: 1,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column,
-          })
-
           if (
             /(FROM|INTO|(ALTER|BACKUP|DROP|REINDEX|RENAME|TRUNCATE|VACUUM) TABLE|JOIN|UPDATE)\s$/gim.test(
               textUntilPosition,
@@ -132,8 +124,11 @@ export const createSchemaCompletionProvider = (
                   ...(isInColumnListing(textUntilPosition)
                     ? getColumnCompletions({
                         columns: tableContext.reduce(
-                          (acc, tableName) => [...acc, ...(informationSchemaColumns[tableName] ?? [])],
-                          [] as InformationSchemaColumn[]
+                          (acc, tableName) => [
+                            ...acc,
+                            ...(informationSchemaColumns[tableName] ?? []),
+                          ],
+                          [] as InformationSchemaColumn[],
                         ),
                         range,
                         withTableName,
@@ -149,7 +144,7 @@ export const createSchemaCompletionProvider = (
                   ...getColumnCompletions({
                     columns: Object.values(informationSchemaColumns).reduce(
                       (acc, columns) => [...acc, ...columns],
-                      [] as InformationSchemaColumn[]
+                      [] as InformationSchemaColumn[],
                     ),
                     range,
                     withTableName: false,

@@ -1,5 +1,5 @@
-import * as RadixDialog from "@radix-ui/react-dialog";
-import styled, { css } from "styled-components";
+import * as RadixDialog from "@radix-ui/react-dialog"
+import styled, { css } from "styled-components"
 
 const dialogShow = css`
   @keyframes dialogShow {
@@ -10,7 +10,7 @@ const dialogShow = css`
       opacity: 1;
     }
   }
-`;
+`
 
 const dialogHide = css`
   @keyframes dialogHide {
@@ -21,7 +21,7 @@ const dialogHide = css`
       opacity: 0;
     }
   }
-`;
+`
 
 export const Dialog = {
   Root: RadixDialog.Root,
@@ -82,4 +82,4 @@ export const Dialog = {
     }
   `,
   Close: RadixDialog.Close,
-};
+}

@@ -1,10 +1,10 @@
-import React, { forwardRef } from "react";
+import React, { forwardRef } from "react"
 
-type Props = React.InputHTMLAttributes<HTMLInputElement>;
+type Props = React.InputHTMLAttributes<HTMLInputElement>
 
 export const Checkbox: React.FunctionComponent<Props> = forwardRef<
   HTMLInputElement,
   Props
->((props, ref) => <input ref={ref} type="checkbox" {...props} />);
+>((props, ref) => <input ref={ref} type="checkbox" {...props} />)
 
-Checkbox.displayName = "Checkbox";
+Checkbox.displayName = "Checkbox"

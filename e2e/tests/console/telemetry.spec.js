@@ -29,8 +29,8 @@ const toggleTelemetry = (enabled) => {
         ],
       ],
       count: 1,
-    });
-  });
+    })
+  })
 
   if (enabled) {
     cy.intercept(
@@ -42,43 +42,43 @@ const toggleTelemetry = (enabled) => {
       (req) => {
         req.reply({
           lastUpdated: null,
-        });
-      }
-    ).as("telemetryRemoteConfig");
+        })
+      },
+    ).as("telemetryRemoteConfig")
   }
-};
+}
 
 describe("telemetry disabled", () => {
   beforeEach(() => {
-    toggleTelemetry(false);
-    cy.loadConsoleWithAuth();
-  });
+    toggleTelemetry(false)
+    cy.loadConsoleWithAuth()
+  })
 
   it("should not start telemetry when disabled", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
       cy.intercept("@addTelemetry").then((interception) => {
-        expect(interception).to.be.null;
-      });
-    });
-  });
-});
+        expect(interception).to.be.null
+      })
+    })
+  })
+})
 
 describe("telemetry enabled", () => {
   beforeEach(() => {
-    toggleTelemetry(true);
-    cy.loadConsoleWithAuth();
-  });
+    toggleTelemetry(true)
+    cy.loadConsoleWithAuth()
+  })
 
   it("should start telemetry when enabled", () => {
     cy.wait("@telemetryConfig").then(({ response }) => {
-      cy.wait("@telemetryRemoteConfig");
+      cy.wait("@telemetryRemoteConfig")
       cy.wait("@addTelemetry").then(({ request }) => {
-        const payload = request.body;
-        expect(payload.id).to.equal(response.body.dataset[0][0]);
-        expect(payload.version).to.equal(response.body.dataset[0][2]);
-        expect(payload.os).to.equal(response.body.dataset[0][3]);
-        expect(payload.package).to.equal(response.body.dataset[0][4]);
-      });
-    });
-  });
-});
+        const payload = request.body
+        expect(payload.id).to.equal(response.body.dataset[0][0])
+        expect(payload.version).to.equal(response.body.dataset[0][2])
+        expect(payload.os).to.equal(response.body.dataset[0][3])
+        expect(payload.package).to.equal(response.body.dataset[0][4])
+      })
+    })
+  })
+})
