@@ -195,12 +195,12 @@ function extractSection(content: string, sectionHeader: string): string | null {
     const line = lines[i]
 
     // Check if we found the section header
-    if (line === `## ${sectionHeader}` || line === `### ${sectionHeader}`) {
+    if (line === `## ${sectionHeader}`) {
       inSection = true
       sectionContent.push(line)
     } else if (inSection) {
       // Check if we reached the next section
-      if (line.match(/^###?\s/)) {
+      if (line.match(/^##?\s/)) {
         break
       }
       sectionContent.push(line)

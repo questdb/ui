@@ -597,7 +597,7 @@ async function handleToolCalls(
 
 const extractOpenAIToolCalls = (
   response: OpenAI.Responses.Response,
-): { id: string; name: string; arguments: unknown }[] => {
+): { id?: string; name: string; arguments: unknown; call_id: string }[] => {
   const calls = []
   for (const item of response.output) {
     if (item?.type === "function_call") {
@@ -605,7 +605,12 @@ const extractOpenAIToolCalls = (
         typeof item.arguments === "string"
           ? safeJsonParse(item.arguments)
           : item.arguments || {}
-      calls.push({ id: item.call_id, name: item.name, arguments: args })
+      calls.push({
+        id: item.id,
+        name: item.name,
+        arguments: args,
+        call_id: item.call_id,
+      })
     }
   }
   return calls
@@ -675,15 +680,15 @@ const tryWithRetries = async <T>(
 interface OpenAIFlowConfig<T> {
   systemInstructions: string
   initialUserContent: string
-  responseFormat: { format: ResponseTextConfig }
-  postProcess?: (formatted: T) => unknown
+  responseFormat: ResponseTextConfig
+  postProcess?: (formatted: T) => T
 }
 
 interface AnthropicFlowConfig<T> {
   systemInstructions: string
   initialUserContent: string
   formattingPrompt: string
-  postProcess?: (formatted: T) => unknown
+  postProcess?: (formatted: T) => T
 }
 
 interface ExecuteAnthropicFlowParams<T> {
@@ -727,9 +732,6 @@ const executeOpenAIFlow = async <T>({
   const openaiTools = toOpenAIFunctions(
     settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
   )
-  if (settings.grantSchemaAccess && schemaClient) {
-    openaiTools.push(...toOpenAIFunctions(SCHEMA_TOOLS))
-  }
 
   let lastResponse = await openai.responses.create({
     model,
@@ -760,11 +762,10 @@ const executeOpenAIFlow = async <T>({
         setStatus,
       )
       tool_outputs.push({
-        id: tc.id,
-        type: "function_call_output" as const,
-        call_id: tc.id,
+        type: "function_call_output",
+        call_id: tc.call_id,
         output: exec.content,
-      })
+      } as OpenAI.Responses.ResponseFunctionToolCallOutputItem)
     }
     input = [...input, ...tool_outputs]
     lastResponse = await openai.responses.create({
@@ -772,7 +773,7 @@ const executeOpenAIFlow = async <T>({
       instructions: config.systemInstructions,
       input,
       tools: openaiTools,
-      text: config.responseFormat as ResponseTextConfig,
+      text: config.responseFormat,
     })
     input = [...input, ...lastResponse.output]
   }
@@ -797,7 +798,7 @@ const executeOpenAIFlow = async <T>({
     const json = JSON.parse(rawOutput) as T
     setStatus(null)
     if (config.postProcess) {
-      return config.postProcess(json) as T
+      return config.postProcess(json)
     }
     return json
   } catch (error) {
@@ -884,7 +885,7 @@ const executeAnthropicFlow = async <T>({
     const json = JSON.parse(fullContent) as T
     setStatus(null)
     if (config.postProcess) {
-      return config.postProcess(json) as T
+      return config.postProcess(json)
     }
     return json
   } catch (error) {
@@ -941,7 +942,7 @@ export const explainQuery = async ({
               settings.grantSchemaAccess,
             ),
             initialUserContent: content,
-            responseFormat: { format: ExplainFormat },
+            responseFormat: ExplainFormat,
           },
           settings,
           schemaClient,
@@ -1022,7 +1023,7 @@ export const generateSQL = async ({
               settings.grantSchemaAccess,
             ),
             initialUserContent,
-            responseFormat: { format: GeneratedSQLFormat },
+            responseFormat: GeneratedSQLFormat,
             postProcess,
           },
           settings,
@@ -1120,7 +1121,7 @@ ${word ? `The error occurred at word: ${word}` : ""}`
           config: {
             systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
             initialUserContent,
-            responseFormat: { format: FixSQLFormat },
+            responseFormat: FixSQLFormat,
             postProcess,
           },
           settings,
@@ -1337,7 +1338,7 @@ function handleAiAssistantError(error: unknown): AiAssistantAPIError {
   if (error instanceof Anthropic.APIError) {
     return {
       type: "unknown",
-      message: `API error: ${error.message}`,
+      message: `Anthropic API error: ${error.message}`,
     }
   }
 
