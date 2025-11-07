@@ -6,7 +6,7 @@ import {
   Overlay,
   Box,
   Text,
-} from "@questdb/react-components"
+} from "../../../components"
 import styled from "styled-components"
 import { AutoAwesome } from "@styled-icons/material"
 import { Check } from "@styled-icons/boxicons-regular"
@@ -84,7 +84,7 @@ const ColumnsTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   font-size: 1.3rem;
-  
+
   th {
     text-align: left;
     padding: 0.8rem;
@@ -92,15 +92,16 @@ const ColumnsTable = styled.table`
     font-weight: 700;
     border-bottom: 1px solid ${({ theme }) => theme.color.gray2};
   }
-  
+
   td {
     padding: 0.8rem;
     border-bottom: 1px solid ${({ theme }) => theme.color.gray1};
-    &:nth-child(1), &:nth-child(2) {
+    &:nth-child(1),
+    &:nth-child(2) {
       padding-right: 1.5rem;
     }
   }
-  
+
   tbody tr:hover {
     background: ${({ theme }) => theme.color.gray1}20;
   }
@@ -124,7 +125,7 @@ const StorageDetail = styled.li`
   color: ${({ theme }) => theme.color.foreground};
   font-size: 1.4rem;
   margin-bottom: 0.8rem;
-  
+
   &:last-child {
     margin-bottom: 0;
   }
@@ -185,7 +186,7 @@ export const SchemaExplanationDialog = ({
                     </ExplanationText>
                   </Section>
                 )}
-                
+
                 {explanation.columns && explanation.columns.length > 0 && (
                   <Section>
                     <SectionTitle>Columns</SectionTitle>
@@ -198,8 +199,8 @@ export const SchemaExplanationDialog = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {explanation.columns.map((column, index) => (
-                          <tr key={index}>
+                        {explanation.columns.map((column) => (
+                          <tr key={column.description}>
                             <td>{column.name}</td>
                             <DataTypeCell>{column.data_type}</DataTypeCell>
                             <td>{column.description}</td>
@@ -209,20 +210,21 @@ export const SchemaExplanationDialog = ({
                     </ColumnsTable>
                   </Section>
                 )}
-                
-                {explanation.storage_details && explanation.storage_details.length > 0 && (
-                  <Section>
-                    <SectionTitle>Storage Details</SectionTitle>
-                    <StorageList>
-                      {explanation.storage_details.map((detail, index) => (
-                        <StorageDetail key={index}>
-                          <CheckIcon size={16} />
-                          <span>{detail}</span>
-                        </StorageDetail>
-                      ))}
-                    </StorageList>
-                  </Section>
-                )}
+
+                {explanation.storage_details &&
+                  explanation.storage_details.length > 0 && (
+                    <Section>
+                      <SectionTitle>Storage Details</SectionTitle>
+                      <StorageList>
+                        {explanation.storage_details.map((detail) => (
+                          <StorageDetail key={detail}>
+                            <CheckIcon size={16} />
+                            <span>{detail}</span>
+                          </StorageDetail>
+                        ))}
+                      </StorageList>
+                    </Section>
+                  )}
               </>
             )}
           </StyledDescription>

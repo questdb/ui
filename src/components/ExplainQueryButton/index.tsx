@@ -1,19 +1,30 @@
 import React, { useContext, useEffect, useRef, useCallback } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box } from "@questdb/react-components"
+import { Button, Box } from "../../components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
-import type { AiAssistantAPIError, AiAssistantExplanation } from "../../utils/aiAssistant"
-import { explainQuery, formatExplanationAsComment, createSchemaClient, isAiAssistantError } from "../../utils/aiAssistant"
+import type {
+  AiAssistantAPIError,
+  AiAssistantExplanation,
+} from "../../utils/aiAssistant"
+import {
+  explainQuery,
+  formatExplanationAsComment,
+  createSchemaClient,
+  isAiAssistantError,
+} from "../../utils/aiAssistant"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { RunningType } from "../../store/Query/types"
-import { useAIStatus, isBlockingAIStatus } from "../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+} from "../../providers/AIStatusProvider"
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
@@ -28,11 +39,15 @@ const Key = styled(Box).attrs({ alignItems: "center" })`
   }
 `
 
-const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{ $disabled: boolean }>`
+const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
+  $disabled: boolean
+}>`
   margin-left: 1rem;
-  ${({ $disabled, theme }) => $disabled && css`
-    color: ${theme.color.gray1};
-  `}
+  ${({ $disabled, theme }) =>
+    $disabled &&
+    css`
+      color: ${theme.color.gray1};
+    `}
 `
 
 type Props = {
@@ -41,7 +56,8 @@ type Props = {
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 
-const shortcutTitle = platform.isMacintosh || platform.isIOS ? "Cmd+E" : "Ctrl+E"
+const shortcutTitle =
+  platform.isMacintosh || platform.isIOS ? "Cmd+E" : "Ctrl+E"
 
 export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
   const { aiAssistantSettings } = useLocalStorage()
@@ -52,7 +68,10 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const { status: aiStatus, setStatus, abortController } = useAIStatus()
   const highlightDecorationsRef = useRef<string[]>([])
-  const disabled = running !== RunningType.NONE || queriesToRun.length !== 1 || isBlockingAIStatus(aiStatus)
+  const disabled =
+    running !== RunningType.NONE ||
+    queriesToRun.length !== 1 ||
+    isBlockingAIStatus(aiStatus)
   const isSelection = queriesToRun.length === 1 && queriesToRun[0].selection
 
   const handleExplainQuery = useCallback(async () => {
@@ -64,35 +83,39 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
       readOnly: true,
       readOnlyMessage: {
         value: "Query explanation in progress",
-      }
+      },
     })
-    const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
+    const schemaClient = aiAssistantSettings.grantSchemaAccess
+      ? createSchemaClient(tables, quest)
+      : undefined
     const response = await explainQuery({
       query: queriesToRun[0],
       settings: aiAssistantSettings,
       schemaClient,
       setStatus,
-      abortSignal: abortController?.signal
+      abortSignal: abortController?.signal,
     })
 
     if (isAiAssistantError(response)) {
       const error = response as AiAssistantAPIError
-      if (error.type !== 'aborted') {
+      if (error.type !== "aborted") {
         toast.error(error.message, { autoClose: 10000 })
       }
       editorRef.current?.updateOptions({
         readOnly: false,
-        readOnlyMessage: undefined
+        readOnlyMessage: undefined,
       })
       return
     }
 
     const result = response as AiAssistantExplanation
     if (!result.explanation) {
-      toast.error("No explanation received from AI Assistant", { autoClose: 10000 })
+      toast.error("No explanation received from AI Assistant", {
+        autoClose: 10000,
+      })
       editorRef.current?.updateOptions({
         readOnly: false,
-        readOnlyMessage: undefined
+        readOnlyMessage: undefined,
       })
       return
     }
@@ -103,63 +126,89 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     const queryStartLine = isSelection
       ? model.getPositionAt(queriesToRun[0].selection!.startOffset).lineNumber
       : queriesToRun[0].row + 1
-    
+
     const insertText = commentBlock + "\n"
-    const explanationEndLine = queryStartLine + insertText.split("\n").length - 1
+    const explanationEndLine =
+      queryStartLine + insertText.split("\n").length - 1
 
     editorRef.current?.updateOptions({
       readOnly: false,
-      readOnlyMessage: undefined
+      readOnlyMessage: undefined,
     })
-    editorRef.current.executeEdits("explain-query", [{
-      range: {
-        startLineNumber: queryStartLine,
-        startColumn: 1,
-        endLineNumber: queryStartLine,
-        endColumn: 1
+    editorRef.current.executeEdits("explain-query", [
+      {
+        range: {
+          startLineNumber: queryStartLine,
+          startColumn: 1,
+          endLineNumber: queryStartLine,
+          endColumn: 1,
+        },
+        text: insertText,
       },
-      text: insertText
-    }])
-    
+    ])
+
     if (onBufferContentChange) {
       onBufferContentChange(editorRef.current.getValue())
     }
-    editorRef.current.revealPositionNearTop({ lineNumber: queryStartLine, column: 1 })
+    editorRef.current.revealPositionNearTop({
+      lineNumber: queryStartLine,
+      column: 1,
+    })
     editorRef.current.setPosition({ lineNumber: queryStartLine, column: 1 })
-    highlightDecorationsRef.current = editorRef.current.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
-      range: {
-        startLineNumber: queryStartLine,
-        startColumn: 1,
-        endLineNumber: explanationEndLine,
-        endColumn: 1
-      },
-      options: {
-        className: "aiQueryHighlight",
-        isWholeLine: false
-      }
-    }]) ?? []
+    highlightDecorationsRef.current =
+      editorRef.current
+        .getModel()
+        ?.deltaDecorations(highlightDecorationsRef.current, [
+          {
+            range: {
+              startLineNumber: queryStartLine,
+              startColumn: 1,
+              endLineNumber: explanationEndLine,
+              endColumn: 1,
+            },
+            options: {
+              className: "aiQueryHighlight",
+              isWholeLine: false,
+            },
+          },
+        ]) ?? []
     setTimeout(() => {
-      highlightDecorationsRef.current = editorRef.current?.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
+      highlightDecorationsRef.current =
+        editorRef.current
+          ?.getModel()
+          ?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
     }, 1000)
 
     toast.success("Query explanation added!")
-  }, [disabled, onBufferContentChange, queriesToRun, aiAssistantSettings, tables, quest, setStatus, abortController])
+  }, [
+    disabled,
+    onBufferContentChange,
+    queriesToRun,
+    aiAssistantSettings,
+    tables,
+    quest,
+    setStatus,
+    abortController,
+  ])
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (!((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E'))) {
-      return
-    }
-    e.preventDefault()
-    handleExplainQuery()
-  }, [handleExplainQuery])
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!((e.metaKey || e.ctrlKey) && (e.key === "e" || e.key === "E"))) {
+        return
+      }
+      e.preventDefault()
+      void handleExplainQuery()
+    },
+    [handleExplainQuery],
+  )
 
   useEffect(() => {
     eventBus.subscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQuery)
-    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener("keydown", handleKeyDown)
 
     return () => {
       eventBus.unsubscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQuery)
-      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener("keydown", handleKeyDown)
     }
   }, [handleExplainQuery])
 

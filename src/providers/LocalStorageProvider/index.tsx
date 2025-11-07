@@ -37,7 +37,7 @@ import {
 export const DEFAULT_AI_ASSISTANT_SETTINGS = {
   apiKey: "",
   model: "claude-sonnet-4-0",
-  grantSchemaAccess: true
+  grantSchemaAccess: true,
 }
 
 const defaultConfig: LocalConfig = {
@@ -139,7 +139,10 @@ export const LocalStorageProvider = ({
         return {
           apiKey: parsed.apiKey || "",
           model: parsed.model || DEFAULT_AI_ASSISTANT_SETTINGS.model,
-          grantSchemaAccess: parsed.grantSchemaAccess !== undefined ? parsed.grantSchemaAccess : true
+          grantSchemaAccess:
+            parsed.grantSchemaAccess !== undefined
+              ? parsed.grantSchemaAccess
+              : true,
         }
       } catch (e) {
         return defaultConfig.aiAssistantSettings
@@ -148,13 +151,15 @@ export const LocalStorageProvider = ({
     return defaultConfig.aiAssistantSettings
   }
 
-  const [aiAssistantSettings, setAiAssistantSettings] = useState<AiAssistantSettings>(getAiAssistantSettings())
+  const [aiAssistantSettings, setAiAssistantSettings] =
+    useState<AiAssistantSettings>(getAiAssistantSettings())
 
   const updateSettings = (key: StoreKey, value: SettingsType) => {
     if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
       setValue(key, JSON.stringify(value))
     } else {
-      setValue(key, value.toString())
+      const typedValue = value as string | boolean | number
+      setValue(key, typedValue as string)
     }
     refreshSettings(key)
   }

@@ -1,19 +1,33 @@
-import React, { useCallback, useState, useContext, useEffect, useRef } from "react"
+import React, {
+  useCallback,
+  useState,
+  useContext,
+  useEffect,
+  useRef,
+} from "react"
 import styled, { css } from "styled-components"
-import { Button, Box, Dialog, ForwardRef, Overlay } from "@questdb/react-components"
+import { Button, Box, Dialog, ForwardRef, Overlay } from "../../components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
 import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
-import { generateSQL, formatExplanationAsComment, createSchemaClient, isAiAssistantError } from "../../utils/aiAssistant"
+import {
+  generateSQL,
+  formatExplanationAsComment,
+  createSchemaClient,
+  isAiAssistantError,
+} from "../../utils/aiAssistant"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { RunningType } from "../../store/Query/types"
-import { useAIStatus, isBlockingAIStatus } from "../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+} from "../../providers/AIStatusProvider"
 
 const Key = styled(Box).attrs({ alignItems: "center" })`
   padding: 0 0.4rem;
@@ -28,11 +42,15 @@ const Key = styled(Box).attrs({ alignItems: "center" })`
   }
 `
 
-const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{ $disabled: boolean }>`
+const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
+  $disabled: boolean
+}>`
   margin-left: 1rem;
-  ${({ $disabled, theme }) => $disabled && css`
-    color: ${theme.color.gray1};
-  `}
+  ${({ $disabled, theme }) =>
+    $disabled &&
+    css`
+      color: ${theme.color.gray1};
+    `}
 `
 
 const StyledDialogDescription = styled(Dialog.Description)`
@@ -50,7 +68,6 @@ const StyledDialogButton = styled(Button)`
     outline: 1px solid ${({ theme }) => theme.color.foreground};
   }
 `
-
 
 const StyledTextArea = styled.textarea`
   width: 100%;
@@ -74,13 +91,13 @@ const StyledTextArea = styled.textarea`
   }
 `
 
-
 type Props = {
   onBufferContentChange?: (value?: string) => void
 }
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
-const shortcutTitle = platform.isMacintosh || platform.isIOS ? "Cmd+G" : "Ctrl+G"
+const shortcutTitle =
+  platform.isMacintosh || platform.isIOS ? "Cmd+G" : "Ctrl+G"
 
 export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   const { aiAssistantSettings } = useLocalStorage()
@@ -92,24 +109,29 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
   const highlightDecorationsRef = useRef<string[]>([])
-  const disabled = running !== RunningType.NONE || !editorRef.current || isBlockingAIStatus(aiStatus)
+  const disabled =
+    running !== RunningType.NONE ||
+    !editorRef.current ||
+    isBlockingAIStatus(aiStatus)
 
   const handleGenerate = async () => {
     setShowDialog(false)
     setDescription("")
 
-    const schemaClient = aiAssistantSettings.grantSchemaAccess ? createSchemaClient(tables, quest) : undefined
+    const schemaClient = aiAssistantSettings.grantSchemaAccess
+      ? createSchemaClient(tables, quest)
+      : undefined
     const response = await generateSQL({
       description,
       settings: aiAssistantSettings,
       schemaClient,
       setStatus,
-      abortSignal: abortController?.signal
+      abortSignal: abortController?.signal,
     })
 
     if (isAiAssistantError(response)) {
       const error = response as AiAssistantAPIError
-      if (error.type !== 'aborted') {
+      if (error.type !== "aborted") {
         toast.error(error.message, { autoClose: 10000 })
       }
       return
@@ -125,41 +147,55 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
       const model = editorRef.current.getModel()
       if (!model) return
 
-      const commentBlock = formatExplanationAsComment(`${description}\nExplanation:\n${result.explanation}`, `Prompt`)
+      const commentBlock = formatExplanationAsComment(
+        `${description}\nExplanation:\n${result.explanation}`,
+        `Prompt`,
+      )
       const sqlWithComment = `\n${commentBlock}\n${result.sql}\n`
-      
+
       const lineNumber = model.getLineCount()
       const column = model.getLineMaxColumn(lineNumber)
 
-      editorRef.current.executeEdits("generate-sql", [{
-        range: {
-          startLineNumber: lineNumber,
-          startColumn: column,
-          endLineNumber: lineNumber,
-          endColumn: column
+      editorRef.current.executeEdits("generate-sql", [
+        {
+          range: {
+            startLineNumber: lineNumber,
+            startColumn: column,
+            endLineNumber: lineNumber,
+            endColumn: column,
+          },
+          text: sqlWithComment,
         },
-        text: sqlWithComment
-      }])
-      
+      ])
+
       if (onBufferContentChange) {
         onBufferContentChange(editorRef.current.getValue())
       }
 
       editorRef.current.revealLineNearTop(lineNumber)
-      highlightDecorationsRef.current = editorRef.current.getModel()?.deltaDecorations(highlightDecorationsRef.current, [{
-        range: {
-          startLineNumber: lineNumber,
-          startColumn: column,
-          endLineNumber: lineNumber + sqlWithComment.split("\n").length - 1,
-          endColumn: column
-        },
-        options: {
-          className: "aiQueryHighlight",
-          isWholeLine: false
-        }
-      }]) ?? []
+      highlightDecorationsRef.current =
+        editorRef.current
+          .getModel()
+          ?.deltaDecorations(highlightDecorationsRef.current, [
+            {
+              range: {
+                startLineNumber: lineNumber,
+                startColumn: column,
+                endLineNumber:
+                  lineNumber + sqlWithComment.split("\n").length - 1,
+                endColumn: column,
+              },
+              options: {
+                className: "aiQueryHighlight",
+                isWholeLine: false,
+              },
+            },
+          ]) ?? []
       setTimeout(() => {
-        highlightDecorationsRef.current = editorRef.current?.getModel()?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
+        highlightDecorationsRef.current =
+          editorRef.current
+            ?.getModel()
+            ?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
       }, 1000)
       editorRef.current.setPosition({ lineNumber: lineNumber + 1, column: 1 })
       editorRef.current.focus()
@@ -178,25 +214,28 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     setDescription("")
   }, [])
 
-  const handleGenerateQueryOpen = useCallback((e?: KeyboardEvent) => {
-    if (e) {
-      if (!(e instanceof KeyboardEvent)) {
-        return
+  const handleGenerateQueryOpen = useCallback(
+    (e?: KeyboardEvent) => {
+      if (e) {
+        if (!(e instanceof KeyboardEvent)) {
+          return
+        }
+        if (!((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G"))) {
+          return
+        }
+        e.preventDefault()
       }
-      if (!((e.metaKey || e.ctrlKey) && (e.key === 'g' || e.key === 'G'))) {
-        return
+      if (!disabled && aiAssistantSettings.apiKey) {
+        handleOpenDialog()
       }
-      e.preventDefault()
-    }
-    if (!disabled && aiAssistantSettings.apiKey) {
-      handleOpenDialog()
-    }
-  }, [disabled, aiAssistantSettings.apiKey])
+    },
+    [disabled, aiAssistantSettings.apiKey],
+  )
 
   useEffect(() => {
-    document.addEventListener('keydown', handleGenerateQueryOpen)
+    document.addEventListener("keydown", handleGenerateQueryOpen)
     return () => {
-      document.removeEventListener('keydown', handleGenerateQueryOpen)
+      document.removeEventListener("keydown", handleGenerateQueryOpen)
     }
   }, [handleGenerateQueryOpen])
 
@@ -204,7 +243,10 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     eventBus.subscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
 
     return () => {
-      eventBus.unsubscribe(EventType.GENERATE_QUERY_OPEN, handleGenerateQueryOpen)
+      eventBus.unsubscribe(
+        EventType.GENERATE_QUERY_OPEN,
+        handleGenerateQueryOpen,
+      )
     }
   }, [handleGenerateQueryOpen])
 
@@ -228,7 +270,10 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
         </KeyBinding>
       </Button>
 
-      <Dialog.Root open={showDialog} onOpenChange={(open) => !open && handleCloseDialog()}>
+      <Dialog.Root
+        open={showDialog}
+        onOpenChange={(open) => !open && handleCloseDialog()}
+      >
         <Dialog.Portal>
           <ForwardRef>
             <Overlay primitive={Dialog.Overlay} />
@@ -238,15 +283,16 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
             onEscapeKeyDown={handleCloseDialog}
             onInteractOutside={handleCloseDialog}
             style={{
-              minWidth: '60rem'
+              minWidth: "60rem",
             }}
           >
             <Dialog.Title>Generate query</Dialog.Title>
-            
+
             <StyledDialogDescription>
               <p>
-                Describe what data you want to query in natural language, and I'll generate the query for you.
-                For example: "Show me the average price by symbol for the last hour"
+                Describe what data you want to query in natural language, and
+                I&apos;ll generate the query for you. For example: &quot;Show me
+                the average price by symbol for the last hour&quot;
               </p>
 
               <StyledTextArea
@@ -255,9 +301,9 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
                 onChange={(e) => setDescription(e.target.value)}
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.ctrlKey) {
+                  if (e.key === "Enter" && e.ctrlKey) {
                     e.preventDefault()
-                    handleGenerate()
+                    void handleGenerate()
                   }
                 }}
               />
@@ -272,7 +318,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
                   Cancel
                 </StyledDialogButton>
               </Dialog.Close>
-              
+
               <StyledDialogButton
                 skin="primary"
                 onClick={handleGenerate}

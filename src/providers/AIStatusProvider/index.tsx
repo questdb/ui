@@ -1,30 +1,43 @@
-import React, { createContext, useCallback, useContext, useState, useRef, useEffect } from 'react'
-import { useEditor } from '../EditorProvider'
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+} from "react"
+import { useEditor } from "../EditorProvider"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
   if (!context) {
-    throw new Error('useAIStatus must be used within AIStatusProvider')
+    throw new Error("useAIStatus must be used within AIStatusProvider")
   }
   return context
 }
 
 export const isBlockingAIStatus = (status: AIOperationStatus | null) => {
-  return status !== undefined && status !== null && status !== AIOperationStatus.Aborted
+  return (
+    status !== undefined &&
+    status !== null &&
+    status !== AIOperationStatus.Aborted
+  )
 }
 
-const AIStatusContext = createContext<AIStatusContextType | undefined>(undefined)
+const AIStatusContext = createContext<AIStatusContextType | undefined>(
+  undefined,
+)
 
 export enum AIOperationStatus {
-  Processing = 'Processing the request',
-  RetrievingTables = 'Retrieving tables',
-  InvestigatingTableSchema = 'Investigating table schema',
-  RetrievingDocumentation = 'Retrieving docs',
-  InvestigatingFunctions = 'Investigating functions',
-  InvestigatingOperators = 'Investigating operators',
-  InvestigatingKeywords = 'Investigating keywords',
-  FormattingResponse = 'Formatting response',
-  Aborted = 'Operation has been cancelled'
+  Processing = "Processing the request",
+  RetrievingTables = "Retrieving tables",
+  InvestigatingTableSchema = "Investigating table schema",
+  RetrievingDocumentation = "Retrieving docs",
+  InvestigatingFunctions = "Investigating functions",
+  InvestigatingOperators = "Investigating operators",
+  InvestigatingKeywords = "Investigating keywords",
+  FormattingResponse = "Formatting response",
+  Aborted = "Operation has been cancelled",
 }
 
 export interface AIStatusContextType {
@@ -38,10 +51,14 @@ interface AIStatusProviderProps {
   children: React.ReactNode
 }
 
-export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({ children }) => {
+export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
+  children,
+}) => {
   const { editorRef } = useEditor()
   const [status, setStatus] = useState<AIOperationStatus | null>(null)
-  const [abortController, setAbortController] = useState<AbortController>(new AbortController())
+  const [abortController, setAbortController] = useState<AbortController>(
+    new AbortController(),
+  )
   const abortControllerRef = useRef<AbortController | null>(null)
   const statusRef = useRef<AIOperationStatus | null>(null)
 
@@ -52,7 +69,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({ children }) 
       setStatus(AIOperationStatus.Aborted)
       editorRef.current?.updateOptions({
         readOnly: false,
-        readOnlyMessage: undefined
+        readOnlyMessage: undefined,
       })
     }
   }, [status, editorRef])
@@ -74,12 +91,14 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({ children }) 
   }, [])
 
   return (
-    <AIStatusContext.Provider value={{ 
-      status, 
-      setStatus, 
-      abortController,
-      abortOperation 
-    }}>
+    <AIStatusContext.Provider
+      value={{
+        status,
+        setStatus,
+        abortController,
+        abortOperation,
+      }}
+    >
       {children}
     </AIStatusContext.Provider>
   )

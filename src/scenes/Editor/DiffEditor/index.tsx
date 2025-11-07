@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { AutoAwesome } from "@styled-icons/material"
 import { DiffEditor } from "@monaco-editor/react"
 import type { Monaco, DiffOnMount } from "@monaco-editor/react"
-import { Button, Box } from "@questdb/react-components"
+import { Button, Box } from "../../../components"
 import { useEditor } from "../../../providers"
 import { QuestDBLanguageName } from "../Monaco/utils"
 import type { editor } from "monaco-editor"
@@ -48,16 +48,17 @@ type Props = {
 }
 
 export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
-  const { activeBuffer, setActiveBuffer, updateBuffer, deleteBuffer, buffers } = useEditor()
+  const { activeBuffer, setActiveBuffer, deleteBuffer, buffers } = useEditor()
   const [diffEditor, setDiffEditor] = useState<editor.IDiffEditor | null>(null)
   const scrolledRef = useRef(false)
   const monacoRef = useRef<Monaco | null>(null)
-  
+
   if (!activeBuffer.isDiffBuffer || !activeBuffer.diffContent) {
     return null
   }
-  
-  const { original, modified, explanation, queryStartOffset, originalQuery } = activeBuffer.diffContent
+
+  const { original, modified, explanation, queryStartOffset, originalQuery } =
+    activeBuffer.diffContent
   const originalBufferId = activeBuffer.originalBufferId
 
   const destroyEditor = async (setActiveBuffer?: boolean) => {
@@ -66,11 +67,11 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
       await deleteBuffer(activeBuffer.id, setActiveBuffer ?? false)
     }
   }
-  
+
   const handleEditorDidMount: DiffOnMount = (editor, monaco) => {
     monacoRef.current = monaco
     setDiffEditor(editor)
-    
+
     editor.getOriginalEditor().updateOptions({ readOnly: true })
     editor.onDidUpdateDiff(() => {
       if (scrolledRef.current) {
@@ -80,21 +81,27 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
       const lineChange = editor.getLineChanges()?.[0]
       if (lineChange) {
         scrolledRef.current = true
-        editor.getOriginalEditor().revealLineNearTop(lineChange.originalStartLineNumber)
-        editor.getModifiedEditor().revealLineNearTop(lineChange.modifiedStartLineNumber)
+        editor
+          .getOriginalEditor()
+          .revealLineNearTop(lineChange.originalStartLineNumber)
+        editor
+          .getModifiedEditor()
+          .revealLineNearTop(lineChange.modifiedStartLineNumber)
       }
     })
 
     monaco.editor.defineTheme("dracula", dracula)
     monaco.editor.setTheme("dracula")
   }
-  
+
   const handleAccept = async () => {
     if (!diffEditor || !originalBufferId) return
-    
-    const originalBuffer = buffers.find(b => b.id === originalBufferId)
+
+    const originalBuffer = buffers.find((b) => b.id === originalBufferId)
     if (!originalBuffer || originalBuffer.archived) {
-      toast.error(`The tab has been ${originalBuffer ? "archived" : "deleted"}. Fix cannot be applied.`)
+      toast.error(
+        `The tab has been ${originalBuffer ? "archived" : "deleted"}. Fix cannot be applied.`,
+      )
       await destroyEditor(true)
       return
     }
@@ -104,28 +111,32 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
       modifiedContent,
       queryStartOffset,
       originalQuery,
-      originalBufferId
+      originalBufferId,
     }
-    
+
     await destroyEditor()
     await setActiveBuffer(originalBuffer)
   }
-  
+
   const handleReject = async () => {
     if (!originalBufferId) return
-    const originalBuffer = buffers.find(b => b.id === originalBufferId)
+    const originalBuffer = buffers.find((b) => b.id === originalBufferId)
 
     await destroyEditor()
     if (originalBuffer && !originalBuffer.archived) {
       await setActiveBuffer(originalBuffer)
     }
   }
-  
+
   return (
     <Container>
       {explanation && (
         <ExplanationBox>
-          <AutoAwesome size="16px" color="#f1fa8c" style={{ flexShrink: 0, transform: 'translateY(2px)' }} />
+          <AutoAwesome
+            size="16px"
+            color="#f1fa8c"
+            style={{ flexShrink: 0, transform: "translateY(2px)" }}
+          />
           {explanation}
         </ExplanationBox>
       )}
@@ -143,7 +154,7 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
             readOnly: false,
             originalEditable: false,
             fontSize: 14,
-            lineHeight: 24
+            lineHeight: 24,
           }}
         />
       </EditorContainer>

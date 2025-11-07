@@ -32,6 +32,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.57.0",
     "@date-fns/tz": "^1.2.0",
     "@docsearch/css": "^3.5.2",
     "@docsearch/react": "^3.5.2",
@@ -77,6 +78,7 @@
     "lodash.isequal": "^4.5.0",
     "lodash.merge": "^4.6.2",
     "monaco-editor": "^0.44.0",
+    "openai": "^5.21.0",
     "posthog-js": "^1.131.2",
     "ramda": "0.27.1",
     "react": "17.0.2",

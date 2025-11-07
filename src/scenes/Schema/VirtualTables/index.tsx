@@ -51,10 +51,13 @@ import {
   explainTableSchema,
   isAiAssistantError,
   AiAssistantAPIError,
-  TableSchemaExplanation
+  TableSchemaExplanation,
 } from "../../../utils/aiAssistant"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
-import { useAIStatus, isBlockingAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+} from "../../../providers/AIStatusProvider"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -241,7 +244,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }, [] as FlattenedTreeItem[])
   }, [schemaTree])
 
-  const getTableSchema = async (tableName: string, isMatView: boolean): Promise<string | null> => {
+  const getTableSchema = async (
+    tableName: string,
+    isMatView: boolean,
+  ): Promise<string | null> => {
     try {
       const response = isMatView
         ? await quest.showMatViewDDL(tableName)
@@ -250,8 +256,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
         return response.data[0].ddl
       }
-    } catch (error: any) {
-      toast.error(`Cannot fetch schema for ${isMatView ? 'materialized view' : 'table'} '${tableName}'`)
+    } catch (_error) {
+      toast.error(
+        `Cannot fetch schema for ${isMatView ? "materialized view" : "table"} '${tableName}'`,
+      )
     }
     return null
   }
@@ -259,14 +267,16 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
     const schema = await getTableSchema(tableName, isMatView)
     if (schema) {
-      copyToClipboard(schema)
+      await copyToClipboard(schema)
       toast.success("Schema copied to clipboard")
     }
   }
 
   const handleExplainSchema = async (tableName: string, isMatView: boolean) => {
     if (!aiAssistantSettings.apiKey) {
-      toast.error("AI Assistant is not enabled. Please configure your API key in settings.")
+      toast.error(
+        "AI Assistant is not enabled. Please configure your API key in settings.",
+      )
       return
     }
 
@@ -291,14 +301,16 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
     const result = response as TableSchemaExplanation
     if (!result.explanation) {
-      toast.error("No explanation received from AI Assistant", { autoClose: 10000 })
+      toast.error("No explanation received from AI Assistant", {
+        autoClose: 10000,
+      })
       return
     }
 
     setSchemaExplanationDialog({
       tableName,
       isMatView,
-      explanation: result
+      explanation: result,
     })
   }
 
@@ -621,7 +633,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 <MenuItem
                   data-hook="table-context-menu-explain-schema"
                   onClick={async () =>
-                    await handleExplainSchema(item.name, item.kind === "matview")
+                    await handleExplainSchema(
+                      item.name,
+                      item.kind === "matview",
+                    )
                   }
                   icon={<AutoAwesome size={16} />}
                   disabled={
@@ -775,7 +790,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   return (
     <>
-      <div ref={wrapperRef} style={{ height: '100%' }}>
+      <div ref={wrapperRef} style={{ height: "100%" }}>
         <Virtuoso
           totalCount={flattenedItems.length}
           ref={virtuosoRef}
@@ -785,12 +800,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           }}
           data={flattenedItems}
           itemContent={(index) => renderRow(index)}
-          style={{ height: '100%' }}
+          style={{ height: "100%" }}
         />
       </div>
       {schemaExplanationDialog && (
         <SchemaExplanationDialog
-          open={true}
+          open
           onOpenChange={(open) => !open && setSchemaExplanationDialog(null)}
           tableName={schemaExplanationDialog.tableName}
           explanation={schemaExplanationDialog.explanation}

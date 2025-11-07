@@ -14,8 +14,6 @@ import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import type { ExecutionInfo, ExecutionRefs, PendingFix } from "../../Editor"
-import { PaneContent, Text } from "../../../components"
-import type { ExecutionInfo, ExecutionRefs } from "../../Editor"
 import {
   Box,
   Button,
@@ -161,7 +159,7 @@ const Content = styled(PaneContent)`
     }
   }
 
-  div[widgetid="fix-query-buttons"] { 
+  div[widgetid="fix-query-buttons"] {
     display: inline-flex !important;
     width: 30rem;
     gap: 1rem !important;
@@ -327,7 +325,7 @@ const MonacoEditor = ({
       return
     }
     currentBufferValueRef.current = value
-    updateBuffer(activeBuffer.id as number, { value })
+    void updateBuffer(activeBuffer.id as number, { value })
   }
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
@@ -999,28 +997,40 @@ const MonacoEditor = ({
       }, 200)
     })
 
-    if (pendingFixRef.current && pendingFixRef.current.originalBufferId === activeBuffer.id) {
-      const { modifiedContent, queryStartOffset, originalQuery } = pendingFixRef.current
+    if (
+      pendingFixRef.current &&
+      pendingFixRef.current.originalBufferId === activeBuffer.id
+    ) {
+      const { modifiedContent, queryStartOffset, originalQuery } =
+        pendingFixRef.current
       const model = editor.getModel()
       if (!model) return
-      const isValid = model.getValue().slice(queryStartOffset, queryStartOffset + originalQuery.length) === originalQuery
+      const isValid =
+        model
+          .getValue()
+          .slice(queryStartOffset, queryStartOffset + originalQuery.length) ===
+        originalQuery
 
       if (isValid) {
         const model = editor.getModel()
         if (model) {
           const startPosition = model.getPositionAt(queryStartOffset)
-          const endPosition = model.getPositionAt(queryStartOffset + originalQuery.length)
+          const endPosition = model.getPositionAt(
+            queryStartOffset + originalQuery.length,
+          )
 
-          editor.executeEdits('fix-query', [{
-            range: {
-              startLineNumber: startPosition.lineNumber,
-              startColumn: startPosition.column,
-              endLineNumber: endPosition.lineNumber,
-              endColumn: endPosition.column
+          editor.executeEdits("fix-query", [
+            {
+              range: {
+                startLineNumber: startPosition.lineNumber,
+                startColumn: startPosition.column,
+                endLineNumber: endPosition.lineNumber,
+                endColumn: endPosition.column,
+              },
+              text: modifiedContent,
+              forceMoveMarkers: true,
             },
-            text: modifiedContent,
-            forceMoveMarkers: true
-          }])
+          ])
           handleBufferContentChange(model.getValue())
           editor.revealPositionInCenter(startPosition)
         }
@@ -1836,7 +1846,7 @@ const MonacoEditor = ({
               selectOnLineNumbers: false,
               scrollBeyondLastLine: false,
               tabSize: 2,
-              lineNumbersMinChars: lineNumbersMinChars,
+              lineNumbersMinChars,
             }}
             theme="vs-dark"
           />

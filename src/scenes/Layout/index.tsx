@@ -103,28 +103,28 @@ const Layout = () => {
     <SearchProvider>
       <EditorProvider>
         <AIStatusProvider>
-        <TopBar />
-        <Warnings />
-        <Root>
-          <Main sideOpened={activeSidebar !== undefined}>
-            <ImageZoom />
-            <Page>
-              <Console />
-            </Page>
-          </Main>
+          <TopBar />
+          <Warnings />
+          <Root>
+            <Main sideOpened={activeSidebar !== undefined}>
+              <ImageZoom />
+              <Page>
+                <Console />
+              </Page>
+            </Main>
 
-          <Drawer id="side-panel-right" />
+            <Drawer id="side-panel-right" />
 
-          <Sidebar align="top">
-            <Help />
+            <Sidebar align="top">
+              <Help />
 
-            <News />
+              <News />
 
-            <CreateTableDialog />
-          </Sidebar>
-        </Root>
+              <CreateTableDialog />
+            </Sidebar>
+          </Root>
 
-        <SideMenu />
+          <SideMenu />
 
           <Footer />
         </AIStatusProvider>

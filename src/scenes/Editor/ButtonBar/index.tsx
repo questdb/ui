@@ -11,14 +11,18 @@ import {
   ExplainQueryButton,
   GenerateSQLButton,
   PopperToggle,
-  spinAnimation
+  spinAnimation,
 } from "../../../components"
-import { FixQueryButton} from "./FixQueryButton";
+import { FixQueryButton } from "./FixQueryButton"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
-import { useAIStatus, AIOperationStatus, isBlockingAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  AIOperationStatus,
+  isBlockingAIStatus,
+} from "../../../providers/AIStatusProvider"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
@@ -28,60 +32,74 @@ type ButtonBarProps = {
   onBufferContentChange?: (value?: string) => void
 }
 
-const ButtonBarWrapper = styled.div<{ $searchWidgetType: "find" | "replace" | null, $aiAssistantEnabled: boolean }>`
-  ${({ $aiAssistantEnabled, $searchWidgetType }) => !$aiAssistantEnabled ? css`
-    position: absolute;
-    top: ${$searchWidgetType === "replace" ? '8.2rem' : $searchWidgetType === "find" ? '5.3rem' : '1rem'};
-    right: 2.4rem;
-    z-index: 1;
-    transition: top .1s linear;
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-  ` : css`
-    padding: 1rem 0;
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    margin: 0 2.4rem;
-  `}
+const ButtonBarWrapper = styled.div<{
+  $searchWidgetType: "find" | "replace" | null
+  $aiAssistantEnabled: boolean
+}>`
+  ${({ $aiAssistantEnabled, $searchWidgetType }) =>
+    !$aiAssistantEnabled
+      ? css`
+          position: absolute;
+          top: ${$searchWidgetType === "replace"
+            ? "8.2rem"
+            : $searchWidgetType === "find"
+              ? "5.3rem"
+              : "1rem"};
+          right: 2.4rem;
+          z-index: 1;
+          transition: top 0.1s linear;
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+        `
+      : css`
+          padding: 1rem 0;
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+          margin: 0 2.4rem;
+        `}
 `
 
-const StatusIndicator = styled.div<{ $aborted: boolean, $loading: boolean }>`
+const StatusIndicator = styled.div<{ $aborted: boolean; $loading: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
   color: ${color("gray2")};
-  ${({ $aborted }) => $aborted && css`
-    color: ${color("red")};
-  `}
-  
-  ${({ $loading }) => $loading && css`
-    @keyframes slide {
-      0% { 
-        background-position: 200% center;
+  ${({ $aborted }) =>
+    $aborted &&
+    css`
+      color: ${color("red")};
+    `}
+
+  ${({ $loading }) =>
+    $loading &&
+    css`
+      @keyframes slide {
+        0% {
+          background-position: 200% center;
+        }
+        100% {
+          background-position: -200% center;
+        }
       }
-      100% { 
-        background-position: -200% center;
-      }
-    }
-    
-    background: linear-gradient(
-      90deg,
-      ${color("gray2")} 0%,
-      ${color("gray2")} 40%,
-      ${color("white")} 50%,
-      ${color("gray2")} 60%,
-      ${color("gray2")} 100%
-    );
-    background-size: 200% auto;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-fill-color: transparent;
-    animation: slide 3s linear infinite;
-  `}
-`;
+
+      background: linear-gradient(
+        90deg,
+        ${color("gray2")} 0%,
+        ${color("gray2")} 40%,
+        ${color("white")} 50%,
+        ${color("gray2")} 60%,
+        ${color("gray2")} 100%
+      );
+      background-size: 200% auto;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-fill-color: transparent;
+      animation: slide 3s linear infinite;
+    `}
+`
 
 const StatusLoader = styled(Loader3)`
   width: 2rem;
@@ -238,13 +256,12 @@ const ButtonBar = ({
   const { aiAssistantSettings } = useLocalStorage()
   const { status: aiStatus } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
-  const [searchWidgetType, setSearchWidgetType] = useState<
-    "find" | "replace" | null
-  >(null)
   const observerRef = useRef<MutationObserver | null>(null)
-  const aiAssistantEnabled = !!aiAssistantSettings.apiKey && !!aiAssistantSettings.model
+  const aiAssistantEnabled =
+    !!aiAssistantSettings.apiKey && !!aiAssistantSettings.model
 
-  const hasQueryError = activeNotification?.type === 'error' && !activeNotification?.isExplain
+  const hasQueryError =
+    activeNotification?.type === "error" && !activeNotification?.isExplain
   const [searchWidgetType, setSearchWidgetType] = useState<
     "find" | "replace" | null
   >(null)
@@ -434,13 +451,12 @@ const ButtonBar = ({
   }
 
   return (
-    <ButtonBarWrapper $searchWidgetType={searchWidgetType} $aiAssistantEnabled={aiAssistantEnabled}>
-      <GenerateSQLButton
-        onBufferContentChange={onBufferContentChange}
-      />
-      <ExplainQueryButton
-          onBufferContentChange={onBufferContentChange}
-        />
+    <ButtonBarWrapper
+      $searchWidgetType={searchWidgetType}
+      $aiAssistantEnabled={aiAssistantEnabled}
+    >
+      <GenerateSQLButton onBufferContentChange={onBufferContentChange} />
+      <ExplainQueryButton onBufferContentChange={onBufferContentChange} />
       {hasQueryError && queriesToRun.length === 1 && (
         <FixQueryButton
           executionRefs={executionRefs}
@@ -448,18 +464,23 @@ const ButtonBar = ({
         />
       )}
       {aiStatus && (
-        <StatusIndicator $aborted={aiStatus === AIOperationStatus.Aborted} $loading={isBlockingAIStatus(aiStatus)}>
-          {aiStatus === AIOperationStatus.Aborted ? <CloseOutline size="18px" /> : <StatusLoader />}
+        <StatusIndicator
+          $aborted={aiStatus === AIOperationStatus.Aborted}
+          $loading={isBlockingAIStatus(aiStatus)}
+        >
+          {aiStatus === AIOperationStatus.Aborted ? (
+            <CloseOutline size="18px" />
+          ) : (
+            <StatusLoader />
+          )}
           {aiStatus}
         </StatusIndicator>
       )}
       {running === RunningType.SCRIPT
         ? renderRunScriptButton()
-        : renderRunQueryButton()
-      }
+        : renderRunQueryButton()}
     </ButtonBarWrapper>
   )
 }
 
 export default ButtonBar
-

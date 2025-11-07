@@ -1,7 +1,7 @@
-export type DocCategory = 'functions' | 'operators' | 'sql'
+export type DocCategory = "functions" | "operators" | "sql"
 
 // Base URL for documentation
-const DOCS_BASE_URL = ' https://questdb.com/docs'
+const DOCS_BASE_URL = " https://questdb.com/docs"
 
 // Interface for metadata (no content, includes url)
 export interface DocFileMetadata {
@@ -19,7 +19,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.statusText}`)
   }
-  return response.json()
+  return response.json() as T
 }
 
 /**
@@ -40,19 +40,19 @@ export async function getQuestDBTableOfContents(): Promise<string> {
   const tocUrl = `${DOCS_BASE_URL}/web-console/toc-list.json`
   const toc = await fetchJson<Record<DocCategory, string[]>>(tocUrl)
 
-  let result = '# QuestDB Documentation Table of Contents\n\n'
+  let result = "# QuestDB Documentation Table of Contents\n\n"
 
   // Functions
-  result += '## Functions\n'
-  result += toc.functions.join(', ') + '\n\n'
+  result += "## Functions\n"
+  result += toc.functions.join(", ") + "\n\n"
 
   // Operators
-  result += '## Operators\n'
-  result += toc.operators.join(', ') + '\n\n'
+  result += "## Operators\n"
+  result += toc.operators.join(", ") + "\n\n"
 
   // SQL Keywords
-  result += '## SQL Syntax & Keywords\n'
-  result += toc.sql.join(', ') + '\n'
+  result += "## SQL Syntax & Keywords\n"
+  result += toc.sql.join(", ") + "\n"
 
   return result
 }
@@ -60,7 +60,10 @@ export async function getQuestDBTableOfContents(): Promise<string> {
 /**
  * Get documentation for specific items
  */
-export async function getSpecificDocumentation(category: DocCategory, items: string[]): Promise<string> {
+export async function getSpecificDocumentation(
+  category: DocCategory,
+  items: string[],
+): Promise<string> {
   // Fetch metadata for this category
   const metadataUrl = `${DOCS_BASE_URL}/web-console/${category}-docs.json`
   const categoryDocs = await fetchJson<DocFileMetadata[]>(metadataUrl)
@@ -73,29 +76,45 @@ export async function getSpecificDocumentation(category: DocCategory, items: str
   const processedPaths = new Set<string>()
 
   for (const item of items) {
-    const normalizedItem = item.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    const normalizedItem = item.toLowerCase().replace(/[^a-z0-9_]/g, "_")
     const parts = item.split(/\s+-\s+/)
     const hasTitleAndSection = parts.length >= 2
     const queryTitle = hasTitleAndSection ? parts[0].trim() : null
-    const querySection = hasTitleAndSection ? parts.slice(1).join(' - ').trim() : null
+    const querySection = hasTitleAndSection
+      ? parts.slice(1).join(" - ").trim()
+      : null
 
     // Find files containing this item
     for (const file of categoryDocs) {
       // Handle explicit "Title - Section" lookups
       if (hasTitleAndSection && queryTitle && querySection) {
         if (file.title.toLowerCase() === queryTitle.toLowerCase()) {
-          const matchingHeaderFromTitleSection = file.headers.find(h =>
-            h.toLowerCase() === querySection.toLowerCase() ||
-            h.toLowerCase().replace(/[^a-z0-9_]/g, '_') === querySection.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+          const matchingHeaderFromTitleSection = file.headers.find(
+            (h) =>
+              h.toLowerCase() === querySection.toLowerCase() ||
+              h.toLowerCase().replace(/[^a-z0-9_]/g, "_") ===
+                querySection.toLowerCase().replace(/[^a-z0-9_]/g, "_"),
           )
-          if (matchingHeaderFromTitleSection && !processedPaths.has(`${file.path}::${matchingHeaderFromTitleSection}`)) {
-            processedPaths.add(`${file.path}::${matchingHeaderFromTitleSection}`)
+          if (
+            matchingHeaderFromTitleSection &&
+            !processedPaths.has(
+              `${file.path}::${matchingHeaderFromTitleSection}`,
+            )
+          ) {
+            processedPaths.add(
+              `${file.path}::${matchingHeaderFromTitleSection}`,
+            )
 
             // Fetch the markdown content
             const content = await fetchMarkdown(file.url)
-            const sectionContent = extractSection(content, matchingHeaderFromTitleSection)
+            const sectionContent = extractSection(
+              content,
+              matchingHeaderFromTitleSection,
+            )
             if (sectionContent) {
-              chunks.push(`### ${file.path} - ${matchingHeaderFromTitleSection}\n\n${sectionContent}`)
+              chunks.push(
+                `### ${file.path} - ${matchingHeaderFromTitleSection}\n\n${sectionContent}`,
+              )
               continue
             }
           }
@@ -103,37 +122,50 @@ export async function getSpecificDocumentation(category: DocCategory, items: str
       }
 
       // Check if file name matches
-      const fileKey = file.path.split('/').pop()?.replace('.md', '').replace(/-/g, '_')
+      const fileKey = file.path
+        .split("/")
+        .pop()
+        ?.replace(".md", "")
+        .replace(/-/g, "_")
       const hasItemInPath = fileKey === normalizedItem
 
       // Check if title matches
-      const normalizedTitle = file.title.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+      const normalizedTitle = file.title
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_")
       const hasItemInTitle =
         normalizedTitle === normalizedItem ||
         file.title.toLowerCase() === item.toLowerCase()
 
       // Check if any header matches
-      const hasItemInHeaders = file.headers.some(h =>
-        h.toLowerCase().replace(/[^a-z0-9_]/g, '_') === normalizedItem ||
-        h.toLowerCase() === item.toLowerCase()
+      const hasItemInHeaders = file.headers.some(
+        (h) =>
+          h.toLowerCase().replace(/[^a-z0-9_]/g, "_") === normalizedItem ||
+          h.toLowerCase() === item.toLowerCase(),
       )
 
-      if ((hasItemInPath || hasItemInTitle || hasItemInHeaders) && !processedPaths.has(file.path)) {
+      if (
+        (hasItemInPath || hasItemInTitle || hasItemInHeaders) &&
+        !processedPaths.has(file.path)
+      ) {
         processedPaths.add(file.path)
 
         // Fetch the markdown content
         const content = await fetchMarkdown(file.url)
 
         // If looking for a specific function/operator, try to extract just that section
-        const matchingHeader = file.headers.find(h =>
-          h.toLowerCase() === item.toLowerCase() ||
-          h.toLowerCase().replace(/[^a-z0-9_]/g, '_') === normalizedItem
+        const matchingHeader = file.headers.find(
+          (h) =>
+            h.toLowerCase() === item.toLowerCase() ||
+            h.toLowerCase().replace(/[^a-z0-9_]/g, "_") === normalizedItem,
         )
 
         if (matchingHeader) {
           const sectionContent = extractSection(content, matchingHeader)
           if (sectionContent) {
-            chunks.push(`### ${file.path} - ${matchingHeader}\n\n${sectionContent}`)
+            chunks.push(
+              `### ${file.path} - ${matchingHeader}\n\n${sectionContent}`,
+            )
             continue
           }
         }
@@ -145,17 +177,17 @@ export async function getSpecificDocumentation(category: DocCategory, items: str
   }
 
   if (chunks.length === 0) {
-    return `No documentation found for: ${items.join(', ')}`
+    return `No documentation found for: ${items.join(", ")}`
   }
 
-  return chunks.join('\n\n---\n\n')
+  return chunks.join("\n\n---\n\n")
 }
 
 /**
  * Extract a specific section from markdown content
  */
 function extractSection(content: string, sectionHeader: string): string | null {
-  const lines = content.split('\n')
+  const lines = content.split("\n")
   let inSection = false
   const sectionContent: string[] = []
 
@@ -175,7 +207,7 @@ function extractSection(content: string, sectionHeader: string): string | null {
     }
   }
 
-  return sectionContent.length > 0 ? sectionContent.join('\n') : null
+  return sectionContent.length > 0 ? sectionContent.join("\n") : null
 }
 
 /**
@@ -186,7 +218,7 @@ export async function searchDocumentation(query: string): Promise<string> {
   const results: string[] = []
 
   // Search in all categories
-  const categories: DocCategory[] = ['functions', 'operators', 'sql']
+  const categories: DocCategory[] = ["functions", "operators", "sql"]
 
   for (const category of categories) {
     const metadataUrl = `${DOCS_BASE_URL}/web-console/${category}-docs.json`
@@ -211,11 +243,10 @@ export async function searchDocumentation(query: string): Promise<string> {
     return `No results found for: ${query}`
   }
 
-  return `Found ${results.length} results:\n${results.join('\n')}`
+  return `Found ${results.length} results:\n${results.join("\n")}`
 }
 
 export async function getReferenceFull(): Promise<string> {
-  console.log('getReferenceFull', DOCS_BASE_URL)
   const url = `${DOCS_BASE_URL}/reference-full.md`
   return fetchMarkdown(url)
 }

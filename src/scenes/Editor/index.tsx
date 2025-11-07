@@ -104,8 +104,12 @@ const Editor = ({
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
-      {activeBuffer.isDiffBuffer && <DiffEditorComponent pendingFixRef={pendingFixRef} />}
-      {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && <Monaco executionRefs={executionRefs} pendingFixRef={pendingFixRef} />}
+      {activeBuffer.isDiffBuffer && (
+        <DiffEditorComponent pendingFixRef={pendingFixRef} />
+      )}
+      {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && (
+        <Monaco executionRefs={executionRefs} pendingFixRef={pendingFixRef} />
+      )}
       {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
       {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && (
         <Notifications onClearNotifications={handleClearNotifications} />

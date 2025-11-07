@@ -145,23 +145,27 @@ export const registerEditorActions = ({
     }),
   )
 
-  actions.push(editor.addAction({
-    id: Command.GENERATE_QUERY,
-    label: "Generate query",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG],
-    run: () => {
-      eventBus.publish(EventType.GENERATE_QUERY_OPEN)
-    },
-  }))
+  actions.push(
+    editor.addAction({
+      id: Command.GENERATE_QUERY,
+      label: "Generate query",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG],
+      run: () => {
+        eventBus.publish(EventType.GENERATE_QUERY_OPEN)
+      },
+    }),
+  )
 
-  actions.push(editor.addAction({
-    id: Command.EXPLAIN_QUERY,
-    label: "Explain query",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
-    run: () => {
-      eventBus.publish(EventType.EXPLAIN_QUERY_EXEC)
-    },
-  }))
+  actions.push(
+    editor.addAction({
+      id: Command.EXPLAIN_QUERY,
+      label: "Explain query",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
+      run: () => {
+        eventBus.publish(EventType.EXPLAIN_QUERY_EXEC)
+      },
+    }),
+  )
 
   return () => {
     actions.forEach((action) => {

@@ -346,7 +346,10 @@ export const EditorProvider: React.FC = ({ children }) => {
     })
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (id, setActiveBuffer = true) => {
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (
+    id,
+    setActiveBuffer = true,
+  ) => {
     await bufferStore.delete(id)
     if (setActiveBuffer) {
       await setActiveBufferOnRemoved(id)

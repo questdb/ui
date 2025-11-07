@@ -7,7 +7,7 @@ import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
 import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { Tools, ShieldCheck } from "@styled-icons/bootstrap"
 import { Flask } from "@styled-icons/boxicons-solid"
-import { toast } from '../Toast'
+import { toast } from "../Toast"
 import { Box, Button } from "../../components"
 import { Text } from "../Text"
 import { selectors } from "../../store"
