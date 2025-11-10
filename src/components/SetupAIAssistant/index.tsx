@@ -8,7 +8,6 @@ import { Select } from "../Select"
 import { Checkbox } from "../Checkbox"
 import { Edit } from "@styled-icons/remix-line"
 import { InfoCircle } from "@styled-icons/boxicons-regular"
-import { AutoAwesome } from "@styled-icons/material"
 import { Tooltip } from "../Tooltip"
 import { Text } from "../Text"
 import { PopperToggle } from "../PopperToggle"
@@ -20,6 +19,7 @@ import {
 import { testApiKey } from "../../utils/aiAssistant"
 import { PopperHover } from "../PopperHover"
 import { StoreKey } from "../../utils/localStorage/types"
+import { AIAssistantPromo } from "./AIAssistantPromo"
 
 const Wrapper = styled.div`
   margin-top: 0.5rem;
@@ -195,25 +195,43 @@ const providerForModel = (
 
 export const SetupAIAssistant = () => {
   const [active, setActive] = useState(false)
+  const configureButtonRef = useRef<HTMLElement>(null)
 
   return (
-    <PopperToggle
-      active={active}
-      onToggle={setActive}
-      trigger={
-        <SettingsButton
-          skin="secondary"
-          prefixIcon={<AutoAwesome size="16px" color="#f1fa8c" />}
-          data-hook="anthropic-api-settings-button"
-          title="Anthropic API Settings"
+    <>
+      <div ref={configureButtonRef as React.RefObject<HTMLDivElement>}>
+        <PopperToggle
+          active={active}
+          onToggle={setActive}
+          trigger={
+            <SettingsButton
+              skin="gradient"
+              gradientStyle="vertical"
+              gradientWeight="thick"
+              prefixIcon={
+                <img
+                  src="../../assets/ai-sparkle-hollow.svg"
+                  width="16px"
+                  height="16px"
+                  alt="AI Sparkle Hollow"
+                />
+              }
+              data-hook="anthropic-api-settings-button"
+              title="Anthropic API Settings"
+            >
+              Configure
+            </SettingsButton>
+          }
+          placement="bottom-start"
         >
-          Set up AI Assistant
-        </SettingsButton>
-      }
-      placement="bottom-start"
-    >
-      <AIAssistantSettings setActive={setActive} />
-    </PopperToggle>
+          <AIAssistantSettings setActive={setActive} />
+        </PopperToggle>
+      </div>
+      <AIAssistantPromo
+        triggerRef={configureButtonRef}
+        onSetupClick={() => setActive(true)}
+      />
+    </>
   )
 }
 
@@ -461,6 +479,9 @@ const AIAssistantSettings = ({
               disabled={!inputValue || isValidating || !dirty}
               prefixIcon={isValidating ? <Loader size="14px" /> : undefined}
               data-hook="anthropic-api-save-button"
+              skin="gradient"
+              gradientWeight="thick"
+              gradientStyle="vertical"
             >
               {isValidating ? "Validating..." : "Save"}
             </StyledButton>

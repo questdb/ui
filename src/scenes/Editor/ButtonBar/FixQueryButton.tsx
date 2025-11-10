@@ -1,5 +1,4 @@
 import React, { useContext, MutableRefObject } from "react"
-import styled, { css, keyframes } from "styled-components"
 import { Button } from "../../../components"
 import { useSelector } from "react-redux"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
@@ -28,26 +27,6 @@ import {
 } from "../../../providers/AIStatusProvider"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
-
-const pulse = keyframes`
-  0% {
-    box-shadow: 0 0 0 0 #50fa7b;
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(255, 85, 85, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 85, 85, 0);
-  }
-`
-
-const StyledFixButton = styled(Button)<{ $pulse?: boolean }>`
-  ${({ $pulse }) =>
-    $pulse &&
-    css`
-      animation: ${pulse} 1s 2;
-    `}
-`
 
 const extractError = (
   queryToFix: Request,
@@ -272,15 +251,15 @@ export const FixQueryButton = ({
   }
 
   return (
-    <StyledFixButton
-      skin="success"
+    <Button
+      skin="gradient"
+      gradientWeight="thin"
       onClick={handleFixQuery}
       disabled={running !== RunningType.NONE || isBlockingAIStatus(aiStatus)}
       title="Fix query with AI Assistant"
       data-hook="button-fix-query"
-      $pulse={!isBlockingAIStatus(aiStatus)}
     >
       Fix query with AI
-    </StyledFixButton>
+    </Button>
   )
 }

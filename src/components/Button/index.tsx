@@ -1,16 +1,40 @@
 import React, { MouseEvent, ReactNode } from "react"
 import styled, { css } from "styled-components"
+import type { DefaultTheme } from "styled-components"
 import type { FontSize } from "../../types"
 import type { Skin } from "./skin"
 import { makeSkin } from "./skin"
+import {
+  pinkLinearGradientHorizontal,
+  pinkLinearGradientVertical,
+} from "../../theme"
 
 export const sizes = ["sm", "md", "lg"] as const
 export type Size = (typeof sizes)[number]
 type Type = "button" | "submit"
 
-export type ButtonProps = {
+const getPinkGradient = (props: ButtonProps & { theme: DefaultTheme }) =>
+  props.gradientStyle === "vertical"
+    ? pinkLinearGradientVertical
+    : pinkLinearGradientHorizontal
+
+const getHoverPinkGradient = (props: ButtonProps & { theme: DefaultTheme }) => {
+  const base = getPinkGradient(props)
+  return base.includes("180deg")
+    ? base.replace("180deg", "0deg")
+    : base.replace("90deg", "270deg")
+}
+
+const getBorderWidth = (props: ButtonProps) =>
+  "gradientWeight" in props && props.gradientWeight === "thick" ? "2px" : "1px"
+
+const getFillColor = (props: ButtonProps & { theme: DefaultTheme }) =>
+  "gradientWeight" in props && props.gradientWeight === "thick"
+    ? props.theme.color.selectionDarker
+    : props.theme.color.midnight
+
+type BaseButtonProps = {
   as?: React.ElementType
-  skin?: Skin
   children?: ReactNode
   className?: string
   disabled?: boolean
@@ -23,6 +47,21 @@ export type ButtonProps = {
   prefixIcon?: React.ReactNode
   dataHook?: string
 }
+
+type GradientOnlyProps = {
+  skin: "gradient"
+  gradientWeight?: "thin" | "thick"
+  gradientStyle?: "horizontal" | "vertical"
+}
+
+type NonGradientProps = {
+  skin?: Exclude<Skin, "gradient">
+  gradientWeight?: never
+  gradientStyle?: never
+}
+
+export type ButtonProps = BaseButtonProps &
+  (GradientOnlyProps | NonGradientProps)
 
 const Prefix = styled.div<{ disabled?: boolean }>`
   display: inline-flex;
@@ -87,6 +126,29 @@ const StyledButton = styled.div<ButtonProps>`
   `}
 
   ${(props) => makeSkin(props.skin ?? "primary")}
+
+  ${(props) =>
+    props.skin === "gradient" &&
+    css`
+      border: ${getBorderWidth} solid transparent;
+      background:
+        linear-gradient(${getFillColor}, ${getFillColor}) padding-box,
+        ${getPinkGradient} border-box;
+      color: ${props.theme.color.white};
+
+      &:hover:not([disabled]) {
+        background:
+          linear-gradient(${getFillColor}, ${getFillColor}) padding-box,
+          ${getHoverPinkGradient} border-box;
+        filter: brightness(120%);
+      }
+
+      &:disabled {
+        border: ${getBorderWidth(props)} solid ${props.theme.color.gray1};
+        background: ${props.theme.color.selection};
+        color: ${props.theme.color.gray1};
+      }
+    `}
 `
 
 function getSize({ size }: { size?: Size }) {

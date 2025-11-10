@@ -46,6 +46,7 @@ const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
 }>`
   margin-left: 1rem;
+  color: ${({ theme }) => theme.color.pinkPrimary};
   ${({ $disabled, theme }) =>
     $disabled &&
     css`
@@ -257,7 +258,8 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
   return (
     <>
       <Button
-        skin="success"
+        skin="gradient"
+        gradientWeight="thin"
         onClick={() => handleGenerateQueryOpen()}
         disabled={disabled}
         title={`Generate query with AI Assistant (${shortcutTitle})`}

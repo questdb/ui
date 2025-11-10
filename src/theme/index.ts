@@ -38,6 +38,7 @@ const color: ColorShape = {
   foreground: "#f8f8f2",
   selection: "#44475a",
   selectionDarker: "#333544",
+  midnight: "#141725",
   comment: "#6272a4",
   red: "#ff5555",
   redDark: "#5a1d1d",
@@ -84,5 +85,10 @@ export const theme: DefaultThemeShape = {
   fontSize,
   borderRadius: "0.8rem",
 }
+
+export const pinkLinearGradientHorizontal =
+  "linear-gradient(90deg, #D14671 0%, #892C6C 100%)"
+export const pinkLinearGradientVertical =
+  "linear-gradient(180deg, #D14671 0%, #892C6C 100%)"
 
 export type ThemeShape = typeof theme
