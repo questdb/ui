@@ -34,7 +34,7 @@ const color: ColorShape = {
   gray2: "#bbbbbb",
   backgroundDarker: "#21222c",
   backgroundLighter: "#282a36",
-  background: "#21222c",
+  background: "#2d303e",
   foreground: "#f8f8f2",
   selection: "#44475a",
   selectionDarker: "#333544",

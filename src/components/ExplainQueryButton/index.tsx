@@ -3,7 +3,6 @@ import styled, { css } from "styled-components"
 import { Button, Box } from "../../components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
 import type {
   AiAssistantAPIError,
@@ -14,7 +13,9 @@ import {
   formatExplanationAsComment,
   createSchemaClient,
   isAiAssistantError,
+  type ActiveProviderSettings,
 } from "../../utils/aiAssistant"
+import { providerForModel } from "../../utils/aiAssistantSettings"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
@@ -61,13 +62,20 @@ const shortcutTitle =
   platform.isMacintosh || platform.isIOS ? "Cmd+E" : "Ctrl+E"
 
 export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
-  const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
   const { editorRef } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
-  const { status: aiStatus, setStatus, abortController } = useAIStatus()
+  const {
+    status: aiStatus,
+    setStatus,
+    abortController,
+    canUse,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+  } = useAIStatus()
   const highlightDecorationsRef = useRef<string[]>([])
   const disabled =
     running !== RunningType.NONE ||
@@ -77,8 +85,12 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
 
   const handleExplainQuery = useCallback(async () => {
     if (!editorRef.current || disabled) return
-    const model = editorRef.current.getModel()
-    if (!model) return
+    const editorModel = editorRef.current.getModel()
+    if (!editorModel) return
+    if (!canUse) {
+      toast.error("No model selected for AI Assistant")
+      return
+    }
 
     editorRef.current?.updateOptions({
       readOnly: true,
@@ -86,12 +98,20 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
         value: "Query explanation in progress",
       },
     })
-    const schemaClient = aiAssistantSettings.grantSchemaAccess
+    const schemaClient = hasSchemaAccess
       ? createSchemaClient(tables, quest)
       : undefined
+    const provider = providerForModel(currentModel)
+
+    const settings: ActiveProviderSettings = {
+      model: currentModel,
+      provider,
+      apiKey,
+    }
+
     const response = await explainQuery({
       query: queriesToRun[0],
-      settings: aiAssistantSettings,
+      settings,
       schemaClient,
       setStatus,
       abortSignal: abortController?.signal,
@@ -125,7 +145,8 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     const isSelection = !!queriesToRun[0].selection
 
     const queryStartLine = isSelection
-      ? model.getPositionAt(queriesToRun[0].selection!.startOffset).lineNumber
+      ? editorModel.getPositionAt(queriesToRun[0].selection!.startOffset)
+          .lineNumber
       : queriesToRun[0].row + 1
 
     const insertText = commentBlock + "\n"
@@ -185,11 +206,14 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     disabled,
     onBufferContentChange,
     queriesToRun,
-    aiAssistantSettings,
     tables,
     quest,
     setStatus,
     abortController,
+    canUse,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
   ])
 
   const handleKeyDown = useCallback(
@@ -213,7 +237,7 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     }
   }, [handleExplainQuery])
 
-  if (!aiAssistantSettings.apiKey) {
+  if (!canUse) {
     return null
   }
 

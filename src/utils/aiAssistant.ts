@@ -2,9 +2,8 @@ import Anthropic from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 import { Client } from "./questdb/client"
 import { Type } from "./questdb/types"
-import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
-import { MODEL_OPTIONS } from "../components/SetupAIAssistant"
-import type { ModelOption } from "../components/SetupAIAssistant"
+import { MODEL_OPTIONS } from "./aiAssistantSettings"
+import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
 import type { Request } from "../scenes/Editor/Monaco/utils"
 import { AIOperationStatus } from "../providers/AIStatusProvider"
@@ -19,6 +18,12 @@ import type {
   ResponseTextConfig,
 } from "openai/resources/responses/responses"
 import type { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/messages"
+
+export type ActiveProviderSettings = {
+  model: string
+  provider: Provider
+  apiKey: string
+}
 
 export interface AiAssistantAPIError {
   type: "rate_limit" | "invalid_key" | "network" | "unknown" | "aborted"
@@ -145,7 +150,7 @@ const ExplainTableSchemaFormat: ResponseTextConfig = {
   },
 }
 
-const inferProviderFromModel = (model: string): "anthropic" | "openai" => {
+const inferProviderFromModel = (model: string): Provider => {
   const found: ModelOption | undefined = MODEL_OPTIONS.find(
     (m) => m.value === model,
   )
@@ -154,12 +159,15 @@ const inferProviderFromModel = (model: string): "anthropic" | "openai" => {
 }
 
 const createProviderClients = (
-  settings: AiAssistantSettings,
+  settings: ActiveProviderSettings,
 ): ProviderClients => {
-  const provider = inferProviderFromModel(settings.model)
-  if (provider === "openai") {
+  if (!settings.apiKey) {
+    throw new Error(`No API key found for ${settings.provider}`)
+  }
+
+  if (settings.provider === "openai") {
     return {
-      provider,
+      provider: settings.provider,
       openai: new OpenAI({
         apiKey: settings.apiKey,
         dangerouslyAllowBrowser: true,
@@ -167,7 +175,7 @@ const createProviderClients = (
     }
   }
   return {
-    provider,
+    provider: settings.provider,
     anthropic: new Anthropic({
       apiKey: settings.apiKey,
       dangerouslyAllowBrowser: true,
@@ -695,7 +703,6 @@ interface ExecuteAnthropicFlowParams<T> {
   anthropic: Anthropic
   model: string
   config: AnthropicFlowConfig<T>
-  settings: AiAssistantSettings
   schemaClient?: SchemaToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
@@ -705,7 +712,6 @@ interface ExecuteOpenAIFlowParams<T> {
   openai: OpenAI
   model: string
   config: OpenAIFlowConfig<T>
-  settings: AiAssistantSettings
   schemaClient?: SchemaToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
@@ -715,7 +721,6 @@ const executeOpenAIFlow = async <T>({
   openai,
   model,
   config,
-  settings,
   schemaClient,
   setStatus,
   abortSignal,
@@ -729,8 +734,9 @@ const executeOpenAIFlow = async <T>({
     },
   ]
 
+  const grantSchemaAccess = !!schemaClient
   const openaiTools = toOpenAIFunctions(
-    settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
+    grantSchemaAccess ? ALL_TOOLS : DOC_TOOLS,
   )
 
   let lastResponse = await openai.responses.create({
@@ -814,7 +820,6 @@ const executeAnthropicFlow = async <T>({
   anthropic,
   model,
   config,
-  settings,
   schemaClient,
   setStatus,
   abortSignal,
@@ -823,10 +828,11 @@ const executeAnthropicFlow = async <T>({
     { role: "user" as const, content: config.initialUserContent },
   ]
 
+  const grantSchemaAccess = !!schemaClient
   const message = await createAnthropicMessage(anthropic, {
     model,
     system: config.systemInstructions,
-    tools: settings.grantSchemaAccess && schemaClient ? ALL_TOOLS : DOC_TOOLS,
+    tools: grantSchemaAccess ? ALL_TOOLS : DOC_TOOLS,
     messages: initialMessages,
     temperature: 0.3,
   })
@@ -838,7 +844,7 @@ const executeAnthropicFlow = async <T>({
           anthropic,
           schemaClient,
           initialMessages,
-          settings.model,
+          model,
           setStatus,
           abortSignal,
         )
@@ -859,7 +865,7 @@ const executeAnthropicFlow = async <T>({
 
   const responseMessage = response as Anthropic.Messages.Message
   const formattingResponse = await createAnthropicMessage(anthropic, {
-    model: settings.model,
+    model,
     messages: [
       { role: "assistant", content: responseMessage.content },
       { role: "user", content: config.formattingPrompt },
@@ -905,12 +911,12 @@ export const explainQuery = async ({
   abortSignal,
 }: {
   query: Request
-  settings: AiAssistantSettings
+  settings: ActiveProviderSettings
   schemaClient?: SchemaToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }): Promise<AiAssistantExplanation | AiAssistantAPIError> => {
-  if (!settings.apiKey || !query) {
+  if (!settings.apiKey || !settings.model || !query) {
     return {
       type: "invalid_key",
       message: "API key or query is missing",
@@ -929,6 +935,7 @@ export const explainQuery = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
+      const grantSchemaAccess = !!schemaClient
       const content = query.selection
         ? `Explain this portion of the query:\n\n\`\`\`sql\n${query.selection.queryText}\n\`\`\` within this query:\n\n\`\`\`sql\n${query.query}\n\`\`\` with 2-4 sentences`
         : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${query.query}\n\`\`\``
@@ -938,13 +945,10 @@ export const explainQuery = async ({
           openai: clients.openai,
           model: settings.model,
           config: {
-            systemInstructions: getExplainQueryPrompt(
-              settings.grantSchemaAccess,
-            ),
+            systemInstructions: getExplainQueryPrompt(grantSchemaAccess),
             initialUserContent: content,
             responseFormat: ExplainFormat,
           },
-          settings,
           schemaClient,
           setStatus,
           abortSignal,
@@ -955,12 +959,11 @@ export const explainQuery = async ({
         anthropic: clients.anthropic,
         model: settings.model,
         config: {
-          systemInstructions: getExplainQueryPrompt(settings.grantSchemaAccess),
+          systemInstructions: getExplainQueryPrompt(grantSchemaAccess),
           initialUserContent: content,
           formattingPrompt:
             'Please give the 2-4 sentences summary of this query explanation in format { "explanation": "The summarized explanation" }. The result should be a valid JSON string.',
         },
-        settings,
         schemaClient,
         setStatus,
         abortSignal,
@@ -979,12 +982,12 @@ export const generateSQL = async ({
   abortSignal,
 }: {
   description: string
-  settings: AiAssistantSettings
+  settings: ActiveProviderSettings
   schemaClient?: SchemaToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }): Promise<GeneratedSQL | AiAssistantAPIError> => {
-  if (!settings.apiKey || !description) {
+  if (!settings.apiKey || !settings.model || !description) {
     return {
       type: "invalid_key",
       message: "API key or description is missing",
@@ -1003,6 +1006,7 @@ export const generateSQL = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
+      const grantSchemaAccess = !!schemaClient
       const initialUserContent = `For the following description, generate the corresponding QuestDB SQL query and 2-4 sentences explanation:\n\n\`\`\`\n${description}\n\`\`\``
       const postProcess = (formatted: { sql: string; explanation: string }) => {
         if (!formatted || !formatted.sql) {
@@ -1019,14 +1023,11 @@ export const generateSQL = async ({
           openai: clients.openai,
           model: settings.model,
           config: {
-            systemInstructions: getGenerateSQLPrompt(
-              settings.grantSchemaAccess,
-            ),
+            systemInstructions: getGenerateSQLPrompt(grantSchemaAccess),
             initialUserContent,
             responseFormat: GeneratedSQLFormat,
             postProcess,
           },
-          settings,
           schemaClient,
           setStatus,
           abortSignal,
@@ -1037,13 +1038,12 @@ export const generateSQL = async ({
         anthropic: clients.anthropic,
         model: settings.model,
         config: {
-          systemInstructions: getGenerateSQLPrompt(settings.grantSchemaAccess),
+          systemInstructions: getGenerateSQLPrompt(grantSchemaAccess),
           initialUserContent,
           formattingPrompt:
             'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }. The result should be a valid JSON string.',
           postProcess,
         },
-        settings,
         schemaClient,
         setStatus,
         abortSignal,
@@ -1065,13 +1065,13 @@ export const fixQuery = async ({
 }: {
   query: string
   errorMessage: string
-  settings: AiAssistantSettings
+  settings: ActiveProviderSettings
   schemaClient?: SchemaToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
   word: string | null
 }): Promise<Partial<GeneratedSQL> | AiAssistantAPIError> => {
-  if (!settings.apiKey || !query || !errorMessage) {
+  if (!settings.apiKey || !settings.model || !query || !errorMessage) {
     return {
       type: "invalid_key",
       message: "API key, query, or error message is missing",
@@ -1090,6 +1090,7 @@ export const fixQuery = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
+      const grantSchemaAccess = !!schemaClient
       const initialUserContent = `SQL Query:
 \`\`\`sql
 ${query}
@@ -1119,12 +1120,11 @@ ${word ? `The error occurred at word: ${word}` : ""}`
           openai: clients.openai,
           model: settings.model,
           config: {
-            systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
+            systemInstructions: getFixQueryPrompt(grantSchemaAccess),
             initialUserContent,
             responseFormat: FixSQLFormat,
             postProcess,
           },
-          settings,
           schemaClient,
           setStatus,
           abortSignal,
@@ -1135,13 +1135,12 @@ ${word ? `The error occurred at word: ${word}` : ""}`
         anthropic: clients.anthropic,
         model: settings.model,
         config: {
-          systemInstructions: getFixQueryPrompt(settings.grantSchemaAccess),
+          systemInstructions: getFixQueryPrompt(grantSchemaAccess),
           initialUserContent,
           formattingPrompt:
             'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }. The result should be a valid JSON string.',
           postProcess,
         },
-        settings,
         schemaClient,
         setStatus,
         abortSignal,
@@ -1162,10 +1161,10 @@ export const explainTableSchema = async ({
   tableName: string
   schema: string
   isMatView: boolean
-  settings: AiAssistantSettings
+  settings: ActiveProviderSettings
   setStatus: StatusCallback
 }): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
-  if (!settings.apiKey) {
+  if (!settings.apiKey || !settings.model) {
     return {
       type: "invalid_key",
       message: "API key is missing",
@@ -1446,7 +1445,7 @@ export const testApiKey = async (
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true })
       await openai.responses.create({
         model,
-        input: [{ role: "user", content: "Test" }],
+        input: [{ role: "user", content: "ping" }],
         max_output_tokens: 16,
       })
     }

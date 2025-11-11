@@ -1,7 +1,16 @@
-export type AiAssistantSettings = {
+export type ProviderSettings = {
   apiKey: string
-  model: string
+  enabledModels: string[]
   grantSchemaAccess: boolean
+}
+
+export type AiAssistantSettings = {
+  aiAssistantPromo: boolean
+  selectedModel?: string
+  providers: {
+    anthropic?: ProviderSettings
+    openai?: ProviderSettings
+  }
 }
 
 export type SettingsType = string | boolean | number | AiAssistantSettings

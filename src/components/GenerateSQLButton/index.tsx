@@ -9,7 +9,6 @@ import styled, { css } from "styled-components"
 import { Button, Box, Dialog, ForwardRef, Overlay } from "../../components"
 import { platform } from "../../utils"
 import { useSelector } from "react-redux"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
 import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
 import {
@@ -17,7 +16,9 @@ import {
   formatExplanationAsComment,
   createSchemaClient,
   isAiAssistantError,
+  type ActiveProviderSettings,
 } from "../../utils/aiAssistant"
+import { providerForModel } from "../../utils/aiAssistantSettings"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
@@ -101,12 +102,19 @@ const shortcutTitle =
   platform.isMacintosh || platform.isIOS ? "Cmd+G" : "Ctrl+G"
 
 export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
-  const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
   const { editorRef } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
-  const { status: aiStatus, setStatus, abortController } = useAIStatus()
+  const {
+    status: aiStatus,
+    setStatus,
+    abortController,
+    canUse,
+    hasSchemaAccess: hasSchemaAccessValue,
+    currentModel,
+    apiKey,
+  } = useAIStatus()
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
   const highlightDecorationsRef = useRef<string[]>([])
@@ -119,12 +127,25 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     setShowDialog(false)
     setDescription("")
 
-    const schemaClient = aiAssistantSettings.grantSchemaAccess
+    if (!canUse) {
+      toast.error("No model selected for AI Assistant")
+      return
+    }
+
+    const schemaClient = hasSchemaAccessValue
       ? createSchemaClient(tables, quest)
       : undefined
+    const provider = providerForModel(currentModel)
+
+    const settings: ActiveProviderSettings = {
+      model: currentModel,
+      provider,
+      apiKey,
+    }
+
     const response = await generateSQL({
       description,
-      settings: aiAssistantSettings,
+      settings,
       schemaClient,
       setStatus,
       abortSignal: abortController?.signal,
@@ -226,11 +247,11 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
         }
         e.preventDefault()
       }
-      if (!disabled && aiAssistantSettings.apiKey) {
+      if (!disabled && canUse) {
         handleOpenDialog()
       }
     },
-    [disabled, aiAssistantSettings.apiKey],
+    [disabled, canUse, handleOpenDialog],
   )
 
   useEffect(() => {
@@ -251,7 +272,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     }
   }, [handleGenerateQueryOpen])
 
-  if (!aiAssistantSettings.apiKey) {
+  if (!canUse) {
     return null
   }
 

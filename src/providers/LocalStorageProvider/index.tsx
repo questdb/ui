@@ -34,10 +34,9 @@ import {
   LeftPanelType,
 } from "./types"
 
-export const DEFAULT_AI_ASSISTANT_SETTINGS = {
-  apiKey: "",
-  model: "claude-sonnet-4-0",
-  grantSchemaAccess: true,
+export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
+  aiAssistantPromo: true,
+  providers: {},
 }
 
 const defaultConfig: LocalConfig = {
@@ -137,12 +136,12 @@ export const LocalStorageProvider = ({
       try {
         const parsed = JSON.parse(stored) as AiAssistantSettings
         return {
-          apiKey: parsed.apiKey || "",
-          model: parsed.model || DEFAULT_AI_ASSISTANT_SETTINGS.model,
-          grantSchemaAccess:
-            parsed.grantSchemaAccess !== undefined
-              ? parsed.grantSchemaAccess
+          aiAssistantPromo:
+            parsed.aiAssistantPromo !== undefined
+              ? parsed.aiAssistantPromo
               : true,
+          selectedModel: parsed.selectedModel,
+          providers: parsed.providers || {},
         }
       } catch (e) {
         return defaultConfig.aiAssistantSettings

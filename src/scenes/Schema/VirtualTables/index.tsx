@@ -10,7 +10,6 @@ import React, {
 import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
 import { Loader3, FileCopy, Restart } from "@styled-icons/remix-line"
-import { AutoAwesome } from "@styled-icons/material"
 import { spinAnimation, toast } from "../../../components"
 import { color, ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
@@ -52,12 +51,13 @@ import {
   isAiAssistantError,
   AiAssistantAPIError,
   TableSchemaExplanation,
+  type ActiveProviderSettings,
 } from "../../../utils/aiAssistant"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
+import { providerForModel } from "../../../utils/aiAssistantSettings"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -175,8 +175,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
   const allColumns = useSelector(selectors.query.getColumns)
-  const { aiAssistantSettings } = useLocalStorage()
-  const { status: aiStatus, setStatus } = useAIStatus()
+  const {
+    status: aiStatus,
+    setStatus,
+    canUse,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+  } = useAIStatus()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -273,7 +279,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }
 
   const handleExplainSchema = async (tableName: string, isMatView: boolean) => {
-    if (!aiAssistantSettings.apiKey) {
+    if (!canUse) {
       toast.error(
         "AI Assistant is not enabled. Please configure your API key in settings.",
       )
@@ -285,11 +291,19 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return
     }
 
+    const provider = providerForModel(currentModel)
+
+    const settings: ActiveProviderSettings = {
+      model: currentModel,
+      provider,
+      apiKey,
+    }
+
     const response = await explainTableSchema({
       tableName,
       schema,
       isMatView,
-      settings: aiAssistantSettings,
+      settings,
       setStatus,
     })
 
@@ -638,11 +652,17 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       item.kind === "matview",
                     )
                   }
-                  icon={<AutoAwesome size={16} />}
+                  icon={
+                    <img
+                      src="/assets/ai-sparkle.svg"
+                      alt="AI Sparkle"
+                      width={16}
+                      height={16}
+                      style={{ filter: "brightness(0) invert(1)" }}
+                    />
+                  }
                   disabled={
-                    !aiAssistantSettings.apiKey ||
-                    !aiAssistantSettings.grantSchemaAccess ||
-                    isBlockingAIStatus(aiStatus)
+                    !canUse || !hasSchemaAccess || isBlockingAIStatus(aiStatus)
                   }
                 >
                   Explain schema with AI

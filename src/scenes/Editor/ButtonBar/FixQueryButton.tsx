@@ -1,7 +1,6 @@
 import React, { useContext, MutableRefObject } from "react"
 import { Button } from "../../../components"
 import { useSelector } from "react-redux"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { useEditor } from "../../../providers"
 import type {
   AiAssistantAPIError,
@@ -11,7 +10,9 @@ import {
   isAiAssistantError,
   createSchemaClient,
   fixQuery,
+  type ActiveProviderSettings,
 } from "../../../utils/aiAssistant"
+import { providerForModel } from "../../../utils/aiAssistantSettings"
 import { toast } from "../../../components/Toast"
 import { QuestContext } from "../../../providers"
 import { selectors } from "../../../store"
@@ -96,22 +97,34 @@ export const FixQueryButton = ({
   executionRefs,
   onBufferContentChange,
 }: Props) => {
-  const { aiAssistantSettings } = useLocalStorage()
   const { quest } = useContext(QuestContext)
   const { editorRef, activeBuffer, addBuffer } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
-  const { status: aiStatus, setStatus, abortController } = useAIStatus()
+  const {
+    status: aiStatus,
+    setStatus,
+    abortController,
+    canUse,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+  } = useAIStatus()
 
-  if (!aiAssistantSettings.apiKey) {
+  if (!canUse) {
     return null
   }
 
   const handleFixQuery = async () => {
     if (!editorRef.current || queriesToRun.length !== 1) return
-    const model = editorRef.current.getModel()
-    if (!model) return
+    const editorModel = editorRef.current.getModel()
+    if (!editorModel) return
+
+    if (!canUse) {
+      toast.error("AI Assistant is not configured", { autoClose: 10000 })
+      return
+    }
 
     const queryToFix = queriesToRun[0]
     const errorInfo = extractError(
@@ -127,21 +140,28 @@ export const FixQueryButton = ({
       return
     }
     const { errorMessage, fixStart, queryText, word } = errorInfo
-    const fixStartPosition = model.getPositionAt(fixStart)
+    const fixStartPosition = editorModel.getPositionAt(fixStart)
     editorRef.current?.updateOptions({
       readOnly: true,
       readOnlyMessage: {
         value: "Query fix in progress",
       },
     })
-    const schemaClient = aiAssistantSettings.grantSchemaAccess
+    const schemaClient = hasSchemaAccess
       ? createSchemaClient(tables, quest)
       : undefined
+    const provider = providerForModel(currentModel)
+
+    const settings: ActiveProviderSettings = {
+      model: currentModel,
+      provider,
+      apiKey,
+    }
 
     const response = await fixQuery({
       query: queryText,
       errorMessage,
-      settings: aiAssistantSettings,
+      settings,
       schemaClient,
       setStatus,
       abortSignal: abortController?.signal,

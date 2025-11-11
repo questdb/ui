@@ -49,7 +49,7 @@ const CustomTooltipWrapper = styled.div<{
   display: flex;
   flex-direction: column;
   padding: 1.5rem 0;
-  background: ${({ theme }) => theme.color.background};
+  background: ${({ theme }) => theme.color.backgroundDarker};
   font-size: 1.4rem;
   border-radius: 0.8rem;
   border: 1px solid ${({ $badgeColors }) => $badgeColors.primary};

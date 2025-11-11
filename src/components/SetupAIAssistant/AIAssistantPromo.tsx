@@ -8,7 +8,8 @@ import { Button } from "../Button"
 import { Text } from "../Text"
 import { Box } from "../Box"
 import { TransitionDuration } from "../Transition"
-import { getValue, setValue } from "../../utils/localStorage"
+import { useAIStatus } from "../../providers/AIStatusProvider"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { platform } from "../../utils"
 
@@ -252,18 +253,22 @@ const ExternalIcon = styled(ExternalLink)`
 type Props = {
   triggerRef: React.RefObject<HTMLElement>
   onSetupClick: () => void
+  showPromo: boolean
+  setShowPromo: (show: boolean) => void
 }
 
-export const AIAssistantPromo = ({ triggerRef, onSetupClick }: Props) => {
+export const AIAssistantPromo = ({
+  triggerRef,
+  onSetupClick,
+  showPromo,
+  setShowPromo,
+}: Props) => {
+  const { aiAssistantPromo: shouldShowPromo } = useAIStatus()
+  const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const [container] = useState<HTMLElement>(document.createElement("div"))
   const transitionTimeoutId = useRef<number | undefined>()
   const [arrowElement, setArrowElement] = useState<HTMLElement | null>(null)
   const [popperElement, setPopperElement] = useState<HTMLElement | null>(null)
-  const shouldShowPromo = (() => {
-    const stored = getValue(StoreKey.AI_ASSISTANT_PROMO as StoreKey)
-    return stored === "" || stored === "true"
-  })()
-  const [showPromo, setShowPromo] = useState(false)
   const [positionReady, setPositionReady] = useState(false)
 
   useEffect(() => {
@@ -299,13 +304,20 @@ export const AIAssistantPromo = ({ triggerRef, onSetupClick }: Props) => {
 
   const handleClose = useCallback(() => {
     setShowPromo(false)
-    setValue(StoreKey.AI_ASSISTANT_PROMO as StoreKey, "false")
-  }, [])
+    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
+      ...aiAssistantSettings,
+      aiAssistantPromo: false,
+    })
+  }, [aiAssistantSettings, updateSettings])
 
   const handleSetupClick = useCallback(() => {
-    handleClose()
+    setShowPromo(false)
+    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
+      ...aiAssistantSettings,
+      aiAssistantPromo: false,
+    })
     onSetupClick()
-  }, [handleClose, onSetupClick])
+  }, [aiAssistantSettings, updateSettings, onSetupClick])
 
   useEffect(() => {
     document.body.appendChild(container)
@@ -350,141 +362,149 @@ export const AIAssistantPromo = ({ triggerRef, onSetupClick }: Props) => {
     return null
   }
 
-  return ReactDOM.createPortal(
-    <CSSTransition
-      classNames="fade-reg"
-      in={positionReady}
-      timeout={TransitionDuration.REG}
-      unmountOnExit={false}
-    >
-      <TooltipContainer
-        ref={setPopperElement}
-        {...attributes.popper}
-        style={{
-          zIndex: 1000,
-          ...styles.popper,
-        }}
-        $positionReady={positionReady}
-      >
-        <Arrow ref={setArrowElement} style={styles.arrow} data-popper-arrow />
-        <Content>
-          <Header>
-            <AssistantTitle>
-              <SparkleIcon src="/assets/ai-sparkle.svg" alt="AI Sparkle" />
-              <TitleText>Meet QuestDB Assistant</TitleText>
-            </AssistantTitle>
-            <CloseButton onClick={handleClose} aria-label="Close">
-              <Close size="2rem" />
-            </CloseButton>
-          </Header>
+  return (
+    <>
+      {ReactDOM.createPortal(
+        <CSSTransition
+          classNames="fade-reg"
+          in={positionReady}
+          timeout={TransitionDuration.REG}
+          unmountOnExit={false}
+        >
+          <TooltipContainer
+            ref={setPopperElement}
+            {...attributes.popper}
+            style={{
+              zIndex: 1000,
+              ...styles.popper,
+            }}
+            $positionReady={positionReady}
+          >
+            <Arrow
+              ref={setArrowElement}
+              style={styles.arrow}
+              data-popper-arrow
+            />
+            <Content>
+              <Header>
+                <AssistantTitle>
+                  <SparkleIcon src="/assets/ai-sparkle.svg" alt="AI Sparkle" />
+                  <TitleText>Meet QuestDB Assistant</TitleText>
+                </AssistantTitle>
+                <CloseButton onClick={handleClose} aria-label="Close">
+                  <Close size="2rem" />
+                </CloseButton>
+              </Header>
 
-          <Description>
-            Our AI Assistant is a specialized programming and support agent that
-            makes you more effective and helps you solve problems as you
-            interface with your QuestDB database. It can help you in the
-            following ways:
-          </Description>
+              <Description>
+                Our AI Assistant is a specialized programming and support agent
+                that makes you more effective and helps you solve problems as
+                you interface with your QuestDB database. It can help you in the
+                following ways:
+              </Description>
 
-          <AssistantModes>
-            <AssistantMode>
-              <IconContainer>
-                <ModeIcon
-                  src="/assets/icon-generate-queries.svg"
-                  alt="Generate Queries"
-                />
-              </IconContainer>
-              <ModeContent>
-                <ModeTitleRow>
-                  <ModeTitle>Generate Queries</ModeTitle>
-                  <KeyContainer>
-                    <KeyBadge>
-                      <KeyText>{ctrlCmd}</KeyText>
-                    </KeyBadge>
-                    <KeyBadge>
-                      <KeyText>G</KeyText>
-                    </KeyBadge>
-                  </KeyContainer>
-                </ModeTitleRow>
-                <ModeDescription>
-                  Create SQL queries from natural language, with schema-aware
-                  context.
-                </ModeDescription>
-              </ModeContent>
-            </AssistantMode>
+              <AssistantModes>
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIcon
+                      src="/assets/icon-generate-queries.svg"
+                      alt="Generate Queries"
+                    />
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitleRow>
+                      <ModeTitle>Generate Queries</ModeTitle>
+                      <KeyContainer>
+                        <KeyBadge>
+                          <KeyText>{ctrlCmd}</KeyText>
+                        </KeyBadge>
+                        <KeyBadge>
+                          <KeyText>G</KeyText>
+                        </KeyBadge>
+                      </KeyContainer>
+                    </ModeTitleRow>
+                    <ModeDescription>
+                      Create SQL queries from natural language, with
+                      schema-aware context.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
 
-            <AssistantMode>
-              <IconContainer>
-                <ModeIcon
-                  src="/assets/icon-explain-queries.svg"
-                  alt="Explain Queries"
-                />
-              </IconContainer>
-              <ModeContent>
-                <ModeTitleRow>
-                  <ModeTitle>Explain Queries</ModeTitle>
-                  <KeyContainer>
-                    <KeyBadge>
-                      <KeyText>{ctrlCmd}</KeyText>
-                    </KeyBadge>
-                    <KeyBadge>
-                      <KeyText>E</KeyText>
-                    </KeyBadge>
-                  </KeyContainer>
-                </ModeTitleRow>
-                <ModeDescription>
-                  Get an inline explanation of your query.
-                </ModeDescription>
-              </ModeContent>
-            </AssistantMode>
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIcon
+                      src="/assets/icon-explain-queries.svg"
+                      alt="Explain Queries"
+                    />
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitleRow>
+                      <ModeTitle>Explain Queries</ModeTitle>
+                      <KeyContainer>
+                        <KeyBadge>
+                          <KeyText>{ctrlCmd}</KeyText>
+                        </KeyBadge>
+                        <KeyBadge>
+                          <KeyText>E</KeyText>
+                        </KeyBadge>
+                      </KeyContainer>
+                    </ModeTitleRow>
+                    <ModeDescription>
+                      Get an inline explanation of your query.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
 
-            <AssistantMode>
-              <IconContainer>
-                <ModeIcon
-                  src="/assets/icon-fix-queries.svg"
-                  alt="Fix Queries"
-                />
-              </IconContainer>
-              <ModeContent>
-                <ModeTitle>Fix Queries</ModeTitle>
-                <ModeDescription>
-                  Documentation-referenced suggestions to fix query errors.
-                </ModeDescription>
-              </ModeContent>
-            </AssistantMode>
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIcon
+                      src="/assets/icon-fix-queries.svg"
+                      alt="Fix Queries"
+                    />
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitle>Fix Queries</ModeTitle>
+                    <ModeDescription>
+                      Documentation-referenced suggestions to fix query errors.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
 
-            <AssistantMode>
-              <IconContainer>
-                <ModeIcon
-                  src="/assets/icon-explain-schema.svg"
-                  alt="Explain Schema"
-                />
-              </IconContainer>
-              <ModeContent>
-                <ModeTitle>Explain Schema</ModeTitle>
-                <ModeDescription>
-                  Detailed overview and structure of tables.
-                </ModeDescription>
-              </ModeContent>
-            </AssistantMode>
-          </AssistantModes>
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIcon
+                      src="/assets/icon-explain-schema.svg"
+                      alt="Explain Schema"
+                    />
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitle>Explain Schema</ModeTitle>
+                    <ModeDescription>
+                      Detailed overview and structure of tables.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+              </AssistantModes>
 
-          <Footer>
-            <LearnMoreLink
-              as="a"
-              href="https://questdb.io/docs/ai-assistant"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <LearnMoreText>Learn more</LearnMoreText>
-              <ExternalIcon size="1.6rem" />
-            </LearnMoreLink>
-            <SetupButton onClick={handleSetupClick}>
-              Setup Assistant
-            </SetupButton>
-          </Footer>
-        </Content>
-      </TooltipContainer>
-    </CSSTransition>,
-    container,
+              <Footer>
+                <LearnMoreLink
+                  as="a"
+                  href="https://questdb.io/docs/ai-assistant"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <LearnMoreText>Learn more</LearnMoreText>
+                  <ExternalIcon size="1.6rem" />
+                </LearnMoreLink>
+                <SetupButton onClick={handleSetupClick}>
+                  Setup Assistant
+                </SetupButton>
+              </Footer>
+            </Content>
+          </TooltipContainer>
+        </CSSTransition>,
+        container,
+      )}
+    </>
   )
 }

@@ -36,6 +36,7 @@ const ExplanationBox = styled(Box)`
 const ButtonBar = styled(Box)`
   padding: 0.5rem 1rem;
   gap: 1rem;
+  justify-content: center;
 `
 
 const EditorContainer = styled.div`

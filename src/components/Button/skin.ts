@@ -31,13 +31,13 @@ const themes: {
 } = {
   primary: {
     normal: {
-      background: "pink",
-      border: "pink",
+      background: "pinkDarker",
+      border: "pinkDarker",
       color: "foreground",
     },
     hover: {
-      background: "pinkDarker",
-      border: "pinkDarker",
+      background: "pink",
+      border: "pink",
       color: "foreground",
     },
     disabled: {

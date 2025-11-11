@@ -60,10 +60,8 @@ export const AlertDialog = {
   `,
   Title: styled(RadixAlertDialog.Title)`
     margin: 0;
-    padding: 2rem;
     font-size: 1.6rem;
     color: ${({ theme }) => theme.color.foreground};
-    border-bottom: 1px ${({ theme }) => theme.color.backgroundLighter} solid;
   `,
   Description: styled.div`
     margin-top: 2rem;

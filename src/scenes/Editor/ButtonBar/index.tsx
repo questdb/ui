@@ -17,7 +17,6 @@ import { FixQueryButton } from "./FixQueryButton"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
-import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import {
   useAIStatus,
   AIOperationStatus,
@@ -253,12 +252,10 @@ const ButtonBar = ({
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const { aiAssistantSettings } = useLocalStorage()
-  const { status: aiStatus } = useAIStatus()
+  const { status: aiStatus, canUse } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
-  const aiAssistantEnabled =
-    !!aiAssistantSettings.apiKey && !!aiAssistantSettings.model
+  const aiAssistantEnabled = canUse
 
   const hasQueryError =
     activeNotification?.type === "error" && !activeNotification?.isExplain

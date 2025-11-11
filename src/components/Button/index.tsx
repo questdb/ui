@@ -41,6 +41,7 @@ type BaseButtonProps = {
   fontSize?: FontSize
   onClick?: (event: MouseEvent) => void
   size?: Size
+  fullWidth?: boolean
   type?: Type
   title?: string
   rounded?: boolean
@@ -92,7 +93,7 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
   },
 )
 
-const StyledButton = styled.div<ButtonProps>`
+const StyledButton = styled.button<ButtonProps>`
   display: inline-flex;
   height: ${getSize};
   padding: 0 1rem;
@@ -124,6 +125,12 @@ const StyledButton = styled.div<ButtonProps>`
     `
     cursor: default;
   `}
+
+  ${(props) =>
+    props.fullWidth &&
+    css`
+      width: 100%;
+    `}
 
   ${(props) => makeSkin(props.skin ?? "primary")}
 
