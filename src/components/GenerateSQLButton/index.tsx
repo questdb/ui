@@ -55,11 +55,25 @@ const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
     `}
 `
 
+const StyledDialogTitle = styled(Dialog.Title)`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`
+
 const StyledDialogDescription = styled(Dialog.Description)`
   font-size: 1.4rem;
   color: ${({ theme }) => theme.color.gray2};
   line-height: 1.5;
-  margin-bottom: 2rem;
+  padding: 0;
+  margin-bottom: 0;
+`
+
+const StyledContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin: 0 2rem;
 `
 
 const StyledDialogButton = styled(Button)`
@@ -309,14 +323,16 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
               minWidth: "60rem",
             }}
           >
-            <Dialog.Title>Generate query</Dialog.Title>
-
-            <StyledDialogDescription>
-              <p>
-                Describe what data you want to query in natural language, and
-                I&apos;ll generate the query for you. For example: &quot;Show me
-                the average price by symbol for the last hour&quot;
-              </p>
+            <StyledDialogTitle>
+              <img src="/assets/ai-sparkle.svg" alt="" />
+              Generate query
+            </StyledDialogTitle>
+            <StyledContent>
+              <StyledDialogDescription>
+                Describe your query in natural language to generate the
+                corresponding QuestDB SQL. Example: &quot;Show bid-ask spread
+                for BTC/USD over the last 5 minutes.&quot;
+              </StyledDialogDescription>
 
               <StyledTextArea
                 placeholder="Describe your query..."
@@ -330,7 +346,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
                   }
                 }}
               />
-            </StyledDialogDescription>
+            </StyledContent>
 
             <Dialog.ActionButtons>
               <Dialog.Close asChild>
@@ -343,7 +359,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
               </Dialog.Close>
 
               <StyledDialogButton
-                skin="primary"
+                skin="gradient"
                 onClick={handleGenerate}
                 disabled={!description.trim()}
               >

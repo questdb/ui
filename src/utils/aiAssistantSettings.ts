@@ -15,7 +15,7 @@ export type ModelOption = {
 export const MODEL_OPTIONS: ModelOption[] = [
   {
     label: "Claude Sonnet 4.5",
-    value: "claude-sonnet-4-5-20250929",
+    value: "claude-sonnet-4-5",
     provider: "anthropic",
     default: true,
     defaultEnabled: true,
@@ -28,44 +28,39 @@ export const MODEL_OPTIONS: ModelOption[] = [
     defaultEnabled: true,
   },
   {
-    label: "Claude Opus 4.0",
-    value: "claude-opus-4-0",
+    label: "Claude Sonnet 4",
+    value: "claude-sonnet-4",
     provider: "anthropic",
-    isSlow: true,
   },
   {
-    label: "Claude Sonnet 4.0",
-    value: "claude-sonnet-4-0",
-    provider: "anthropic",
-    defaultEnabled: true,
-  },
-  {
-    label: "Claude 3.7 Sonnet (Latest)",
-    value: "claude-3-7-sonnet-latest",
+    label: "Claude Haiku 4.5",
+    value: "claude-haiku-4-5",
     provider: "anthropic",
     isTestModel: true,
   },
   {
-    label: "GPT 5",
+    label: "GPT-5",
     value: "gpt-5",
     provider: "openai",
     isSlow: true,
     defaultEnabled: true,
   },
   {
-    label: "GPT 5 Mini",
+    label: "GPT-5 mini",
     value: "gpt-5-mini",
     provider: "openai",
     default: true,
     defaultEnabled: true,
   },
   {
-    label: "GPT 5 Nano",
+    label: "GPT-5 nano",
     value: "gpt-5-nano",
     provider: "openai",
+    defaultEnabled: true,
     isTestModel: true,
   },
-  { label: "GPT 4.1", value: "gpt-4.1", provider: "openai" },
+  { label: "GPT-4.1", value: "gpt-4.1", provider: "openai" },
+  { label: "GPT-4o", value: "gpt-4o", provider: "openai" },
 ]
 
 export const providerForModel = (model: ModelOption["value"]): Provider => {

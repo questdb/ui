@@ -19,16 +19,16 @@ import { BrainIcon } from "./BrainIcon"
 import { LoadingSpinner } from "../LoadingSpinner"
 import { Overlay } from "../Overlay"
 import {
-  getSelectedModel,
   getAllProviders,
   MODEL_OPTIONS,
   type ModelOption,
   type Provider,
-  providerForModel,
   getNextModel,
 } from "../../utils/aiAssistantSettings"
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 import { ForwardRef } from "../ForwardRef"
+import { Badge, BadgeType } from "../../components/Badge"
+import { CheckboxCircle } from "@styled-icons/remix-fill"
 
 const ModalContent = styled.div`
   display: flex;
@@ -266,6 +266,16 @@ const EyeToggleButton = styled.button`
   &:hover {
     color: ${({ theme }) => theme.color.foreground};
   }
+`
+
+const ValidatedBadge = styled(Badge).attrs({
+  type: BadgeType.SUCCESS,
+})`
+  font-size: 1rem;
+  margin-right: auto;
+  padding: 0.3rem 0.6rem;
+  height: 2rem;
+  border: 0;
 `
 
 const APIKeyLink = styled.a`
@@ -631,7 +641,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         return
       }
 
-      const testModel = providerModels[0].value
+      const testModel = (
+        providerModels.find((m) => m.isTestModel) ?? providerModels[0]
+      ).value
       try {
         const result = await testApiKey(apiKey, testModel)
         if (!result.valid) {
@@ -650,9 +662,6 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           setValidationState((prev) => ({ ...prev, [provider]: "validated" }))
           setValidatedApiKeys((prev) => ({ ...prev, [provider]: true }))
           setValidationErrors((prev) => ({ ...prev, [provider]: null }))
-          toast.success(
-            `${getProviderName(provider)} API key validated successfully`,
-          )
         }
       } catch (err) {
         setValidationState((prev) => ({ ...prev, [provider]: "error" }))
@@ -664,47 +673,15 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [apiKeys],
   )
 
-  const handleRemoveApiKey = useCallback(
-    (provider: Provider) => {
-      // Remove API key from local state
-      setApiKeys((prev) => ({ ...prev, [provider]: "" }))
-      setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
-      setValidationState((prev) => ({ ...prev, [provider]: "idle" }))
-      setValidationErrors((prev) => ({ ...prev, [provider]: null }))
-      setShowApiKey((prev) => ({ ...prev, [provider]: false }))
-
-      // Update storage immediately - remove provider entry when API key is removed
-      // Note: enabledModels are kept in local state but removed from storage
-      // since ProviderSettings requires apiKey
-      const updatedProviders = { ...aiAssistantSettings.providers }
-      delete updatedProviders[provider]
-
-      const updatedSettings: AiAssistantSettings = {
-        ...aiAssistantSettings,
-        providers: updatedProviders,
-      }
-
-      // Handle fallback logic
-      const remainingProviders = getProvidersWithApiKeys(updatedSettings)
-      const currentModel = getSelectedModel(updatedSettings)
-
-      if (remainingProviders.length === 0) {
-        // No providers left, reset selectedModel
-        updatedSettings.selectedModel = undefined
-      } else if (currentModel && providerForModel(currentModel) === provider) {
-        // Current model belongs to removed provider, find fallback
-        const fallbackModel = getNextModel(
-          updatedSettings.selectedModel,
-          enabledModels,
-        )
-        updatedSettings.selectedModel = fallbackModel || undefined
-      }
-
-      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
-      toast.success(`${getProviderName(provider)} API key removed`)
-    },
-    [aiAssistantSettings, updateSettings],
-  )
+  const handleRemoveApiKey = useCallback((provider: Provider) => {
+    // Remove API key from local state only
+    // Settings will be persisted when Save Settings is clicked
+    setApiKeys((prev) => ({ ...prev, [provider]: "" }))
+    setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
+    setValidationState((prev) => ({ ...prev, [provider]: "idle" }))
+    setValidationErrors((prev) => ({ ...prev, [provider]: null }))
+    setShowApiKey((prev) => ({ ...prev, [provider]: false }))
+  }, [])
 
   const handleModelToggle = useCallback(
     (provider: Provider, modelValue: string) => {
@@ -872,6 +849,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       style={{ width: "100%" }}
                     >
                       <SectionTitle>API Key</SectionTitle>
+                      {validatedApiKeys[selectedProvider] && (
+                        <ValidatedBadge icon={<CheckboxCircle size="13px" />}>
+                          Validated
+                        </ValidatedBadge>
+                      )}
                       <Text size="sm" color="gray2">
                         Get your API key from{" "}
                         <APIKeyLink

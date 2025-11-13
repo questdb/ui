@@ -6,7 +6,7 @@ import { MODEL_OPTIONS } from "./aiAssistantSettings"
 import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
 import type { Request } from "../scenes/Editor/Monaco/utils"
-import { AIOperationStatus } from "../providers/AIStatusProvider"
+import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import {
   getQuestDBTableOfContents,
   getSpecificDocumentation,
@@ -55,7 +55,10 @@ export interface SchemaToolsClient {
   getTableSchema: (tableName: string) => Promise<string | null>
 }
 
-type StatusCallback = (status: AIOperationStatus | null) => void
+type StatusCallback = (
+  status: AIOperationStatus | null,
+  args?: StatusArgs,
+) => void
 
 type ProviderClients =
   | {
@@ -180,19 +183,6 @@ const createProviderClients = (
       apiKey: settings.apiKey,
       dangerouslyAllowBrowser: true,
     }),
-  }
-}
-
-const getStatusFromCategory = (category: DocCategory) => {
-  switch (category) {
-    case "functions":
-      return AIOperationStatus.InvestigatingFunctions
-    case "operators":
-      return AIOperationStatus.InvestigatingOperators
-    case "sql":
-      return AIOperationStatus.InvestigatingKeywords
-    default:
-      return null
   }
 }
 
@@ -478,7 +468,6 @@ const executeTool = async (
         return { content: JSON.stringify(result, null, 2) }
       }
       case "get_table_schema": {
-        setStatus(AIOperationStatus.InvestigatingTableSchema)
         const tableName = (input as { table_name: string })?.table_name
         if (!schemaClient) {
           return {
@@ -493,6 +482,9 @@ const executeTool = async (
             is_error: true,
           }
         }
+        setStatus(AIOperationStatus.InvestigatingTableSchema, {
+          name: tableName,
+        })
         const result = await schemaClient.getTableSchema(tableName)
         return {
           content:
@@ -513,7 +505,17 @@ const executeTool = async (
             is_error: true,
           }
         }
-        setStatus(getStatusFromCategory(category as DocCategory))
+        const firstItem = items[0] || ""
+        const parts = firstItem.split(/\s+-\s+/)
+        if (parts.length >= 2) {
+          const name = parts[0].trim()
+          const section = parts.slice(1).join(" - ").trim()
+          setStatus(AIOperationStatus.InvestigatingDocs, { name, section })
+        } else if (firstItem) {
+          setStatus(AIOperationStatus.InvestigatingDocs, { name: firstItem })
+        } else {
+          setStatus(AIOperationStatus.InvestigatingDocs)
+        }
         const documentation = await getSpecificDocumentation(
           category as DocCategory,
           items,
@@ -930,7 +932,7 @@ export const explainQuery = async ({
       message: "Operation was cancelled",
     } as AiAssistantAPIError
   }
-  setStatus(AIOperationStatus.Processing)
+  setStatus(AIOperationStatus.Processing, { type: "explain" })
 
   return tryWithRetries(
     async () => {
@@ -1001,7 +1003,7 @@ export const generateSQL = async ({
       message: "Operation was cancelled",
     } as AiAssistantAPIError
   }
-  setStatus(AIOperationStatus.Processing)
+  setStatus(AIOperationStatus.Processing, { type: "generate" })
 
   return tryWithRetries(
     async () => {
@@ -1085,7 +1087,7 @@ export const fixQuery = async ({
       message: "Operation was cancelled",
     } as AiAssistantAPIError
   }
-  setStatus(AIOperationStatus.Processing)
+  setStatus(AIOperationStatus.Processing, { type: "fix" })
 
   return tryWithRetries(
     async () => {
@@ -1178,7 +1180,7 @@ export const explainTableSchema = async ({
   }
 
   await handleRateLimit()
-  setStatus(AIOperationStatus.Processing)
+  setStatus(AIOperationStatus.Processing, { type: "explain" })
 
   return tryWithRetries(async () => {
     const clients = createProviderClients(settings)

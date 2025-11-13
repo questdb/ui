@@ -104,7 +104,7 @@ const Editor = ({
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <Tabs />
-      {activeBuffer.isDiffBuffer && (
+      {activeBuffer.isDiffBuffer && activeBuffer.diffContent && (
         <DiffEditorComponent pendingFixRef={pendingFixRef} />
       )}
       {activeBuffer.editorViewState && !activeBuffer.isDiffBuffer && (

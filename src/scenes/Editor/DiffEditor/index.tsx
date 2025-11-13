@@ -1,6 +1,5 @@
-import React, { useRef, useState } from "react"
+import React, { useMemo, useRef, useState } from "react"
 import styled from "styled-components"
-import { AutoAwesome } from "@styled-icons/material"
 import { DiffEditor } from "@monaco-editor/react"
 import type { Monaco, DiffOnMount } from "@monaco-editor/react"
 import { Button, Box } from "../../../components"
@@ -23,14 +22,26 @@ const Container = styled.div`
 const ExplanationBox = styled(Box)`
   display: flex;
   align-items: flex-start;
-  background: ${color("backgroundLighter")};
-  padding: 1rem;
-  padding-bottom: 2rem;
+  background: ${color("midnight")};
+  padding: 1.5rem 2rem;
   font-size: 1.4rem;
   line-height: 1.5;
   white-space: pre-wrap;
   max-height: 150px;
   overflow-y: auto;
+
+  .explanation-code-block {
+    background: #2d303e;
+    border: 1px solid #44475a;
+    border-radius: 0.6rem;
+    padding: 0.1rem 0.3rem;
+    display: inline-flex;
+    gap: 1rem;
+    align-items: center;
+    font-family: ${({ theme }) => theme.fontMonospace};
+    font-size: 1.3rem;
+    color: #9089fc;
+  }
 `
 
 const ButtonBar = styled(Box)`
@@ -54,13 +65,18 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
   const scrolledRef = useRef(false)
   const monacoRef = useRef<Monaco | null>(null)
 
-  if (!activeBuffer.isDiffBuffer || !activeBuffer.diffContent) {
-    return null
-  }
-
   const { original, modified, explanation, queryStartOffset, originalQuery } =
-    activeBuffer.diffContent
+    activeBuffer.diffContent!
   const originalBufferId = activeBuffer.originalBufferId
+
+  const explanationWithCodeBlocks = useMemo(
+    () =>
+      explanation.replace(
+        /`([^`]+)`/g,
+        "<code class='explanation-code-block'>" + "$1" + "</code>",
+      ),
+    [explanation],
+  )
 
   const destroyEditor = async (setActiveBuffer?: boolean) => {
     diffEditor?.dispose()
@@ -133,12 +149,11 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
     <Container>
       {explanation && (
         <ExplanationBox>
-          <AutoAwesome
-            size="16px"
-            color="#f1fa8c"
-            style={{ flexShrink: 0, transform: "translateY(2px)" }}
+          <img src="/assets/ai-sparkle.svg" alt="" width={16} height={16} />
+          <p
+            style={{ margin: 0 }}
+            dangerouslySetInnerHTML={{ __html: explanationWithCodeBlocks }}
           />
-          {explanation}
         </ExplanationBox>
       )}
       <EditorContainer>
@@ -160,10 +175,10 @@ export const DiffEditorComponent = ({ pendingFixRef }: Props) => {
         />
       </EditorContainer>
       <ButtonBar align="center" justifyContent="flex-end">
-        <Button skin="error" onClick={handleReject}>
+        <Button skin="gradient" gradientWeight="thick" onClick={handleReject}>
           Reject
         </Button>
-        <Button skin="success" onClick={handleAccept}>
+        <Button skin="gradient" onClick={handleAccept}>
           Accept
         </Button>
       </ButtonBar>

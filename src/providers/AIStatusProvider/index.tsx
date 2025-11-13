@@ -38,25 +38,39 @@ const AIStatusContext = createContext<AIStatusContextType | undefined>(
 )
 
 export enum AIOperationStatus {
-  Processing = "Processing the request",
-  RetrievingTables = "Retrieving tables",
+  Processing = "Processing request",
+  RetrievingTables = "Reviewing tables",
   InvestigatingTableSchema = "Investigating table schema",
-  RetrievingDocumentation = "Retrieving docs",
-  InvestigatingFunctions = "Investigating functions",
-  InvestigatingOperators = "Investigating operators",
-  InvestigatingKeywords = "Investigating keywords",
+  RetrievingDocumentation = "Reviewing docs",
+  InvestigatingDocs = "Investigating docs",
   FormattingResponse = "Formatting response",
   Aborted = "Operation has been cancelled",
 }
 
+export type StatusArgs =
+  | { type: "generate" }
+  | { type: "fix" }
+  | { type: "explain" }
+  | { name: string }
+  | { name: string; section: string }
+  | null
+
+export type StatusEntry = {
+  type: AIOperationStatus
+  args?: StatusArgs
+}
+
+export type OperationHistory = StatusEntry[]
+
 type BaseAIStatusContextType = {
   status: AIOperationStatus | null
-  setStatus: (status: AIOperationStatus | null) => void
+  setStatus: (status: AIOperationStatus | null, args?: StatusArgs) => void
   abortController: AbortController | null
   abortOperation: () => void
   hasSchemaAccess: boolean
   models: string[]
   aiAssistantPromo: boolean
+  currentOperation: OperationHistory
 }
 
 export type AIStatusContextType =
@@ -82,13 +96,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
 }) => {
   const { editorRef } = useEditor()
   const { aiAssistantSettings } = useLocalStorage()
-  const [status, setStatus] = useState<AIOperationStatus | null>(null)
+  const [status, setStatusState] = useState<AIOperationStatus | null>(null)
+  const [currentOperation, setCurrentOperation] = useState<OperationHistory>([])
   const [abortController, setAbortController] = useState<AbortController>(
     new AbortController(),
   )
   const abortControllerRef = useRef<AbortController | null>(null)
   const statusRef = useRef<AIOperationStatus | null>(null)
-
+  const currentOperationRef = useRef<OperationHistory>([])
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isConfigured = useMemo(
     () => isAiAssistantConfigured(aiAssistantSettings),
     [aiAssistantSettings],
@@ -130,8 +146,32 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     [aiAssistantSettings],
   )
 
+  const setStatus = useCallback(
+    (newStatus: AIOperationStatus | null, args?: StatusArgs) => {
+      setStatusState(newStatus)
+
+      if (newStatus === null) {
+        if (currentOperationRef.current.length > 0) {
+          currentOperationRef.current = []
+          setCurrentOperation([])
+        }
+      } else {
+        currentOperationRef.current.push({
+          type: newStatus,
+          args: args || undefined,
+        })
+        setCurrentOperation([...currentOperationRef.current])
+      }
+    },
+    [],
+  )
+
   const abortOperation = useCallback(() => {
-    if (abortControllerRef.current && statusRef.current !== null) {
+    if (
+      abortControllerRef.current &&
+      statusRef.current !== null &&
+      statusRef.current !== AIOperationStatus.Aborted
+    ) {
       abortControllerRef.current?.abort()
       setAbortController(new AbortController())
       setStatus(AIOperationStatus.Aborted)
@@ -140,7 +180,24 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         readOnlyMessage: undefined,
       })
     }
-  }, [status, editorRef])
+  }, [status, editorRef, setStatus])
+
+  useEffect(() => {
+    if (status === AIOperationStatus.Aborted && timeoutRef.current === null) {
+      timeoutRef.current = setTimeout(() => {
+        currentOperationRef.current = []
+        setCurrentOperation([])
+      }, 3000)
+    } else if (
+      status !== AIOperationStatus.Aborted &&
+      timeoutRef.current !== null
+    ) {
+      currentOperationRef.current = []
+      setCurrentOperation([])
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [status])
 
   useEffect(() => {
     abortControllerRef.current = abortController
@@ -171,6 +228,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey: apiKey!,
         models,
         aiAssistantPromo,
+        currentOperation,
       }
     : {
         status,
@@ -184,6 +242,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey,
         models,
         aiAssistantPromo,
+        currentOperation,
       }
 
   return (

@@ -43,6 +43,7 @@ import "allotment/dist/style.css"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
+import { AIStatusIndicator } from "../../components/AIStatusIndicator"
 
 const Page = styled.div`
   display: flex;
@@ -111,6 +112,7 @@ const Layout = () => {
               <Page>
                 <Console />
               </Page>
+              <AIStatusIndicator />
             </Main>
 
             <Drawer id="side-panel-right" />
