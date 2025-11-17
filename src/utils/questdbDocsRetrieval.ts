@@ -1,5 +1,41 @@
 export type DocCategory = "functions" | "operators" | "sql"
 
+export type ParsedDocItem = {
+  name: string
+  section?: string
+}
+
+/**
+ * Parse a documentation item string into name and optional section
+ * Handles formats like "Window Functions - avg()" or "Window Functions"
+ */
+export function parseDocItem(item: string): ParsedDocItem | null {
+  if (!item || !item.trim()) {
+    return null
+  }
+
+  const parts = item.split(/\s+-\s+/)
+  if (parts.length >= 2) {
+    return {
+      name: parts[0].trim(),
+      section: parts.slice(1).join(" - ").trim(),
+    }
+  }
+
+  return { name: item.trim() }
+}
+
+/**
+ * Parse multiple documentation item strings into an array of parsed items
+ */
+export function parseDocItems(
+  items: string[],
+): Array<{ name: string; section?: string }> {
+  return items
+    .map(parseDocItem)
+    .filter((item): item is ParsedDocItem => item !== null)
+}
+
 // Base URL for documentation
 const DOCS_BASE_URL = " https://questdb.com/docs"
 
@@ -77,12 +113,12 @@ export async function getSpecificDocumentation(
 
   for (const item of items) {
     const normalizedItem = item.toLowerCase().replace(/[^a-z0-9_]/g, "_")
-    const parts = item.split(/\s+-\s+/)
-    const hasTitleAndSection = parts.length >= 2
-    const queryTitle = hasTitleAndSection ? parts[0].trim() : null
-    const querySection = hasTitleAndSection
-      ? parts.slice(1).join(" - ").trim()
-      : null
+    const parsed = parseDocItem(item)
+    if (!parsed) continue
+
+    const queryTitle = parsed.name
+    const querySection = parsed.section
+    const hasTitleAndSection = !!querySection
 
     // Find files containing this item
     for (const file of categoryDocs) {

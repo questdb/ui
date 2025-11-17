@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 import { Client } from "./questdb/client"
 import { Type } from "./questdb/types"
-import { MODEL_OPTIONS } from "./aiAssistantSettings"
+import { getModelProps, MODEL_OPTIONS } from "./aiAssistantSettings"
 import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
 import type { Request } from "../scenes/Editor/Monaco/utils"
@@ -10,6 +10,7 @@ import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import {
   getQuestDBTableOfContents,
   getSpecificDocumentation,
+  parseDocItems,
   DocCategory,
 } from "./questdbDocsRetrieval"
 import { MessageParam } from "@anthropic-ai/sdk/resources/messages"
@@ -242,7 +243,7 @@ const DOC_TOOLS = [
             type: "string" as const,
           },
           description:
-            "List of specific function names, operators, or SQL keywords to get documentation for",
+            "List of specific docs items in the category. IMPORTANT: Category of these items must match the category parameter. Name of these items should exactly match the entry in the table of contents you get with get_questdb_toc.",
         },
       },
       required: ["category", "items"],
@@ -443,7 +444,9 @@ const isNonRetryableError = (error: unknown) => {
     error instanceof MaxTokensError ||
     error instanceof Anthropic.AuthenticationError ||
     (typeof OpenAI !== "undefined" &&
-      error instanceof OpenAI.AuthenticationError)
+      error instanceof OpenAI.AuthenticationError) ||
+    // @ts-expect-error no proper rate limit error type
+    ("status" in error && error.status === 429)
   )
 }
 
@@ -505,14 +508,10 @@ const executeTool = async (
             is_error: true,
           }
         }
-        const firstItem = items[0] || ""
-        const parts = firstItem.split(/\s+-\s+/)
-        if (parts.length >= 2) {
-          const name = parts[0].trim()
-          const section = parts.slice(1).join(" - ").trim()
-          setStatus(AIOperationStatus.InvestigatingDocs, { name, section })
-        } else if (firstItem) {
-          setStatus(AIOperationStatus.InvestigatingDocs, { name: firstItem })
+        const parsedItems = parseDocItems(items)
+
+        if (parsedItems.length > 0) {
+          setStatus(AIOperationStatus.InvestigatingDocs, { items: parsedItems })
         } else {
           setStatus(AIOperationStatus.InvestigatingDocs)
         }
@@ -742,7 +741,7 @@ const executeOpenAIFlow = async <T>({
   )
 
   let lastResponse = await openai.responses.create({
-    model,
+    ...getModelProps(model),
     instructions: config.systemInstructions,
     input,
     tools: openaiTools,
@@ -777,7 +776,7 @@ const executeOpenAIFlow = async <T>({
     }
     input = [...input, ...tool_outputs]
     lastResponse = await openai.responses.create({
-      model,
+      ...getModelProps(model),
       instructions: config.systemInstructions,
       input,
       tools: openaiTools,
@@ -1446,7 +1445,7 @@ export const testApiKey = async (
     } else {
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true })
       await openai.responses.create({
-        model,
+        model: getModelProps(model).model,
         input: [{ role: "user", content: "ping" }],
         max_output_tokens: 16,
       })

@@ -681,6 +681,69 @@ export const AIStatusIndicator: React.FC = () => {
                       }
 
                       if (op.type === AIOperationStatus.InvestigatingDocs) {
+                        const items =
+                          op.args &&
+                          "items" in op.args &&
+                          Array.isArray(op.args.items)
+                            ? op.args.items
+                            : null
+
+                        if (items && items.length > 0) {
+                          return (
+                            <>
+                              {items.map((item, itemIdx) => {
+                                const itemKey = `${opKey}-item-${itemIdx}`
+                                return (
+                                  <ReasoningItem key={itemKey}>
+                                    <ReasoningIcon>
+                                      <FileText size={16} />
+                                    </ReasoningIcon>
+                                    <ReasoningText>
+                                      {item.section ? (
+                                        <>
+                                          <ReasoningTextPart>
+                                            Investigating
+                                          </ReasoningTextPart>
+                                          <CodeBadge>
+                                            <CodeBadgeText>
+                                              {item.section}
+                                            </CodeBadgeText>
+                                          </CodeBadge>
+                                          <ReasoningTextPart>
+                                            in
+                                          </ReasoningTextPart>
+                                          <CodeBadge>
+                                            <CodeBadgeText>
+                                              {item.name}
+                                            </CodeBadgeText>
+                                          </CodeBadge>
+                                          <ReasoningTextPart>
+                                            documentation
+                                          </ReasoningTextPart>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ReasoningTextPart>
+                                            Investigating
+                                          </ReasoningTextPart>
+                                          <CodeBadge>
+                                            <CodeBadgeText>
+                                              {item.name}
+                                            </CodeBadgeText>
+                                          </CodeBadge>
+                                          <ReasoningTextPart>
+                                            documentation
+                                          </ReasoningTextPart>
+                                        </>
+                                      )}
+                                    </ReasoningText>
+                                  </ReasoningItem>
+                                )
+                              })}
+                            </>
+                          )
+                        }
+
                         const name =
                           op.args && "name" in op.args ? op.args.name : null
                         const docSection =

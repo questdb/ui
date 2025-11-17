@@ -53,6 +53,7 @@ export type StatusArgs =
   | { type: "explain" }
   | { name: string }
   | { name: string; section: string }
+  | { items: Array<{ name: string; section?: string }> }
   | null
 
 export type StatusEntry = {

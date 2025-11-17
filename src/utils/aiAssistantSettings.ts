@@ -1,3 +1,4 @@
+import { ReasoningEffort } from "openai/resources/shared"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 
 export type Provider = "anthropic" | "openai"
@@ -39,10 +40,22 @@ export const MODEL_OPTIONS: ModelOption[] = [
     isTestModel: true,
   },
   {
-    label: "GPT-5",
-    value: "gpt-5",
+    label: "GPT-5.1 (High Reasoning)",
+    value: "gpt-5.1@reasoning=high",
     provider: "openai",
     isSlow: true,
+  },
+  {
+    label: "GPT-5.1 (Medium Reasoning)",
+    value: "gpt-5.1@reasoning=medium",
+    provider: "openai",
+    isSlow: true,
+    defaultEnabled: true,
+  },
+  {
+    label: "GPT-5.1 (No Reasoning)",
+    value: "gpt-5.1",
+    provider: "openai",
     defaultEnabled: true,
   },
   {
@@ -52,19 +65,37 @@ export const MODEL_OPTIONS: ModelOption[] = [
     default: true,
     defaultEnabled: true,
   },
-  {
-    label: "GPT-5 nano",
-    value: "gpt-5-nano",
-    provider: "openai",
-    defaultEnabled: true,
-    isTestModel: true,
-  },
-  { label: "GPT-4.1", value: "gpt-4.1", provider: "openai" },
-  { label: "GPT-4o", value: "gpt-4o", provider: "openai" },
 ]
 
 export const providerForModel = (model: ModelOption["value"]): Provider => {
   return MODEL_OPTIONS.find((m) => m.value === model)!.provider
+}
+
+export const getModelProps = (
+  model: ModelOption["value"],
+): {
+  model: string
+  reasoning?: { effort: ReasoningEffort }
+} => {
+  const modelOption = MODEL_OPTIONS.find((m) => m.value === model)
+  if (!modelOption) {
+    return { model }
+  }
+  const parts = modelOption.value.split("@")
+  const modelName = parts[0]
+  const extraParams = parts[1]
+  if (extraParams) {
+    const params = extraParams.split("=")
+    const paramName = params[0]
+    const paramValue = params[1]
+    if (paramName === "reasoning" && paramValue) {
+      return {
+        model: modelName,
+        reasoning: { effort: paramValue as ReasoningEffort },
+      }
+    }
+  }
+  return { model: modelName }
 }
 
 export const getAllProviders = (): Provider[] => {
