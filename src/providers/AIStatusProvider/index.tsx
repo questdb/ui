@@ -43,6 +43,7 @@ export enum AIOperationStatus {
   InvestigatingTableSchema = "Investigating table schema",
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
+  ValidatingQuery = "Validating generated query",
   FormattingResponse = "Formatting response",
   Aborted = "Operation has been cancelled",
 }

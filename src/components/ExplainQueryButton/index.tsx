@@ -11,7 +11,7 @@ import type {
 import {
   explainQuery,
   formatExplanationAsComment,
-  createSchemaClient,
+  createModelToolsClient,
   isAiAssistantError,
   type ActiveProviderSettings,
 } from "../../utils/aiAssistant"
@@ -85,9 +85,6 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
         value: "Query explanation in progress",
       },
     })
-    const schemaClient = hasSchemaAccess
-      ? createSchemaClient(tables, quest)
-      : undefined
     const provider = providerForModel(currentModel)
 
     const settings: ActiveProviderSettings = {
@@ -99,7 +96,10 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     const response = await explainQuery({
       query: queriesToRun[0],
       settings,
-      schemaClient,
+      modelToolsClient: createModelToolsClient(
+        quest,
+        hasSchemaAccess ? tables : undefined,
+      ),
       setStatus,
       abortSignal: abortController?.signal,
     })

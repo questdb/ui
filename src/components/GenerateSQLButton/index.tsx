@@ -15,7 +15,7 @@ import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
 import {
   generateSQL,
   formatExplanationAsComment,
-  createSchemaClient,
+  createModelToolsClient,
   isAiAssistantError,
   type ActiveProviderSettings,
 } from "../../utils/aiAssistant"
@@ -143,10 +143,6 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
       toast.error("No model selected for AI Assistant")
       return
     }
-
-    const schemaClient = hasSchemaAccessValue
-      ? createSchemaClient(tables, quest)
-      : undefined
     const provider = providerForModel(currentModel)
 
     const settings: ActiveProviderSettings = {
@@ -158,7 +154,10 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     const response = await generateSQL({
       description,
       settings,
-      schemaClient,
+      modelToolsClient: createModelToolsClient(
+        quest,
+        hasSchemaAccessValue ? tables : undefined,
+      ),
       setStatus,
       abortSignal: abortController?.signal,
     })

@@ -80,7 +80,7 @@ const ExplanationText = styled.p`
     background: #2d303e;
     border: 1px solid #44475a;
     border-radius: 0.6rem;
-    padding: 0.1rem 0.3rem;
+    padding: 0 0.3rem;
     display: inline-flex;
     gap: 1rem;
     align-items: center;

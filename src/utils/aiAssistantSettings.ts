@@ -59,6 +59,12 @@ export const MODEL_OPTIONS: ModelOption[] = [
     defaultEnabled: true,
   },
   {
+    label: "GPT-5",
+    value: "gpt-5",
+    provider: "openai",
+    defaultEnabled: true,
+  },
+  {
     label: "GPT-5 mini",
     value: "gpt-5-mini",
     provider: "openai",

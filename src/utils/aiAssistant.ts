@@ -36,6 +36,10 @@ export interface AiAssistantExplanation {
   explanation: string
 }
 
+export type AiAssistantValidateQueryResult =
+  | { valid: true }
+  | { valid: false; error: string; position: number }
+
 export interface TableSchemaExplanation {
   explanation: string
   columns: Array<{
@@ -51,9 +55,10 @@ export interface GeneratedSQL {
   explanation?: string
 }
 
-export interface SchemaToolsClient {
-  getTables: () => Promise<Array<{ name: string; type: "table" | "matview" }>>
-  getTableSchema: (tableName: string) => Promise<string | null>
+export interface ModelToolsClient {
+  validateQuery: (query: string) => Promise<AiAssistantValidateQueryResult>
+  getTables?: () => Promise<Array<{ name: string; type: "table" | "matview" }>>
+  getTableSchema?: (tableName: string) => Promise<string | null>
 }
 
 type StatusCallback = (
@@ -215,7 +220,22 @@ const SCHEMA_TOOLS: Array<AnthropicTool> = [
   },
 ]
 
-const DOC_TOOLS = [
+const REFERENCE_TOOLS = [
+  {
+    name: "validate_query",
+    description:
+      "Validate the syntax correctness of a SQL query using QuestDB's SQL syntax validator. All generated SQL queries should be validated using this tool before responding to the user.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string" as const,
+          description: "The SQL query to validate",
+        },
+      },
+      required: ["query"],
+    },
+  },
   {
     name: "get_questdb_toc",
     description:
@@ -251,7 +271,7 @@ const DOC_TOOLS = [
   },
 ]
 
-const ALL_TOOLS = [...SCHEMA_TOOLS, ...DOC_TOOLS]
+const ALL_TOOLS = [...SCHEMA_TOOLS, ...REFERENCE_TOOLS]
 
 const toOpenAIFunctions = (
   tools: Array<{
@@ -291,41 +311,77 @@ export function isAiAssistantError(
   return false
 }
 
-export function createSchemaClient(
-  tables: Array<{ table_name: string; matView: boolean }>,
+export function createModelToolsClient(
   questClient: Client,
-): SchemaToolsClient {
+  tables?: Array<{ table_name: string; matView: boolean }>,
+): ModelToolsClient {
   return {
-    getTables(): Promise<Array<{ name: string; type: "table" | "matview" }>> {
-      return Promise.resolve(
-        tables.map((table) => ({
-          name: table.table_name,
-          type: table.matView ? "matview" : ("table" as const),
-        })),
-      )
-    },
-
-    async getTableSchema(tableName: string): Promise<string | null> {
+    async validateQuery(
+      query: string,
+    ): Promise<AiAssistantValidateQueryResult> {
       try {
-        const table = tables.find((t) => t.table_name === tableName)
-        if (!table) {
-          return null
+        const response = await questClient.validateQuery(query)
+        if ("error" in response) {
+          return {
+            valid: false,
+            error: response.error,
+            position: response.position,
+          }
         }
-
-        const ddlResponse = table.matView
-          ? await questClient.showMatViewDDL(tableName)
-          : await questClient.showTableDDL(tableName)
-
-        if (ddlResponse?.type === Type.DQL && ddlResponse.data?.[0]?.ddl) {
-          return ddlResponse.data[0].ddl
+        return {
+          valid: true,
         }
-
-        return null
       } catch (error) {
-        console.error(`Failed to fetch schema for table ${tableName}:`, error)
-        return null
+        return {
+          valid: false,
+          error:
+            "Failed to validate query. Something went wrong with the QuestDB API.",
+          position: -1,
+        }
       }
     },
+    ...(tables
+      ? {
+          getTables(): Promise<
+            Array<{ name: string; type: "table" | "matview" }>
+          > {
+            return Promise.resolve(
+              tables.map((table) => ({
+                name: table.table_name,
+                type: table.matView ? "matview" : ("table" as const),
+              })),
+            )
+          },
+
+          async getTableSchema(tableName: string): Promise<string | null> {
+            try {
+              const table = tables.find((t) => t.table_name === tableName)
+              if (!table) {
+                return null
+              }
+
+              const ddlResponse = table.matView
+                ? await questClient.showMatViewDDL(tableName)
+                : await questClient.showTableDDL(tableName)
+
+              if (
+                ddlResponse?.type === Type.DQL &&
+                ddlResponse.data?.[0]?.ddl
+              ) {
+                return ddlResponse.data[0].ddl
+              }
+
+              return null
+            } catch (error) {
+              console.error(
+                `Failed to fetch schema for table ${tableName}:`,
+                error,
+              )
+              return null
+            }
+          },
+        }
+      : {}),
   }
 }
 
@@ -357,6 +413,7 @@ const getGenerateSQLPrompt = (grantSchemaAccess?: boolean) => {
 When given a natural language description, generate the corresponding QuestDB SQL query.
 
 Important guidelines:
+- Always validate the query using the validate_query tool before returning the generated SQL query.
 - Generate only valid QuestDB SQL syntax referring to the documentation about functions, operators, and SQL keywords
 - Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
 - Use \`IN\` with \`today()\`, \`tomorrow()\`, \`yesterday()\` interval functions when relevant
@@ -378,11 +435,12 @@ const getFixQueryPrompt = (grantSchemaAccess?: boolean) => {
 When given a QuestDB SQL query with an error, fix the query to resolve the error.
 
 Important guidelines:
-1. Analyze the error message carefully to understand what went wrong
-2. Generate only valid QuestDB SQL syntax by always referring to the documentation about functions, operators, and SQL keywords
-3. Preserve the original intent of the query while fixing the error
-4. Follow QuestDB best practices and syntax rules referring to the documentation
-5. Consider common issues like:
+1. Always validate the query using the validate_query tool before returning the fixed SQL query.
+2. Analyze the error message carefully to understand what went wrong
+3. Generate only valid QuestDB SQL syntax by always referring to the documentation about functions, operators, and SQL keywords
+4. Preserve the original intent of the query while fixing the error
+5. Follow QuestDB best practices and syntax rules referring to the documentation
+6. Consider common issues like:
    - Missing or incorrect column names
    - Invalid syntax for time-series operations
    - Data type mismatches
@@ -452,26 +510,26 @@ const isNonRetryableError = (error: unknown) => {
 const executeTool = async (
   toolName: string,
   input: unknown,
-  schemaClient: SchemaToolsClient | undefined,
+  modelToolsClient: ModelToolsClient,
   setStatus: StatusCallback,
 ): Promise<{ content: string; is_error?: boolean }> => {
   try {
     switch (toolName) {
       case "get_tables": {
         setStatus(AIOperationStatus.RetrievingTables)
-        if (!schemaClient) {
+        if (!modelToolsClient.getTables) {
           return {
             content:
               "Error: Schema access is not granted. This tool is not available.",
             is_error: true,
           }
         }
-        const result = await schemaClient.getTables()
+        const result = await modelToolsClient.getTables()
         return { content: JSON.stringify(result, null, 2) }
       }
       case "get_table_schema": {
         const tableName = (input as { table_name: string })?.table_name
-        if (!schemaClient) {
+        if (!modelToolsClient.getTableSchema) {
           return {
             content:
               "Error: Schema access is not granted. This tool is not available.",
@@ -487,11 +545,28 @@ const executeTool = async (
         setStatus(AIOperationStatus.InvestigatingTableSchema, {
           name: tableName,
         })
-        const result = await schemaClient.getTableSchema(tableName)
+        const result = await modelToolsClient.getTableSchema(tableName)
         return {
           content:
             result || `Table '${tableName}' not found or schema unavailable`,
         }
+      }
+      case "validate_query": {
+        setStatus(AIOperationStatus.ValidatingQuery)
+        const query = (input as { query: string })?.query
+        if (!query) {
+          return {
+            content: "Error: query parameter is required",
+            is_error: true,
+          }
+        }
+        const result = await modelToolsClient.validateQuery(query)
+        const content = {
+          valid: result.valid,
+          error: result.valid ? undefined : result.error,
+          position: result.valid ? undefined : result.position,
+        }
+        return { content: JSON.stringify(content, null, 2) }
       }
       case "get_questdb_toc": {
         setStatus(AIOperationStatus.RetrievingDocumentation)
@@ -534,7 +609,7 @@ const executeTool = async (
 async function handleToolCalls(
   message: Anthropic.Messages.Message,
   anthropic: Anthropic,
-  schemaClient: SchemaToolsClient | undefined,
+  modelToolsClient: ModelToolsClient,
   conversationHistory: Array<MessageParam>,
   model: string,
   setStatus: StatusCallback,
@@ -557,7 +632,7 @@ async function handleToolCalls(
       const exec = await executeTool(
         toolUse.name,
         toolUse.input,
-        schemaClient,
+        modelToolsClient,
         setStatus,
       )
       toolResults.push({
@@ -583,7 +658,7 @@ async function handleToolCalls(
 
   const followUpMessage = await createAnthropicMessage(anthropic, {
     model,
-    tools: schemaClient ? ALL_TOOLS : DOC_TOOLS,
+    tools: modelToolsClient ? ALL_TOOLS : REFERENCE_TOOLS,
     messages: updatedHistory,
     temperature: 0.3,
   })
@@ -592,7 +667,7 @@ async function handleToolCalls(
     return handleToolCalls(
       followUpMessage,
       anthropic,
-      schemaClient,
+      modelToolsClient,
       updatedHistory,
       model,
       setStatus,
@@ -703,7 +778,7 @@ interface ExecuteAnthropicFlowParams<T> {
   anthropic: Anthropic
   model: string
   config: AnthropicFlowConfig<T>
-  schemaClient?: SchemaToolsClient
+  modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }
@@ -712,7 +787,7 @@ interface ExecuteOpenAIFlowParams<T> {
   openai: OpenAI
   model: string
   config: OpenAIFlowConfig<T>
-  schemaClient?: SchemaToolsClient
+  modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }
@@ -721,7 +796,7 @@ const executeOpenAIFlow = async <T>({
   openai,
   model,
   config,
-  schemaClient,
+  modelToolsClient,
   setStatus,
   abortSignal,
 }: ExecuteOpenAIFlowParams<T>): Promise<T | AiAssistantAPIError> => {
@@ -734,9 +809,9 @@ const executeOpenAIFlow = async <T>({
     },
   ]
 
-  const grantSchemaAccess = !!schemaClient
+  const grantSchemaAccess = !!modelToolsClient.getTables
   const openaiTools = toOpenAIFunctions(
-    grantSchemaAccess ? ALL_TOOLS : DOC_TOOLS,
+    grantSchemaAccess ? ALL_TOOLS : REFERENCE_TOOLS,
   )
 
   let lastResponse = await openai.responses.create({
@@ -764,7 +839,7 @@ const executeOpenAIFlow = async <T>({
       const exec = await executeTool(
         tc.name,
         tc.arguments,
-        schemaClient,
+        modelToolsClient,
         setStatus,
       )
       tool_outputs.push({
@@ -820,7 +895,7 @@ const executeAnthropicFlow = async <T>({
   anthropic,
   model,
   config,
-  schemaClient,
+  modelToolsClient,
   setStatus,
   abortSignal,
 }: ExecuteAnthropicFlowParams<T>): Promise<T | AiAssistantAPIError> => {
@@ -828,11 +903,11 @@ const executeAnthropicFlow = async <T>({
     { role: "user" as const, content: config.initialUserContent },
   ]
 
-  const grantSchemaAccess = !!schemaClient
+  const grantSchemaAccess = !!modelToolsClient.getTables
   const message = await createAnthropicMessage(anthropic, {
     model,
     system: config.systemInstructions,
-    tools: grantSchemaAccess ? ALL_TOOLS : DOC_TOOLS,
+    tools: grantSchemaAccess ? ALL_TOOLS : REFERENCE_TOOLS,
     messages: initialMessages,
     temperature: 0.3,
   })
@@ -842,7 +917,7 @@ const executeAnthropicFlow = async <T>({
       ? await handleToolCalls(
           message,
           anthropic,
-          schemaClient,
+          modelToolsClient,
           initialMessages,
           model,
           setStatus,
@@ -906,13 +981,13 @@ const executeAnthropicFlow = async <T>({
 export const explainQuery = async ({
   query,
   settings,
-  schemaClient,
+  modelToolsClient,
   setStatus,
   abortSignal,
 }: {
   query: Request
   settings: ActiveProviderSettings
-  schemaClient?: SchemaToolsClient
+  modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }): Promise<AiAssistantExplanation | AiAssistantAPIError> => {
@@ -935,7 +1010,7 @@ export const explainQuery = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
-      const grantSchemaAccess = !!schemaClient
+      const grantSchemaAccess = !!modelToolsClient.getTables
       const content = query.selection
         ? `Explain this portion of the query:\n\n\`\`\`sql\n${query.selection.queryText}\n\`\`\` within this query:\n\n\`\`\`sql\n${query.query}\n\`\`\` with 2-4 sentences`
         : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${query.query}\n\`\`\``
@@ -949,7 +1024,7 @@ export const explainQuery = async ({
             initialUserContent: content,
             responseFormat: ExplainFormat,
           },
-          schemaClient,
+          modelToolsClient,
           setStatus,
           abortSignal,
         })
@@ -964,7 +1039,7 @@ export const explainQuery = async ({
           formattingPrompt:
             'Please give the 2-4 sentences summary of this query explanation in format { "explanation": "The summarized explanation" }. The result should be a valid JSON string.',
         },
-        schemaClient,
+        modelToolsClient,
         setStatus,
         abortSignal,
       })
@@ -977,13 +1052,13 @@ export const explainQuery = async ({
 export const generateSQL = async ({
   description,
   settings,
-  schemaClient,
+  modelToolsClient,
   setStatus,
   abortSignal,
 }: {
   description: string
   settings: ActiveProviderSettings
-  schemaClient?: SchemaToolsClient
+  modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }): Promise<GeneratedSQL | AiAssistantAPIError> => {
@@ -1006,7 +1081,7 @@ export const generateSQL = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
-      const grantSchemaAccess = !!schemaClient
+      const grantSchemaAccess = !!modelToolsClient.getTables
       const initialUserContent = `For the following description, generate the corresponding QuestDB SQL query and 2-4 sentences explanation:\n\n\`\`\`\n${description}\n\`\`\``
       const postProcess = (formatted: { sql: string; explanation: string }) => {
         if (!formatted || !formatted.sql) {
@@ -1028,7 +1103,7 @@ export const generateSQL = async ({
             responseFormat: GeneratedSQLFormat,
             postProcess,
           },
-          schemaClient,
+          modelToolsClient,
           setStatus,
           abortSignal,
         })
@@ -1044,7 +1119,7 @@ export const generateSQL = async ({
             'Return a JSON string with the following structure:\n{ "sql": "The generated SQL query", "explanation": "A brief explanation of the query" }. The result should be a valid JSON string.',
           postProcess,
         },
-        schemaClient,
+        modelToolsClient,
         setStatus,
         abortSignal,
       })
@@ -1058,7 +1133,7 @@ export const fixQuery = async ({
   query,
   errorMessage,
   settings,
-  schemaClient,
+  modelToolsClient,
   setStatus,
   abortSignal,
   word,
@@ -1066,7 +1141,7 @@ export const fixQuery = async ({
   query: string
   errorMessage: string
   settings: ActiveProviderSettings
-  schemaClient?: SchemaToolsClient
+  modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
   word: string | null
@@ -1090,7 +1165,7 @@ export const fixQuery = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
-      const grantSchemaAccess = !!schemaClient
+      const grantSchemaAccess = !!modelToolsClient.getTables
       const initialUserContent = `SQL Query:
 \`\`\`sql
 ${query}
@@ -1125,7 +1200,7 @@ ${word ? `The error occurred at word: ${word}` : ""}`
             responseFormat: FixSQLFormat,
             postProcess,
           },
-          schemaClient,
+          modelToolsClient,
           setStatus,
           abortSignal,
         })
@@ -1141,7 +1216,7 @@ ${word ? `The error occurred at word: ${word}` : ""}`
             'Return a JSON string with the following structure:\n{ "sql": "The fixed SQL query", "explanation": "What was wrong and how it was fixed" }, if it should not be fixed, return a JSON string with the following structure:\n{"explanation": "The explanation of why it was failed" }. The result should be a valid JSON string.',
           postProcess,
         },
-        schemaClient,
+        modelToolsClient,
         setStatus,
         abortSignal,
       })

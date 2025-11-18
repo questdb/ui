@@ -54,7 +54,12 @@ export default defineConfig(({ mode }) => {
           groups: ["group1", "group2"]
         }))
       }
-    }
+    },
+    "/api": {
+      target: 'http://127.0.0.1:9000',
+      changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
+    },
   }
 
   return {

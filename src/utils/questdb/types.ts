@@ -128,6 +128,56 @@ export type QueryResult<T extends Record<string, unknown>> =
   | DdlResult
   | NoticeResult
 
+type QueryType =
+  | "INSERT"
+  | "TRUNCATE"
+  | "ALTER TABLE"
+  | "SET"
+  | "DROP"
+  | "COPY"
+  | "CREATE TABLE"
+  | "INSERT AS SELECT"
+  | "COPY REMOTE"
+  | "RENAME TABLE"
+  | "REPAIR"
+  | "BACKUP TABLE"
+  | "UPDATE"
+  | "VACUUM"
+  | "BEGIN"
+  | "COMMIT"
+  | "ROLLBACK"
+  | "CREATE AS SELECT"
+  | "CHECKPOINT CREATE"
+  | "CHECKPOINT RELEASE"
+  | "DEALLOCATE"
+  | "EXPLAIN"
+  | "TABLE RESUME"
+
+export type ValidateQuerySuccessResult =
+  | {
+      query: string
+      columns: Array<{
+        name: string
+        type: string
+        dim?: number
+        elemType?: string
+      }>
+      timestamp: number
+    }
+  | {
+      queryType: QueryType
+    }
+
+export type ValidateQueryErrorResult = {
+  query: string
+  position: number
+  error: string
+}
+
+export type ValidateQueryResult =
+  | ValidateQuerySuccessResult
+  | ValidateQueryErrorResult
+
 export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
 export type Table = {

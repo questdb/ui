@@ -462,12 +462,13 @@ const getIsExpandableSection = (section: OperationSection) => {
     AIOperationStatus.RetrievingDocumentation,
     AIOperationStatus.FormattingResponse,
     AIOperationStatus.Aborted,
+    AIOperationStatus.ValidatingQuery,
   ].includes(section.type)
 }
 
 export const AIStatusIndicator: React.FC = () => {
   const { status, currentOperation, currentModel } = useAIStatus()
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({})

@@ -8,7 +8,7 @@ import type {
 } from "../../../utils/aiAssistant"
 import {
   isAiAssistantError,
-  createSchemaClient,
+  createModelToolsClient,
   fixQuery,
   type ActiveProviderSettings,
 } from "../../../utils/aiAssistant"
@@ -147,9 +147,6 @@ export const FixQueryButton = ({
         value: "Query fix in progress",
       },
     })
-    const schemaClient = hasSchemaAccess
-      ? createSchemaClient(tables, quest)
-      : undefined
     const provider = providerForModel(currentModel)
 
     const settings: ActiveProviderSettings = {
@@ -162,7 +159,10 @@ export const FixQueryButton = ({
       query: queryText,
       errorMessage,
       settings,
-      schemaClient,
+      modelToolsClient: createModelToolsClient(
+        quest,
+        hasSchemaAccess ? tables : undefined,
+      ),
       setStatus,
       abortSignal: abortController?.signal,
       word,
