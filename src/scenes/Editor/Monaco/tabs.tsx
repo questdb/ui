@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useState, useMemo } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
 import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
@@ -13,6 +13,10 @@ import {
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 import type { Buffer } from "../../../store/buffers"
+import {
+  isBlockingAIStatus,
+  useAIStatus,
+} from "../../../providers/AIStatusProvider"
 
 type Tab = {
   id: string
@@ -25,11 +29,19 @@ type Tab = {
 const Root = styled(Box).attrs({
   align: "center",
   justifyContent: "space-between",
-})`
+})<{ $disabled: boolean }>`
   width: 100%;
   display: flex;
   background: ${({ theme }) => theme.color.backgroundLighter};
   padding-right: 1rem;
+  ${({ $disabled }) =>
+    $disabled &&
+    css`
+      * {
+        pointer-events: none;
+        opacity: 0.8;
+      }
+    `}
 `
 
 const HistoryButton = styled(Button)`
@@ -65,6 +77,7 @@ export const Tabs = () => {
     deleteBuffer,
     archiveBuffer,
   } = useEditor()
+  const { status } = useAIStatus()
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -191,7 +204,7 @@ export const Tabs = () => {
   }
 
   return (
-    <Root>
+    <Root $disabled={isBlockingAIStatus(status)}>
       <ReactChromeTabs
         limit={40}
         darkMode
