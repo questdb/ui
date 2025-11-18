@@ -386,7 +386,6 @@ Important guidelines:
    - Missing or incorrect column names
    - Invalid syntax for time-series operations
    - Data type mismatches
-   - Missing quotes around string literals
    - Incorrect function usage
 `
   const schemaAccess = grantSchemaAccess

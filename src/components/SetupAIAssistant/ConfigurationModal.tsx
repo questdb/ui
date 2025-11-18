@@ -138,6 +138,7 @@ const ProviderCard = styled.button<{ $selected: boolean }>`
   gap: 0.6rem;
   padding: 1.2rem 2rem;
   width: 10rem;
+  height: 8.5rem;
   transition: all 0.2s;
 
   ${({ $selected, theme }) =>
@@ -212,6 +213,7 @@ const StyledInput = styled(Input)<{ $hasError?: boolean; $disabled?: boolean }>`
   border: 0.1rem solid
     ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
   border-radius: 0.8rem;
+  line-height: 21px;
   padding: 1.2rem;
   color: ${({ theme, $disabled }) =>
     $disabled ? theme.color.gray2 : theme.color.foreground};
@@ -707,7 +709,6 @@ const StepTwoContent = ({
           </SchemaAccessSection>
         )}
       </ContentSection>
-      <Separator />
       <WarningText>
         The AI assistant may occasionally produce incorrect information. Please
         verify important details and review all generated queries before

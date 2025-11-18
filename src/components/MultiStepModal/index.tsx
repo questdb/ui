@@ -69,7 +69,7 @@ const StyledContent = styled(RadixDialog.Content)<{ maxwidth?: string }>`
   max-width: ${({ maxwidth }) => maxwidth ?? "50rem"};
   max-height: 85vh;
   padding: 0;
-  border: 0.1rem solid ${({ theme }) => theme.color.gray1};
+  border: 0.1rem solid ${({ theme }) => theme.color.selection};
   z-index: 101;
   display: flex;
   flex-direction: column;
@@ -136,6 +136,7 @@ const FooterSection = styled(Box).attrs({
 })`
   padding: 2.4rem;
   width: 100%;
+  border-top: 0.1rem solid ${({ theme }) => theme.color.selection};
 `
 
 const FooterButtons = styled(Box).attrs({
@@ -307,6 +308,7 @@ export const MultiStepModal = ({
                 gap="1.6rem"
                 style={{
                   padding: "2.4rem",
+                  paddingBottom: "1.6rem",
                   width: "100%",
                 }}
               >

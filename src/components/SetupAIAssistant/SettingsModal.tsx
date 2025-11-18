@@ -45,7 +45,6 @@ const StyledContent = styled(Dialog.Content).attrs({
   flex-direction: column;
   max-height: 85vh;
   overflow: hidden;
-  height: 85vh;
 `
 
 const HeaderSection = styled(Box).attrs({

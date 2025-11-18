@@ -30,6 +30,7 @@ const color: ColorShape = {
   black70: "rgba(25, 26, 33, 0.7)",
   black40: "rgba(25, 26, 33, 0.4)",
   black20: "rgba(25, 26, 33, 0.2)",
+  overlayBackground: "rgba(44, 46, 61, 0.48)",
   gray1: "#585858",
   gray2: "#bbbbbb",
   backgroundDarker: "#21222c",
