@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react"
 import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
 import { Stop, Loader3 } from "@styled-icons/remix-line"
-import { CornerDownLeft } from "@styled-icons/evaicons-solid"
+import { Key } from "../../../components"
 import { CloseOutline } from "@styled-icons/evaicons-outline"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
 import {
@@ -184,23 +184,6 @@ const DropdownMenu = styled.div`
   }
 `
 
-const Key = styled(Box).attrs({ alignItems: "center" })`
-  padding: 0 0.4rem;
-  background: ${({ theme }) => theme.color.selectionDarker};
-  border-radius: 0.2rem;
-  font-size: 1.2rem;
-  height: 1.8rem;
-  color: ${color("green")};
-
-  &:not(:last-child) {
-    margin-right: 0.25rem;
-  }
-
-  svg {
-    color: ${color("green")} !important;
-  }
-`
-
 const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   margin-left: 1rem;
 `
@@ -343,11 +326,21 @@ const ButtonBar = ({
       >
         Run all queries
         <RunShortcut>
-          <Key>{ctrlCmd}</Key>
-          <Key>⇧</Key>
-          <Key>
-            <CornerDownLeft size="16px" />
-          </Key>
+          <Key
+            keyString={ctrlCmd}
+            color={color("green")}
+            hoverColor={color("green")}
+          />
+          <Key
+            keyString="⇧"
+            color={color("green")}
+            hoverColor={color("green")}
+          />
+          <Key
+            keyString="Enter"
+            color={color("green")}
+            hoverColor={color("green")}
+          />
         </RunShortcut>
       </SuccessButton>
     )
@@ -395,10 +388,16 @@ const ButtonBar = ({
         >
           {getQueryButtonText()}
           <RunShortcut>
-            <Key>{ctrlCmd}</Key>
-            <Key>
-              <CornerDownLeft size="16px" />
-            </Key>
+            <Key
+              keyString={ctrlCmd}
+              color={color("green")}
+              hoverColor={color("green")}
+            />
+            <Key
+              keyString="Enter"
+              color={color("green")}
+              hoverColor={color("green")}
+            />
           </RunShortcut>
         </MainRunButton>
         <PopperToggle

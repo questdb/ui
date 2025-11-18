@@ -6,8 +6,8 @@ import React, {
   useRef,
 } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box, Dialog, ForwardRef, Overlay } from "../../components"
-import { platform } from "../../utils"
+import { Button, Box, Dialog, ForwardRef, Overlay, Key } from "../../components"
+import { color, platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
@@ -29,19 +29,6 @@ import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
-
-const Key = styled(Box).attrs({ alignItems: "center" })`
-  padding: 0 0.4rem;
-  background: ${({ theme }) => theme.color.selectionDarker};
-  border-radius: 0.2rem;
-  font-size: 1.2rem;
-  height: 1.8rem;
-  color: inherit;
-
-  &:not(:last-child) {
-    margin-right: 0.25rem;
-  }
-`
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
@@ -302,8 +289,16 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
       >
         Generate query
         <KeyBinding $disabled={disabled}>
-          <Key>{ctrlCmd}</Key>
-          <Key>G</Key>
+          <Key
+            keyString={ctrlCmd}
+            color={disabled ? color("gray1") : color("pinkPrimary")}
+            hoverColor={disabled ? color("gray1") : color("pinkPrimary")}
+          />
+          <Key
+            keyString="G"
+            color={disabled ? color("gray1") : color("pinkPrimary")}
+            hoverColor={disabled ? color("gray1") : color("pinkPrimary")}
+          />
         </KeyBinding>
       </Button>
 

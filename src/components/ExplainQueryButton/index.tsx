@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useRef, useCallback } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box } from "../../components"
-import { platform } from "../../utils"
+import { Button, Box, Key } from "../../components"
+import { color, platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import type {
@@ -26,19 +26,6 @@ import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
-
-const Key = styled(Box).attrs({ alignItems: "center" })`
-  padding: 0 0.4rem;
-  background: ${({ theme }) => theme.color.selectionDarker};
-  border-radius: 0.2rem;
-  font-size: 1.2rem;
-  height: 1.8rem;
-  color: inherit;
-
-  &:not(:last-child) {
-    margin-right: 0.25rem;
-  }
-`
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
@@ -252,8 +239,16 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     >
       {isSelection ? "Explain selected query" : "Explain query"}
       <KeyBinding $disabled={disabled}>
-        <Key>{ctrlCmd}</Key>
-        <Key>E</Key>
+        <Key
+          keyString={ctrlCmd}
+          color={disabled ? color("gray1") : color("pinkPrimary")}
+          hoverColor={disabled ? color("gray1") : color("pinkPrimary")}
+        />
+        <Key
+          keyString="E"
+          color={disabled ? color("gray1") : color("pinkPrimary")}
+          hoverColor={disabled ? color("gray1") : color("pinkPrimary")}
+        />
       </KeyBinding>
     </Button>
   )
