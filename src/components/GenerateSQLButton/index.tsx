@@ -8,6 +8,7 @@ import React, {
 import styled, { css } from "styled-components"
 import { Button, Box, Dialog, ForwardRef, Overlay, Key } from "../../components"
 import { color, platform } from "../../utils"
+import { pinkLinearGradientVertical } from "../../theme"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
@@ -46,6 +47,8 @@ const StyledDialogTitle = styled(Dialog.Title)`
   display: flex;
   align-items: center;
   gap: 1rem;
+  font-size: 2rem;
+  font-weight: 500;
 `
 
 const StyledDialogDescription = styled(Dialog.Description)`
@@ -76,7 +79,7 @@ const StyledTextArea = styled.textarea`
   width: 100%;
   min-height: 120px;
   padding: 1rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.background};
   border: 1px solid ${({ theme }) => theme.color.gray1};
   border-radius: 0.4rem;
   color: ${({ theme }) => theme.color.foreground};
@@ -86,11 +89,19 @@ const StyledTextArea = styled.textarea`
   margin-bottom: 2rem;
 
   &:focus {
-    border-color: ${({ theme }) => theme.color.pink};
+    background:
+      linear-gradient(
+          ${({ theme }) => theme.color.background},
+          ${({ theme }) => theme.color.background}
+        )
+        padding-box,
+      ${pinkLinearGradientVertical} border-box;
+    border: 1px solid transparent;
   }
 
   &::placeholder {
     color: ${({ theme }) => theme.color.gray2};
+    font-size: 1.3rem;
   }
 `
 
@@ -273,6 +284,28 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     }
   }, [handleGenerateQueryOpen])
 
+  const handleGenerateShortcut = useCallback(
+    (e: KeyboardEvent) => {
+      if (!showDialog) return
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault()
+        if (description.trim()) {
+          void handleGenerate()
+        }
+      }
+    },
+    [showDialog, description, handleGenerate],
+  )
+
+  useEffect(() => {
+    if (showDialog) {
+      document.addEventListener("keydown", handleGenerateShortcut)
+      return () => {
+        document.removeEventListener("keydown", handleGenerateShortcut)
+      }
+    }
+  }, [showDialog, handleGenerateShortcut])
+
   if (!canUse) {
     return null
   }
@@ -320,7 +353,7 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
           >
             <StyledDialogTitle>
               <img src="/assets/ai-sparkle.svg" alt="" />
-              Generate query
+              Generate Query
             </StyledDialogTitle>
             <StyledContent>
               <StyledDialogDescription>
@@ -354,11 +387,39 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
               </Dialog.Close>
 
               <StyledDialogButton
-                skin="gradient"
+                skin="primary"
                 onClick={handleGenerate}
                 disabled={!description.trim()}
               >
                 Generate
+                <KeyBinding $disabled={!description.trim()}>
+                  <Key
+                    keyString={ctrlCmd}
+                    color={
+                      !description.trim()
+                        ? color("gray1")
+                        : color("pinkPrimary")
+                    }
+                    hoverColor={
+                      !description.trim()
+                        ? color("gray1")
+                        : color("pinkPrimary")
+                    }
+                  />
+                  <Key
+                    keyString="Enter"
+                    color={
+                      !description.trim()
+                        ? color("gray1")
+                        : color("pinkPrimary")
+                    }
+                    hoverColor={
+                      !description.trim()
+                        ? color("gray1")
+                        : color("pinkPrimary")
+                    }
+                  />
+                </KeyBinding>
               </StyledDialogButton>
             </Dialog.ActionButtons>
           </Dialog.Content>

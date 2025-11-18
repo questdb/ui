@@ -57,8 +57,8 @@ export const SetupAIAssistant = () => {
                 alt="AI Sparkle Hollow"
               />
             }
-            data-hook="anthropic-api-settings-button"
-            title="Anthropic API Settings"
+            data-hook="ai-assistant-settings-button"
+            title="AI Assistant Settings"
           >
             {isConfigured ? "Settings" : "Configure"}
           </SettingsButton>

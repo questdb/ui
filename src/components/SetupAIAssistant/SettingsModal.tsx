@@ -128,6 +128,7 @@ const Sidebar = styled(Box).attrs({
   gap: "1.2rem",
 })`
   padding: 0;
+  padding-top: 2.4rem;
   width: 15.1rem;
   flex-shrink: 0;
   overflow-y: auto;
@@ -137,15 +138,19 @@ const ProviderTab = styled.button<{ $active: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 2.4rem;
-  background: transparent;
+  padding: 1.2rem 2.4rem;
+  background: ${({ $active, theme }) =>
+    $active ? theme.color.midnight : "transparent"};
   border: none;
+  border-bottom: ${({ $active, theme }) =>
+    $active ? "0.2rem solid " + theme.color.pinkPrimary : "none"};
   cursor: pointer;
   align-items: flex-start;
   width: 100%;
 
   &:hover {
-    background: ${({ theme }) => theme.color.selection};
+    background: ${({ $active, theme }) =>
+      $active ? theme.color.midnight : theme.color.selection};
   }
 `
 
@@ -166,8 +171,8 @@ const ProviderTabName = styled(Text)<{ $active: boolean }>`
 const StatusBadge = styled(Box).attrs({
   gap: "0.4rem",
   align: "center",
-})`
-  background: #2d303e;
+})<{ $enabled: boolean }>`
+  background: ${({ $enabled }) => ($enabled ? "transparent" : "#2d303e")};
   padding: 0.3rem;
   border-radius: 0.2rem;
 `
@@ -827,7 +832,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                           {getProviderName(provider)}
                         </ProviderTabName>
                       </ProviderTabTitle>
-                      <StatusBadge>
+                      <StatusBadge $enabled={validatedApiKeys[provider]}>
                         <StatusDot $enabled={validatedApiKeys[provider]} />
                         <StatusText $enabled={validatedApiKeys[provider]}>
                           {validatedApiKeys[provider] ? "Enabled" : "Inactive"}
