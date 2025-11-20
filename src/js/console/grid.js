@@ -60,7 +60,7 @@ export function grid(rootElement, _paginationFn, id) {
     dataPageSize: 1000,
     layoutStoreTimeout: 1000,
     cellWidthMultiplier: 9.6,
-    arrayCellWidthMultiplier: 8,
+    arrayCellWidthMultiplier: 8.3,
     maxCellWidthMultiplier: 0.8,
   }
   const ACTIVE_CELL_CLASS = "qg-c-active"
