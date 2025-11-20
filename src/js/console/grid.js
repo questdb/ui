@@ -709,6 +709,10 @@ export function grid(rootElement, _paginationFn, id) {
     e.preventDefault()
     document.onmousemove = null
     document.onmouseup = null
+    layoutStoreSaveColumnChange(
+      getColumn(colResizeColIndex).name,
+      colResizeTargetWidth,
+    )
     setColumnWidth(colResizeColIndex, colResizeTargetWidth)
 
     columnResizeGhost.style.visibility = "hidden"
@@ -718,10 +722,6 @@ export function grid(rootElement, _paginationFn, id) {
       // delay clearing drag end to prevent overlapping header click
       colResizeColIndex = undefined
     }, 500)
-    layoutStoreSaveColumnChange(
-      getColumn(colResizeColIndex).name,
-      colResizeTargetWidth,
-    )
   }
 
   function getCellWidth(valueLen) {
