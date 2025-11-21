@@ -182,6 +182,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     hasSchemaAccess,
     currentModel,
     apiKey,
+    isConfigured,
   } = useAIStatus()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
@@ -644,29 +645,33 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 >
                   Copy schema
                 </MenuItem>
-                <MenuItem
-                  data-hook="table-context-menu-explain-schema"
-                  onClick={async () =>
-                    await handleExplainSchema(
-                      item.name,
-                      item.kind === "matview",
-                    )
-                  }
-                  icon={
-                    <img
-                      src="/assets/ai-sparkle.svg"
-                      alt="AI Sparkle"
-                      width={16}
-                      height={16}
-                      style={{ filter: "brightness(0) invert(1)" }}
-                    />
-                  }
-                  disabled={
-                    !canUse || !hasSchemaAccess || isBlockingAIStatus(aiStatus)
-                  }
-                >
-                  Explain schema with AI
-                </MenuItem>
+                {isConfigured && (
+                  <MenuItem
+                    data-hook="table-context-menu-explain-schema"
+                    onClick={async () =>
+                      await handleExplainSchema(
+                        item.name,
+                        item.kind === "matview",
+                      )
+                    }
+                    icon={
+                      <img
+                        src="/assets/ai-sparkle.svg"
+                        alt="AI Sparkle"
+                        width={16}
+                        height={16}
+                        style={{ filter: "brightness(0) invert(1)" }}
+                      />
+                    }
+                    disabled={
+                      !canUse ||
+                      !hasSchemaAccess ||
+                      isBlockingAIStatus(aiStatus)
+                    }
+                  >
+                    Explain schema with AI
+                  </MenuItem>
+                )}
                 <MenuItem
                   data-hook="table-context-menu-resume-wal"
                   onClick={() =>
