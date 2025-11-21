@@ -45,6 +45,19 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { SchemaExplanationDialog } from "../SchemaExplanationDialog"
+import {
+  explainTableSchema,
+  isAiAssistantError,
+  AiAssistantAPIError,
+  TableSchemaExplanation,
+  type ActiveProviderSettings,
+} from "../../../utils/aiAssistant"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+} from "../../../providers/AIStatusProvider"
+import { providerForModel } from "../../../utils/aiAssistantSettings"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -162,6 +175,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
   const allColumns = useSelector(selectors.query.getColumns)
+  const {
+    status: aiStatus,
+    setStatus,
+    canUse,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+    isConfigured,
+  } = useAIStatus()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -170,6 +192,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<
     string | null
   >(null)
+  const [schemaExplanationDialog, setSchemaExplanationDialog] = useState<{
+    tableName: string
+    isMatView: boolean
+    explanation: TableSchemaExplanation | null
+  } | null>(null)
 
   const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(
     new Map(),
@@ -224,24 +251,82 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }, [] as FlattenedTreeItem[])
   }, [schemaTree])
 
-  const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
+  const getTableSchema = async (
+    tableName: string,
+    isMatView: boolean,
+  ): Promise<string | null> => {
     try {
-      let response
-      if (isMatView) {
-        response = await quest.showMatViewDDL(tableName)
-      } else {
-        response = await quest.showTableDDL(tableName)
-      }
+      const response = isMatView
+        ? await quest.showMatViewDDL(tableName)
+        : await quest.showTableDDL(tableName)
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
-        await copyToClipboard(response.data[0].ddl)
-        toast.success("Schema copied to clipboard")
+        return response.data[0].ddl
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error(
-        `Cannot copy schema for ${isMatView ? "materialized view" : "table"} '${tableName}'`,
+        `Cannot fetch schema for ${isMatView ? "materialized view" : "table"} '${tableName}'`,
       )
     }
+    return null
+  }
+
+  const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
+    const schema = await getTableSchema(tableName, isMatView)
+    if (schema) {
+      await copyToClipboard(schema)
+      toast.success("Schema copied to clipboard")
+    }
+  }
+
+  const handleExplainSchema = async (tableName: string, isMatView: boolean) => {
+    if (!canUse) {
+      toast.error(
+        "AI Assistant is not enabled. Please configure your API key in settings.",
+      )
+      return
+    }
+
+    const schema = await getTableSchema(tableName, isMatView)
+    if (!schema) {
+      return
+    }
+
+    const provider = providerForModel(currentModel)
+
+    const settings: ActiveProviderSettings = {
+      model: currentModel,
+      provider,
+      apiKey,
+    }
+
+    const response = await explainTableSchema({
+      tableName,
+      schema,
+      isMatView,
+      settings,
+      setStatus,
+    })
+
+    if (isAiAssistantError(response)) {
+      const error = response as AiAssistantAPIError
+      toast.error(error.message, { autoClose: 10000 })
+      return
+    }
+
+    const result = response as TableSchemaExplanation
+    if (!result.explanation) {
+      toast.error("No explanation received from AI Assistant", {
+        autoClose: 10000,
+      })
+      return
+    }
+
+    setSchemaExplanationDialog({
+      tableName,
+      isMatView,
+      explanation: result,
+    })
   }
 
   const fetchSymbolColumnDetails = useCallback(
@@ -560,6 +645,33 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 >
                   Copy schema
                 </MenuItem>
+                {isConfigured && (
+                  <MenuItem
+                    data-hook="table-context-menu-explain-schema"
+                    onClick={async () =>
+                      await handleExplainSchema(
+                        item.name,
+                        item.kind === "matview",
+                      )
+                    }
+                    icon={
+                      <img
+                        src="/assets/ai-sparkle.svg"
+                        alt="AI Sparkle"
+                        width={16}
+                        height={16}
+                        style={{ filter: "brightness(0) invert(1)" }}
+                      />
+                    }
+                    disabled={
+                      !canUse ||
+                      !hasSchemaAccess ||
+                      isBlockingAIStatus(aiStatus)
+                    }
+                  >
+                    Explain schema with AI
+                  </MenuItem>
+                )}
                 <MenuItem
                   data-hook="table-context-menu-resume-wal"
                   onClick={() =>
@@ -702,19 +814,29 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }
 
   return (
-    <div ref={wrapperRef} style={{ height: "100%" }}>
-      <Virtuoso
-        totalCount={flattenedItems.length}
-        ref={virtuosoRef}
-        data-hook="schema-tree"
-        rangeChanged={(newRange) => {
-          rangeRef.current = newRange
-        }}
-        data={flattenedItems}
-        itemContent={(index) => renderRow(index)}
-        style={{ height: "100%" }}
-      />
-    </div>
+    <>
+      <div ref={wrapperRef} style={{ height: "100%" }}>
+        <Virtuoso
+          totalCount={flattenedItems.length}
+          ref={virtuosoRef}
+          data-hook="schema-tree"
+          rangeChanged={(newRange) => {
+            rangeRef.current = newRange
+          }}
+          data={flattenedItems}
+          itemContent={(index) => renderRow(index)}
+          style={{ height: "100%" }}
+        />
+      </div>
+      {schemaExplanationDialog && (
+        <SchemaExplanationDialog
+          open
+          onOpenChange={(open) => !open && setSchemaExplanationDialog(null)}
+          tableName={schemaExplanationDialog.tableName}
+          explanation={schemaExplanationDialog.explanation}
+        />
+      )}
+    </>
   )
 }
 

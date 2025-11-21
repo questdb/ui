@@ -11,7 +11,7 @@ import {
   Input,
   CopyButton,
 } from "../../../components"
-import { Undo } from "@styled-icons/boxicons-regular"
+import { Undo, CheckCircle } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
@@ -23,8 +23,9 @@ import { ErrorResult } from "../../../utils"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import Joi from "joi"
 
-const StyledDialogContent = styled(Dialog.Content)`
-  border-color: #723131;
+const StyledDialogContent = styled(Dialog.Content)<{ $success?: boolean }>`
+  border-color: ${({ $success, theme }) =>
+    $success ? theme.color.green : theme.color.red};
 `
 
 const StyledDescription = styled(Dialog.Description)`
@@ -59,6 +60,11 @@ const StyledInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
   background: #313340;
   border-color: ${({ theme }) => theme.color.selection};
+`
+
+const StyledTable = styled(Table)<{ $success?: boolean }>`
+  color: ${({ $success, theme }) =>
+    $success ? theme.color.green : theme.color.red};
 `
 
 type FormValues = {
@@ -143,10 +149,11 @@ export const SuspensionDialog = ({
           }}
           onEscapeKeyDown={() => onOpenChange(false)}
           onPointerDownOutside={() => onOpenChange(false)}
+          $success={isSubmitted}
         >
           <Dialog.Title>
             <Box>
-              <Table size={20} color="#FF5555" />
+              <StyledTable size={20} $success={isSubmitted} />
               {kind === "table" ? "Table" : "Materialized view"} is suspended:{" "}
               {walTableData.name}
             </Box>
@@ -157,10 +164,13 @@ export const SuspensionDialog = ({
               {error && <Text color="red">{error}</Text>}
 
               {isSubmitted && (
-                <Text color="green">WAL resumed successfully!</Text>
+                <Text color="green" size="lg">
+                  WAL resumed successfully!
+                </Text>
               )}
 
               {walTableData.errorTag &&
+                !isSubmitted &&
                 errorWorkarounds[walTableData.errorTag] && (
                   <Text
                     color="red"
@@ -295,12 +305,14 @@ export const SuspensionDialog = ({
           <Dialog.ActionButtons>
             <Dialog.Close asChild>
               <Button
-                prefixIcon={<Undo size={18} />}
-                skin="secondary"
+                prefixIcon={
+                  isSubmitted ? <CheckCircle size={18} /> : <Undo size={18} />
+                }
+                skin={isSubmitted ? "success" : "secondary"}
                 data-hook="schema-suspension-dialog-dismiss"
                 onClick={() => onOpenChange(false)}
               >
-                Dismiss
+                {isSubmitted ? "Close" : "Dismiss"}
               </Button>
             </Dialog.Close>
           </Dialog.ActionButtons>

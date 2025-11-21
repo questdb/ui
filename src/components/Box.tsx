@@ -7,6 +7,7 @@ type Props = {
   margin?: React.CSSProperties["margin"]
   align?: React.CSSProperties["alignItems"]
   justifyContent?: React.CSSProperties["justifyContent"]
+  alignSelf?: React.CSSProperties["alignSelf"]
 }
 
 export const Box = styled.div.attrs<Props, Props>((props) => ({
@@ -15,6 +16,7 @@ export const Box = styled.div.attrs<Props, Props>((props) => ({
   margin: props.margin || "0",
   align: props.align || "center",
   justifyContent: props.justifyContent || "flex-start",
+  alignSelf: props.alignSelf || "",
 }))`
   display: flex;
   flex-direction: ${({ flexDirection }) => flexDirection};
@@ -22,4 +24,5 @@ export const Box = styled.div.attrs<Props, Props>((props) => ({
   margin: ${({ margin }) => margin};
   align-items: ${({ align }) => align};
   justify-content: ${({ justifyContent }) => justifyContent};
+  align-self: ${({ alignSelf }) => alignSelf};
 `
