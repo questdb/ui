@@ -60,6 +60,8 @@ export function grid(rootElement, _paginationFn, id) {
     dataPageSize: 1000,
     layoutStoreTimeout: 1000,
     cellWidthMultiplier: 9.6,
+    arrayCellWidthMultiplier: 8.3,
+    maxCellWidthMultiplier: 0.8,
   }
   const ACTIVE_CELL_CLASS = "qg-c-active"
   const NAV_EVENT_ANY_VERTICAL = 0
@@ -709,6 +711,10 @@ export function grid(rootElement, _paginationFn, id) {
     e.preventDefault()
     document.onmousemove = null
     document.onmouseup = null
+    layoutStoreSaveColumnChange(
+      getColumn(colResizeColIndex).name,
+      colResizeTargetWidth,
+    )
     setColumnWidth(colResizeColIndex, colResizeTargetWidth)
 
     columnResizeGhost.style.visibility = "hidden"
@@ -718,10 +724,6 @@ export function grid(rootElement, _paginationFn, id) {
       // delay clearing drag end to prevent overlapping header click
       colResizeColIndex = undefined
     }, 500)
-    layoutStoreSaveColumnChange(
-      getColumn(colResizeColIndex).name,
-      colResizeTargetWidth,
-    )
   }
 
   function getCellWidth(valueLen) {
@@ -729,6 +731,26 @@ export function grid(rootElement, _paginationFn, id) {
       defaults.minColumnWidth,
       Math.ceil(valueLen * defaults.cellWidthMultiplier),
     )
+  }
+
+  function getArrayColumnWidth(value, columnIndex) {
+    const arrayString = getArrayString(value)
+    const col = getColumn(columnIndex)
+    const fullContent =
+      "ARRAY" +
+      "[".repeat(col.dim) +
+      arrayString.slice(col.dim, -col.dim) +
+      "]".repeat(col.dim)
+
+    const fullContentWidth = Math.max(
+      defaults.minColumnWidth,
+      Math.ceil(fullContent.length * defaults.arrayCellWidthMultiplier),
+    )
+    const maxArrayWidth =
+      viewport.getBoundingClientRect().width * defaults.maxCellWidthMultiplier
+
+    // Only use the 80% cap if the content would exceed it
+    return Math.min(fullContentWidth, maxArrayWidth)
   }
 
   function colFreezeMouseEnter(e) {
@@ -1113,9 +1135,10 @@ export function grid(rootElement, _paginationFn, id) {
     const arrayString = getArrayString(cellData)
 
     const maxWidthToSpan =
-      columnWidth ?? viewport.getBoundingClientRect().width * 0.4
+      columnWidth ??
+      viewport.getBoundingClientRect().width * defaults.maxCellWidthMultiplier
     const maxArrayTextLength = Math.ceil(
-      maxWidthToSpan / defaults.cellWidthMultiplier,
+      maxWidthToSpan / defaults.arrayCellWidthMultiplier,
     )
 
     const openCloseBracketsLength = column.dim
@@ -1957,7 +1980,8 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function computeColumnWidthsFromData() {
-    const maxWidth = viewport.getBoundingClientRect().width * 0.8
+    const maxWidth =
+      viewport.getBoundingClientRect().width * defaults.maxCellWidthMultiplier
     const offsets = Array(columnCount + 1).fill(0)
     let offset = 0
 
@@ -1975,7 +1999,9 @@ export function grid(rootElement, _paginationFn, id) {
           if (value === null) {
             str = "null"
           } else if (Array.isArray(value)) {
-            str = getDisplayedCellValue(getColumn(i), value)
+            const arrayColumnWidth = getArrayColumnWidth(value, i)
+            w = Math.min(maxWidth, Math.max(w, arrayColumnWidth))
+            continue
           } else {
             str = value.toString()
           }
@@ -1995,7 +2021,8 @@ export function grid(rootElement, _paginationFn, id) {
       totalWidth = columnOffsets[columnCount]
       return
     }
-    const maxWidth = viewport.getBoundingClientRect().width * 0.8
+    const maxWidth =
+      viewport.getBoundingClientRect().width * defaults.maxCellWidthMultiplier
     recomputeColumnWidthOnResize = maxWidth < 0.1
 
     if (!recomputeColumnWidthOnResize && data && data.length > 0) {
@@ -2025,7 +2052,9 @@ export function grid(rootElement, _paginationFn, id) {
             if (value === null) {
               str = "null"
             } else if (getColumn(i).type === "ARRAY") {
-              str = getDisplayedCellValue(getColumn(i), value)
+              const arrayColumnWidth = getArrayColumnWidth(value, i)
+              w = Math.min(maxWidth, Math.max(w, arrayColumnWidth))
+              continue
             } else {
               str = value.toString()
             }
