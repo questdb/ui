@@ -6,8 +6,6 @@ import { AIAssistantPromo } from "./AIAssistantPromo"
 import { ConfigurationModal } from "./ConfigurationModal"
 import { SettingsModal } from "./SettingsModal"
 import { ModelDropdown } from "./ModelDropdown"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { StoreKey } from "../../utils/localStorage/types"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 
 const SettingsButton = styled(Button)`
@@ -23,19 +21,19 @@ export const SetupAIAssistant = () => {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [showPromo, setShowPromo] = useState(false)
   const configureButtonRef = useRef<HTMLElement>(null)
-  const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const { isConfigured } = useAIStatus()
 
   const handleSettingsClick = () => {
     if (isConfigured) {
       setSettingsModalOpen(true)
     } else {
-      setConfigModalOpen(true)
-      setShowPromo(false)
-      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
-        ...aiAssistantSettings,
-        aiAssistantPromo: false,
-      })
+      if (showPromo) {
+        setShowPromo(false)
+        setConfigModalOpen(true)
+      } else {
+        // First click: show promo
+        setShowPromo(true)
+      }
     }
   }
 
@@ -68,7 +66,10 @@ export const SetupAIAssistant = () => {
         triggerRef={configureButtonRef}
         showPromo={showPromo}
         setShowPromo={setShowPromo}
-        onSetupClick={() => setConfigModalOpen(true)}
+        onSetupClick={() => {
+          setShowPromo(false)
+          setConfigModalOpen(true)
+        }}
       />
       <ConfigurationModal
         open={configModalOpen}

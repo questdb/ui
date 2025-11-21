@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Dialog } from "../Dialog"
 import { MultiStepModal, Step } from "../MultiStepModal"
 import { Box } from "../Box"
@@ -16,7 +16,6 @@ import {
   type ModelOption,
   type Provider,
 } from "../../utils/aiAssistantSettings"
-import { ExternalLink } from "@styled-icons/remix-line"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
@@ -207,17 +206,13 @@ const InputLabel = styled(Text)`
   color: ${({ theme }) => theme.color.gray2};
 `
 
-const StyledInput = styled(Input)<{ $hasError?: boolean; $disabled?: boolean }>`
+const StyledInput = styled(Input)<{ $hasError?: boolean; disabled?: boolean }>`
   width: 100%;
   background: #262833;
   border: 0.1rem solid
     ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
   border-radius: 0.8rem;
-  line-height: 21px;
-  padding: 1.2rem;
-  color: ${({ theme, $disabled }) =>
-    $disabled ? theme.color.gray2 : theme.color.foreground};
-  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "text")};
+  cursor: ${({ disabled }) => (disabled ? "not-allowed" : "text")};
   font-size: 1.4rem;
 
   &::placeholder {
@@ -225,9 +220,12 @@ const StyledInput = styled(Input)<{ $hasError?: boolean; $disabled?: boolean }>`
     font-family: inherit;
   }
 
-  &:disabled {
-    opacity: 0.6;
-  }
+  ${({ disabled }) =>
+    disabled &&
+    css`
+      opacity: 0.6;
+      cursor: not-allowed;
+    `}
 `
 
 const ErrorText = styled(Text)`
@@ -345,31 +343,6 @@ const SchemaAccessTitle = styled(Text)`
   font-weight: 600;
   color: ${({ theme }) => theme.color.gray2};
   flex: 1;
-`
-
-const LearnMoreLink = styled(Box).attrs({
-  gap: "0.4rem",
-  align: "center",
-})`
-  cursor: pointer;
-  color: ${({ theme }) => theme.color.cyan};
-  text-decoration: none;
-
-  &:hover {
-    opacity: 0.8;
-  }
-`
-
-const LearnMoreText = styled(Text)`
-  font-size: 1.3rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.cyan};
-`
-
-const LearnMoreIcon = styled(ExternalLink)`
-  width: 1.6rem;
-  height: 1.6rem;
-  color: ${({ theme }) => theme.color.cyan};
 `
 
 const SchemaCheckboxContainer = styled(Box).attrs({
@@ -558,7 +531,7 @@ const StepOneContent = ({
         <InputSection align="flex-start">
           <InputLabel>API Key</InputLabel>
           <StyledInput
-            type="password"
+            type="text"
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
             placeholder={`Enter${providerName ? ` ${providerName}` : ""} API key`}
@@ -669,17 +642,6 @@ const StepTwoContent = ({
           <SchemaAccessSection>
             <SchemaAccessHeader>
               <SchemaAccessTitle>Schema Access</SchemaAccessTitle>
-              <LearnMoreLink
-                as="a"
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault()
-                  // TODO: Open learn more link
-                }}
-              >
-                <LearnMoreText>Learn more about data privacy</LearnMoreText>
-                <LearnMoreIcon />
-              </LearnMoreLink>
             </SchemaAccessHeader>
             <SchemaCheckboxContainer>
               <SchemaCheckboxInner>

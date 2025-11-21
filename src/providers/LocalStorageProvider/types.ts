@@ -5,7 +5,6 @@ export type ProviderSettings = {
 }
 
 export type AiAssistantSettings = {
-  aiAssistantPromo: boolean
   selectedModel?: string
   providers: {
     anthropic?: ProviderSettings

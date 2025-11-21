@@ -35,7 +35,6 @@ import {
 } from "./types"
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
-  aiAssistantPromo: true,
   providers: {},
 }
 
@@ -136,10 +135,6 @@ export const LocalStorageProvider = ({
       try {
         const parsed = JSON.parse(stored) as AiAssistantSettings
         return {
-          aiAssistantPromo:
-            parsed.aiAssistantPromo !== undefined
-              ? parsed.aiAssistantPromo
-              : true,
           selectedModel: parsed.selectedModel,
           providers: parsed.providers || {},
         }

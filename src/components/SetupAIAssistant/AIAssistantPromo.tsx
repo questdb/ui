@@ -3,14 +3,11 @@ import ReactDOM from "react-dom"
 import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
-import { Close, ExternalLink } from "@styled-icons/remix-line"
+import { Close } from "@styled-icons/remix-line"
 import { Button } from "../Button"
 import { Text } from "../Text"
 import { Box } from "../Box"
 import { TransitionDuration } from "../Transition"
-import { useAIStatus } from "../../providers/AIStatusProvider"
-import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { StoreKey } from "../../utils/localStorage/types"
 import { platform } from "../../utils"
 
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
@@ -223,31 +220,7 @@ const SetupButton = styled(Button).attrs({
   skin: "primary",
 })`
   background: ${({ theme }) => theme.color.pinkDarker};
-`
-
-const LearnMoreLink = styled(Box).attrs({
-  align: "center",
-  gap: "0.4rem",
-})`
-  cursor: pointer;
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-    color: ${({ theme }) => theme.color.cyan};
-  }
-`
-
-const LearnMoreText = styled(Text)`
-  font-weight: 500;
-  font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.cyan};
-`
-
-const ExternalIcon = styled(ExternalLink)`
-  width: 1.6rem;
-  height: 1.6rem;
-  color: ${({ theme }) => theme.color.cyan};
+  margin-left: auto;
 `
 
 type Props = {
@@ -263,22 +236,12 @@ export const AIAssistantPromo = ({
   showPromo,
   setShowPromo,
 }: Props) => {
-  const { aiAssistantPromo: shouldShowPromo } = useAIStatus()
-  const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const [container] = useState<HTMLElement>(document.createElement("div"))
   const transitionTimeoutId = useRef<number | undefined>()
   const [arrowElement, setArrowElement] = useState<HTMLElement | null>(null)
   const [popperElement, setPopperElement] = useState<HTMLElement | null>(null)
   const [positionReady, setPositionReady] = useState(false)
-
-  useEffect(() => {
-    if (shouldShowPromo && triggerRef.current) {
-      const timer = setTimeout(() => {
-        setShowPromo(true)
-      }, 200)
-      return () => clearTimeout(timer)
-    }
-  }, [shouldShowPromo, triggerRef])
+  const promoKeyRef = useRef(0)
 
   const { attributes, styles, forceUpdate } = usePopper(
     triggerRef.current || undefined,
@@ -304,20 +267,12 @@ export const AIAssistantPromo = ({
 
   const handleClose = useCallback(() => {
     setShowPromo(false)
-    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
-      ...aiAssistantSettings,
-      aiAssistantPromo: false,
-    })
-  }, [aiAssistantSettings, updateSettings])
+  }, [])
 
   const handleSetupClick = useCallback(() => {
     setShowPromo(false)
-    updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
-      ...aiAssistantSettings,
-      aiAssistantPromo: false,
-    })
     onSetupClick()
-  }, [aiAssistantSettings, updateSettings, onSetupClick])
+  }, [onSetupClick])
 
   useEffect(() => {
     document.body.appendChild(container)
@@ -331,6 +286,17 @@ export const AIAssistantPromo = ({
   }, [container])
 
   useEffect(() => {
+    if (showPromo) {
+      promoKeyRef.current += 1
+      setPositionReady(false)
+    } else {
+      setPositionReady(false)
+      setPopperElement(null)
+      setArrowElement(null)
+    }
+  }, [showPromo])
+
+  useEffect(() => {
     if (popperElement && styles.popper && showPromo && !positionReady) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -341,18 +307,34 @@ export const AIAssistantPromo = ({
   }, [popperElement, styles.popper, positionReady, showPromo])
 
   useEffect(() => {
-    if (showPromo) {
-      setPositionReady(false)
-    }
-  }, [showPromo])
-
-  useEffect(() => {
     if (showPromo && forceUpdate && triggerRef.current && popperElement) {
       requestAnimationFrame(() => {
         forceUpdate()
       })
     }
   }, [showPromo, forceUpdate, triggerRef, popperElement])
+
+  useEffect(() => {
+    if (!showPromo) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      const isClickInsidePopper =
+        popperElement && popperElement.contains(target)
+      const isClickOnTrigger =
+        triggerRef.current && triggerRef.current.contains(target)
+
+      if (!isClickInsidePopper && !isClickOnTrigger) {
+        setShowPromo(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside, true)
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside, true)
+    }
+  }, [showPromo, popperElement, triggerRef])
 
   if (!triggerRef.current && !showPromo) {
     return null
@@ -366,6 +348,7 @@ export const AIAssistantPromo = ({
     <>
       {ReactDOM.createPortal(
         <CSSTransition
+          key={promoKeyRef.current}
           classNames="fade-reg"
           in={positionReady}
           timeout={TransitionDuration.REG}
@@ -487,15 +470,6 @@ export const AIAssistantPromo = ({
               </AssistantModes>
 
               <Footer>
-                <LearnMoreLink
-                  as="a"
-                  href="https://questdb.io/docs/ai-assistant"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <LearnMoreText>Learn more</LearnMoreText>
-                  <ExternalIcon size="1.6rem" />
-                </LearnMoreLink>
                 <SetupButton onClick={handleSetupClick}>
                   Setup Assistant
                 </SetupButton>

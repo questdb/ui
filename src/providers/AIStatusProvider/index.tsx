@@ -71,7 +71,6 @@ type BaseAIStatusContextType = {
   abortOperation: () => void
   hasSchemaAccess: boolean
   models: string[]
-  aiAssistantPromo: boolean
   currentOperation: OperationHistory
 }
 
@@ -142,11 +141,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     allModels.push(...anthropicModels, ...openaiModels)
     return allModels
   }, [aiAssistantSettings])
-
-  const aiAssistantPromo = useMemo(
-    () => aiAssistantSettings.aiAssistantPromo !== false,
-    [aiAssistantSettings],
-  )
 
   const setStatus = useCallback(
     (newStatus: AIOperationStatus | null, args?: StatusArgs) => {
@@ -229,7 +223,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         currentModel: currentModel!,
         apiKey: apiKey!,
         models,
-        aiAssistantPromo,
         currentOperation,
       }
     : {
@@ -243,7 +236,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         currentModel,
         apiKey,
         models,
-        aiAssistantPromo,
         currentOperation,
       }
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react"
+import React, { useState, useCallback, useMemo, useRef } from "react"
 import styled from "styled-components"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
@@ -12,7 +12,7 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
-import { ExternalLink, Eye, EyeOff } from "@styled-icons/remix-line"
+import { Edit } from "@styled-icons/remix-line"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
@@ -234,14 +234,18 @@ const InputWrapper = styled(Box)`
   width: 100%;
 `
 
-const StyledInput = styled(Input)<{ $hasError?: boolean }>`
+const StyledInput = styled(Input)<{
+  $hasError?: boolean
+  $showEditButton?: boolean
+}>`
   width: 100%;
-  background: #262833;
+  background: ${({ theme }) => theme.color.background};
   border: 0.1rem solid
     ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
   border-radius: 0.8rem;
   padding: 1.2rem;
-  padding-right: 4rem;
+  padding-right: ${({ $showEditButton }) =>
+    $showEditButton ? "4rem" : "1.2rem"};
   color: ${({ theme }) => theme.color.foreground};
   font-size: 1.4rem;
 
@@ -251,7 +255,7 @@ const StyledInput = styled(Input)<{ $hasError?: boolean }>`
   }
 `
 
-const EyeToggleButton = styled.button`
+const EditButton = styled.button`
   position: absolute;
   right: 1.2rem;
   top: 50%;
@@ -402,32 +406,6 @@ const SchemaAccessTitle = styled(Text)`
   font-weight: 600;
   color: ${({ theme }) => theme.color.foreground};
   flex: 1;
-`
-
-const LearnMoreLink = styled(Box).attrs({
-  gap: "0.4rem",
-  align: "center",
-})`
-  cursor: pointer;
-  color: ${({ theme }) => theme.color.cyan};
-  text-decoration: none;
-
-  &:hover {
-    opacity: 0.8;
-  }
-`
-
-const LearnMoreText = styled(Text)`
-  font-size: 1.3rem;
-  font-weight: 500;
-  letter-spacing: 0.016rem;
-  color: ${({ theme }) => theme.color.cyan};
-`
-
-const LearnMoreIcon = styled(ExternalLink)`
-  width: 1.6rem;
-  height: 1.6rem;
-  color: ${({ theme }) => theme.color.cyan};
 `
 
 const SchemaCheckboxContainer = styled(Box).attrs({
@@ -600,9 +578,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const [validationErrors, setValidationErrors] = useState<
     Record<Provider, string | null>
   >(() => initializeProviderState(() => null, null))
-  const [showApiKey, setShowApiKey] = useState<Record<Provider, boolean>>(() =>
-    initializeProviderState(() => false, false),
-  )
+  const [isInputFocused, setIsInputFocused] = useState<
+    Record<Provider, boolean>
+  >(() => initializeProviderState(() => false, false))
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const handleProviderSelect = useCallback((provider: Provider) => {
     setSelectedProvider(provider)
@@ -684,7 +663,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
     setValidationState((prev) => ({ ...prev, [provider]: "idle" }))
     setValidationErrors((prev) => ({ ...prev, [provider]: null }))
-    setShowApiKey((prev) => ({ ...prev, [provider]: false }))
+    setIsInputFocused((prev) => ({ ...prev, [provider]: false }))
   }, [])
 
   const handleModelToggle = useCallback(
@@ -757,7 +736,8 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const currentProviderApiKey = apiKeys[selectedProvider]
   const currentProviderValidationState = validationState[selectedProvider]
   const currentProviderError = validationErrors[selectedProvider]
-  const currentProviderShowApiKey = showApiKey[selectedProvider]
+  const currentProviderIsFocused = isInputFocused[selectedProvider]
+  const maskInput = !!(currentProviderApiKey && !currentProviderIsFocused)
 
   const modelsForProvider = useMemo(
     () => getModelsForProvider(selectedProvider),
@@ -876,69 +856,56 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     </Box>
                     <InputWrapper>
                       <StyledInput
-                        type={currentProviderShowApiKey ? "text" : "password"}
+                        ref={inputRef}
+                        type="text"
                         value={
-                          currentProviderValidated && !currentProviderShowApiKey
+                          maskInput
                             ? "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
                             : currentProviderApiKey
                         }
+                        autoComplete="off"
                         onChange={(e) => {
-                          if (
-                            currentProviderValidated &&
-                            !currentProviderShowApiKey
-                          ) {
-                            // If showing masked value, don't allow editing until they click Show
-                            return
-                          }
                           handleApiKeyChange(selectedProvider, e.target.value)
                         }}
                         placeholder={`Enter ${getProviderName(selectedProvider)} API key`}
                         $hasError={!!currentProviderError}
-                        disabled={false}
-                        readOnly={
-                          currentProviderValidated && !currentProviderShowApiKey
-                        }
-                        onClick={() => {
-                          // When clicking on masked input, show the API key
-                          if (
-                            currentProviderValidated &&
-                            !currentProviderShowApiKey
-                          ) {
-                            setShowApiKey((prev) => ({
-                              ...prev,
-                              [selectedProvider]: true,
-                            }))
+                        $showEditButton={maskInput}
+                        readOnly={maskInput}
+                        onFocus={() => {
+                          setIsInputFocused((prev) => ({
+                            ...prev,
+                            [selectedProvider]: true,
+                          }))
+                        }}
+                        onBlur={() => {
+                          setIsInputFocused((prev) => ({
+                            ...prev,
+                            [selectedProvider]: false,
+                          }))
+                          if (inputRef.current) {
+                            inputRef.current.blur()
                           }
                         }}
+                        onMouseDown={(e) => {
+                          if (maskInput) {
+                            e.preventDefault()
+                          }
+                        }}
+                        tabIndex={maskInput ? -1 : 0}
                         style={{
-                          cursor:
-                            currentProviderValidated &&
-                            !currentProviderShowApiKey
-                              ? "pointer"
-                              : "text",
+                          cursor: maskInput ? "default" : "text",
                         }}
                       />
-                      {currentProviderValidated && currentProviderApiKey && (
-                        <EyeToggleButton
+                      {maskInput && (
+                        <EditButton
                           type="button"
-                          onClick={() =>
-                            setShowApiKey((prev) => ({
-                              ...prev,
-                              [selectedProvider]: !prev[selectedProvider],
-                            }))
-                          }
-                          title={
-                            currentProviderShowApiKey
-                              ? "Hide API key"
-                              : "Show API key"
-                          }
+                          onClick={() => {
+                            inputRef.current?.focus()
+                          }}
+                          title="Edit API key"
                         >
-                          {currentProviderShowApiKey ? (
-                            <EyeOff size="20px" />
-                          ) : (
-                            <Eye size="20px" />
-                          )}
-                        </EyeToggleButton>
+                          <Edit size="20px" />
+                        </EditButton>
                       )}
                     </InputWrapper>
                     {currentProviderError && (
@@ -1027,19 +994,6 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                   <SchemaAccessSection>
                     <SchemaAccessHeader>
                       <SchemaAccessTitle>Schema Access</SchemaAccessTitle>
-                      <LearnMoreLink
-                        as="a"
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          // TODO: Open learn more link
-                        }}
-                      >
-                        <LearnMoreText>
-                          Learn more about data privacy
-                        </LearnMoreText>
-                        <LearnMoreIcon />
-                      </LearnMoreLink>
                     </SchemaAccessHeader>
                     <SchemaCheckboxContainer>
                       <SchemaCheckboxInner>
