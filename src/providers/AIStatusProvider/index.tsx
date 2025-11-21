@@ -183,6 +183,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       timeoutRef.current = setTimeout(() => {
         currentOperationRef.current = []
         setCurrentOperation([])
+        setStatus(null)
       }, 3000)
     } else if (
       status !== AIOperationStatus.Aborted &&

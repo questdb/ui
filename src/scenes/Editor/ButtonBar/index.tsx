@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react"
 import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
 import { Stop, Loader3 } from "@styled-icons/remix-line"
+import { Stop as StopFill } from "@styled-icons/remix-fill"
 import { Key } from "../../../components"
 import { CloseOutline } from "@styled-icons/evaicons-outline"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
@@ -152,6 +153,26 @@ const StopButton = styled(Button)`
   }
 `
 
+const AIStopButton = styled(Button)`
+  width: 2.2rem;
+  height: 2.2rem;
+  flex-shrink: 0;
+  border-radius: 100%;
+  background: #da152832;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.red} !important;
+    svg {
+      color: ${({ theme }) => theme.color.foreground};
+    }
+  }
+`
+
 const MainRunButton = styled(SuccessButton)`
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
@@ -210,7 +231,7 @@ const ButtonBar = ({
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const { status: aiStatus, canUse } = useAIStatus()
+  const { status: aiStatus, canUse, abortOperation } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
   const aiAssistantEnabled = canUse
@@ -445,6 +466,14 @@ const ButtonBar = ({
             <StatusLoader />
           )}
           {aiStatus}
+          {isBlockingAIStatus(aiStatus) && (
+            <AIStopButton
+              title="Cancel current operation"
+              onClick={abortOperation}
+            >
+              <StopFill size="14px" color="#da1e28" />
+            </AIStopButton>
+          )}
         </StatusIndicator>
       )}
       {running === RunningType.SCRIPT
