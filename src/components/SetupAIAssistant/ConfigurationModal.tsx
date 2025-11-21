@@ -215,6 +215,9 @@ const StyledInput = styled(Input)<{ $hasError?: boolean; disabled?: boolean }>`
   cursor: ${({ disabled }) => (disabled ? "not-allowed" : "text")};
   font-size: 1.4rem;
   min-height: 3rem;
+  text-security: disc;
+  -webkit-text-security: disc;
+  -moz-text-security: disc;
 
   &::placeholder {
     color: ${({ theme }) => theme.color.gray2};
