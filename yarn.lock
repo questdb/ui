@@ -2421,10 +2421,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@questdb/sql-grammar@npm:1.3.0":
-  version: 1.3.0
-  resolution: "@questdb/sql-grammar@npm:1.3.0"
-  checksum: 10/821049d1a7cef24c497965173215f3d954c789432c3ceb75dd3a883de7fd5a2454ee71eb4c0ce5dbe0ad55d0e022832b7cbd11694075e46444cb0489310ae976
+"@questdb/sql-grammar@npm:1.4.1":
+  version: 1.4.1
+  resolution: "@questdb/sql-grammar@npm:1.4.1"
+  checksum: 10/a98761909ce7f47349ef1aa48f25ac227a58d7c91bf105ab79feb3dec8150bafb2585fcfcdca9297534c339bdc1865851967d1d51d29bf5a7b41b9397f4d8ddc
   languageName: node
   linkType: hard
 
@@ -2444,7 +2444,7 @@ __metadata:
     "@hookform/resolvers": "npm:2.8.5"
     "@monaco-editor/react": "npm:^4.6.0"
     "@popperjs/core": "npm:2.4.2"
-    "@questdb/sql-grammar": "npm:1.3.0"
+    "@questdb/sql-grammar": "npm:1.4.1"
     "@radix-ui/react-alert-dialog": "npm:^1.1.15"
     "@radix-ui/react-context-menu": "npm:^2.2.16"
     "@radix-ui/react-dialog": "npm:^1.1.15"
