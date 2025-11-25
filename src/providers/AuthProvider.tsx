@@ -23,7 +23,6 @@ import {
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 import { ErrorResult } from "../utils"
-import { Error } from "../modules/OAuth2/views/error"
 import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
@@ -31,7 +30,17 @@ import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>
-  logout: (promptForLogin?: boolean) => void
+  logout: ({
+    promptForLogin,
+    errorTitle,
+    errorMessage,
+    isDisconnection,
+  }?: {
+    promptForLogin?: boolean
+    errorTitle?: string
+    errorMessage?: string
+    isDisconnection?: boolean
+  }) => void
   refreshAuthToken: (
     settings: Settings,
     refreshToken: string | undefined,
@@ -42,13 +51,22 @@ type ContextProps = {
 enum View {
   ready,
   loading,
-  error,
   login,
 }
 
-type State = { view: View; errorMessage?: string }
+type State = {
+  view: View
+  errorTitle?: string
+  errorMessage?: string
+  isDisconnection?: boolean
+}
 
-const initialState: { view: View; errorMessage?: string } = {
+const initialState: {
+  view: View
+  errorTitle?: string
+  errorMessage?: string
+  isDisconnection?: boolean
+} = {
   view: View.loading,
 }
 
@@ -77,9 +95,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { settings } = useSettings()
   const [sessionData, setSessionData] =
     useState<ContextProps["sessionData"]>(undefined)
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(
-    undefined,
-  )
   const [state, dispatch] = useReducer(reducer, initialState)
 
   const setAuthToken = (tokenResponse: AuthPayload, settings: Settings) => {
@@ -103,8 +118,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       const error = tokenResponse as unknown as OAuth2Error
       // display error message
-      dispatch({
-        view: View.error,
+      logout({
+        errorTitle: "Something went wrong.",
         errorMessage:
           error.error_description ?? "Error logging in. Please try again.",
       })
@@ -144,7 +159,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (!isNaN(count) && count >= 5) {
             // redirect to /logout and force user authentication to avoid infinite loop
             removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-            logout(true)
+            logout({ promptForLogin: true })
           } else {
             setValue(
               StoreKey.OAUTH_REDIRECT_COUNT,
@@ -184,7 +199,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const stateParam = urlParams.get("state")
           if (!stateParam || state !== stateParam) {
             // state is missing or there is a mismatch, user has to re-authenticate
-            logout(true)
+            logout({ promptForLogin: true })
             return
           }
         }
@@ -212,10 +227,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           redirectToAuthorizationUrl()
         } else {
           // If the error is not in response for a silent authorization code request, display the error
-          setErrorMessage(
-            oauth2Error.error + ": " + oauth2Error.error_description,
-          )
-          dispatch({ view: View.error })
+          logout({
+            errorTitle: "Something went wrong.",
+            errorMessage:
+              oauth2Error.error + ": " + oauth2Error.error_description,
+          })
         }
       } else if (ssoUsername && !getValue(StoreKey.REST_TOKEN)) {
         // No REST token, so it is a page reload for an SSO user
@@ -290,8 +306,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })
   }
 
-  const logout = (promptForLogin?: boolean) => {
+  const logout = ({
+    promptForLogin,
+    errorTitle,
+    errorMessage,
+    isDisconnection,
+  }: {
+    promptForLogin?: boolean
+    errorTitle?: string
+    errorMessage?: string
+    isDisconnection?: boolean
+  } = {}) => {
     ssoAuthState.clearAuthPayload()
+    setSessionData(undefined)
     removeValue(StoreKey.OAUTH_PROMPT)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
@@ -299,7 +326,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
     destroyServerSession()
-    dispatch({ view: View.login })
+    dispatch({ view: View.login, errorTitle, errorMessage, isDisconnection })
   }
 
   useEffect(() => {
@@ -318,9 +345,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           errorPayload &&
           errorPayload.error.match(/Access denied.* \[HTTP]/gm)
         ) {
-          dispatch({
-            view: View.error,
-            errorMessage: "Unauthorized to use the Web Console.",
+          logout({
+            errorTitle: "Oops. You've been disconnected.",
+            errorMessage:
+              "You are not authorized to use the Web Console. You may try login again or contact your account administrator.",
+            isDisconnection: true,
           })
         }
       },
@@ -343,13 +372,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         {children}
       </AuthContext.Provider>
     ),
-    [View.error]: () => (
-      <Error
-        errorMessage={errorMessage}
-        onLogout={logout}
-        basicAuthEnabled={settings["acl.basic.auth.realm.enabled"] ?? false}
-      />
-    ),
     [View.login]: () => (
       <Login
         onOAuthLogin={(loginWithDifferentAccount) => {
@@ -360,6 +382,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })
         }}
+        resetErrors={() =>
+          dispatch({
+            errorTitle: undefined,
+            errorMessage: undefined,
+            isDisconnection: undefined,
+          })
+        }
+        errorTitle={state.errorTitle}
+        errorMessage={state.errorMessage}
+        isDisconnection={state.isDisconnection ?? false}
       />
     ),
   }

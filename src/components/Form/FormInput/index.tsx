@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { useFormContext } from "react-hook-form"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Button } from "../../Button"
 import { Input as UnstyledInput } from "../../Input"
 import { Eye, EyeOff } from "@styled-icons/remix-line"
@@ -14,9 +14,14 @@ export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   autoComplete?: string
 }
 
-const Wrapper = styled.div<{ autoComplete: FormInputProps["autoComplete"] }>`
+const Wrapper = styled.div<{
+  autoComplete: FormInputProps["autoComplete"]
+  type: FormInputProps["type"]
+}>`
   display: flex;
   width: 100%;
+  position: relative;
+  align-items: center;
   ${(props) =>
     props.autoComplete === "off" &&
     `
@@ -26,22 +31,46 @@ const Wrapper = styled.div<{ autoComplete: FormInputProps["autoComplete"] }>`
       display: none !important;
     }
   `}
+  ${(props) =>
+    props.type === "password" &&
+    `
+    border-radius: 8px;
+  `}
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-transition: "color 9999s ease-out, background-color 9999s ease-out";
+    -webkit-transition-delay: 9999s;
+  }
 `
 
-const Input = styled(UnstyledInput)<FormInputProps>`
+const Input = styled(UnstyledInput)<
+  FormInputProps & { $inputType: FormInputProps["type"] }
+>`
   ${(props) => props.disabled && `opacity: 0.7;`}
+  ${({ $inputType }) =>
+    $inputType === "password" &&
+    css`
+      width: calc(100% + 3.2rem);
+      padding-right: 4.2rem !important;
+    `}
 `
 
-const ToggleButton = styled(Button)<{ last?: boolean }>`
+const ToggleButton = styled(Button)`
   cursor: pointer;
   border-radius: 0;
+  position: absolute;
+  right: 1.2rem;
+  padding: 0;
 
-  ${(props) =>
-    props.last &&
-    `
-    border-top-right-radius: 0.4rem;
-    border-bottom-right-radius: 0.4rem;
-  `}
+  &:hover {
+    background: transparent !important;
+
+    svg {
+      color: ${({ theme }) => theme.color.foreground};
+    }
+  }
 `
 
 export const FormInput = ({
@@ -69,7 +98,7 @@ export const FormInput = ({
   }, [])
 
   return (
-    <Wrapper autoComplete={autoComplete}>
+    <Wrapper autoComplete={autoComplete} type={type}>
       <Input
         {...register(name, {
           valueAsNumber: type === "number",
@@ -77,6 +106,7 @@ export const FormInput = ({
         name={name}
         placeholder={placeholder}
         type={passwordShown ? "text" : type}
+        $inputType={type}
         disabled={disabled}
         showPassword={showPassword}
         autoComplete={autoComplete}
@@ -84,13 +114,12 @@ export const FormInput = ({
       />
       {type === "password" && (
         <ToggleButton
-          skin="secondary"
+          skin="transparent"
           onClick={handleTogglePassword}
           title="Toggle password visibility"
           type="button"
-          last
         >
-          {passwordShown ? <Eye size="15px" /> : <EyeOff size="15px" />}
+          {passwordShown ? <Eye size="20px" /> : <EyeOff size="20px" />}
         </ToggleButton>
       )}
     </Wrapper>
