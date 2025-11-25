@@ -17,6 +17,13 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.5 - 2025.11.25
+### Fixed
+- save resized column width before arranging array contents [#497](https://github.com/questdb/ui/pull/497)
+### Added
+- enable dynamic Y-axis scaling in chart view [#493](https://github.com/questdb/ui/pull/493)
+
+
 ## 1.1.4 - 2025.10.24
 ### Added 
 - export parquet files [#484](https://github.com/questdb/ui/pull/484)
