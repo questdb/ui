@@ -11,6 +11,7 @@ const Root = styled.div`
   align-items: center;
   justify-content: space-between;
   margin-bottom: auto;
+  overflow-y: auto;
   background: ${({ theme }) => theme.color.loginBackground};
 `
 
@@ -59,7 +60,7 @@ export const CenteredLayout = ({ children }: { children: React.ReactNode }) => {
     <Root>
       <Main>
         <GridBackground
-          src="assets/grid-bg.png"
+          src="assets/grid-bg.webp"
           alt=""
           aria-hidden="true"
           width="100%"

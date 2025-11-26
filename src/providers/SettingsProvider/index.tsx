@@ -243,7 +243,7 @@ export const SettingsProvider = ({
         setConsoleConfig(consoleConfig)
       }
 
-      if (!settings || !preferences || !consoleConfig) {
+      if (!settings || !consoleConfig) {
         throw new Error("Failed to fetch settings from the server")
       }
     }

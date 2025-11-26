@@ -206,7 +206,6 @@ const RedirectErrorContainer = styled(ErrorContainer)`
   position: relative;
   z-index: 1;
   border-color: rgba(220, 40, 40);
-  width: 100%;
   width: 560px;
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
@@ -393,7 +392,7 @@ export const Login = ({
           "You are not authorized to use the Web Console. Contact your account administrator.",
         )
       } else {
-        setErrorMessage("Status code: " + response.status)
+        setErrorMessage("Error occurred while trying to login")
       }
     } catch (e) {
       setErrorMessage("Error occurred while trying to login")
