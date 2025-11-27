@@ -167,7 +167,7 @@ const Card = styled.div`
   button {
     padding-top: 2rem;
     padding-bottom: 2rem;
-    border-radius: 0 5px 5px 0;
+    border-radius: 5px;
   }
 
   input {
@@ -181,6 +181,13 @@ const Card = styled.div`
     background: ${({ theme }) => theme.color.background};
     font-size: 1.4rem;
     line-height: 1.5;
+
+    &:focus,
+    &:active,
+    &:focus-visible {
+      background: ${({ theme }) => theme.color.background} !important;
+      border-color: ${({ theme }) => theme.color.pinkPrimary} !important;
+    }
   }
 
   label {
@@ -370,7 +377,6 @@ export const Login = ({
 
   const handleSubmit = async (values: FormValues) => {
     resetErrors()
-    setErrorMessage(undefined)
     setLoading(true)
     const { username, password } = values
     try {
