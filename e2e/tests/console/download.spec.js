@@ -1,7 +1,7 @@
 describe("download functionality", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth()
-    cy.getEditorContent().should("be.visible")
+    cy.getEditor().should("be.visible")
     cy.clearEditor()
   })
 
