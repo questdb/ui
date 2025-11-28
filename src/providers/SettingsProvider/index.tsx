@@ -5,13 +5,13 @@ import React, {
   useReducer,
   useState,
 } from "react"
+import styled from "styled-components"
 import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout, Box, Text, Button } from "../../components"
 import { Refresh } from "@styled-icons/remix-line"
 import { setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { Preferences } from "../../utils"
-import QuestDBLogo from "./QuestDBLogo"
 
 enum View {
   loading = 0,
@@ -52,15 +52,48 @@ const SettingContext = createContext<{
     }),
 })
 
+const TextContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  padding: 2.4rem;
+  gap: 2.8rem;
+`
+const RefreshButton = styled(Button)`
+  padding: 1.2rem;
+  height: unset !important;
+`
+
+const Whoops = styled.img`
+  width: auto;
+  height: auto;
+
+  @media (max-width: 1000px) {
+    width: 600px;
+    height: auto;
+  }
+`
+
 const connectionError = (
-  <>
-    Error connecting to the database.
-    <br />
-    Please, check if the server is running correctly.
-  </>
+  <Box flexDirection="column" gap="0">
+    <Text align="center" size="lg" color="offWhite" weight={600}>
+      It appears we can&apos;t connect to the database.
+    </Text>
+    <Text align="center" size="lg" color="offWhite">
+      Please, check if the server is running correctly.
+    </Text>
+  </Box>
 )
 
-const consoleConfigError = <>Error loading the console configuration file</>
+const consoleConfigError = (
+  <Box flexDirection="column" gap="0">
+    <Text align="center" size="lg" color="offWhite" weight={600}>
+      It appears we can&apos;t connect to the database.
+    </Text>
+    <Text align="center" size="lg" color="offWhite">
+      Error loading the console configuration file.
+    </Text>
+  </Box>
+)
 
 export const SettingsProvider = ({
   children,
@@ -90,22 +123,35 @@ export const SettingsProvider = ({
     ),
     [View.error]: () => (
       <CenteredLayout>
-        <Box flexDirection="column" gap="2rem">
-          <a href="https://questdb.io">
-            <QuestDBLogo />
+        <Box flexDirection="column" gap="6.4rem">
+          <a href="https://questdb.com">
+            <img
+              src="assets/questdb-logo-3d.png"
+              alt="QuestDB logo"
+              width="163"
+              height="144"
+            />
           </a>
-          <Text align="center" size="lg" color="offWhite">
-            Error connecting to the database.
-            <br />
-            Please, check if the server is running correctly.
-          </Text>
-          <Button
-            skin="secondary"
-            prefixIcon={<Refresh size="18px" />}
-            onClick={() => window.location.reload()}
-          >
-            Retry
-          </Button>
+          <Whoops src="assets/whoops.svg" alt="Whoops" />
+          <TextContainer>
+            {state.errorMessage ?? (
+              <Box flexDirection="column" gap="0">
+                <Text align="center" size="lg" color="offWhite" weight={600}>
+                  It appears we can&apos;t connect to the database.
+                </Text>
+                <Text align="center" size="lg" color="offWhite">
+                  Please, check if the server is running correctly.
+                </Text>
+              </Box>
+            )}
+            <RefreshButton
+              skin="primary"
+              prefixIcon={<Refresh size="18px" />}
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </RefreshButton>
+          </TextContainer>
         </Box>
       </CenteredLayout>
     ),
@@ -196,9 +242,17 @@ export const SettingsProvider = ({
       if (consoleConfig) {
         setConsoleConfig(consoleConfig)
       }
+
+      if (!settings || !consoleConfig) {
+        throw new Error("Failed to fetch settings from the server")
+      }
     }
 
-    void fetchAll().then(() => dispatch({ view: View.ready }))
+    void fetchAll()
+      .then(() => dispatch({ view: View.ready }))
+      .catch((_err) => {
+        // view should already be set to error
+      })
   }, [])
 
   return <>{views[state.view]()}</>
