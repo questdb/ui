@@ -3,6 +3,7 @@ describe("download functionality", () => {
     cy.loadConsoleWithAuth()
     cy.getEditor().should("be.visible")
     cy.clearEditor()
+    cy.get(".monaco-mouse-cursor-text").should("be.visible")
   })
 
   it("should show download button with results", () => {
