@@ -17,6 +17,13 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.6 - 2025.11.28
+### Changed
+- apply new login screen design [#501](https://github.com/questdb/ui/pull/501)
+### Fixed
+- serve build assets relative to the base path [#502](https://github.com/questdb/ui/pull/502)
+
+
 ## 1.1.5 - 2025.11.25
 ### Fixed
 - save resized column width before arranging array contents [#497](https://github.com/questdb/ui/pull/497)
