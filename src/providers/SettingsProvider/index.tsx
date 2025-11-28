@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useReducer,
@@ -105,6 +106,40 @@ export const SettingsProvider = ({
   const [preferences, _setPreferences] = useState<Preferences>({})
   const [warnings, setWarnings] = useState<Warning[]>([])
   const [consoleConfig, setConsoleConfig] = useState<ConsoleConfig>({})
+  const [preloadedImages, setPreloadedImages] = useState<
+    Record<string, string>
+  >({})
+
+  useEffect(() => {
+    const preloadImages = async () => {
+      const imagesToPreload = [
+        "assets/questdb-logo-3d.png",
+        "assets/whoops.svg",
+        "assets/grid-bg.webp",
+      ]
+
+      const imageDataUrls: Record<string, string> = {}
+
+      for (const src of imagesToPreload) {
+        try {
+          const response = await fetch(src)
+          const blob = await response.blob()
+          imageDataUrls[src] = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = () => reject("Failed to read image blob")
+            reader.readAsDataURL(blob)
+          })
+        } catch (error) {
+          imageDataUrls[src] = src
+        }
+      }
+
+      setPreloadedImages(imageDataUrls)
+    }
+
+    void preloadImages()
+  }, [])
 
   const views: { [key in View]: () => React.ReactNode } = {
     [View.loading]: () => null,
@@ -122,17 +157,23 @@ export const SettingsProvider = ({
       </SettingContext.Provider>
     ),
     [View.error]: () => (
-      <CenteredLayout>
+      <CenteredLayout preloadedImages={preloadedImages}>
         <Box flexDirection="column" gap="6.4rem">
           <a href="https://questdb.com">
             <img
-              src="assets/questdb-logo-3d.png"
+              src={
+                preloadedImages["assets/questdb-logo-3d.png"] ||
+                "assets/questdb-logo-3d.png"
+              }
               alt="QuestDB logo"
               width="163"
               height="144"
             />
           </a>
-          <Whoops src="assets/whoops.svg" alt="Whoops" />
+          <Whoops
+            src={preloadedImages["assets/whoops.svg"] || "assets/whoops.svg"}
+            alt="Whoops"
+          />
           <TextContainer>
             {state.errorMessage ?? (
               <Box flexDirection="column" gap="0">
@@ -147,7 +188,13 @@ export const SettingsProvider = ({
             <RefreshButton
               skin="primary"
               prefixIcon={<Refresh size="18px" />}
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                void fetchAll(false)
+                  .then(() => dispatch({ view: View.ready }))
+                  .catch(() => {
+                    /* no-op */
+                  })
+              }}
             >
               Retry
             </RefreshButton>
@@ -159,7 +206,7 @@ export const SettingsProvider = ({
 
   const fetchEndpoint = async <ResponseType = unknown,>(
     endpoint: string,
-    errorMessage: React.ReactNode,
+    errorMessage?: React.ReactNode,
   ): Promise<ResponseType | undefined> => {
     try {
       const response = await fetch(endpoint)
@@ -212,42 +259,42 @@ export const SettingsProvider = ({
     }
   }
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      const settings = await fetchEndpoint<SettingsResponse>(
-        "settings",
-        connectionError,
-      )
-      const warnings = await fetchEndpoint<Warning[]>(
-        "warnings",
-        connectionError,
-      )
-      const consoleConfig = await fetchEndpoint<ConsoleConfig>(
-        "assets/console-configuration.json",
-        consoleConfigError,
-      )
-      if (settings) {
-        setSettings(settings.config)
-        setPreferences({
-          version: settings["preferences.version"],
-          ...settings.preferences,
-        })
-        if (settings.config["release.type"]) {
-          setValue(StoreKey.RELEASE_TYPE, settings.config["release.type"])
-        }
-      }
-      if (warnings) {
-        setWarnings(warnings)
-      }
-      if (consoleConfig) {
-        setConsoleConfig(consoleConfig)
-      }
-
-      if (!settings || !consoleConfig) {
-        throw new Error("Failed to fetch settings from the server")
+  const fetchAll = useCallback(async (switchView = true) => {
+    const settings = await fetchEndpoint<SettingsResponse>(
+      "settings",
+      switchView ? connectionError : undefined,
+    )
+    const warnings = await fetchEndpoint<Warning[]>(
+      "warnings",
+      switchView ? connectionError : undefined,
+    )
+    const consoleConfig = await fetchEndpoint<ConsoleConfig>(
+      "assets/console-configuration.json",
+      switchView ? consoleConfigError : undefined,
+    )
+    if (settings) {
+      setSettings(settings.config)
+      setPreferences({
+        version: settings["preferences.version"],
+        ...settings.preferences,
+      })
+      if (settings.config["release.type"]) {
+        setValue(StoreKey.RELEASE_TYPE, settings.config["release.type"])
       }
     }
+    if (warnings) {
+      setWarnings(warnings)
+    }
+    if (consoleConfig) {
+      setConsoleConfig(consoleConfig)
+    }
 
+    if (!settings || !consoleConfig) {
+      throw new Error("Failed to fetch settings from the server")
+    }
+  }, [])
+
+  useEffect(() => {
     void fetchAll()
       .then(() => dispatch({ view: View.ready }))
       .catch((_err) => {
