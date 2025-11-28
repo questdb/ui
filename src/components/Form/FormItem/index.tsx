@@ -1,6 +1,8 @@
 import React from "react"
 import styled from "styled-components"
+import { ErrorWarning } from "@styled-icons/remix-fill"
 import { useFormContext, FieldError } from "react-hook-form"
+import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 
 type Props = {
@@ -50,6 +52,10 @@ const AfterLabel = styled.span`
   color: ${({ theme }) => theme.color.gray2};
 `
 
+const ErrorIcon = styled(ErrorWarning)`
+  color: ${({ theme }) => theme.color.red};
+`
+
 export const FormItem = ({
   name,
   label,
@@ -86,12 +92,21 @@ export const FormItem = ({
         !error &&
         helperText &&
         (typeof helperText === "string" ? (
-          <Text color="comment">{helperText}</Text>
+          <Text color="comment" size="sm">
+            {helperText}
+          </Text>
         ) : (
           helperText
         ))}
 
-      {name && error && <Text color="red">{error.message}</Text>}
+      {name && error && (
+        <Box align="center" gap="1rem">
+          <ErrorIcon size="20px" />
+          <Text color="red" size="sm">
+            {error.message}
+          </Text>
+        </Box>
+      )}
     </Root>
   )
 }
