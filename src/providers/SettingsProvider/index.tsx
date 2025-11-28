@@ -127,7 +127,7 @@ export const SettingsProvider = ({
           imageDataUrls[src] = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader()
             reader.onload = () => resolve(reader.result as string)
-            reader.onerror = () => reject("Failed to read image blob")
+            reader.onerror = () => reject(`Failed to read image blob for ${src}`)
             reader.readAsDataURL(blob)
           })
         } catch (error) {
