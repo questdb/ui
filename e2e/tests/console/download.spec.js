@@ -14,8 +14,8 @@ describe("download functionality", () => {
 
   it("should show download button with results", () => {
     // When
-    cy.typeQuery("select x from long_sequence(10)")
-    cy.runLine()
+    cy.typeQueryDirectly("select x from long_sequence(10)")
+    cy.clickRunIconInLine(1)
 
     // Then
     cy.getByDataHook("download-parquet-button").should("be.visible")
