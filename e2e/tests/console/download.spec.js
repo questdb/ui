@@ -2,8 +2,14 @@ describe("download functionality", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth()
     cy.getEditor().should("be.visible")
+
+    cy.document().should((doc) => {
+      const activeElement = doc.activeElement
+      expect(activeElement).to.exist
+      expect(activeElement.classList.contains("monaco-mouse-cursor-text")).to.be.true
+    })
+
     cy.clearEditor()
-    cy.get(".monaco-mouse-cursor-text").should("be.visible")
   })
 
   it("should show download button with results", () => {
