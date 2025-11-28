@@ -6,7 +6,8 @@ describe("download functionality", () => {
     cy.document().should((doc) => {
       const activeElement = doc.activeElement
       expect(activeElement).to.exist
-      expect(activeElement.classList.contains("monaco-mouse-cursor-text")).to.be.true
+      expect(activeElement.classList.contains("monaco-mouse-cursor-text")).to.be
+        .true
     })
 
     cy.clearEditor()

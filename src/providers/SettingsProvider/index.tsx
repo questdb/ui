@@ -10,6 +10,7 @@ import styled from "styled-components"
 import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout, Box, Text, Button } from "../../components"
 import { Refresh } from "@styled-icons/remix-line"
+import { CloseOutline } from "@styled-icons/evaicons-outline"
 import { setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { Preferences } from "../../utils"
@@ -74,6 +75,19 @@ const Whoops = styled.img`
   }
 `
 
+const ErrorMessage = styled(Text).attrs({ color: "red", size: "md" })`
+  height: 3rem;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+`
+
+const CloseOutlineIcon = styled(CloseOutline)`
+  color: ${({ theme }) => theme.color.red};
+  flex-shrink: 0;
+`
+
 const connectionError = (
   <Box flexDirection="column" gap="0">
     <Text align="center" size="lg" color="offWhite" weight={600}>
@@ -109,6 +123,8 @@ export const SettingsProvider = ({
   const [preloadedImages, setPreloadedImages] = useState<
     Record<string, string>
   >({})
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const errorTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const preloadImages = async () => {
@@ -127,7 +143,8 @@ export const SettingsProvider = ({
           imageDataUrls[src] = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader()
             reader.onload = () => resolve(reader.result as string)
-            reader.onerror = () => reject(`Failed to read image blob for ${src}`)
+            reader.onerror = () =>
+              reject(`Failed to read image blob for ${src}`)
             reader.readAsDataURL(blob)
           })
         } catch (error) {
@@ -192,12 +209,27 @@ export const SettingsProvider = ({
                 void fetchAll(false)
                   .then(() => dispatch({ view: View.ready }))
                   .catch(() => {
-                    /* no-op */
+                    if (errorTimeoutRef.current) {
+                      clearTimeout(errorTimeoutRef.current)
+                    }
+                    setErrorMessage("Retry failed")
+                    errorTimeoutRef.current = setTimeout(
+                      () => setErrorMessage(null),
+                      3000,
+                    )
                   })
               }}
             >
               Retry
             </RefreshButton>
+            <ErrorMessage>
+              {errorMessage && (
+                <>
+                  <CloseOutlineIcon size="18px" />
+                  {errorMessage}
+                </>
+              )}
+            </ErrorMessage>
           </TextContainer>
         </Box>
       </CenteredLayout>
