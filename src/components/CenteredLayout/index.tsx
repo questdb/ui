@@ -54,13 +54,21 @@ const VersionBadge = styled.div`
   background: #290a13;
 `
 
-export const CenteredLayout = ({ children }: { children: React.ReactNode }) => {
+export const CenteredLayout = ({
+  children,
+  preloadedImages,
+}: {
+  children: React.ReactNode
+  preloadedImages?: Record<string, string>
+}) => {
   const { settings } = useSettings()
   return (
     <Root>
       <Main>
         <GridBackground
-          src="assets/grid-bg.webp"
+          src={
+            preloadedImages?.["assets/grid-bg.webp"] || "assets/grid-bg.webp"
+          }
           alt=""
           aria-hidden="true"
           width="100%"
