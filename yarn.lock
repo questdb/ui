@@ -2414,10 +2414,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@posthog/core@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@posthog/core@npm:1.4.0"
-  checksum: 10/af18ac7fd26b902abacf96a19383b6062300011812c8ea16e890ef9c607fdb31c5b8c0e245a27a55d2f20bc98e4ad5f7342027f902cf5071f0d88f2682b47cd5
+"@posthog/core@npm:1.6.0":
+  version: 1.6.0
+  resolution: "@posthog/core@npm:1.6.0"
+  dependencies:
+    cross-spawn: "npm:^7.0.6"
+  checksum: 10/9b582423eaec1e59505b05373820594346f4af800fcd837403197fb5dcd40cce4d7180d622625a3f47b47d83ff35ee1b0f9311fbb54685378dd985f47b41c2ef
   languageName: node
   linkType: hard
 
@@ -2515,7 +2517,7 @@ __metadata:
     lodash.isequal: "npm:^4.5.0"
     lodash.merge: "npm:^4.6.2"
     monaco-editor: "npm:^0.44.0"
-    posthog-js: "npm:^1.131.2"
+    posthog-js: "npm:1.298.1"
     prettier: "npm:^3.3.0"
     ramda: "npm:0.27.1"
     react: "npm:17.0.2"
@@ -9617,16 +9619,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"posthog-js@npm:^1.131.2":
-  version: 1.281.0
-  resolution: "posthog-js@npm:1.281.0"
+"posthog-js@npm:1.298.1":
+  version: 1.298.1
+  resolution: "posthog-js@npm:1.298.1"
   dependencies:
-    "@posthog/core": "npm:1.4.0"
+    "@posthog/core": "npm:1.6.0"
     core-js: "npm:^3.38.1"
     fflate: "npm:^0.4.8"
     preact: "npm:^10.19.3"
     web-vitals: "npm:^4.2.4"
-  checksum: 10/2f5f4c64d95bdb99958a04f3744bf0c3445d51921f26889de682c394212672539589372b37b9090ad6de1f873a4b4effbe8fb2e02081a5bbfd5538bfca50b561
+  checksum: 10/6b218767b71597320a79abdb222c4f0baef264036323b5b166abce4a6da551b356a767af5df988054857045096cb3dbbf4f8545d9d60496d7c66c9c94edc8e16
   languageName: node
   linkType: hard
 
