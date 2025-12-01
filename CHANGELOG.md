@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.7 - 2025.12.01
+### Fixed
+- prefetch images for connection error - handle retry [#504](https://github.com/questdb/ui/pull/504)
+
+
 ## 1.1.6 - 2025.11.28
 ### Changed
 - apply new login screen design [#501](https://github.com/questdb/ui/pull/501)
