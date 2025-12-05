@@ -126,6 +126,13 @@ const setQueriesToRun = (payload: QueriesToRun): QueryAction => ({
   payload,
 })
 
+const setAISuggestionRequest = (
+  payload: { query: string; startOffset: number } | null,
+): QueryAction => ({
+  type: QueryAT.SET_AI_SUGGESTION_REQUEST,
+  payload,
+})
+
 export default {
   addNotification,
   cleanupNotifications,
@@ -139,4 +146,5 @@ export default {
   setColumns,
   setActiveNotification,
   setQueriesToRun,
+  setAISuggestionRequest,
 }

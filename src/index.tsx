@@ -49,6 +49,7 @@ import {
   QuestProvider,
   SettingsProvider,
   PosthogProviderWrapper,
+  AIConversationProvider,
 } from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
@@ -79,9 +80,11 @@ ReactDOM.render(
                 <GlobalStyle />
                 {ReactDOM.createPortal(<ToastContainer />, document.body)}
                 <LocalStorageProvider>
-                  <FadeSlow />
-                  <FadeReg />
-                  <Layout />
+                  <AIConversationProvider>
+                    <FadeSlow />
+                    <FadeReg />
+                    <Layout />
+                  </AIConversationProvider>
                 </LocalStorageProvider>
               </QuestProvider>
             </AuthProvider>

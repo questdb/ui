@@ -1,21 +1,20 @@
-import React, { useContext, useEffect, useRef, useCallback } from "react"
+import React, { useContext, useEffect, useCallback } from "react"
 import styled, { css } from "styled-components"
 import { Button, Box, Key } from "../../components"
 import { color, platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
-import type {
-  AiAssistantAPIError,
-  AiAssistantExplanation,
-} from "../../utils/aiAssistant"
 import {
   explainQuery,
-  formatExplanationAsComment,
   createModelToolsClient,
   isAiAssistantError,
+  generateChatTitle,
   type ActiveProviderSettings,
 } from "../../utils/aiAssistant"
-import { providerForModel } from "../../utils/aiAssistantSettings"
+import {
+  providerForModel,
+  MODEL_OPTIONS,
+} from "../../utils/aiAssistantSettings"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
@@ -26,6 +25,8 @@ import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
+import { useAIConversation } from "../../providers/AIConversationProvider"
+import { createQueryKeyFromRequest } from "../../scenes/Editor/Monaco/utils"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
@@ -39,18 +40,14 @@ const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
     `}
 `
 
-type Props = {
-  onBufferContentChange?: (value?: string) => void
-}
-
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 
 const shortcutTitle =
   platform.isMacintosh || platform.isIOS ? "Cmd+E" : "Ctrl+E"
 
-export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
+export const ExplainQueryButton = () => {
   const { quest } = useContext(QuestContext)
-  const { editorRef } = useEditor()
+  const { editorRef, activeBuffer } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
@@ -63,135 +60,140 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     currentModel,
     apiKey,
   } = useAIStatus()
-  const highlightDecorationsRef = useRef<string[]>([])
+  const {
+    getOrCreateConversation,
+    openChatWindow,
+    addMessage,
+    addMessageAndUpdateSQL,
+    updateConversationName,
+  } = useAIConversation()
   const disabled =
     running !== RunningType.NONE ||
     queriesToRun.length !== 1 ||
     isBlockingAIStatus(aiStatus)
   const isSelection = queriesToRun.length === 1 && queriesToRun[0].selection
 
-  const handleExplainQuery = useCallback(async () => {
-    if (!editorRef.current || disabled) return
-    const editorModel = editorRef.current.getModel()
-    if (!editorModel) return
-    if (!canUse) {
-      toast.error("No model selected for AI Assistant")
-      return
-    }
+  const handleExplainQuery = useCallback(() => {
+    const editorInstance = editorRef.current
+    if (!editorInstance || disabled) return
 
-    editorRef.current?.updateOptions({
-      readOnly: true,
-      readOnlyMessage: {
-        value: "Query explanation in progress",
-      },
-    })
-    const provider = providerForModel(currentModel)
-
-    const settings: ActiveProviderSettings = {
-      model: currentModel,
-      provider,
-      apiKey,
-    }
-
-    const response = await explainQuery({
-      query: queriesToRun[0],
-      settings,
-      modelToolsClient: createModelToolsClient(
-        quest,
-        hasSchemaAccess ? tables : undefined,
-      ),
-      setStatus,
-      abortSignal: abortController?.signal,
-    })
-
-    if (isAiAssistantError(response)) {
-      const error = response as AiAssistantAPIError
-      if (error.type !== "aborted") {
-        toast.error(error.message, { autoClose: 10000 })
+    void (async () => {
+      const editorModel = editorInstance.getModel()
+      if (!editorModel) return
+      if (!canUse) {
+        toast.error("No model selected for AI Assistant")
+        return
       }
-      editorRef.current?.updateOptions({
-        readOnly: false,
-        readOnlyMessage: undefined,
+
+      const query = queriesToRun[0]
+      const queryText = query.selection
+        ? query.selection.queryText
+        : query.query
+      const queryKey = createQueryKeyFromRequest(editorInstance, query)
+
+      // Calculate query offsets for position tracking
+      const queryStartOffset = query.selection ? query.selection.startOffset : 0
+      const queryEndOffset = queryStartOffset + queryText.length
+
+      // Get or create conversation for this queryKey with position info
+      getOrCreateConversation({
+        queryKey,
+        bufferId: activeBuffer.id,
+        originalQuery: queryText,
+        initialSQL: queryText,
+        initialExplanation: "",
+        queryStartOffset,
+        queryEndOffset,
       })
-      return
-    }
 
-    const result = response as AiAssistantExplanation
-    if (!result.explanation) {
-      toast.error("No explanation received from AI Assistant", {
-        autoClose: 10000,
+      const queryToExplain = queriesToRun[0]
+
+      // Build the full API message (sent to the model)
+      const fullApiMessage = queryToExplain.selection
+        ? `Explain this portion of the query:\n\n\`\`\`sql\n${queryToExplain.selection.queryText}\n\`\`\` within this query:\n\n\`\`\`sql\n${queryToExplain.query}\n\`\`\` with 2-4 sentences`
+        : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${queryToExplain.query}\n\`\`\``
+
+      // Add the initial user message with display info for cleaner UI
+      addMessage(queryKey, {
+        role: "user",
+        content: fullApiMessage,
+        timestamp: Date.now(),
+        displayType: "explain_request",
+        displaySQL: queryText,
       })
-      editorRef.current?.updateOptions({
-        readOnly: false,
-        readOnlyMessage: undefined,
+
+      // Open chat window immediately
+      openChatWindow(queryKey)
+
+      // Now explain query in the background
+      const provider = providerForModel(currentModel)
+      const settings: ActiveProviderSettings = {
+        model: currentModel,
+        provider,
+        apiKey,
+      }
+
+      // Generate chat title in parallel using test model
+      const testModel = MODEL_OPTIONS.find(
+        (m) => m.isTestModel && m.provider === provider,
+      )
+      if (testModel) {
+        void generateChatTitle({
+          firstUserMessage: fullApiMessage,
+          settings: { model: testModel.value, provider, apiKey },
+        }).then((title) => {
+          if (title) {
+            updateConversationName(queryKey, title)
+          }
+        })
+      }
+
+      const response = await explainQuery({
+        query: queriesToRun[0],
+        settings,
+        modelToolsClient: createModelToolsClient(
+          quest,
+          hasSchemaAccess ? tables : undefined,
+        ),
+        setStatus,
+        abortSignal: abortController?.signal,
       })
-      return
-    }
 
-    const commentBlock = formatExplanationAsComment(result.explanation)
-    const isSelection = !!queriesToRun[0].selection
+      if (isAiAssistantError(response)) {
+        const error = response
+        if (error.type !== "aborted") {
+          toast.error(error.message, { autoClose: 10000 })
+        }
+        return
+      }
 
-    const queryStartLine = isSelection
-      ? editorModel.getPositionAt(queriesToRun[0].selection!.startOffset)
-          .lineNumber
-      : queriesToRun[0].row + 1
+      const result = response
+      if (!result.explanation) {
+        toast.error("No explanation received from AI Assistant", {
+          autoClose: 10000,
+        })
+        return
+      }
 
-    const insertText = commentBlock + "\n"
-    const explanationEndLine =
-      queryStartLine + insertText.split("\n").length - 1
+      // Build complete assistant response content (explanation only for explain flow)
+      // Note: The user message was already added before the API call for immediate UI feedback
+      const assistantContent = result.explanation
 
-    editorRef.current?.updateOptions({
-      readOnly: false,
-      readOnlyMessage: undefined,
-    })
-    editorRef.current.executeEdits("explain-query", [
-      {
-        range: {
-          startLineNumber: queryStartLine,
-          startColumn: 1,
-          endLineNumber: queryStartLine,
-          endColumn: 1,
+      addMessageAndUpdateSQL(
+        queryKey,
+        {
+          role: "assistant",
+          content: assistantContent,
+          timestamp: Date.now(),
+          explanation: result.explanation,
+          tokenUsage: result.tokenUsage,
         },
-        text: insertText,
-      },
-    ])
-
-    if (onBufferContentChange) {
-      onBufferContentChange(editorRef.current.getValue())
-    }
-    editorRef.current.revealPositionNearTop({
-      lineNumber: queryStartLine,
-      column: 1,
-    })
-    editorRef.current.setPosition({ lineNumber: queryStartLine, column: 1 })
-    highlightDecorationsRef.current =
-      editorRef.current
-        .getModel()
-        ?.deltaDecorations(highlightDecorationsRef.current, [
-          {
-            range: {
-              startLineNumber: queryStartLine,
-              startColumn: 1,
-              endLineNumber: explanationEndLine,
-              endColumn: 1,
-            },
-            options: {
-              className: "aiQueryHighlight",
-              isWholeLine: false,
-            },
-          },
-        ]) ?? []
-    setTimeout(() => {
-      highlightDecorationsRef.current =
-        editorRef.current
-          ?.getModel()
-          ?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
-    }, 1000)
-
-    toast.success("Query explanation added!")
+        queryText,
+        result.explanation,
+      )
+    })()
   }, [
     disabled,
-    onBufferContentChange,
     queriesToRun,
     tables,
     quest,
@@ -201,6 +203,12 @@ export const ExplainQueryButton = ({ onBufferContentChange }: Props) => {
     hasSchemaAccess,
     currentModel,
     apiKey,
+    getOrCreateConversation,
+    openChatWindow,
+    addMessage,
+    addMessageAndUpdateSQL,
+    updateConversationName,
+    editorRef,
   ])
 
   const handleKeyDown = useCallback(

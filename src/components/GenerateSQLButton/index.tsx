@@ -1,25 +1,21 @@
-import React, {
-  useCallback,
-  useState,
-  useContext,
-  useEffect,
-  useRef,
-} from "react"
+import React, { useCallback, useState, useContext, useEffect } from "react"
 import styled, { css } from "styled-components"
 import { Button, Box, Dialog, ForwardRef, Overlay, Key } from "../../components"
 import { color, platform } from "../../utils"
 import { pinkLinearGradientVertical } from "../../theme"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
-import type { AiAssistantAPIError, GeneratedSQL } from "../../utils/aiAssistant"
 import {
   generateSQL,
-  formatExplanationAsComment,
   createModelToolsClient,
   isAiAssistantError,
+  generateChatTitle,
   type ActiveProviderSettings,
 } from "../../utils/aiAssistant"
-import { providerForModel } from "../../utils/aiAssistantSettings"
+import {
+  providerForModel,
+  MODEL_OPTIONS,
+} from "../../utils/aiAssistantSettings"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
@@ -30,6 +26,7 @@ import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
+import { useAIConversation } from "../../providers/AIConversationProvider"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
@@ -105,17 +102,13 @@ const StyledTextArea = styled.textarea`
   }
 `
 
-type Props = {
-  onBufferContentChange?: (value?: string) => void
-}
-
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 const shortcutTitle =
   platform.isMacintosh || platform.isIOS ? "Cmd+G" : "Ctrl+G"
 
-export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
+export const GenerateSQLButton = () => {
   const { quest } = useContext(QuestContext)
-  const { editorRef } = useEditor()
+  const { editorRef, activeBuffer } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const {
@@ -127,114 +120,139 @@ export const GenerateSQLButton = ({ onBufferContentChange }: Props) => {
     currentModel,
     apiKey,
   } = useAIStatus()
+  const {
+    getOrCreateConversation,
+    openChatWindow,
+    addMessage,
+    addMessageAndUpdateSQL,
+    updateConversationName,
+  } = useAIConversation()
   const [showDialog, setShowDialog] = useState(false)
   const [description, setDescription] = useState("")
-  const highlightDecorationsRef = useRef<string[]>([])
   const disabled =
     running !== RunningType.NONE ||
     !editorRef.current ||
     isBlockingAIStatus(aiStatus)
 
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     setShowDialog(false)
-    setDescription("")
 
-    if (!canUse) {
-      toast.error("No model selected for AI Assistant")
-      return
-    }
-    const provider = providerForModel(currentModel)
-
-    const settings: ActiveProviderSettings = {
-      model: currentModel,
-      provider,
-      apiKey,
-    }
-
-    const response = await generateSQL({
-      description,
-      settings,
-      modelToolsClient: createModelToolsClient(
-        quest,
-        hasSchemaAccessValue ? tables : undefined,
-      ),
-      setStatus,
-      abortSignal: abortController?.signal,
-    })
-
-    if (isAiAssistantError(response)) {
-      const error = response as AiAssistantAPIError
-      if (error.type !== "aborted") {
-        toast.error(error.message, { autoClose: 10000 })
+    void (async () => {
+      if (!canUse) {
+        toast.error("No model selected for AI Assistant")
+        return
       }
-      return
-    }
 
-    const result = response as GeneratedSQL
-    if (!result.sql) {
-      toast.error("No query received from AI Assistant", { autoClose: 10000 })
-      return
-    }
+      // Create a temporary queryKey for generate flow (using description as query text)
+      // When accepted, this will be replaced with the actual query's key
+      const tempQueryKey =
+        `${description}@-1--1` as import("../../scenes/Editor/Monaco/utils").QueryKey
 
-    if (editorRef.current) {
-      const model = editorRef.current.getModel()
-      if (!model) return
+      // Get or create conversation for this temporary queryKey
+      getOrCreateConversation({
+        queryKey: tempQueryKey,
+        bufferId: activeBuffer.id, // Associate with current buffer
+        originalQuery: description,
+        initialSQL: "",
+        initialExplanation: "",
+      })
 
-      const commentBlock = formatExplanationAsComment(
-        `${description}\nExplanation:\n${result.explanation}`,
-        `Prompt`,
+      // Build the full API message (sent to the model)
+      const fullApiMessage = `For the following description, generate the corresponding QuestDB SQL query and 2-4 sentences explanation:\n\n\`\`\`\n${description}\n\`\`\``
+
+      // Add the initial user message with display info for cleaner UI
+      addMessage(tempQueryKey, {
+        role: "user",
+        content: fullApiMessage,
+        timestamp: Date.now(),
+        displayType: "generate_request",
+        displayDescription: description,
+      })
+
+      // Open chat window immediately
+      openChatWindow(tempQueryKey)
+
+      // Clear description after opening chat
+      setDescription("")
+
+      // Now generate SQL in the background
+      const provider = providerForModel(currentModel)
+      const settings: ActiveProviderSettings = {
+        model: currentModel,
+        provider,
+        apiKey,
+      }
+
+      // Generate chat title in parallel using test model
+      const testModel = MODEL_OPTIONS.find(
+        (m) => m.isTestModel && m.provider === provider,
       )
-      const sqlWithComment = `\n${commentBlock}\n${result.sql}\n`
-
-      const lineNumber = model.getLineCount()
-      const column = model.getLineMaxColumn(lineNumber)
-
-      editorRef.current.executeEdits("generate-sql", [
-        {
-          range: {
-            startLineNumber: lineNumber,
-            startColumn: column,
-            endLineNumber: lineNumber,
-            endColumn: column,
-          },
-          text: sqlWithComment,
-        },
-      ])
-
-      if (onBufferContentChange) {
-        onBufferContentChange(editorRef.current.getValue())
+      if (testModel) {
+        void generateChatTitle({
+          firstUserMessage: fullApiMessage,
+          settings: { model: testModel.value, provider, apiKey },
+        }).then((title) => {
+          if (title) {
+            updateConversationName(tempQueryKey, title)
+          }
+        })
       }
 
-      editorRef.current.revealLineNearTop(lineNumber)
-      highlightDecorationsRef.current =
-        editorRef.current
-          .getModel()
-          ?.deltaDecorations(highlightDecorationsRef.current, [
-            {
-              range: {
-                startLineNumber: lineNumber,
-                startColumn: column,
-                endLineNumber:
-                  lineNumber + sqlWithComment.split("\n").length - 1,
-                endColumn: column,
-              },
-              options: {
-                className: "aiQueryHighlight",
-                isWholeLine: false,
-              },
-            },
-          ]) ?? []
-      setTimeout(() => {
-        highlightDecorationsRef.current =
-          editorRef.current
-            ?.getModel()
-            ?.deltaDecorations(highlightDecorationsRef.current, []) ?? []
-      }, 1000)
-      editorRef.current.setPosition({ lineNumber: lineNumber + 1, column: 1 })
-      editorRef.current.focus()
-    }
+      // For initial call, pass empty conversation history
+      // generateSQL will create the full initial message with description
+      const response = await generateSQL({
+        description,
+        conversationHistory: [], // Empty for initial call
+        settings,
+        modelToolsClient: createModelToolsClient(
+          quest,
+          hasSchemaAccessValue ? tables : undefined,
+        ),
+        setStatus,
+        abortSignal: abortController?.signal,
+      })
 
-    toast.success("Query generated!")
+      if (isAiAssistantError(response)) {
+        const error = response
+        if (error.type !== "aborted") {
+          toast.error(error.message, { autoClose: 10000 })
+        }
+        return
+      }
+
+      const result = response
+      if (!result.sql) {
+        toast.error("No query received from AI Assistant", { autoClose: 10000 })
+        return
+      }
+
+      // Build complete assistant response content (SQL + explanation)
+      // Note: The user message was already added before the API call for immediate UI feedback
+      let assistantContent =
+        result.explanation || "Query generated successfully"
+      if (result.sql) {
+        assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
+      }
+
+      // Only include sql field if there's an actual SQL change (not null/undefined/empty)
+      const hasSQLInResult =
+        result.sql !== undefined &&
+        result.sql !== null &&
+        result.sql.trim() !== ""
+      addMessageAndUpdateSQL(
+        tempQueryKey,
+        {
+          role: "assistant",
+          content: assistantContent,
+          timestamp: Date.now(),
+          ...(hasSQLInResult && { sql: result.sql }),
+          explanation: result.explanation,
+          tokenUsage: result.tokenUsage,
+        },
+        result.sql,
+        result.explanation || "",
+      )
+    })()
   }
 
   const handleOpenDialog = useCallback(() => {

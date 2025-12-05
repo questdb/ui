@@ -16,7 +16,13 @@ import {
   clearModelMarkers,
   insertTextAtCursor,
   QuestDBLanguageName,
+  QueryKey,
+  normalizeQueryText,
+  parseQueryKey,
+  createQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
+import { normalizeSql } from "../../utils/aiAssistant"
+import type { IRange } from "monaco-editor"
 import type { Buffer } from "../../store/buffers"
 import {
   bufferStore,
@@ -32,6 +38,34 @@ import { EventType } from "../../modules/EventBus/types"
 import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
+
+export type DiffModeState = {
+  bufferId: number | string
+  queryKey: QueryKey
+  original: string
+  modified: string
+} | null
+
+export type DiffBufferContent = {
+  original: string
+  modified: string
+  explanation?: string
+  queryKey?: QueryKey // Links the diff buffer to its source conversation
+}
+
+export type ApplyAISQLChangeOptions = {
+  newSQL: string
+  queryStartOffset?: number
+  queryEndOffset?: number
+  originalQuery?: string
+  queryKey?: QueryKey
+}
+
+export type ApplyAISQLChangeResult = {
+  success: boolean
+  finalQueryKey?: QueryKey
+  queryStartOffset?: number
+}
 
 export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
@@ -65,6 +99,22 @@ export type EditorContext = {
   temporaryBufferId: number | null
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
+  // Diff mode for AI chat integration
+  diffModeState: DiffModeState
+  enterDiffMode: (
+    bufferId: number | string,
+    queryKey: QueryKey,
+    original: string,
+    modified: string,
+  ) => void
+  exitDiffMode: () => void
+  updateDiffMode: (original: string, modified: string) => void
+  // Global diff buffer management
+  showDiffBuffer: (content: DiffBufferContent) => Promise<void>
+  // Apply AI SQL change to editor
+  applyAISQLChange: (
+    options: ApplyAISQLChangeOptions,
+  ) => Promise<ApplyAISQLChangeResult>
 }
 
 const defaultValues = {
@@ -87,6 +137,12 @@ const defaultValues = {
   temporaryBufferId: null,
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
+  diffModeState: null,
+  enterDiffMode: () => undefined,
+  exitDiffMode: () => undefined,
+  updateDiffMode: () => undefined,
+  showDiffBuffer: () => Promise.resolve(),
+  applyAISQLChange: () => Promise.resolve({ success: false }),
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -97,6 +153,27 @@ export const EditorProvider: React.FC = ({ children }) => {
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
+  const [diffModeState, setDiffModeState] = useState<DiffModeState>(null)
+
+  const enterDiffMode = useCallback(
+    (
+      bufferId: number | string,
+      queryKey: QueryKey,
+      original: string,
+      modified: string,
+    ) => {
+      setDiffModeState({ bufferId, queryKey, original, modified })
+    },
+    [],
+  )
+
+  const exitDiffMode = useCallback(() => {
+    setDiffModeState(null)
+  }, [])
+
+  const updateDiffMode = useCallback((original: string, modified: string) => {
+    setDiffModeState((prev) => (prev ? { ...prev, original, modified } : null))
+  }, [])
 
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
@@ -385,6 +462,247 @@ export const EditorProvider: React.FC = ({ children }) => {
       })
     }
 
+  // Global diff buffer management - creates or updates a single diff buffer and switches to it
+  const showDiffBuffer: EditorContext["showDiffBuffer"] = async (content) => {
+    // Check if diff buffer already exists
+    const existingDiffBuffer = buffers.find(
+      (b) => b.isDiffBuffer && !b.archived,
+    )
+
+    if (existingDiffBuffer && existingDiffBuffer.id) {
+      // Update existing diff buffer
+      await bufferStore.update(existingDiffBuffer.id, {
+        diffContent: {
+          original: content.original,
+          modified: content.modified,
+          explanation: content.explanation || "",
+          queryKey: content.queryKey,
+          queryStartOffset: 0,
+          originalQuery: content.original,
+        },
+      })
+      // Switch to it
+      const updatedBuffer = {
+        ...existingDiffBuffer,
+        diffContent: {
+          original: content.original,
+          modified: content.modified,
+          explanation: content.explanation || "",
+          queryKey: content.queryKey,
+          queryStartOffset: 0,
+          originalQuery: content.original,
+        },
+      }
+      await setActiveBuffer(updatedBuffer)
+    } else {
+      // Create new diff buffer
+      const position = buffers.filter(
+        (b) => !b.archived && !b.isTemporary,
+      ).length
+      await addBuffer({
+        label: "AI Suggestion",
+        value: "",
+        isDiffBuffer: true,
+        position,
+        diffContent: {
+          original: content.original,
+          modified: content.modified,
+          explanation: content.explanation || "",
+          queryKey: content.queryKey,
+          queryStartOffset: 0,
+          originalQuery: content.original,
+        },
+      })
+      // addBuffer already switches to it
+    }
+  }
+
+  // Shared logic for applying AI SQL changes to editor
+  // Used by both AIChatWindow and diff editor button bar
+  const applyAISQLChange: EditorContext["applyAISQLChange"] = async (
+    options,
+  ) => {
+    const {
+      newSQL,
+      queryStartOffset,
+      queryEndOffset,
+      originalQuery,
+      queryKey,
+    } = options
+
+    if (!editorRef.current) {
+      return { success: false }
+    }
+
+    const model = editorRef.current.getModel()
+    if (!model) {
+      return { success: false }
+    }
+
+    let finalQueryStartOffset: number = 0
+    let replaceRange: IRange | null = null
+    let shouldReplace = false
+
+    // First try using stored offsets (more reliable)
+    if (queryStartOffset !== undefined && queryEndOffset !== undefined) {
+      const startOffset = queryStartOffset
+      const endOffset = queryEndOffset
+      const currentEditorText = model.getValue()
+      const queryToMatch = originalQuery || ""
+
+      // Verify the query still exists at this position
+      const queryInEditor = currentEditorText.slice(startOffset, endOffset)
+      const normalizedQueryInEditor = normalizeQueryText(queryInEditor)
+      const normalizedOriginalQuery = normalizeQueryText(queryToMatch)
+
+      if (normalizedQueryInEditor === normalizedOriginalQuery) {
+        const startPosition = model.getPositionAt(startOffset)
+
+        // Extend endOffset to include any trailing semicolon and whitespace
+        let extendedEndOffset = endOffset
+        const textAfterQuery = currentEditorText.slice(
+          endOffset,
+          endOffset + 10,
+        )
+        const semicolonMatch = textAfterQuery.match(/^(\s*;)/)
+        if (semicolonMatch) {
+          extendedEndOffset = endOffset + semicolonMatch[0].length
+        }
+
+        const endPosition = model.getPositionAt(extendedEndOffset)
+        replaceRange = {
+          startLineNumber: startPosition.lineNumber,
+          startColumn: startPosition.column,
+          endLineNumber: endPosition.lineNumber,
+          endColumn: endPosition.column,
+        }
+        finalQueryStartOffset = startOffset
+        shouldReplace = true
+      }
+    }
+
+    // Fallback: try parsing from queryKey
+    if (!shouldReplace && queryKey) {
+      try {
+        const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+        const currentEditorText = model.getValue()
+        const queryInEditor = currentEditorText.slice(startOffset, endOffset)
+        const normalizedQueryInEditor = normalizeQueryText(queryInEditor)
+        const normalizedOriginalQuery = normalizeQueryText(queryText)
+
+        if (normalizedQueryInEditor === normalizedOriginalQuery) {
+          const startPosition = model.getPositionAt(startOffset)
+
+          let extendedEndOffset = endOffset
+          const textAfterQuery = currentEditorText.slice(
+            endOffset,
+            endOffset + 10,
+          )
+          const semicolonMatch = textAfterQuery.match(/^(\s*;)/)
+          if (semicolonMatch) {
+            extendedEndOffset = endOffset + semicolonMatch[0].length
+          }
+
+          const endPosition = model.getPositionAt(extendedEndOffset)
+          replaceRange = {
+            startLineNumber: startPosition.lineNumber,
+            startColumn: startPosition.column,
+            endLineNumber: endPosition.lineNumber,
+            endColumn: endPosition.column,
+          }
+          finalQueryStartOffset = startOffset
+          shouldReplace = true
+        }
+      } catch {
+        // Invalid queryKey or query not found, fall back to appending
+      }
+    }
+
+    if (!shouldReplace || !replaceRange) {
+      // Append to end of editor
+      const lineNumber = model.getLineCount()
+      const column = model.getLineMaxColumn(lineNumber)
+      finalQueryStartOffset = model.getOffsetAt({ lineNumber, column })
+      replaceRange = {
+        startLineNumber: lineNumber,
+        startColumn: column,
+        endLineNumber: lineNumber,
+        endColumn: column,
+      }
+    }
+
+    // Apply the edit with proper semicolon handling
+    // normalizeSql ensures: removes trailing semicolon, formats, then adds single semicolon
+    const sqlWithSemicolon = normalizeSql(newSQL)
+    const isAppend =
+      replaceRange.startColumn === replaceRange.endColumn &&
+      replaceRange.startLineNumber === replaceRange.endLineNumber
+    editorRef.current.executeEdits("accept-ai-change", [
+      {
+        range: replaceRange,
+        text: isAppend ? "\n" + sqlWithSemicolon + "\n" : sqlWithSemicolon,
+        forceMoveMarkers: true,
+      },
+    ])
+
+    // Recalculate positions after edit
+    const finalModel = editorRef.current.getModel()
+    if (!finalModel) {
+      return { success: false }
+    }
+
+    const actualQueryStartOffset = isAppend
+      ? finalQueryStartOffset + 1
+      : finalQueryStartOffset
+    const normalizedQuery = normalizeQueryText(newSQL)
+    const actualQueryEndOffset = actualQueryStartOffset + normalizedQuery.length
+
+    const finalStartPosition = finalModel.getPositionAt(actualQueryStartOffset)
+    const finalEndPosition = finalModel.getPositionAt(actualQueryEndOffset)
+
+    // Apply highlighting decoration
+    const monaco = await import("monaco-editor")
+    const highlightRange = new monaco.Range(
+      finalStartPosition.lineNumber,
+      finalStartPosition.column,
+      finalEndPosition.lineNumber,
+      finalEndPosition.column,
+    )
+
+    const decorationId = finalModel.deltaDecorations(
+      [],
+      [
+        {
+          range: highlightRange,
+          options: {
+            isWholeLine: false,
+            className: "aiQueryHighlight",
+          },
+        },
+      ],
+    )
+
+    // Reveal the query in the editor
+    editorRef.current.revealPositionNearTop(finalStartPosition)
+
+    // Remove decoration after 1 second
+    setTimeout(() => {
+      finalModel.deltaDecorations(decorationId, [])
+    }, 1000)
+
+    // Return the final query key for caller to update conversation state
+    const finalQueryKey = createQueryKey(
+      normalizedQuery,
+      actualQueryStartOffset,
+    )
+
+    return {
+      success: true,
+      finalQueryKey,
+      queryStartOffset: actualQueryStartOffset,
+    }
+  }
+
   return (
     <EditorContext.Provider
       value={{
@@ -414,6 +732,12 @@ export const EditorProvider: React.FC = ({ children }) => {
         temporaryBufferId,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
+        diffModeState,
+        enterDiffMode,
+        exitDiffMode,
+        updateDiffMode,
+        showDiffBuffer,
+        applyAISQLChange,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()

@@ -24,13 +24,13 @@ import {
   AIOperationStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
+import { useAIConversation } from "../../../providers/AIConversationProvider"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
   isTemporary: boolean | undefined
   executionRefs?: React.MutableRefObject<ExecutionRefs>
-  onBufferContentChange?: (value?: string) => void
 }
 
 const ButtonBarWrapper = styled.div<{
@@ -225,16 +225,17 @@ const ButtonBar = ({
   onTriggerRunScript,
   isTemporary,
   executionRefs,
-  onBufferContentChange,
 }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { status: aiStatus, canUse, abortOperation } = useAIStatus()
+  const { chatWindowState } = useAIConversation()
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
   const aiAssistantEnabled = canUse
+  const isChatWindowOpen = chatWindowState.isOpen
 
   const hasQueryError =
     activeNotification?.type === "error" && !activeNotification?.isExplain
@@ -447,15 +448,12 @@ const ButtonBar = ({
       $searchWidgetType={searchWidgetType}
       $aiAssistantEnabled={aiAssistantEnabled}
     >
-      <GenerateSQLButton onBufferContentChange={onBufferContentChange} />
-      <ExplainQueryButton onBufferContentChange={onBufferContentChange} />
+      <GenerateSQLButton />
+      <ExplainQueryButton />
       {hasQueryError && queriesToRun.length === 1 && (
-        <FixQueryButton
-          executionRefs={executionRefs}
-          onBufferContentChange={onBufferContentChange}
-        />
+        <FixQueryButton executionRefs={executionRefs} />
       )}
-      {aiStatus && (
+      {aiStatus && !isChatWindowOpen && (
         <StatusIndicator
           $aborted={aiStatus === AIOperationStatus.Aborted}
           $loading={isBlockingAIStatus(aiStatus)}

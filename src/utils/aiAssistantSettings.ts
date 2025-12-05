@@ -22,8 +22,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
     defaultEnabled: true,
   },
   {
-    label: "Claude Opus 4.1",
-    value: "claude-opus-4-1",
+    label: "Claude Opus 4.5",
+    value: "claude-opus-4-5",
     provider: "anthropic",
     isSlow: true,
     defaultEnabled: true,
@@ -57,6 +57,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
     value: "gpt-5.1",
     provider: "openai",
     defaultEnabled: true,
+    isTestModel: true,
   },
   {
     label: "GPT-5",

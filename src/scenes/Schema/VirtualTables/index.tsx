@@ -49,7 +49,6 @@ import { SchemaExplanationDialog } from "../SchemaExplanationDialog"
 import {
   explainTableSchema,
   isAiAssistantError,
-  AiAssistantAPIError,
   TableSchemaExplanation,
   type ActiveProviderSettings,
 } from "../../../utils/aiAssistant"
@@ -309,12 +308,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     })
 
     if (isAiAssistantError(response)) {
-      const error = response as AiAssistantAPIError
+      const error = response
       toast.error(error.message, { autoClose: 10000 })
       return
     }
 
-    const result = response as TableSchemaExplanation
+    const result = response
     if (!result.explanation) {
       toast.error("No explanation received from AI Assistant", {
         autoClose: 10000,

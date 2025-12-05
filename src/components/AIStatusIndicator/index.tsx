@@ -81,7 +81,7 @@ const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => (
 const Container = styled.div`
   position: absolute;
   bottom: 2rem;
-  right: 2rem;
+  left: 2rem;
   width: 38.3rem;
   background: ${color("backgroundDarker")};
   border: 1px solid rgba(255, 255, 255, 0.12);

@@ -65,13 +65,13 @@ export type Buffer = {
   metricsViewState?: MetricsViewState
   isTemporary?: boolean
   isDiffBuffer?: boolean
-  originalBufferId?: number
   diffContent?: {
     original: string
     modified: string
     explanation: string
     queryStartOffset: number
     originalQuery: string
+    queryKey?: string // Links the diff buffer to its source conversation
   }
 }
 
@@ -119,7 +119,6 @@ export const makeBuffer = ({
   archivedAt,
   isTemporary,
   isDiffBuffer,
-  originalBufferId,
   diffContent,
 }: {
   label: string
@@ -131,13 +130,13 @@ export const makeBuffer = ({
   archivedAt?: number
   isTemporary?: boolean
   isDiffBuffer?: boolean
-  originalBufferId?: number
   diffContent?: {
     original: string
     modified: string
     explanation: string
     queryStartOffset: number
     originalQuery: string
+    queryKey?: string
   }
 }): Omit<Buffer, "id"> => ({
   label,
@@ -149,7 +148,6 @@ export const makeBuffer = ({
   archivedAt,
   isTemporary,
   isDiffBuffer,
-  originalBufferId,
   diffContent,
 })
 

@@ -75,10 +75,6 @@ import { useSchema } from "./SchemaContext"
 import { SchemaProvider } from "./SchemaContext"
 import { TreeNodeKind } from "./Row"
 import { toast } from "../../components/Toast"
-import {
-  useAIStatus,
-  isBlockingAIStatus,
-} from "../../providers/AIStatusProvider"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -153,7 +149,6 @@ const Schema = ({
   const listenerActiveRef = useRef(false)
   const latestFocusChangeTimestampRef = useRef<number>(0)
   const { addBuffer } = useEditor()
-  const { status } = useAIStatus()
   const { selectOpen, setSelectOpen, selectedTables, setSelectedTables } =
     useSchema()
 
@@ -452,7 +447,6 @@ const Schema = ({
                       <Button
                         data-hook="schema-add-metrics-button"
                         skin="transparent"
-                        disabled={isBlockingAIStatus(status)}
                         onClick={handleAddMetricsBuffer}
                       >
                         <AddChart size="20px" />

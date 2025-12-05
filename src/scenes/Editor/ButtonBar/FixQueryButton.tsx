@@ -2,22 +2,22 @@ import React, { useContext, MutableRefObject } from "react"
 import { Button } from "../../../components"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../../providers"
-import type {
-  AiAssistantAPIError,
-  GeneratedSQL,
-} from "../../../utils/aiAssistant"
+import type { GeneratedSQL } from "../../../utils/aiAssistant"
 import {
   isAiAssistantError,
   createModelToolsClient,
   fixQuery,
+  generateChatTitle,
   type ActiveProviderSettings,
 } from "../../../utils/aiAssistant"
-import { providerForModel } from "../../../utils/aiAssistantSettings"
+import {
+  providerForModel,
+  MODEL_OPTIONS,
+} from "../../../utils/aiAssistantSettings"
 import { toast } from "../../../components/Toast"
 import { QuestContext } from "../../../providers"
 import { selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
-import { formatExplanationAsComment } from "../../../utils/aiAssistant"
 import { createQueryKeyFromRequest } from "../../../scenes/Editor/Monaco/utils"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 import type { Request } from "../../../scenes/Editor/Monaco/utils"
@@ -26,6 +26,7 @@ import {
   isBlockingAIStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
+import { useAIConversation } from "../../../providers/AIConversationProvider"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -37,6 +38,7 @@ const extractError = (
 ): {
   errorMessage: string
   fixStart: number
+  fixEnd: number
   queryText: string
   word: string | null
 } | null => {
@@ -63,6 +65,10 @@ const extractError = (
     ? execution.selection.startOffset
     : execution.startOffset
 
+  const fixEnd = execution.selection
+    ? execution.selection.endOffset
+    : execution.endOffset
+
   const startPosition = model.getPositionAt(fixStart)
   const errorWordPosition = model.getPositionAt(
     fixStart + execution.error.position,
@@ -84,21 +90,18 @@ const extractError = (
     errorMessage: execution.error.error || "Query execution failed",
     word: errorWord ? errorWord.word : null,
     fixStart,
+    fixEnd,
     queryText,
   }
 }
 
 type Props = {
   executionRefs?: React.MutableRefObject<ExecutionRefs>
-  onBufferContentChange?: (value?: string) => void
 }
 
-export const FixQueryButton = ({
-  executionRefs,
-  onBufferContentChange,
-}: Props) => {
+export const FixQueryButton = ({ executionRefs }: Props) => {
   const { quest } = useContext(QuestContext)
-  const { editorRef, activeBuffer, addBuffer } = useEditor()
+  const { editorRef, activeBuffer } = useEditor()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
@@ -111,6 +114,13 @@ export const FixQueryButton = ({
     currentModel,
     apiKey,
   } = useAIStatus()
+  const {
+    getOrCreateConversation,
+    openChatWindow,
+    addMessage,
+    addMessageAndUpdateSQL,
+    updateConversationName,
+  } = useAIConversation()
 
   if (!canUse) {
     return null
@@ -139,20 +149,58 @@ export const FixQueryButton = ({
       })
       return
     }
-    const { errorMessage, fixStart, queryText, word } = errorInfo
-    const fixStartPosition = editorModel.getPositionAt(fixStart)
-    editorRef.current?.updateOptions({
-      readOnly: true,
-      readOnlyMessage: {
-        value: "Query fix in progress",
-      },
-    })
-    const provider = providerForModel(currentModel)
+    const { errorMessage, fixStart, fixEnd, queryText, word } = errorInfo
 
+    // Create query key from the request
+    const queryKey = createQueryKeyFromRequest(editorRef.current, queryToFix)
+
+    // Get or create conversation for this queryKey with position info
+    getOrCreateConversation({
+      queryKey,
+      bufferId: activeBuffer.id,
+      originalQuery: queryText,
+      initialSQL: queryText,
+      initialExplanation: "",
+      queryStartOffset: fixStart,
+      queryEndOffset: fixEnd,
+    })
+
+    // Build the full API message (sent to the model)
+    const fullApiMessage = `Fix this SQL query that has an error:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\nError: ${errorMessage}${word ? `\n\nError near: "${word}"` : ""}`
+
+    // Add the initial user message with display info for cleaner UI
+    addMessage(queryKey, {
+      role: "user",
+      content: fullApiMessage,
+      timestamp: Date.now(),
+      displayType: "fix_request",
+      displaySQL: queryText,
+    })
+
+    // Open chat window immediately
+    openChatWindow(queryKey)
+
+    // Now fix query in the background
+    const provider = providerForModel(currentModel)
     const settings: ActiveProviderSettings = {
       model: currentModel,
       provider,
       apiKey,
+    }
+
+    // Generate chat title in parallel using test model
+    const testModel = MODEL_OPTIONS.find(
+      (m) => m.isTestModel && m.provider === provider,
+    )
+    if (testModel) {
+      void generateChatTitle({
+        firstUserMessage: fullApiMessage,
+        settings: { model: testModel.value, provider, apiKey },
+      }).then((title) => {
+        if (title) {
+          updateConversationName(queryKey, title)
+        }
+      })
     }
 
     const response = await fixQuery({
@@ -169,84 +217,32 @@ export const FixQueryButton = ({
     })
 
     if (isAiAssistantError(response)) {
-      const error = response as AiAssistantAPIError
+      const error = response
       if (error.type !== "aborted") {
         toast.error(error.message, { autoClose: 10000 })
       }
-      editorRef.current?.updateOptions({
-        readOnly: false,
-        readOnlyMessage: undefined,
-      })
       return
     }
 
     const result = response as GeneratedSQL
 
+    // Handle case where no SQL fix was provided, only explanation
     if (!result.sql && result.explanation) {
-      const commentBlock = formatExplanationAsComment(
-        result.explanation,
-        "AI Error Explanation",
-      )
-      const insertText = commentBlock + "\n"
-
-      editorRef.current?.updateOptions({
-        readOnly: false,
-        readOnlyMessage: undefined,
-      })
-      editorRef.current.executeEdits("fix-query-explanation", [
+      // Add assistant message with explanation only
+      addMessageAndUpdateSQL(
+        queryKey,
         {
-          range: {
-            startLineNumber: fixStartPosition.lineNumber,
-            startColumn: 1,
-            endLineNumber: fixStartPosition.lineNumber,
-            endColumn: 1,
-          },
-          text: insertText,
+          role: "assistant",
+          content: result.explanation,
+          timestamp: Date.now(),
+          explanation: result.explanation,
+          tokenUsage: result.tokenUsage,
         },
-      ])
-
-      if (onBufferContentChange) {
-        onBufferContentChange(editorRef.current.getValue())
-      }
-
-      editorRef.current.revealPositionNearTop(fixStartPosition)
-      editorRef.current.setPosition(fixStartPosition)
-
-      const explanationEndLine =
-        fixStartPosition.lineNumber + insertText.split("\n").length - 1
-      const highlightDecorations =
-        editorRef.current.getModel()?.deltaDecorations(
-          [],
-          [
-            {
-              range: {
-                startLineNumber: fixStartPosition.lineNumber,
-                startColumn: 1,
-                endLineNumber: explanationEndLine,
-                endColumn: 1,
-              },
-              options: {
-                className: "aiQueryHighlight",
-                isWholeLine: false,
-              },
-            },
-          ],
-        ) ?? []
-
-      setTimeout(() => {
-        editorRef.current
-          ?.getModel()
-          ?.deltaDecorations(highlightDecorations, [])
-      }, 1000)
-
-      toast.success("Error explanation added!")
+        queryText, // Keep original SQL since no fix was provided
+        result.explanation,
+      )
       return
     }
-
-    editorRef.current?.updateOptions({
-      readOnly: false,
-      readOnlyMessage: undefined,
-    })
 
     if (!result.sql) {
       toast.error("No fixed query or explanation received from AI Assistant", {
@@ -255,19 +251,25 @@ export const FixQueryButton = ({
       return
     }
 
-    await addBuffer({
-      label: `${activeBuffer.label} (Fix Preview)`,
-      value: "",
-      isDiffBuffer: true,
-      originalBufferId: activeBuffer.id,
-      diffContent: {
-        original: queryText,
-        modified: result.sql,
-        explanation: result.explanation || "AI suggested fix for the SQL query",
-        queryStartOffset: fixStart,
-        originalQuery: queryText,
+    // Build complete assistant response content (SQL + explanation)
+    const assistantContent = result.explanation
+      ? `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation}`
+      : `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\``
+
+    // Add assistant response with the fixed SQL
+    addMessageAndUpdateSQL(
+      queryKey,
+      {
+        role: "assistant",
+        content: assistantContent,
+        timestamp: Date.now(),
+        sql: result.sql,
+        explanation: result.explanation,
+        tokenUsage: result.tokenUsage,
       },
-    })
+      result.sql,
+      result.explanation || "",
+    )
   }
 
   return (
