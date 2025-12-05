@@ -27,6 +27,7 @@ import "styled-components"
 export type ColorShape = {
   black: string
   black70: string
+  overlayBackground: string
   black40: string
   black20: string
   gray1: string
@@ -38,9 +39,11 @@ export type ColorShape = {
   selection: string
   selectionDarker: string
   comment: string
+  midnight: string
   red: string
   redDark: string
   loginBackground: string
+  orangeDark: string
   orange: string
   yellow: string
   green: string

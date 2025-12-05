@@ -47,6 +47,8 @@ export type TextProps = Readonly<{
   transform?: Transform
   type?: Type
   weight?: number
+  margin?: string
+  padding?: string
 }>
 
 const defaultProps: Readonly<{
@@ -71,6 +73,8 @@ export const textStyles = css<TextProps>`
   font-weight: ${({ weight }) => weight};
   text-transform: ${({ transform }) => transform};
   ${({ align }) => (align ? `text-align: ${align}` : "")};
+  ${({ margin }) => margin && `margin: ${margin}`};
+  ${({ padding }) => padding && `padding: ${padding}`};
   ${({ ellipsis }) => ellipsis && ellipsisStyles};
 `
 

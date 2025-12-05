@@ -42,6 +42,7 @@ import "allotment/dist/style.css"
 
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { AIStatusProvider } from "../../providers/AIStatusProvider"
 
 const Page = styled.div`
   display: flex;
@@ -101,30 +102,33 @@ const Layout = () => {
   return (
     <SearchProvider>
       <EditorProvider>
-        <TopBar />
-        <Warnings />
-        <Root>
-          <Main sideOpened={activeSidebar !== undefined}>
-            <ImageZoom />
-            <Page>
-              <Console />
-            </Page>
-          </Main>
+        <AIStatusProvider>
+          <TopBar />
+          <Warnings />
+          <Root>
+            <Main sideOpened={activeSidebar !== undefined}>
+              <ImageZoom />
+              <Page>
+                <Console />
+              </Page>
+              {/* <AIStatusIndicator /> */}
+            </Main>
 
-          <Drawer id="side-panel-right" />
+            <Drawer id="side-panel-right" />
 
-          <Sidebar align="top">
-            <Help />
+            <Sidebar align="top">
+              <Help />
 
-            <News />
+              <News />
 
-            <CreateTableDialog />
-          </Sidebar>
-        </Root>
+              <CreateTableDialog />
+            </Sidebar>
+          </Root>
 
-        <SideMenu />
+          <SideMenu />
 
-        <Footer />
+          <Footer />
+        </AIStatusProvider>
       </EditorProvider>
     </SearchProvider>
   )

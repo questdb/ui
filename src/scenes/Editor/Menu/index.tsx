@@ -34,6 +34,7 @@ import {
   PaneMenu,
   PopperToggle,
   TransitionDuration,
+  SetupAIAssistant,
 } from "../../../components"
 import { useKeyPress, useScreenSize } from "../../../hooks"
 import { actions, selectors } from "../../../store"
@@ -65,6 +66,7 @@ const Separator = styled.div`
 const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
   position: relative;
   flex: 0 0 auto;
+  margin-right: 0.5rem;
 
   @keyframes pulse {
     0% {
@@ -187,6 +189,7 @@ const Menu = () => {
           />
         </PopperToggle>
       )}
+      <SetupAIAssistant />
 
       <Separator />
 

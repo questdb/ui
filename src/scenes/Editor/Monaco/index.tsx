@@ -28,6 +28,8 @@ import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
+import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
@@ -52,6 +54,7 @@ import {
   getQueryFromCursor,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
+  getQueryRequestFromAISuggestion,
   QuestDBLanguageName,
   getAllQueries,
   getQueriesInRange,
@@ -86,10 +89,24 @@ loader.config({
 
 export const LINE_NUMBER_HARD_LIMIT = 99999
 
-const Content = styled(PaneContent)`
+const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: #2c2e3d;
+  height: 100%;
+  width: 100%;
+
+  ${({ $hidden }) =>
+    $hidden &&
+    `
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+  `}
   .monaco-editor .squiggly-error {
     background: none;
     border-bottom: 0.3rem ${color("red")} solid;
@@ -124,11 +141,53 @@ const Content = styled(PaneContent)`
     border-radius: 2px;
   }
 
+  .aiQueryHighlight {
+    background-color: rgba(241, 250, 140, 0.5);
+    border-radius: 2px;
+  }
+
+  .ai-fix-suggestion {
+    background-color: rgba(80, 250, 123, 0.15);
+    border-radius: 2px;
+  }
+
+  .fix-action-button {
+    height: 2.4rem;
+    padding: 1px 6px;
+    font-size: 1.4rem;
+    color: #f8f8f2;
+    border-radius: 4px;
+    cursor: pointer;
+    &.accept-fix {
+      background-color: #00aa3b;
+      border: 1px solid #00aa3b;
+    }
+
+    &.reject-fix {
+      background-color: #ff5555;
+      border: 1px solid #ff5555;
+    }
+
+    &:hover {
+      filter: brightness(1.3);
+    }
+  }
+
+  div[widgetid="fix-query-buttons"] {
+    display: inline-flex !important;
+    width: 30rem;
+    gap: 1rem !important;
+  }
+
   .cursorQueryGlyph,
   .cancelQueryGlyph {
-    margin-left: 2rem;
+    width: 50px !important;
+    margin-left: 1rem;
     z-index: 1;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 
     &:after {
       display: block;
@@ -138,9 +197,29 @@ const Content = styled(PaneContent)`
       background-repeat: no-repeat;
       background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
       transform: scale(1.1);
+      &:hover {
+        filter: brightness(1.3);
+      }
     }
-    &:hover:after {
-      filter: brightness(1.3);
+
+    /* AI sparkle icon - hollow (no conversation) */
+    &.ai-enabled:before {
+      display: block;
+      content: "";
+      width: 16px;
+      height: 16px;
+      background-repeat: no-repeat;
+      background-size: 16px 16px;
+      background-image: url("/assets/ai-sparkle-hollow.svg");
+      &:hover {
+        filter: brightness(1.3);
+      }
+    }
+
+    /* AI sparkle icon - filled (has conversation) */
+    &.ai-enabled.has-conversation:before {
+      background-image: url("/assets/ai-sparkle.svg");
+      background-size: 16px 16px;
     }
   }
 
@@ -196,12 +275,22 @@ const StyledDialogButton = styled(Button)`
   }
 `
 
-const DEFAULT_LINE_CHARS = 5
+const EditorWrapper = styled.div`
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+`
+
+// Extra chars for line numbers to accommodate glyph icons
+// With AI enabled: [AI sparkle 22px] [gap 5px] [run button 22px] = ~49px = ~7 chars
+const DEFAULT_LINE_CHARS = 7
 
 const MonacoEditor = ({
   executionRefs,
+  hidden = false,
 }: {
   executionRefs: React.MutableRefObject<ExecutionRefs>
+  hidden?: boolean
 }) => {
   const editorContext = useEditor()
   const {
@@ -216,6 +305,7 @@ const MonacoEditor = ({
     isNavigatingFromSearchRef,
   } = editorContext
   const { quest } = useContext(QuestContext)
+  const { canUse: canUseAI } = useAIStatus()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
@@ -224,6 +314,9 @@ const MonacoEditor = ({
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
+  const aiSuggestionRequest = useSelector(
+    selectors.query.getAISuggestionRequest,
+  )
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
@@ -245,6 +338,10 @@ const MonacoEditor = ({
   const requestRef = useRef(request)
   const queryNotificationsRef = useRef(queryNotifications)
   const activeNotificationRef = useRef(activeNotification)
+  const aiSuggestionRequestRef = useRef<{
+    query: string
+    startOffset: number
+  } | null>(aiSuggestionRequest)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const decorationCollectionRef =
@@ -263,7 +360,21 @@ const MonacoEditor = ({
   const dropdownPositionRef = useRef<{ x: number; y: number } | null>(null)
   const dropdownQueriesRef = useRef<Request[]>([])
   const isContextMenuDropdownRef = useRef<boolean>(false)
+  const isAIDropdownRef = useRef<boolean>(false)
   const cleanupActionsRef = useRef<(() => void)[]>([])
+
+  const handleBufferContentChange = (value: string | undefined) => {
+    const lineCount = editorRef.current?.getModel()?.getLineCount()
+    if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
+      if (editorRef.current && currentBufferValueRef.current !== undefined) {
+        editorRef.current.setValue(currentBufferValueRef.current)
+      }
+      toast.error("Maximum line limit reached")
+      return
+    }
+    currentBufferValueRef.current = value
+    void updateBuffer(activeBuffer.id as number, { value })
+  }
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
@@ -277,6 +388,20 @@ const MonacoEditor = ({
   }
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
+    // Don't overwrite active notification when showing AI suggestion result
+    // The aiSuggestionRequest persists after query runs, so check if the current
+    // activeNotification's queryKey matches the AI suggestion's expected queryKey
+    if (aiSuggestionRequest && activeNotificationRef.current) {
+      const aiQueryKey = createQueryKey(
+        normalizeQueryText(aiSuggestionRequest.query),
+        aiSuggestionRequest.startOffset,
+      )
+      // If current notification is from AI suggestion, preserve it
+      if (activeNotificationRef.current.query === aiQueryKey) {
+        return
+      }
+    }
+
     let newActiveNotification: NotificationShape | null = null
 
     if (queryKey) {
@@ -417,7 +542,32 @@ const MonacoEditor = ({
           lineNumber: target.position.lineNumber,
           column: 1,
         }
+
         const dropdownQueries = getDropdownQueries(position.lineNumber)
+        if (dropdownQueries.length === 0) return
+
+        // Check if AI sparkle was clicked using nativeEvent.offsetX
+        // The glyph layout: [AI sparkle 22px] [gap 5px] [run button 22px]
+        // offsetX is relative to the target element
+        const glyphElement = e.target as HTMLElement
+        const isAIEnabled = glyphElement.classList.contains("ai-enabled")
+        const offsetX = e.nativeEvent.offsetX
+
+        if (isAIEnabled && offsetX < 27) {
+          // AI sparkle was clicked
+          if (dropdownQueries.length > 1) {
+            // Multiple queries - show AI dropdown to select which query
+            dropdownQueriesRef.current = dropdownQueries
+            isAIDropdownRef.current = true
+            openDropdownAtPosition(e.clientX, e.clientY, position, false)
+          } else {
+            // Single query - open chat window directly
+            handleAskAI(dropdownQueries[0])
+          }
+          return
+        }
+
+        // Run button was clicked
         if (dropdownQueries.length > 1) {
           dropdownQueriesRef.current = dropdownQueries
           openDropdownAtPosition(e.clientX, e.clientY, position, false)
@@ -452,6 +602,28 @@ const MonacoEditor = ({
     }
 
     toggleRunning(RunningType.EXPLAIN)
+  }
+
+  const { getOrCreateConversation, openChatWindow, conversations } =
+    useAIConversation()
+
+  const handleAskAI = (query?: Request) => {
+    setDropdownOpen(false)
+    if (!query || !editorRef.current) return
+
+    const queryText = query.selection ? query.selection.queryText : query.query
+    const queryKey = createQueryKeyFromRequest(editorRef.current, query)
+
+    // Get or create conversation for this queryKey
+    getOrCreateConversation({
+      queryKey,
+      bufferId: activeBuffer.id,
+      originalQuery: queryText,
+      initialSQL: queryText,
+    })
+
+    // Open chat window for this queryKey
+    openChatWindow(queryKey)
   }
 
   const applyLineMarkings = (
@@ -606,17 +778,29 @@ const MonacoEditor = ({
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
+        // Check if AI assistant is available and if there's a conversation with messages for this query
+        const conversation = conversations.get(queryKey)
+        const hasConversation =
+          canUseAI &&
+          conversation !== undefined &&
+          conversation.messages.length > 0
+        const aiClasses = canUseAI
+          ? hasConversation
+            ? " ai-enabled has-conversation"
+            : " ai-enabled"
+          : ""
+
         // Add glyph for all queries with line number in class name
         const glyphClassName =
           runningValueRef.current !== RunningType.NONE &&
           requestRef.current?.row !== undefined &&
           requestRef.current?.row + 1 === startLineNumber
-            ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}`
+            ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}${aiClasses}`
             : hasError
-              ? `cursorQueryGlyph error-glyph cursorQueryGlyph-line-${startLineNumber}`
+              ? `cursorQueryGlyph error-glyph cursorQueryGlyph-line-${startLineNumber}${aiClasses}`
               : isSuccessful
-                ? `cursorQueryGlyph success-glyph cursorQueryGlyph-line-${startLineNumber}`
-                : `cursorQueryGlyph cursorQueryGlyph-line-${startLineNumber}`
+                ? `cursorQueryGlyph success-glyph cursorQueryGlyph-line-${startLineNumber}${aiClasses}`
+                : `cursorQueryGlyph cursorQueryGlyph-line-${startLineNumber}${aiClasses}`
 
         allDecorations.push({
           range: new monaco.Range(startLineNumber, 1, startLineNumber, 1),
@@ -691,6 +875,18 @@ const MonacoEditor = ({
         e.target.element &&
         e.target.element.classList.contains("cursorQueryGlyph")
       ) {
+        // Check if right-click was on AI icon area (left side) or run button area (right side)
+        // The glyph layout: [AI sparkle 22px] [gap 5px] [run button 22px]
+        const glyphElement = e.target.element
+        const isAIEnabled = glyphElement.classList.contains("ai-enabled")
+        const glyphRect = glyphElement.getBoundingClientRect()
+        const offsetX = e.event.posx - glyphRect.left
+
+        // If AI is enabled and right-click was on AI icon area, ignore (don't show dropdown)
+        if (isAIEnabled && offsetX < 27) {
+          return
+        }
+
         const posX = e.event.posx,
           posY = e.event.posy
         if (editorRef.current) {
@@ -830,8 +1026,24 @@ const MonacoEditor = ({
       }
 
       const currentNotifications = queryNotificationsRef.current || {}
+      // Calculate AI suggestion queryKey to skip it during content changes
+      // (it will be handled separately via updateNotificationKey after the AI suggestion is accepted)
+      const currentAISuggestion = aiSuggestionRequestRef.current
+      const aiSuggestionQueryKey = currentAISuggestion
+        ? createQueryKey(
+            normalizeQueryText(currentAISuggestion.query),
+            currentAISuggestion.startOffset,
+          )
+        : null
+
       Object.keys(currentNotifications).forEach((key) => {
         const queryKey = key as QueryKey
+
+        // Skip AI suggestion notification - it will be handled by the accept flow
+        if (aiSuggestionQueryKey && queryKey === aiSuggestionQueryKey) {
+          return
+        }
+
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const effectiveOffsetDelta = e.changes
           .filter((change) => change.rangeOffset < endOffset)
@@ -1337,6 +1549,10 @@ const MonacoEditor = ({
   }, [activeNotification])
 
   useEffect(() => {
+    aiSuggestionRequestRef.current = aiSuggestionRequest
+  }, [aiSuggestionRequest])
+
+  useEffect(() => {
     const gridNotificationKeySuffix = `@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
     queryNotificationsRef.current = queryNotifications
     if (
@@ -1374,17 +1590,28 @@ const MonacoEditor = ({
       const request =
         running === RunningType.REFRESH
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-          : getQueryRequestFromEditor(editorRef.current)
+          : running === RunningType.AI_SUGGESTION && aiSuggestionRequest
+            ? getQueryRequestFromAISuggestion(
+                editorRef.current,
+                aiSuggestionRequest,
+              )
+            : getQueryRequestFromEditor(editorRef.current)
 
       const isRunningExplain = running === RunningType.EXPLAIN
+      const isAISuggestion =
+        running === RunningType.AI_SUGGESTION && aiSuggestionRequest !== null
+
+      // Use the active buffer's ID for notifications and results
+      const targetBufferId = activeBuffer.id as number
 
       if (request?.query) {
         editorRef.current?.updateOptions({ readOnly: true })
         const parentQuery = request.query
-        const parentQueryKey = createQueryKeyFromRequest(
-          editorRef.current,
-          request,
-        )
+        // For AI_SUGGESTION, use the startOffset directly from aiSuggestionRequest
+        // because the editor model doesn't contain the AI suggestion query
+        const parentQueryKey = isAISuggestion
+          ? createQueryKey(request.query, aiSuggestionRequest.startOffset)
+          : createQueryKeyFromRequest(editorRef.current, request)
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -1419,7 +1646,7 @@ const MonacoEditor = ({
                   ),
                   sideContent: <QueryInNotification query={queryToRun} />,
                 },
-                activeBuffer.id as number,
+                targetBufferId,
               ),
             )
           }
@@ -1440,29 +1667,27 @@ const MonacoEditor = ({
             setRequest(undefined)
             if (!editorRef.current) return
 
-            const activeBufferId = activeBuffer.id as number
-
-            if (executionRefs.current[activeBufferId] && editorRef.current) {
-              delete executionRefs.current[activeBufferId][parentQueryKey]
+            if (executionRefs.current[targetBufferId] && editorRef.current) {
+              delete executionRefs.current[targetBufferId][parentQueryKey]
               if (
-                Object.keys(executionRefs.current[activeBufferId]).length === 0
+                Object.keys(executionRefs.current[targetBufferId]).length === 0
               ) {
-                delete executionRefs.current[activeBufferId]
+                delete executionRefs.current[targetBufferId]
               }
             }
 
             if (request.selection) {
               const model = editorRef.current.getModel()
               if (model) {
-                if (!executionRefs.current[activeBufferId]) {
-                  executionRefs.current[activeBufferId] = {}
+                if (!executionRefs.current[targetBufferId]) {
+                  executionRefs.current[targetBufferId] = {}
                 }
 
-                const queryStartOffset = getQueryStartOffset(
-                  editorRef.current,
-                  request,
-                )
-                executionRefs.current[activeBufferId][parentQueryKey] = {
+                // For AI_SUGGESTION, use the startOffset from aiSuggestionRequest
+                const queryStartOffset = isAISuggestion
+                  ? aiSuggestionRequest.startOffset
+                  : getQueryStartOffset(editorRef.current, request)
+                executionRefs.current[targetBufferId][parentQueryKey] = {
                   success: true,
                   selection: request.selection,
                   queryText: parentQuery,
@@ -1487,7 +1712,7 @@ const MonacoEditor = ({
                     isExplain: isRunningExplain,
                     content: <QueryInNotification query={queryToRun} />,
                   },
-                  activeBuffer.id as number,
+                  targetBufferId,
                 ),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -1510,7 +1735,7 @@ const MonacoEditor = ({
                     sideContent: <QueryInNotification query={queryToRun} />,
                     type: NotificationType.NOTICE,
                   },
-                  activeBuffer.id as number,
+                  targetBufferId,
                 ),
               )
               eventBus.publish(EventType.MSG_QUERY_SCHEMA)
@@ -1532,7 +1757,7 @@ const MonacoEditor = ({
                     ),
                     sideContent: <QueryInNotification query={queryToRun} />,
                   },
-                  activeBuffer.id as number,
+                  targetBufferId,
                 ),
               )
               eventBus.publish(EventType.MSG_QUERY_DATASET, result)
@@ -1569,20 +1794,17 @@ const MonacoEditor = ({
 
               const errorToStore = { ...error, position: adjustedErrorPosition }
 
-              const parentQueryKey = createQueryKeyFromRequest(
-                editorRef.current,
-                request,
-              )
-              const activeBufferId = activeBuffer.id as number
-              if (!executionRefs.current[activeBufferId]) {
-                executionRefs.current[activeBufferId] = {}
+              // Use the already-defined parentQueryKey (which correctly handles AI_SUGGESTION)
+              // instead of recalculating it here
+              if (!executionRefs.current[targetBufferId]) {
+                executionRefs.current[targetBufferId] = {}
               }
 
-              const startOffset = getQueryStartOffset(
-                editorRef.current,
-                request,
-              )
-              executionRefs.current[activeBufferId][parentQueryKey] = {
+              // For AI_SUGGESTION, use the startOffset from aiSuggestionRequest
+              const startOffset = isAISuggestion
+                ? aiSuggestionRequest.startOffset
+                : getQueryStartOffset(editorRef.current, request)
+              executionRefs.current[targetBufferId][parentQueryKey] = {
                 error: errorToStore,
                 selection: request.selection,
                 queryText: parentQuery,
@@ -1615,7 +1837,7 @@ const MonacoEditor = ({
                     sideContent: <QueryInNotification query={queryToRun} />,
                     type: NotificationType.ERROR,
                   },
-                  activeBuffer.id as number,
+                  targetBufferId,
                 ),
               )
             }
@@ -1631,7 +1853,7 @@ const MonacoEditor = ({
       scriptStopRef.current = true
       eventBus.publish(EventType.MSG_QUERY_SCHEMA)
     }
-  }, [running])
+  }, [running, aiSuggestionRequest])
 
   useEffect(() => {
     requestRef.current = request
@@ -1671,6 +1893,13 @@ const MonacoEditor = ({
     }
   }, [activeBuffer])
 
+  // Update glyphs when conversations change (to show filled/hollow AI sparkle)
+  useEffect(() => {
+    if (monacoRef.current && editorRef.current) {
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+    }
+  }, [conversations])
+
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)
     return () => {
@@ -1705,51 +1934,42 @@ const MonacoEditor = ({
 
   return (
     <>
-      <Content className="monaco-content" onClick={handleEditorClick}>
-        <ButtonBar
-          onTriggerRunScript={handleTriggerRunScript}
-          isTemporary={activeBuffer.isTemporary}
-        />
-        <Editor
-          beforeMount={beforeMount}
-          defaultLanguage={QuestDBLanguageName}
-          onMount={onMount}
-          saveViewState={false}
-          onChange={(value) => {
-            const lineCount = editorRef.current?.getModel()?.getLineCount()
-            if (lineCount && lineCount > LINE_NUMBER_HARD_LIMIT) {
-              if (
-                editorRef.current &&
-                currentBufferValueRef.current !== undefined
-              ) {
-                editorRef.current.setValue(currentBufferValueRef.current)
-              }
-              toast.error("Maximum line limit reached")
-              return
-            }
-            currentBufferValueRef.current = value
-            void updateBuffer(activeBuffer.id as number, { value })
-          }}
-          options={{
-            // initially null, but will be set during onMount with editor.setModel
-            model: null,
-            fixedOverflowWidgets: true,
-            fontSize: 14,
-            lineHeight: 24,
-            fontFamily: theme.fontMonospace,
-            glyphMargin: true,
-            renderLineHighlight: "gutter",
-            useShadowDOM: false,
-            minimap: {
-              enabled: false,
-            },
-            selectOnLineNumbers: false,
-            scrollBeyondLastLine: false,
-            tabSize: 2,
-            lineNumbersMinChars,
-          }}
-          theme="vs-dark"
-        />
+      <Content onClick={handleEditorClick} $hidden={hidden}>
+        {!hidden && (
+          <ButtonBar
+            onTriggerRunScript={handleTriggerRunScript}
+            isTemporary={activeBuffer.isTemporary}
+            executionRefs={executionRefs}
+          />
+        )}
+        <EditorWrapper>
+          <Editor
+            beforeMount={beforeMount}
+            defaultLanguage={QuestDBLanguageName}
+            onMount={onMount}
+            saveViewState={false}
+            onChange={handleBufferContentChange}
+            options={{
+              // initially null, but will be set during onMount with editor.setModel
+              model: null,
+              fixedOverflowWidgets: true,
+              fontSize: 14,
+              lineHeight: 24,
+              fontFamily: theme.fontMonospace,
+              glyphMargin: true,
+              renderLineHighlight: "gutter",
+              useShadowDOM: false,
+              minimap: {
+                enabled: false,
+              },
+              selectOnLineNumbers: false,
+              scrollBeyondLastLine: false,
+              tabSize: 2,
+              lineNumbersMinChars,
+            }}
+            theme="vs-dark"
+          />
+        </EditorWrapper>
         <Loader show={!!request || !tables} />
       </Content>
 
@@ -1761,13 +1981,16 @@ const MonacoEditor = ({
             dropdownPositionRef.current = null
             dropdownQueriesRef.current = []
             isContextMenuDropdownRef.current = false
+            isAIDropdownRef.current = false
           }
         }}
         positionRef={dropdownPositionRef}
         queriesRef={dropdownQueriesRef}
         isContextMenuRef={isContextMenuDropdownRef}
+        isAIDropdownRef={isAIDropdownRef}
         onRunQuery={handleRunQuery}
         onExplainQuery={handleExplainQuery}
+        onAskAI={handleAskAI}
       />
 
       <Dialog.Root

@@ -1,35 +1,95 @@
-import React, { useCallback, useState, useEffect } from "react"
-import styled from "styled-components"
+import React, { useCallback, useState, useEffect, useRef } from "react"
+import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
-import { Stop } from "@styled-icons/remix-line"
-import { CornerDownLeft } from "@styled-icons/evaicons-solid"
+import { Stop, Loader3 } from "@styled-icons/remix-line"
+import { Stop as StopFill } from "@styled-icons/remix-fill"
+import { Key } from "../../../components"
+import { CloseOutline } from "@styled-icons/evaicons-outline"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
-import { Box, Button, PopperToggle } from "../../../components"
+import {
+  Box,
+  Button,
+  ExplainQueryButton,
+  GenerateSQLButton,
+  PopperToggle,
+  slideAnimation,
+  spinAnimation,
+} from "../../../components"
+import { FixQueryButton } from "./FixQueryButton"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
+import {
+  useAIStatus,
+  AIOperationStatus,
+  isBlockingAIStatus,
+} from "../../../providers/AIStatusProvider"
+import { useAIConversation } from "../../../providers/AIConversationProvider"
+import type { ExecutionRefs } from "../../../scenes/Editor"
+
+type ButtonBarProps = {
+  onTriggerRunScript: (runAll?: boolean) => void
+  isTemporary: boolean | undefined
+  executionRefs?: React.MutableRefObject<ExecutionRefs>
+}
 
 const ButtonBarWrapper = styled.div<{
   $searchWidgetType: "find" | "replace" | null
+  $aiAssistantEnabled: boolean
 }>`
-  position: absolute;
-  top: ${({ $searchWidgetType }) =>
-    $searchWidgetType === "replace"
-      ? "8.2rem"
-      : $searchWidgetType === "find"
-        ? "5.3rem"
-        : "1rem"};
-  right: 2.4rem;
-  z-index: 1;
-  transition: top 0.1s linear;
+  ${({ $aiAssistantEnabled, $searchWidgetType }) =>
+    !$aiAssistantEnabled
+      ? css`
+          position: absolute;
+          top: ${$searchWidgetType === "replace"
+            ? "8.2rem"
+            : $searchWidgetType === "find"
+              ? "5.3rem"
+              : "1rem"};
+          right: 2.4rem;
+          z-index: 1;
+          transition: top 0.1s linear;
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+        `
+      : css`
+          padding: 1rem 0;
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+          margin: 0 2.4rem;
+        `}
+`
+
+const StatusIndicator = styled.div<{ $aborted: boolean; $loading: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: ${color("gray2")};
+  ${({ $aborted }) =>
+    $aborted &&
+    css`
+      color: ${color("red")};
+    `}
+
+  ${({ $loading }) => $loading && slideAnimation}
+`
+
+const StatusLoader = styled(Loader3)`
+  width: 2rem;
+  color: ${color("pink")};
+  ${spinAnimation};
 `
 
 const ButtonGroup = styled.div`
   display: flex;
   gap: 0;
+  margin-left: auto;
 `
 
 const SuccessButton = styled(Button)`
+  margin-left: auto;
   background-color: ${color("greenDarker")};
   border-color: ${color("greenDarker")};
   color: ${color("foreground")};
@@ -37,7 +97,7 @@ const SuccessButton = styled(Button)`
   &:hover:not(:disabled) {
     background-color: ${color("green")};
     border-color: ${color("green")};
-    color: ${color("gray1")};
+    color: ${color("selectionDarker")};
   }
 
   &:disabled {
@@ -61,6 +121,7 @@ const SuccessButton = styled(Button)`
 `
 
 const StopButton = styled(Button)`
+  margin-left: auto;
   background-color: ${color("red")};
   border-color: ${color("red")};
   color: ${color("foreground")};
@@ -89,6 +150,26 @@ const StopButton = styled(Button)`
 
   &:disabled svg {
     color: ${color("foreground")};
+  }
+`
+
+const AIStopButton = styled(Button)`
+  width: 2.2rem;
+  height: 2.2rem;
+  flex-shrink: 0;
+  border-radius: 100%;
+  background: #da152832;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.red} !important;
+    svg {
+      color: ${({ theme }) => theme.color.foreground};
+    }
   }
 `
 
@@ -124,23 +205,6 @@ const DropdownMenu = styled.div`
   }
 `
 
-const Key = styled(Box).attrs({ alignItems: "center" })`
-  padding: 0 0.4rem;
-  background: ${color("gray1")};
-  border-radius: 0.2rem;
-  font-size: 1.2rem;
-  height: 1.8rem;
-  color: ${color("green")};
-
-  &:not(:last-child) {
-    margin-right: 0.25rem;
-  }
-
-  svg {
-    color: ${color("green")} !important;
-  }
-`
-
 const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   margin-left: 1rem;
 `
@@ -149,25 +213,32 @@ const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 const shortcutTitles =
   platform.isMacintosh || platform.isIOS
     ? {
-        [RunningType.QUERY]: "Cmd+Enter",
-        [RunningType.SCRIPT]: "Cmd+Shift+Enter",
+        [RunningType.QUERY]: "Run query (Cmd+Enter)",
+        [RunningType.SCRIPT]: "Run all queries (Cmd+Shift+Enter)",
       }
     : {
-        [RunningType.QUERY]: "Ctrl+Enter",
-        [RunningType.SCRIPT]: "Ctrl+Shift+Enter",
+        [RunningType.QUERY]: "Run query (Ctrl+Enter)",
+        [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
       }
 
 const ButtonBar = ({
   onTriggerRunScript,
   isTemporary,
-}: {
-  onTriggerRunScript: (runAll?: boolean) => void
-  isTemporary: boolean | undefined
-}) => {
+  executionRefs,
+}: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
+  const { status: aiStatus, canUse, abortOperation } = useAIStatus()
+  const { chatWindowState } = useAIConversation()
   const [dropdownActive, setDropdownActive] = useState(false)
+  const observerRef = useRef<MutationObserver | null>(null)
+  const aiAssistantEnabled = canUse
+  const isChatWindowOpen = chatWindowState.isOpen
+
+  const hasQueryError =
+    activeNotification?.type === "error" && !activeNotification?.isExplain
   const [searchWidgetType, setSearchWidgetType] = useState<
     "find" | "replace" | null
   >(null)
@@ -190,6 +261,14 @@ const ButtonBar = ({
   }, [])
 
   useEffect(() => {
+    if (aiAssistantEnabled) {
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
+      return
+    }
+
     const checkFindWidgetVisibility = () => {
       const findWidget = document.querySelector(".find-widget")
       const isVisible = !!findWidget && findWidget.classList.contains("visible")
@@ -236,11 +315,15 @@ const ButtonBar = ({
       attributeFilter: ["class"],
       attributeOldValue: false,
     })
+    observerRef.current = observer
 
     return () => {
-      observer.disconnect()
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+        observerRef.current = null
+      }
     }
-  }, [])
+  }, [aiAssistantEnabled])
 
   const renderRunScriptButton = () => {
     if (running === RunningType.SCRIPT) {
@@ -265,11 +348,21 @@ const ButtonBar = ({
       >
         Run all queries
         <RunShortcut>
-          <Key>{ctrlCmd}</Key>
-          <Key>⇧</Key>
-          <Key>
-            <CornerDownLeft size="16px" />
-          </Key>
+          <Key
+            keyString={ctrlCmd}
+            color={color("green")}
+            hoverColor={color("green")}
+          />
+          <Key
+            keyString="⇧"
+            color={color("green")}
+            hoverColor={color("green")}
+          />
+          <Key
+            keyString="Enter"
+            color={color("green")}
+            hoverColor={color("green")}
+          />
         </RunShortcut>
       </SuccessButton>
     )
@@ -317,10 +410,16 @@ const ButtonBar = ({
         >
           {getQueryButtonText()}
           <RunShortcut>
-            <Key>{ctrlCmd}</Key>
-            <Key>
-              <CornerDownLeft size="16px" />
-            </Key>
+            <Key
+              keyString={ctrlCmd}
+              color={color("green")}
+              hoverColor={color("green")}
+            />
+            <Key
+              keyString="Enter"
+              color={color("green")}
+              hoverColor={color("green")}
+            />
           </RunShortcut>
         </MainRunButton>
         <PopperToggle
@@ -345,7 +444,36 @@ const ButtonBar = ({
   }
 
   return (
-    <ButtonBarWrapper $searchWidgetType={searchWidgetType}>
+    <ButtonBarWrapper
+      $searchWidgetType={searchWidgetType}
+      $aiAssistantEnabled={aiAssistantEnabled}
+    >
+      <GenerateSQLButton />
+      <ExplainQueryButton />
+      {hasQueryError && queriesToRun.length === 1 && (
+        <FixQueryButton executionRefs={executionRefs} />
+      )}
+      {aiStatus && !isChatWindowOpen && (
+        <StatusIndicator
+          $aborted={aiStatus === AIOperationStatus.Aborted}
+          $loading={isBlockingAIStatus(aiStatus)}
+        >
+          {aiStatus === AIOperationStatus.Aborted ? (
+            <CloseOutline size="18px" />
+          ) : (
+            <StatusLoader />
+          )}
+          {aiStatus}
+          {isBlockingAIStatus(aiStatus) && (
+            <AIStopButton
+              title="Cancel current operation"
+              onClick={abortOperation}
+            >
+              <StopFill size="14px" color="#da1e28" />
+            </AIStopButton>
+          )}
+        </StatusIndicator>
+      )}
       {running === RunningType.SCRIPT
         ? renderRunScriptButton()
         : renderRunQueryButton()}

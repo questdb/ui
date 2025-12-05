@@ -46,6 +46,7 @@ export enum RunningType {
   EXPLAIN = "explain",
   REFRESH = "refresh",
   QUERY = "query",
+  AI_SUGGESTION = "ai_suggestion",
   NONE = "none",
 }
 
@@ -70,6 +71,12 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
+// AI Suggestion query request - used for running AI-suggested queries
+export type AISuggestionRequest = Readonly<{
+  query: string
+  startOffset: number // Original query's start offset in editor
+}>
+
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
@@ -79,6 +86,7 @@ export type QueryStateShape = Readonly<{
   queryNotifications: Record<number, Record<QueryKey, QueryNotifications>>
   activeNotification: NotificationShape | null
   queriesToRun: QueriesToRun
+  aiSuggestionRequest: AISuggestionRequest | null
 }>
 
 export enum QueryAT {
@@ -94,6 +102,7 @@ export enum QueryAT {
   SET_COLUMNS = "QUERY/SET_COLUMNS",
   SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
   SET_QUERIES_TO_RUN = "QUERY/SET_QUERIES_TO_RUN",
+  SET_AI_SUGGESTION_REQUEST = "QUERY/SET_AI_SUGGESTION_REQUEST",
 }
 
 type AddNotificationAction = Readonly<{
@@ -165,6 +174,11 @@ type SetQueriesToRunAction = Readonly<{
   payload: QueriesToRun
 }>
 
+type SetAISuggestionRequestAction = Readonly<{
+  type: QueryAT.SET_AI_SUGGESTION_REQUEST
+  payload: AISuggestionRequest | null
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -178,3 +192,4 @@ export type QueryAction =
   | SetColumnsActions
   | SetActiveNotificationAction
   | SetQueriesToRunAction
+  | SetAISuggestionRequestAction

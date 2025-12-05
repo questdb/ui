@@ -29,7 +29,7 @@ export const Dialog = {
   Trigger: RadixDialog.Trigger,
   Portal: RadixDialog.Portal,
   Content: styled(RadixDialog.Content)<{ maxwidth?: string }>`
-    background-color: ${({ theme }) => theme.color.background};
+    background-color: ${({ theme }) => theme.color.backgroundDarker};
     border-radius: ${({ theme }) => theme.borderRadius};
     box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
     position: fixed;
@@ -65,7 +65,7 @@ export const Dialog = {
     color: ${({ theme }) => theme.color.foreground};
     border-bottom: 1px ${({ theme }) => theme.color.backgroundLighter} solid;
   `,
-  Description: styled.div`
+  Description: styled(RadixDialog.Description)`
     margin-top: 2rem;
     padding: 0 2rem;
     color: ${({ theme }) => theme.color.foreground};
