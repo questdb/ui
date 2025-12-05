@@ -57,7 +57,7 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("be.visible")
       cy.getByDataHook("button-sso-continue").should("not.exist")
       cy.getByDataHook("button-sso-login").should("be.visible")
-      cy.getByDataHook("button-sso-login").contains("Continue with SSO")
+      cy.getByDataHook("button-sso-login").contains("Single Sign-On (SSO)")
       cy.getEditor().should("not.exist")
     })
 
@@ -220,7 +220,7 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("be.visible")
       cy.getByDataHook("button-sso-continue").should("not.exist")
       cy.getByDataHook("button-sso-login").should("be.visible")
-      cy.getByDataHook("button-sso-login").contains("Continue with SSO")
+      cy.getByDataHook("button-sso-login").contains("Single Sign-On (SSO)")
       cy.getEditor().should("not.exist")
     })
 
@@ -309,7 +309,7 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("be.visible")
       cy.getByDataHook("button-sso-continue").should("not.exist")
       cy.getByDataHook("button-sso-login").should("be.visible")
-      cy.getByDataHook("button-sso-login").contains("Continue with SSO")
+      cy.getByDataHook("button-sso-login").contains("Single Sign-On (SSO)")
       cy.getEditor().should("not.exist")
 
       cy.getByDataHook("button-sso-login").click()

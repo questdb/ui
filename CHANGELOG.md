@@ -17,6 +17,25 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.7 - 2025.12.01
+### Fixed
+- prefetch images for connection error - handle retry [#504](https://github.com/questdb/ui/pull/504)
+
+
+## 1.1.6 - 2025.11.28
+### Changed
+- apply new login screen design [#501](https://github.com/questdb/ui/pull/501)
+### Fixed
+- serve build assets relative to the base path [#502](https://github.com/questdb/ui/pull/502)
+
+
+## 1.1.5 - 2025.11.25
+### Fixed
+- save resized column width before arranging array contents [#497](https://github.com/questdb/ui/pull/497)
+### Added
+- enable dynamic Y-axis scaling in chart view [#493](https://github.com/questdb/ui/pull/493)
+
+
 ## 1.1.4 - 2025.10.24
 ### Added 
 - export parquet files [#484](https://github.com/questdb/ui/pull/484)
