@@ -49,7 +49,6 @@ import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
 import type { QueryKey as MonacoQueryKey } from "./Monaco/utils"
-import dracula from "./Monaco/dracula"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -368,9 +367,6 @@ const Editor = ({
                     modified={activeBuffer.diffContent.modified}
                     language={QuestDBLanguageName}
                     theme="dracula"
-                    beforeMount={(monaco) => {
-                      monaco.editor.defineTheme("dracula", dracula)
-                    }}
                     options={{
                       readOnly: true,
                       renderSideBySide: false,

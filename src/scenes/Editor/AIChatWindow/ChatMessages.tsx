@@ -9,7 +9,6 @@ import {
   normalizeQueryText,
   createQueryKey,
 } from "../Monaco/utils"
-import dracula from "../Monaco/dracula"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { Chat1 } from "@styled-icons/remix-line"
 import { File } from "@styled-icons/boxicons-regular"
@@ -725,12 +724,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                         height="100%"
                         language={QuestDBLanguageName}
                         value={displaySQL}
-                        beforeMount={(monaco) => {
-                          monaco.editor.defineTheme("dracula", dracula)
-                        }}
-                        onMount={(_editor, monaco) => {
-                          monaco.editor.setTheme("dracula")
-                        }}
+                        theme="dracula"
                         options={{
                           readOnly: true,
                           lineNumbers: "off",
@@ -770,12 +764,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                         height="100%"
                         language={QuestDBLanguageName}
                         value={displaySQL}
-                        beforeMount={(monaco) => {
-                          monaco.editor.defineTheme("dracula", dracula)
-                        }}
-                        onMount={(_editor, monaco) => {
-                          monaco.editor.setTheme("dracula")
-                        }}
+                        theme="dracula"
                         options={{
                           readOnly: true,
                           lineNumbers: "off",
@@ -998,12 +987,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             language={QuestDBLanguageName}
                             original={previousSQLForDiff}
                             modified={currentSQLForDiff}
-                            beforeMount={(monaco) => {
-                              monaco.editor.defineTheme("dracula", dracula)
-                            }}
-                            onMount={(editor, monaco) => {
-                              monaco.editor.setTheme("dracula")
-                            }}
+                            theme="dracula"
                             options={{
                               lineNumbers: "off",
                               renderIndicators: false,

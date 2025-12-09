@@ -16,7 +16,6 @@ import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
 import { Editor } from "@monaco-editor/react"
 import { QuestDBLanguageName } from "../Monaco/utils"
-import dracula from "../Monaco/dracula"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
 import {
@@ -775,12 +774,7 @@ export const AIChatWindow: React.FC = () => {
                     height="100%"
                     language={QuestDBLanguageName}
                     value={currentSQL.trim()}
-                    beforeMount={(monaco) => {
-                      monaco.editor.defineTheme("dracula", dracula)
-                    }}
-                    onMount={(_editor, monaco) => {
-                      monaco.editor.setTheme("dracula")
-                    }}
+                    theme="dracula"
                     options={{
                       readOnly: true,
                       lineNumbers: "off",

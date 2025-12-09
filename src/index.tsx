@@ -24,6 +24,7 @@
 
 import "core-js/features/promise"
 import "./js/console"
+import "./utils/monacoInit"
 
 import React from "react"
 import ReactDOM from "react-dom"

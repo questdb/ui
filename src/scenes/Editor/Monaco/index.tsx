@@ -1,6 +1,5 @@
 import Editor from "@monaco-editor/react"
 import type { Monaco } from "@monaco-editor/react"
-import { loader } from "@monaco-editor/react"
 import { Stop } from "@styled-icons/remix-line"
 import type { editor, IDisposable } from "monaco-editor"
 import React, {
@@ -40,8 +39,7 @@ import { color } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import Loader from "../Loader"
 import QueryResult from "../QueryResult"
-import dracula from "./dracula"
-import { registerEditorActions, registerLanguageAddons } from "./editor-addons"
+import { registerEditorActions } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { QueryInNotification } from "./query-in-notification"
 import { createSchemaCompletionProvider } from "./questdb-sql"
@@ -80,12 +78,6 @@ type IndividualQueryResult = {
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
     | null
 }
-
-loader.config({
-  paths: {
-    vs: "assets/vs",
-  },
-})
 
 export const LINE_NUMBER_HARD_LIMIT = 99999
 
@@ -504,12 +496,6 @@ const MonacoEditor = ({
     }
   }
 
-  const beforeMount = (monaco: Monaco) => {
-    registerLanguageAddons(monaco)
-
-    monaco.editor.defineTheme("dracula", dracula)
-  }
-
   const handleEditorClick = (e: React.MouseEvent) => {
     if (
       isRunningScriptRef.current &&
@@ -826,7 +812,6 @@ const MonacoEditor = ({
   const onMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     monacoRef.current = monaco
     editorRef.current = editor
-    monaco.editor.setTheme("dracula")
     editor.updateOptions({
       find: {
         addExtraSpaceOnTop: false,
@@ -1944,7 +1929,6 @@ const MonacoEditor = ({
         )}
         <EditorWrapper>
           <Editor
-            beforeMount={beforeMount}
             defaultLanguage={QuestDBLanguageName}
             onMount={onMount}
             saveViewState={false}
@@ -1967,7 +1951,7 @@ const MonacoEditor = ({
               tabSize: 2,
               lineNumbersMinChars,
             }}
-            theme="vs-dark"
+            theme="dracula"
           />
         </EditorWrapper>
         <Loader show={!!request || !tables} />
