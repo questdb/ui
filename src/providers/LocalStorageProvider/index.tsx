@@ -50,6 +50,7 @@ const defaultConfig: LocalConfig = {
     type: LeftPanelType.DATASOURCES,
     width: 350,
   },
+  aiChatPanelWidth: 400,
 }
 
 type ContextProps = {
@@ -63,6 +64,8 @@ type ContextProps = {
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
   aiAssistantSettings: AiAssistantSettings
+  aiChatPanelWidth: number
+  updateAiChatPanelWidth: (width: number) => void
 }
 
 const defaultValues: ContextProps = {
@@ -76,6 +79,8 @@ const defaultValues: ContextProps = {
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (_state: LeftPanelState) => undefined,
   aiAssistantSettings: defaultConfig.aiAssistantSettings,
+  aiChatPanelWidth: defaultConfig.aiChatPanelWidth,
+  updateAiChatPanelWidth: (_width: number) => undefined,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -148,6 +153,18 @@ export const LocalStorageProvider = ({
   const [aiAssistantSettings, setAiAssistantSettings] =
     useState<AiAssistantSettings>(getAiAssistantSettings())
 
+  const [aiChatPanelWidth, setAiChatPanelWidth] = useState<number>(
+    parseInteger(
+      getValue(StoreKey.AI_CHAT_PANEL_WIDTH),
+      defaultConfig.aiChatPanelWidth,
+    ),
+  )
+
+  const updateAiChatPanelWidth = useCallback((width: number) => {
+    setValue(StoreKey.AI_CHAT_PANEL_WIDTH, width.toString())
+    setAiChatPanelWidth(width)
+  }, [])
+
   const updateSettings = (key: StoreKey, value: SettingsType) => {
     if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
       setValue(key, JSON.stringify(value))
@@ -207,6 +224,8 @@ export const LocalStorageProvider = ({
         leftPanelState,
         updateLeftPanelState,
         aiAssistantSettings,
+        aiChatPanelWidth,
+        updateAiChatPanelWidth,
       }}
     >
       {children}

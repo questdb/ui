@@ -40,5 +40,5 @@ export enum StoreKey {
   SSO_USERNAME = "sso.username",
   LEFT_PANEL_STATE = "left.panel.state",
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
-  AI_ASSISTANT_PROMO = "ai.assistant.promo",
+  AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
 }

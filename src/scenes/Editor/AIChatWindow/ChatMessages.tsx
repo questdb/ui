@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo, useState } from "react"
 import styled, { keyframes } from "styled-components"
 import { DiffEditor, Editor } from "@monaco-editor/react"
+import ReactMarkdown from "react-markdown"
 import { Box, Text, Button } from "../../../components"
 import { color } from "../../../utils"
 import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
@@ -279,30 +280,104 @@ const ExplanationContent = styled(Box)`
   width: 100%;
 `
 
-const ExplanationText = styled.p`
+const MarkdownContent = styled.div`
   margin: 0;
   max-width: 100%;
   font-family: ${({ theme }) => theme.font};
   font-size: 1.4rem;
   line-height: 2.1rem;
   color: ${color("foreground")};
-  white-space: pre-wrap;
   overflow: visible;
   word-break: break-word;
 
-  .explanation-code-block {
-    background: #2d303e;
-    border: 1px solid #44475a;
-    border-radius: 0.6rem;
-    padding: 0 0.3rem;
-    display: inline-flex;
-    word-break: break-word;
-    white-space: normal;
-    gap: 1rem;
-    align-items: center;
+  p {
+    margin: 0 0 1rem 0;
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  code {
+    background: ${color("background")};
+    border: 1px solid ${color("selection")};
+    border-radius: 0.4rem;
+    padding: 0.1rem 0.4rem;
     font-family: ${({ theme }) => theme.fontMonospace};
     font-size: 1.3rem;
-    color: #9089fc;
+    color: ${color("purple")};
+    white-space: pre-wrap;
+  }
+
+  pre {
+    background: ${color("background")};
+    border: 1px solid ${color("selection")};
+    border-radius: 0.6rem;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+
+    code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 1.2rem;
+      color: ${color("foreground")};
+    }
+  }
+
+  strong {
+    font-weight: 600;
+    color: ${color("foreground")};
+  }
+
+  em {
+    font-style: italic;
+  }
+
+  ul,
+  ol {
+    margin: 0.5rem 0;
+    padding-left: 2rem;
+  }
+
+  li {
+    margin-bottom: 0.3rem;
+  }
+
+  a {
+    color: ${({ theme }) => theme.color.cyan};
+    text-decoration: none;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 1rem 0 0.5rem 0;
+    font-weight: 600;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+  h2 {
+    font-size: 1.6rem;
+  }
+  h3 {
+    font-size: 1.5rem;
+  }
+  h4 {
+    font-size: 1.4rem;
+  }
+
+  blockquote {
+    border-left: 3px solid ${color("selection")};
+    margin: 1rem 0;
+    padding-left: 1rem;
+    color: ${color("gray2")};
   }
 `
 
@@ -575,13 +650,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       prevLatestDiffIndexRef.current = latestDiffIndex
     }
   }, [latestDiffIndex])
-
-  const explanationWithCodeBlocks = (explanation: string) => {
-    return explanation.replace(
-      /`([^`]+)`/g,
-      "<code class='explanation-code-block'>" + "$1" + "</code>",
-    )
-  }
 
   const formatTokenCount = (count: number): string => {
     if (count >= 1000) {
@@ -905,11 +973,30 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 )}
               </AssistantHeader>
               <ExplanationContent>
-                <ExplanationText
-                  dangerouslySetInnerHTML={{
-                    __html: explanationWithCodeBlocks(explanation),
-                  }}
-                />
+                <MarkdownContent>
+                  <ReactMarkdown
+                    components={{
+                      a: ({
+                        children,
+                        href,
+                        ...props
+                      }: React.ComponentProps<"a">) => (
+                        <a
+                          {...(typeof href === "string" &&
+                          href.startsWith("http")
+                            ? { target: "_blank", rel: "noopener noreferrer" }
+                            : {})}
+                          href={href}
+                          {...props}
+                        >
+                          {children}
+                        </a>
+                      ),
+                    }}
+                  >
+                    {explanation}
+                  </ReactMarkdown>
+                </MarkdownContent>
                 {hasSQLChange && (
                   <DiffContainer
                     $isAccepted={isAccepted}

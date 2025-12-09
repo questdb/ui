@@ -414,7 +414,7 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
 - Refining and modifying existing queries based on user requests
 
 Important guidelines:
-- Modify a query by returning "sql" field only if the user asks you to modify the query. Otherwise, return null in the "sql" field. Always provide the "explanation" field.
+- Modify a query by returning "sql" field only if the user asks you to modify the query. Otherwise, return null in the "sql" field. Always provide the "explanation" field, which should be in markdown format.
 - Always validate queries using the validate_query tool before returning SQL
 - Generate only valid QuestDB SQL syntax referring to the documentation about functions, operators, and SQL keywords
 - Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
@@ -425,7 +425,7 @@ Important guidelines:
 - Pay special attention to QuestDB-specific features such as time-series operations, time-based filtering, and performance optimizations
 - When fixing queries, analyze the error carefully and preserve the original intent while fixing the issue
 - When refining queries, understand the user's request and modify the query accordingly
-- Always provide a 2-4 sentences explanation of your response
+- Always provide a 2-4 sentences explanation of your response in markdown format
 `
   const schemaAccess = grantSchemaAccess
     ? `\n\nYou have access to schema tools:
@@ -437,7 +437,7 @@ Important guidelines:
 }
 
 const getExplainQueryPrompt = (grantSchemaAccess?: boolean) => {
-  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query, explain what it does in clear, concise plain English.
+  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query, explain what it does in clear, concise plain English using markdown format.
 
 Focus on the business logic and what the query achieves, not the SQL syntax itself. Pay special attention to QuestDB-specific features such as:
 - Time-series operations (SAMPLE BY, LATEST ON, designated timestamp columns)

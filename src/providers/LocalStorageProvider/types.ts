@@ -33,4 +33,5 @@ export type LocalConfig = {
   autoRefreshTables: boolean
   leftPanelState: LeftPanelState
   aiAssistantSettings: AiAssistantSettings
+  aiChatPanelWidth: number
 }

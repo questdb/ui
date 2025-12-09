@@ -90,6 +90,8 @@ const Console = () => {
     updateSettings,
     leftPanelState,
     updateLeftPanelState,
+    aiChatPanelWidth,
+    updateAiChatPanelWidth,
   } = useLocalStorage()
   const result = useSelector(selectors.query.getResult)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
@@ -133,7 +135,14 @@ const Console = () => {
 
   return (
     <Root>
-      <Allotment>
+      <Allotment
+        onDragEnd={(sizes) => {
+          // sizes[1] is the AI chat panel width when it's open
+          if (chatWindowState.isOpen && sizes[1] !== undefined) {
+            updateAiChatPanelWidth(sizes[1])
+          }
+        }}
+      >
         <Allotment.Pane>
           <MainContent>
             <Allotment
@@ -305,7 +314,7 @@ const Console = () => {
           </MainContent>
         </Allotment.Pane>
         {chatWindowState.isOpen && (
-          <Allotment.Pane minSize={300} preferredSize={400}>
+          <Allotment.Pane minSize={300} preferredSize={aiChatPanelWidth}>
             <AIChatWindow />
           </Allotment.Pane>
         )}
