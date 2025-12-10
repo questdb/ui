@@ -71,7 +71,7 @@ export type Buffer = {
     explanation: string
     queryStartOffset: number
     originalQuery: string
-    queryKey?: string // Links the diff buffer to its source conversation
+    queryKey?: string
   }
 }
 

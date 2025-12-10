@@ -273,8 +273,6 @@ const EditorWrapper = styled.div`
   position: relative;
 `
 
-// Extra chars for line numbers to accommodate glyph icons
-// With AI enabled: [AI sparkle 22px] [gap 5px] [run button 22px] = ~49px = ~7 chars
 const DEFAULT_LINE_CHARS = 7
 
 const MonacoEditor = ({
@@ -381,8 +379,6 @@ const MonacoEditor = ({
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
     // Don't overwrite active notification when showing AI suggestion result
-    // The aiSuggestionRequest persists after query runs, so check if the current
-    // activeNotification's queryKey matches the AI suggestion's expected queryKey
     if (aiSuggestionRequest && activeNotificationRef.current) {
       const aiQueryKey = createQueryKey(
         normalizeQueryText(aiSuggestionRequest.query),
@@ -528,7 +524,6 @@ const MonacoEditor = ({
           lineNumber: target.position.lineNumber,
           column: 1,
         }
-
         const dropdownQueries = getDropdownQueries(position.lineNumber)
         if (dropdownQueries.length === 0) return
 
@@ -764,7 +759,6 @@ const MonacoEditor = ({
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
-        // Check if AI assistant is available and if there's a conversation with messages for this query
         const conversation = conversations.get(queryKey)
         const hasConversation =
           canUseAI &&
@@ -1575,16 +1569,18 @@ const MonacoEditor = ({
       const request =
         running === RunningType.REFRESH
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-          : running === RunningType.AI_SUGGESTION && aiSuggestionRequest
+          : running === RunningType.AI_SUGGESTION &&
+              aiSuggestionRequestRef.current
             ? getQueryRequestFromAISuggestion(
                 editorRef.current,
-                aiSuggestionRequest,
+                aiSuggestionRequestRef.current,
               )
             : getQueryRequestFromEditor(editorRef.current)
 
       const isRunningExplain = running === RunningType.EXPLAIN
       const isAISuggestion =
-        running === RunningType.AI_SUGGESTION && aiSuggestionRequest !== null
+        running === RunningType.AI_SUGGESTION &&
+        aiSuggestionRequestRef.current !== null
 
       // Use the active buffer's ID for notifications and results
       const targetBufferId = activeBuffer.id as number
@@ -1592,10 +1588,13 @@ const MonacoEditor = ({
       if (request?.query) {
         editorRef.current?.updateOptions({ readOnly: true })
         const parentQuery = request.query
-        // For AI_SUGGESTION, use the startOffset directly from aiSuggestionRequest
+        // For AI_SUGGESTION, use the startOffset directly from aiSuggestionRequestRef
         // because the editor model doesn't contain the AI suggestion query
         const parentQueryKey = isAISuggestion
-          ? createQueryKey(request.query, aiSuggestionRequest.startOffset)
+          ? createQueryKey(
+              request.query,
+              aiSuggestionRequestRef.current!.startOffset,
+            )
           : createQueryKeyFromRequest(editorRef.current, request)
         const originalQueryText = request.selection
           ? request.selection.queryText
@@ -1668,9 +1667,9 @@ const MonacoEditor = ({
                   executionRefs.current[targetBufferId] = {}
                 }
 
-                // For AI_SUGGESTION, use the startOffset from aiSuggestionRequest
+                // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
                 const queryStartOffset = isAISuggestion
-                  ? aiSuggestionRequest.startOffset
+                  ? aiSuggestionRequestRef.current!.startOffset
                   : getQueryStartOffset(editorRef.current, request)
                 executionRefs.current[targetBufferId][parentQueryKey] = {
                   success: true,
@@ -1785,9 +1784,9 @@ const MonacoEditor = ({
                 executionRefs.current[targetBufferId] = {}
               }
 
-              // For AI_SUGGESTION, use the startOffset from aiSuggestionRequest
+              // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
               const startOffset = isAISuggestion
-                ? aiSuggestionRequest.startOffset
+                ? aiSuggestionRequestRef.current!.startOffset
                 : getQueryStartOffset(editorRef.current, request)
               executionRefs.current[targetBufferId][parentQueryKey] = {
                 error: errorToStore,
@@ -1838,7 +1837,7 @@ const MonacoEditor = ({
       scriptStopRef.current = true
       eventBus.publish(EventType.MSG_QUERY_SCHEMA)
     }
-  }, [running, aiSuggestionRequest])
+  }, [running])
 
   useEffect(() => {
     requestRef.current = request
