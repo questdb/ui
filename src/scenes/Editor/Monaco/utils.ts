@@ -24,6 +24,7 @@
 import type { editor, IPosition, IRange } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
+import { hashString } from "../../../utils"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -1224,4 +1225,14 @@ export const setErrorMarkerForQuery = (
   }
 
   monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
+}
+
+// Creates a QueryKey for schema explanation conversations
+// Uses DDL hash so same schema = same queryKey = cached conversation
+export const createSchemaQueryKey = (
+  tableName: string,
+  ddl: string,
+): QueryKey => {
+  const ddlHash = hashString(ddl)
+  return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
 }

@@ -46,7 +46,7 @@ const Container = styled.div`
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: ${color("backgroundLighter")};
+  background: ${color("chatBackground")};
 `
 
 const Header = styled.div`
@@ -78,6 +78,7 @@ const HeaderTitle = styled.div`
   align-items: center;
   justify-content: center;
   white-space: nowrap;
+  font-size: 1.6rem;
 `
 
 const CloseButton = styled.button`

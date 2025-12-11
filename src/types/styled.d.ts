@@ -33,6 +33,7 @@ export type ColorShape = {
   gray1: string
   gray2: string
   backgroundLighter: string
+  chatBackground: string
   backgroundDarker: string
   background: string
   foreground: string

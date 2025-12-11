@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useMemo, useState } from "react"
-import styled, { keyframes } from "styled-components"
+import styled, { keyframes, useTheme } from "styled-components"
 import { DiffEditor, Editor } from "@monaco-editor/react"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
 import { color } from "../../../utils"
 import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
@@ -10,9 +11,11 @@ import {
   normalizeQueryText,
   createQueryKey,
 } from "../Monaco/utils"
+import { GaugeIcon } from "@phosphor-icons/react"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { Chat1 } from "@styled-icons/remix-line"
 import { File } from "@styled-icons/boxicons-regular"
+import { TableIcon } from "../../Schema/table-icon"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
@@ -206,6 +209,7 @@ const UserRequestContent = styled(Box)`
   overflow: hidden;
   flex-shrink: 0;
   width: 100%;
+  align-items: flex-start;
 `
 
 const InlineSQLEditor = styled.div`
@@ -222,6 +226,19 @@ const DescriptionText = styled(Text)`
   width: 100%;
 `
 
+const SchemaNameDisplay = styled(Box)`
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem;
+`
+
+const SchemaName = styled(Text)`
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: ${color("foreground")};
+`
+
 const MessageContent = styled(Text)`
   font-size: 1.4rem;
   line-height: 1.8rem;
@@ -235,10 +252,10 @@ const ExplanationBox = styled(Box)`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-width: 85%;
+  max-width: 100%;
   align-self: flex-start;
   text-align: left;
-  background: rgba(68, 71, 90, 0.56);
+  background: transparent;
   padding: 0.4rem;
   border-radius: 0.6rem;
   flex-shrink: 0;
@@ -255,14 +272,14 @@ const AssistantHeader = styled(Box).attrs({
 `
 
 const SparkleIcon = styled.img`
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2rem;
+  height: 2rem;
   flex-shrink: 0;
 `
 
 const AssistantLabel = styled(Text)`
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   text-transform: uppercase;
   color: ${color("foreground")};
   line-height: 1;
@@ -271,8 +288,6 @@ const AssistantLabel = styled(Text)`
 const ExplanationContent = styled(Box)`
   display: flex;
   flex-direction: column;
-  background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
   border-radius: 0.6rem;
   padding: 0.8rem;
   overflow: visible;
@@ -378,6 +393,34 @@ const MarkdownContent = styled.div`
     margin: 1rem 0;
     padding-left: 1rem;
     color: ${color("gray2")};
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    min-width: max-content;
+  }
+
+  th,
+  td {
+    padding: 0.6rem 0.8rem;
+    border: 1px solid ${color("selection")};
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    background: ${color("backgroundDarker")};
+    font-weight: 600;
+  }
+
+  td:last-child {
+    white-space: normal;
+    min-width: 200px;
   }
 `
 
@@ -612,6 +655,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   queryStartOffset = 0,
   conversationQueryKey,
 }) => {
+  const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Find the latest assistant message with SQL changes and auto-expand it
@@ -653,7 +697,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   const formatTokenCount = (count: number): string => {
     if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`
+      return `${(count / 1000).toFixed(1)}K`
     }
     return count.toString()
   }
@@ -759,6 +803,35 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 </UserRequestHeader>
                 <UserRequestContent>
                   <DescriptionText>{displayDescription}</DescriptionText>
+                </UserRequestContent>
+              </UserRequestBox>
+            )
+          }
+
+          if (
+            displayType === "schema_explain_request" &&
+            message.displaySchemaData
+          ) {
+            const schemaData = message.displaySchemaData
+            return (
+              <UserRequestBox key={key}>
+                <UserRequestHeader>
+                  <UserRequestLabel>
+                    Requested explanation for{" "}
+                    {schemaData.isMatView ? "materialized view" : "table"}{" "}
+                    schema
+                  </UserRequestLabel>
+                </UserRequestHeader>
+                <UserRequestContent>
+                  <SchemaNameDisplay>
+                    <TableIcon
+                      isMaterializedView={schemaData.isMatView}
+                      partitionBy={schemaData.partitionBy}
+                      walEnabled={schemaData.walEnabled}
+                      designatedTimestamp={schemaData.designatedTimestamp}
+                    />
+                    <SchemaName>{schemaData.tableName}</SchemaName>
+                  </SchemaNameDisplay>
                 </UserRequestContent>
               </UserRequestBox>
             )
@@ -967,14 +1040,18 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <SparkleIcon src="/assets/ai-sparkle.svg" alt="" />
                 <AssistantLabel>Assistant</AssistantLabel>
                 {tokenDisplay && (
-                  <Text size="xs" color="gray2" margin="0 0 0 auto">
-                    {tokenDisplay}
-                  </Text>
+                  <Box align="center" gap="0.9rem" margin="0 0 0 auto">
+                    <GaugeIcon size="16px" color={theme.color.gray2} />
+                    <Text size="sm" color="gray2">
+                      {tokenDisplay}
+                    </Text>
+                  </Box>
                 )}
               </AssistantHeader>
               <ExplanationContent>
                 <MarkdownContent>
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       a: ({
                         children,
@@ -991,6 +1068,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                         >
                           {children}
                         </a>
+                      ),
+                      table: ({
+                        children,
+                        ...props
+                      }: React.ComponentProps<"table">) => (
+                        <div className="table-wrapper">
+                          <table {...props}>{children}</table>
+                        </div>
                       ),
                     }}
                   >

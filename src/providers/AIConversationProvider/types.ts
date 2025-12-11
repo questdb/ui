@@ -1,17 +1,26 @@
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
+import type { PartitionBy } from "../../utils/questdb"
 
 export type TokenUsage = {
   inputTokens: number
   outputTokens: number
 }
 
-// Display types for user messages - determines how they're rendered in UI
+export type SchemaDisplayData = {
+  tableName: string
+  isMatView: boolean
+  partitionBy?: PartitionBy
+  walEnabled?: boolean
+  designatedTimestamp?: string
+}
+
 export type UserMessageDisplayType =
-  | "fix_request" // "Requested fix for the query" with inline SQL editor
-  | "explain_request" // "Requested explanation for the query" with inline SQL editor
-  | "ask_request" // "Asked about the query" with inline SQL editor
-  | "generate_request" // "Generate query with description" with description box
-  | "text" // Plain text message (default for follow-ups)
+  | "fix_request"
+  | "explain_request"
+  | "ask_request"
+  | "generate_request"
+  | "schema_explain_request"
+  | "text"
 
 export type ConversationMessage = {
   role: "user" | "assistant"
@@ -31,6 +40,7 @@ export type ConversationMessage = {
   displaySQL?: string // SQL to show in inline editor (for fix/explain/ask requests)
   displayDescription?: string // Description to show (for generate_request)
   displayUserMessage?: string // User's actual message/question (for ask_request)
+  displaySchemaData?: SchemaDisplayData // Schema data (for schema_explain_request)
 }
 
 export type AIConversation = {

@@ -49,6 +49,34 @@ export interface TableSchemaExplanation {
     data_type: string
   }>
   storage_details: string[]
+  tokenUsage?: TokenUsage
+}
+
+export const schemaExplanationToMarkdown = (
+  explanation: TableSchemaExplanation,
+): string => {
+  let md = ""
+
+  md += `${explanation.explanation}\n\n`
+
+  if (explanation.columns.length > 0) {
+    md += `## Columns\n\n`
+    md += `| Column | Type | Description |\n`
+    md += `|--------|------|-------------|\n`
+    for (const col of explanation.columns) {
+      md += `| \`${col.name}\` | \`${col.data_type}\` | ${col.description} |\n`
+    }
+    md += `\n`
+  }
+
+  if (explanation.storage_details.length > 0) {
+    md += `## Storage Details\n\n`
+    for (const detail of explanation.storage_details) {
+      md += `- ${detail}\n`
+    }
+  }
+
+  return md
 }
 
 export interface TokenUsage {
@@ -474,7 +502,7 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
   return base + schemaAccess + DOCS_INSTRUCTION_ANTHROPIC
 }
 
-const getExplainSchemaPrompt = (
+export const getExplainSchemaPrompt = (
   tableName: string,
   schema: string,
   isMatView: boolean,
@@ -1118,12 +1146,14 @@ export const explainTableSchema = async ({
   isMatView,
   settings,
   setStatus,
+  queryKey,
 }: {
   tableName: string
   schema: string
   isMatView: boolean
   settings: ActiveProviderSettings
   setStatus: StatusCallback
+  queryKey?: QueryKey
 }): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
   if (!settings.apiKey || !settings.model) {
     return {
@@ -1139,7 +1169,7 @@ export const explainTableSchema = async ({
   }
 
   await handleRateLimit()
-  setStatus(AIOperationStatus.Processing, { type: "explain" })
+  setStatus(AIOperationStatus.Processing, { type: "explain", queryKey })
 
   return tryWithRetries(async () => {
     const clients = createProviderClients(settings)
@@ -1163,10 +1193,17 @@ export const explainTableSchema = async ({
           message: "Failed to parse assistant response.",
         } as AiAssistantAPIError
       }
+      const openAIUsage = formattingOutput.usage
       return {
         explanation: formatted.explanation || "",
         columns: formatted.columns || [],
         storage_details: formatted.storage_details || [],
+        tokenUsage: openAIUsage
+          ? {
+              inputTokens: openAIUsage.input_tokens,
+              outputTokens: openAIUsage.output_tokens,
+            }
+          : undefined,
       }
     }
 
@@ -1205,10 +1242,17 @@ export const explainTableSchema = async ({
     try {
       const json = JSON.parse(textBlock.text) as TableSchemaExplanation
       setStatus(null)
+      const anthropicUsage = message.usage
       return {
         explanation: json.explanation || "",
         columns: json.columns || [],
         storage_details: json.storage_details || [],
+        tokenUsage: anthropicUsage
+          ? {
+              inputTokens: anthropicUsage.input_tokens,
+              outputTokens: anthropicUsage.output_tokens,
+            }
+          : undefined,
       }
     } catch (error) {
       setStatus(null)

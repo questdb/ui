@@ -34,6 +34,7 @@ const color: ColorShape = {
   gray1: "#585858",
   gray2: "#bbbbbb",
   backgroundDarker: "#21222c",
+  chatBackground: "#1D1E25",
   backgroundLighter: "#282a36",
   background: "#2d303e",
   foreground: "#f8f8f2",

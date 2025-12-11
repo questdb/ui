@@ -45,13 +45,15 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { SchemaExplanationDialog } from "../SchemaExplanationDialog"
 import {
   explainTableSchema,
   isAiAssistantError,
-  TableSchemaExplanation,
+  schemaExplanationToMarkdown,
   type ActiveProviderSettings,
+  getExplainSchemaPrompt,
 } from "../../../utils/aiAssistant"
+import { useAIConversation } from "../../../providers/AIConversationProvider"
+import { createSchemaQueryKey } from "../../Editor/Monaco/utils"
 import {
   useAIStatus,
   isBlockingAIStatus,
@@ -184,6 +186,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     isConfigured,
   } = useAIStatus()
 
+  const {
+    getConversation,
+    getOrCreateConversation,
+    openChatWindow,
+    addMessage,
+    updateConversationName,
+  } = useAIConversation()
+
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
     null,
@@ -191,11 +201,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<
     string | null
   >(null)
-  const [schemaExplanationDialog, setSchemaExplanationDialog] = useState<{
-    tableName: string
-    isMatView: boolean
-    explanation: TableSchemaExplanation | null
-  } | null>(null)
 
   const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(
     new Map(),
@@ -278,7 +283,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }
   }
 
-  const handleExplainSchema = async (tableName: string, isMatView: boolean) => {
+  const handleExplainSchema = async (item: FlattenedTreeItem) => {
+    const tableName = item.name
+    const isMatView = item.kind === "matview"
+
     if (!canUse) {
       toast.error(
         "AI Assistant is not enabled. Please configure your API key in settings.",
@@ -290,6 +298,38 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     if (!schema) {
       return
     }
+
+    const queryKey = createSchemaQueryKey(tableName, schema)
+    const existingConversation = getConversation(queryKey)
+    if (existingConversation) {
+      openChatWindow(queryKey)
+      return
+    }
+
+    getOrCreateConversation({
+      queryKey,
+      initialSQL: "",
+      originalQuery: schema,
+    })
+
+    updateConversationName(queryKey, `${tableName} schema explanation`)
+    const userMessage = getExplainSchemaPrompt(tableName, schema, isMatView)
+
+    addMessage(queryKey, {
+      role: "user",
+      content: userMessage,
+      timestamp: Date.now(),
+      displayType: "schema_explain_request",
+      displaySchemaData: {
+        tableName,
+        isMatView,
+        partitionBy: item.partitionBy,
+        walEnabled: item.walEnabled,
+        designatedTimestamp: item.designatedTimestamp,
+      },
+    })
+
+    openChatWindow(queryKey)
 
     const provider = providerForModel(currentModel)
 
@@ -305,11 +345,18 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       isMatView,
       settings,
       setStatus,
+      queryKey,
     })
 
     if (isAiAssistantError(response)) {
       const error = response
       toast.error(error.message, { autoClose: 10000 })
+      addMessage(queryKey, {
+        role: "assistant",
+        content: `Error: ${error.message}`,
+        timestamp: Date.now(),
+        explanation: `Error: ${error.message}`,
+      })
       return
     }
 
@@ -321,10 +368,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return
     }
 
-    setSchemaExplanationDialog({
-      tableName,
-      isMatView,
-      explanation: result,
+    const markdownContent = schemaExplanationToMarkdown(result)
+    addMessage(queryKey, {
+      role: "assistant",
+      content: markdownContent,
+      timestamp: Date.now(),
+      explanation: markdownContent,
+      tokenUsage: result.tokenUsage,
     })
   }
 
@@ -647,12 +697,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 {isConfigured && (
                   <MenuItem
                     data-hook="table-context-menu-explain-schema"
-                    onClick={async () =>
-                      await handleExplainSchema(
-                        item.name,
-                        item.kind === "matview",
-                      )
-                    }
+                    onClick={async () => await handleExplainSchema(item)}
                     icon={
                       <img
                         src="/assets/ai-sparkle.svg"
@@ -827,14 +872,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           style={{ height: "100%" }}
         />
       </div>
-      {schemaExplanationDialog && (
-        <SchemaExplanationDialog
-          open
-          onOpenChange={(open) => !open && setSchemaExplanationDialog(null)}
-          tableName={schemaExplanationDialog.tableName}
-          explanation={schemaExplanationDialog.explanation}
-        />
-      )}
     </>
   )
 }
