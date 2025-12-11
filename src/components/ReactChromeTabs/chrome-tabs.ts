@@ -506,7 +506,6 @@ class ChromeTabs {
 
   setupDraggabilly() {
     const tabEls = this.tabEls
-    const tabPositions = this.tabPositions
 
     if (this.isDragging && this.draggabillyDragging) {
       this.isDragging = false
@@ -532,14 +531,14 @@ class ChromeTabs {
       return
     }
 
-    tabEls.forEach((tabEl, originalIndex) => {
-      const originalTabPositionX = tabPositions[originalIndex]
+    tabEls.forEach((tabEl) => {
       const draggabilly = new Draggabilly(tabEl, {
         axis: "x",
         handle: ".chrome-tab-drag-handle",
         containment: this.tabContentEl,
       })
 
+      let dragStartTabPositionX: number = 0
       let lastClickX: number
       let lastClickY: number
       let lastTimeStamp: number = 0
@@ -576,6 +575,8 @@ class ChromeTabs {
         this.draggabillyDragging = draggabilly
         tabEl.classList.add("chrome-tab-is-dragging")
         this.el.classList.add("chrome-tabs-is-sorting")
+        const currentTabIndex = this.tabEls.indexOf(tabEl)
+        dragStartTabPositionX = this.tabPositions[currentTabIndex] ?? 0
         this.emit("dragStart", {})
       })
 
@@ -611,10 +612,10 @@ class ChromeTabs {
         const tabEls = this.tabEls
         const currentIndex = tabEls.indexOf(tabEl)
 
-        const currentTabPositionX = originalTabPositionX + moveVector.x
+        const currentTabPositionX = dragStartTabPositionX + moveVector.x
         const destinationIndexTarget = closest(
           currentTabPositionX,
-          tabPositions,
+          this.tabPositions,
         )
         const destinationIndex = Math.max(
           0,
