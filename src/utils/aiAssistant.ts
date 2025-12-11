@@ -278,7 +278,7 @@ const REFERENCE_TOOLS = [
       properties: {
         category: {
           type: "string" as const,
-          enum: ["functions", "operators", "sql"],
+          enum: ["functions", "operators", "sql", "concepts", "schema"],
           description: "The category of documentation to retrieve",
         },
         items: {

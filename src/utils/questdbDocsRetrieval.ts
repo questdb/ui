@@ -1,4 +1,9 @@
-export type DocCategory = "functions" | "operators" | "sql"
+export type DocCategory =
+  | "functions"
+  | "operators"
+  | "sql"
+  | "concepts"
+  | "schema"
 
 export type ParsedDocItem = {
   name: string
@@ -88,7 +93,19 @@ export async function getQuestDBTableOfContents(): Promise<string> {
 
   // SQL Keywords
   result += "## SQL Syntax & Keywords\n"
-  result += toc.sql.join(", ") + "\n"
+  result += toc.sql.join(", ") + "\n\n"
+
+  // Concepts
+  if (toc.concepts) {
+    result += "## Concepts\n"
+    result += toc.concepts.join(", ") + "\n\n"
+  }
+
+  // Schema
+  if (toc.schema) {
+    result += "## Schema\n"
+    result += toc.schema.join(", ") + "\n"
+  }
 
   return result
 }
@@ -254,7 +271,13 @@ export async function searchDocumentation(query: string): Promise<string> {
   const results: string[] = []
 
   // Search in all categories
-  const categories: DocCategory[] = ["functions", "operators", "sql"]
+  const categories: DocCategory[] = [
+    "functions",
+    "operators",
+    "sql",
+    "concepts",
+    "schema",
+  ]
 
   for (const category of categories) {
     const metadataUrl = `${DOCS_BASE_URL}/web-console/${category}-docs.json`
