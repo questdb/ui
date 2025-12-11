@@ -271,7 +271,7 @@ const Editor = ({
     }
 
     // Apply the changes using the shared function
-    const result = await applyAISQLChange({
+    const result = applyAISQLChange({
       newSQL: modifiedSQL,
       queryStartOffset: conversation.queryStartOffset,
       queryEndOffset: conversation.queryEndOffset,

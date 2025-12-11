@@ -27,6 +27,7 @@ import {
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
+import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
@@ -145,8 +146,7 @@ export const GenerateSQLButton = () => {
 
       // Create a temporary queryKey for generate flow (using description as query text)
       // When accepted, this will be replaced with the actual query's key
-      const tempQueryKey =
-        `${description}@-1--1` as import("../../scenes/Editor/Monaco/utils").QueryKey
+      const tempQueryKey = `${description}@-1--1` as QueryKey
 
       // Get or create conversation for this temporary queryKey
       getOrCreateConversation({

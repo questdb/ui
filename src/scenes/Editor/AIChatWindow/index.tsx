@@ -489,7 +489,7 @@ export const AIChatWindow: React.FC = () => {
     try {
       // Scenario 1: Active tab - apply changes directly
       if (bufferStatus.type === "active") {
-        await applyChangesToActiveTab(normalizedSQL, messageIndex)
+        applyChangesToActiveTab(normalizedSQL, messageIndex)
         // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
         dispatch(actions.query.setAISuggestionRequest(null))
         if (!keepChatOpen) {
@@ -513,7 +513,7 @@ export const AIChatWindow: React.FC = () => {
         await setActiveBuffer(bufferStatus.buffer)
         // Wait for tab to be fully activated
         await new Promise((resolve) => setTimeout(resolve, 100))
-        await applyChangesToActiveTab(normalizedSQL, messageIndex)
+        applyChangesToActiveTab(normalizedSQL, messageIndex)
         // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
         dispatch(actions.query.setAISuggestionRequest(null))
         if (!keepChatOpen) {
@@ -527,13 +527,13 @@ export const AIChatWindow: React.FC = () => {
     }
   }
 
-  const applyChangesToActiveTab = async (
+  const applyChangesToActiveTab = (
     normalizedSQL: string,
     messageIndex?: number,
   ) => {
     if (!conversation) return
 
-    const result = await applyAISQLChange({
+    const result = applyAISQLChange({
       newSQL: normalizedSQL,
       queryStartOffset: conversation.queryStartOffset,
       queryEndOffset: conversation.queryEndOffset,
@@ -621,13 +621,12 @@ export const AIChatWindow: React.FC = () => {
     const endPosition = model.getPositionAt(queryEndOffset)
 
     // Apply highlighting decoration
-    const monaco = await import("monaco-editor")
-    const highlightRange = new monaco.Range(
-      startPosition.lineNumber,
-      startPosition.column,
-      endPosition.lineNumber,
-      endPosition.column,
-    )
+    const highlightRange = {
+      startLineNumber: startPosition.lineNumber,
+      startColumn: startPosition.column,
+      endLineNumber: endPosition.lineNumber,
+      endColumn: endPosition.column,
+    }
 
     const decorationId = model.deltaDecorations(
       [],

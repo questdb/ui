@@ -1,5 +1,5 @@
 import type { Monaco } from "@monaco-editor/react"
-import type { editor } from "monaco-editor"
+import type { editor, IRange } from "monaco-editor"
 import React, {
   createContext,
   MutableRefObject,
@@ -22,7 +22,6 @@ import {
   createQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
 import { normalizeSql } from "../../utils/aiAssistant"
-import type { IRange } from "monaco-editor"
 import type { Buffer } from "../../store/buffers"
 import {
   bufferStore,
@@ -113,9 +112,7 @@ export type EditorContext = {
   showDiffBuffer: (content: DiffBufferContent) => Promise<void>
   closeDiffBufferForQuery: (queryKey: QueryKey) => Promise<void>
   // Apply AI SQL change to editor
-  applyAISQLChange: (
-    options: ApplyAISQLChangeOptions,
-  ) => Promise<ApplyAISQLChangeResult>
+  applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
 }
 
 const defaultValues = {
@@ -144,7 +141,7 @@ const defaultValues = {
   updateDiffMode: () => undefined,
   showDiffBuffer: () => Promise.resolve(),
   closeDiffBufferForQuery: () => Promise.resolve(),
-  applyAISQLChange: () => Promise.resolve({ success: false }),
+  applyAISQLChange: () => ({ success: false }),
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -530,9 +527,7 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   // Shared logic for applying AI SQL changes to editor
   // Used by both AIChatWindow and diff editor button bar
-  const applyAISQLChange: EditorContext["applyAISQLChange"] = async (
-    options,
-  ) => {
+  const applyAISQLChange: EditorContext["applyAISQLChange"] = (options) => {
     const {
       newSQL,
       queryStartOffset,
@@ -672,13 +667,12 @@ export const EditorProvider: React.FC = ({ children }) => {
     const finalEndPosition = finalModel.getPositionAt(actualQueryEndOffset)
 
     // Apply highlighting decoration
-    const monaco = await import("monaco-editor")
-    const highlightRange = new monaco.Range(
-      finalStartPosition.lineNumber,
-      finalStartPosition.column,
-      finalEndPosition.lineNumber,
-      finalEndPosition.column,
-    )
+    const highlightRange = {
+      startLineNumber: finalStartPosition.lineNumber,
+      startColumn: finalStartPosition.column,
+      endLineNumber: finalEndPosition.lineNumber,
+      endColumn: finalEndPosition.column,
+    }
 
     const decorationId = finalModel.deltaDecorations(
       [],
@@ -693,10 +687,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       ],
     )
 
-    // Reveal the query in the editor
     editorRef.current.revealPositionNearTop(finalStartPosition)
-
-    // Remove decoration after 1 second
     setTimeout(() => {
       finalModel.deltaDecorations(decorationId, [])
     }, 1000)
