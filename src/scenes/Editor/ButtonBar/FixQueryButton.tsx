@@ -6,7 +6,7 @@ import type { GeneratedSQL } from "../../../utils/aiAssistant"
 import {
   isAiAssistantError,
   createModelToolsClient,
-  fixQuery,
+  continueConversation,
   generateChatTitle,
   type ActiveProviderSettings,
 } from "../../../utils/aiAssistant"
@@ -203,9 +203,10 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
       })
     }
 
-    const response = await fixQuery({
-      query: queryText,
-      errorMessage,
+    const response = await continueConversation({
+      userMessage: fullApiMessage,
+      conversationHistory: [],
+      currentSQL: queryText,
       settings,
       modelToolsClient: createModelToolsClient(
         quest,
@@ -213,7 +214,8 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
       ),
       setStatus,
       abortSignal: abortController?.signal,
-      word,
+      operation: "fix",
+      queryKey,
     })
 
     if (isAiAssistantError(response)) {

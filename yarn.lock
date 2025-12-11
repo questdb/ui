@@ -211,12 +211,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@anthropic-ai/sdk@npm:^0.57.0":
-  version: 0.57.0
-  resolution: "@anthropic-ai/sdk@npm:0.57.0"
+"@anthropic-ai/sdk@npm:^0.71.2":
+  version: 0.71.2
+  resolution: "@anthropic-ai/sdk@npm:0.71.2"
+  dependencies:
+    json-schema-to-ts: "npm:^3.1.1"
+  peerDependencies:
+    zod: ^3.25.0 || ^4.0.0
+  peerDependenciesMeta:
+    zod:
+      optional: true
   bin:
     anthropic-ai-sdk: bin/cli
-  checksum: 10/3ff430ded97067467e1731acd906a5ad2e5dfd2f0283ce0ce90f292e7ec57f5ddfdc76094c093f141eac272f6038d9780f7516468bfda0128fb25db6078d041d
+  checksum: 10/a8190f9e860079dd97a544a95f36bd4b0b3a9a941610d7e067c431dc47febe03e3e761fc371166b261af9629d832533eeb3d8e72298e9f73dd52994a61881a2c
   languageName: node
   linkType: hard
 
@@ -1421,7 +1428,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.19.0, @babel/runtime@npm:^7.20.7, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.8.7, @babel/runtime@npm:^7.9.2":
+"@babel/runtime@npm:^7.18.3, @babel/runtime@npm:^7.19.0, @babel/runtime@npm:^7.20.7, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.8.7, @babel/runtime@npm:^7.9.2":
   version: 7.28.4
   resolution: "@babel/runtime@npm:7.28.4"
   checksum: 10/6c9a70452322ea80b3c9b2a412bcf60771819213a67576c8cec41e88a95bb7bf01fc983754cda35dc19603eef52df22203ccbf7777b9d6316932f9fb77c25163
@@ -2444,7 +2451,7 @@ __metadata:
   resolution: "@questdb/web-console@workspace:."
   dependencies:
     "@4tw/cypress-drag-drop": "npm:^2.2.5"
-    "@anthropic-ai/sdk": "npm:^0.57.0"
+    "@anthropic-ai/sdk": "npm:^0.71.2"
     "@babel/core": "npm:^7.28.5"
     "@babel/preset-env": "npm:^7.20.2"
     "@babel/preset-react": "npm:^7.17.12"
@@ -7926,6 +7933,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"json-schema-to-ts@npm:^3.1.1":
+  version: 3.1.1
+  resolution: "json-schema-to-ts@npm:3.1.1"
+  dependencies:
+    "@babel/runtime": "npm:^7.18.3"
+    ts-algebra: "npm:^2.0.0"
+  checksum: 10/9fd0490279d36ff8b4604cc10632df05e4e5f5ee1d0a77841c927623fc1e636c47eb4ace488018c4e9a2e7e5dde5520d0870e06dfc84b930d9c98c6eacd0f041
+  languageName: node
+  linkType: hard
+
 "json-schema-traverse@npm:^0.4.1":
   version: 0.4.1
   resolution: "json-schema-traverse@npm:0.4.1"
@@ -11526,6 +11543,13 @@ __metadata:
   version: 2.2.0
   resolution: "trough@npm:2.2.0"
   checksum: 10/999c1cb3db6ec63e1663f911146a90125065da37f66ba342b031d53edb22a62f56c1f934bbc61a55b2b29dd74207544cfd78875b414665c1ffadcd9a9a009eeb
+  languageName: node
+  linkType: hard
+
+"ts-algebra@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "ts-algebra@npm:2.0.0"
+  checksum: 10/b970eef64ca9594a77337e03b9c1732c1b7a0d2c4d316638b654e921a47b40c4cc42f41821445e9e54408d5dfdf4ecca27ffa59554373033b9c92dee8b52066d
   languageName: node
   linkType: hard
 

@@ -5,7 +5,7 @@ import { color, platform } from "../../utils"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import {
-  explainQuery,
+  continueConversation,
   createModelToolsClient,
   isAiAssistantError,
   generateChatTitle,
@@ -148,8 +148,10 @@ export const ExplainQueryButton = () => {
         })
       }
 
-      const response = await explainQuery({
-        query: queriesToRun[0],
+      const response = await continueConversation({
+        userMessage: fullApiMessage,
+        conversationHistory: [],
+        currentSQL: queryText,
         settings,
         modelToolsClient: createModelToolsClient(
           quest,
@@ -157,6 +159,8 @@ export const ExplainQueryButton = () => {
         ),
         setStatus,
         abortSignal: abortController?.signal,
+        operation: "explain",
+        queryKey,
       })
 
       if (isAiAssistantError(response)) {

@@ -460,7 +460,6 @@ const getIsExpandableSection = (section: OperationSection) => {
   return ![
     AIOperationStatus.RetrievingTables,
     AIOperationStatus.RetrievingDocumentation,
-    AIOperationStatus.FormattingResponse,
     AIOperationStatus.Aborted,
     AIOperationStatus.ValidatingQuery,
   ].includes(section.type)

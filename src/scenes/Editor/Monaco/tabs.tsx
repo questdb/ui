@@ -116,7 +116,6 @@ export const Tabs = () => {
       return
     }
 
-    // Diff buffers can be closed like any other buffer, but don't archive them
     if (buffer.isDiffBuffer) {
       await deleteBuffer(parseInt(id), true)
       await repositionActiveBuffers(id)

@@ -16,6 +16,7 @@ import {
   providerForModel,
   canUseAiAssistant,
 } from "../../utils/aiAssistantSettings"
+import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
@@ -44,17 +45,19 @@ export enum AIOperationStatus {
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
   ValidatingQuery = "Validating generated query",
-  FormattingResponse = "Formatting response",
   Aborted = "Operation has been cancelled",
 }
 
 export type StatusArgs =
-  | { type: "generate" }
-  | { type: "fix" }
-  | { type: "explain" }
-  | { name: string }
-  | { name: string; section: string }
-  | { items: Array<{ name: string; section?: string }> }
+  | ({ queryKey?: QueryKey } & (
+      | { type: "generate" }
+      | { type: "fix" }
+      | { type: "explain" }
+      | { type: "followup" }
+      | { name: string }
+      | { name: string; section: string }
+      | { items: Array<{ name: string; section?: string }> }
+    ))
   | null
 
 export type StatusEntry = {
@@ -72,6 +75,7 @@ type BaseAIStatusContextType = {
   hasSchemaAccess: boolean
   models: string[]
   currentOperation: OperationHistory
+  activeQueryKey: QueryKey | null
 }
 
 export type AIStatusContextType =
@@ -212,6 +216,12 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     }
   }, [])
 
+  // Derive activeQueryKey from the first operation entry that has queryKey
+  // (queryKey is set at the start of an operation, internal status updates don't have it)
+  const activeQueryKey =
+    currentOperation.find((entry) => entry.args?.queryKey)?.args?.queryKey ??
+    null
+
   const contextValue: AIStatusContextType = isConfigured
     ? {
         status,
@@ -225,6 +235,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey: apiKey!,
         models,
         currentOperation,
+        activeQueryKey,
       }
     : {
         status,
@@ -238,6 +249,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey,
         models,
         currentOperation,
+        activeQueryKey,
       }
 
   return (

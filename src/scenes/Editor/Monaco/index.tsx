@@ -296,6 +296,8 @@ const MonacoEditor = ({
   } = editorContext
   const { quest } = useContext(QuestContext)
   const { canUse: canUseAI } = useAIStatus()
+  const { getOrCreateConversation, openChatWindow, conversations } =
+    useAIConversation()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
@@ -332,6 +334,7 @@ const MonacoEditor = ({
     query: string
     startOffset: number
   } | null>(aiSuggestionRequest)
+  const conversationsRef = useRef(conversations)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const decorationCollectionRef =
@@ -378,11 +381,11 @@ const MonacoEditor = ({
   }
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
-    // Don't overwrite active notification when showing AI suggestion result
-    if (aiSuggestionRequest && activeNotificationRef.current) {
+    const currentAISuggestion = aiSuggestionRequestRef.current
+    if (currentAISuggestion && activeNotificationRef.current) {
       const aiQueryKey = createQueryKey(
-        normalizeQueryText(aiSuggestionRequest.query),
-        aiSuggestionRequest.startOffset,
+        normalizeQueryText(currentAISuggestion.query),
+        currentAISuggestion.startOffset,
       )
       // If current notification is from AI suggestion, preserve it
       if (activeNotificationRef.current.query === aiQueryKey) {
@@ -585,9 +588,6 @@ const MonacoEditor = ({
     toggleRunning(RunningType.EXPLAIN)
   }
 
-  const { getOrCreateConversation, openChatWindow, conversations } =
-    useAIConversation()
-
   const handleAskAI = (query?: Request) => {
     setDropdownOpen(false)
     if (!query || !editorRef.current) return
@@ -759,7 +759,7 @@ const MonacoEditor = ({
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
-        const conversation = conversations.get(queryKey)
+        const conversation = conversationsRef.current.get(queryKey)
         const hasConversation =
           canUseAI &&
           conversation !== undefined &&
@@ -1877,8 +1877,9 @@ const MonacoEditor = ({
     }
   }, [activeBuffer])
 
-  // Update glyphs when conversations change (to show filled/hollow AI sparkle)
+  // AI sparkle handling (filled/hollow)
   useEffect(() => {
+    conversationsRef.current = conversations
     if (monacoRef.current && editorRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }

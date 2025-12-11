@@ -16,6 +16,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { slideAnimation, spinAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
+import type { QueryKey } from "../Monaco/utils"
 
 // Send arrow icon
 const SendArrowIcon = () => (
@@ -138,7 +139,6 @@ const SendButton = styled(ActionButton)`
   }
 `
 
-// ThoughtStream components (adapted from AIStatusIndicator)
 const ThoughtStream = styled.div<{ $aborted?: boolean }>`
   display: flex;
   position: relative;
@@ -221,6 +221,7 @@ type ChatInputProps = {
   onSend: (message: string) => void
   disabled?: boolean
   placeholder?: string
+  queryKey?: QueryKey
 }
 
 export type ChatInputHandle = {
@@ -233,6 +234,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSend,
       disabled = false,
       placeholder = "Ask a question or request a refinement...",
+      queryKey,
     },
     ref,
   ) => {
@@ -244,9 +246,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         textareaRef.current?.focus()
       },
     }))
-    const { status: aiStatus, abortOperation } = useAIStatus()
-    const isAIInProgress = isBlockingAIStatus(aiStatus)
-    const isAborted = aiStatus === AIOperationStatus.Aborted
+    const { status: aiStatus, abortOperation, activeQueryKey } = useAIStatus()
+
+    const isOperationForThisConversation = Boolean(
+      queryKey && activeQueryKey && queryKey === activeQueryKey,
+    )
+    const isAIInProgress =
+      isBlockingAIStatus(aiStatus) && isOperationForThisConversation
+    const isAborted =
+      aiStatus === AIOperationStatus.Aborted && isOperationForThisConversation
 
     useEffect(() => {
       // Auto-resize textarea
@@ -280,7 +288,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       abortOperation()
     }
 
-    // Show ThoughtStream when AI is in progress OR when operation was aborted
     const showThoughtStream = isAIInProgress || isAborted
 
     return (

@@ -9,7 +9,10 @@ import styled from "styled-components"
 import { Box } from "../../../components"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  isBlockingAIStatus,
+  useAIStatus,
+} from "../../../providers/AIStatusProvider"
 import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
 import type { QueryKey } from "../Monaco/utils"
 import { toast } from "../../../components/Toast"
@@ -156,6 +159,7 @@ export const AIChatWindow: React.FC = () => {
     setActiveBuffer,
     addBuffer,
     showDiffBuffer,
+    closeDiffBufferForQuery,
     applyAISQLChange,
   } = useEditor()
   const {
@@ -320,6 +324,7 @@ export const AIChatWindow: React.FC = () => {
     // If there's a pending diff and user is sending a follow-up, mark it as rejected with follow-up
     if (hasUnactionedDiff) {
       markLatestAsRejectedWithFollowUp(queryKey)
+      void closeDiffBufferForQuery(queryKey)
     }
 
     // Determine if this is the first message (no assistant messages yet)
@@ -403,6 +408,7 @@ export const AIChatWindow: React.FC = () => {
         ),
         setStatus,
         abortSignal: abortController?.signal,
+        queryKey,
       })
 
       if (isAiAssistantError(response)) {
@@ -669,14 +675,15 @@ export const AIChatWindow: React.FC = () => {
 
     const normalizedSQL = normalizeSql(targetMessage.sql, false)
 
-    // Apply the changes to the editor, keeping chat open
-    // handleAccept will delete the diff buffer and apply changes
+    await closeDiffBufferForQuery(chatWindowState.activeQueryKey)
+
     await handleAccept(normalizedSQL, true, messageIndex)
   }
 
   const handleRejectChange = () => {
     if (!chatWindowState.activeQueryKey) return
     rejectLatestChange(chatWindowState.activeQueryKey)
+    void closeDiffBufferForQuery(chatWindowState.activeQueryKey)
 
     // Focus the chat input so user can type corrections
     setTimeout(() => {
@@ -803,12 +810,13 @@ export const AIChatWindow: React.FC = () => {
           <ChatInput
             ref={chatInputRef}
             onSend={(message) => handleSendMessage(message, hasPendingDiff)}
-            disabled={!canUse || aiStatus !== null}
+            disabled={!canUse || isBlockingAIStatus(aiStatus)}
             placeholder={
               !shouldShowMessages
                 ? "Ask a question about this query..."
                 : undefined
             }
+            queryKey={chatWindowState.activeQueryKey ?? undefined}
           />
         </ChatPanel>
       </ChatWindowContent>

@@ -31,7 +31,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.57.0",
+    "@anthropic-ai/sdk": "^0.71.2",
     "@date-fns/tz": "^1.2.0",
     "@docsearch/css": "^3.5.2",
     "@docsearch/react": "^3.5.2",

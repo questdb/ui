@@ -6,7 +6,7 @@ import { pinkLinearGradientVertical } from "../../theme"
 import { useSelector } from "react-redux"
 import { useEditor } from "../../providers/EditorProvider"
 import {
-  generateSQL,
+  continueConversation,
   createModelToolsClient,
   isAiAssistantError,
   generateChatTitle,
@@ -199,10 +199,9 @@ export const GenerateSQLButton = () => {
       }
 
       // For initial call, pass empty conversation history
-      // generateSQL will create the full initial message with description
-      const response = await generateSQL({
-        description,
-        conversationHistory: [], // Empty for initial call
+      const response = await continueConversation({
+        userMessage: fullApiMessage,
+        conversationHistory: [],
         settings,
         modelToolsClient: createModelToolsClient(
           quest,
@@ -210,6 +209,8 @@ export const GenerateSQLButton = () => {
         ),
         setStatus,
         abortSignal: abortController?.signal,
+        operation: "generate",
+        queryKey: tempQueryKey,
       })
 
       if (isAiAssistantError(response)) {
@@ -220,7 +221,12 @@ export const GenerateSQLButton = () => {
         return
       }
 
-      const result = response
+      // For generate operation, response is GeneratedSQL type
+      const result = response as {
+        sql: string | null
+        explanation?: string
+        tokenUsage?: { inputTokens: number; outputTokens: number }
+      }
       if (!result.sql) {
         toast.error("No query received from AI Assistant", { autoClose: 10000 })
         return

@@ -5,7 +5,6 @@ import { Type } from "./questdb/types"
 import { getModelProps, MODEL_OPTIONS } from "./aiAssistantSettings"
 import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
-import type { Request } from "../scenes/Editor/Monaco/utils"
 import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import {
   getQuestDBTableOfContents,
@@ -19,6 +18,7 @@ import type {
   ResponseTextConfig,
 } from "openai/resources/responses/responses"
 import type { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/messages"
+import type { QueryKey } from "../scenes/Editor/Monaco/utils"
 
 export type ActiveProviderSettings = {
   model: string
@@ -160,6 +160,23 @@ const ExplainTableSchemaFormat: ResponseTextConfig = {
         },
       },
       required: ["explanation", "columns", "storage_details"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+}
+
+const ConversationResponseFormat: ResponseTextConfig = {
+  format: {
+    type: "json_schema" as const,
+    name: "conversation_response_format",
+    schema: {
+      type: "object",
+      properties: {
+        sql: { type: ["string", "null"] },
+        explanation: { type: "string" },
+      },
+      required: ["explanation", "sql"],
       additionalProperties: false,
     },
     strict: true,
@@ -329,7 +346,6 @@ export function createModelToolsClient(
       try {
         const response = await questClient.validateQuery(query)
         if ("error" in response) {
-          // TypeScript guard: if "error" exists, it's ValidateQueryErrorResult
           const errorResponse = response as {
             error: string
             position: number
@@ -348,7 +364,7 @@ export function createModelToolsClient(
         const errorMessage =
           err instanceof Error
             ? err.message
-            : "Failed to validate query. Something went wrong with the QuestDB API."
+            : "Failed to validate query. Something went wrong with the server."
         return {
           valid: false,
           error: errorMessage,
@@ -413,87 +429,44 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
 - Fixing errors in QuestDB SQL queries
 - Refining and modifying existing queries based on user requests
 
-Important guidelines:
-- Modify a query by returning "sql" field only if the user asks you to modify the query. Otherwise, return null in the "sql" field. Always provide the "explanation" field, which should be in markdown format.
-- Always validate queries using the validate_query tool before returning SQL
-- Generate only valid QuestDB SQL syntax referring to the documentation about functions, operators, and SQL keywords
-- Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
-- Use \`IN\` with \`today()\`, \`tomorrow()\`, \`yesterday()\` interval functions when relevant
-- Use proper timestamp handling for time-series data
-- Use correct data types and functions specific to QuestDB referring to the documentation. Do not use any word that is not in the documentation.
-- When explaining queries, focus on the business logic and what the query achieves, not the SQL syntax itself
-- Pay special attention to QuestDB-specific features such as time-series operations, time-based filtering, and performance optimizations
-- When fixing queries, analyze the error carefully and preserve the original intent while fixing the issue
-- When refining queries, understand the user's request and modify the query accordingly
-- Always provide a 2-4 sentences explanation of your response in markdown format
-`
-  const schemaAccess = grantSchemaAccess
-    ? `\n\nYou have access to schema tools:
-- Use the get_tables tool to retrieve all tables and materialized views in the database instance
-- Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
-`
-    : ""
-  return base + schemaAccess + DOCS_INSTRUCTION_ANTHROPIC
-}
+## When Explaining Queries
+- Focus on the business logic and what the query achieves, not the SQL syntax itself
+- Pay special attention to QuestDB-specific features:
+  - Time-series operations (SAMPLE BY, LATEST ON, designated timestamp columns)
+  - Time-based filtering and aggregations
+  - Real-time data ingestion patterns
+  - Performance optimizations specific to time-series data
 
-const getExplainQueryPrompt = (grantSchemaAccess?: boolean) => {
-  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. When given a QuestDB SQL query, explain what it does in clear, concise plain English using markdown format.
-
-Focus on the business logic and what the query achieves, not the SQL syntax itself. Pay special attention to QuestDB-specific features such as:
-- Time-series operations (SAMPLE BY, LATEST ON, designated timestamp columns)
-- Time-based filtering and aggregations
-- Real-time data ingestion patterns
-- Performance optimizations specific to time-series data
-`
-  const schemaAccess = grantSchemaAccess
-    ? `\n\nYou have access to schema tools for better context:
-- Use the get_tables tool to retrieve all tables and materialized views in the database instance
-- Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
-`
-    : ""
-  return base + schemaAccess + DOCS_INSTRUCTION_ANTHROPIC
-}
-
-const getGenerateSQLPrompt = (grantSchemaAccess?: boolean) => {
-  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
-When given a natural language description, generate the corresponding QuestDB SQL query.
-
-Important guidelines:
-- Always validate the query using the validate_query tool before returning the generated SQL query.
+## When Generating SQL
+- Always validate the query using the validate_query tool before returning the generated SQL query
 - Generate only valid QuestDB SQL syntax referring to the documentation about functions, operators, and SQL keywords
 - Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
 - Use \`IN\` with \`today()\`, \`tomorrow()\`, \`yesterday()\` interval functions when relevant
 - Follow QuestDB best practices for performance referring to the documentation
 - Use proper timestamp handling for time-series data
 - Use correct data types and functions specific to QuestDB referring to the documentation. Do not use any word that is not in the documentation.
+
+## When Fixing Queries
+- Always validate the query using the validate_query tool before returning the fixed SQL query
+- Analyze the error message carefully to understand what went wrong
+- Generate only valid QuestDB SQL syntax by always referring to the documentation about functions, operators, and SQL keywords
+- Preserve the original intent of the query while fixing the error
+- Follow QuestDB best practices and syntax rules referring to the documentation
+- Consider common issues like:
+  - Missing or incorrect column names
+  - Invalid syntax for time-series operations
+  - Data type mismatches
+  - Incorrect function usage
+
+## Response Guidelines
+- Modify a query by returning "sql" field only if the user asks you to generate, fix, or make changes to the query. If the user does not ask for fixing/changing/generating a query, return null in the "sql" field. Every time you provide a SQL query, the current SQL is updated.
+- Always provide the "explanation" field, which should be a 2-4 sentence explanation in markdown format.
+
+## Tools
+
 `
   const schemaAccess = grantSchemaAccess
-    ? `\nYou have access to schema tools to understand the database structure:
-- Use the get_tables tool to retrieve all tables and materialized views in the database instance
-- Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
-`
-    : ""
-  return base + schemaAccess + DOCS_INSTRUCTION_ANTHROPIC
-}
-
-const getFixQueryPrompt = (grantSchemaAccess?: boolean) => {
-  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
-When given a QuestDB SQL query with an error, fix the query to resolve the error.
-
-Important guidelines:
-1. Always validate the query using the validate_query tool before returning the fixed SQL query.
-2. Analyze the error message carefully to understand what went wrong
-3. Generate only valid QuestDB SQL syntax by always referring to the documentation about functions, operators, and SQL keywords
-4. Preserve the original intent of the query while fixing the error
-5. Follow QuestDB best practices and syntax rules referring to the documentation
-6. Consider common issues like:
-   - Missing or incorrect column names
-   - Invalid syntax for time-series operations
-   - Data type mismatches
-   - Incorrect function usage
-`
-  const schemaAccess = grantSchemaAccess
-    ? `\nYou have access to schema tools to verify table and column names:
+    ? `You have access to schema tools:
 - Use the get_tables tool to retrieve all tables and materialized views in the database instance
 - Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
 `
@@ -652,6 +625,11 @@ const executeTool = async (
   }
 }
 
+interface AnthropicToolCallResult {
+  message: Anthropic.Messages.Message
+  accumulatedTokens: TokenUsage
+}
+
 async function handleToolCalls(
   message: Anthropic.Messages.Message,
   anthropic: Anthropic,
@@ -659,9 +637,10 @@ async function handleToolCalls(
   conversationHistory: Array<MessageParam>,
   model: string,
   setStatus: StatusCallback,
+  responseFormat: ResponseTextConfig,
   abortSignal?: AbortSignal,
-  responseFormat?: ResponseTextConfig,
-): Promise<Anthropic.Messages.Message | AiAssistantAPIError> {
+  accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
+): Promise<AnthropicToolCallResult | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
   )
@@ -710,14 +689,12 @@ async function handleToolCalls(
     temperature: 0.3,
   }
 
-  if (responseFormat?.format) {
-    const format = responseFormat.format as { type: string; schema?: object }
-    if (format.type === "json_schema" && format.schema) {
-      // @ts-expect-error - output_format is a new field not yet in the type definitions
-      followUpParams.output_format = {
-        type: "json_schema",
-        schema: format.schema,
-      }
+  const format = responseFormat.format as { type: string; schema?: object }
+  if (format.type === "json_schema" && format.schema) {
+    // @ts-expect-error - output_format is a new field not yet in the type definitions
+    followUpParams.output_format = {
+      type: "json_schema",
+      schema: format.schema,
     }
   }
 
@@ -725,6 +702,16 @@ async function handleToolCalls(
     anthropic,
     followUpParams,
   )
+
+  // Accumulate tokens from this response
+  const newAccumulatedTokens: TokenUsage = {
+    inputTokens:
+      accumulatedTokens.inputTokens +
+      (followUpMessage.usage?.input_tokens || 0),
+    outputTokens:
+      accumulatedTokens.outputTokens +
+      (followUpMessage.usage?.output_tokens || 0),
+  }
 
   if (followUpMessage.stop_reason === "tool_use") {
     return handleToolCalls(
@@ -734,12 +721,16 @@ async function handleToolCalls(
       updatedHistory,
       model,
       setStatus,
-      abortSignal,
       responseFormat,
+      abortSignal,
+      newAccumulatedTokens,
     )
   }
 
-  return followUpMessage
+  return {
+    message: followUpMessage,
+    accumulatedTokens: newAccumulatedTokens,
+  }
 }
 
 const extractOpenAIToolCalls = (
@@ -836,8 +827,7 @@ interface AnthropicFlowConfig<T> {
   systemInstructions: string
   initialUserContent: string
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
-  formattingPrompt?: string // Deprecated: Use responseFormat instead
-  responseFormat?: ResponseTextConfig
+  responseFormat: ResponseTextConfig
   postProcess?: (formatted: T) => T
 }
 
@@ -867,10 +857,7 @@ const executeOpenAIFlow = async <T>({
   setStatus,
   abortSignal,
 }: ExecuteOpenAIFlowParams<T>): Promise<T | AiAssistantAPIError> => {
-  // Build input array with conversation history
   let input: OpenAI.Responses.ResponseInput = []
-
-  // Add conversation history if provided
   if (config.conversationHistory && config.conversationHistory.length > 0) {
     for (const msg of config.conversationHistory) {
       input.push({
@@ -880,7 +867,6 @@ const executeOpenAIFlow = async <T>({
     }
   }
 
-  // Add current user message
   input.push({
     role: "user",
     content: config.initialUserContent,
@@ -891,6 +877,10 @@ const executeOpenAIFlow = async <T>({
     grantSchemaAccess ? ALL_TOOLS : REFERENCE_TOOLS,
   )
 
+  // Accumulate tokens across all iterations
+  let totalInputTokens = 0
+  let totalOutputTokens = 0
+
   let lastResponse = await openai.responses.create({
     ...getModelProps(model),
     instructions: config.systemInstructions,
@@ -899,6 +889,10 @@ const executeOpenAIFlow = async <T>({
     text: config.responseFormat,
   } as OpenAI.Responses.ResponseCreateParamsNonStreaming)
   input = [...input, ...lastResponse.output]
+
+  // Add tokens from first response
+  totalInputTokens += lastResponse.usage?.input_tokens ?? 0
+  totalOutputTokens += lastResponse.usage?.output_tokens ?? 0
 
   while (true) {
     if (abortSignal?.aborted) {
@@ -934,6 +928,10 @@ const executeOpenAIFlow = async <T>({
       text: config.responseFormat,
     })
     input = [...input, ...lastResponse.output]
+
+    // Accumulate tokens from each iteration
+    totalInputTokens += lastResponse.usage?.input_tokens ?? 0
+    totalOutputTokens += lastResponse.usage?.output_tokens ?? 0
   }
 
   if (abortSignal?.aborted) {
@@ -953,20 +951,15 @@ const executeOpenAIFlow = async <T>({
 
   const rawOutput = text.message
 
-  // Extract token usage from OpenAI response
-  const inputTokens = lastResponse.usage?.input_tokens ?? 0
-  const outputTokens = lastResponse.usage?.output_tokens ?? 0
-
   try {
     const json = JSON.parse(rawOutput) as T
     setStatus(null)
 
-    // Attach token usage to the result
     const resultWithTokens = {
       ...json,
       tokenUsage: {
-        inputTokens,
-        outputTokens,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
       },
     } as T & { tokenUsage: TokenUsage }
 
@@ -975,8 +968,8 @@ const executeOpenAIFlow = async <T>({
       return {
         ...processed,
         tokenUsage: {
-          inputTokens,
-          outputTokens,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
         },
       } as T & { tokenUsage: TokenUsage }
     }
@@ -998,10 +991,7 @@ const executeAnthropicFlow = async <T>({
   setStatus,
   abortSignal,
 }: ExecuteAnthropicFlowParams<T>): Promise<T | AiAssistantAPIError> => {
-  // Build messages array with conversation history
   const initialMessages: MessageParam[] = []
-
-  // Add conversation history if provided
   if (config.conversationHistory && config.conversationHistory.length > 0) {
     for (const msg of config.conversationHistory) {
       initialMessages.push({
@@ -1011,7 +1001,6 @@ const executeAnthropicFlow = async <T>({
     }
   }
 
-  // Add current user message
   initialMessages.push({
     role: "user" as const,
     content: config.initialUserContent,
@@ -1019,7 +1008,6 @@ const executeAnthropicFlow = async <T>({
 
   const grantSchemaAccess = !!modelToolsClient.getTables
 
-  // Build the message create params
   const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
     model,
     system: config.systemInstructions,
@@ -1028,8 +1016,6 @@ const executeAnthropicFlow = async <T>({
     temperature: 0.3,
   }
 
-  // Add output_format if responseFormat is provided (new structured output approach)
-  // Anthropic's output_format expects: { type: "json_schema", schema: <the schema object> }
   if (config.responseFormat?.format) {
     const format = config.responseFormat.format as {
       type: string
@@ -1046,23 +1032,34 @@ const executeAnthropicFlow = async <T>({
 
   const message = await createAnthropicMessage(anthropic, messageParams)
 
-  const response =
-    message.stop_reason === "tool_use"
-      ? await handleToolCalls(
-          message,
-          anthropic,
-          modelToolsClient,
-          initialMessages,
-          model,
-          setStatus,
-          abortSignal,
-          config.responseFormat,
-        )
-      : message
+  let totalInputTokens = message.usage?.input_tokens || 0
+  let totalOutputTokens = message.usage?.output_tokens || 0
 
-  const responseError = response as AiAssistantAPIError
-  if (responseError.type === "aborted") {
-    return responseError
+  let responseMessage: Anthropic.Messages.Message
+
+  if (message.stop_reason === "tool_use") {
+    const toolCallResult = await handleToolCalls(
+      message,
+      anthropic,
+      modelToolsClient,
+      initialMessages,
+      model,
+      setStatus,
+      config.responseFormat,
+      abortSignal,
+      { inputTokens: 0, outputTokens: 0 }, // Start fresh, we already counted initial message
+    )
+
+    if ("type" in toolCallResult && "message" in toolCallResult) {
+      return toolCallResult
+    }
+
+    const result = toolCallResult
+    responseMessage = result.message
+    totalInputTokens += result.accumulatedTokens.inputTokens
+    totalOutputTokens += result.accumulatedTokens.outputTokens
+  } else {
+    responseMessage = message
   }
 
   if (abortSignal?.aborted) {
@@ -1072,96 +1069,26 @@ const executeAnthropicFlow = async <T>({
     } as AiAssistantAPIError
   }
 
-  const responseMessage = response as Anthropic.Messages.Message
-
-  // Track token usage from the main response
-  const inputTokens = responseMessage.usage?.input_tokens || 0
-  let outputTokens = responseMessage.usage?.output_tokens || 0
-
-  // If using new structured output format, parse directly from response
-  if (config.responseFormat) {
-    const textBlock = responseMessage.content.find(
-      (block) => block.type === "text",
-    )
-    if (!textBlock || !("text" in textBlock)) {
-      setStatus(null)
-      return {
-        type: "unknown",
-        message: "No text response received from assistant.",
-      } as AiAssistantAPIError
-    }
-
-    try {
-      const json = JSON.parse(textBlock.text) as T
-      setStatus(null)
-
-      const resultWithTokens = {
-        ...json,
-        tokenUsage: {
-          inputTokens,
-          outputTokens,
-        },
-      } as T & { tokenUsage: TokenUsage }
-
-      if (config.postProcess) {
-        const processed = config.postProcess(json)
-        return {
-          ...processed,
-          tokenUsage: {
-            inputTokens,
-            outputTokens,
-          },
-        } as T & { tokenUsage: TokenUsage }
-      }
-      return resultWithTokens
-    } catch (error) {
-      setStatus(null)
-      return {
-        type: "unknown",
-        message: "Failed to parse assistant response.",
-      } as AiAssistantAPIError
-    }
+  const textBlock = responseMessage.content.find(
+    (block) => block.type === "text",
+  )
+  if (!textBlock || !("text" in textBlock)) {
+    setStatus(null)
+    return {
+      type: "unknown",
+      message: "No text response received from assistant.",
+    } as AiAssistantAPIError
   }
 
-  // Legacy: Use formatting prompt approach (deprecated)
-  setStatus(AIOperationStatus.FormattingResponse)
-
-  const formattingResponse = await createAnthropicMessage(anthropic, {
-    model,
-    messages: [
-      { role: "assistant", content: responseMessage.content },
-      { role: "user", content: config.formattingPrompt! },
-      { role: "assistant", content: "{" },
-    ],
-    temperature: 0.3,
-  })
-
-  // Add formatting response tokens
-  outputTokens += formattingResponse.usage?.output_tokens || 0
-
-  const fullContent = formattingResponse.content.reduce((acc, block) => {
-    if (block.type === "text" && "text" in block) {
-      acc += block.text
-    }
-    return acc
-  }, "{")
-
   try {
-    if (abortSignal?.aborted) {
-      return {
-        type: "aborted",
-        message: "Operation was cancelled",
-      } as AiAssistantAPIError
-    }
-    const json = JSON.parse(fullContent) as T
+    const json = JSON.parse(textBlock.text) as T
     setStatus(null)
 
-    // Attach token usage to the result
     const resultWithTokens = {
       ...json,
       tokenUsage: {
-        inputTokens,
-        outputTokens,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
       },
     } as T & { tokenUsage: TokenUsage }
 
@@ -1170,8 +1097,8 @@ const executeAnthropicFlow = async <T>({
       return {
         ...processed,
         tokenUsage: {
-          inputTokens,
-          outputTokens,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
         },
       } as T & { tokenUsage: TokenUsage }
     }
@@ -1183,270 +1110,6 @@ const executeAnthropicFlow = async <T>({
       message: "Failed to parse assistant response.",
     } as AiAssistantAPIError
   }
-}
-
-export const explainQuery = async ({
-  query,
-  settings,
-  modelToolsClient,
-  setStatus,
-  abortSignal,
-}: {
-  query: Request
-  settings: ActiveProviderSettings
-  modelToolsClient: ModelToolsClient
-  setStatus: StatusCallback
-  abortSignal?: AbortSignal
-}): Promise<AiAssistantExplanation | AiAssistantAPIError> => {
-  if (!settings.apiKey || !settings.model || !query) {
-    return {
-      type: "invalid_key",
-      message: "API key or query is missing",
-    }
-  }
-
-  await handleRateLimit()
-  if (abortSignal?.aborted) {
-    return {
-      type: "aborted",
-      message: "Operation was cancelled",
-    } as AiAssistantAPIError
-  }
-  setStatus(AIOperationStatus.Processing, { type: "explain" })
-
-  return tryWithRetries(
-    async () => {
-      const clients = createProviderClients(settings)
-      const grantSchemaAccess = !!modelToolsClient.getTables
-      const content = query.selection
-        ? `Explain this portion of the query:\n\n\`\`\`sql\n${query.selection.queryText}\n\`\`\` within this query:\n\n\`\`\`sql\n${query.query}\n\`\`\` with 2-4 sentences`
-        : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${query.query}\n\`\`\``
-
-      if (clients.provider === "openai") {
-        return await executeOpenAIFlow<{ explanation: string }>({
-          openai: clients.openai,
-          model: settings.model,
-          config: {
-            systemInstructions: getExplainQueryPrompt(grantSchemaAccess),
-            initialUserContent: content,
-            responseFormat: ExplainFormat,
-          },
-          modelToolsClient,
-          setStatus,
-          abortSignal,
-        })
-      }
-
-      return await executeAnthropicFlow<{ explanation: string }>({
-        anthropic: clients.anthropic,
-        model: settings.model,
-        config: {
-          systemInstructions: getExplainQueryPrompt(grantSchemaAccess),
-          initialUserContent: content,
-          responseFormat: ExplainFormat,
-        },
-        modelToolsClient,
-        setStatus,
-        abortSignal,
-      })
-    },
-    setStatus,
-    abortSignal,
-  )
-}
-
-export const generateSQL = async ({
-  description,
-  conversationHistory,
-  settings,
-  modelToolsClient,
-  setStatus,
-  abortSignal,
-}: {
-  description: string
-  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
-  settings: ActiveProviderSettings
-  modelToolsClient: ModelToolsClient
-  setStatus: StatusCallback
-  abortSignal?: AbortSignal
-}): Promise<GeneratedSQL | AiAssistantAPIError> => {
-  if (!settings.apiKey || !settings.model || !description) {
-    return {
-      type: "invalid_key",
-      message: "API key or description is missing",
-    }
-  }
-
-  await handleRateLimit()
-  if (abortSignal?.aborted) {
-    return {
-      type: "aborted",
-      message: "Operation was cancelled",
-    } as AiAssistantAPIError
-  }
-  setStatus(AIOperationStatus.Processing, { type: "generate" })
-
-  return tryWithRetries(
-    async () => {
-      const clients = createProviderClients(settings)
-      const grantSchemaAccess = !!modelToolsClient.getTables
-      const initialUserContent = `For the following description, generate the corresponding QuestDB SQL query and 2-4 sentences explanation:\n\n\`\`\`\n${description}\n\`\`\``
-      const postProcess = (formatted: {
-        sql: string
-        explanation: string
-        tokenUsage?: TokenUsage
-      }) => {
-        if (!formatted || !formatted.sql) {
-          return {
-            sql: "",
-            explanation: formatted?.explanation || "",
-            tokenUsage: formatted?.tokenUsage,
-          }
-        }
-        return {
-          sql: normalizeSql(formatted.sql),
-          explanation: formatted.explanation || "",
-          tokenUsage: formatted.tokenUsage,
-        }
-      }
-
-      if (clients.provider === "openai") {
-        return await executeOpenAIFlow<{ sql: string; explanation: string }>({
-          openai: clients.openai,
-          model: settings.model,
-          config: {
-            systemInstructions: getGenerateSQLPrompt(grantSchemaAccess),
-            initialUserContent,
-            conversationHistory,
-            responseFormat: GeneratedSQLFormat,
-            postProcess,
-          },
-          modelToolsClient,
-          setStatus,
-          abortSignal,
-        })
-      }
-
-      return await executeAnthropicFlow<{ sql: string; explanation: string }>({
-        anthropic: clients.anthropic,
-        model: settings.model,
-        config: {
-          systemInstructions: getGenerateSQLPrompt(grantSchemaAccess),
-          initialUserContent,
-          conversationHistory,
-          responseFormat: GeneratedSQLFormat,
-          postProcess,
-        },
-        modelToolsClient,
-        setStatus,
-        abortSignal,
-      })
-    },
-    setStatus,
-    abortSignal,
-  )
-}
-
-export const fixQuery = async ({
-  query,
-  errorMessage,
-  conversationHistory,
-  settings,
-  modelToolsClient,
-  setStatus,
-  abortSignal,
-  word,
-}: {
-  query: string
-  errorMessage: string
-  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
-  settings: ActiveProviderSettings
-  modelToolsClient: ModelToolsClient
-  setStatus: StatusCallback
-  abortSignal?: AbortSignal
-  word: string | null
-}): Promise<Partial<GeneratedSQL> | AiAssistantAPIError> => {
-  if (!settings.apiKey || !settings.model || !query || !errorMessage) {
-    return {
-      type: "invalid_key",
-      message: "API key, query, or error message is missing",
-    }
-  }
-
-  await handleRateLimit()
-  if (abortSignal?.aborted) {
-    return {
-      type: "aborted",
-      message: "Operation was cancelled",
-    } as AiAssistantAPIError
-  }
-  setStatus(AIOperationStatus.Processing, { type: "fix" })
-
-  return tryWithRetries(
-    async () => {
-      const clients = createProviderClients(settings)
-      const grantSchemaAccess = !!modelToolsClient.getTables
-      const initialUserContent = `SQL Query:
-\`\`\`sql
-${query}
-\`\`\`
-
-Error Message:
-\`\`\`
-${errorMessage}
-\`\`\`
-
-Analyze the error and return the fixed SQL query if possible, always provide a 2-4 sentences explanation why it was failed and how it was fixed.
-${word ? `The error occurred at word: ${word}` : ""}`
-      const postProcess = (formatted: {
-        explanation: string
-        sql?: string
-        tokenUsage?: TokenUsage
-      }) => {
-        return {
-          ...(formatted?.sql
-            ? { sql: normalizeSql(formatted.sql, false) }
-            : {}),
-          explanation: formatted?.explanation || "",
-          tokenUsage: formatted?.tokenUsage,
-        }
-      }
-
-      if (clients.provider === "openai") {
-        return await executeOpenAIFlow<{ explanation: string; sql?: string }>({
-          openai: clients.openai,
-          model: settings.model,
-          config: {
-            systemInstructions: getFixQueryPrompt(grantSchemaAccess),
-            initialUserContent,
-            conversationHistory,
-            responseFormat: FixSQLFormat,
-            postProcess,
-          },
-          modelToolsClient,
-          setStatus,
-          abortSignal,
-        })
-      }
-
-      return await executeAnthropicFlow<{ explanation: string; sql?: string }>({
-        anthropic: clients.anthropic,
-        model: settings.model,
-        config: {
-          systemInstructions: getFixQueryPrompt(grantSchemaAccess),
-          initialUserContent,
-          conversationHistory,
-          responseFormat: FixSQLFormat,
-          postProcess,
-        },
-        modelToolsClient,
-        setStatus,
-        abortSignal,
-      })
-    },
-    setStatus,
-    abortSignal,
-  )
 }
 
 export const explainTableSchema = async ({
@@ -1518,7 +1181,6 @@ export const explainTableSchema = async ({
       ],
       temperature: 0.3,
     }
-    // Anthropic's output_format expects: { type: "json_schema", schema: <the schema object> }
     const schemaFormat = ExplainTableSchemaFormat.format as {
       type: string
       schema?: object
@@ -1668,77 +1330,11 @@ function handleAiAssistantError(error: unknown): AiAssistantAPIError {
   }
 }
 
-export const formatExplanationAsComment = (
-  explanation: string,
-  prefix: string = "AI Explanation",
-): string => {
-  if (!explanation) return ""
-
-  const MAX_LINE_LENGTH = 80 // Maximum characters per line
-  const COMMENT_PREFIX = " * " // 3 characters
-  const MAX_CONTENT_LENGTH = MAX_LINE_LENGTH - COMMENT_PREFIX.length
-
-  const wrapLine = (text: string): string[] => {
-    if (text.length <= MAX_CONTENT_LENGTH) {
-      return [text]
-    }
-
-    const words = text.split(" ")
-    const lines: string[] = []
-    let currentLine = ""
-
-    for (const word of words) {
-      // If adding this word would exceed the limit
-      if (currentLine.length + word.length + 1 > MAX_CONTENT_LENGTH) {
-        if (currentLine.length > 0) {
-          lines.push(currentLine.trim())
-          currentLine = word
-        } else {
-          // Single word is too long, break it
-          if (word.length > MAX_CONTENT_LENGTH) {
-            const chunks = word.match(
-              new RegExp(`.{1,${MAX_CONTENT_LENGTH}}`, "g"),
-            ) || [word]
-            lines.push(...chunks.slice(0, -1))
-            currentLine = chunks[chunks.length - 1]
-          } else {
-            currentLine = word
-          }
-        }
-      } else {
-        currentLine += (currentLine.length > 0 ? " " : "") + word
-      }
-    }
-
-    if (currentLine.length > 0) {
-      lines.push(currentLine.trim())
-    }
-
-    return lines
-  }
-
-  // Split explanation into paragraphs and wrap each line
-  const paragraphs = explanation.split("\n")
-  const wrappedLines: string[] = []
-
-  for (const paragraph of paragraphs) {
-    if (paragraph.trim() === "") {
-      wrappedLines.push("") // Preserve empty lines
-    } else {
-      const wrapped = wrapLine(paragraph.trim())
-      wrappedLines.push(...wrapped)
-    }
-  }
-
-  return `/*\n  ${prefix}:\n${wrappedLines.map((line) => `  ${line}`).join("\n")}\n */`
-}
-
 export const testApiKey = async (
   apiKey: string,
   model: string,
 ): Promise<{ valid: boolean; error?: string }> => {
   try {
-    // Infer provider from model choice
     if (inferProviderFromModel(model) === "anthropic") {
       const anthropic = new Anthropic({
         apiKey,
@@ -1812,23 +1408,6 @@ const ChatTitleFormat: ResponseTextConfig = {
   },
 }
 
-const ConversationResponseFormat: ResponseTextConfig = {
-  format: {
-    type: "json_schema" as const,
-    name: "conversation_response_format",
-    schema: {
-      type: "object",
-      properties: {
-        sql: { type: ["string", "null"] },
-        explanation: { type: "string" },
-      },
-      required: ["explanation", "sql"],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-}
-
 export const generateChatTitle = async ({
   firstUserMessage,
   settings,
@@ -1865,14 +1444,12 @@ Return a JSON object with the following structure: { "title": "Your title here" 
       }
     }
 
-    // Anthropic - use structured output
     const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
       model: settings.model,
       messages: [{ role: "user", content: prompt }],
       max_tokens: 100,
       temperature: 0.3,
     }
-    // Anthropic's output_format expects: { type: "json_schema", schema: <the schema object> }
     const titleFormat = ChatTitleFormat.format as {
       type: string
       schema?: object
@@ -1905,6 +1482,8 @@ Return a JSON object with the following structure: { "title": "Your title here" 
   }
 }
 
+export type AIOperation = "explain" | "generate" | "fix" | "followup"
+
 export const continueConversation = async ({
   userMessage,
   conversationHistory,
@@ -1914,6 +1493,8 @@ export const continueConversation = async ({
   modelToolsClient,
   setStatus,
   abortSignal,
+  operation = "followup",
+  queryKey,
 }: {
   userMessage: string
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
@@ -1923,7 +1504,9 @@ export const continueConversation = async ({
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
-}): Promise<GeneratedSQL | AiAssistantAPIError> => {
+  operation?: AIOperation
+  queryKey: QueryKey
+}): Promise<GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError> => {
   // originalQuery is kept for potential future use
   void originalQuery
   if (!settings.apiKey || !settings.model) {
@@ -1941,19 +1524,31 @@ export const continueConversation = async ({
     }
   }
 
-  setStatus(AIOperationStatus.Processing)
+  const responseFormat = {
+    explain: ExplainFormat,
+    generate: GeneratedSQLFormat,
+    fix: FixSQLFormat,
+    followup: ConversationResponseFormat,
+  }[operation]
+
+  const statusType = {
+    explain: "explain" as const,
+    generate: "generate" as const,
+    fix: "fix" as const,
+    followup: "followup" as const,
+  }[operation]
+
+  setStatus(AIOperationStatus.Processing, { type: statusType, queryKey })
 
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
       const grantSchemaAccess = !!modelToolsClient.getTables
 
-      // Determine if this is a follow-up by checking if there are any assistant messages
       const hasAssistantMessages = conversationHistory.some(
         (msg) => msg.role === "assistant",
       )
 
-      // Build the user message with appropriate context
       let userMessageWithContext = userMessage
       if (hasAssistantMessages) {
         // This is a true follow-up message (has previous assistant responses)
@@ -2021,9 +1616,8 @@ export const continueConversation = async ({
             systemInstructions: getUnifiedPrompt(grantSchemaAccess),
             initialUserContent: userMessageWithContext,
             conversationHistory: historyWithoutLastMessage,
-            responseFormat: ConversationResponseFormat,
+            responseFormat,
             postProcess: (formatted) => {
-              // Preserve null when model explicitly returns null (no SQL change)
               const sql =
                 formatted?.sql === null
                   ? null
@@ -2058,9 +1652,8 @@ export const continueConversation = async ({
           systemInstructions: getUnifiedPrompt(grantSchemaAccess),
           initialUserContent: userMessageWithContext,
           conversationHistory: historyWithoutLastMessage,
-          responseFormat: ConversationResponseFormat,
+          responseFormat,
           postProcess: (formatted) => {
-            // Preserve null when model explicitly returns null (no SQL change)
             const sql =
               formatted?.sql === null
                 ? null

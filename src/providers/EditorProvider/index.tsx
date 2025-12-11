@@ -111,6 +111,7 @@ export type EditorContext = {
   updateDiffMode: (original: string, modified: string) => void
   // Global diff buffer management
   showDiffBuffer: (content: DiffBufferContent) => Promise<void>
+  closeDiffBufferForQuery: (queryKey: QueryKey) => Promise<void>
   // Apply AI SQL change to editor
   applyAISQLChange: (
     options: ApplyAISQLChangeOptions,
@@ -142,6 +143,7 @@ const defaultValues = {
   exitDiffMode: () => undefined,
   updateDiffMode: () => undefined,
   showDiffBuffer: () => Promise.resolve(),
+  closeDiffBufferForQuery: () => Promise.resolve(),
   applyAISQLChange: () => Promise.resolve({ success: false }),
 }
 
@@ -462,9 +464,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       })
     }
 
-  // Global diff buffer management - creates or updates a single diff buffer and switches to it
   const showDiffBuffer: EditorContext["showDiffBuffer"] = async (content) => {
-    // Check if diff buffer already exists
     const existingDiffBuffer = buffers.find(
       (b) => b.isDiffBuffer && !b.archived,
     )
@@ -516,6 +516,17 @@ export const EditorProvider: React.FC = ({ children }) => {
       // addBuffer already switches to it
     }
   }
+
+  const closeDiffBufferForQuery: EditorContext["closeDiffBufferForQuery"] =
+    async (queryKey) => {
+      const diffBuffer = buffers.find(
+        (b) =>
+          b.isDiffBuffer && !b.archived && b.diffContent?.queryKey === queryKey,
+      )
+      if (diffBuffer && diffBuffer.id) {
+        await deleteBuffer(diffBuffer.id, true)
+      }
+    }
 
   // Shared logic for applying AI SQL changes to editor
   // Used by both AIChatWindow and diff editor button bar
@@ -737,6 +748,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         exitDiffMode,
         updateDiffMode,
         showDiffBuffer,
+        closeDiffBufferForQuery,
         applyAISQLChange,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {

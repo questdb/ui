@@ -369,7 +369,6 @@ class ChromeTabs {
     tabEl
       .querySelector(".chrome-tab-close")!
       .addEventListener("click", closeTabEvent)
-    tabEl.addEventListener("auxclick", closeTabEvent)
   }
 
   setTabRenameConfirmEventListener(tabEl: HTMLElement) {
