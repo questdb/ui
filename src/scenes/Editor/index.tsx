@@ -363,6 +363,18 @@ const Editor = ({
                       activeBuffer.diffContent.original +
                       activeBuffer.diffContent.modified
                     }
+                    onMount={(editor) => {
+                      editor.onDidUpdateDiff(() => {
+                        const lineChange = editor.getLineChanges()?.[0]
+                        if (lineChange) {
+                          editor
+                            .getModifiedEditor()
+                            .revealLineInCenter(
+                              lineChange.modifiedStartLineNumber,
+                            )
+                        }
+                      })
+                    }}
                     original={activeBuffer.diffContent.original}
                     modified={activeBuffer.diffContent.modified}
                     language={QuestDBLanguageName}

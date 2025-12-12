@@ -17,8 +17,7 @@ import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
 import type { QueryKey } from "../Monaco/utils"
 import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
-import { Editor } from "@monaco-editor/react"
-import { QuestDBLanguageName } from "../Monaco/utils"
+import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
 import {
@@ -56,7 +55,6 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   background: ${color("backgroundLighter")};
-  border-bottom: 1px solid ${color("backgroundDarker")};
   flex-shrink: 0;
 `
 
@@ -124,10 +122,7 @@ const InitialQueryContainer = styled.div`
 const InitialQueryBox = styled.div`
   display: flex;
   flex-direction: column;
-  padding: 4px;
   align-self: flex-end;
-  background: ${color("pinkDarker")};
-  border-radius: 0.6rem;
   flex-shrink: 0;
   overflow: hidden;
   width: 100%;
@@ -135,9 +130,6 @@ const InitialQueryBox = styled.div`
 
 const InitialQueryEditor = styled.div`
   width: 100%;
-  background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
-  border-radius: 0.6rem;
   overflow: hidden;
 `
 
@@ -306,11 +298,6 @@ export const AIChatWindow: React.FC = () => {
     // Fallback for conversations without displayType
     return "AI Assistant"
   }, [conversation])
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
 
   const handleSendMessage = (
     userMessage: string,
@@ -484,29 +471,33 @@ export const AIChatWindow: React.FC = () => {
     normalizedSQL: string,
     keepChatOpen: boolean = false,
     messageIndex?: number,
-  ) => {
-    if (!conversation) return
+  ): Promise<QueryKey | undefined> => {
+    if (!conversation) return undefined
 
     try {
+      let finalQueryKey: QueryKey | undefined
+
       // Scenario 1: Active tab - apply changes directly
       if (bufferStatus.type === "active") {
-        applyChangesToActiveTab(normalizedSQL, messageIndex)
+        finalQueryKey = applyChangesToActiveTab(normalizedSQL, { messageIndex })
         // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
         dispatch(actions.query.setAISuggestionRequest(null))
         if (!keepChatOpen) {
           closeChatWindow()
         }
-        return
+        return finalQueryKey
       }
 
       // Scenario 2: Deleted/Archived tab - create new tab
       if (bufferStatus.type === "deleted" || bufferStatus.type === "archived") {
-        await applyChangesToNewTab(normalizedSQL, messageIndex)
+        finalQueryKey = await applyChangesToNewTab(normalizedSQL, {
+          messageIndex,
+        })
         dispatch(actions.query.setAISuggestionRequest(null))
         if (!keepChatOpen) {
           closeChatWindow()
         }
-        return
+        return finalQueryKey
       }
 
       // Scenario 3: Inactive tab - activate it first, then apply
@@ -514,25 +505,26 @@ export const AIChatWindow: React.FC = () => {
         await setActiveBuffer(bufferStatus.buffer)
         // Wait for tab to be fully activated
         await new Promise((resolve) => setTimeout(resolve, 100))
-        applyChangesToActiveTab(normalizedSQL, messageIndex)
+        finalQueryKey = applyChangesToActiveTab(normalizedSQL, { messageIndex })
         // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
         dispatch(actions.query.setAISuggestionRequest(null))
         if (!keepChatOpen) {
           closeChatWindow()
         }
-        return
+        return finalQueryKey
       }
     } catch (error) {
       console.error("Error applying changes:", error)
       toast.error("Failed to apply changes")
     }
+    return undefined
   }
 
   const applyChangesToActiveTab = (
     normalizedSQL: string,
-    messageIndex?: number,
-  ) => {
-    if (!conversation) return
+    options?: { messageIndex?: number; skipAcceptState?: boolean },
+  ): QueryKey | undefined => {
+    if (!conversation) return undefined
 
     const result = applyAISQLChange({
       newSQL: normalizedSQL,
@@ -543,7 +535,7 @@ export const AIChatWindow: React.FC = () => {
     })
 
     if (!result.success) {
-      return
+      return undefined
     }
 
     // If there was an AI suggestion query that was run, update its notification key
@@ -583,21 +575,31 @@ export const AIChatWindow: React.FC = () => {
         normalizedSQL,
         currentExplanation,
       )
-      acceptConversationChanges(result.finalQueryKey, messageIndex)
+      if (!options?.skipAcceptState) {
+        acceptConversationChanges(result.finalQueryKey, options?.messageIndex)
+      }
+      return result.finalQueryKey
     } else if (chatWindowState.activeQueryKey) {
       updateConversationSQL(
         chatWindowState.activeQueryKey,
         normalizedSQL,
         currentExplanation,
       )
-      acceptConversationChanges(chatWindowState.activeQueryKey, messageIndex)
+      if (!options?.skipAcceptState) {
+        acceptConversationChanges(
+          chatWindowState.activeQueryKey,
+          options?.messageIndex,
+        )
+      }
+      return chatWindowState.activeQueryKey
     }
+    return undefined
   }
 
   const applyChangesToNewTab = async (
     normalizedSQL: string,
-    messageIndex?: number,
-  ) => {
+    options?: { messageIndex?: number; skipAcceptState?: boolean },
+  ): Promise<QueryKey | undefined> => {
     // Create a new tab with proper semicolon handling
     // normalizeSql ensures: removes trailing semicolon, formats, then adds single semicolon
     const sqlWithSemicolon = normalizeSql(normalizedSQL)
@@ -608,10 +610,10 @@ export const AIChatWindow: React.FC = () => {
     // Wait for the tab to be mounted and editor to be ready
     await new Promise((resolve) => setTimeout(resolve, 200))
 
-    if (!editorRef.current) return
+    if (!editorRef.current) return undefined
 
     const model = editorRef.current.getModel()
-    if (!model) return
+    if (!model) return undefined
 
     // The query is at the start of the new buffer
     const queryStartOffset = 0
@@ -656,8 +658,12 @@ export const AIChatWindow: React.FC = () => {
       updateConversationQueryKey(chatWindowState.activeQueryKey, finalQueryKey)
       updateConversationBufferId(finalQueryKey, newBuffer.id)
       updateConversationSQL(finalQueryKey, normalizedSQL, currentExplanation)
-      acceptConversationChanges(finalQueryKey, messageIndex)
+      if (!options?.skipAcceptState) {
+        acceptConversationChanges(finalQueryKey, options?.messageIndex)
+      }
+      return finalQueryKey
     }
+    return undefined
   }
 
   const handleReject = useCallback(() => {
@@ -677,7 +683,17 @@ export const AIChatWindow: React.FC = () => {
 
     await closeDiffBufferForQuery(chatWindowState.activeQueryKey)
 
-    await handleAccept(normalizedSQL, true, messageIndex)
+    const finalQueryKey = await handleAccept(normalizedSQL, true, messageIndex)
+
+    // Add a hidden message to inform the model about the acceptance
+    // Use the final query key returned by handleAccept
+    const targetQueryKey = finalQueryKey ?? chatWindowState.activeQueryKey
+    addMessage(targetQueryKey, {
+      role: "user" as const,
+      content: `User accepted your latest SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+      timestamp: Date.now(),
+      hideFromUI: true,
+    })
   }
 
   const handleRejectChange = () => {
@@ -711,6 +727,61 @@ export const AIChatWindow: React.FC = () => {
     // Trigger execution with AI_SUGGESTION type
     dispatch(actions.query.toggleRunning(RunningType.AI_SUGGESTION))
   }
+
+  // Handle applying SQL to editor without changing accepted/rejected state
+  // This is used for already-accepted/rejected suggestions that user wants to re-apply
+  const handleApplyToEditor = useCallback(
+    async (sql: string) => {
+      if (!conversation || !chatWindowState.activeQueryKey) return
+
+      const normalizedSQL = normalizeSql(sql, false)
+
+      try {
+        // Reuse the same logic as accept, but skip updating accepted state
+        // The apply functions return the final query key (which may differ from activeQueryKey)
+        let finalQueryKey: QueryKey | undefined
+
+        if (bufferStatus.type === "active") {
+          finalQueryKey = applyChangesToActiveTab(normalizedSQL, {
+            skipAcceptState: true,
+          })
+        } else if (
+          bufferStatus.type === "deleted" ||
+          bufferStatus.type === "archived"
+        ) {
+          finalQueryKey = await applyChangesToNewTab(normalizedSQL, {
+            skipAcceptState: true,
+          })
+        } else if (bufferStatus.type === "inactive" && bufferStatus.buffer) {
+          await setActiveBuffer(bufferStatus.buffer)
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          finalQueryKey = applyChangesToActiveTab(normalizedSQL, {
+            skipAcceptState: true,
+          })
+        }
+
+        // Add a hidden message to inform the model for the next round
+        // Use the final query key (after potential key change from apply)
+        const targetQueryKey = finalQueryKey ?? chatWindowState.activeQueryKey
+        addMessage(targetQueryKey, {
+          role: "user" as const,
+          content: `User replaced query with one of your previous suggestions. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+          timestamp: Date.now(),
+          hideFromUI: true,
+        })
+      } catch (error) {
+        console.error("Error applying SQL to editor:", error)
+        toast.error("Failed to apply changes to editor")
+      }
+    },
+    [
+      conversation,
+      chatWindowState.activeQueryKey,
+      bufferStatus,
+      setActiveBuffer,
+      addMessage,
+    ],
+  )
 
   // Note: AI suggestions now create a separate diff buffer tab.
   // The diff tab is closed when user clicks Accept, Reject, or closes the tab directly.
@@ -759,11 +830,14 @@ export const AIChatWindow: React.FC = () => {
               onRejectChange={handleRejectChange}
               onRunQuery={handleRunQuery}
               onExpandDiff={handleExpandDiff}
+              onApplyToEditor={handleApplyToEditor}
               running={running}
               aiSuggestionRequest={aiSuggestionRequest}
               queryNotifications={queryNotifications}
               queryStartOffset={conversation?.queryStartOffset ?? 0}
               conversationQueryKey={chatWindowState.activeQueryKey ?? undefined}
+              isOperationInProgress={isBlockingAIStatus(aiStatus)}
+              editorSQL={conversation?.acceptedSQL}
             />
           ) : currentSQL && currentSQL.trim() !== "\n" ? (
             // Show initial SQL as a user message bubble when no messages exist
@@ -777,32 +851,7 @@ export const AIChatWindow: React.FC = () => {
                     ),
                   }}
                 >
-                  <Editor
-                    height="100%"
-                    language={QuestDBLanguageName}
-                    value={currentSQL.trim()}
-                    theme="dracula"
-                    options={{
-                      readOnly: true,
-                      lineNumbers: "off",
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      folding: false,
-                      glyphMargin: false,
-                      lineDecorationsWidth: 0,
-                      lineNumbersMinChars: 0,
-                      renderLineHighlight: "none",
-                      overviewRulerLanes: 0,
-                      hideCursorInOverviewRuler: true,
-                      overviewRulerBorder: false,
-                      scrollbar: {
-                        vertical: "hidden",
-                        horizontal: "hidden",
-                      },
-                      fontSize: 12,
-                      padding: { top: 8, bottom: 8 },
-                    }}
-                  />
+                  <LiteEditor value={currentSQL.trim()} />
                 </InitialQueryEditor>
               </InitialQueryBox>
             </InitialQueryContainer>

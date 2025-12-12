@@ -1,34 +1,27 @@
 import React, { useEffect, useRef, useMemo, useState } from "react"
-import styled, { keyframes, useTheme } from "styled-components"
-import { DiffEditor, Editor } from "@monaco-editor/react"
+import styled, { css, keyframes, useTheme } from "styled-components"
+import { LiteEditor } from "../../../components/LiteEditor"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
 import { color } from "../../../utils"
 import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
-import {
-  QuestDBLanguageName,
-  normalizeQueryText,
-  createQueryKey,
-} from "../Monaco/utils"
-import { GaugeIcon } from "@phosphor-icons/react"
+import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
+import { GaugeIcon, CodeIcon, KeyReturnIcon } from "@phosphor-icons/react"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { Chat1 } from "@styled-icons/remix-line"
-import { File } from "@styled-icons/boxicons-regular"
 import { TableIcon } from "../../Schema/table-icon"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
 
-// Query status type for the run button
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
-// Play icon (neutral state) - matches cursorQueryGlyph default
 const PlayIcon = () => (
   <svg
     viewBox="0 0 24 24"
-    height="24px"
-    width="24px"
+    height="22px"
+    width="22px"
     fill="#50fa7b"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -41,8 +34,8 @@ const PlayIcon = () => (
 const SuccessIcon = () => (
   <svg
     viewBox="0 0 24 24"
-    height="24px"
-    width="24px"
+    height="22px"
+    width="22px"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -73,8 +66,8 @@ const SuccessIcon = () => (
 const ErrorIcon = () => (
   <svg
     viewBox="0 0 24 24"
-    height="24px"
-    width="24px"
+    height="22px"
+    width="22px"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -101,8 +94,8 @@ const LoadingIconSvg = () => (
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="white"
-    height="24px"
-    width="24px"
+    height="22px"
+    width="22px"
   >
     <path fill="none" d="M0 0h24v24H0z" />
     <path d="M12 2a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0V3a1 1 0 0 1 1-1zm0 15a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0v-3a1 1 0 0 1 1-1zm8.66-10a1 1 0 0 1-.366 1.366l-2.598 1.5a1 1 0 1 1-1-1.732l2.598-1.5A1 1 0 0 1 20.66 7zM7.67 14.5a1 1 0 0 1-.366 1.366l-2.598 1.5a1 1 0 1 1-1-1.732l2.598-1.5a1 1 0 0 1 1.366.366zM20.66 17a1 1 0 0 1-1.366.366l-2.598-1.5a1 1 0 0 1 1-1.732l2.598 1.5A1 1 0 0 1 20.66 17zM7.67 9.5a1 1 0 0 1-1.366.366l-2.598-1.5a1 1 0 1 1 1-1.732l2.598 1.5A1 1 0 0 1 7.67 9.5z" />
@@ -134,7 +127,7 @@ const LoadingIcon = () => (
 const ExpandUpDown = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    width="14"
+    width="9"
     height="16"
     viewBox="0 0 7 12"
     fill="none"
@@ -157,16 +150,16 @@ const MessagesContainer = styled(Box)`
   width: 100%;
 `
 
-const MessageBubble = styled(Box)`
+const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 1rem 1.2rem;
+  padding: 0.8rem;
   border-radius: 0.8rem;
-  max-width: 85%;
+  width: 100%;
   align-self: flex-end;
-  background: ${color("pinkDarker")};
-  border: 1px solid ${color("pinkDarker")};
+  background: ${color("loginBackground")};
+  border: 1px solid rgba(25, 26, 33, 0.32);
   flex-shrink: 0;
   overflow: visible;
 `
@@ -174,11 +167,12 @@ const MessageBubble = styled(Box)`
 const UserRequestBox = styled(Box)`
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 4px;
-  max-width: 85%;
+  gap: 1.2rem;
+  padding: 0.8rem;
+  width: 100%;
   align-self: flex-end;
-  background: ${color("pinkDarker")};
+  background: ${color("loginBackground")};
+  border: 1px solid rgba(25, 26, 33, 0.32);
   border-radius: 0.6rem;
   flex-shrink: 0;
   overflow: visible;
@@ -203,8 +197,6 @@ const UserRequestLabel = styled(Text)`
 const UserRequestContent = styled(Box)`
   display: flex;
   flex-direction: column;
-  background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
   border-radius: 0.6rem;
   overflow: hidden;
   flex-shrink: 0;
@@ -252,7 +244,7 @@ const ExplanationBox = styled(Box)`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-width: 100%;
+  width: 100%;
   align-self: flex-start;
   text-align: left;
   background: transparent;
@@ -297,7 +289,7 @@ const ExplanationContent = styled(Box)`
 
 const MarkdownContent = styled.div`
   margin: 0;
-  max-width: 100%;
+  width: 100%;
   font-family: ${({ theme }) => theme.font};
   font-size: 1.4rem;
   line-height: 2.1rem;
@@ -321,23 +313,6 @@ const MarkdownContent = styled.div`
     font-size: 1.3rem;
     color: ${color("purple")};
     white-space: pre-wrap;
-  }
-
-  pre {
-    background: ${color("background")};
-    border: 1px solid ${color("selection")};
-    border-radius: 0.6rem;
-    padding: 1rem;
-    overflow-x: auto;
-    margin: 1rem 0;
-
-    code {
-      background: none;
-      border: none;
-      padding: 0;
-      font-size: 1.2rem;
-      color: ${color("foreground")};
-    }
   }
 
   strong {
@@ -424,62 +399,50 @@ const MarkdownContent = styled.div`
   }
 `
 
-const DiffContainer = styled(Box)<{
-  $isAccepted?: boolean
-  $isRejected?: boolean
-  $isRejectedWithFollowUp?: boolean
-}>`
+const DiffContainer = styled(Box)`
   display: flex;
   flex-direction: column;
+  gap: 10px;
   margin-top: 1rem;
-  border: 1px solid
-    ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
-      if ($isRejected) return color("red")
-      if ($isRejectedWithFollowUp) return color("orangeDark")
-      if ($isAccepted) return color("greenDarker")
-      return color("selection")
-    }};
-  border-radius: 0.6rem;
-  overflow: hidden;
+  padding: 8px 12px;
+  border: 1px solid ${color("selection")};
+  border-radius: 8px;
   background: ${color("backgroundDarker")};
   width: 100%;
 `
 
-const DiffHeader = styled(Box)`
+const DiffHeader = styled(Box)<{ $isExpanded?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.6rem 0.8rem;
-  background: ${color("backgroundDarker")};
+  padding-bottom: 8px;
+  border-bottom: 1px solid ${color("selectionDarker")};
   width: 100%;
-  cursor: pointer;
-
-  &:hover {
-    background: rgba(68, 71, 90, 0.5);
-  }
+  ${({ $isExpanded }) =>
+    !$isExpanded &&
+    css`
+      border-bottom: 0;
+      padding-bottom: 0;
+    `}
 `
 
 const DiffHeaderLeft = styled(Box)`
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  color: ${color("foreground")};
+  gap: 1rem;
+  padding: 4px 0;
 `
 
-const DiffHeaderFileIcon = styled(File)`
-  color: ${color("gray2")};
-  flex-shrink: 0;
-`
-
-const DiffHeaderLabel = styled(Text)`
-  font-size: 1.2rem;
-  color: ${color("foreground")};
+const DiffHeaderLabel = styled.span`
+  font-size: 1.4rem;
+  color: ${color("offWhite")};
 `
 
 const DiffHeaderRight = styled(Box)`
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 1.8rem;
+  margin-left: auto;
 `
 
 const DiffHeaderStatus = styled(Box)<{
@@ -489,14 +452,14 @@ const DiffHeaderStatus = styled(Box)<{
 }>`
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.8rem;
   color: ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
     if ($isRejected) return color("red")
     if ($isRejectedWithFollowUp) return color("orangeDark")
-    if ($isAccepted) return color("green")
+    if ($isAccepted) return color("greenDarker")
     return color("gray2")
   }};
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 600;
 `
 
@@ -510,31 +473,33 @@ const StatusIcon = styled.span<{
   color: ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
     if ($isRejected) return color("red")
     if ($isRejectedWithFollowUp) return color("orangeDark")
-    if ($isAccepted) return color("green")
+    if ($isAccepted) return color("greenDarker")
     return color("gray2")
   }};
 `
 
-const ExpandIcon = styled.span`
-  display: flex;
-  align-items: center;
-  color: ${color("gray2")};
-  margin-right: 0.2rem;
-`
-
-const RunQueryButton = styled(Button)`
+const IconButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   background: transparent;
-  border-radius: 0.4rem;
-  color: ${color("foreground")};
+  border: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  height: 22px;
+  width: 22px;
+  color: ${color("gray2")};
 
-  &:active {
-    transform: scale(0.95);
+  &:hover {
+    svg {
+      filter: brightness(1.3);
+    }
   }
+`
+
+const ExpandButton = styled(IconButton)`
+  width: 16px;
+  height: 16px;
 `
 
 const DiffEditorWrapper = styled.div`
@@ -574,6 +539,11 @@ const DiffActions = styled(Box)`
   gap: 0.8rem;
   border-top: 1px solid ${color("selection")};
   background: ${color("backgroundDarker")};
+  width: 100%;
+`
+
+const CodeBlockWrapper = styled.div`
+  margin: 1rem 0;
   width: 100%;
 `
 
@@ -617,6 +587,8 @@ type ChatMessagesProps = {
     modified: string,
     queryKey: QueryKey,
   ) => void
+  // Apply SQL to editor without changing accepted/rejected state
+  onApplyToEditor?: (sql: string) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -626,6 +598,10 @@ type ChatMessagesProps = {
   queryStartOffset?: number
   // The queryKey for this conversation (for diff buffer linking)
   conversationQueryKey?: QueryKey
+  // Whether an AI operation is in progress
+  isOperationInProgress?: boolean
+  // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
+  editorSQL?: string
 }
 
 // Helper to get the appropriate icon based on query run status
@@ -649,11 +625,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onRejectChange,
   onRunQuery,
   onExpandDiff,
+  onApplyToEditor,
   running,
   aiSuggestionRequest,
   queryNotifications,
   queryStartOffset = 0,
   conversationQueryKey,
+  isOperationInProgress,
+  editorSQL,
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -702,12 +681,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     return count.toString()
   }
 
+  // Only scroll to bottom when there are new visible messages
+  // Hidden messages (like context messages for model) shouldn't trigger scroll
+  const visibleMessagesCount = useMemo(
+    () => messages.filter((m) => !m.hideFromUI).length,
+    [messages],
+  )
+
   useEffect(() => {
     setTimeout(
       () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
       50,
     )
-  }, [messages])
+  }, [visibleMessagesCount])
 
   // Pre-compute which diffs are accepted, rejected, and which is the latest unaccepted
   const diffStatuses = useMemo(() => {
@@ -861,32 +847,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   </UserRequestHeader>
                   <UserRequestContent>
                     <InlineSQLEditor style={{ height: editorHeight }}>
-                      <Editor
-                        height="100%"
-                        language={QuestDBLanguageName}
-                        value={displaySQL}
-                        theme="dracula"
-                        options={{
-                          readOnly: true,
-                          lineNumbers: "off",
-                          minimap: { enabled: false },
-                          scrollBeyondLastLine: false,
-                          folding: false,
-                          glyphMargin: false,
-                          lineDecorationsWidth: 0,
-                          lineNumbersMinChars: 0,
-                          renderLineHighlight: "none",
-                          overviewRulerLanes: 0,
-                          hideCursorInOverviewRuler: true,
-                          overviewRulerBorder: false,
-                          scrollbar: {
-                            vertical: "hidden",
-                            horizontal: "hidden",
-                          },
-                          fontSize: 12,
-                          padding: { top: 8, bottom: 8 },
-                        }}
-                      />
+                      <LiteEditor value={displaySQL} />
                     </InlineSQLEditor>
                   </UserRequestContent>
                 </UserRequestBox>
@@ -901,32 +862,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   </UserRequestHeader>
                   <UserRequestContent>
                     <InlineSQLEditor style={{ height: editorHeight }}>
-                      <Editor
-                        height="100%"
-                        language={QuestDBLanguageName}
-                        value={displaySQL}
-                        theme="dracula"
-                        options={{
-                          readOnly: true,
-                          lineNumbers: "off",
-                          minimap: { enabled: false },
-                          scrollBeyondLastLine: false,
-                          folding: false,
-                          glyphMargin: false,
-                          lineDecorationsWidth: 0,
-                          lineNumbersMinChars: 0,
-                          renderLineHighlight: "none",
-                          overviewRulerLanes: 0,
-                          hideCursorInOverviewRuler: true,
-                          overviewRulerBorder: false,
-                          scrollbar: {
-                            vertical: "hidden",
-                            horizontal: "hidden",
-                          },
-                          fontSize: 12,
-                          padding: { top: 8, bottom: 8 },
-                        }}
-                      />
+                      <LiteEditor value={displaySQL} />
                     </InlineSQLEditor>
                   </UserRequestContent>
                 </UserRequestBox>
@@ -1077,65 +1013,82 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                           <table {...props}>{children}</table>
                         </div>
                       ),
+                      // Render pre as fragment since code blocks are handled by code component
+                      pre: ({ children }: React.ComponentProps<"pre">) => (
+                        <>{children}</>
+                      ),
+                      code: ({
+                        children,
+                        className,
+                      }: React.ComponentProps<"code">) => {
+                        // Check if this is a code block (has language class) or inline code
+                        const isCodeBlock =
+                          typeof className === "string" &&
+                          className.includes("language-")
+                        if (isCodeBlock) {
+                          // Extract text content from children (can be string or array)
+                          const codeContent = (
+                            Array.isArray(children)
+                              ? children.join("")
+                              : typeof children === "string"
+                                ? children
+                                : ""
+                          ).replace(/\n$/, "")
+                          const lineCount = codeContent.split("\n").length
+                          // LiteEditor has 8px padding top and bottom (16px total)
+                          const editorHeight = Math.min(
+                            Math.max(lineCount * 20 + 16, 56),
+                            316,
+                          )
+                          return (
+                            <CodeBlockWrapper style={{ height: editorHeight }}>
+                              <LiteEditor value={codeContent} />
+                            </CodeBlockWrapper>
+                          )
+                        }
+                        // Inline code - render as default
+                        return <code>{children}</code>
+                      },
                     }}
                   >
                     {explanation}
                   </ReactMarkdown>
                 </MarkdownContent>
                 {hasSQLChange && (
-                  <DiffContainer
-                    $isAccepted={isAccepted}
-                    $isRejected={isRejected}
-                    $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                  >
-                    <DiffHeader
-                      onClick={() => {
-                        setExpandedDiffs((prev) => {
-                          const next = new Set(prev)
-                          if (next.has(originalIndex)) {
-                            next.delete(originalIndex)
-                          } else {
-                            next.add(originalIndex)
-                          }
-                          return next
-                        })
-                      }}
-                    >
+                  <DiffContainer>
+                    <DiffHeader $isExpanded={isExpanded}>
                       <DiffHeaderLeft>
-                        <DiffHeaderFileIcon size="18px" />
-                        <DiffHeaderLabel>SQL Changes</DiffHeaderLabel>
+                        <CodeIcon size={22} color="#BDBDBD" />
+                        <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
                       </DiffHeaderLeft>
-                      <DiffHeaderRight>
-                        {(isAccepted ||
-                          isRejected ||
-                          isRejectedWithFollowUp) && (
-                          <DiffHeaderStatus
+                      {(isAccepted || isRejected || isRejectedWithFollowUp) && (
+                        <DiffHeaderStatus
+                          $isAccepted={isAccepted}
+                          $isRejected={isRejected}
+                          $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                        >
+                          <StatusIcon
                             $isAccepted={isAccepted}
                             $isRejected={isRejected}
                             $isRejectedWithFollowUp={isRejectedWithFollowUp}
                           >
-                            <StatusIcon
-                              $isAccepted={isAccepted}
-                              $isRejected={isRejected}
-                              $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                            >
-                              {isRejected ? (
-                                <CloseOutline size="14px" />
-                              ) : isRejectedWithFollowUp ? (
-                                <Chat1 size="14px" />
-                              ) : (
-                                <CheckmarkOutline size="14px" />
-                              )}
-                            </StatusIcon>
-                            {isRejected
-                              ? "Rejected"
-                              : isRejectedWithFollowUp
-                                ? "Follow-up received"
-                                : "Accepted"}
-                          </DiffHeaderStatus>
-                        )}
-                        <RunQueryButton
-                          skin="transparent"
+                            {isRejected ? (
+                              <CloseOutline size="14px" />
+                            ) : isRejectedWithFollowUp ? (
+                              <Chat1 size="14px" />
+                            ) : (
+                              <CheckmarkOutline size="14px" />
+                            )}
+                          </StatusIcon>
+                          {isRejected
+                            ? "Rejected"
+                            : isRejectedWithFollowUp
+                              ? "Follow-up received"
+                              : "Accepted"}
+                        </DiffHeaderStatus>
+                      )}
+                      <DiffHeaderRight>
+                        <IconButton
                           onClick={(e) => {
                             e.stopPropagation()
                             if (message.sql && onRunQuery) {
@@ -1145,36 +1098,62 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                           title="Run this query"
                         >
                           {getQueryStatusIcon(queryRunStatus)}
-                        </RunQueryButton>
-                        <ExpandIcon>
+                        </IconButton>
+                        {/* Show Apply to Editor button only when:
+                            - accept/reject buttons are NOT shown
+                            - NOT the latest suggestion that is already accepted (would have no effect)
+                            - suggestion SQL differs from what's in editor (otherwise no effect)
+                        */}
+                        {!showButtons &&
+                          onApplyToEditor &&
+                          !(originalIndex === latestDiffIndex && isAccepted) &&
+                          normalizeQueryText(message.sql || "") !==
+                            normalizeQueryText(editorSQL || "") && (
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (message.sql && !isOperationInProgress) {
+                                  onApplyToEditor(message.sql)
+                                }
+                              }}
+                              title="Apply to editor"
+                              disabled={isOperationInProgress}
+                              style={{
+                                opacity: isOperationInProgress ? 0.5 : 1,
+                                cursor: isOperationInProgress
+                                  ? "not-allowed"
+                                  : "pointer",
+                              }}
+                            >
+                              <KeyReturnIcon size={22} color="#BDBDBD" />
+                            </IconButton>
+                          )}
+                        <ExpandButton
+                          title="Expand diff view"
+                          onClick={() => {
+                            setExpandedDiffs((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(originalIndex)) {
+                                next.delete(originalIndex)
+                              } else {
+                                next.add(originalIndex)
+                              }
+                              return next
+                            })
+                          }}
+                        >
                           <ExpandUpDown />
-                        </ExpandIcon>
+                        </ExpandButton>
                       </DiffHeaderRight>
                     </DiffHeader>
                     {isExpanded && (
                       <>
                         <DiffEditorWrapper>
-                          <DiffEditor
-                            height="100%"
-                            language={QuestDBLanguageName}
+                          <LiteEditor
+                            diffEditor
                             original={previousSQLForDiff}
                             modified={currentSQLForDiff}
-                            theme="dracula"
-                            options={{
-                              lineNumbers: "off",
-                              renderIndicators: false,
-                              renderOverviewRuler: false,
-                              hideCursorInOverviewRuler: true,
-                              automaticLayout: true,
-                              minimap: { enabled: false },
-                              scrollBeyondLastLine: false,
-                              readOnly: true,
-                              enableSplitViewResizing: false,
-                              renderSideBySide: false,
-                              originalEditable: false,
-                              fontSize: 12,
-                              lineHeight: 20,
-                            }}
+                            noBorder
                           />
                           {onExpandDiff && conversationQueryKey && (
                             <ExpandToEditorButton

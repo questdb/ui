@@ -1482,7 +1482,7 @@ Return a JSON object with the following structure: { "title": "Your title here" 
       })
       try {
         const parsed = JSON.parse(response.output_text) as { title: string }
-        return parsed.title?.slice(0, 40) || null
+        return parsed.title || null
       } catch {
         return null
       }
