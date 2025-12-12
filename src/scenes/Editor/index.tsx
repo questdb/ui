@@ -35,6 +35,7 @@ import styled from "styled-components"
 import { DiffEditor } from "@monaco-editor/react"
 
 import { PaneWrapper, Box, Button, Key } from "../../components"
+import { useKeyPress } from "../../hooks"
 
 import Monaco from "./Monaco"
 import { Tabs } from "./Monaco/tabs"
@@ -134,7 +135,7 @@ const ButtonBar = styled(Box)`
   justify-content: center;
   flex-shrink: 0;
   width: fit-content;
-  margin: 0 auto 1rem auto;
+  margin: 1rem auto;
   background: ${color("backgroundDarker")};
   border: 1px solid ${color("selection")};
   border-radius: 0.4rem;
@@ -343,18 +344,36 @@ const Editor = ({
     setActiveBuffer,
   ])
 
+  // Keyboard shortcut: Escape to reject diff
+  const escPressed = useKeyPress("Escape")
+  useEffect(() => {
+    if (escPressed && pendingDiffInfo) {
+      handleRejectFromDiffEditor()
+    }
+  }, [escPressed, pendingDiffInfo, handleRejectFromDiffEditor])
+
+  // Keyboard shortcut: Ctrl/Cmd+Enter to accept diff
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && pendingDiffInfo) {
+        e.preventDefault()
+        void handleAcceptFromDiffEditor()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [pendingDiffInfo, handleAcceptFromDiffEditor])
+
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
       <EditorLeftPane>
         <Tabs />
         <EditorContent>
           <EditorPane>
-            {/* Monaco editor - always mounted for editor view state, but UI hidden when diff/metrics is shown */}
-            {/* This ensures query execution logic stays active without mount/unmount issues */}
             {activeBuffer.editorViewState && (
               <Monaco executionRefs={executionRefs} hidden={isMonacoHidden} />
             )}
-            {/* Diff view - shown for AI suggestion diff buffers */}
             {activeBuffer.isDiffBuffer && activeBuffer.diffContent && (
               <DiffViewWrapper>
                 <DiffEditorContainer>

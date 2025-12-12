@@ -687,7 +687,11 @@ export const EditorProvider: React.FC = ({ children }) => {
       ],
     )
 
+    // Set cursor to beginning of the query and focus the editor
+    editorRef.current.setPosition(finalStartPosition)
     editorRef.current.revealPositionNearTop(finalStartPosition)
+    editorRef.current.focus()
+
     setTimeout(() => {
       finalModel.deltaDecorations(decorationId, [])
     }, 1000)

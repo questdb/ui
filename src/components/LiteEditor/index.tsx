@@ -1,9 +1,15 @@
-import React, { useRef } from "react"
+import React, { useRef, useState } from "react"
 import { Editor, DiffEditor } from "@monaco-editor/react"
 import { QuestDBLanguageName } from "../../scenes/Editor/Monaco/utils"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
+import { Button } from "../Button"
+import { FileCopy } from "@styled-icons/remix-line"
+import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
+import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
+  position: relative;
   padding: ${({ $noBorder }) => ($noBorder ? 0 : "0 1.2rem")};
   border-radius: 8px;
   border: ${({ $noBorder, theme }) =>
@@ -24,6 +30,12 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
 
   .view-lines {
     width: 100% !important;
+    pointer-events: none;
+  }
+
+  .current-line {
+    background: transparent !important;
+    border: 0 !important;
   }
 
   .margin {
@@ -37,6 +49,45 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   .scrollbar {
     display: none !important;
   }
+
+  .open-in-editor-btn {
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+  }
+
+  &:hover .open-in-editor-btn {
+    opacity: 1;
+  }
+`
+
+const OpenInEditorButton = styled(Button).attrs({ skin: "secondary" })`
+  gap: 1rem;
+  font-size: 1.2rem;
+`
+
+const SuccessIcon = styled(CheckboxCircle)`
+  position: absolute;
+  transform: translate(75%, -75%);
+  color: ${({ theme }) => theme.color.green};
+`
+
+const ButtonsContainer = styled.div`
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.2rem;
+  z-index: 10;
+`
+
+const CopyButton = styled(Button)`
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  color: #e5e7eb;
+  z-index: 10;
 `
 
 type BaseLiteEditorProps = {
@@ -61,18 +112,11 @@ type DiffEditorProps = BaseLiteEditorProps & {
   original: string
   modified: string
   value?: never
+  onExpandDiff?: () => void
 }
 
 type LiteEditorProps = RegularEditorProps | DiffEditorProps
 
-/**
- * A lightweight read-only Monaco editor optimized for displaying code.
- * All editing features, line numbers, minimap, glyph margin, and scrollbars are disabled.
- * Use this for read-only code display in chat windows, messages, etc.
- *
- * When `diffEditor` is true, renders a diff view with `original` and `modified` props.
- * Otherwise, renders a regular editor with `value` prop.
- */
 export const LiteEditor: React.FC<LiteEditorProps> = ({
   height = "100%",
   language = QuestDBLanguageName,
@@ -83,7 +127,15 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   noBorder,
   ...props
 }) => {
+  const appTheme = useTheme()
   const scrolledRef = useRef<boolean>(false)
+  const [copied, setCopied] = useState(false)
+  const handleCopy = (value: string) => {
+    void copyToClipboard(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   if (props.diffEditor) {
     return (
       <EditorWrapper
@@ -93,6 +145,29 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           ...(!noBorder ? { paddingTop: 8, paddingBottom: 8 } : undefined),
         }}
       >
+        <ButtonsContainer>
+          {props.onExpandDiff && (
+            <OpenInEditorButton
+              className="open-in-editor-btn"
+              onClick={props.onExpandDiff}
+              title="Open in editor"
+            >
+              Open in editor
+              <SquareSplitHorizontalIcon
+                size="1.8rem"
+                color={appTheme.color.offWhite}
+              />
+            </OpenInEditorButton>
+          )}
+          <Button
+            skin="transparent"
+            onClick={() => handleCopy(props.modified)}
+            title="Copy to clipboard"
+          >
+            {copied && <SuccessIcon size="1rem" />}
+            <FileCopy size="1.8rem" />
+          </Button>
+        </ButtonsContainer>
         <DiffEditor
           height={height}
           language={language}
@@ -141,6 +216,14 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
 
   return (
     <EditorWrapper $noBorder={noBorder} style={{ height }}>
+      <CopyButton
+        skin="transparent"
+        onClick={() => handleCopy(props.value ?? "")}
+        title="Copy to clipboard"
+      >
+        {copied && <SuccessIcon size="1rem" />}
+        <FileCopy size="1.8rem" />
+      </CopyButton>
       <Editor
         height={height}
         language={language}

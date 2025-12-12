@@ -508,38 +508,16 @@ const DiffEditorWrapper = styled.div`
   width: 100%;
 `
 
-const ExpandToEditorButton = styled.button`
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  z-index: 10;
+const ButtonBar = styled(Box)`
+  padding: 0.5rem;
+  gap: 1rem;
+  justify-content: center;
+  flex-shrink: 0;
+  width: fit-content;
+  margin: 0 auto;
   background: ${color("backgroundDarker")};
   border: 1px solid ${color("selection")};
-  border-radius: 4px;
-  color: ${color("foreground")};
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-
-  ${DiffEditorWrapper}:hover & {
-    opacity: 1;
-  }
-
-  &:hover {
-    background: ${color("selection")};
-  }
-`
-
-const DiffActions = styled(Box)`
-  display: flex;
-  align-items: stretch;
-  padding: 0.8rem;
-  gap: 0.8rem;
-  border-top: 1px solid ${color("selection")};
-  background: ${color("backgroundDarker")};
-  width: 100%;
+  border-radius: 0.4rem;
 `
 
 const CodeBlockWrapper = styled.div`
@@ -548,31 +526,27 @@ const CodeBlockWrapper = styled.div`
 `
 
 const AcceptButton = styled(Button)`
-  background: ${({ theme }) => theme.color.background};
+  background: ${({ theme }) => theme.color.pinkDarker};
   color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.greenDarker};
-  width: 100%;
+  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+  width: 10rem;
 
   &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.pink};
-    border-color: ${({ theme }) => theme.color.pink};
-    filter: brightness(1.1);
+    background: ${({ theme }) => theme.color.pinkDarker};
+    border-color: ${({ theme }) => theme.color.pinkDarker};
+    filter: brightness(1.2);
   }
 `
 
 const RejectButton = styled(Button)`
   background: ${color("background")};
   color: ${color("foreground")};
-  border: 0.1rem solid ${color("selection")};
-  width: 100%;
-  &:hover:not(:disabled) {
-    background: ${color("backgroundDarker")};
-    border-color: ${color("gray2")};
-  }
+  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+  width: 10rem;
 
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  &:hover:not(:disabled) {
+    background: ${color("selection")};
+    border-color: ${({ theme }) => theme.color.pinkDarker};
   }
 `
 
@@ -1154,25 +1128,20 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             original={previousSQLForDiff}
                             modified={currentSQLForDiff}
                             noBorder
+                            onExpandDiff={
+                              onExpandDiff && conversationQueryKey
+                                ? () =>
+                                    onExpandDiff(
+                                      message.previousSQL || "",
+                                      message.sql || "",
+                                      conversationQueryKey,
+                                    )
+                                : undefined
+                            }
                           />
-                          {onExpandDiff && conversationQueryKey && (
-                            <ExpandToEditorButton
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onExpandDiff(
-                                  message.previousSQL || "",
-                                  message.sql || "",
-                                  conversationQueryKey,
-                                )
-                              }}
-                              title="Open in editor"
-                            >
-                              Open in editor
-                            </ExpandToEditorButton>
-                          )}
                         </DiffEditorWrapper>
                         {showButtons && hasPendingDiff && (
-                          <DiffActions>
+                          <ButtonBar align="center" justifyContent="center">
                             {showRejectButton && onRejectChange && (
                               <RejectButton onClick={onRejectChange}>
                                 Reject
@@ -1185,7 +1154,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 Accept
                               </AcceptButton>
                             )}
-                          </DiffActions>
+                          </ButtonBar>
                         )}
                       </>
                     )}

@@ -1,11 +1,6 @@
-import React, {
-  useMemo,
-  useRef,
-  useEffect,
-  useContext,
-  useCallback,
-} from "react"
+import React, { useMemo, useRef, useContext, useCallback } from "react"
 import styled from "styled-components"
+import { Button } from "../../../components"
 import { Box } from "../../../components"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
@@ -79,26 +74,8 @@ const HeaderTitle = styled.div`
   font-size: 1.6rem;
 `
 
-const CloseButton = styled.button`
-  background: transparent;
-  border: none;
-  color: ${color("gray2")};
-  font-size: 1.8rem;
-  line-height: 1;
-  padding: 0.4rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 0.4rem;
-  transition: all 0.2s;
-
-  &:hover {
-    background: ${color("backgroundDarker")};
-    color: ${color("foreground")};
-  }
+const CloseButton = styled(Button).attrs({ skin: "transparent" })`
+  color: ${color("offWhite")};
 `
 
 const ChatWindowContent = styled.div`
@@ -216,19 +193,6 @@ export const AIChatWindow: React.FC = () => {
 
   const messages = useMemo(() => {
     return conversation?.messages || []
-  }, [conversation])
-
-  // Check if SQL has actually changed from the initial SQL
-  const hasSQLChanged = useMemo(() => {
-    if (!conversation) return false
-    const initial = (conversation.initialSQL || "").trim()
-    const current = (conversation.currentSQL || "").trim()
-    // If both are empty, no change
-    if (initial === "" && current === "") return false
-    // For generate flow, initial is empty but current has SQL - that's a change
-    if (initial === "" && current !== "") return true
-    // Otherwise, compare normalized SQL
-    return normalizeQueryText(initial) !== normalizeQueryText(current)
   }, [conversation])
 
   // Check if there's a pending diff that needs action
@@ -469,7 +433,6 @@ export const AIChatWindow: React.FC = () => {
 
   const handleAccept = async (
     normalizedSQL: string,
-    keepChatOpen: boolean = false,
     messageIndex?: number,
   ): Promise<QueryKey | undefined> => {
     if (!conversation) return undefined
@@ -482,9 +445,6 @@ export const AIChatWindow: React.FC = () => {
         finalQueryKey = applyChangesToActiveTab(normalizedSQL, { messageIndex })
         // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
         dispatch(actions.query.setAISuggestionRequest(null))
-        if (!keepChatOpen) {
-          closeChatWindow()
-        }
         return finalQueryKey
       }
 
@@ -494,9 +454,6 @@ export const AIChatWindow: React.FC = () => {
           messageIndex,
         })
         dispatch(actions.query.setAISuggestionRequest(null))
-        if (!keepChatOpen) {
-          closeChatWindow()
-        }
         return finalQueryKey
       }
 
@@ -508,9 +465,6 @@ export const AIChatWindow: React.FC = () => {
         finalQueryKey = applyChangesToActiveTab(normalizedSQL, { messageIndex })
         // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
         dispatch(actions.query.setAISuggestionRequest(null))
-        if (!keepChatOpen) {
-          closeChatWindow()
-        }
         return finalQueryKey
       }
     } catch (error) {
@@ -666,12 +620,6 @@ export const AIChatWindow: React.FC = () => {
     return undefined
   }
 
-  const handleReject = useCallback(() => {
-    // Clear any pending AI suggestion request
-    dispatch(actions.query.setAISuggestionRequest(null))
-    closeChatWindow()
-  }, [dispatch, closeChatWindow])
-
   const handleAcceptChange = async (messageIndex: number) => {
     if (!conversation || !chatWindowState.activeQueryKey) return
 
@@ -683,7 +631,7 @@ export const AIChatWindow: React.FC = () => {
 
     await closeDiffBufferForQuery(chatWindowState.activeQueryKey)
 
-    const finalQueryKey = await handleAccept(normalizedSQL, true, messageIndex)
+    const finalQueryKey = await handleAccept(normalizedSQL, messageIndex)
 
     // Add a hidden message to inform the model about the acceptance
     // Use the final query key returned by handleAccept
@@ -783,28 +731,6 @@ export const AIChatWindow: React.FC = () => {
     ],
   )
 
-  // Note: AI suggestions now create a separate diff buffer tab.
-  // The diff tab is closed when user clicks Accept, Reject, or closes the tab directly.
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        void handleReject()
-        return
-      }
-
-      // Only allow Cmd/Ctrl+Enter to accept if SQL has changed
-    }
-
-    if (chatWindowState.isOpen) {
-      document.addEventListener("keydown", handleKeyDown)
-      return () => {
-        document.removeEventListener("keydown", handleKeyDown)
-      }
-    }
-  }, [chatWindowState.isOpen, hasSQLChanged])
-
   if (!chatWindowState.isOpen || !conversation) {
     return null
   }
@@ -816,7 +742,7 @@ export const AIChatWindow: React.FC = () => {
           <SparkleIcon src="/assets/ai-sparkle.svg" alt="" />
           <HeaderTitle>{headerTitle}</HeaderTitle>
         </HeaderLeft>
-        <CloseButton onClick={handleReject} title="Close">
+        <CloseButton onClick={closeChatWindow} title="Close">
           ✕
         </CloseButton>
       </Header>
