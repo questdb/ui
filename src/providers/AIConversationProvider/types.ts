@@ -61,6 +61,8 @@ export type AIConversation = {
   // Query position in editor - for replacement on accept
   queryStartOffset?: number // Start offset of original query in editor
   queryEndOffset?: number // End offset of original query in editor
+  // Schema explanation data - cleared when conversation transitions to query generation
+  schemaData?: SchemaDisplayData
 }
 
 export type ChatWindowState = {

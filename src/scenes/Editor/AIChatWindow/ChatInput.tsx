@@ -7,7 +7,9 @@ import React, {
 } from "react"
 import styled, { css } from "styled-components"
 import { Box } from "../../../components"
+import { Text } from "../../../components/Text"
 import { color } from "../../../utils"
+import { ArrowUpIcon, CodeBlockIcon } from "@phosphor-icons/react"
 import { Stop as StopFill, CloseCircle } from "@styled-icons/remix-fill"
 import {
   useAIStatus,
@@ -17,19 +19,8 @@ import {
 import { slideAnimation, spinAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
 import type { QueryKey } from "../Monaco/utils"
-
-// Send arrow icon
-const SendArrowIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    width="18"
-    height="18"
-  >
-    <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-  </svg>
-)
+import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
+import { TableIcon } from "../../Schema/table-icon"
 
 // Gradient spinner icon (same as AIStatusIndicator)
 const CircleNotch = (props: React.SVGProps<SVGSVGElement>) => (
@@ -69,26 +60,31 @@ const InputContainer = styled(Box)`
   flex-direction: column;
   align-items: stretch;
   gap: 0.8rem;
-  padding: 0.5rem 1rem;
+  padding: 1rem 1.2rem;
   flex-shrink: 0;
   width: 100%;
   margin-top: auto;
+  border-top: 1px solid ${color("selection")};
 `
 
 const InputWrapper = styled(Box)`
   display: flex;
   position: relative;
   width: 100%;
+  overflow: hidden;
 `
 
-const StyledTextArea = styled.textarea`
+const StyledTextArea = styled.textarea<{ $hasContext: boolean }>`
   flex: 1;
-  min-height: 4rem;
-  max-height: 12rem;
+  min-height: 8rem;
+  max-height: 30rem;
   line-height: 1.3;
-  padding: 1rem 4.5rem 1rem 1.2rem;
+  padding: ${({ $hasContext }) =>
+    $hasContext
+      ? "4.4rem 4.5rem 1.2rem 1.2rem"
+      : "1.2rem 4.5rem 1.2rem 1.2rem"};
   background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
+  border: 1px solid ${color("pinkDarker")};
   border-radius: 0.6rem;
   color: ${color("foreground")};
   font-size: 1.4rem;
@@ -112,17 +108,63 @@ const StyledTextArea = styled.textarea`
 const ActionButton = styled.button`
   position: absolute;
   right: 0.8rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2.6rem;
-  height: 2.6rem;
-  border-radius: 50%;
+  bottom: 0.8rem;
+  padding: 0.6rem;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 0.4rem;
   cursor: pointer;
   transition: all 0.15s ease;
+`
+
+const ContextBadgeContainer = styled.div`
+  position: absolute;
+  padding: 0.8rem;
+  top: 1px;
+  border-radius: 0.6rem;
+  left: 1px;
+  width: calc(100% - 0.2rem);
+  display: inline-flex;
+  background: ${color("backgroundDarker")};
+`
+
+const ContextBadge = styled.div<{ $type: "sql" | "table" }>`
+  display: flex;
+  padding: 0.3rem 0.6rem;
+  align-items: center;
+  gap: 0.4rem;
+  line-height: 1.4;
+  border-radius: 0.6rem;
+  border: 1px solid ${color("selection")};
+  background: ${color("chatBackground")};
+  color: ${color("gray2")};
+  font-size: 1.3rem;
+  user-select: none;
+
+  ${({ $type }) =>
+    $type === "sql" &&
+    css`
+      transition: all 0.2s ease;
+      cursor: pointer;
+
+      &:hover {
+        border: 1px solid ${color("offWhite")};
+        color: ${color("offWhite")};
+      }
+    `}
+`
+
+const ContextBadgeIcon = styled.div`
+  display: flex;
+  align-items: center;
+  color: ${color("gray2")};
+  flex-shrink: 0;
+
+  svg {
+    color: ${color("gray2")};
+  }
 `
 
 const SendButton = styled(ActionButton)`
@@ -222,6 +264,16 @@ type ChatInputProps = {
   disabled?: boolean
   placeholder?: string
   queryKey?: QueryKey
+  contextSQL?: string
+  contextSchemaData?: SchemaDisplayData
+  onContextClick: () => void
+}
+
+const truncateText = (text: string, maxLength: number = 30): string => {
+  if (!text) return ""
+  const trimmed = text.trim().replace(/\s+/g, " ")
+  if (trimmed.length <= maxLength) return trimmed
+  return trimmed.slice(0, maxLength) + "..."
 }
 
 export type ChatInputHandle = {
@@ -235,11 +287,22 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       disabled = false,
       placeholder = "Ask a question or request a refinement...",
       queryKey,
+      contextSQL,
+      contextSchemaData,
+      onContextClick,
     },
     ref,
   ) => {
     const [input, setInput] = useState("")
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+    // Determine what to show in context badge
+    const contextText = contextSchemaData?.tableName
+      ? truncateText(contextSchemaData.tableName)
+      : contextSQL
+        ? truncateText(contextSQL)
+        : null
+    const hasContext = Boolean(contextText)
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -284,6 +347,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       // Shift+Enter -> allow default behavior (new line)
     }
 
+    const handleContextClickInternal = () => {
+      if (!contextSchemaData) {
+        onContextClick()
+      }
+    }
+
     const handleStop = () => {
       abortOperation()
     }
@@ -306,6 +375,31 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           </ThoughtStream>
         ) : (
           <InputWrapper>
+            {hasContext && (
+              <ContextBadgeContainer>
+                <ContextBadge
+                  role="presentation"
+                  onClick={handleContextClickInternal}
+                  $type={contextSchemaData ? "table" : "sql"}
+                >
+                  <ContextBadgeIcon>
+                    {contextSchemaData ? (
+                      <TableIcon
+                        isMaterializedView={contextSchemaData.isMatView}
+                        partitionBy={contextSchemaData.partitionBy}
+                        walEnabled={contextSchemaData.walEnabled}
+                        designatedTimestamp={
+                          contextSchemaData.designatedTimestamp
+                        }
+                      />
+                    ) : (
+                      <CodeBlockIcon size={14} weight="regular" />
+                    )}
+                  </ContextBadgeIcon>
+                  {contextText}
+                </ContextBadge>
+              </ContextBadgeContainer>
+            )}
             <StyledTextArea
               ref={textareaRef}
               value={input}
@@ -314,16 +408,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               placeholder={placeholder}
               disabled={disabled}
               rows={1}
+              $hasContext={hasContext}
             />
             <SendButton
               onClick={handleSend}
               disabled={!input.trim() || disabled}
               title="Send (Enter) • New line (Shift+Enter)"
             >
-              <SendArrowIcon />
+              <ArrowUpIcon size={20} weight="bold" />
             </SendButton>
           </InputWrapper>
         )}
+        <Text color="gray2" size="sm" align="center">
+          Chats are connected to a single query to improve responses.
+        </Text>
       </InputContainer>
     )
   },

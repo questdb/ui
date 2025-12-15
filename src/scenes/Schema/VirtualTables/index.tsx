@@ -310,6 +310,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       queryKey,
       initialSQL: "",
       originalQuery: schema,
+      schemaData: {
+        tableName,
+        isMatView,
+        partitionBy: item.partitionBy,
+        walEnabled: item.walEnabled,
+        designatedTimestamp: item.designatedTimestamp,
+      },
     })
 
     updateConversationName(queryKey, `${tableName} schema explanation`)

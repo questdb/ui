@@ -142,6 +142,7 @@ export const AIChatWindow: React.FC = () => {
     updateConversationQueryKey,
     updateConversationBufferId,
     updateConversationName,
+    updateConversationOffsets,
     acceptConversationChanges,
     rejectLatestChange,
     markLatestAsRejectedWithFollowUp,
@@ -529,6 +530,16 @@ export const AIChatWindow: React.FC = () => {
         normalizedSQL,
         currentExplanation,
       )
+      // Update query offsets from the apply result
+      if (result.queryStartOffset !== undefined) {
+        const normalizedQuery = normalizeQueryText(normalizedSQL)
+        const queryEndOffset = result.queryStartOffset + normalizedQuery.length
+        updateConversationOffsets(
+          result.finalQueryKey,
+          result.queryStartOffset,
+          queryEndOffset,
+        )
+      }
       if (!options?.skipAcceptState) {
         acceptConversationChanges(result.finalQueryKey, options?.messageIndex)
       }
@@ -539,6 +550,16 @@ export const AIChatWindow: React.FC = () => {
         normalizedSQL,
         currentExplanation,
       )
+      // Update query offsets from the apply result
+      if (result.queryStartOffset !== undefined) {
+        const normalizedQuery = normalizeQueryText(normalizedSQL)
+        const queryEndOffset = result.queryStartOffset + normalizedQuery.length
+        updateConversationOffsets(
+          chatWindowState.activeQueryKey,
+          result.queryStartOffset,
+          queryEndOffset,
+        )
+      }
       if (!options?.skipAcceptState) {
         acceptConversationChanges(
           chatWindowState.activeQueryKey,
@@ -599,7 +620,7 @@ export const AIChatWindow: React.FC = () => {
     )
 
     // Reveal the query
-    editorRef.current.revealPositionInCenter(startPosition)
+    editorRef.current.revealPositionNearTop(startPosition)
 
     // Remove decoration after 2 seconds
     setTimeout(() => {
@@ -612,6 +633,8 @@ export const AIChatWindow: React.FC = () => {
       updateConversationQueryKey(chatWindowState.activeQueryKey, finalQueryKey)
       updateConversationBufferId(finalQueryKey, newBuffer.id)
       updateConversationSQL(finalQueryKey, normalizedSQL, currentExplanation)
+      // Update query offsets for context badge navigation
+      updateConversationOffsets(finalQueryKey, queryStartOffset, queryEndOffset)
       if (!options?.skipAcceptState) {
         acceptConversationChanges(finalQueryKey, options?.messageIndex)
       }
@@ -678,6 +701,86 @@ export const AIChatWindow: React.FC = () => {
 
   // Handle applying SQL to editor without changing accepted/rejected state
   // This is used for already-accepted/rejected suggestions that user wants to re-apply
+  // Navigate to inactive buffer - returns true if successful
+  const navigateToBuffer = useCallback(async (): Promise<boolean> => {
+    if (
+      bufferStatus.type === "deleted" ||
+      bufferStatus.type === "archived" ||
+      bufferStatus.type === "none"
+    ) {
+      return false
+    }
+
+    try {
+      // Switch to the buffer if it's inactive
+      if (bufferStatus.type === "inactive" && bufferStatus.buffer) {
+        await setActiveBuffer(bufferStatus.buffer)
+        // Wait for the buffer to be set
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error navigating to buffer:", error)
+      return false
+    }
+  }, [bufferStatus, setActiveBuffer])
+
+  // Handle context badge click - navigate to query and highlight it
+  const handleContextClick = useCallback(async () => {
+    if (!conversation || !editorRef.current) return
+
+    const queryStartOffset = conversation.queryStartOffset
+    const queryEndOffset = conversation.queryEndOffset
+
+    if (queryStartOffset === undefined || queryEndOffset === undefined) return
+
+    // Navigate to the buffer first
+    const success = await navigateToBuffer()
+    if (!success) return
+
+    try {
+      const model = editorRef.current.getModel()
+      if (!model) return
+
+      // Get positions for revealing and highlighting
+      const startPosition = model.getPositionAt(queryStartOffset)
+      const endPosition = model.getPositionAt(queryEndOffset)
+
+      // Reveal the position in the center of the viewport
+      editorRef.current.revealPositionNearTop(startPosition)
+      editorRef.current.setPosition(startPosition)
+
+      // Apply highlighting decoration
+      const decorationIds = model.deltaDecorations(
+        [],
+        [
+          {
+            range: {
+              startLineNumber: startPosition.lineNumber,
+              startColumn: startPosition.column,
+              endLineNumber: endPosition.lineNumber,
+              endColumn: endPosition.column,
+            },
+            options: {
+              isWholeLine: false,
+              className: "aiQueryHighlight",
+            },
+          },
+        ],
+      )
+
+      editorRef.current.focus()
+
+      // Remove highlighting after 2 seconds
+      setTimeout(() => {
+        model.deltaDecorations(decorationIds, [])
+      }, 1000)
+    } catch (error) {
+      console.error("Error highlighting query:", error)
+    }
+  }, [conversation, editorRef, navigateToBuffer])
+
   const handleApplyToEditor = useCallback(
     async (sql: string) => {
       if (!conversation || !chatWindowState.activeQueryKey) return
@@ -701,8 +804,7 @@ export const AIChatWindow: React.FC = () => {
             skipAcceptState: true,
           })
         } else if (bufferStatus.type === "inactive" && bufferStatus.buffer) {
-          await setActiveBuffer(bufferStatus.buffer)
-          await new Promise((resolve) => setTimeout(resolve, 100))
+          await navigateToBuffer()
           finalQueryKey = applyChangesToActiveTab(normalizedSQL, {
             skipAcceptState: true,
           })
@@ -726,7 +828,7 @@ export const AIChatWindow: React.FC = () => {
       conversation,
       chatWindowState.activeQueryKey,
       bufferStatus,
-      setActiveBuffer,
+      navigateToBuffer,
       addMessage,
     ],
   )
@@ -792,6 +894,9 @@ export const AIChatWindow: React.FC = () => {
                 : undefined
             }
             queryKey={chatWindowState.activeQueryKey ?? undefined}
+            contextSQL={conversation?.acceptedSQL}
+            contextSchemaData={conversation?.schemaData}
+            onContextClick={handleContextClick}
           />
         </ChatPanel>
       </ChatWindowContent>

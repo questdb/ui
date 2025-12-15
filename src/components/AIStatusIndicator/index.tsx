@@ -605,8 +605,11 @@ export const AIStatusIndicator: React.FC = () => {
     if (statusRef.current === null && status !== null) {
       setIsClosed(false)
     }
+    if (status === null && chatWindowState.isOpen) {
+      clearOperation()
+    }
     statusRef.current = status
-  }, [status])
+  }, [status, chatWindowState.isOpen, clearOperation])
 
   if (
     !currentOperation ||

@@ -592,8 +592,21 @@ const MonacoEditor = ({
     setDropdownOpen(false)
     if (!query || !editorRef.current) return
 
+    const model = editorRef.current.getModel()
+    if (!model) return
+
     const queryText = query.selection ? query.selection.queryText : query.query
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
+
+    // Calculate query offsets for navigation
+    const queryStartOffset = model.getOffsetAt({
+      lineNumber: query.row + 1,
+      column: query.column,
+    })
+    const queryEndOffset = model.getOffsetAt({
+      lineNumber: query.endRow + 1,
+      column: query.endColumn,
+    })
 
     // Get or create conversation for this queryKey
     getOrCreateConversation({
@@ -601,6 +614,8 @@ const MonacoEditor = ({
       bufferId: activeBuffer.id,
       originalQuery: queryText,
       initialSQL: queryText,
+      queryStartOffset,
+      queryEndOffset,
     })
 
     // Open chat window for this queryKey

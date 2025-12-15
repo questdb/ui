@@ -184,10 +184,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       abortControllerRef.current?.abort()
       setAbortController(new AbortController())
       setStatus(AIOperationStatus.Aborted)
-      editorRef.current?.updateOptions({
-        readOnly: false,
-        readOnlyMessage: undefined,
-      })
     }
   }, [status, editorRef, setStatus])
 

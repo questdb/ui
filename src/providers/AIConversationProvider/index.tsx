@@ -3,8 +3,10 @@ import type {
   AIConversation,
   ConversationMessage,
   ChatWindowState,
+  SchemaDisplayData,
 } from "./types"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
+import { normalizeQueryText } from "../../scenes/Editor/Monaco/utils"
 
 type AIConversationContextType = {
   conversations: Map<QueryKey, AIConversation>
@@ -20,6 +22,7 @@ type AIConversationContextType = {
     initialExplanation?: string
     queryStartOffset?: number
     queryEndOffset?: number
+    schemaData?: SchemaDisplayData
   }) => AIConversation
   addMessage: (queryKey: QueryKey, message: ConversationMessage) => void
   updateConversationSQL: (
@@ -42,6 +45,11 @@ type AIConversationContextType = {
     bufferId: number | string | undefined,
   ) => void
   updateConversationName: (queryKey: QueryKey, name: string) => void
+  updateConversationOffsets: (
+    queryKey: QueryKey,
+    queryStartOffset: number,
+    queryEndOffset: number,
+  ) => void
   acceptConversationChanges: (
     queryKey: QueryKey,
     upToMessageIndex?: number,
@@ -91,6 +99,7 @@ export const AIConversationProvider: React.FC<{
       initialExplanation?: string
       queryStartOffset?: number
       queryEndOffset?: number
+      schemaData?: SchemaDisplayData
     }): AIConversation => {
       const existing = conversations.get(options.queryKey)
       if (existing) {
@@ -113,6 +122,7 @@ export const AIConversationProvider: React.FC<{
         hasPendingDiff: false,
         queryStartOffset: options.queryStartOffset,
         queryEndOffset: options.queryEndOffset,
+        schemaData: options.schemaData,
       }
 
       setConversations((prev) => {
@@ -194,24 +204,38 @@ export const AIConversationProvider: React.FC<{
           // Track previous SQL only if this message contains SQL changes
           // (message.sql will be undefined if no SQL change, due to conditional spreading)
           const hasSQLChange = message.sql !== undefined
+
+          // Check if the SQL actually changed from what's accepted in the editor
+          // Normalize both for comparison to avoid whitespace/formatting differences
+          const normalizedNewSQL = hasSQLChange ? normalizeQueryText(sql) : ""
+          const normalizedAcceptedSQL = conv.acceptedSQL
+            ? normalizeQueryText(conv.acceptedSQL)
+            : ""
+          const sqlActuallyChanged =
+            hasSQLChange && normalizedNewSQL !== normalizedAcceptedSQL
+
           // Use acceptedSQL as previousSQL for diff display
           // This ensures the diff shows "what's in editor" vs "what model suggests"
           // rather than "previous suggestion" vs "new suggestion"
-          const previousSQL = hasSQLChange ? conv.acceptedSQL : undefined
+          const previousSQL = sqlActuallyChanged ? conv.acceptedSQL : undefined
 
           // Mark previous assistant messages as non-rejectable if this is a new SQL change
           const updatedMessages = conv.messages.map((msg) => {
-            if (msg.role === "assistant" && msg.isRejectable && hasSQLChange) {
+            if (
+              msg.role === "assistant" &&
+              msg.isRejectable &&
+              sqlActuallyChanged
+            ) {
               return { ...msg, isRejectable: false }
             }
             return msg
           })
 
-          // Add new message with previousSQL and isRejectable flag (only if SQL change exists)
+          // Add new message with previousSQL and isRejectable flag (only if SQL actually changed)
           const messageWithHistory: ConversationMessage = {
             ...message,
             previousSQL,
-            isRejectable: hasSQLChange,
+            isRejectable: sqlActuallyChanged,
           }
 
           next.set(queryKey, {
@@ -221,8 +245,10 @@ export const AIConversationProvider: React.FC<{
             currentSQL: hasSQLChange ? sql : conv.currentSQL,
             currentExplanation: explanation,
             updatedAt: Date.now(),
-            // Set pending diff if there's a SQL change
-            hasPendingDiff: hasSQLChange ? true : conv.hasPendingDiff,
+            // Set pending diff only if SQL actually changed from acceptedSQL
+            hasPendingDiff: sqlActuallyChanged ? true : conv.hasPendingDiff,
+            // Clear schemaData when conversation transitions to having SQL (schema→query)
+            ...(hasSQLChange ? { schemaData: undefined } : {}),
           })
         }
         return next
@@ -290,6 +316,25 @@ export const AIConversationProvider: React.FC<{
           next.set(queryKey, {
             ...conv,
             conversationName: name,
+            updatedAt: Date.now(),
+          })
+        }
+        return next
+      })
+    },
+    [],
+  )
+
+  const updateConversationOffsets = useCallback(
+    (queryKey: QueryKey, queryStartOffset: number, queryEndOffset: number) => {
+      setConversations((prev) => {
+        const next = new Map(prev)
+        const conv = next.get(queryKey)
+        if (conv) {
+          next.set(queryKey, {
+            ...conv,
+            queryStartOffset,
+            queryEndOffset,
             updatedAt: Date.now(),
           })
         }
@@ -492,6 +537,7 @@ export const AIConversationProvider: React.FC<{
         updateConversationQueryKey,
         updateConversationBufferId,
         updateConversationName,
+        updateConversationOffsets,
         acceptConversationChanges,
         rejectLatestChange,
         markLatestAsRejectedWithFollowUp,
