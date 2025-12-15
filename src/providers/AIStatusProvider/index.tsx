@@ -76,6 +76,7 @@ type BaseAIStatusContextType = {
   models: string[]
   currentOperation: OperationHistory
   activeQueryKey: QueryKey | null
+  clearOperation: () => void
 }
 
 export type AIStatusContextType =
@@ -148,23 +149,31 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
 
   const setStatus = useCallback(
     (newStatus: AIOperationStatus | null, args?: StatusArgs) => {
-      setStatusState(newStatus)
-
-      if (newStatus === null) {
-        if (currentOperationRef.current.length > 0) {
-          currentOperationRef.current = []
-          setCurrentOperation([])
-        }
-      } else {
-        currentOperationRef.current.push({
+      if (newStatus !== null) {
+        const statusPayload = {
           type: newStatus,
           args: args || undefined,
-        })
-        setCurrentOperation([...currentOperationRef.current])
+        }
+        if (
+          statusRef.current === null ||
+          statusRef.current === AIOperationStatus.Aborted
+        ) {
+          currentOperationRef.current = [statusPayload]
+        } else {
+          currentOperationRef.current.push(statusPayload)
+        }
       }
+      setCurrentOperation([...currentOperationRef.current])
+      statusRef.current = newStatus
+      setStatusState(newStatus)
     },
     [],
   )
+
+  const clearOperation = useCallback(() => {
+    currentOperationRef.current = []
+    setCurrentOperation([])
+  }, [])
 
   const abortOperation = useCallback(() => {
     if (
@@ -188,13 +197,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         currentOperationRef.current = []
         setCurrentOperation([])
         setStatus(null)
-      }, 1000)
+      }, 2000)
     } else if (
       status !== AIOperationStatus.Aborted &&
       timeoutRef.current !== null
     ) {
-      currentOperationRef.current = []
-      setCurrentOperation([])
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
@@ -205,10 +212,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   }, [abortController])
 
   useEffect(() => {
-    statusRef.current = status
-  }, [status])
-
-  useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
@@ -216,8 +219,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     }
   }, [])
 
-  // Derive activeQueryKey from the first operation entry that has queryKey
-  // (queryKey is set at the start of an operation, internal status updates don't have it)
   const activeQueryKey =
     currentOperation.find((entry) => entry.args?.queryKey)?.args?.queryKey ??
     null
@@ -228,6 +229,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         setStatus,
         abortController,
         abortOperation,
+        clearOperation,
         isConfigured: true,
         canUse,
         hasSchemaAccess: hasSchemaAccessValue,
@@ -242,6 +244,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         setStatus,
         abortController,
         abortOperation,
+        clearOperation,
         isConfigured: false,
         canUse: false,
         hasSchemaAccess: hasSchemaAccessValue,

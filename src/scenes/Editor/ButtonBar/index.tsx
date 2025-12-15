@@ -1,10 +1,8 @@
 import React, { useCallback, useState, useEffect, useRef } from "react"
 import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
-import { Stop, Loader3 } from "@styled-icons/remix-line"
-import { Stop as StopFill } from "@styled-icons/remix-fill"
+import { Stop } from "@styled-icons/remix-line"
 import { Key } from "../../../components"
-import { CloseOutline } from "@styled-icons/evaicons-outline"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
 import {
   Box,
@@ -12,19 +10,12 @@ import {
   ExplainQueryButton,
   GenerateSQLButton,
   PopperToggle,
-  slideAnimation,
-  spinAnimation,
 } from "../../../components"
 import { FixQueryButton } from "./FixQueryButton"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
-import {
-  useAIStatus,
-  AIOperationStatus,
-  isBlockingAIStatus,
-} from "../../../providers/AIStatusProvider"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
 import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
@@ -60,26 +51,6 @@ const ButtonBarWrapper = styled.div<{
           align-items: center;
           margin: 0 2.4rem;
         `}
-`
-
-const StatusIndicator = styled.div<{ $aborted: boolean; $loading: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: ${color("gray2")};
-  ${({ $aborted }) =>
-    $aborted &&
-    css`
-      color: ${color("red")};
-    `}
-
-  ${({ $loading }) => $loading && slideAnimation}
-`
-
-const StatusLoader = styled(Loader3)`
-  width: 2rem;
-  color: ${color("pink")};
-  ${spinAnimation};
 `
 
 const ButtonGroup = styled.div`
@@ -153,26 +124,6 @@ const StopButton = styled(Button)`
   }
 `
 
-const AIStopButton = styled(Button)`
-  width: 2.2rem;
-  height: 2.2rem;
-  flex-shrink: 0;
-  border-radius: 100%;
-  background: #da152832;
-  border: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-
-  &:hover {
-    background: ${({ theme }) => theme.color.red} !important;
-    svg {
-      color: ${({ theme }) => theme.color.foreground};
-    }
-  }
-`
-
 const MainRunButton = styled(SuccessButton)`
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
@@ -230,12 +181,10 @@ const ButtonBar = ({
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const { status: aiStatus, canUse, abortOperation } = useAIStatus()
-  const { chatWindowState } = useAIConversation()
+  const { canUse } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
   const aiAssistantEnabled = canUse
-  const isChatWindowOpen = chatWindowState.isOpen
 
   const hasQueryError =
     activeNotification?.type === "error" && !activeNotification?.isExplain
@@ -452,27 +401,6 @@ const ButtonBar = ({
       <ExplainQueryButton />
       {hasQueryError && queriesToRun.length === 1 && (
         <FixQueryButton executionRefs={executionRefs} />
-      )}
-      {aiStatus && !isChatWindowOpen && (
-        <StatusIndicator
-          $aborted={aiStatus === AIOperationStatus.Aborted}
-          $loading={isBlockingAIStatus(aiStatus)}
-        >
-          {aiStatus === AIOperationStatus.Aborted ? (
-            <CloseOutline size="18px" />
-          ) : (
-            <StatusLoader />
-          )}
-          {aiStatus}
-          {isBlockingAIStatus(aiStatus) && (
-            <AIStopButton
-              title="Cancel current operation"
-              onClick={abortOperation}
-            >
-              <StopFill size="14px" color="#da1e28" />
-            </AIStopButton>
-          )}
-        </StatusIndicator>
       )}
       {running === RunningType.SCRIPT
         ? renderRunScriptButton()

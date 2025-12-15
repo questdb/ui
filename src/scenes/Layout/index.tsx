@@ -29,6 +29,7 @@ import Console from "../Console"
 import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
+import { AIStatusIndicator } from "../../components/AIStatusIndicator"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import News from "../../scenes/News"
@@ -111,7 +112,7 @@ const Layout = () => {
               <Page>
                 <Console />
               </Page>
-              {/* <AIStatusIndicator /> */}
+              <AIStatusIndicator />
             </Main>
 
             <Drawer id="side-panel-right" />

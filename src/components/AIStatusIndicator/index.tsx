@@ -1,18 +1,26 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import styled, { css } from "styled-components"
-import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
+import {
+  CheckboxCircle,
+  CloseCircle,
+  Stop as StopFill,
+} from "@styled-icons/remix-fill"
 import { FileText, Table } from "@styled-icons/remix-line"
+import { SidebarSimpleIcon, XIcon } from "@phosphor-icons/react"
 import { ChevronDown, ChevronRight } from "@styled-icons/boxicons-solid"
 import {
   useAIStatus,
   AIOperationStatus,
   StatusArgs,
+  isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
 import { slideAnimation, spinAnimation } from "../Animation"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import { pinkLinearGradientHorizontal } from "../../theme"
 import { MODEL_OPTIONS } from "../../utils/aiAssistantSettings"
+import { useAIConversation } from "../../providers/AIConversationProvider"
+import { Button } from "../../components/Button"
 
 const CircleNotch = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -81,7 +89,7 @@ const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => (
 const Container = styled.div`
   position: absolute;
   bottom: 2rem;
-  left: 2rem;
+  right: 2rem;
   width: 38.3rem;
   background: ${color("backgroundDarker")};
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -108,6 +116,20 @@ const ChatStreaming = styled.div`
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
+`
+
+const CloseButton = styled(Button).attrs({ skin: "transparent" })`
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  flex-shrink: 0;
+
+  &:hover {
+    background: transparent !important;
+    svg {
+      color: ${color("foreground")};
+    }
+  }
 `
 
 const ChatStreamingOverlay = styled.div`
@@ -218,7 +240,7 @@ const HeaderLeft = styled.div`
   flex: 1 0 0;
   gap: 1rem;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
   min-width: 0;
 `
@@ -234,12 +256,33 @@ const WorkingText = styled.div`
   font-size: 1.6rem;
   color: ${color("foreground")};
   text-transform: uppercase;
-  flex: 1 0 0;
-  min-height: 0;
-  min-width: 0;
 `
 
-const ChevronButton = styled.button`
+const AIStopButton = styled(Button)`
+  width: 2.2rem;
+  height: 2.2rem;
+  flex-shrink: 0;
+  border-radius: 100%;
+  background: #da152832;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.red} !important;
+    svg {
+      color: ${({ theme }) => theme.color.foreground};
+    }
+  }
+`
+
+const ViewChatButton = styled(Button).attrs({ skin: "transparent" })`
+  gap: 1rem;
+`
+
+const ChevronButton = styled(Button).attrs({ skin: "transparent" })`
   background: none;
   border: none;
   padding: 0;
@@ -250,9 +293,11 @@ const ChevronButton = styled.button`
   width: 2.4rem;
   height: 2.4rem;
   flex-shrink: 0;
+  margin-right: 1rem;
   color: ${color("foreground")};
 
   &:hover {
+    background: transparent !important;
     svg {
       filter: brightness(1.2);
     }
@@ -466,13 +511,25 @@ const getIsExpandableSection = (section: OperationSection) => {
 }
 
 export const AIStatusIndicator: React.FC = () => {
-  const { status, currentOperation, currentModel } = useAIStatus()
+  const {
+    status,
+    currentOperation,
+    currentModel,
+    abortOperation,
+    activeQueryKey,
+    clearOperation,
+  } = useAIStatus()
+  const { chatWindowState, openChatWindow } = useAIConversation()
   const [expanded, setExpanded] = useState(true)
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({})
+  const [isClosed, setIsClosed] = useState(false)
+  const isCompleted = status === null && currentOperation.length > 0
+  const isAborted = status === AIOperationStatus.Aborted
   const assistantModesRef = useRef<HTMLDivElement | null>(null)
-
+  const isChatWindowOpen = chatWindowState.isOpen
+  const statusRef = useRef<AIOperationStatus | null>(null)
   const hasExtendedThinking = useMemo(() => {
     return MODEL_OPTIONS.find((model) => model.value === currentModel)?.isSlow
   }, [currentModel])
@@ -526,6 +583,13 @@ export const AIStatusIndicator: React.FC = () => {
     }))
   }
 
+  const handleClose = () => {
+    if (isCompleted) {
+      clearOperation()
+    }
+    setIsClosed(true)
+  }
+
   useEffect(() => {
     if (expanded) {
       setTimeout(() =>
@@ -537,7 +601,19 @@ export const AIStatusIndicator: React.FC = () => {
     }
   }, [operationSections, expanded])
 
-  if (!currentOperation || currentOperation.length === 0) {
+  useEffect(() => {
+    if (statusRef.current === null && status !== null) {
+      setIsClosed(false)
+    }
+    statusRef.current = status
+  }, [status])
+
+  if (
+    !currentOperation ||
+    currentOperation.length === 0 ||
+    isClosed ||
+    isChatWindowOpen
+  ) {
     return null
   }
 
@@ -573,8 +649,22 @@ export const AIStatusIndicator: React.FC = () => {
         <HeaderLeft>
           <SparkleIcon src="/assets/ai-sparkle.svg" alt="AI Sparkle" />
           <WorkingText>
-            {status === AIOperationStatus.Aborted ? "Cancelled" : "Working..."}
+            {isAborted ? "Cancelled" : isCompleted ? "Completed" : "Working..."}
           </WorkingText>
+          {isBlockingAIStatus(status) && (
+            <AIStopButton
+              title="Cancel current operation"
+              onClick={abortOperation}
+            >
+              <StopFill size="14px" color="#da1e28" />
+            </AIStopButton>
+          )}
+          {activeQueryKey && (
+            <ViewChatButton onClick={() => openChatWindow(activeQueryKey)}>
+              View chat
+              <SidebarSimpleIcon size={14} weight="fill" />
+            </ViewChatButton>
+          )}
         </HeaderLeft>
         <ChevronButton onClick={handleToggleExpand} type="button">
           {expanded ? (
@@ -583,6 +673,11 @@ export const AIStatusIndicator: React.FC = () => {
             <CaretGradient />
           )}
         </ChevronButton>
+        {!isAborted && (
+          <CloseButton skin="transparent" onClick={handleClose}>
+            <XIcon size={16} weight="bold" />
+          </CloseButton>
+        )}
       </Header>
 
       {hasExtendedThinking && (

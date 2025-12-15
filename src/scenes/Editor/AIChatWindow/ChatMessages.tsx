@@ -5,11 +5,18 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
 import { color } from "../../../utils"
-import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
+import type {
+  ConversationMessage,
+  UserMessageDisplayType,
+} from "../../../providers/AIConversationProvider/types"
 import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
-import { GaugeIcon, CodeIcon, KeyReturnIcon } from "@phosphor-icons/react"
+import {
+  GaugeIcon,
+  CodeIcon,
+  KeyReturnIcon,
+  ChatDotsIcon,
+} from "@phosphor-icons/react"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
-import { Chat1 } from "@styled-icons/remix-line"
 import { TableIcon } from "../../Schema/table-icon"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
@@ -167,7 +174,7 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
 const UserRequestBox = styled(Box)`
   display: flex;
   flex-direction: column;
-  gap: 1.2rem;
+  gap: 0.5rem;
   padding: 0.8rem;
   width: 100%;
   align-self: flex-end;
@@ -187,13 +194,6 @@ const UserRequestHeader = styled(Box).attrs({
   flex: 1 0 auto;
 `
 
-const UserRequestLabel = styled(Text)`
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.4rem;
-  color: ${color("foreground")};
-  line-height: 1;
-`
-
 const UserRequestContent = styled(Box)`
   display: flex;
   flex-direction: column;
@@ -208,14 +208,49 @@ const InlineSQLEditor = styled.div`
   width: 100%;
 `
 
-const DescriptionText = styled(Text)`
-  font-size: 1.4rem;
-  line-height: 2rem;
-  color: ${color("foreground")};
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  padding: 1rem;
+// Operation Badge components for fix/explain/generate/schema requests
+const OperationBadge = styled(Box).attrs({
+  gap: "1rem",
+  alignItems: "center",
+})`
   width: 100%;
+  padding: 0 0.4rem;
+`
+
+const BadgeIconContainer = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  background: #290a13;
+  border: 1px solid rgba(122, 31, 58, 0.64);
+  border-radius: 0.4rem;
+  padding: 0.8rem;
+  width: 4.8rem;
+  height: 4rem;
+  flex-shrink: 0;
+`
+
+const BadgeIcon = styled.img`
+  width: 1.8rem;
+  height: 1.8rem;
+`
+
+const BadgeTitle = styled(Text)`
+  font-weight: 500;
+  font-size: 1.6rem;
+  line-height: 1.6rem;
+  color: ${color("foreground")};
+`
+
+const BadgeDescriptionContainer = styled(Box)`
+  padding: 0.8rem;
+  width: 100%;
+`
+
+const BadgeDescriptionText = styled(Text)`
+  font-size: 1.4rem;
+  line-height: 2.1rem;
+  color: ${color("foreground")};
 `
 
 const SchemaNameDisplay = styled(Box)`
@@ -252,6 +287,19 @@ const ExplanationBox = styled(Box)`
   border-radius: 0.6rem;
   flex-shrink: 0;
   overflow: visible;
+
+  .assistant-label,
+  .token-display {
+    transition: opacity 0.2s;
+    opacity: 0;
+  }
+
+  &:hover {
+    .assistant-label,
+    .token-display {
+      opacity: 1;
+    }
+  }
 `
 
 const AssistantHeader = styled(Box).attrs({
@@ -269,12 +317,18 @@ const SparkleIcon = styled.img`
   flex-shrink: 0;
 `
 
-const AssistantLabel = styled(Text)`
+const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.4rem;
   text-transform: uppercase;
   color: ${color("foreground")};
   line-height: 1;
+`
+
+const TokenDisplay = styled(Box).attrs({ className: "token-display" })`
+  align-items: center;
+  gap: 0.9rem;
+  margin: 0 0 0 auto;
 `
 
 const ExplanationContent = styled(Box)`
@@ -455,12 +509,11 @@ const DiffHeaderStatus = styled(Box)<{
   gap: 0.8rem;
   color: ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
     if ($isRejected) return color("red")
-    if ($isRejectedWithFollowUp) return color("orangeDark")
+    if ($isRejectedWithFollowUp) return color("cyan")
     if ($isAccepted) return color("greenDarker")
     return color("gray2")
   }};
   font-size: 1.3rem;
-  font-weight: 600;
 `
 
 const StatusIcon = styled.span<{
@@ -472,7 +525,7 @@ const StatusIcon = styled.span<{
   align-items: center;
   color: ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
     if ($isRejected) return color("red")
-    if ($isRejectedWithFollowUp) return color("orangeDark")
+    if ($isRejectedWithFollowUp) return color("cyan")
     if ($isAccepted) return color("greenDarker")
     return color("gray2")
   }};
@@ -576,6 +629,42 @@ type ChatMessagesProps = {
   isOperationInProgress?: boolean
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
   editorSQL?: string
+}
+
+const getOperationBadgeInfo = (
+  displayType: UserMessageDisplayType,
+  displayDescription?: string,
+): { icon: string; title: string; description?: string } | null => {
+  switch (displayType) {
+    case "fix_request":
+      return {
+        icon: "/assets/icon-fix-queries.svg",
+        title: "Fix Query",
+        description:
+          "Help me debug and fix the error with the attached SQL query",
+      }
+    case "explain_request":
+      return {
+        icon: "/assets/icon-explain-queries.svg",
+        title: "Explain Query",
+        description: "Explain this query in detail",
+      }
+    case "generate_request":
+      return {
+        icon: "/assets/icon-generate-queries.svg",
+        title: "Generate Query",
+        description:
+          displayDescription || "Generating a query from your description",
+      }
+    case "schema_explain_request": {
+      return {
+        icon: "/assets/icon-explain-schema.svg",
+        title: "Explain Schema",
+      }
+    }
+    default:
+      return null
+  }
 }
 
 // Helper to get the appropriate icon based on query run status
@@ -754,16 +843,23 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
           // Handle generate_request type (shows description instead of SQL)
           if (displayType === "generate_request" && displayDescription) {
+            const badgeInfo = getOperationBadgeInfo(
+              "generate_request",
+              displayDescription,
+            )
             return (
               <UserRequestBox key={key}>
-                <UserRequestHeader>
-                  <UserRequestLabel>
-                    Generate query with description
-                  </UserRequestLabel>
-                </UserRequestHeader>
-                <UserRequestContent>
-                  <DescriptionText>{displayDescription}</DescriptionText>
-                </UserRequestContent>
+                <OperationBadge>
+                  <BadgeIconContainer>
+                    <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
+                  </BadgeIconContainer>
+                  <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
+                </OperationBadge>
+                <BadgeDescriptionContainer>
+                  <BadgeDescriptionText>
+                    {displayDescription}
+                  </BadgeDescriptionText>
+                </BadgeDescriptionContainer>
               </UserRequestBox>
             )
           }
@@ -773,15 +869,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             message.displaySchemaData
           ) {
             const schemaData = message.displaySchemaData
+            const badgeInfo = getOperationBadgeInfo("schema_explain_request")
             return (
               <UserRequestBox key={key}>
-                <UserRequestHeader>
-                  <UserRequestLabel>
-                    Requested explanation for{" "}
-                    {schemaData.isMatView ? "materialized view" : "table"}{" "}
-                    schema
-                  </UserRequestLabel>
-                </UserRequestHeader>
+                <OperationBadge>
+                  <BadgeIconContainer>
+                    <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
+                  </BadgeIconContainer>
+                  <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
+                </OperationBadge>
                 <UserRequestContent>
                   <SchemaNameDisplay>
                     <TableIcon
@@ -798,27 +894,26 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           }
 
           if (displayType && displaySQL) {
-            // Get display label based on type
-            const displayLabel =
-              displayType === "fix_request"
-                ? "Requested fix for the query"
-                : displayType === "explain_request"
-                  ? "Requested explanation for the query"
-                  : null // ask_request shows user's question directly
-
             // Calculate editor height based on SQL content
             const lineCount = displaySQL.split("\n").length
             const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
 
-            // Special handling for ask_request: show user's question above SQL
-            if (displayType === "ask_request") {
-              const userQuestion = message.displayUserMessage || message.content
-
+            // Handle fix_request with badge
+            if (displayType === "fix_request") {
+              const badgeInfo = getOperationBadgeInfo("fix_request")
               return (
                 <UserRequestBox key={key}>
-                  <UserRequestHeader>
-                    <MessageContent>{userQuestion}</MessageContent>
-                  </UserRequestHeader>
+                  <OperationBadge>
+                    <BadgeIconContainer>
+                      <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
+                    </BadgeIconContainer>
+                    <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
+                  </OperationBadge>
+                  <BadgeDescriptionContainer>
+                    <BadgeDescriptionText>
+                      {badgeInfo?.description}
+                    </BadgeDescriptionText>
+                  </BadgeDescriptionContainer>
                   <UserRequestContent>
                     <InlineSQLEditor style={{ height: editorHeight }}>
                       <LiteEditor value={displaySQL} />
@@ -828,11 +923,39 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               )
             }
 
-            if (displayLabel) {
+            // Handle explain_request with badge
+            if (displayType === "explain_request") {
+              const badgeInfo = getOperationBadgeInfo("explain_request")
+              return (
+                <UserRequestBox key={key}>
+                  <OperationBadge>
+                    <BadgeIconContainer>
+                      <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
+                    </BadgeIconContainer>
+                    <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
+                  </OperationBadge>
+                  <BadgeDescriptionContainer>
+                    <BadgeDescriptionText>
+                      {badgeInfo?.description}
+                    </BadgeDescriptionText>
+                  </BadgeDescriptionContainer>
+                  <UserRequestContent>
+                    <InlineSQLEditor style={{ height: editorHeight }}>
+                      <LiteEditor value={displaySQL} />
+                    </InlineSQLEditor>
+                  </UserRequestContent>
+                </UserRequestBox>
+              )
+            }
+
+            // Special handling for ask_request: show user's question above SQL
+            if (displayType === "ask_request") {
+              const userQuestion = message.displayUserMessage || message.content
+
               return (
                 <UserRequestBox key={key}>
                   <UserRequestHeader>
-                    <UserRequestLabel>{displayLabel}</UserRequestLabel>
+                    <MessageContent>{userQuestion}</MessageContent>
                   </UserRequestHeader>
                   <UserRequestContent>
                     <InlineSQLEditor style={{ height: editorHeight }}>
@@ -950,12 +1073,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <SparkleIcon src="/assets/ai-sparkle.svg" alt="" />
                 <AssistantLabel>Assistant</AssistantLabel>
                 {tokenDisplay && (
-                  <Box align="center" gap="0.9rem" margin="0 0 0 auto">
+                  <TokenDisplay className="token-display">
                     <GaugeIcon size="16px" color={theme.color.gray2} />
                     <Text size="sm" color="gray2">
                       {tokenDisplay}
                     </Text>
-                  </Box>
+                  </TokenDisplay>
                 )}
               </AssistantHeader>
               <ExplanationContent>
@@ -1049,7 +1172,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             {isRejected ? (
                               <CloseOutline size="14px" />
                             ) : isRejectedWithFollowUp ? (
-                              <Chat1 size="14px" />
+                              <ChatDotsIcon size="14px" />
                             ) : (
                               <CheckmarkOutline size="14px" />
                             )}
@@ -1057,7 +1180,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                           {isRejected
                             ? "Rejected"
                             : isRejectedWithFollowUp
-                              ? "Follow-up received"
+                              ? "Followed up"
                               : "Accepted"}
                         </DiffHeaderStatus>
                       )}
