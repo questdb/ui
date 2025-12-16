@@ -6,7 +6,20 @@ import type {
   SchemaDisplayData,
 } from "./types"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
-import { normalizeQueryText } from "../../scenes/Editor/Monaco/utils"
+import {
+  normalizeQueryText,
+  createQueryKey,
+} from "../../scenes/Editor/Monaco/utils"
+import { useEditor } from "../EditorProvider"
+import { normalizeSql } from "../../utils/aiAssistant"
+
+export type AcceptSuggestionParams = {
+  queryKey: QueryKey
+  sql: string
+  explanation?: string
+  messageIndex?: number
+  skipHiddenMessage?: boolean
+}
 
 type AIConversationContextType = {
   conversations: Map<QueryKey, AIConversation>
@@ -56,6 +69,10 @@ type AIConversationContextType = {
   ) => void
   rejectLatestChange: (queryKey: QueryKey) => void
   markLatestAsRejectedWithFollowUp: (queryKey: QueryKey) => void
+  acceptSuggestion: (
+    params: AcceptSuggestionParams,
+  ) => Promise<QueryKey | undefined>
+  rejectSuggestion: (queryKey: QueryKey) => Promise<void>
 }
 
 const AIConversationContext = createContext<
@@ -522,6 +539,277 @@ export const AIConversationProvider: React.FC<{
     }))
   }, [])
 
+  // Get editor functions for accept/reject operations
+  const {
+    editorRef,
+    buffers,
+    activeBuffer,
+    setActiveBuffer,
+    addBuffer,
+    closeDiffBufferForQuery,
+    applyAISQLChange,
+  } = useEditor()
+
+  // Unified accept function - handles all scenarios
+  const acceptSuggestion = useCallback(
+    async (params: AcceptSuggestionParams): Promise<QueryKey | undefined> => {
+      const {
+        queryKey,
+        sql,
+        explanation = "",
+        messageIndex,
+        skipHiddenMessage,
+      } = params
+      const conversation = conversations.get(queryKey)
+      if (!conversation) return undefined
+
+      const normalizedSQL = normalizeSql(sql, false)
+
+      // Close any open diff buffer for this query first
+      await closeDiffBufferForQuery(queryKey)
+
+      // Determine buffer status
+      const conversationBufferId = conversation.bufferId
+      const buffer = buffers.find((b) => b.id === conversationBufferId)
+
+      const bufferStatus = !buffer
+        ? ("deleted" as const)
+        : buffer.archived
+          ? ("archived" as const)
+          : buffer.id === activeBuffer.id
+            ? ("active" as const)
+            : ("inactive" as const)
+
+      let finalQueryKey: QueryKey | undefined
+
+      try {
+        // Handle based on buffer status
+        if (bufferStatus === "active") {
+          finalQueryKey = applyChangesToActiveTab(
+            normalizedSQL,
+            queryKey,
+            conversation,
+            explanation,
+            messageIndex,
+          )
+        } else if (
+          bufferStatus === "deleted" ||
+          bufferStatus === "archived" ||
+          !conversationBufferId
+        ) {
+          finalQueryKey = await applyChangesToNewTab(
+            normalizedSQL,
+            queryKey,
+            explanation,
+            messageIndex,
+          )
+        } else if (bufferStatus === "inactive" && buffer) {
+          await setActiveBuffer(buffer)
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          finalQueryKey = applyChangesToActiveTab(
+            normalizedSQL,
+            queryKey,
+            conversation,
+            explanation,
+            messageIndex,
+          )
+        }
+
+        // Add hidden message to inform model about acceptance (unless skipped)
+        if (!skipHiddenMessage && finalQueryKey) {
+          addMessage(finalQueryKey, {
+            role: "user" as const,
+            content: `User accepted your latest SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+            timestamp: Date.now(),
+            hideFromUI: true,
+          })
+        }
+
+        return finalQueryKey
+      } catch (error) {
+        console.error("Error applying changes:", error)
+        return undefined
+      }
+    },
+    [
+      conversations,
+      buffers,
+      activeBuffer,
+      setActiveBuffer,
+      closeDiffBufferForQuery,
+      addMessage,
+    ],
+  )
+
+  // Helper: Apply changes to active tab
+  const applyChangesToActiveTab = useCallback(
+    (
+      normalizedSQL: string,
+      queryKey: QueryKey,
+      conversation: AIConversation,
+      explanation: string,
+      messageIndex?: number,
+    ): QueryKey | undefined => {
+      const result = applyAISQLChange({
+        newSQL: normalizedSQL,
+        queryStartOffset: conversation.queryStartOffset,
+        queryEndOffset: conversation.queryEndOffset,
+        originalQuery: conversation.originalQuery || conversation.initialSQL,
+        queryKey,
+      })
+
+      if (!result.success) {
+        return undefined
+      }
+
+      // Update conversation state
+      if (result.finalQueryKey && result.finalQueryKey !== queryKey) {
+        updateConversationQueryKey(queryKey, result.finalQueryKey)
+        updateConversationSQL(result.finalQueryKey, normalizedSQL, explanation)
+        if (result.queryStartOffset !== undefined) {
+          const normalizedQuery = normalizeQueryText(normalizedSQL)
+          const queryEndOffset =
+            result.queryStartOffset + normalizedQuery.length
+          updateConversationOffsets(
+            result.finalQueryKey,
+            result.queryStartOffset,
+            queryEndOffset,
+          )
+        }
+        acceptConversationChanges(result.finalQueryKey, messageIndex)
+        return result.finalQueryKey
+      } else {
+        updateConversationSQL(queryKey, normalizedSQL, explanation)
+        if (result.queryStartOffset !== undefined) {
+          const normalizedQuery = normalizeQueryText(normalizedSQL)
+          const queryEndOffset =
+            result.queryStartOffset + normalizedQuery.length
+          updateConversationOffsets(
+            queryKey,
+            result.queryStartOffset,
+            queryEndOffset,
+          )
+        }
+        acceptConversationChanges(queryKey, messageIndex)
+        return queryKey
+      }
+    },
+    [
+      applyAISQLChange,
+      updateConversationQueryKey,
+      updateConversationSQL,
+      updateConversationOffsets,
+      acceptConversationChanges,
+    ],
+  )
+
+  // Helper: Apply changes to new tab (when original is deleted/archived)
+  const applyChangesToNewTab = useCallback(
+    async (
+      normalizedSQL: string,
+      queryKey: QueryKey,
+      explanation: string,
+      messageIndex?: number,
+    ): Promise<QueryKey | undefined> => {
+      const sqlWithSemicolon = normalizeSql(normalizedSQL)
+      const newBuffer = await addBuffer({
+        value: sqlWithSemicolon,
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      if (!editorRef.current) return undefined
+
+      const model = editorRef.current.getModel()
+      if (!model) return undefined
+
+      const queryStartOffset = 0
+      const normalizedQuery = normalizeQueryText(normalizedSQL)
+      const queryEndOffset = normalizedQuery.length
+
+      const startPosition = model.getPositionAt(queryStartOffset)
+      const endPosition = model.getPositionAt(queryEndOffset)
+
+      // Apply highlighting decoration
+      const highlightRange = {
+        startLineNumber: startPosition.lineNumber,
+        startColumn: startPosition.column,
+        endLineNumber: endPosition.lineNumber,
+        endColumn: endPosition.column,
+      }
+
+      const decorationId = model.deltaDecorations(
+        [],
+        [
+          {
+            range: highlightRange,
+            options: {
+              isWholeLine: false,
+              className: "aiQueryHighlight",
+            },
+          },
+        ],
+      )
+
+      editorRef.current.revealPositionNearTop(startPosition)
+
+      setTimeout(() => {
+        model.deltaDecorations(decorationId, [])
+      }, 2000)
+
+      // Update conversation to point to new buffer
+      const finalQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
+      updateConversationQueryKey(queryKey, finalQueryKey)
+      updateConversationBufferId(finalQueryKey, newBuffer.id)
+      updateConversationSQL(finalQueryKey, normalizedSQL, explanation)
+      updateConversationOffsets(finalQueryKey, queryStartOffset, queryEndOffset)
+      acceptConversationChanges(finalQueryKey, messageIndex)
+
+      return finalQueryKey
+    },
+    [
+      addBuffer,
+      editorRef,
+      updateConversationQueryKey,
+      updateConversationBufferId,
+      updateConversationSQL,
+      updateConversationOffsets,
+      acceptConversationChanges,
+    ],
+  )
+
+  // Unified reject function
+  const rejectSuggestion = useCallback(
+    async (queryKey: QueryKey): Promise<void> => {
+      const conversation = conversations.get(queryKey)
+      if (!conversation) return
+
+      // Update conversation state (marks as rejected, adds hidden message)
+      rejectLatestChange(queryKey)
+
+      // Close any open diff buffer
+      await closeDiffBufferForQuery(queryKey)
+
+      // If we're currently viewing a diff buffer, switch back to original
+      if (activeBuffer.isDiffBuffer) {
+        const originalBuffer = buffers.find(
+          (b) => b.id === conversation.bufferId && !b.archived,
+        )
+        if (originalBuffer) {
+          await setActiveBuffer(originalBuffer)
+        }
+      }
+    },
+    [
+      conversations,
+      rejectLatestChange,
+      closeDiffBufferForQuery,
+      activeBuffer,
+      buffers,
+      setActiveBuffer,
+    ],
+  )
+
   return (
     <AIConversationContext.Provider
       value={{
@@ -541,6 +829,8 @@ export const AIConversationProvider: React.FC<{
         acceptConversationChanges,
         rejectLatestChange,
         markLatestAsRejectedWithFollowUp,
+        acceptSuggestion,
+        rejectSuggestion,
       }}
     >
       {children}

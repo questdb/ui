@@ -8,7 +8,6 @@ import {
   isBlockingAIStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
-import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
 import type { QueryKey } from "../Monaco/utils"
 import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
@@ -127,25 +126,19 @@ export const AIChatWindow: React.FC = () => {
     buffers,
     activeBuffer,
     setActiveBuffer,
-    addBuffer,
     showDiffBuffer,
     closeDiffBufferForQuery,
-    applyAISQLChange,
   } = useEditor()
   const {
     chatWindowState,
     closeChatWindow,
     getConversation,
     addMessage,
-    updateConversationSQL,
     addMessageAndUpdateSQL,
-    updateConversationQueryKey,
-    updateConversationBufferId,
     updateConversationName,
-    updateConversationOffsets,
-    acceptConversationChanges,
-    rejectLatestChange,
     markLatestAsRejectedWithFollowUp,
+    acceptSuggestion,
+    rejectSuggestion,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -432,217 +425,6 @@ export const AIChatWindow: React.FC = () => {
     [showDiffBuffer, currentExplanation],
   )
 
-  const handleAccept = async (
-    normalizedSQL: string,
-    messageIndex?: number,
-  ): Promise<QueryKey | undefined> => {
-    if (!conversation) return undefined
-
-    try {
-      let finalQueryKey: QueryKey | undefined
-
-      // Scenario 1: Active tab - apply changes directly
-      if (bufferStatus.type === "active") {
-        finalQueryKey = applyChangesToActiveTab(normalizedSQL, { messageIndex })
-        // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
-        dispatch(actions.query.setAISuggestionRequest(null))
-        return finalQueryKey
-      }
-
-      // Scenario 2: Deleted/Archived tab - create new tab
-      if (bufferStatus.type === "deleted" || bufferStatus.type === "archived") {
-        finalQueryKey = await applyChangesToNewTab(normalizedSQL, {
-          messageIndex,
-        })
-        dispatch(actions.query.setAISuggestionRequest(null))
-        return finalQueryKey
-      }
-
-      // Scenario 3: Inactive tab - activate it first, then apply
-      if (bufferStatus.type === "inactive" && bufferStatus.buffer) {
-        await setActiveBuffer(bufferStatus.buffer)
-        // Wait for tab to be fully activated
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        finalQueryKey = applyChangesToActiveTab(normalizedSQL, { messageIndex })
-        // Clear AI suggestion request AFTER applying changes (so updateNotificationKey can use it)
-        dispatch(actions.query.setAISuggestionRequest(null))
-        return finalQueryKey
-      }
-    } catch (error) {
-      console.error("Error applying changes:", error)
-      toast.error("Failed to apply changes")
-    }
-    return undefined
-  }
-
-  const applyChangesToActiveTab = (
-    normalizedSQL: string,
-    options?: { messageIndex?: number; skipAcceptState?: boolean },
-  ): QueryKey | undefined => {
-    if (!conversation) return undefined
-
-    const result = applyAISQLChange({
-      newSQL: normalizedSQL,
-      queryStartOffset: conversation.queryStartOffset,
-      queryEndOffset: conversation.queryEndOffset,
-      originalQuery: conversation.originalQuery || conversation.initialSQL,
-      queryKey: chatWindowState.activeQueryKey ?? undefined,
-    })
-
-    if (!result.success) {
-      return undefined
-    }
-
-    // If there was an AI suggestion query that was run, update its notification key
-    // to match the final query key (since formatSql may have changed the text)
-    if (
-      aiSuggestionRequest &&
-      conversation.bufferId !== undefined &&
-      result.finalQueryKey
-    ) {
-      const oldAIQueryKey = createQueryKey(
-        normalizeQueryText(aiSuggestionRequest.query),
-        aiSuggestionRequest.startOffset,
-      )
-      if (oldAIQueryKey !== result.finalQueryKey) {
-        dispatch(
-          actions.query.updateNotificationKey(
-            oldAIQueryKey,
-            result.finalQueryKey,
-            conversation.bufferId as number,
-          ),
-        )
-      }
-    }
-
-    // Update conversation state
-    if (
-      chatWindowState.activeQueryKey &&
-      result.finalQueryKey &&
-      result.finalQueryKey !== chatWindowState.activeQueryKey
-    ) {
-      updateConversationQueryKey(
-        chatWindowState.activeQueryKey,
-        result.finalQueryKey,
-      )
-      updateConversationSQL(
-        result.finalQueryKey,
-        normalizedSQL,
-        currentExplanation,
-      )
-      // Update query offsets from the apply result
-      if (result.queryStartOffset !== undefined) {
-        const normalizedQuery = normalizeQueryText(normalizedSQL)
-        const queryEndOffset = result.queryStartOffset + normalizedQuery.length
-        updateConversationOffsets(
-          result.finalQueryKey,
-          result.queryStartOffset,
-          queryEndOffset,
-        )
-      }
-      if (!options?.skipAcceptState) {
-        acceptConversationChanges(result.finalQueryKey, options?.messageIndex)
-      }
-      return result.finalQueryKey
-    } else if (chatWindowState.activeQueryKey) {
-      updateConversationSQL(
-        chatWindowState.activeQueryKey,
-        normalizedSQL,
-        currentExplanation,
-      )
-      // Update query offsets from the apply result
-      if (result.queryStartOffset !== undefined) {
-        const normalizedQuery = normalizeQueryText(normalizedSQL)
-        const queryEndOffset = result.queryStartOffset + normalizedQuery.length
-        updateConversationOffsets(
-          chatWindowState.activeQueryKey,
-          result.queryStartOffset,
-          queryEndOffset,
-        )
-      }
-      if (!options?.skipAcceptState) {
-        acceptConversationChanges(
-          chatWindowState.activeQueryKey,
-          options?.messageIndex,
-        )
-      }
-      return chatWindowState.activeQueryKey
-    }
-    return undefined
-  }
-
-  const applyChangesToNewTab = async (
-    normalizedSQL: string,
-    options?: { messageIndex?: number; skipAcceptState?: boolean },
-  ): Promise<QueryKey | undefined> => {
-    // Create a new tab with proper semicolon handling
-    // normalizeSql ensures: removes trailing semicolon, formats, then adds single semicolon
-    const sqlWithSemicolon = normalizeSql(normalizedSQL)
-    const newBuffer = await addBuffer({
-      value: sqlWithSemicolon,
-    })
-
-    // Wait for the tab to be mounted and editor to be ready
-    await new Promise((resolve) => setTimeout(resolve, 200))
-
-    if (!editorRef.current) return undefined
-
-    const model = editorRef.current.getModel()
-    if (!model) return undefined
-
-    // The query is at the start of the new buffer
-    const queryStartOffset = 0
-    const normalizedQuery = normalizeQueryText(normalizedSQL)
-    const queryEndOffset = normalizedQuery.length
-
-    const startPosition = model.getPositionAt(queryStartOffset)
-    const endPosition = model.getPositionAt(queryEndOffset)
-
-    // Apply highlighting decoration
-    const highlightRange = {
-      startLineNumber: startPosition.lineNumber,
-      startColumn: startPosition.column,
-      endLineNumber: endPosition.lineNumber,
-      endColumn: endPosition.column,
-    }
-
-    const decorationId = model.deltaDecorations(
-      [],
-      [
-        {
-          range: highlightRange,
-          options: {
-            isWholeLine: false,
-            className: "aiQueryHighlight",
-          },
-        },
-      ],
-    )
-
-    // Reveal the query
-    editorRef.current.revealPositionNearTop(startPosition)
-
-    // Remove decoration after 2 seconds
-    setTimeout(() => {
-      model.deltaDecorations(decorationId, [])
-    }, 2000)
-
-    // Update conversation to point to new buffer and queryKey
-    const finalQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
-    if (chatWindowState.activeQueryKey) {
-      updateConversationQueryKey(chatWindowState.activeQueryKey, finalQueryKey)
-      updateConversationBufferId(finalQueryKey, newBuffer.id)
-      updateConversationSQL(finalQueryKey, normalizedSQL, currentExplanation)
-      // Update query offsets for context badge navigation
-      updateConversationOffsets(finalQueryKey, queryStartOffset, queryEndOffset)
-      if (!options?.skipAcceptState) {
-        acceptConversationChanges(finalQueryKey, options?.messageIndex)
-      }
-      return finalQueryKey
-    }
-    return undefined
-  }
-
   const handleAcceptChange = async (messageIndex: number) => {
     if (!conversation || !chatWindowState.activeQueryKey) return
 
@@ -650,27 +432,23 @@ export const AIChatWindow: React.FC = () => {
     const targetMessage = conversation.messages[messageIndex]
     if (!targetMessage || !targetMessage.sql) return
 
-    const normalizedSQL = normalizeSql(targetMessage.sql, false)
-
-    await closeDiffBufferForQuery(chatWindowState.activeQueryKey)
-
-    const finalQueryKey = await handleAccept(normalizedSQL, messageIndex)
-
-    // Add a hidden message to inform the model about the acceptance
-    // Use the final query key returned by handleAccept
-    const targetQueryKey = finalQueryKey ?? chatWindowState.activeQueryKey
-    addMessage(targetQueryKey, {
-      role: "user" as const,
-      content: `User accepted your latest SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
-      timestamp: Date.now(),
-      hideFromUI: true,
+    // Use unified acceptSuggestion from provider
+    await acceptSuggestion({
+      queryKey: chatWindowState.activeQueryKey,
+      sql: targetMessage.sql,
+      explanation: currentExplanation,
+      messageIndex,
     })
+
+    // Clear AI suggestion request after applying changes
+    dispatch(actions.query.setAISuggestionRequest(null))
   }
 
-  const handleRejectChange = () => {
+  const handleRejectChange = async () => {
     if (!chatWindowState.activeQueryKey) return
-    rejectLatestChange(chatWindowState.activeQueryKey)
-    void closeDiffBufferForQuery(chatWindowState.activeQueryKey)
+
+    // Use unified rejectSuggestion from provider
+    await rejectSuggestion(chatWindowState.activeQueryKey)
 
     // Focus the chat input so user can type corrections
     setTimeout(() => {
@@ -788,30 +566,15 @@ export const AIChatWindow: React.FC = () => {
       const normalizedSQL = normalizeSql(sql, false)
 
       try {
-        // Reuse the same logic as accept, but skip updating accepted state
-        // The apply functions return the final query key (which may differ from activeQueryKey)
-        let finalQueryKey: QueryKey | undefined
+        // Use unified acceptSuggestion but skip the default hidden message
+        const finalQueryKey = await acceptSuggestion({
+          queryKey: chatWindowState.activeQueryKey,
+          sql,
+          explanation: currentExplanation,
+          skipHiddenMessage: true, // We'll add our own custom message
+        })
 
-        if (bufferStatus.type === "active") {
-          finalQueryKey = applyChangesToActiveTab(normalizedSQL, {
-            skipAcceptState: true,
-          })
-        } else if (
-          bufferStatus.type === "deleted" ||
-          bufferStatus.type === "archived"
-        ) {
-          finalQueryKey = await applyChangesToNewTab(normalizedSQL, {
-            skipAcceptState: true,
-          })
-        } else if (bufferStatus.type === "inactive" && bufferStatus.buffer) {
-          await navigateToBuffer()
-          finalQueryKey = applyChangesToActiveTab(normalizedSQL, {
-            skipAcceptState: true,
-          })
-        }
-
-        // Add a hidden message to inform the model for the next round
-        // Use the final query key (after potential key change from apply)
+        // Add a custom hidden message to inform the model for the next round
         const targetQueryKey = finalQueryKey ?? chatWindowState.activeQueryKey
         addMessage(targetQueryKey, {
           role: "user" as const,
@@ -827,8 +590,8 @@ export const AIChatWindow: React.FC = () => {
     [
       conversation,
       chatWindowState.activeQueryKey,
-      bufferStatus,
-      navigateToBuffer,
+      currentExplanation,
+      acceptSuggestion,
       addMessage,
     ],
   )

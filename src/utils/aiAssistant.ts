@@ -1178,7 +1178,7 @@ export const explainTableSchema = async ({
       const prompt = getExplainSchemaPrompt(tableName, schema, isMatView)
 
       const formattingOutput = await clients.openai.responses.parse({
-        model: settings.model,
+        ...getModelProps(settings.model),
         instructions: getExplainSchemaPrompt(tableName, schema, isMatView),
         input: [{ role: "user", content: prompt }],
         text: ExplainTableSchemaFormat,
@@ -1209,7 +1209,7 @@ export const explainTableSchema = async ({
 
     const anthropic = clients.anthropic
     const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
-      model: settings.model,
+      model: getModelProps(settings.model).model,
       messages: [
         {
           role: "user" as const,

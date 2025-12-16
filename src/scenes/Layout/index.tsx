@@ -34,7 +34,11 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
-import { EditorProvider, SearchProvider } from "../../providers"
+import {
+  EditorProvider,
+  SearchProvider,
+  AIConversationProvider,
+} from "../../providers"
 import { Help } from "./help"
 import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
@@ -103,33 +107,35 @@ const Layout = () => {
   return (
     <SearchProvider>
       <EditorProvider>
-        <AIStatusProvider>
-          <TopBar />
-          <Warnings />
-          <Root>
-            <Main sideOpened={activeSidebar !== undefined}>
-              <ImageZoom />
-              <Page>
-                <Console />
-              </Page>
-              <AIStatusIndicator />
-            </Main>
+        <AIConversationProvider>
+          <AIStatusProvider>
+            <TopBar />
+            <Warnings />
+            <Root>
+              <Main sideOpened={activeSidebar !== undefined}>
+                <ImageZoom />
+                <Page>
+                  <Console />
+                </Page>
+                <AIStatusIndicator />
+              </Main>
 
-            <Drawer id="side-panel-right" />
+              <Drawer id="side-panel-right" />
 
-            <Sidebar align="top">
-              <Help />
+              <Sidebar align="top">
+                <Help />
 
-              <News />
+                <News />
 
-              <CreateTableDialog />
-            </Sidebar>
-          </Root>
+                <CreateTableDialog />
+              </Sidebar>
+            </Root>
 
-          <SideMenu />
+            <SideMenu />
 
-          <Footer />
-        </AIStatusProvider>
+            <Footer />
+          </AIStatusProvider>
+        </AIConversationProvider>
       </EditorProvider>
     </SearchProvider>
   )

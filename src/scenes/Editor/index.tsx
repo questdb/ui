@@ -177,21 +177,9 @@ const Editor = ({
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const dispatch = useDispatch()
-  const {
-    activeBuffer,
-    addBuffer,
-    archiveBuffer,
-    buffers,
-    setActiveBuffer,
-    applyAISQLChange,
-  } = useEditor()
-  const {
-    getConversation,
-    acceptConversationChanges,
-    rejectLatestChange,
-    updateConversationQueryKey,
-    updateConversationSQL,
-  } = useAIConversation()
+  const { activeBuffer, addBuffer } = useEditor()
+  const { getConversation, acceptSuggestion, rejectSuggestion } =
+    useAIConversation()
   const executionRefs = useRef<ExecutionRefs>({})
 
   const handleClearNotifications = (bufferId: number) => {
@@ -254,101 +242,29 @@ const Editor = ({
     const { queryKey, conversation } = pendingDiffInfo
     const modifiedSQL = activeBuffer.diffContent.modified
 
-    // Find the original buffer to switch back to
-    const originalBuffer = buffers.find(
-      (b) => b.id === conversation.bufferId && !b.archived,
-    )
-
-    // Archive the diff buffer first
-    if (activeBuffer.id) {
-      void archiveBuffer(activeBuffer.id)
-    }
-
-    // Switch to original buffer if available
-    if (originalBuffer) {
-      await setActiveBuffer(originalBuffer)
-      // Wait for tab switch and editor to be ready
-      await new Promise((resolve) => setTimeout(resolve, 150))
-    }
-
-    // Apply the changes using the shared function
-    const result = applyAISQLChange({
-      newSQL: modifiedSQL,
-      queryStartOffset: conversation.queryStartOffset,
-      queryEndOffset: conversation.queryEndOffset,
-      originalQuery: conversation.originalQuery || conversation.initialSQL,
+    // Use unified acceptSuggestion from provider
+    await acceptSuggestion({
       queryKey,
+      sql: modifiedSQL,
+      explanation: conversation.currentExplanation || "",
     })
-
-    if (!result.success) {
-      console.error("Failed to apply AI SQL change")
-      return
-    }
-
-    // Update conversation state
-    const currentExplanation = conversation.currentExplanation || ""
-
-    if (result.finalQueryKey && result.finalQueryKey !== queryKey) {
-      updateConversationQueryKey(queryKey, result.finalQueryKey)
-      updateConversationSQL(
-        result.finalQueryKey,
-        modifiedSQL,
-        currentExplanation,
-      )
-      acceptConversationChanges(result.finalQueryKey)
-    } else {
-      updateConversationSQL(queryKey, modifiedSQL, currentExplanation)
-      acceptConversationChanges(queryKey)
-    }
-  }, [
-    pendingDiffInfo,
-    activeBuffer,
-    buffers,
-    archiveBuffer,
-    setActiveBuffer,
-    applyAISQLChange,
-    updateConversationQueryKey,
-    updateConversationSQL,
-    acceptConversationChanges,
-  ])
+  }, [pendingDiffInfo, activeBuffer.diffContent, acceptSuggestion])
 
   // Handle reject button click from diff editor button bar
-  const handleRejectFromDiffEditor = useCallback(() => {
+  const handleRejectFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo) return
 
-    const { queryKey, conversation } = pendingDiffInfo
+    const { queryKey } = pendingDiffInfo
 
-    // Find the original buffer to switch back to
-    const originalBuffer = buffers.find(
-      (b) => b.id === conversation.bufferId && !b.archived,
-    )
-
-    // Mark the latest change as rejected
-    rejectLatestChange(queryKey)
-
-    // Archive the diff buffer
-    if (activeBuffer.id) {
-      void archiveBuffer(activeBuffer.id)
-    }
-
-    // Switch to original buffer if available
-    if (originalBuffer) {
-      void setActiveBuffer(originalBuffer)
-    }
-  }, [
-    pendingDiffInfo,
-    buffers,
-    rejectLatestChange,
-    archiveBuffer,
-    activeBuffer.id,
-    setActiveBuffer,
-  ])
+    // Use unified rejectSuggestion from provider
+    await rejectSuggestion(queryKey)
+  }, [pendingDiffInfo, rejectSuggestion])
 
   // Keyboard shortcut: Escape to reject diff
   const escPressed = useKeyPress("Escape")
   useEffect(() => {
     if (escPressed && pendingDiffInfo) {
-      handleRejectFromDiffEditor()
+      void handleRejectFromDiffEditor()
     }
   }, [escPressed, pendingDiffInfo, handleRejectFromDiffEditor])
 

@@ -254,15 +254,17 @@ const BadgeDescriptionText = styled(Text)`
 `
 
 const SchemaNameDisplay = styled(Box)`
-  display: flex;
+  margin-left: 0.4rem;
+  padding: 0.8rem 1.2rem;
   align-items: center;
-  gap: 0.8rem;
-  padding: 1rem;
+  gap: 1rem;
+  border-radius: 8px;
+  border: 1px solid ${color("selection")};
+  background: ${color("backgroundDarker")};
 `
 
 const SchemaName = styled(Text)`
   font-size: 1.4rem;
-  font-weight: 600;
   color: ${color("foreground")};
 `
 
@@ -660,6 +662,8 @@ const getOperationBadgeInfo = (
       return {
         icon: "/assets/icon-explain-schema.svg",
         title: "Explain Schema",
+        description:
+          "Provide an overview, detailed column descriptions and storage details.",
       }
     }
     default:
@@ -841,43 +845,28 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const displaySQL = message.displaySQL
           const displayDescription = message.displayDescription
 
-          // Handle generate_request type (shows description instead of SQL)
-          if (displayType === "generate_request" && displayDescription) {
+          // Render badge/title/description types
+          if (
+            displayType &&
+            (displayType === "fix_request" ||
+              displayType === "explain_request" ||
+              displayType === "generate_request" ||
+              displayType === "schema_explain_request")
+          ) {
             const badgeInfo = getOperationBadgeInfo(
-              "generate_request",
+              displayType,
               displayDescription,
             )
-            return (
-              <UserRequestBox key={key}>
-                <OperationBadge>
-                  <BadgeIconContainer>
-                    <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
-                  </BadgeIconContainer>
-                  <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
-                </OperationBadge>
-                <BadgeDescriptionContainer>
-                  <BadgeDescriptionText>
-                    {displayDescription}
-                  </BadgeDescriptionText>
-                </BadgeDescriptionContainer>
-              </UserRequestBox>
-            )
-          }
 
-          if (
-            displayType === "schema_explain_request" &&
-            message.displaySchemaData
-          ) {
-            const schemaData = message.displaySchemaData
-            const badgeInfo = getOperationBadgeInfo("schema_explain_request")
-            return (
-              <UserRequestBox key={key}>
-                <OperationBadge>
-                  <BadgeIconContainer>
-                    <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
-                  </BadgeIconContainer>
-                  <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
-                </OperationBadge>
+            // Determine content to render below badge/description
+            let content: React.ReactNode = null
+
+            if (
+              displayType === "schema_explain_request" &&
+              message.displaySchemaData
+            ) {
+              const schemaData = message.displaySchemaData
+              content = (
                 <UserRequestContent>
                   <SchemaNameDisplay>
                     <TableIcon
@@ -889,82 +878,58 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <SchemaName>{schemaData.tableName}</SchemaName>
                   </SchemaNameDisplay>
                 </UserRequestContent>
+              )
+            } else if (displaySQL) {
+              // fix_request and explain_request show SQL editor
+              const lineCount = displaySQL.split("\n").length
+              const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
+              content = (
+                <UserRequestContent>
+                  <InlineSQLEditor style={{ height: editorHeight }}>
+                    <LiteEditor value={displaySQL} />
+                  </InlineSQLEditor>
+                </UserRequestContent>
+              )
+            }
+
+            return (
+              <UserRequestBox key={key}>
+                <OperationBadge>
+                  <BadgeIconContainer>
+                    <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
+                  </BadgeIconContainer>
+                  <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
+                </OperationBadge>
+                {badgeInfo?.description && (
+                  <BadgeDescriptionContainer>
+                    <BadgeDescriptionText>
+                      {badgeInfo.description}
+                    </BadgeDescriptionText>
+                  </BadgeDescriptionContainer>
+                )}
+                {content}
               </UserRequestBox>
             )
           }
 
-          if (displayType && displaySQL) {
-            // Calculate editor height based on SQL content
+          // Special handling for ask_request: show user's question above SQL
+          if (displayType === "ask_request" && displaySQL) {
+            const userQuestion = message.displayUserMessage || message.content
             const lineCount = displaySQL.split("\n").length
             const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
 
-            // Handle fix_request with badge
-            if (displayType === "fix_request") {
-              const badgeInfo = getOperationBadgeInfo("fix_request")
-              return (
-                <UserRequestBox key={key}>
-                  <OperationBadge>
-                    <BadgeIconContainer>
-                      <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
-                    </BadgeIconContainer>
-                    <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
-                  </OperationBadge>
-                  <BadgeDescriptionContainer>
-                    <BadgeDescriptionText>
-                      {badgeInfo?.description}
-                    </BadgeDescriptionText>
-                  </BadgeDescriptionContainer>
-                  <UserRequestContent>
-                    <InlineSQLEditor style={{ height: editorHeight }}>
-                      <LiteEditor value={displaySQL} />
-                    </InlineSQLEditor>
-                  </UserRequestContent>
-                </UserRequestBox>
-              )
-            }
-
-            // Handle explain_request with badge
-            if (displayType === "explain_request") {
-              const badgeInfo = getOperationBadgeInfo("explain_request")
-              return (
-                <UserRequestBox key={key}>
-                  <OperationBadge>
-                    <BadgeIconContainer>
-                      <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
-                    </BadgeIconContainer>
-                    <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
-                  </OperationBadge>
-                  <BadgeDescriptionContainer>
-                    <BadgeDescriptionText>
-                      {badgeInfo?.description}
-                    </BadgeDescriptionText>
-                  </BadgeDescriptionContainer>
-                  <UserRequestContent>
-                    <InlineSQLEditor style={{ height: editorHeight }}>
-                      <LiteEditor value={displaySQL} />
-                    </InlineSQLEditor>
-                  </UserRequestContent>
-                </UserRequestBox>
-              )
-            }
-
-            // Special handling for ask_request: show user's question above SQL
-            if (displayType === "ask_request") {
-              const userQuestion = message.displayUserMessage || message.content
-
-              return (
-                <UserRequestBox key={key}>
-                  <UserRequestHeader>
-                    <MessageContent>{userQuestion}</MessageContent>
-                  </UserRequestHeader>
-                  <UserRequestContent>
-                    <InlineSQLEditor style={{ height: editorHeight }}>
-                      <LiteEditor value={displaySQL} />
-                    </InlineSQLEditor>
-                  </UserRequestContent>
-                </UserRequestBox>
-              )
-            }
+            return (
+              <UserRequestBox key={key}>
+                <UserRequestHeader>
+                  <MessageContent>{userQuestion}</MessageContent>
+                </UserRequestHeader>
+                <UserRequestContent>
+                  <InlineSQLEditor style={{ height: editorHeight }}>
+                    <LiteEditor value={displaySQL} />
+                  </InlineSQLEditor>
+                </UserRequestContent>
+              </UserRequestBox>
+            )
           }
 
           // Default: plain text message

@@ -60,7 +60,7 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   }
 `
 
-const OpenInEditorButton = styled(Button).attrs({ skin: "secondary" })`
+const OpenInEditorButton = styled(Button).attrs({ skin: "transparent" })`
   gap: 1rem;
   font-size: 1.2rem;
 `
