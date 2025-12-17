@@ -3,12 +3,8 @@ import styled from "styled-components"
 import { Information } from "@styled-icons/remix-line"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
+import { AISparkle } from "../../../components/AISparkle"
 import type { Request } from "./utils"
-
-const SparkleIcon = styled.img`
-  width: 1.8rem;
-  height: 1.8rem;
-`
 
 const StyledDropdownContent = styled(DropdownMenu.Content)`
   background-color: #343846;
@@ -129,7 +125,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                   data-hook={`dropdown-item-ask-ai-${index}`}
                 >
                   <IconWrapper>
-                    <SparkleIcon src="/assets/ai-sparkle.svg" alt="" />
+                    <AISparkle size={18} variant="filled" />
                   </IconWrapper>
                   Ask AI about {extractQueryTextToRun(query)}
                 </StyledDropdownItem>

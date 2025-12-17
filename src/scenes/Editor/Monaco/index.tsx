@@ -250,6 +250,7 @@ const MonacoEditor = ({
   const decorationCollectionRef =
     useRef<editor.IEditorDecorationsCollection | null>(null)
   const glyphWidgetsRef = useRef<editor.IGlyphMarginWidget[]>([])
+  const prevConversationStateRef = useRef<Map<QueryKey, boolean>>(new Map())
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -617,6 +618,12 @@ const MonacoEditor = ({
           canUseAI &&
           hasConversationForQueryRef.current(activeBufferId, queryKey)
 
+        // Check if this is a newly created conversation (for highlight animation)
+        const hadConversationBefore =
+          prevConversationStateRef.current.get(queryKey) ?? false
+        const isNewlyCreatedConversation =
+          hasConversation && !hadConversationBefore
+
         const isRunningQuery =
           runningValueRef.current !== RunningType.NONE &&
           requestRef.current?.row !== undefined &&
@@ -680,6 +687,7 @@ const MonacoEditor = ({
             isSuccessful,
             showAI: canUseAI,
             hasConversation,
+            isHighlighted: isNewlyCreatedConversation,
             onRunClick: handleRunClick,
             onRunContextMenu: handleRunContextMenu,
             onAIClick: handleAIClick,
@@ -688,6 +696,9 @@ const MonacoEditor = ({
           glyphLineNumbersRef.current.add(startLineNumber)
           glyphWidgetsRef.current.push(widget)
         }
+
+        // Update conversation state tracking for next render
+        prevConversationStateRef.current.set(queryKey, hasConversation)
       })
     }
 
@@ -1736,7 +1747,6 @@ const MonacoEditor = ({
     }
   }, [activeBuffer])
 
-  // AI sparkle handling (filled/hollow)
   useEffect(() => {
     hasConversationForQueryRef.current = hasConversationForQuery
     if (monacoRef.current && editorRef.current) {

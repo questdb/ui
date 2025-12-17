@@ -62,6 +62,7 @@ import {
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
 import { providerForModel } from "../../../utils/aiAssistantSettings"
+import { AISparkle } from "../../../components/AISparkle"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -713,15 +714,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   <MenuItem
                     data-hook="table-context-menu-explain-schema"
                     onClick={async () => await handleExplainSchema(item)}
-                    icon={
-                      <img
-                        src="/assets/ai-sparkle.svg"
-                        alt="AI Sparkle"
-                        width={16}
-                        height={16}
-                        style={{ filter: "brightness(0) invert(1)" }}
-                      />
-                    }
+                    icon={<AISparkle size={16} variant="filled" inverted />}
                     disabled={
                       !canUse ||
                       !hasSchemaAccess ||

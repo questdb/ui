@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useContext, useCallback } from "react"
 import styled from "styled-components"
-import { Button } from "../../../components"
-import { Box } from "../../../components"
+import { Button, Box } from "../../../components"
+import { AISparkle } from "../../../components/AISparkle"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
@@ -59,12 +59,6 @@ const HeaderLeft = styled.div`
   display: flex;
   align-items: center;
   gap: 1rem;
-`
-
-const SparkleIcon = styled.img`
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
 `
 
 const HeaderTitle = styled.div`
@@ -578,7 +572,7 @@ export const AIChatWindow: React.FC = () => {
     <Container>
       <Header>
         <HeaderLeft>
-          <SparkleIcon src="/assets/ai-sparkle.svg" alt="" />
+          <AISparkle size={20} variant="filled" />
           <HeaderTitle>{headerTitle}</HeaderTitle>
         </HeaderLeft>
         <CloseButton onClick={closeChatWindow} title="Close">

@@ -17,6 +17,7 @@ import {
 import { color } from "../../utils"
 import { slideAnimation, spinAnimation } from "../Animation"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
+import { AISparkle } from "../AISparkle"
 import { pinkLinearGradientHorizontal } from "../../theme"
 import { MODEL_OPTIONS } from "../../utils/aiAssistantSettings"
 import { useAIConversation } from "../../providers/AIConversationProvider"
@@ -243,12 +244,6 @@ const HeaderLeft = styled.div`
   justify-content: flex-start;
   min-height: 0;
   min-width: 0;
-`
-
-const SparkleIcon = styled.img`
-  width: 2.4rem;
-  height: 2.4rem;
-  flex-shrink: 0;
 `
 
 const WorkingText = styled.div`
@@ -650,7 +645,7 @@ export const AIStatusIndicator: React.FC = () => {
       </ChatStreaming>
       <Header>
         <HeaderLeft>
-          <SparkleIcon src="/assets/ai-sparkle.svg" alt="AI Sparkle" />
+          <AISparkle size={24} variant="filled" />
           <WorkingText>
             {isAborted ? "Cancelled" : isCompleted ? "Completed" : "Working..."}
           </WorkingText>

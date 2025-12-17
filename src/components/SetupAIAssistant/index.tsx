@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react"
 import styled from "styled-components"
 import { Button } from "../Button"
 import { Box } from "../Box"
+import { AISparkle } from "../AISparkle"
 import { AIAssistantPromo } from "./AIAssistantPromo"
 import { ConfigurationModal } from "./ConfigurationModal"
 import { SettingsModal } from "./SettingsModal"
@@ -47,14 +48,7 @@ export const SetupAIAssistant = () => {
             gradientStyle="vertical"
             gradientWeight="thick"
             onClick={handleSettingsClick}
-            prefixIcon={
-              <img
-                src="../../assets/ai-sparkle-hollow.svg"
-                width="16px"
-                height="16px"
-                alt="AI Sparkle Hollow"
-              />
-            }
+            prefixIcon={<AISparkle size={16} variant="hollow" />}
             data-hook="ai-assistant-settings-button"
             title="AI Assistant Settings"
           >

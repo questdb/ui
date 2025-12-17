@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useContext, useEffect } from "react"
 import styled, { css } from "styled-components"
 import { Button, Box, Dialog, ForwardRef, Overlay, Key } from "../../components"
+import { AISparkle } from "../AISparkle"
 import { color, platform } from "../../utils"
 import { pinkLinearGradientVertical } from "../../theme"
 import { useSelector } from "react-redux"
@@ -364,7 +365,7 @@ export const GenerateSQLButton = () => {
             }}
           >
             <StyledDialogTitle>
-              <img src="/assets/ai-sparkle.svg" alt="" />
+              <AISparkle size={24} variant="filled" />
               Generate Query
             </StyledDialogTitle>
             <StyledContent>

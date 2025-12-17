@@ -7,6 +7,7 @@ import { Close } from "@styled-icons/remix-line"
 import { Button } from "../Button"
 import { Text } from "../Text"
 import { Box } from "../Box"
+import { AISparkle } from "../AISparkle"
 import { TransitionDuration } from "../Transition"
 import { platform } from "../../utils"
 
@@ -80,12 +81,6 @@ const AssistantTitle = styled(Box).attrs({
   gap: "1rem",
 })`
   flex: 1;
-`
-
-const SparkleIcon = styled.img`
-  width: 2.8rem;
-  height: 2.8rem;
-  flex-shrink: 0;
 `
 
 const TitleText = styled(Text)`
@@ -371,7 +366,7 @@ export const AIAssistantPromo = ({
             <Content>
               <Header>
                 <AssistantTitle>
-                  <SparkleIcon src="/assets/ai-sparkle.svg" alt="AI Sparkle" />
+                  <AISparkle size={28} variant="filled" />
                   <TitleText>Meet QuestDB Assistant</TitleText>
                 </AssistantTitle>
                 <CloseButton onClick={handleClose} aria-label="Close">

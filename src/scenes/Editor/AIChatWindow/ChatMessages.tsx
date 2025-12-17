@@ -4,6 +4,7 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
+import { AISparkle } from "../../../components/AISparkle"
 import { color } from "../../../utils"
 import type {
   ConversationMessage,
@@ -219,12 +220,6 @@ const AssistantHeader = styled(Box).attrs({
   width: 100%;
   padding: 0.4rem;
   flex: 1 0 auto;
-`
-
-const SparkleIcon = styled.img`
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
 `
 
 const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
@@ -787,13 +782,20 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const tokenUsage = message.tokenUsage as
             | { inputTokens: number; outputTokens: number }
             | undefined
-          let tokenDisplay: string | null = null
+          let tokenDisplay: React.ReactNode | null = null
           if (
             tokenUsage &&
             typeof tokenUsage.inputTokens === "number" &&
             typeof tokenUsage.outputTokens === "number"
           ) {
-            tokenDisplay = `${formatTokenCount(tokenUsage.inputTokens)} input / ${formatTokenCount(tokenUsage.outputTokens)} output tokens`
+            tokenDisplay = (
+              <>
+                <strong>{formatTokenCount(tokenUsage.inputTokens)}</strong>{" "}
+                input /{" "}
+                <strong>{formatTokenCount(tokenUsage.outputTokens)}</strong>{" "}
+                output tokens
+              </>
+            )
           }
 
           // Check if this message has SQL changes to show diff
@@ -857,7 +859,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           return (
             <ExplanationBox key={key}>
               <AssistantHeader>
-                <SparkleIcon src="/assets/ai-sparkle.svg" alt="" />
+                <AISparkle size={20} variant="filled" />
                 <AssistantLabel>Assistant</AssistantLabel>
                 {tokenDisplay && (
                   <TokenDisplay className="token-display">

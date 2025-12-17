@@ -1,5 +1,13 @@
 import React from "react"
 
+// Gutter icon state types
+export type GutterIconState =
+  | "noChat"
+  | "noChatHover"
+  | "active"
+  | "activeHover"
+  | "highlight"
+
 // Play icon - green play button
 export const PlayIcon = () => (
   <svg
@@ -97,51 +105,6 @@ export const SuccessIcon = () => (
         fill="none"
       />
     </g>
-  </svg>
-)
-
-// AI Sparkle icon - filled version with gradient
-export const AISparkleFilledIcon = ({ size = 16 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    fill="none"
-    viewBox="0 0 24 24"
-  >
-    <path
-      fill="url(#aiSparkleGradient)"
-      d="M19.5 13.5a1.48 1.48 0 0 1-.977 1.4l-4.836 1.787-1.78 4.84a1.493 1.493 0 0 1-2.802 0l-1.793-4.84-4.839-1.78a1.492 1.492 0 0 1 0-2.802l4.84-1.793 1.78-4.839a1.492 1.492 0 0 1 2.802 0l1.792 4.84 4.84 1.78A1.48 1.48 0 0 1 19.5 13.5m-5.25-9h1.5V6a.75.75 0 1 0 1.5 0V4.5h1.5a.75.75 0 1 0 0-1.5h-1.5V1.5a.75.75 0 1 0-1.5 0V3h-1.5a.75.75 0 1 0 0 1.5m8.25 3h-.75v-.75a.75.75 0 1 0-1.5 0v.75h-.75a.75.75 0 1 0 0 1.5h.75v.75a.75.75 0 1 0 1.5 0V9h.75a.75.75 0 1 0 0-1.5"
-    />
-    <defs>
-      <linearGradient
-        id="aiSparkleGradient"
-        x1="12.37"
-        x2="12.37"
-        y1=".75"
-        y2="22.5"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop stopColor="#d14671" />
-        <stop offset="1" stopColor="#892c6c" />
-      </linearGradient>
-    </defs>
-  </svg>
-)
-
-// AI Sparkle icon - hollow/outline version
-export const AISparkleHollowIcon = ({ size = 16 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    fill="none"
-    viewBox="0 0 15 15"
-  >
-    <path
-      fill="#d14671"
-      d="m11.69 7.582-3.118-1.15-1.152-3.12a1.245 1.245 0 0 0-2.336 0l-1.15 3.12-3.12 1.15a1.245 1.245 0 0 0 0 2.336l3.118 1.15 1.152 3.12a1.245 1.245 0 0 0 2.336 0l1.15-3.118 3.12-1.152a1.245 1.245 0 0 0 0-2.336M7.727 9.779a.75.75 0 0 0-.444.445l-1.032 2.794-1.03-2.794a.75.75 0 0 0-.444-.445L1.984 8.75l2.794-1.03a.75.75 0 0 0 .444-.444l1.03-2.793 1.03 2.793a.75.75 0 0 0 .444.445l2.793 1.029zm.274-7.529a.75.75 0 0 1 .75-.75h.75V.75a.75.75 0 0 1 1.5 0v.75h.75a.75.75 0 1 1 0 1.5h-.75v.75a.75.75 0 1 1-1.5 0V3h-.75a.75.75 0 0 1-.75-.75m7 3a.75.75 0 0 1-.75.75h-.25v.25a.75.75 0 1 1-1.5 0V6h-.25a.75.75 0 1 1 0-1.5h.25v-.25a.75.75 0 1 1 1.5 0v.25h.25a.75.75 0 0 1 .75.75"
-    />
   </svg>
 )
 
@@ -282,4 +245,97 @@ export const createSvgElement = (
   }
 
   return svg
+}
+
+export const createAIGutterIcon = (
+  state: GutterIconState,
+  size = 16,
+): HTMLElement => {
+  const wrapper = document.createElement("span")
+  wrapper.className = "ai-gutter-icon"
+
+  const wrapperSize = size + 8 // 4px padding on each side
+  wrapper.style.display = "inline-flex"
+  wrapper.style.alignItems = "center"
+  wrapper.style.justifyContent = "center"
+  wrapper.style.width = `${wrapperSize}px`
+  wrapper.style.height = `${wrapperSize}px`
+  wrapper.style.borderRadius = "4px"
+  wrapper.style.transition = "all 0.15s ease"
+  wrapper.style.boxSizing = "border-box"
+
+  // Apply styles based on state
+  applyGutterIconState(wrapper, state, size)
+
+  return wrapper
+}
+
+export const applyGutterIconState = (
+  wrapper: HTMLElement,
+  state: GutterIconState,
+  size = 16,
+): void => {
+  // Determine if we need filled or hollow icon
+  const isFilled =
+    state === "noChatHover" || state === "activeHover" || state === "highlight"
+
+  // Determine if we need the gradient border
+  const hasBorder =
+    state === "active" || state === "activeHover" || state === "highlight"
+
+  // Determine if we need the glow effect
+  const hasGlow = state === "highlight"
+
+  // Clear existing SVG
+  wrapper.innerHTML = ""
+
+  // Create the appropriate SVG
+  const svg = createSvgElement(
+    isFilled ? "aiSparkleFilled" : "aiSparkleHollow",
+    size,
+  )
+  wrapper.appendChild(svg)
+
+  // Apply border and background styles
+  if (hasGlow) {
+    // Highlight state: gradient background fill + solid border
+    wrapper.style.border = "1px solid #d14671"
+    wrapper.style.background =
+      "linear-gradient(180deg, rgba(209, 70, 113, 0.24) 0%, rgba(137, 44, 108, 0.24) 100%)"
+    wrapper.style.boxShadow = "none"
+  } else if (hasBorder) {
+    // Active/ActiveHover state: transparent background with gradient border
+    wrapper.style.border = "1px solid transparent"
+    wrapper.style.background = `
+      linear-gradient(#2c2e3d, #2c2e3d) padding-box,
+      linear-gradient(180deg, #D14671 0%, #892C6C 100%) border-box
+    `
+    wrapper.style.boxShadow = "none"
+  } else {
+    // NoChat/NoChatHover state: no border, no background
+    wrapper.style.border = "1px solid transparent"
+    wrapper.style.background = "transparent"
+    wrapper.style.boxShadow = "none"
+  }
+}
+
+export const getHoverState = (baseState: GutterIconState): GutterIconState => {
+  switch (baseState) {
+    case "noChat":
+      return "noChatHover"
+    case "active":
+    case "highlight":
+      return "activeHover"
+    default:
+      return baseState
+  }
+}
+
+export const getBaseState = (
+  hoverState: GutterIconState,
+  hasConversation: boolean,
+): GutterIconState => {
+  if (hoverState === "noChatHover") return "noChat"
+  if (hoverState === "activeHover") return hasConversation ? "active" : "noChat"
+  return hoverState
 }

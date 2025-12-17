@@ -1,5 +1,11 @@
 import type { editor } from "monaco-editor"
-import { createSvgElement } from "./icons"
+import {
+  createSvgElement,
+  createAIGutterIcon,
+  applyGutterIconState,
+  getHoverState,
+  type GutterIconState,
+} from "./icons"
 
 export type GlyphWidgetOptions = {
   isCancel?: boolean
@@ -8,6 +14,7 @@ export type GlyphWidgetOptions = {
   isLoading?: boolean
   showAI?: boolean
   hasConversation?: boolean
+  isHighlighted?: boolean // For temporary highlight when conversation is first created
   onRunClick: () => void
   onRunContextMenu?: () => void
   onAIClick?: () => void
@@ -34,30 +41,42 @@ export const createGlyphWidget = (
 
   // AI sparkle icon (if enabled)
   if (options.showAI) {
-    const aiIconWrapper = document.createElement("span")
-    aiIconWrapper.className = "glyph-ai-icon"
-    aiIconWrapper.style.display = "inline-flex"
-    aiIconWrapper.style.alignItems = "center"
-    aiIconWrapper.style.justifyContent = "center"
-    aiIconWrapper.style.width = "24px"
-    aiIconWrapper.style.height = "100%"
-    aiIconWrapper.style.position = "absolute"
-    aiIconWrapper.style.top = "0"
-    aiIconWrapper.style.left = "0"
-    aiIconWrapper.style.transition = "filter 0.1s"
+    // Determine initial state based on conversation status and highlight flag
+    let baseState: GutterIconState = options.hasConversation
+      ? "active"
+      : "noChat"
+    if (options.isHighlighted) {
+      baseState = "highlight"
+    }
 
-    const aiSvg = createSvgElement(
-      options.hasConversation ? "aiSparkleFilled" : "aiSparkleHollow",
-      16,
-    )
-    aiIconWrapper.appendChild(aiSvg)
+    const aiIconWrapper = createAIGutterIcon(baseState, 16)
+    aiIconWrapper.classList.add("glyph-ai-icon")
+    aiIconWrapper.style.position = "absolute"
+    aiIconWrapper.style.top = "50%"
+    aiIconWrapper.style.left = "0"
+    aiIconWrapper.style.transform = "translateY(-50%)"
+    aiIconWrapper.style.cursor = "pointer"
+
+    // Track current state for hover transitions
+    let currentBaseState = baseState
+
+    // Handle highlight -> active transition after delay
+    if (options.isHighlighted) {
+      setTimeout(() => {
+        currentBaseState = "active"
+        applyGutterIconState(aiIconWrapper, "active", 16)
+      }, 2000)
+    }
 
     aiIconWrapper.addEventListener("mouseenter", () => {
-      aiIconWrapper.style.filter = "brightness(1.3)"
+      const hoverState = getHoverState(currentBaseState)
+      applyGutterIconState(aiIconWrapper, hoverState, 16)
     })
+
     aiIconWrapper.addEventListener("mouseleave", () => {
-      aiIconWrapper.style.filter = ""
+      applyGutterIconState(aiIconWrapper, currentBaseState, 16)
     })
+
     aiIconWrapper.addEventListener("click", (e) => {
       e.stopPropagation()
       options.onAIClick?.()
