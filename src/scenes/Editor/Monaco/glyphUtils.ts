@@ -1,0 +1,146 @@
+import type { editor } from "monaco-editor"
+import { createSvgElement } from "./icons"
+
+export type GlyphWidgetOptions = {
+  isCancel?: boolean
+  hasError?: boolean
+  isSuccessful?: boolean
+  isLoading?: boolean
+  showAI?: boolean
+  hasConversation?: boolean
+  onRunClick: () => void
+  onRunContextMenu?: () => void
+  onAIClick?: () => void
+}
+
+/**
+ * Creates a glyph margin widget for a specific line in the Monaco editor.
+ * The widget contains an optional AI sparkle icon and a run/cancel button,
+ * each with independent hover effects and click handlers.
+ */
+export const createGlyphWidget = (
+  lineNumber: number,
+  options: GlyphWidgetOptions,
+): editor.IGlyphMarginWidget => {
+  const domNode = document.createElement("div")
+  domNode.className = "glyph-widget-container"
+  domNode.style.display = "flex"
+  domNode.style.alignItems = "center"
+  domNode.style.gap = "5px"
+  domNode.style.cursor = "pointer"
+  domNode.style.marginLeft = "1rem"
+  domNode.style.width = "53px"
+  domNode.style.height = "100%"
+
+  // AI sparkle icon (if enabled)
+  if (options.showAI) {
+    const aiIconWrapper = document.createElement("span")
+    aiIconWrapper.className = "glyph-ai-icon"
+    aiIconWrapper.style.display = "inline-flex"
+    aiIconWrapper.style.alignItems = "center"
+    aiIconWrapper.style.justifyContent = "center"
+    aiIconWrapper.style.width = "24px"
+    aiIconWrapper.style.height = "100%"
+    aiIconWrapper.style.position = "absolute"
+    aiIconWrapper.style.top = "0"
+    aiIconWrapper.style.left = "0"
+    aiIconWrapper.style.transition = "filter 0.1s"
+
+    const aiSvg = createSvgElement(
+      options.hasConversation ? "aiSparkleFilled" : "aiSparkleHollow",
+      16,
+    )
+    aiIconWrapper.appendChild(aiSvg)
+
+    aiIconWrapper.addEventListener("mouseenter", () => {
+      aiIconWrapper.style.filter = "brightness(1.3)"
+    })
+    aiIconWrapper.addEventListener("mouseleave", () => {
+      aiIconWrapper.style.filter = ""
+    })
+    aiIconWrapper.addEventListener("click", (e) => {
+      e.stopPropagation()
+      options.onAIClick?.()
+    })
+
+    domNode.appendChild(aiIconWrapper)
+  }
+
+  // Run/Cancel/Status icon
+  const runIconWrapper = document.createElement("span")
+  runIconWrapper.className = "glyph-run-icon"
+  runIconWrapper.style.display = "inline-flex"
+  runIconWrapper.style.alignItems = "center"
+  runIconWrapper.style.justifyContent = "center"
+  runIconWrapper.style.width = "24px"
+  runIconWrapper.style.position = "absolute"
+  runIconWrapper.style.top = "0"
+  runIconWrapper.style.right = "0"
+  runIconWrapper.style.height = "100%"
+
+  // Determine which icon to show
+  let iconType: "play" | "cancel" | "loading" | "error" | "success" = "play"
+  if (options.isCancel) {
+    iconType = "cancel"
+  } else if (options.isLoading) {
+    iconType = "loading"
+  } else if (options.hasError) {
+    iconType = "error"
+  } else if (options.isSuccessful) {
+    iconType = "success"
+  }
+
+  const runSvg = createSvgElement(iconType, 22)
+  runIconWrapper.appendChild(runSvg)
+
+  // Add spin animation for loading state
+  if (options.isLoading) {
+    runIconWrapper.style.animation = "glyph-spin 3s linear infinite"
+  }
+
+  runIconWrapper.addEventListener("mouseenter", () => {
+    runIconWrapper.style.filter = "brightness(1.3)"
+  })
+  runIconWrapper.addEventListener("mouseleave", () => {
+    runIconWrapper.style.filter = ""
+  })
+  runIconWrapper.addEventListener("click", (e) => {
+    e.stopPropagation()
+    options.onRunClick()
+  })
+  runIconWrapper.addEventListener("contextmenu", (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    options.onRunContextMenu?.()
+  })
+
+  domNode.appendChild(runIconWrapper)
+
+  return {
+    getId: () => `glyph-widget-${lineNumber}`,
+    getDomNode: () => domNode,
+    getPosition: () => ({
+      lane: 1, // monaco.editor.GlyphMarginLane.Left
+      zIndex: 1,
+      range: {
+        startLineNumber: lineNumber,
+        startColumn: 1,
+        endLineNumber: lineNumber,
+        endColumn: 1,
+      },
+    }),
+  }
+}
+
+/**
+ * Removes all glyph widgets from the editor and clears the widgets array.
+ */
+export const clearGlyphWidgets = (
+  editor: editor.IStandaloneCodeEditor,
+  widgetsRef: React.MutableRefObject<editor.IGlyphMarginWidget[]>,
+): void => {
+  widgetsRef.current.forEach((widget) => {
+    editor.removeGlyphMarginWidget(widget)
+  })
+  widgetsRef.current = []
+}

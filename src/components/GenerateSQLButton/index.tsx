@@ -27,7 +27,6 @@ import {
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
-import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })<{
   $disabled: boolean
@@ -122,7 +121,7 @@ export const GenerateSQLButton = () => {
     apiKey,
   } = useAIStatus()
   const {
-    getOrCreateConversation,
+    createConversation,
     openChatWindow,
     addMessage,
     addMessageAndUpdateSQL,
@@ -144,24 +143,19 @@ export const GenerateSQLButton = () => {
         return
       }
 
-      // Create a temporary queryKey for generate flow (using description as query text)
-      // When accepted, this will be replaced with the actual query's key
-      const tempQueryKey = `${description}@-1--1` as QueryKey
-
-      // Get or create conversation for this temporary queryKey
-      getOrCreateConversation({
-        queryKey: tempQueryKey,
+      // Create a blank conversation for generate flow
+      // When accepted, the conversation will be associated with the target buffer/queryKey
+      const conversation = createConversation({
         bufferId: activeBuffer.id, // Associate with current buffer
         originalQuery: description,
         initialSQL: "",
-        initialExplanation: "",
       })
 
       // Build the full API message (sent to the model)
       const fullApiMessage = `For the following description, generate the corresponding QuestDB SQL query and 2-4 sentences explanation:\n\n\`\`\`\n${description}\n\`\`\``
 
       // Add the initial user message with display info for cleaner UI
-      addMessage(tempQueryKey, {
+      addMessage(conversation.id, {
         role: "user",
         content: fullApiMessage,
         timestamp: Date.now(),
@@ -170,7 +164,7 @@ export const GenerateSQLButton = () => {
       })
 
       // Open chat window immediately
-      openChatWindow(tempQueryKey)
+      openChatWindow(conversation.id)
 
       // Clear description after opening chat
       setDescription("")
@@ -193,7 +187,7 @@ export const GenerateSQLButton = () => {
           settings: { model: testModel.value, provider, apiKey },
         }).then((title) => {
           if (title) {
-            updateConversationName(tempQueryKey, title)
+            updateConversationName(conversation.id, title)
           }
         })
       }
@@ -210,7 +204,7 @@ export const GenerateSQLButton = () => {
         setStatus,
         abortSignal: abortController?.signal,
         operation: "generate",
-        queryKey: tempQueryKey,
+        conversationId: conversation.id,
       })
 
       if (isAiAssistantError(response)) {
@@ -245,19 +239,14 @@ export const GenerateSQLButton = () => {
         result.sql !== undefined &&
         result.sql !== null &&
         result.sql.trim() !== ""
-      addMessageAndUpdateSQL(
-        tempQueryKey,
-        {
-          role: "assistant",
-          content: assistantContent,
-          timestamp: Date.now(),
-          ...(hasSQLInResult && { sql: result.sql }),
-          explanation: result.explanation,
-          tokenUsage: result.tokenUsage,
-        },
-        result.sql,
-        result.explanation || "",
-      )
+      addMessageAndUpdateSQL(conversation.id, {
+        role: "assistant",
+        content: assistantContent,
+        timestamp: Date.now(),
+        ...(hasSQLInResult && { sql: result.sql }),
+        explanation: result.explanation,
+        tokenUsage: result.tokenUsage,
+      })
     })()
   }
 

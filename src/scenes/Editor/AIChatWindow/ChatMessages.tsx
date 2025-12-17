@@ -9,7 +9,15 @@ import type {
   ConversationMessage,
   UserMessageDisplayType,
 } from "../../../providers/AIConversationProvider/types"
+import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
 import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
+import {
+  PlayIcon,
+  ErrorIcon,
+  SuccessIcon,
+  LoadingIconSvg,
+  ExpandUpDownIcon,
+} from "../Monaco/icons"
 import {
   GaugeIcon,
   CodeIcon,
@@ -23,91 +31,6 @@ import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
-
-const PlayIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    height="22px"
-    width="22px"
-    fill="#50fa7b"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path fill="none" d="M0 0h24v24H0z" />
-    <path d="M16.394 12 10 7.737v8.526L16.394 12zm2.982.416L8.777 19.482A.5.5 0 0 1 8 19.066V4.934a.5.5 0 0 1 .777-.416l10.599 7.066a.5.5 0 0 1 0 .832z" />
-  </svg>
-)
-
-// Success icon - matches cursorQueryGlyph.success-glyph
-const SuccessIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    height="22px"
-    width="22px"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <defs>
-      <clipPath id="clip0">
-        <rect width="24" height="24" />
-      </clipPath>
-    </defs>
-    <g clipPath="url(#clip0)">
-      <path
-        d="M8 4.934v14.132c0 .433.466.702.812.484l10.563-7.066a.5.5 0 0 0 0-.832L8.812 4.616A.5.5 0 0 0 8 4.934Z"
-        fill="#50fa7b"
-      />
-      <circle cx="18" cy="8" r="6" fill="#00aa3b" />
-      <path
-        d="m15 8.5 2 2 4-4"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </g>
-  </svg>
-)
-
-// Error icon - matches cursorQueryGlyph.error-glyph
-const ErrorIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    height="22px"
-    width="22px"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <defs>
-      <clipPath id="clip0">
-        <rect width="24" height="24" />
-      </clipPath>
-    </defs>
-    <g clipPath="url(#clip0)">
-      <path
-        d="M8 4.934v14.132c0 .433.466.702.812.484l10.563-7.066a.5.5 0 0 0 0-.832L8.812 4.616A.5.5 0 0 0 8 4.934Z"
-        fill="#50fa7b"
-      />
-      <circle cx="18" cy="8" r="6" fill="#ff5555" />
-      <rect x="17" y="4" width="2" height="5" fill="white" rx="0.5" />
-      <circle cx="18" cy="11" r="1" fill="white" />
-    </g>
-  </svg>
-)
-
-// Loading icon - matches cursorQueryGlyph.loading-glyph
-const LoadingIconSvg = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="white"
-    height="22px"
-    width="22px"
-  >
-    <path fill="none" d="M0 0h24v24H0z" />
-    <path d="M12 2a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0V3a1 1 0 0 1 1-1zm0 15a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0v-3a1 1 0 0 1 1-1zm8.66-10a1 1 0 0 1-.366 1.366l-2.598 1.5a1 1 0 1 1-1-1.732l2.598-1.5A1 1 0 0 1 20.66 7zM7.67 14.5a1 1 0 0 1-.366 1.366l-2.598 1.5a1 1 0 1 1-1-1.732l2.598-1.5a1 1 0 0 1 1.366.366zM20.66 17a1 1 0 0 1-1.366.366l-2.598-1.5a1 1 0 0 1 1-1.732l2.598 1.5A1 1 0 0 1 20.66 17zM7.67 9.5a1 1 0 0 1-1.366.366l-2.598-1.5a1 1 0 1 1 1-1.732l2.598 1.5A1 1 0 0 1 7.67 9.5z" />
-  </svg>
-)
 
 const spinAnimation = keyframes`
   from {
@@ -129,21 +52,6 @@ const LoadingIcon = () => (
   <LoadingIconWrapper>
     <LoadingIconSvg />
   </LoadingIconWrapper>
-)
-
-const ExpandUpDown = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="9"
-    height="16"
-    viewBox="0 0 7 12"
-    fill="none"
-  >
-    <path
-      d="M3.06 1.88667L5.17333 4L6.11333 3.06L3.06 0L0 3.06L0.946667 4L3.06 1.88667ZM3.06 10.1133L0.946667 8L0.00666682 8.94L3.06 12L6.12 8.94L5.17333 8L3.06 10.1133Z"
-      fill="currentColor"
-    />
-  </svg>
 )
 
 const MessagesContainer = styled(Box)`
@@ -607,17 +515,12 @@ const RejectButton = styled(Button)`
 
 type ChatMessagesProps = {
   messages: ConversationMessage[]
-  hasPendingDiff?: boolean
   onAcceptChange?: (messageIndex: number) => void
   onRejectChange?: () => void
   onRunQuery?: (sql: string) => void
-  onExpandDiff?: (
-    original: string,
-    modified: string,
-    queryKey: QueryKey,
-  ) => void
-  // Apply SQL to editor without changing accepted/rejected state
-  onApplyToEditor?: (sql: string) => void
+  onExpandDiff?: (original: string, modified: string) => void
+  // Apply SQL to editor and mark that specific message as accepted
+  onApplyToEditor?: (sql: string, messageIndex: number) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -625,8 +528,6 @@ type ChatMessagesProps = {
   queryNotifications?: Record<QueryKey, QueryNotifications>
   // The start offset used when running queries from this conversation
   queryStartOffset?: number
-  // The queryKey for this conversation (for diff buffer linking)
-  conversationQueryKey?: QueryKey
   // Whether an AI operation is in progress
   isOperationInProgress?: boolean
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
@@ -687,7 +588,6 @@ const getQueryStatusIcon = (status: QueryRunStatus) => {
 
 export const ChatMessages: React.FC<ChatMessagesProps> = ({
   messages,
-  hasPendingDiff,
   onAcceptChange,
   onRejectChange,
   onRunQuery,
@@ -697,7 +597,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   aiSuggestionRequest,
   queryNotifications,
   queryStartOffset = 0,
-  conversationQueryKey,
   isOperationInProgress,
   editorSQL,
 }) => {
@@ -762,68 +661,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     )
   }, [visibleMessagesCount])
 
-  // Pre-compute which diffs are accepted, rejected, and which is the latest unaccepted
-  const diffStatuses = useMemo(() => {
-    const statuses: Map<
-      number,
-      {
-        isAccepted: boolean
-        isRejected: boolean
-        isRejectedWithFollowUp: boolean
-        isLatestUnaccepted: boolean
-      }
-    > = new Map()
-
-    // Find all assistant messages with SQL changes
-    const diffsWithSQL: Array<{
-      index: number
-      sql: string
-      isRejected: boolean
-      isRejectedWithFollowUp: boolean
-      isAccepted: boolean
-    }> = []
-    messages.forEach((msg, idx) => {
-      // Note: previousSQL can be empty string for generate flow, so we check for undefined
-      if (
-        msg.role === "assistant" &&
-        msg.sql &&
-        msg.previousSQL !== undefined
-      ) {
-        diffsWithSQL.push({
-          index: idx,
-          sql: msg.sql,
-          isRejected: msg.isRejected === true,
-          isRejectedWithFollowUp: msg.isRejectedWithFollowUp === true,
-          isAccepted: msg.isAccepted === true,
-        })
-      }
-    })
-
-    // Determine which diffs are accepted and rejected
-    diffsWithSQL.forEach(
-      ({ index, isRejected, isRejectedWithFollowUp, isAccepted }) => {
-        statuses.set(index, {
-          isAccepted,
-          isRejected,
-          isRejectedWithFollowUp,
-          isLatestUnaccepted: false,
-        })
-      },
-    )
-
-    // Find the latest unaccepted and non-rejected diff
-    for (let i = diffsWithSQL.length - 1; i >= 0; i--) {
-      const { index, isRejected, isAccepted } = diffsWithSQL[i]
-      const status = statuses.get(index)
-      if (status && !isAccepted && !isRejected) {
-        status.isLatestUnaccepted = true
-        break
-      }
-    }
-
-    return statuses
-  }, [messages])
-
   // Filter out hidden messages for display, but keep original indices for status computation
   const visibleMessages: Array<{
     message: ConversationMessage
@@ -834,6 +671,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       visibleMessages.push({ message: msg, originalIndex: originalIdx })
     }
   })
+
+  // Get the index of the last visible message (for button visibility)
+  const lastVisibleMessageIndex =
+    visibleMessages.length > 0
+      ? visibleMessages[visibleMessages.length - 1].originalIndex
+      : -1
 
   return (
     <MessagesContainer>
@@ -958,27 +801,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const hasSQLChange =
             !!message.sql && message.previousSQL !== undefined
           const isExpanded = expandedDiffs.has(originalIndex)
-          const isRejectable = message.isRejectable === true
 
-          // Get diff status from pre-computed map (use original index)
-          const diffStatus = hasSQLChange
-            ? diffStatuses.get(originalIndex)
-            : null
-          const isAccepted = diffStatus?.isAccepted ?? false
-          const isRejected = diffStatus?.isRejected ?? false
-          const isRejectedWithFollowUp =
-            diffStatus?.isRejectedWithFollowUp ?? false
-          const isLatestUnacceptedDiff = diffStatus?.isLatestUnaccepted ?? false
+          // Read status directly from message
+          const isAccepted = message.isAccepted === true
+          const isRejected = message.isRejected === true
+          const isRejectedWithFollowUp = message.isRejectedWithFollowUp === true
 
-          // Show buttons only if diff hasn't been accepted and hasn't been rejected (either type)
+          const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
           const showButtons =
             hasSQLChange &&
             !isAccepted &&
             !isRejected &&
-            !isRejectedWithFollowUp
-          // Show reject button only on latest unaccepted diff
-          const showRejectButton =
-            showButtons && isLatestUnacceptedDiff && isRejectable
+            !isRejectedWithFollowUp &&
+            isLastVisibleMessage
 
           // Compute query run status for this message's SQL
           let queryRunStatus: QueryRunStatus = "neutral"
@@ -1014,23 +849,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             }
           }
 
-          // Prepare SQL for diff display (remove semicolons)
-          let previousSQLForDiff = "\n"
-          if (message.previousSQL && typeof message.previousSQL === "string") {
-            let trimmed = message.previousSQL.trim()
-            if (trimmed.endsWith(";")) {
-              trimmed = trimmed.slice(0, -1).trim()
-            }
-            previousSQLForDiff = trimmed + "\n"
-          }
-          let currentSQLForDiff = "\n"
-          if (message.sql && typeof message.sql === "string") {
-            let trimmed = message.sql.trim()
-            if (trimmed.endsWith(";")) {
-              trimmed = trimmed.slice(0, -1).trim()
-            }
-            currentSQLForDiff = trimmed + "\n"
-          }
+          const previousSQLForDiff = trimSemicolonForDisplay(
+            message.previousSQL,
+          )
+          const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
 
           return (
             <ExplanationBox key={key}>
@@ -1175,7 +997,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                               onClick={(e) => {
                                 e.stopPropagation()
                                 if (message.sql && !isOperationInProgress) {
-                                  onApplyToEditor(message.sql)
+                                  onApplyToEditor(message.sql, originalIndex)
                                 }
                               }}
                               title="Apply to editor"
@@ -1204,7 +1026,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             })
                           }}
                         >
-                          <ExpandUpDown />
+                          <ExpandUpDownIcon />
                         </ExpandButton>
                       </DiffHeaderRight>
                     </DiffHeader>
@@ -1217,20 +1039,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             modified={currentSQLForDiff}
                             noBorder
                             onExpandDiff={
-                              onExpandDiff && conversationQueryKey
+                              onExpandDiff
                                 ? () =>
                                     onExpandDiff(
                                       message.previousSQL || "",
                                       message.sql || "",
-                                      conversationQueryKey,
                                     )
                                 : undefined
                             }
                           />
                         </DiffEditorWrapper>
-                        {showButtons && hasPendingDiff && (
+                        {showButtons && (
                           <ButtonBar align="center" justifyContent="center">
-                            {showRejectButton && onRejectChange && (
+                            {onRejectChange && (
                               <RejectButton onClick={onRejectChange}>
                                 Reject
                               </RejectButton>

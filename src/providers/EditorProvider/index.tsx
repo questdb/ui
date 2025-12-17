@@ -21,6 +21,7 @@ import {
   parseQueryKey,
   createQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
+import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/aiAssistant"
 import type { Buffer } from "../../store/buffers"
 import {
@@ -48,8 +49,7 @@ export type DiffModeState = {
 export type DiffBufferContent = {
   original: string
   modified: string
-  explanation?: string
-  queryKey?: QueryKey // Links the diff buffer to its source conversation
+  conversationId?: ConversationId // Links the diff buffer to its source conversation
 }
 
 export type ApplyAISQLChangeOptions = {
@@ -110,7 +110,9 @@ export type EditorContext = {
   updateDiffMode: (original: string, modified: string) => void
   // Global diff buffer management
   showDiffBuffer: (content: DiffBufferContent) => Promise<void>
-  closeDiffBufferForQuery: (queryKey: QueryKey) => Promise<void>
+  closeDiffBufferForConversation: (
+    conversationId: ConversationId,
+  ) => Promise<void>
   // Apply AI SQL change to editor
   applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
 }
@@ -140,7 +142,7 @@ const defaultValues = {
   exitDiffMode: () => undefined,
   updateDiffMode: () => undefined,
   showDiffBuffer: () => Promise.resolve(),
-  closeDiffBufferForQuery: () => Promise.resolve(),
+  closeDiffBufferForConversation: () => Promise.resolve(),
   applyAISQLChange: () => ({ success: false }),
 }
 
@@ -472,8 +474,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         diffContent: {
           original: content.original,
           modified: content.modified,
-          explanation: content.explanation || "",
-          queryKey: content.queryKey,
+          conversationId: content.conversationId,
           queryStartOffset: 0,
           originalQuery: content.original,
         },
@@ -484,8 +485,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         diffContent: {
           original: content.original,
           modified: content.modified,
-          explanation: content.explanation || "",
-          queryKey: content.queryKey,
+          conversationId: content.conversationId,
           queryStartOffset: 0,
           originalQuery: content.original,
         },
@@ -504,8 +504,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         diffContent: {
           original: content.original,
           modified: content.modified,
-          explanation: content.explanation || "",
-          queryKey: content.queryKey,
+          conversationId: content.conversationId,
           queryStartOffset: 0,
           originalQuery: content.original,
         },
@@ -514,11 +513,13 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const closeDiffBufferForQuery: EditorContext["closeDiffBufferForQuery"] =
-    async (queryKey) => {
+  const closeDiffBufferForConversation: EditorContext["closeDiffBufferForConversation"] =
+    async (conversationId) => {
       const diffBuffer = buffers.find(
         (b) =>
-          b.isDiffBuffer && !b.archived && b.diffContent?.queryKey === queryKey,
+          b.isDiffBuffer &&
+          !b.archived &&
+          b.diffContent?.conversationId === conversationId,
       )
       if (diffBuffer && diffBuffer.id) {
         await deleteBuffer(diffBuffer.id, true)
@@ -743,7 +744,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         exitDiffMode,
         updateDiffMode,
         showDiffBuffer,
-        closeDiffBufferForQuery,
+        closeDiffBufferForConversation,
         applyAISQLChange,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {

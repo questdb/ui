@@ -18,8 +18,10 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { slideAnimation, spinAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
-import type { QueryKey } from "../Monaco/utils"
-import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
+import type {
+  SchemaDisplayData,
+  ConversationId,
+} from "../../../providers/AIConversationProvider/types"
 import { TableIcon } from "../../Schema/table-icon"
 
 // Gradient spinner icon (same as AIStatusIndicator)
@@ -263,7 +265,7 @@ type ChatInputProps = {
   onSend: (message: string) => void
   disabled?: boolean
   placeholder?: string
-  queryKey?: QueryKey
+  conversationId?: ConversationId
   contextSQL?: string
   contextSchemaData?: SchemaDisplayData
   onContextClick: () => void
@@ -286,7 +288,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSend,
       disabled = false,
       placeholder = "Ask a question or request a refinement...",
-      queryKey,
+      conversationId,
       contextSQL,
       contextSchemaData,
       onContextClick,
@@ -309,10 +311,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         textareaRef.current?.focus()
       },
     }))
-    const { status: aiStatus, abortOperation, activeQueryKey } = useAIStatus()
+    const {
+      status: aiStatus,
+      abortOperation,
+      activeConversationId,
+    } = useAIStatus()
 
     const isOperationForThisConversation = Boolean(
-      queryKey && activeQueryKey && queryKey === activeQueryKey,
+      conversationId &&
+        activeConversationId &&
+        conversationId === activeConversationId,
     )
     const isAIInProgress =
       isBlockingAIStatus(aiStatus) && isOperationForThisConversation

@@ -516,7 +516,7 @@ export const AIStatusIndicator: React.FC = () => {
     currentOperation,
     currentModel,
     abortOperation,
-    activeQueryKey,
+    activeConversationId,
     clearOperation,
   } = useAIStatus()
   const { chatWindowState, openChatWindow } = useAIConversation()
@@ -662,8 +662,10 @@ export const AIStatusIndicator: React.FC = () => {
               <StopFill size="14px" color="#da1e28" />
             </AIStopButton>
           )}
-          {activeQueryKey && (
-            <ViewChatButton onClick={() => openChatWindow(activeQueryKey)}>
+          {activeConversationId && (
+            <ViewChatButton
+              onClick={() => openChatWindow(activeConversationId)}
+            >
               View chat
               <SidebarSimpleIcon size={14} weight="fill" />
             </ViewChatButton>

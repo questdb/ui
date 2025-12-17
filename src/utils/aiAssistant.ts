@@ -18,7 +18,7 @@ import type {
   ResponseTextConfig,
 } from "openai/resources/responses/responses"
 import type { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/messages"
-import type { QueryKey } from "../scenes/Editor/Monaco/utils"
+import type { ConversationId } from "../providers/AIConversationProvider/types"
 
 export type ActiveProviderSettings = {
   model: string
@@ -1146,14 +1146,14 @@ export const explainTableSchema = async ({
   isMatView,
   settings,
   setStatus,
-  queryKey,
+  conversationId,
 }: {
   tableName: string
   schema: string
   isMatView: boolean
   settings: ActiveProviderSettings
   setStatus: StatusCallback
-  queryKey?: QueryKey
+  conversationId?: ConversationId
 }): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
   if (!settings.apiKey || !settings.model) {
     return {
@@ -1169,7 +1169,7 @@ export const explainTableSchema = async ({
   }
 
   await handleRateLimit()
-  setStatus(AIOperationStatus.Processing, { type: "explain", queryKey })
+  setStatus(AIOperationStatus.Processing, { type: "explain", conversationId })
 
   return tryWithRetries(async () => {
     const clients = createProviderClients(settings)
@@ -1538,7 +1538,7 @@ export const continueConversation = async ({
   setStatus,
   abortSignal,
   operation = "followup",
-  queryKey,
+  conversationId,
 }: {
   userMessage: string
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
@@ -1549,7 +1549,7 @@ export const continueConversation = async ({
   setStatus: StatusCallback
   abortSignal?: AbortSignal
   operation?: AIOperation
-  queryKey: QueryKey
+  conversationId?: ConversationId
 }): Promise<GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError> => {
   // originalQuery is kept for potential future use
   void originalQuery
@@ -1582,7 +1582,7 @@ export const continueConversation = async ({
     followup: "followup" as const,
   }[operation]
 
-  setStatus(AIOperationStatus.Processing, { type: statusType, queryKey })
+  setStatus(AIOperationStatus.Processing, { type: statusType, conversationId })
 
   return tryWithRetries(
     async () => {

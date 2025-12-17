@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useState, useCallback } from "react"
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+} from "react"
 import type {
   AIConversation,
   ConversationMessage,
   ChatWindowState,
   SchemaDisplayData,
+  ConversationId,
 } from "./types"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
@@ -12,67 +19,96 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
 import { normalizeSql } from "../../utils/aiAssistant"
+import {
+  buildIndices,
+  createQueryLookupKey,
+  createSchemaIdentifier,
+} from "./indices"
 
 export type AcceptSuggestionParams = {
-  queryKey: QueryKey
+  conversationId: ConversationId
   sql: string
-  explanation?: string
-  messageIndex?: number
+  messageIndex?: number // Index of the specific message to mark as accepted
   skipHiddenMessage?: boolean
 }
 
 type AIConversationContextType = {
-  conversations: Map<QueryKey, AIConversation>
+  // Storage
+  conversations: Map<ConversationId, AIConversation>
   chatWindowState: ChatWindowState
-  openChatWindow: (queryKey: QueryKey) => void
-  closeChatWindow: () => void
-  getConversation: (queryKey: QueryKey) => AIConversation | undefined
-  getOrCreateConversation: (options: {
-    queryKey: QueryKey
-    bufferId?: number | string
-    originalQuery?: string
+
+  // Lookup functions
+  getConversation: (id: ConversationId) => AIConversation | undefined
+  findConversationByQuery: (
+    bufferId: string | number,
+    queryKey: QueryKey,
+  ) => AIConversation | undefined
+  findConversationBySchema: (
+    tableName: string,
+    ddlHash: string,
+  ) => AIConversation | undefined
+  hasConversationForQuery: (
+    bufferId: string | number,
+    queryKey: QueryKey,
+  ) => boolean
+
+  // Creation and mutation
+  createConversation: (options: {
+    bufferId?: string | number | null
+    queryKey?: QueryKey | null
+    schemaIdentifier?: string
     initialSQL?: string
-    initialExplanation?: string
+    originalQuery?: string
     queryStartOffset?: number
     queryEndOffset?: number
     schemaData?: SchemaDisplayData
   }) => AIConversation
-  addMessage: (queryKey: QueryKey, message: ConversationMessage) => void
-  updateConversationSQL: (
-    queryKey: QueryKey,
-    sql: string,
-    explanation: string,
+  getOrCreateConversationForQuery: (options: {
+    bufferId: string | number
+    queryKey: QueryKey
+    queryText: string
+    queryStartOffset?: number
+    queryEndOffset?: number
+  }) => AIConversation
+  updateConversationAssociations: (
+    conversationId: ConversationId,
+    updates: {
+      bufferId?: string | number | null
+      queryKey?: QueryKey | null
+      queryStartOffset?: number
+      queryEndOffset?: number
+    },
   ) => void
-  addMessageAndUpdateSQL: (
+
+  // Chat window
+  openChatWindow: (conversationId: ConversationId) => void
+  openChatWindowForQuery: (
+    bufferId: string | number,
     queryKey: QueryKey,
+  ) => void
+  closeChatWindow: () => void
+
+  // Message operations (now use ConversationId)
+  addMessage: (
+    conversationId: ConversationId,
     message: ConversationMessage,
-    sql: string,
-    explanation: string,
   ) => void
-  updateConversationQueryKey: (
-    oldQueryKey: QueryKey,
-    newQueryKey: QueryKey,
+  updateConversationSQL: (conversationId: ConversationId, sql: string) => void
+  addMessageAndUpdateSQL: (
+    conversationId: ConversationId,
+    message: ConversationMessage,
   ) => void
-  updateConversationBufferId: (
-    queryKey: QueryKey,
-    bufferId: number | string | undefined,
-  ) => void
-  updateConversationName: (queryKey: QueryKey, name: string) => void
-  updateConversationOffsets: (
-    queryKey: QueryKey,
-    queryStartOffset: number,
-    queryEndOffset: number,
-  ) => void
+  updateConversationName: (conversationId: ConversationId, name: string) => void
   acceptConversationChanges: (
-    queryKey: QueryKey,
-    upToMessageIndex?: number,
+    conversationId: ConversationId,
+    messageIndex?: number,
   ) => void
-  rejectLatestChange: (queryKey: QueryKey) => void
-  markLatestAsRejectedWithFollowUp: (queryKey: QueryKey) => void
-  acceptSuggestion: (
-    params: AcceptSuggestionParams,
-  ) => Promise<QueryKey | undefined>
-  rejectSuggestion: (queryKey: QueryKey) => Promise<void>
+  rejectLatestChange: (conversationId: ConversationId) => void
+  markLatestAsRejectedWithFollowUp: (conversationId: ConversationId) => void
+
+  // Accept/reject suggestions
+  acceptSuggestion: (params: AcceptSuggestionParams) => Promise<void>
+  rejectSuggestion: (conversationId: ConversationId) => Promise<void>
 }
 
 const AIConversationContext = createContext<
@@ -93,50 +129,87 @@ export const AIConversationProvider: React.FC<{
   children: React.ReactNode
 }> = ({ children }) => {
   const [conversations, setConversations] = useState<
-    Map<QueryKey, AIConversation>
+    Map<ConversationId, AIConversation>
   >(new Map())
+
   const [chatWindowState, setChatWindowState] = useState<ChatWindowState>({
     isOpen: false,
-    activeQueryKey: null,
+    activeConversationId: null,
   })
 
+  const indices = useMemo(() => buildIndices(conversations), [conversations])
+
+  const generateConversationId = useCallback(
+    (): ConversationId => crypto.randomUUID(),
+    [],
+  )
+
   const getConversation = useCallback(
-    (queryKey: QueryKey): AIConversation | undefined => {
-      return conversations.get(queryKey)
+    (id: ConversationId): AIConversation | undefined => {
+      return conversations.get(id)
     },
     [conversations],
   )
 
-  const getOrCreateConversation = useCallback(
+  const findConversationByQuery = useCallback(
+    (
+      bufferId: string | number,
+      queryKey: QueryKey,
+    ): AIConversation | undefined => {
+      const lookupKey = createQueryLookupKey(bufferId, queryKey)
+      const id = indices.queryIndex.get(lookupKey)
+      return id ? conversations.get(id) : undefined
+    },
+    [conversations, indices],
+  )
+
+  const findConversationBySchema = useCallback(
+    (tableName: string, ddlHash: string): AIConversation | undefined => {
+      const schemaId = createSchemaIdentifier(tableName, ddlHash)
+      const id = indices.schemaIndex.get(schemaId)
+      return id ? conversations.get(id) : undefined
+    },
+    [conversations, indices],
+  )
+
+  const hasConversationForQuery = useCallback(
+    (bufferId: string | number, queryKey: QueryKey): boolean => {
+      const lookupKey = createQueryLookupKey(bufferId, queryKey)
+      const conversationId: ConversationId | undefined =
+        indices.queryIndex.get(lookupKey)
+      if (!conversationId) return false
+      const conversation = conversations.get(conversationId)
+      return conversation !== undefined && conversation.messages.length > 0
+    },
+    [indices, conversations],
+  )
+
+  const createConversation = useCallback(
     (options: {
-      queryKey: QueryKey
-      bufferId?: number | string
-      originalQuery?: string
+      bufferId?: string | number | null
+      queryKey?: QueryKey | null
+      schemaIdentifier?: string
       initialSQL?: string
-      initialExplanation?: string
+      originalQuery?: string
       queryStartOffset?: number
       queryEndOffset?: number
       schemaData?: SchemaDisplayData
     }): AIConversation => {
-      const existing = conversations.get(options.queryKey)
-      if (existing) {
-        return existing
-      }
-
+      const id = generateConversationId()
       const initialSQL = options.initialSQL || ""
       const conversation: AIConversation = {
-        queryKey: options.queryKey,
-        bufferId: options.bufferId,
+        id,
+        queryKey: options.queryKey ?? null,
+        bufferId: options.bufferId ?? null,
+        schemaIdentifier: options.schemaIdentifier,
         originalQuery: options.originalQuery,
         initialSQL,
         currentSQL: initialSQL,
-        currentExplanation: options.initialExplanation || "",
-        acceptedSQL: initialSQL, // Initially equals initialSQL
+        acceptedSQL: initialSQL,
         acceptedAt: Date.now(),
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        hasPendingDiff: false,
         queryStartOffset: options.queryStartOffset,
         queryEndOffset: options.queryEndOffset,
         schemaData: options.schemaData,
@@ -144,20 +217,74 @@ export const AIConversationProvider: React.FC<{
 
       setConversations((prev) => {
         const next = new Map(prev)
-        next.set(options.queryKey, conversation)
+        next.set(id, conversation)
         return next
       })
 
       return conversation
     },
-    [conversations],
+    [generateConversationId],
+  )
+
+  const getOrCreateConversationForQuery = useCallback(
+    (options: {
+      bufferId: string | number
+      queryKey: QueryKey
+      queryText: string
+      queryStartOffset?: number
+      queryEndOffset?: number
+    }): AIConversation => {
+      const existing = findConversationByQuery(
+        options.bufferId,
+        options.queryKey,
+      )
+      if (existing) {
+        return existing
+      }
+
+      return createConversation({
+        bufferId: options.bufferId,
+        queryKey: options.queryKey,
+        originalQuery: options.queryText,
+        initialSQL: options.queryText,
+        queryStartOffset: options.queryStartOffset,
+        queryEndOffset: options.queryEndOffset,
+      })
+    },
+    [findConversationByQuery, createConversation],
+  )
+
+  const updateConversationAssociations = useCallback(
+    (
+      conversationId: ConversationId,
+      updates: {
+        bufferId?: string | number | null
+        queryKey?: QueryKey | null
+        queryStartOffset?: number
+        queryEndOffset?: number
+      },
+    ): void => {
+      setConversations((prev) => {
+        const next = new Map(prev)
+        const conv = next.get(conversationId)
+        if (!conv) return prev
+
+        next.set(conversationId, {
+          ...conv,
+          ...updates,
+          updatedAt: Date.now(),
+        })
+        return next
+      })
+    },
+    [],
   )
 
   const addMessage = useCallback(
-    (queryKey: QueryKey, message: ConversationMessage) => {
+    (conversationId: ConversationId, message: ConversationMessage) => {
       setConversations((prev) => {
         const next = new Map(prev)
-        const conv = next.get(queryKey)
+        const conv = next.get(conversationId)
         if (conv) {
           // If adding a visible user message (follow-up), mark all previous assistant messages as non-rejectable
           // Hidden messages (context messages) should not affect rejectability
@@ -172,7 +299,7 @@ export const AIConversationProvider: React.FC<{
               })
             : conv.messages
 
-          next.set(queryKey, {
+          next.set(conversationId, {
             ...conv,
             messages: [...updatedMessages, message],
             updatedAt: Date.now(),
@@ -185,15 +312,14 @@ export const AIConversationProvider: React.FC<{
   )
 
   const updateConversationSQL = useCallback(
-    (queryKey: QueryKey, sql: string, explanation: string) => {
+    (conversationId: ConversationId, sql: string) => {
       setConversations((prev) => {
         const next = new Map(prev)
-        const conv = next.get(queryKey)
+        const conv = next.get(conversationId)
         if (conv) {
-          next.set(queryKey, {
+          next.set(conversationId, {
             ...conv,
             currentSQL: sql,
-            currentExplanation: explanation,
             // Also update acceptedSQL since this is called when user explicitly applies SQL to editor
             // This ensures future diffs show correct "original" (what's in editor)
             acceptedSQL: sql,
@@ -208,19 +334,15 @@ export const AIConversationProvider: React.FC<{
   )
 
   const addMessageAndUpdateSQL = useCallback(
-    (
-      queryKey: QueryKey,
-      message: ConversationMessage,
-      sql: string,
-      explanation: string,
-    ) => {
+    (conversationId: ConversationId, message: ConversationMessage) => {
       setConversations((prev) => {
         const next = new Map(prev)
-        const conv = next.get(queryKey)
+        const conv = next.get(conversationId)
         if (conv) {
           // Track previous SQL only if this message contains SQL changes
           // (message.sql will be undefined if no SQL change, due to conditional spreading)
           const hasSQLChange = message.sql !== undefined
+          const sql = message.sql || ""
 
           // Check if the SQL actually changed from what's accepted in the editor
           // Normalize both for comparison to avoid whitespace/formatting differences
@@ -255,15 +377,12 @@ export const AIConversationProvider: React.FC<{
             isRejectable: sqlActuallyChanged,
           }
 
-          next.set(queryKey, {
+          next.set(conversationId, {
             ...conv,
             messages: [...updatedMessages, messageWithHistory],
             // Only update currentSQL if there's an actual SQL change
             currentSQL: hasSQLChange ? sql : conv.currentSQL,
-            currentExplanation: explanation,
             updatedAt: Date.now(),
-            // Set pending diff only if SQL actually changed from acceptedSQL
-            hasPendingDiff: sqlActuallyChanged ? true : conv.hasPendingDiff,
             // Clear schemaData when conversation transitions to having SQL (schema→query)
             ...(hasSQLChange ? { schemaData: undefined } : {}),
           })
@@ -274,63 +393,13 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const updateConversationQueryKey = useCallback(
-    (oldQueryKey: QueryKey, newQueryKey: QueryKey) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(oldQueryKey)
-        if (conv) {
-          // Remove old key
-          next.delete(oldQueryKey)
-          // Add with new key
-          next.set(newQueryKey, {
-            ...conv,
-            queryKey: newQueryKey,
-            updatedAt: Date.now(),
-          })
-
-          // Update chat window if it's showing this conversation
-          setChatWindowState((prevState) => {
-            if (prevState.activeQueryKey === oldQueryKey) {
-              return {
-                ...prevState,
-                activeQueryKey: newQueryKey,
-              }
-            }
-            return prevState
-          })
-        }
-        return next
-      })
-    },
-    [],
-  )
-
-  const updateConversationBufferId = useCallback(
-    (queryKey: QueryKey, bufferId: number | string | undefined) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(queryKey)
-        if (conv) {
-          next.set(queryKey, {
-            ...conv,
-            bufferId,
-            updatedAt: Date.now(),
-          })
-        }
-        return next
-      })
-    },
-    [],
-  )
-
   const updateConversationName = useCallback(
-    (queryKey: QueryKey, name: string) => {
+    (conversationId: ConversationId, name: string) => {
       setConversations((prev) => {
         const next = new Map(prev)
-        const conv = next.get(queryKey)
+        const conv = next.get(conversationId)
         if (conv) {
-          next.set(queryKey, {
+          next.set(conversationId, {
             ...conv,
             conversationName: name,
             updatedAt: Date.now(),
@@ -342,87 +411,60 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const updateConversationOffsets = useCallback(
-    (queryKey: QueryKey, queryStartOffset: number, queryEndOffset: number) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(queryKey)
-        if (conv) {
-          next.set(queryKey, {
-            ...conv,
-            queryStartOffset,
-            queryEndOffset,
-            updatedAt: Date.now(),
-          })
-        }
-        return next
-      })
-    },
-    [],
-  )
-
   const acceptConversationChanges = useCallback(
-    (queryKey: QueryKey, upToMessageIndex?: number) => {
+    (conversationId: ConversationId, messageIndex?: number) => {
       setConversations((prev) => {
         const next = new Map(prev)
-        const conv = next.get(queryKey)
-        if (conv) {
-          // Determine which SQL to accept
-          let sqlToAccept = conv.currentSQL
-          if (
-            upToMessageIndex !== undefined &&
-            upToMessageIndex >= 0 &&
-            upToMessageIndex < conv.messages.length
-          ) {
-            // Find the SQL from the message at this index
-            const targetMessage = conv.messages[upToMessageIndex]
-            sqlToAccept = targetMessage.sql || conv.currentSQL
-          }
+        const conv = next.get(conversationId)
+        if (!conv) return next
 
-          // Mark messages up to the accepted index as non-rejectable and accepted
-          const updatedMessages = conv.messages.map((msg, idx) => {
-            if (msg.role === "assistant" && msg.sql) {
-              // If upToMessageIndex is specified, mark up to that index as accepted
-              // Otherwise, mark the latest message with SQL as accepted
-              if (upToMessageIndex !== undefined) {
-                if (idx <= upToMessageIndex) {
-                  return { ...msg, isRejectable: false, isAccepted: true }
-                }
-              } else {
-                // No specific index - mark latest SQL message as accepted
-                // Find the latest assistant message with SQL
-                const lastSQLIndex = conv.messages.reduce(
-                  (lastIdx, m, i) =>
-                    m.role === "assistant" && m.sql ? i : lastIdx,
-                  -1,
-                )
-                if (idx === lastSQLIndex) {
-                  return { ...msg, isRejectable: false, isAccepted: true }
-                }
-              }
+        let targetIndex = messageIndex
+        if (targetIndex === undefined) {
+          for (let i = conv.messages.length - 1; i >= 0; i--) {
+            if (
+              conv.messages[i].role === "assistant" &&
+              conv.messages[i].sql !== undefined
+            ) {
+              targetIndex = i
+              break
             }
-            return msg
-          })
-
-          next.set(queryKey, {
-            ...conv,
-            acceptedSQL: sqlToAccept,
-            acceptedAt: Date.now(),
-            messages: updatedMessages,
-            updatedAt: Date.now(),
-            hasPendingDiff: false,
-          })
+          }
         }
+
+        const targetMessage =
+          targetIndex !== undefined ? conv.messages[targetIndex] : undefined
+        const sqlToAccept = targetMessage?.sql || conv.currentSQL
+
+        const updatedMessages = conv.messages.map((msg, idx) => {
+          if (msg.role === "assistant" && msg.sql) {
+            if (idx === targetIndex) {
+              // Mark this specific message as accepted
+              return { ...msg, isRejectable: false, isAccepted: true }
+            }
+            if (msg.isRejectable) {
+              return { ...msg, isRejectable: false }
+            }
+          }
+          return msg
+        })
+
+        next.set(conversationId, {
+          ...conv,
+          acceptedSQL: sqlToAccept,
+          acceptedAt: Date.now(),
+          messages: updatedMessages,
+          updatedAt: Date.now(),
+        })
         return next
       })
     },
     [],
   )
 
-  const rejectLatestChange = useCallback((queryKey: QueryKey) => {
+  const rejectLatestChange = useCallback((conversationId: ConversationId) => {
     setConversations((prev) => {
       const next = new Map(prev)
-      const conv = next.get(queryKey)
+      const conv = next.get(conversationId)
       if (conv) {
         // Find the latest assistant message with SQL change
         let latestAssistantIndex = -1
@@ -466,76 +508,91 @@ export const AIConversationProvider: React.FC<{
           hideFromUI: true,
         }
 
-        next.set(queryKey, {
+        next.set(conversationId, {
           ...conv,
           currentSQL: revertedSQL,
           messages: [...updatedMessages, rejectionMessage],
           updatedAt: Date.now(),
-          hasPendingDiff: false,
         })
       }
       return next
     })
   }, [])
 
-  const markLatestAsRejectedWithFollowUp = useCallback((queryKey: QueryKey) => {
-    setConversations((prev) => {
-      const next = new Map(prev)
-      const conv = next.get(queryKey)
-      if (conv) {
-        // Find the latest assistant message with SQL change that is rejectable
-        let latestAssistantIndex = -1
-        for (let i = conv.messages.length - 1; i >= 0; i--) {
-          if (
-            conv.messages[i].role === "assistant" &&
-            conv.messages[i].sql &&
-            conv.messages[i].isRejectable
-          ) {
-            latestAssistantIndex = i
-            break
+  const markLatestAsRejectedWithFollowUp = useCallback(
+    (conversationId: ConversationId) => {
+      setConversations((prev) => {
+        const next = new Map(prev)
+        const conv = next.get(conversationId)
+        if (conv) {
+          let latestAssistantIndex = -1
+          for (let i = conv.messages.length - 1; i >= 0; i--) {
+            if (
+              conv.messages[i].role === "assistant" &&
+              conv.messages[i].sql &&
+              conv.messages[i].isRejectable
+            ) {
+              latestAssistantIndex = i
+              break
+            }
           }
-        }
 
-        if (latestAssistantIndex === -1) {
-          // No rejectable change found
-          return next
-        }
-
-        // Mark latest message as rejected with follow-up (not just rejected)
-        // Note: We do NOT revert currentSQL here because:
-        // 1. User may have applied a different suggestion via "Apply to Editor"
-        // 2. The diff view uses message.previousSQL, not conv.currentSQL
-        // 3. addMessageAndUpdateSQL will correctly capture currentSQL as previousSQL for the next suggestion
-        const updatedMessages = conv.messages.map((msg, idx) => {
-          if (idx === latestAssistantIndex) {
-            return { ...msg, isRejectable: false, isRejectedWithFollowUp: true }
+          if (latestAssistantIndex === -1) {
+            return next
           }
-          return msg
-        })
 
-        next.set(queryKey, {
-          ...conv,
-          messages: updatedMessages,
-          updatedAt: Date.now(),
-          hasPendingDiff: false,
-        })
-      }
-      return next
-    })
-  }, [])
+          // Mark latest message as rejected with follow-up (not just rejected)
+          // Note: We do NOT revert currentSQL here because:
+          // 1. User may have applied a different suggestion via "Apply to Editor"
+          // 2. The diff view uses message.previousSQL, not conv.currentSQL
+          // 3. addMessageAndUpdateSQL will correctly capture currentSQL as previousSQL for the next suggestion
+          const updatedMessages = conv.messages.map((msg, idx) => {
+            if (idx === latestAssistantIndex) {
+              return {
+                ...msg,
+                isRejectable: false,
+                isRejectedWithFollowUp: true,
+              }
+            }
+            return msg
+          })
 
-  const openChatWindow = useCallback((queryKey: QueryKey) => {
+          next.set(conversationId, {
+            ...conv,
+            messages: updatedMessages,
+            updatedAt: Date.now(),
+          })
+        }
+        return next
+      })
+    },
+    [],
+  )
+
+  // ============ CHAT WINDOW FUNCTIONS ============
+
+  const openChatWindow = useCallback((conversationId: ConversationId) => {
     setChatWindowState({
       isOpen: true,
-      activeQueryKey: queryKey,
+      activeConversationId: conversationId,
     })
   }, [])
+
+  const openChatWindowForQuery = useCallback(
+    (bufferId: string | number, queryKey: QueryKey) => {
+      const conv = findConversationByQuery(bufferId, queryKey)
+      if (conv) {
+        openChatWindow(conv.id)
+      }
+    },
+    [findConversationByQuery, openChatWindow],
+  )
 
   const closeChatWindow = useCallback(() => {
     setChatWindowState((prev) => ({
       ...prev,
       isOpen: false,
-      // Keep activeQueryKey so conversation persists after closing
+      // Keep activeConversationId so conversation persists after closing
     }))
   }, [])
 
@@ -546,89 +603,78 @@ export const AIConversationProvider: React.FC<{
     activeBuffer,
     setActiveBuffer,
     addBuffer,
-    closeDiffBufferForQuery,
+    closeDiffBufferForConversation,
     applyAISQLChange,
   } = useEditor()
 
   // Unified accept function - handles all scenarios
   const acceptSuggestion = useCallback(
-    async (params: AcceptSuggestionParams): Promise<QueryKey | undefined> => {
-      const {
-        queryKey,
-        sql,
-        explanation = "",
-        messageIndex,
-        skipHiddenMessage,
-      } = params
-      const conversation = conversations.get(queryKey)
-      if (!conversation) return undefined
+    async (params: AcceptSuggestionParams): Promise<void> => {
+      const { conversationId, sql, messageIndex, skipHiddenMessage } = params
+      const conversation = conversations.get(conversationId)
+      if (!conversation) return
 
       const normalizedSQL = normalizeSql(sql, false)
 
-      // Close any open diff buffer for this query first
-      await closeDiffBufferForQuery(queryKey)
+      // Close any open diff buffer for this conversation first
+      await closeDiffBufferForConversation(conversationId)
 
       // Determine buffer status
       const conversationBufferId = conversation.bufferId
       const buffer = buffers.find((b) => b.id === conversationBufferId)
 
-      const bufferStatus = !buffer
-        ? ("deleted" as const)
-        : buffer.archived
-          ? ("archived" as const)
-          : buffer.id === activeBuffer.id
-            ? ("active" as const)
-            : ("inactive" as const)
-
-      let finalQueryKey: QueryKey | undefined
+      const bufferStatus =
+        conversationBufferId == null
+          ? ("none" as const)
+          : !buffer
+            ? ("deleted" as const)
+            : buffer.archived
+              ? ("archived" as const)
+              : buffer.id === activeBuffer.id
+                ? ("active" as const)
+                : ("inactive" as const)
 
       try {
         // Handle based on buffer status
         if (bufferStatus === "active") {
-          finalQueryKey = applyChangesToActiveTab(
+          applyChangesToActiveTab(
+            conversationId,
             normalizedSQL,
-            queryKey,
             conversation,
-            explanation,
             messageIndex,
           )
         } else if (
           bufferStatus === "deleted" ||
           bufferStatus === "archived" ||
-          !conversationBufferId
+          bufferStatus === "none"
         ) {
-          finalQueryKey = await applyChangesToNewTab(
+          await applyChangesToNewTab(
+            conversationId,
             normalizedSQL,
-            queryKey,
-            explanation,
             messageIndex,
           )
         } else if (bufferStatus === "inactive" && buffer) {
           await setActiveBuffer(buffer)
           await new Promise((resolve) => setTimeout(resolve, 100))
-          finalQueryKey = applyChangesToActiveTab(
+          applyChangesToActiveTab(
+            conversationId,
             normalizedSQL,
-            queryKey,
             conversation,
-            explanation,
             messageIndex,
           )
         }
 
         // Add hidden message to inform model about acceptance (unless skipped)
-        if (!skipHiddenMessage && finalQueryKey) {
-          addMessage(finalQueryKey, {
+        if (!skipHiddenMessage) {
+          addMessage(conversationId, {
             role: "user" as const,
             content: `User accepted your latest SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
             timestamp: Date.now(),
             hideFromUI: true,
           })
         }
-
-        return finalQueryKey
       } catch (error) {
         console.error("Error applying changes:", error)
-        return undefined
       }
     },
     [
@@ -636,7 +682,7 @@ export const AIConversationProvider: React.FC<{
       buffers,
       activeBuffer,
       setActiveBuffer,
-      closeDiffBufferForQuery,
+      closeDiffBufferForConversation,
       addMessage,
     ],
   )
@@ -644,73 +690,70 @@ export const AIConversationProvider: React.FC<{
   // Helper: Apply changes to active tab
   const applyChangesToActiveTab = useCallback(
     (
+      conversationId: ConversationId,
       normalizedSQL: string,
-      queryKey: QueryKey,
       conversation: AIConversation,
-      explanation: string,
       messageIndex?: number,
-    ): QueryKey | undefined => {
+    ): void => {
       const result = applyAISQLChange({
         newSQL: normalizedSQL,
         queryStartOffset: conversation.queryStartOffset,
         queryEndOffset: conversation.queryEndOffset,
         originalQuery: conversation.originalQuery || conversation.initialSQL,
-        queryKey,
+        queryKey: conversation.queryKey ?? undefined,
       })
 
       if (!result.success) {
-        return undefined
+        return
       }
 
-      // Update conversation state
-      if (result.finalQueryKey && result.finalQueryKey !== queryKey) {
-        updateConversationQueryKey(queryKey, result.finalQueryKey)
-        updateConversationSQL(result.finalQueryKey, normalizedSQL, explanation)
-        if (result.queryStartOffset !== undefined) {
-          const normalizedQuery = normalizeQueryText(normalizedSQL)
-          const queryEndOffset =
-            result.queryStartOffset + normalizedQuery.length
-          updateConversationOffsets(
-            result.finalQueryKey,
-            result.queryStartOffset,
-            queryEndOffset,
-          )
-        }
-        acceptConversationChanges(result.finalQueryKey, messageIndex)
-        return result.finalQueryKey
-      } else {
-        updateConversationSQL(queryKey, normalizedSQL, explanation)
-        if (result.queryStartOffset !== undefined) {
-          const normalizedQuery = normalizeQueryText(normalizedSQL)
-          const queryEndOffset =
-            result.queryStartOffset + normalizedQuery.length
-          updateConversationOffsets(
-            queryKey,
-            result.queryStartOffset,
-            queryEndOffset,
-          )
-        }
-        acceptConversationChanges(queryKey, messageIndex)
-        return queryKey
+      // Calculate new offsets
+      const normalizedQuery = normalizeQueryText(normalizedSQL)
+      const newQueryStartOffset = result.queryStartOffset ?? 0
+      const newQueryEndOffset = newQueryStartOffset + normalizedQuery.length
+
+      // Update conversation associations with new queryKey and offsets
+      updateConversationAssociations(conversationId, {
+        queryKey: result.finalQueryKey ?? conversation.queryKey,
+        queryStartOffset: newQueryStartOffset,
+        queryEndOffset: newQueryEndOffset,
+      })
+
+      // Update SQL and mark as accepted
+      updateConversationSQL(conversationId, normalizedSQL)
+      acceptConversationChanges(conversationId, messageIndex)
+
+      // Clear schema data if transitioning from schema conversation
+      if (conversation.schemaIdentifier) {
+        setConversations((prev) => {
+          const next = new Map(prev)
+          const conv = next.get(conversationId)
+          if (conv) {
+            next.set(conversationId, {
+              ...conv,
+              schemaIdentifier: undefined,
+              schemaData: undefined,
+            })
+          }
+          return next
+        })
       }
     },
     [
       applyAISQLChange,
-      updateConversationQueryKey,
+      updateConversationAssociations,
       updateConversationSQL,
-      updateConversationOffsets,
       acceptConversationChanges,
     ],
   )
 
-  // Helper: Apply changes to new tab (when original is deleted/archived)
+  // Helper: Apply changes to new tab (when original is deleted/archived or no buffer)
   const applyChangesToNewTab = useCallback(
     async (
+      conversationId: ConversationId,
       normalizedSQL: string,
-      queryKey: QueryKey,
-      explanation: string,
       messageIndex?: number,
-    ): Promise<QueryKey | undefined> => {
+    ): Promise<void> => {
       const sqlWithSemicolon = normalizeSql(normalizedSQL)
       const newBuffer = await addBuffer({
         value: sqlWithSemicolon,
@@ -718,10 +761,10 @@ export const AIConversationProvider: React.FC<{
 
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      if (!editorRef.current) return undefined
+      if (!editorRef.current) return
 
       const model = editorRef.current.getModel()
-      if (!model) return undefined
+      if (!model) return
 
       const queryStartOffset = 0
       const normalizedQuery = normalizeQueryText(normalizedSQL)
@@ -757,38 +800,50 @@ export const AIConversationProvider: React.FC<{
         model.deltaDecorations(decorationId, [])
       }, 2000)
 
-      // Update conversation to point to new buffer
-      const finalQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
-      updateConversationQueryKey(queryKey, finalQueryKey)
-      updateConversationBufferId(finalQueryKey, newBuffer.id)
-      updateConversationSQL(finalQueryKey, normalizedSQL, explanation)
-      updateConversationOffsets(finalQueryKey, queryStartOffset, queryEndOffset)
-      acceptConversationChanges(finalQueryKey, messageIndex)
+      const newQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
+      updateConversationAssociations(conversationId, {
+        bufferId: newBuffer.id,
+        queryKey: newQueryKey,
+        queryStartOffset,
+        queryEndOffset,
+      })
 
-      return finalQueryKey
+      updateConversationSQL(conversationId, normalizedSQL)
+      acceptConversationChanges(conversationId, messageIndex)
+
+      setConversations((prev) => {
+        const next = new Map(prev)
+        const conv = next.get(conversationId)
+        if (conv && conv.schemaIdentifier) {
+          next.set(conversationId, {
+            ...conv,
+            schemaIdentifier: undefined,
+            schemaData: undefined,
+          })
+        }
+        return next
+      })
     },
     [
       addBuffer,
       editorRef,
-      updateConversationQueryKey,
-      updateConversationBufferId,
+      updateConversationAssociations,
       updateConversationSQL,
-      updateConversationOffsets,
       acceptConversationChanges,
     ],
   )
 
   // Unified reject function
   const rejectSuggestion = useCallback(
-    async (queryKey: QueryKey): Promise<void> => {
-      const conversation = conversations.get(queryKey)
+    async (conversationId: ConversationId): Promise<void> => {
+      const conversation = conversations.get(conversationId)
       if (!conversation) return
 
       // Update conversation state (marks as rejected, adds hidden message)
-      rejectLatestChange(queryKey)
+      rejectLatestChange(conversationId)
 
       // Close any open diff buffer
-      await closeDiffBufferForQuery(queryKey)
+      await closeDiffBufferForConversation(conversationId)
 
       // If we're currently viewing a diff buffer, switch back to original
       if (activeBuffer.isDiffBuffer) {
@@ -803,7 +858,7 @@ export const AIConversationProvider: React.FC<{
     [
       conversations,
       rejectLatestChange,
-      closeDiffBufferForQuery,
+      closeDiffBufferForConversation,
       activeBuffer,
       buffers,
       setActiveBuffer,
@@ -815,17 +870,20 @@ export const AIConversationProvider: React.FC<{
       value={{
         conversations,
         chatWindowState,
-        openChatWindow,
-        closeChatWindow,
         getConversation,
-        getOrCreateConversation,
+        findConversationByQuery,
+        findConversationBySchema,
+        hasConversationForQuery,
+        createConversation,
+        getOrCreateConversationForQuery,
+        updateConversationAssociations,
+        openChatWindow,
+        openChatWindowForQuery,
+        closeChatWindow,
         addMessage,
         updateConversationSQL,
         addMessageAndUpdateSQL,
-        updateConversationQueryKey,
-        updateConversationBufferId,
         updateConversationName,
-        updateConversationOffsets,
         acceptConversationChanges,
         rejectLatestChange,
         markLatestAsRejectedWithFollowUp,

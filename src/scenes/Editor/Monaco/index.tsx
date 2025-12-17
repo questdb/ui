@@ -70,6 +70,7 @@ import {
 import { toast } from "../../../components/Toast"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
+import { createGlyphWidget, clearGlyphWidgets } from "./glyphUtils"
 
 type IndividualQueryResult = {
   success: boolean
@@ -118,6 +119,12 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
     }
   }
 
+  .glyph-widget-container {
+    position: relative;
+    align-items: center;
+    width: 50px !important;
+  }
+
   .selectionErrorHighlight {
     background-color: rgba(255, 85, 85, 0.15);
     border-radius: 2px;
@@ -138,114 +145,13 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
     border-radius: 2px;
   }
 
-  .ai-fix-suggestion {
-    background-color: rgba(80, 250, 123, 0.15);
-    border-radius: 2px;
-  }
-
-  .fix-action-button {
-    height: 2.4rem;
-    padding: 1px 6px;
-    font-size: 1.4rem;
-    color: #f8f8f2;
-    border-radius: 4px;
-    cursor: pointer;
-    &.accept-fix {
-      background-color: #00aa3b;
-      border: 1px solid #00aa3b;
-    }
-
-    &.reject-fix {
-      background-color: #ff5555;
-      border: 1px solid #ff5555;
-    }
-
-    &:hover {
-      filter: brightness(1.3);
-    }
-  }
-
-  div[widgetid="fix-query-buttons"] {
-    display: inline-flex !important;
-    width: 30rem;
-    gap: 1rem !important;
-  }
-
-  .cursorQueryGlyph,
-  .cancelQueryGlyph {
-    width: 50px !important;
-    margin-left: 1rem;
-    z-index: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-
-    &:after {
-      display: block;
-      content: "";
-      width: 22px;
-      height: 22px;
-      background-repeat: no-repeat;
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjNTBmYTdiIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBrZkRiTmwiPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNMTYuMzk0IDEyIDEwIDcuNzM3djguNTI2TDE2LjM5NCAxMnptMi45ODIuNDE2TDguNzc3IDE5LjQ4MkEuNS41IDAgMCAxIDggMTkuMDY2VjQuOTM0YS41LjUgMCAwIDEgLjc3Ny0uNDE2bDEwLjU5OSA3LjA2NmEuNS41IDAgMCAxIDAgLjgzMnoiPjwvcGF0aD48L3N2Zz4K");
-      transform: scale(1.1);
-      &:hover {
-        filter: brightness(1.3);
-      }
-    }
-
-    /* AI sparkle icon - hollow (no conversation) */
-    &.ai-enabled:before {
-      display: block;
-      content: "";
-      width: 16px;
-      height: 16px;
-      background-repeat: no-repeat;
-      background-size: 16px 16px;
-      background-image: url("/assets/ai-sparkle-hollow.svg");
-      &:hover {
-        filter: brightness(1.3);
-      }
-    }
-
-    /* AI sparkle icon - filled (has conversation) */
-    &.ai-enabled.has-conversation:before {
-      background-image: url("/assets/ai-sparkle.svg");
-      background-size: 16px 16px;
-    }
-  }
-
-  .cursorQueryGlyph.success-glyph:after {
-    background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiMwMGFhM2IiLz4KICAgICAgICA8cGF0aCBkPSJtMTUgOC41IDIgMiA0LTQiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz4KICAgIDwvZz4KPC9zdmc+");
-  }
-
-  .cursorQueryGlyph.error-glyph:after {
-    background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8Y2xpcFBhdGggaWQ9ImNsaXAwIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPgogICAgPC9kZWZzPgogICAgPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXAwKSI+CiAgICAgICAgPHBhdGggZD0iTTggNC45MzR2MTQuMTMyYzAgLjQzMy40NjYuNzAyLjgxMi40ODRsMTAuNTYzLTcuMDY2YS41LjUgMCAwIDAgMC0uODMyTDguODEyIDQuNjE2QS41LjUgMCAwIDAgOCA0LjkzNFoiIGZpbGw9IiM1MGZhN2IiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjgiIHI9IjYiIGZpbGw9IiNmZjU1NTUiLz4KICAgICAgICA8cmVjdCB4PSIxNyIgeT0iNCIgd2lkdGg9IjIiIGhlaWdodD0iNSIgZmlsbD0id2hpdGUiIHJ4PSIwLjUiLz4KICAgICAgICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjExIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPgogICAgPC9nPgo8L3N2Zz4=");
-  }
-
-  .cursorQueryGlyph.loading-glyph:after {
-    height: 22px;
-    width: 22px;
-    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPgogIDxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIC8+CiAgPHBhdGggZD0iTTEyIDJhMSAxIDAgMCAxIDEgMXYzYTEgMSAwIDAgMS0yIDBWM2ExIDEgMCAwIDEgMS0xem0wIDE1YTEgMSAwIDAgMSAxIDF2M2ExIDEgMCAwIDEtMiAwdi0zYTEgMSAwIDAgMSAxLTF6bTguNjYtMTBhMSAxIDAgMCAxLS4zNjYgMS4zNjZsLTIuNTk4IDEuNWExIDEgMCAxIDEtMS0xLjczMmwyLjU5OC0xLjVBMSAxIDAgMCAxIDIwLjY2IDd6TTcuNjcgMTQuNWExIDEgMCAwIDEtLjM2NiAxLjM2NmwtMi41OTggMS41YTEgMSAwIDEgMS0xLTEuNzMybDIuNTk4LTEuNWExIDEgMCAwIDEgMS4zNjYuMzY2ek0yMC42NiAxN2ExIDEgMCAwIDEtMS4zNjYuMzY2bC0yLjU5OC0xLjVhMSAxIDAgMCAxIDEtMS43MzJsMi41OTggMS41QTEgMSAwIDAgMSAyMC42NiAxN3pNNy42NyA5LjVhMSAxIDAgMCAxLTEuMzY2LjM2NmwtMi41OTgtMS41YTEgMSAwIDEgMSAxLTEuNzMybDIuNTk4IDEuNUExIDEgMCAwIDEgNy42NyA5LjV6IiAvPgo8L3N2Zz4=");
-    animation: loading-glyph-spin 3s linear infinite;
-  }
-
-  @keyframes loading-glyph-spin {
+  /* Keyframe animation for glyph widget spinner */
+  @keyframes glyph-spin {
     from {
       transform: rotate(0);
     }
     to {
       transform: rotate(360deg);
-    }
-  }
-
-  .cancelQueryGlyph {
-    &:after {
-      background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGhlaWdodD0iMjJweCIgd2lkdGg9IjIycHgiIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIiBmaWxsPSIjZmY1NTU1IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGNsYXNzPSJTdHlsZWRJY29uQmFzZS1zYy1lYTl1bGotMCBqQ2hkR0siPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiPjwvcGF0aD48cGF0aCBkPSJNNyA3djEwaDEwVjdIN3pNNiA1aDEyYTEgMSAwIDAgMSAxIDF2MTJhMSAxIDAgMCAxLTEgMUg2YTEgMSAwIDAgMS0xLTFWNmExIDEgMCAwIDEgMS0xeiI+PC9wYXRoPjwvc3ZnPgo=");
-    }
-
-    &:hover:after {
-      filter: brightness(1.3);
     }
   }
 `
@@ -296,8 +202,11 @@ const MonacoEditor = ({
   } = editorContext
   const { quest } = useContext(QuestContext)
   const { canUse: canUseAI } = useAIStatus()
-  const { getOrCreateConversation, openChatWindow, conversations } =
-    useAIConversation()
+  const {
+    getOrCreateConversationForQuery,
+    openChatWindow,
+    hasConversationForQuery,
+  } = useAIConversation()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
@@ -334,11 +243,13 @@ const MonacoEditor = ({
     query: string
     startOffset: number
   } | null>(aiSuggestionRequest)
-  const conversationsRef = useRef(conversations)
+  const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
+  const glyphLineNumbersRef = useRef<Set<number>>(new Set())
   const decorationCollectionRef =
     useRef<editor.IEditorDecorationsCollection | null>(null)
+  const glyphWidgetsRef = useRef<editor.IGlyphMarginWidget[]>([])
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -495,76 +406,6 @@ const MonacoEditor = ({
     }
   }
 
-  const handleEditorClick = (e: React.MouseEvent) => {
-    if (
-      isRunningScriptRef.current &&
-      e.target instanceof Element &&
-      e.target.classList.contains("cursorQueryGlyph")
-    ) {
-      return
-    }
-    const editor = editorRef.current
-    const model = editor?.getModel()
-    if (!editor || !model) return
-
-    if (
-      e.target instanceof Element &&
-      e.target.classList.contains("cancelQueryGlyph")
-    ) {
-      toggleRunning(RunningType.NONE)
-      return
-    }
-
-    if (
-      e.target instanceof Element &&
-      e.target.classList.contains("cursorQueryGlyph")
-    ) {
-      editor.focus()
-      const target = editor.getTargetAtClientPoint(e.clientX, e.clientY)
-
-      if (target && target.position) {
-        const position = {
-          lineNumber: target.position.lineNumber,
-          column: 1,
-        }
-        const dropdownQueries = getDropdownQueries(position.lineNumber)
-        if (dropdownQueries.length === 0) return
-
-        // Check if AI sparkle was clicked using nativeEvent.offsetX
-        // The glyph layout: [AI sparkle 22px] [gap 5px] [run button 22px]
-        // offsetX is relative to the target element
-        const glyphElement = e.target as HTMLElement
-        const isAIEnabled = glyphElement.classList.contains("ai-enabled")
-        const offsetX = e.nativeEvent.offsetX
-
-        if (isAIEnabled && offsetX < 27) {
-          // AI sparkle was clicked
-          if (dropdownQueries.length > 1) {
-            // Multiple queries - show AI dropdown to select which query
-            dropdownQueriesRef.current = dropdownQueries
-            isAIDropdownRef.current = true
-            openDropdownAtPosition(e.clientX, e.clientY, position, false)
-          } else {
-            // Single query - open chat window directly
-            handleAskAI(dropdownQueries[0])
-          }
-          return
-        }
-
-        // Run button was clicked
-        if (dropdownQueries.length > 1) {
-          dropdownQueriesRef.current = dropdownQueries
-          openDropdownAtPosition(e.clientX, e.clientY, position, false)
-          return
-        }
-        if (dropdownQueries.length === 1) {
-          setCursorBeforeRunning(dropdownQueries[0])
-          toggleRunning()
-        }
-      }
-    }
-  }
-
   const handleRunQuery = (query?: Request) => {
     setDropdownOpen(false)
 
@@ -608,18 +449,15 @@ const MonacoEditor = ({
       column: query.endColumn,
     })
 
-    // Get or create conversation for this queryKey
-    getOrCreateConversation({
+    const conversation = getOrCreateConversationForQuery({
       queryKey,
-      bufferId: activeBuffer.id,
-      originalQuery: queryText,
-      initialSQL: queryText,
+      bufferId: activeBufferRef.current.id!,
+      queryText,
       queryStartOffset,
       queryEndOffset,
     })
 
-    // Open chat window for this queryKey
-    openChatWindow(queryKey)
+    openChatWindow(conversation.id)
   }
 
   const applyLineMarkings = (
@@ -745,10 +583,11 @@ const MonacoEditor = ({
 
     const activeBufferId = activeBufferRef.current.id as number
 
-    const allDecorations: editor.IModelDeltaDecoration[] = []
     const allQueryOffsets: { startOffset: number; endOffset: number }[] = []
 
-    // Add decorations for queries in range
+    clearGlyphWidgets(editor, glyphWidgetsRef)
+    glyphLineNumbersRef.current.clear()
+
     if (queries.length > 0) {
       queries.forEach((query) => {
         const queryOffsets = {
@@ -774,36 +613,81 @@ const MonacoEditor = ({
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
-        const conversation = conversationsRef.current.get(queryKey)
         const hasConversation =
           canUseAI &&
-          conversation !== undefined &&
-          conversation.messages.length > 0
-        const aiClasses = canUseAI
-          ? hasConversation
-            ? " ai-enabled has-conversation"
-            : " ai-enabled"
-          : ""
+          hasConversationForQueryRef.current(activeBufferId, queryKey)
 
-        // Add glyph for all queries with line number in class name
-        const glyphClassName =
+        const isRunningQuery =
           runningValueRef.current !== RunningType.NONE &&
           requestRef.current?.row !== undefined &&
           requestRef.current?.row + 1 === startLineNumber
-            ? `cancelQueryGlyph cancelQueryGlyph-line-${startLineNumber}${aiClasses}`
-            : hasError
-              ? `cursorQueryGlyph error-glyph cursorQueryGlyph-line-${startLineNumber}${aiClasses}`
-              : isSuccessful
-                ? `cursorQueryGlyph success-glyph cursorQueryGlyph-line-${startLineNumber}${aiClasses}`
-                : `cursorQueryGlyph cursorQueryGlyph-line-${startLineNumber}${aiClasses}`
 
-        allDecorations.push({
-          range: new monaco.Range(startLineNumber, 1, startLineNumber, 1),
-          options: {
-            isWholeLine: false,
-            glyphMarginClassName: glyphClassName,
-          },
-        })
+        const handleRunClick = () => {
+          if (isRunningQuery) {
+            toggleRunning(RunningType.NONE)
+          } else {
+            const dropdownQueries = getDropdownQueries(startLineNumber)
+            if (dropdownQueries.length > 1) {
+              dropdownQueriesRef.current = dropdownQueries
+              isAIDropdownRef.current = false
+              openDropdownAtPosition(
+                0,
+                0,
+                { lineNumber: startLineNumber, column: 1 },
+                false,
+              )
+            } else if (dropdownQueries.length === 1) {
+              setCursorBeforeRunning(dropdownQueries[0])
+              toggleRunning()
+            }
+          }
+        }
+
+        const handleAIClick = () => {
+          const dropdownQueries = getDropdownQueries(startLineNumber)
+          if (dropdownQueries.length > 1) {
+            dropdownQueriesRef.current = dropdownQueries
+            isAIDropdownRef.current = true
+            openDropdownAtPosition(
+              0,
+              0,
+              { lineNumber: startLineNumber, column: 1 },
+              false,
+            )
+          } else if (dropdownQueries.length === 1) {
+            handleAskAI(dropdownQueries[0])
+          }
+        }
+
+        const handleRunContextMenu = () => {
+          const dropdownQueries = getDropdownQueries(startLineNumber)
+          if (dropdownQueries.length > 0) {
+            dropdownQueriesRef.current = dropdownQueries
+            isAIDropdownRef.current = false
+            openDropdownAtPosition(
+              0,
+              0,
+              { lineNumber: startLineNumber, column: 1 },
+              true,
+            )
+          }
+        }
+
+        if (!glyphLineNumbersRef.current.has(startLineNumber)) {
+          const widget = createGlyphWidget(startLineNumber, {
+            isCancel: isRunningQuery,
+            hasError,
+            isSuccessful,
+            showAI: canUseAI,
+            hasConversation,
+            onRunClick: handleRunClick,
+            onRunContextMenu: handleRunContextMenu,
+            onAIClick: handleAIClick,
+          })
+          editor.addGlyphMarginWidget(widget)
+          glyphLineNumbersRef.current.add(startLineNumber)
+          glyphWidgetsRef.current.push(widget)
+        }
       })
     }
 
@@ -811,8 +695,7 @@ const MonacoEditor = ({
       decorationCollectionRef.current.clear()
     }
 
-    decorationCollectionRef.current =
-      editor.createDecorationsCollection(allDecorations)
+    decorationCollectionRef.current = editor.createDecorationsCollection([])
     queryOffsetsRef.current = allQueryOffsets
 
     applyLineMarkings(monaco, editor, source)
@@ -863,45 +746,6 @@ const MonacoEditor = ({
         addBuffer: () => editorContext.addBuffer(),
       }),
     )
-
-    editor.onContextMenu((e) => {
-      if (
-        e.target.element &&
-        e.target.element.classList.contains("cursorQueryGlyph")
-      ) {
-        // Check if right-click was on AI icon area (left side) or run button area (right side)
-        // The glyph layout: [AI sparkle 22px] [gap 5px] [run button 22px]
-        const glyphElement = e.target.element
-        const isAIEnabled = glyphElement.classList.contains("ai-enabled")
-        const glyphRect = glyphElement.getBoundingClientRect()
-        const offsetX = e.event.posx - glyphRect.left
-
-        // If AI is enabled and right-click was on AI icon area, ignore (don't show dropdown)
-        if (isAIEnabled && offsetX < 27) {
-          return
-        }
-
-        const posX = e.event.posx,
-          posY = e.event.posy
-        if (editorRef.current) {
-          const target = editorRef.current.getTargetAtClientPoint(posX, posY)
-
-          if (target && target.position) {
-            const linePosition = {
-              lineNumber: target.position.lineNumber,
-              column: 1,
-            }
-
-            const dropdownQueries = getDropdownQueries(linePosition.lineNumber)
-
-            if (dropdownQueries.length > 0) {
-              dropdownQueriesRef.current = dropdownQueries
-              openDropdownAtPosition(posX, posY, linePosition, true)
-            }
-          }
-        }
-      }
-    })
 
     editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
@@ -1598,7 +1442,7 @@ const MonacoEditor = ({
         aiSuggestionRequestRef.current !== null
 
       // Use the active buffer's ID for notifications and results
-      const targetBufferId = activeBuffer.id as number
+      const targetBufferId = activeBufferRef.current.id as number
 
       if (request?.query) {
         editorRef.current?.updateOptions({ readOnly: true })
@@ -1894,11 +1738,11 @@ const MonacoEditor = ({
 
   // AI sparkle handling (filled/hollow)
   useEffect(() => {
-    conversationsRef.current = conversations
+    hasConversationForQueryRef.current = hasConversationForQuery
     if (monacoRef.current && editorRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
-  }, [conversations])
+  }, [hasConversationForQuery])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)
@@ -1925,6 +1769,13 @@ const MonacoEditor = ({
       if (decorationCollectionRef.current) {
         decorationCollectionRef.current.clear()
       }
+
+      // Clean up glyph widgets
+      if (editorRef.current) {
+        clearGlyphWidgets(editorRef.current, glyphWidgetsRef)
+        glyphLineNumbersRef.current.clear()
+      }
+
       editorRef.current?.getModel()?.dispose()
       editorRef.current?.dispose()
       editorRef.current = null
@@ -1934,7 +1785,7 @@ const MonacoEditor = ({
 
   return (
     <>
-      <Content onClick={handleEditorClick} $hidden={hidden}>
+      <Content $hidden={hidden}>
         {!hidden && (
           <ButtonBar
             onTriggerRunScript={handleTriggerRunScript}

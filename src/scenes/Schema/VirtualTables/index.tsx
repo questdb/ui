@@ -53,7 +53,10 @@ import {
   getExplainSchemaPrompt,
 } from "../../../utils/aiAssistant"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
-import { createSchemaQueryKey } from "../../Editor/Monaco/utils"
+import {
+  createSchemaIdentifier,
+  hashString,
+} from "../../../providers/AIConversationProvider/indices"
 import {
   useAIStatus,
   isBlockingAIStatus,
@@ -187,8 +190,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   } = useAIStatus()
 
   const {
-    getConversation,
-    getOrCreateConversation,
+    findConversationBySchema,
+    createConversation,
     openChatWindow,
     addMessage,
     updateConversationName,
@@ -299,15 +302,20 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return
     }
 
-    const queryKey = createSchemaQueryKey(tableName, schema)
-    const existingConversation = getConversation(queryKey)
+    // Create schema identifier for lookup
+    const ddlHash = hashString(schema)
+    const schemaIdentifier = createSchemaIdentifier(tableName, ddlHash)
+
+    // Check if conversation already exists for this schema
+    const existingConversation = findConversationBySchema(tableName, ddlHash)
     if (existingConversation) {
-      openChatWindow(queryKey)
+      openChatWindow(existingConversation.id)
       return
     }
 
-    getOrCreateConversation({
-      queryKey,
+    // Create new conversation for this schema
+    const conversation = createConversation({
+      schemaIdentifier,
       initialSQL: "",
       originalQuery: schema,
       schemaData: {
@@ -319,10 +327,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       },
     })
 
-    updateConversationName(queryKey, `${tableName} schema explanation`)
+    updateConversationName(conversation.id, `${tableName} schema explanation`)
     const userMessage = getExplainSchemaPrompt(tableName, schema, isMatView)
 
-    addMessage(queryKey, {
+    addMessage(conversation.id, {
       role: "user",
       content: userMessage,
       timestamp: Date.now(),
@@ -336,7 +344,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       },
     })
 
-    openChatWindow(queryKey)
+    openChatWindow(conversation.id)
 
     const provider = providerForModel(currentModel)
 
@@ -352,13 +360,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       isMatView,
       settings,
       setStatus,
-      queryKey,
+      conversationId: conversation.id,
     })
 
     if (isAiAssistantError(response)) {
       const error = response
       toast.error(error.message, { autoClose: 10000 })
-      addMessage(queryKey, {
+      addMessage(conversation.id, {
         role: "assistant",
         content: `Error: ${error.message}`,
         timestamp: Date.now(),
@@ -376,7 +384,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }
 
     const markdownContent = schemaExplanationToMarkdown(result)
-    addMessage(queryKey, {
+    addMessage(conversation.id, {
       role: "assistant",
       content: markdownContent,
       timestamp: Date.now(),

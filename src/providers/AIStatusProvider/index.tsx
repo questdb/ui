@@ -16,7 +16,7 @@ import {
   providerForModel,
   canUseAiAssistant,
 } from "../../utils/aiAssistantSettings"
-import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
+import type { ConversationId } from "../AIConversationProvider/types"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
@@ -49,7 +49,7 @@ export enum AIOperationStatus {
 }
 
 export type StatusArgs =
-  | ({ queryKey?: QueryKey } & (
+  | ({ conversationId?: ConversationId } & (
       | { type: "generate" }
       | { type: "fix" }
       | { type: "explain" }
@@ -75,7 +75,7 @@ type BaseAIStatusContextType = {
   hasSchemaAccess: boolean
   models: string[]
   currentOperation: OperationHistory
-  activeQueryKey: QueryKey | null
+  activeConversationId: ConversationId | null
   clearOperation: () => void
 }
 
@@ -215,9 +215,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     }
   }, [])
 
-  const activeQueryKey =
-    currentOperation.find((entry) => entry.args?.queryKey)?.args?.queryKey ??
-    null
+  const activeConversationId =
+    currentOperation.find((entry) => entry.args?.conversationId)?.args
+      ?.conversationId ?? null
 
   const contextValue: AIStatusContextType = isConfigured
     ? {
@@ -233,7 +233,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey: apiKey!,
         models,
         currentOperation,
-        activeQueryKey,
+        activeConversationId,
       }
     : {
         status,
@@ -248,7 +248,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey,
         models,
         currentOperation,
-        activeQueryKey,
+        activeConversationId,
       }
 
   return (

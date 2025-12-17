@@ -115,7 +115,7 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
     apiKey,
   } = useAIStatus()
   const {
-    getOrCreateConversation,
+    getOrCreateConversationForQuery,
     openChatWindow,
     addMessage,
     addMessageAndUpdateSQL,
@@ -155,12 +155,10 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
     const queryKey = createQueryKeyFromRequest(editorRef.current, queryToFix)
 
     // Get or create conversation for this queryKey with position info
-    getOrCreateConversation({
+    const conversation = getOrCreateConversationForQuery({
       queryKey,
-      bufferId: activeBuffer.id,
-      originalQuery: queryText,
-      initialSQL: queryText,
-      initialExplanation: "",
+      bufferId: activeBuffer.id!,
+      queryText,
       queryStartOffset: fixStart,
       queryEndOffset: fixEnd,
     })
@@ -169,7 +167,7 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
     const fullApiMessage = `Fix this SQL query that has an error:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\nError: ${errorMessage}${word ? `\n\nError near: "${word}"` : ""}`
 
     // Add the initial user message with display info for cleaner UI
-    addMessage(queryKey, {
+    addMessage(conversation.id, {
       role: "user",
       content: fullApiMessage,
       timestamp: Date.now(),
@@ -178,7 +176,7 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
     })
 
     // Open chat window immediately
-    openChatWindow(queryKey)
+    openChatWindow(conversation.id)
 
     // Now fix query in the background
     const provider = providerForModel(currentModel)
@@ -198,7 +196,7 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
         settings: { model: testModel.value, provider, apiKey },
       }).then((title) => {
         if (title) {
-          updateConversationName(queryKey, title)
+          updateConversationName(conversation.id, title)
         }
       })
     }
@@ -215,7 +213,7 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
       setStatus,
       abortSignal: abortController?.signal,
       operation: "fix",
-      queryKey,
+      conversationId: conversation.id,
     })
 
     if (isAiAssistantError(response)) {
@@ -231,18 +229,13 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
     // Handle case where no SQL fix was provided, only explanation
     if (!result.sql && result.explanation) {
       // Add assistant message with explanation only
-      addMessageAndUpdateSQL(
-        queryKey,
-        {
-          role: "assistant",
-          content: result.explanation,
-          timestamp: Date.now(),
-          explanation: result.explanation,
-          tokenUsage: result.tokenUsage,
-        },
-        queryText, // Keep original SQL since no fix was provided
-        result.explanation,
-      )
+      addMessageAndUpdateSQL(conversation.id, {
+        role: "assistant",
+        content: result.explanation,
+        timestamp: Date.now(),
+        explanation: result.explanation,
+        tokenUsage: result.tokenUsage,
+      })
       return
     }
 
@@ -259,19 +252,14 @@ export const FixQueryButton = ({ executionRefs }: Props) => {
       : `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\``
 
     // Add assistant response with the fixed SQL
-    addMessageAndUpdateSQL(
-      queryKey,
-      {
-        role: "assistant",
-        content: assistantContent,
-        timestamp: Date.now(),
-        sql: result.sql,
-        explanation: result.explanation,
-        tokenUsage: result.tokenUsage,
-      },
-      result.sql,
-      result.explanation || "",
-    )
+    addMessageAndUpdateSQL(conversation.id, {
+      role: "assistant",
+      content: assistantContent,
+      timestamp: Date.now(),
+      sql: result.sql,
+      explanation: result.explanation,
+      tokenUsage: result.tokenUsage,
+    })
   }
 
   return (

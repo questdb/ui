@@ -68,10 +68,9 @@ export type Buffer = {
   diffContent?: {
     original: string
     modified: string
-    explanation: string
     queryStartOffset: number
     originalQuery: string
-    queryKey?: string
+    conversationId?: string
   }
 }
 
@@ -133,10 +132,9 @@ export const makeBuffer = ({
   diffContent?: {
     original: string
     modified: string
-    explanation: string
     queryStartOffset: number
     originalQuery: string
-    queryKey?: string
+    conversationId?: string
   }
 }): Omit<Buffer, "id"> => ({
   label,

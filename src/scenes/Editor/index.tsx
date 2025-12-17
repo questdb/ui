@@ -49,7 +49,6 @@ import { color, platform } from "../../utils"
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
-import type { QueryKey as MonacoQueryKey } from "./Monaco/utils"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -202,18 +201,39 @@ const Editor = ({
 
   // Check if the current diff buffer shows a pending AI suggestion
   // A diff is "pending" if:
-  // 1. The diff buffer has a queryKey linking it to a conversation
+  // 1. The diff buffer has a conversationId linking it to a conversation
   // 2. That conversation has hasPendingDiff = true
   // 3. The diff's modified content matches the conversation's currentSQL (handles multiple revisions)
   const pendingDiffInfo = useMemo(() => {
-    if (!activeBuffer.isDiffBuffer || !activeBuffer.diffContent?.queryKey) {
+    if (
+      !activeBuffer.isDiffBuffer ||
+      !activeBuffer.diffContent?.conversationId
+    ) {
       return null
     }
 
-    const queryKey = activeBuffer.diffContent.queryKey as MonacoQueryKey
-    const conversation = getConversation(queryKey)
+    const conversationId = activeBuffer.diffContent.conversationId
+    const conversation = getConversation(conversationId)
 
-    if (!conversation || !conversation.hasPendingDiff) {
+    if (!conversation) {
+      return null
+    }
+
+    // Check if there's an unactioned diff (last visible assistant message with SQL that isn't accepted/rejected)
+    const visibleMessages = conversation.messages.filter((m) => !m.hideFromUI)
+    if (visibleMessages.length === 0) {
+      return null
+    }
+    const lastVisible = visibleMessages[visibleMessages.length - 1]
+    const hasUnactionedDiff =
+      lastVisible.role === "assistant" &&
+      lastVisible.sql !== undefined &&
+      lastVisible.previousSQL !== undefined &&
+      !lastVisible.isAccepted &&
+      !lastVisible.isRejected &&
+      !lastVisible.isRejectedWithFollowUp
+
+    if (!hasUnactionedDiff) {
       return null
     }
 
@@ -230,7 +250,7 @@ const Editor = ({
     }
 
     return {
-      queryKey,
+      conversationId,
       conversation,
     }
   }, [activeBuffer, getConversation])
@@ -239,14 +259,13 @@ const Editor = ({
   const handleAcceptFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo || !activeBuffer.diffContent) return
 
-    const { queryKey, conversation } = pendingDiffInfo
+    const { conversationId } = pendingDiffInfo
     const modifiedSQL = activeBuffer.diffContent.modified
 
     // Use unified acceptSuggestion from provider
     await acceptSuggestion({
-      queryKey,
+      conversationId,
       sql: modifiedSQL,
-      explanation: conversation.currentExplanation || "",
     })
   }, [pendingDiffInfo, activeBuffer.diffContent, acceptSuggestion])
 
@@ -254,10 +273,10 @@ const Editor = ({
   const handleRejectFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo) return
 
-    const { queryKey } = pendingDiffInfo
+    const { conversationId } = pendingDiffInfo
 
     // Use unified rejectSuggestion from provider
-    await rejectSuggestion(queryKey)
+    await rejectSuggestion(conversationId)
   }, [pendingDiffInfo, rejectSuggestion])
 
   // Keyboard shortcut: Escape to reject diff

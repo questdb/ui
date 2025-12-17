@@ -61,7 +61,7 @@ export const ExplainQueryButton = () => {
     apiKey,
   } = useAIStatus()
   const {
-    getOrCreateConversation,
+    getOrCreateConversationForQuery,
     openChatWindow,
     addMessage,
     addMessageAndUpdateSQL,
@@ -96,12 +96,10 @@ export const ExplainQueryButton = () => {
       const queryEndOffset = queryStartOffset + queryText.length
 
       // Get or create conversation for this queryKey with position info
-      getOrCreateConversation({
+      const conversation = getOrCreateConversationForQuery({
         queryKey,
-        bufferId: activeBuffer.id,
-        originalQuery: queryText,
-        initialSQL: queryText,
-        initialExplanation: "",
+        bufferId: activeBuffer.id!,
+        queryText,
         queryStartOffset,
         queryEndOffset,
       })
@@ -114,7 +112,7 @@ export const ExplainQueryButton = () => {
         : `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${queryToExplain.query}\n\`\`\``
 
       // Add the initial user message with display info for cleaner UI
-      addMessage(queryKey, {
+      addMessage(conversation.id, {
         role: "user",
         content: fullApiMessage,
         timestamp: Date.now(),
@@ -123,7 +121,7 @@ export const ExplainQueryButton = () => {
       })
 
       // Open chat window immediately
-      openChatWindow(queryKey)
+      openChatWindow(conversation.id)
 
       // Now explain query in the background
       const provider = providerForModel(currentModel)
@@ -143,7 +141,7 @@ export const ExplainQueryButton = () => {
           settings: { model: testModel.value, provider, apiKey },
         }).then((title) => {
           if (title) {
-            updateConversationName(queryKey, title)
+            updateConversationName(conversation.id, title)
           }
         })
       }
@@ -160,7 +158,7 @@ export const ExplainQueryButton = () => {
         setStatus,
         abortSignal: abortController?.signal,
         operation: "explain",
-        queryKey,
+        conversationId: conversation.id,
       })
 
       if (isAiAssistantError(response)) {
@@ -183,18 +181,13 @@ export const ExplainQueryButton = () => {
       // Note: The user message was already added before the API call for immediate UI feedback
       const assistantContent = result.explanation
 
-      addMessageAndUpdateSQL(
-        queryKey,
-        {
-          role: "assistant",
-          content: assistantContent,
-          timestamp: Date.now(),
-          explanation: result.explanation,
-          tokenUsage: result.tokenUsage,
-        },
-        queryText,
-        result.explanation,
-      )
+      addMessageAndUpdateSQL(conversation.id, {
+        role: "assistant",
+        content: assistantContent,
+        timestamp: Date.now(),
+        explanation: result.explanation,
+        tokenUsage: result.tokenUsage,
+      })
     })()
   }, [
     disabled,
@@ -207,7 +200,7 @@ export const ExplainQueryButton = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
-    getOrCreateConversation,
+    getOrCreateConversationForQuery,
     openChatWindow,
     addMessage,
     addMessageAndUpdateSQL,

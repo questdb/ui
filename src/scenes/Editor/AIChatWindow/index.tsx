@@ -5,10 +5,13 @@ import { Box } from "../../../components"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
+  trimSemicolonForDisplay,
+  hasUnactionedDiff as checkHasUnactionedDiff,
+} from "../../../providers/AIConversationProvider/utils"
+import {
   isBlockingAIStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
-import type { QueryKey } from "../Monaco/utils"
 import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
 import { LiteEditor } from "../../../components/LiteEditor"
@@ -127,7 +130,7 @@ export const AIChatWindow: React.FC = () => {
     activeBuffer,
     setActiveBuffer,
     showDiffBuffer,
-    closeDiffBufferForQuery,
+    closeDiffBufferForConversation,
   } = useEditor()
   const {
     chatWindowState,
@@ -155,8 +158,8 @@ export const AIChatWindow: React.FC = () => {
     selectors.query.getAISuggestionRequest,
   )
 
-  const conversation = chatWindowState.activeQueryKey
-    ? getConversation(chatWindowState.activeQueryKey)
+  const conversation = chatWindowState.activeConversationId
+    ? getConversation(chatWindowState.activeConversationId)
     : null
 
   // Get query notifications for the conversation's buffer
@@ -170,29 +173,16 @@ export const AIChatWindow: React.FC = () => {
   const chatInputRef = useRef<ChatInputHandle>(null)
 
   const currentSQL = useMemo(() => {
-    const sql = conversation?.currentSQL || ""
-    // Remove trailing semicolon for display in diff editor
-    let trimmed = sql.trim()
-    if (trimmed.endsWith(";")) {
-      trimmed = trimmed.slice(0, -1).trim()
-    }
-    // Ensure we always have valid content for Monaco diff editor
-    // Empty string causes issues, so use at least a newline
-    return trimmed + "\n"
-  }, [conversation])
-
-  const currentExplanation = useMemo(() => {
-    return conversation?.currentExplanation || ""
+    return trimSemicolonForDisplay(conversation?.currentSQL)
   }, [conversation])
 
   const messages = useMemo(() => {
     return conversation?.messages || []
   }, [conversation])
 
-  // Check if there's a pending diff that needs action
-  const hasPendingDiff = useMemo(() => {
-    return conversation?.hasPendingDiff ?? false
-  }, [conversation])
+  const hasUnactionedDiff = useMemo(() => {
+    return checkHasUnactionedDiff(messages)
+  }, [messages])
 
   // Determine the buffer/tab status for this conversation
   const bufferStatus = useMemo(() => {
@@ -259,18 +249,17 @@ export const AIChatWindow: React.FC = () => {
 
   const handleSendMessage = (
     userMessage: string,
-    hasUnactionedDiff: boolean = false,
+    hasUnactionedDiffParam: boolean = false,
   ) => {
-    if (!canUse || !chatWindowState.activeQueryKey || !conversation) {
+    if (!canUse || !chatWindowState.activeConversationId || !conversation) {
       return
     }
 
-    const queryKey = chatWindowState.activeQueryKey
+    const conversationId = chatWindowState.activeConversationId
 
-    // If there's a pending diff and user is sending a follow-up, mark it as rejected with follow-up
-    if (hasUnactionedDiff) {
-      markLatestAsRejectedWithFollowUp(queryKey)
-      void closeDiffBufferForQuery(queryKey)
+    if (hasUnactionedDiffParam) {
+      markLatestAsRejectedWithFollowUp(conversationId)
+      void closeDiffBufferForConversation(conversationId)
     }
 
     // Determine if this is the first message (no assistant messages yet)
@@ -304,7 +293,7 @@ export const AIChatWindow: React.FC = () => {
     }
 
     // Add user message immediately so it appears in the UI right away
-    addMessage(queryKey, userMessageEntry)
+    addMessage(conversationId, userMessageEntry)
 
     const provider = providerForModel(currentModel)
     const settings: ActiveProviderSettings = {
@@ -324,7 +313,7 @@ export const AIChatWindow: React.FC = () => {
           settings: { model: testModel.value, provider, apiKey },
         }).then((title) => {
           if (title) {
-            updateConversationName(queryKey, title)
+            updateConversationName(conversationId, title)
           }
         })
       }
@@ -354,7 +343,7 @@ export const AIChatWindow: React.FC = () => {
         ),
         setStatus,
         abortSignal: abortController?.signal,
-        queryKey,
+        conversationId: conversation.id,
       })
 
       if (isAiAssistantError(response)) {
@@ -370,15 +359,6 @@ export const AIChatWindow: React.FC = () => {
         | GeneratedSQL
         | { explanation: string; sql?: string; tokenUsage?: TokenUsage }
 
-      // Update conversation SQL and explanation
-      // If SQL is provided and not empty, update it; otherwise keep current SQL
-      const updatedSQL =
-        result.sql !== undefined &&
-        result.sql !== null &&
-        result.sql.trim() !== ""
-          ? result.sql
-          : currentSQL
-
       // Build complete assistant response content (SQL + explanation)
       let assistantContent = result.explanation || "Response received"
       if (result.sql) {
@@ -392,21 +372,14 @@ export const AIChatWindow: React.FC = () => {
         result.sql !== null &&
         result.sql.trim() !== ""
 
-      const messageToAdd = {
+      addMessageAndUpdateSQL(conversationId, {
         role: "assistant" as const,
         content: assistantContent,
         timestamp: Date.now(),
         ...(hasSQLInResult && { sql: result.sql }),
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
-      }
-
-      addMessageAndUpdateSQL(
-        queryKey,
-        messageToAdd,
-        updatedSQL,
-        result.explanation || "",
-      )
+      })
     }
 
     void processResponse()
@@ -414,29 +387,28 @@ export const AIChatWindow: React.FC = () => {
 
   // Handle expand button click from chat messages
   const handleExpandDiff = useCallback(
-    (original: string, modified: string, queryKey: QueryKey) => {
+    (original: string, modified: string) => {
+      if (!conversation?.id) return
       void showDiffBuffer({
         original,
         modified,
-        explanation: currentExplanation,
-        queryKey,
+        conversationId: conversation.id,
       })
     },
-    [showDiffBuffer, currentExplanation],
+    [showDiffBuffer, conversation?.id],
   )
 
   const handleAcceptChange = async (messageIndex: number) => {
-    if (!conversation || !chatWindowState.activeQueryKey) return
+    if (!conversation || !chatWindowState.activeConversationId) return
 
-    // Get the SQL from the message at this index
+    // Get the SQL from the message by index
     const targetMessage = conversation.messages[messageIndex]
     if (!targetMessage || !targetMessage.sql) return
 
     // Use unified acceptSuggestion from provider
     await acceptSuggestion({
-      queryKey: chatWindowState.activeQueryKey,
+      conversationId: chatWindowState.activeConversationId,
       sql: targetMessage.sql,
-      explanation: currentExplanation,
       messageIndex,
     })
 
@@ -445,10 +417,10 @@ export const AIChatWindow: React.FC = () => {
   }
 
   const handleRejectChange = async () => {
-    if (!chatWindowState.activeQueryKey) return
+    if (!chatWindowState.activeConversationId) return
 
     // Use unified rejectSuggestion from provider
-    await rejectSuggestion(chatWindowState.activeQueryKey)
+    await rejectSuggestion(chatWindowState.activeConversationId)
 
     // Focus the chat input so user can type corrections
     setTimeout(() => {
@@ -506,12 +478,16 @@ export const AIChatWindow: React.FC = () => {
 
   // Handle context badge click - navigate to query and highlight it
   const handleContextClick = useCallback(async () => {
-    if (!conversation || !editorRef.current) return
+    if (!conversation || !editorRef.current) {
+      return
+    }
 
     const queryStartOffset = conversation.queryStartOffset
     const queryEndOffset = conversation.queryEndOffset
 
-    if (queryStartOffset === undefined || queryEndOffset === undefined) return
+    if (queryStartOffset === undefined || queryEndOffset === undefined) {
+      return
+    }
 
     // Navigate to the buffer first
     const success = await navigateToBuffer()
@@ -560,23 +536,22 @@ export const AIChatWindow: React.FC = () => {
   }, [conversation, editorRef, navigateToBuffer])
 
   const handleApplyToEditor = useCallback(
-    async (sql: string) => {
-      if (!conversation || !chatWindowState.activeQueryKey) return
+    async (sql: string, messageIndex: number) => {
+      if (!conversation || !chatWindowState.activeConversationId) return
 
       const normalizedSQL = normalizeSql(sql, false)
 
       try {
-        // Use unified acceptSuggestion but skip the default hidden message
-        const finalQueryKey = await acceptSuggestion({
-          queryKey: chatWindowState.activeQueryKey,
+        // Use unified acceptSuggestion with messageIndex to mark the correct message as accepted
+        await acceptSuggestion({
+          conversationId: chatWindowState.activeConversationId,
           sql,
-          explanation: currentExplanation,
+          messageIndex, // Pass messageIndex to mark the specific message as accepted
           skipHiddenMessage: true, // We'll add our own custom message
         })
 
         // Add a custom hidden message to inform the model for the next round
-        const targetQueryKey = finalQueryKey ?? chatWindowState.activeQueryKey
-        addMessage(targetQueryKey, {
+        addMessage(chatWindowState.activeConversationId, {
           role: "user" as const,
           content: `User replaced query with one of your previous suggestions. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
           timestamp: Date.now(),
@@ -589,8 +564,7 @@ export const AIChatWindow: React.FC = () => {
     },
     [
       conversation,
-      chatWindowState.activeQueryKey,
-      currentExplanation,
+      chatWindowState.activeConversationId,
       acceptSuggestion,
       addMessage,
     ],
@@ -616,7 +590,6 @@ export const AIChatWindow: React.FC = () => {
           {shouldShowMessages ? (
             <ChatMessages
               messages={messages}
-              hasPendingDiff={hasPendingDiff}
               onAcceptChange={handleAcceptChange}
               onRejectChange={handleRejectChange}
               onRunQuery={handleRunQuery}
@@ -626,7 +599,6 @@ export const AIChatWindow: React.FC = () => {
               aiSuggestionRequest={aiSuggestionRequest}
               queryNotifications={queryNotifications}
               queryStartOffset={conversation?.queryStartOffset ?? 0}
-              conversationQueryKey={chatWindowState.activeQueryKey ?? undefined}
               isOperationInProgress={isBlockingAIStatus(aiStatus)}
               editorSQL={conversation?.acceptedSQL}
             />
@@ -649,14 +621,14 @@ export const AIChatWindow: React.FC = () => {
           ) : null}
           <ChatInput
             ref={chatInputRef}
-            onSend={(message) => handleSendMessage(message, hasPendingDiff)}
+            onSend={(message) => handleSendMessage(message, hasUnactionedDiff)}
             disabled={!canUse || isBlockingAIStatus(aiStatus)}
             placeholder={
               !shouldShowMessages
                 ? "Ask a question about this query..."
                 : undefined
             }
-            queryKey={chatWindowState.activeQueryKey ?? undefined}
+            conversationId={conversation?.id}
             contextSQL={conversation?.acceptedSQL}
             contextSchemaData={conversation?.schemaData}
             onContextClick={handleContextClick}
