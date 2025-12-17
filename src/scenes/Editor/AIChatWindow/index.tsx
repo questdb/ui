@@ -1,9 +1,20 @@
-import React, { useMemo, useRef, useContext, useCallback } from "react"
+import React, {
+  useMemo,
+  useRef,
+  useContext,
+  useCallback,
+  useEffect,
+} from "react"
+import type { MutableRefObject } from "react"
 import styled from "styled-components"
 import { Button, Box } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
+import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
+import { FixQueryButton } from "../../../components/FixQueryButton"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
+import { extractErrorByQueryKey } from "../utils"
+import type { ExecutionRefs } from "../index"
 import {
   trimSemicolonForDisplay,
   hasUnactionedDiff as checkHasUnactionedDiff,
@@ -35,6 +46,8 @@ import { QuestContext } from "../../../providers"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
+import { eventBus } from "../../../modules/EventBus"
+import { EventType } from "../../../modules/EventBus/types"
 
 const Container = styled.div`
   display: flex;
@@ -106,6 +119,15 @@ const InitialQueryEditor = styled.div`
   overflow: hidden;
 `
 
+const ButtonContainer = styled.div`
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  margin-top: 0.5rem;
+`
+
 const ChatPanel = styled(Box)`
   display: flex;
   flex-direction: column;
@@ -125,6 +147,7 @@ export const AIChatWindow: React.FC = () => {
     setActiveBuffer,
     showDiffBuffer,
     closeDiffBufferForConversation,
+    executionRefs,
   } = useEditor()
   const {
     chatWindowState,
@@ -209,6 +232,42 @@ export const AIChatWindow: React.FC = () => {
   const shouldShowMessages = useMemo(() => {
     return messages.length > 0
   }, [messages])
+
+  const shouldShowExplainButton = useMemo(() => {
+    return (
+      messages.length === 0 &&
+      currentSQL &&
+      currentSQL.trim() !== "\n" &&
+      canUse &&
+      !isBlockingAIStatus(aiStatus)
+    )
+  }, [messages.length, currentSQL, canUse, aiStatus])
+
+  const hasErrorForCurrentQuery = useMemo(() => {
+    if (
+      !shouldShowExplainButton ||
+      !conversation ||
+      !conversation.queryKey ||
+      !conversation.bufferId ||
+      !editorRef.current
+    ) {
+      return false
+    }
+
+    const errorInfo = extractErrorByQueryKey(
+      conversation.queryKey,
+      conversation.bufferId,
+      executionRefs as MutableRefObject<ExecutionRefs> | undefined,
+      editorRef,
+    )
+    return errorInfo !== null
+  }, [shouldShowExplainButton, conversation, editorRef, executionRefs])
+
+  const shouldShowFixButton =
+    shouldShowExplainButton &&
+    hasErrorForCurrentQuery &&
+    canUse &&
+    !isBlockingAIStatus(aiStatus)
 
   // Build header title
   const headerTitle = useMemo(() => {
@@ -574,6 +633,39 @@ export const AIChatWindow: React.FC = () => {
     ],
   )
 
+  const explainButtonRef = useRef<HTMLDivElement | null>(null)
+
+  const handleExplainQuery = useCallback(() => {
+    const button = explainButtonRef.current?.querySelector(
+      'button[data-hook="button-explain-query"]',
+    ) as HTMLButtonElement
+    button?.click()
+  }, [])
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!shouldShowExplainButton) return
+      if (!((e.metaKey || e.ctrlKey) && (e.key === "e" || e.key === "E"))) {
+        return
+      }
+      e.preventDefault()
+      handleExplainQuery()
+    },
+    [shouldShowExplainButton],
+  )
+
+  useEffect(() => {
+    if (shouldShowExplainButton) {
+      eventBus.subscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQuery)
+
+      document.addEventListener("keydown", handleKeyDown)
+      return () => {
+        document.removeEventListener("keydown", handleKeyDown)
+        eventBus.unsubscribe(EventType.EXPLAIN_QUERY_EXEC, handleExplainQuery)
+      }
+    }
+  }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
+
   if (!chatWindowState.isOpen || !conversation) {
     return null
   }
@@ -621,6 +713,17 @@ export const AIChatWindow: React.FC = () => {
                   <LiteEditor value={currentSQL.trim()} />
                 </InitialQueryEditor>
               </InitialQueryBox>
+              {(shouldShowExplainButton || shouldShowFixButton) && (
+                <ButtonContainer ref={explainButtonRef}>
+                  {shouldShowExplainButton && (
+                    <ExplainQueryButton
+                      conversationId={conversation.id}
+                      queryText={currentSQL.trim()}
+                    />
+                  )}
+                  {shouldShowFixButton && <FixQueryButton />}
+                </ButtonContainer>
+              )}
             </InitialQueryContainer>
           ) : null}
           <ChatInput

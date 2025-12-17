@@ -301,14 +301,14 @@ export const applyGutterIconState = (
     // Highlight state: gradient background fill + solid border
     wrapper.style.border = "1px solid #d14671"
     wrapper.style.background =
-      "linear-gradient(180deg, rgba(209, 70, 113, 0.24) 0%, rgba(137, 44, 108, 0.24) 100%)"
+      "linear-gradient(90deg, rgba(209, 70, 113, 0.24) 0%, rgba(137, 44, 108, 0.24) 100%)"
     wrapper.style.boxShadow = "none"
   } else if (hasBorder) {
     // Active/ActiveHover state: transparent background with gradient border
     wrapper.style.border = "1px solid transparent"
     wrapper.style.background = `
       linear-gradient(#2c2e3d, #2c2e3d) padding-box,
-      linear-gradient(180deg, #D14671 0%, #892C6C 100%) border-box
+      linear-gradient(90deg, #D14671 0%, #892C6C 100%) border-box
     `
     wrapper.style.boxShadow = "none"
   } else {

@@ -133,12 +133,12 @@ const themes: {
   },
   gradient: {
     normal: {
-      background: "midnight",
+      background: "backgroundDarker",
       border: "transparent",
       color: "white",
     },
     hover: {
-      background: "midnight",
+      background: "backgroundDarker",
       border: "transparent",
       color: "white",
     },

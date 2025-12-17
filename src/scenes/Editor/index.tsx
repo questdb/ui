@@ -27,7 +27,6 @@ import React, {
   forwardRef,
   Ref,
   useEffect,
-  useRef,
   useMemo,
   useCallback,
 } from "react"
@@ -176,14 +175,13 @@ const Editor = ({
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const dispatch = useDispatch()
-  const { activeBuffer, addBuffer } = useEditor()
+  const { activeBuffer, addBuffer, cleanupExecutionRefs } = useEditor()
   const { getConversation, acceptSuggestion, rejectSuggestion } =
     useAIConversation()
-  const executionRefs = useRef<ExecutionRefs>({})
 
   const handleClearNotifications = (bufferId: number) => {
     dispatch(actions.query.cleanupBufferNotifications(bufferId))
-    delete executionRefs.current[bufferId]
+    cleanupExecutionRefs(bufferId)
   }
 
   useEffect(() => {
@@ -306,9 +304,7 @@ const Editor = ({
         <Tabs />
         <EditorContent>
           <EditorPane>
-            {activeBuffer.editorViewState && (
-              <Monaco executionRefs={executionRefs} hidden={isMonacoHidden} />
-            )}
+            {activeBuffer.editorViewState && <Monaco hidden={isMonacoHidden} />}
             {activeBuffer.isDiffBuffer && activeBuffer.diffContent && (
               <DiffViewWrapper>
                 <DiffEditorContainer>

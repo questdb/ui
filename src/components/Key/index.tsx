@@ -31,7 +31,8 @@ const StyledKey = styled(Box).attrs({
   box-shadow:
     0px 12px 16px -4px rgba(0, 0, 0, 0.2),
     0px 4px 6px -2px rgba(0, 0, 0, 0.2),
-    0px 2px 2px -1px rgba(0, 0, 0, 0.2);
+    0px 2px 2px -1px rgba(0, 0, 0, 0.2),
+    0 0 4px 0 rgba(96, 96, 96, 0.2) inset;
   transition: color 0.2s ease;
 
   &:hover {

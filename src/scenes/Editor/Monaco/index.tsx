@@ -12,7 +12,7 @@ import React, {
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import type { ExecutionInfo, ExecutionRefs } from "../../Editor"
+import type { ExecutionInfo } from "../../Editor"
 import {
   Box,
   Button,
@@ -181,14 +181,9 @@ const EditorWrapper = styled.div`
 
 const DEFAULT_LINE_CHARS = 7
 
-const MonacoEditor = ({
-  executionRefs,
-  hidden = false,
-}: {
-  executionRefs: React.MutableRefObject<ExecutionRefs>
-  hidden?: boolean
-}) => {
+const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const editorContext = useEditor()
+  const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
     buffers,
     editorRef,
@@ -477,7 +472,8 @@ const MonacoEditor = ({
     const activeBufferId = activeBufferRef.current.id as number
 
     const lineMarkingDecorations: editor.IModelDeltaDecoration[] = []
-    const bufferExecutions = executionRefs.current[activeBufferId] || {}
+    const bufferExecutions =
+      executionRefs.current[activeBufferId.toString()] || {}
 
     if (queryAtCursor) {
       const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
@@ -602,7 +598,8 @@ const MonacoEditor = ({
           }),
         }
         allQueryOffsets.push(queryOffsets)
-        const bufferExecutions = executionRefs.current[activeBufferId] || {}
+        const bufferExecutions =
+          executionRefs.current[activeBufferId.toString()] || {}
         const queryKey = createQueryKeyFromRequest(editor, query)
         const queryExecutionBuffer = bufferExecutions[queryKey]
         const hasError =
@@ -798,7 +795,7 @@ const MonacoEditor = ({
       contentJustChangedRef.current = true
 
       const activeBufferId = activeBufferRef.current.id as number
-      const bufferExecutions = executionRefs.current[activeBufferId]
+      const bufferExecutions = executionRefs.current[activeBufferId.toString()]
 
       const notificationUpdates: Array<() => void> = []
 
@@ -928,9 +925,9 @@ const MonacoEditor = ({
       })
 
       if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
-        delete executionRefs.current[activeBufferId]
+        cleanupExecutionRefs(activeBufferId)
       }
-      executionRefs.current[activeBufferId] = bufferExecutions
+      executionRefs.current[activeBufferId.toString()] = bufferExecutions
 
       applyGlyphsAndLineMarkings(monaco, editor)
 
@@ -1092,10 +1089,11 @@ const MonacoEditor = ({
         { limit: "0,1000", explain: true },
       )
 
-      if (executionRefs.current[activeBufferId]) {
-        delete executionRefs.current[activeBufferId][queryKey]
-        if (Object.keys(executionRefs.current[activeBufferId]).length === 0) {
-          delete executionRefs.current[activeBufferId]
+      const bufferIdStr = activeBufferId.toString()
+      if (executionRefs.current[bufferIdStr]) {
+        delete executionRefs.current[bufferIdStr][queryKey]
+        if (Object.keys(executionRefs.current[bufferIdStr]).length === 0) {
+          cleanupExecutionRefs(activeBufferId)
         }
       }
 
@@ -1136,12 +1134,13 @@ const MonacoEditor = ({
       }
 
       if (query.selection) {
-        if (!executionRefs.current[activeBufferId]) {
-          executionRefs.current[activeBufferId] = {}
+        const bufferIdStr = activeBufferId.toString()
+        if (!executionRefs.current[bufferIdStr]) {
+          executionRefs.current[bufferIdStr] = {}
         }
 
         const queryStartOffset = getQueryStartOffset(editor, query)
-        executionRefs.current[activeBufferId][queryKey] = {
+        executionRefs.current[bufferIdStr][queryKey] = {
           success: true,
           selection: query.selection,
           queryText: query.query,
@@ -1162,12 +1161,13 @@ const MonacoEditor = ({
     } catch (_error: unknown) {
       const error = _error as ErrorResult
 
-      if (!executionRefs.current[activeBufferId]) {
-        executionRefs.current[activeBufferId] = {}
+      const bufferIdStr = activeBufferId.toString()
+      if (!executionRefs.current[bufferIdStr]) {
+        executionRefs.current[bufferIdStr] = {}
       }
 
       const startOffset = getQueryStartOffset(editor, query)
-      executionRefs.current[activeBufferId][queryKey] = {
+      executionRefs.current[bufferIdStr][queryKey] = {
         error,
         queryText: query.query,
         startOffset,
@@ -1238,9 +1238,7 @@ const MonacoEditor = ({
     const activeBufferId = activeBuffer.id as number
     if (runningAllQueries) {
       dispatch(actions.query.cleanupBufferNotifications(activeBufferId))
-      if (executionRefs.current[activeBufferId]) {
-        delete executionRefs.current[activeBufferId]
-      }
+      cleanupExecutionRefs(activeBufferId)
     }
 
     isRunningScriptRef.current = true
@@ -1386,12 +1384,13 @@ const MonacoEditor = ({
 
   useEffect(() => {
     // Remove all execution information for the buffers that have been deleted
-    Object.keys(executionRefs.current).map((key) => {
-      if (!buffers.find((b) => b.id === parseInt(key))) {
-        delete executionRefs.current[key]
+    Object.keys(executionRefs.current).forEach((key) => {
+      const bufferId = parseInt(key)
+      if (!buffers.find((b) => b.id === bufferId)) {
+        cleanupExecutionRefs(bufferId)
       }
     })
-  }, [buffers])
+  }, [buffers, executionRefs, cleanupExecutionRefs])
 
   useEffect(() => {
     activeNotificationRef.current = activeNotification
@@ -1521,27 +1520,30 @@ const MonacoEditor = ({
             setRequest(undefined)
             if (!editorRef.current) return
 
-            if (executionRefs.current[targetBufferId] && editorRef.current) {
-              delete executionRefs.current[targetBufferId][parentQueryKey]
+            const targetBufferIdStr = targetBufferId.toString()
+            if (executionRefs.current[targetBufferIdStr] && editorRef.current) {
+              delete executionRefs.current[targetBufferIdStr][parentQueryKey]
               if (
-                Object.keys(executionRefs.current[targetBufferId]).length === 0
+                Object.keys(executionRefs.current[targetBufferIdStr]).length ===
+                0
               ) {
-                delete executionRefs.current[targetBufferId]
+                cleanupExecutionRefs(targetBufferId)
               }
             }
 
             if (request.selection) {
               const model = editorRef.current.getModel()
               if (model) {
-                if (!executionRefs.current[targetBufferId]) {
-                  executionRefs.current[targetBufferId] = {}
+                const targetBufferIdStr = targetBufferId.toString()
+                if (!executionRefs.current[targetBufferIdStr]) {
+                  executionRefs.current[targetBufferIdStr] = {}
                 }
 
                 // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
                 const queryStartOffset = isAISuggestion
                   ? aiSuggestionRequestRef.current!.startOffset
                   : getQueryStartOffset(editorRef.current, request)
-                executionRefs.current[targetBufferId][parentQueryKey] = {
+                executionRefs.current[targetBufferIdStr][parentQueryKey] = {
                   success: true,
                   selection: request.selection,
                   queryText: parentQuery,
@@ -1650,15 +1652,16 @@ const MonacoEditor = ({
 
               // Use the already-defined parentQueryKey (which correctly handles AI_SUGGESTION)
               // instead of recalculating it here
-              if (!executionRefs.current[targetBufferId]) {
-                executionRefs.current[targetBufferId] = {}
+              const targetBufferIdStr = targetBufferId.toString()
+              if (!executionRefs.current[targetBufferIdStr]) {
+                executionRefs.current[targetBufferIdStr] = {}
               }
 
               // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
               const startOffset = isAISuggestion
                 ? aiSuggestionRequestRef.current!.startOffset
                 : getQueryStartOffset(editorRef.current, request)
-              executionRefs.current[targetBufferId][parentQueryKey] = {
+              executionRefs.current[targetBufferIdStr][parentQueryKey] = {
                 error: errorToStore,
                 selection: request.selection,
                 queryText: parentQuery,
@@ -1780,7 +1783,6 @@ const MonacoEditor = ({
         decorationCollectionRef.current.clear()
       }
 
-      // Clean up glyph widgets
       if (editorRef.current) {
         clearGlyphWidgets(editorRef.current, glyphWidgetsRef)
         glyphLineNumbersRef.current.clear()
@@ -1800,7 +1802,6 @@ const MonacoEditor = ({
           <ButtonBar
             onTriggerRunScript={handleTriggerRunScript}
             isTemporary={activeBuffer.isTemporary}
-            executionRefs={executionRefs}
           />
         )}
         <EditorWrapper>

@@ -7,21 +7,17 @@ import { ChevronDown } from "@styled-icons/boxicons-solid"
 import {
   Box,
   Button,
-  ExplainQueryButton,
   GenerateSQLButton,
   PopperToggle,
 } from "../../../components"
-import { FixQueryButton } from "./FixQueryButton"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
 import { useAIStatus } from "../../../providers/AIStatusProvider"
-import type { ExecutionRefs } from "../../../scenes/Editor"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
   isTemporary: boolean | undefined
-  executionRefs?: React.MutableRefObject<ExecutionRefs>
 }
 
 const ButtonBarWrapper = styled.div<{
@@ -172,22 +168,15 @@ const shortcutTitles =
         [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
       }
 
-const ButtonBar = ({
-  onTriggerRunScript,
-  isTemporary,
-  executionRefs,
-}: ButtonBarProps) => {
+const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
-  const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { canUse } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
   const aiAssistantEnabled = canUse
 
-  const hasQueryError =
-    activeNotification?.type === "error" && !activeNotification?.isExplain
   const [searchWidgetType, setSearchWidgetType] = useState<
     "find" | "replace" | null
   >(null)
@@ -398,10 +387,6 @@ const ButtonBar = ({
       $aiAssistantEnabled={aiAssistantEnabled}
     >
       <GenerateSQLButton />
-      <ExplainQueryButton />
-      {hasQueryError && queriesToRun.length === 1 && (
-        <FixQueryButton executionRefs={executionRefs} />
-      )}
       {running === RunningType.SCRIPT
         ? renderRunScriptButton()
         : renderRunQueryButton()}

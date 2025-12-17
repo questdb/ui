@@ -24,6 +24,7 @@ import {
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/aiAssistant"
 import type { Buffer } from "../../store/buffers"
+import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
   BufferType,
@@ -115,6 +116,9 @@ export type EditorContext = {
   ) => Promise<void>
   // Apply AI SQL change to editor
   applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
+  executionRefs: MutableRefObject<ExecutionRefs>
+  cleanupExecutionRefs: (bufferId: number) => void
+  cleanupAllExecutionRefs: () => void
 }
 
 const defaultValues = {
@@ -144,6 +148,9 @@ const defaultValues = {
   showDiffBuffer: () => Promise.resolve(),
   closeDiffBufferForConversation: () => Promise.resolve(),
   applyAISQLChange: () => ({ success: false }),
+  executionRefs: { current: {} },
+  cleanupExecutionRefs: () => undefined,
+  cleanupAllExecutionRefs: () => undefined,
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -151,6 +158,7 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider: React.FC = ({ children }) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
+  const executionRefs = useRef<ExecutionRefs>({})
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
@@ -203,6 +211,14 @@ export const EditorProvider: React.FC = ({ children }) => {
     const activeBuffers = buffers.filter((b) => !b.archived || b.isTemporary)
     return Math.max(...activeBuffers.map((b) => b.position), -1) + 1
   }, [buffers])
+
+  const cleanupExecutionRefs = useCallback((bufferId: number) => {
+    delete executionRefs.current[bufferId.toString()]
+  }, [])
+
+  const cleanupAllExecutionRefs = useCallback(() => {
+    executionRefs.current = {}
+  }, [])
 
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
@@ -326,6 +342,7 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const deleteAllBuffers = async () => {
     await bufferStore.deleteAll()
+    cleanupAllExecutionRefs()
     eventBus.publish(EventType.BUFFERS_UPDATED, { type: "deleteAll" })
   }
 
@@ -429,6 +446,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     setActiveBuffer = true,
   ) => {
     await bufferStore.delete(id)
+    cleanupExecutionRefs(id)
     if (setActiveBuffer) {
       await setActiveBufferOnRemoved(id)
     }
@@ -746,6 +764,9 @@ export const EditorProvider: React.FC = ({ children }) => {
         showDiffBuffer,
         closeDiffBufferForConversation,
         applyAISQLChange,
+        executionRefs,
+        cleanupExecutionRefs,
+        cleanupAllExecutionRefs,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()

@@ -31,7 +31,7 @@ const getBorderWidth = (props: ButtonProps) =>
 const getFillColor = (props: ButtonProps & { theme: DefaultTheme }) =>
   "gradientWeight" in props && props.gradientWeight === "thick"
     ? props.theme.color.selectionDarker
-    : props.theme.color.midnight
+    : props.theme.color.backgroundDarker
 
 type BaseButtonProps = {
   as?: React.ElementType
