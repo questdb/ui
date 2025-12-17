@@ -314,7 +314,7 @@ const Console = () => {
           </MainContent>
         </Allotment.Pane>
         {chatWindowState.isOpen && (
-          <Allotment.Pane minSize={300} preferredSize={aiChatPanelWidth}>
+          <Allotment.Pane minSize={420} preferredSize={aiChatPanelWidth}>
             <AIChatWindow />
           </Allotment.Pane>
         )}

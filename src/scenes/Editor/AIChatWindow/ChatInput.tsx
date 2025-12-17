@@ -86,7 +86,7 @@ const StyledTextArea = styled.textarea<{ $hasContext: boolean }>`
       ? "4.4rem 4.5rem 1.2rem 1.2rem"
       : "1.2rem 4.5rem 1.2rem 1.2rem"};
   background: ${color("backgroundDarker")};
-  border: 1px solid ${color("pinkDarker")};
+  border: 1px solid ${color("selection")};
   border-radius: 0.6rem;
   color: ${color("foreground")};
   font-size: 1.4rem;
@@ -103,7 +103,7 @@ const StyledTextArea = styled.textarea<{ $hasContext: boolean }>`
   }
 
   &:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
   }
 `
 
@@ -118,7 +118,6 @@ const ActionButton = styled.button`
   justify-content: center;
   border-radius: 0.4rem;
   cursor: pointer;
-  transition: all 0.15s ease;
 `
 
 const ContextBadgeContainer = styled.div`
@@ -148,7 +147,6 @@ const ContextBadge = styled.div<{ $type: "sql" | "table" }>`
   ${({ $type }) =>
     $type === "sql" &&
     css`
-      transition: all 0.2s ease;
       cursor: pointer;
 
       &:hover {
@@ -178,7 +176,7 @@ const SendButton = styled(ActionButton)`
   }
 
   &:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 `

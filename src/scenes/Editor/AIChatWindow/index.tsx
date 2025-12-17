@@ -241,6 +241,16 @@ export const AIChatWindow: React.FC = () => {
     return "AI Assistant"
   }, [conversation])
 
+  const getPlaceholder = () => {
+    if (messages.length > 0) {
+      return "Ask a follow up question or request refinement..."
+    }
+    if (conversation?.schemaData || conversation?.originalQuery) {
+      return `Ask a question or request an edit...`
+    }
+    return "Ask a question or request an edit..."
+  }
+
   const handleSendMessage = (
     userMessage: string,
     hasUnactionedDiffParam: boolean = false,
@@ -617,11 +627,7 @@ export const AIChatWindow: React.FC = () => {
             ref={chatInputRef}
             onSend={(message) => handleSendMessage(message, hasUnactionedDiff)}
             disabled={!canUse || isBlockingAIStatus(aiStatus)}
-            placeholder={
-              !shouldShowMessages
-                ? "Ask a question about this query..."
-                : undefined
-            }
+            placeholder={getPlaceholder()}
             conversationId={conversation?.id}
             contextSQL={conversation?.acceptedSQL}
             contextSchemaData={conversation?.schemaData}

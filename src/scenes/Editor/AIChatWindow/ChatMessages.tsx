@@ -790,9 +790,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           ) {
             tokenDisplay = (
               <>
-                <strong>{formatTokenCount(tokenUsage.inputTokens)}</strong>{" "}
+                <span style={{ fontWeight: 600 }}>
+                  {formatTokenCount(tokenUsage.inputTokens)}
+                </span>{" "}
                 input /{" "}
-                <strong>{formatTokenCount(tokenUsage.outputTokens)}</strong>{" "}
+                <span style={{ fontWeight: 600 }}>
+                  {formatTokenCount(tokenUsage.outputTokens)}
+                </span>{" "}
                 output tokens
               </>
             )
