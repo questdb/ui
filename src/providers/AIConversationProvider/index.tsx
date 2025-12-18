@@ -78,6 +78,9 @@ type AIConversationContextType = {
   openOrCreateBlankChatWindow: () => void
   openBlankChatWindow: () => void
   closeChatWindow: () => void
+  openHistoryView: () => void
+  closeHistoryView: () => void
+  deleteConversation: (conversationId: ConversationId) => void
 
   // Message operations (now use ConversationId)
   addMessage: (
@@ -125,6 +128,8 @@ export const AIConversationProvider: React.FC<{
   const [chatWindowState, setChatWindowState] = useState<ChatWindowState>({
     isOpen: false,
     activeConversationId: null,
+    isHistoryOpen: false,
+    previousConversationId: null,
   })
 
   const indices = useMemo(() => buildIndices(conversations), [conversations])
@@ -543,7 +548,42 @@ export const AIConversationProvider: React.FC<{
     openChatWindow(blankConversation.id)
   }, [createConversation, openChatWindow])
 
-  // Get editor functions for accept/reject operations
+  const openHistoryView = useCallback(() => {
+    setChatWindowState((prev) => ({
+      ...prev,
+      isHistoryOpen: true,
+      previousConversationId: prev.activeConversationId,
+    }))
+  }, [])
+
+  const closeHistoryView = useCallback(() => {
+    setChatWindowState((prev) => ({
+      ...prev,
+      isHistoryOpen: false,
+      activeConversationId:
+        prev.previousConversationId ?? prev.activeConversationId,
+    }))
+  }, [])
+
+  const deleteConversation = useCallback((conversationId: ConversationId) => {
+    setConversations((prev) => {
+      const next = new Map(prev)
+      next.delete(conversationId)
+      return next
+    })
+
+    setChatWindowState((prev) => {
+      const updates: Partial<ChatWindowState> = {}
+      if (prev.activeConversationId === conversationId) {
+        updates.activeConversationId = null
+      }
+      if (prev.previousConversationId === conversationId) {
+        updates.previousConversationId = null
+      }
+      return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
+    })
+  }, [])
+
   const {
     editorRef,
     buffers,
@@ -814,6 +854,9 @@ export const AIConversationProvider: React.FC<{
         openOrCreateBlankChatWindow,
         openBlankChatWindow,
         closeChatWindow,
+        openHistoryView,
+        closeHistoryView,
+        deleteConversation,
         addMessage,
         updateConversationSQL,
         addMessageAndUpdateSQL,

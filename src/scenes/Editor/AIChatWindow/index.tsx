@@ -6,12 +6,16 @@ import React, {
   useEffect,
 } from "react"
 import type { MutableRefObject } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Button, Box } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { FixQueryButton } from "../../../components/FixQueryButton"
-import { PlusIcon, XIcon } from "@phosphor-icons/react"
+import {
+  PlusIcon,
+  XIcon,
+  ClockCounterClockwiseIcon,
+} from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
@@ -30,6 +34,7 @@ import { color } from "../../../utils"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
+import { ChatHistoryView } from "./ChatHistoryView"
 import {
   continueConversation,
   isAiAssistantError,
@@ -85,9 +90,20 @@ const HeaderTitle = styled.div`
   font-size: 1.6rem;
 `
 
-const HeaderButton = styled(Button).attrs({ skin: "transparent" })`
+const HeaderButton = styled(Button).attrs(
+  ({ $active }: { $active: boolean }) => ({
+    skin: "transparent",
+    $active,
+  }),
+)`
   color: ${color("foreground")};
   padding: 0.6rem;
+
+  ${({ $active }) =>
+    $active &&
+    css`
+      background: ${color("selection")};
+    `}
 `
 
 const HeaderRight = styled.div`
@@ -190,9 +206,12 @@ export const AIChatWindow: React.FC = () => {
     executionRefs,
   } = useEditor()
   const {
+    conversations,
     chatWindowState,
     closeChatWindow,
     openBlankChatWindow,
+    openHistoryView,
+    closeHistoryView,
     getConversation,
     addMessage,
     addMessageAndUpdateSQL,
@@ -313,8 +332,14 @@ export const AIChatWindow: React.FC = () => {
     canUse &&
     !isBlockingAIStatus(aiStatus)
 
-  // Build header title
+  const isHistoryOpen = chatWindowState.isHistoryOpen ?? false
+  const hasConversations = conversations.size > 0
+
   const headerTitle = useMemo(() => {
+    if (isHistoryOpen) {
+      return "Chat history"
+    }
+
     if (!conversation) return ""
 
     if (conversation.conversationName) {
@@ -338,7 +363,15 @@ export const AIChatWindow: React.FC = () => {
     }
 
     return "AI Assistant"
-  }, [conversation])
+  }, [conversation, isHistoryOpen])
+
+  const handleHistoryToggle = useCallback(() => {
+    if (isHistoryOpen) {
+      closeHistoryView()
+    } else {
+      openHistoryView()
+    }
+  }, [isHistoryOpen, closeHistoryView, openHistoryView])
 
   const getPlaceholder = () => {
     if (messages.length > 0) {
@@ -705,78 +738,96 @@ export const AIChatWindow: React.FC = () => {
           <HeaderButton onClick={openBlankChatWindow} title="New chat">
             <PlusIcon size={16} weight="bold" />
           </HeaderButton>
+          <HeaderButton
+            $active={isHistoryOpen}
+            onClick={handleHistoryToggle}
+            title={isHistoryOpen ? "Back to chat" : "Chat history"}
+            disabled={!hasConversations}
+          >
+            <ClockCounterClockwiseIcon size={16} weight="bold" />
+          </HeaderButton>
           <HeaderButton onClick={closeChatWindow} title="Close">
             <XIcon size={16} weight="bold" />
           </HeaderButton>
         </HeaderRight>
       </Header>
       <ChatWindowContent>
-        <ChatPanel>
-          {shouldShowMessages ? (
-            <ChatMessages
-              messages={messages}
-              onAcceptChange={handleAcceptChange}
-              onRejectChange={handleRejectChange}
-              onRunQuery={handleRunQuery}
-              onExpandDiff={handleExpandDiff}
-              onApplyToEditor={handleApplyToEditor}
-              running={running}
-              aiSuggestionRequest={aiSuggestionRequest}
-              queryNotifications={queryNotifications}
-              queryStartOffset={queryInfo.startOffset}
-              isOperationInProgress={isBlockingAIStatus(aiStatus)}
-              editorSQL={queryInfo.queryText}
-            />
-          ) : currentSQL && currentSQL.trim() ? (
-            // Show initial SQL as a user message bubble when no messages exist
-            <InitialQueryContainer>
-              <InitialQueryBox>
-                <InitialQueryEditor
-                  style={{
-                    height: Math.min(
-                      Math.max(currentSQL.split("\n").length * 20, 60),
-                      200,
-                    ),
-                  }}
-                >
-                  <LiteEditor value={currentSQL.trim()} />
-                </InitialQueryEditor>
-              </InitialQueryBox>
-              {(shouldShowExplainButton || shouldShowFixButton) && (
-                <ButtonContainer ref={explainButtonRef}>
-                  {shouldShowExplainButton && (
-                    <ExplainQueryButton
-                      conversationId={conversation.id}
-                      queryText={currentSQL.trim()}
-                    />
-                  )}
-                  {shouldShowFixButton && <FixQueryButton />}
-                </ButtonContainer>
-              )}
-            </InitialQueryContainer>
-          ) : (
-            <BlankChatContainer>
-              <BlankChatHeading>
-                Leverage AI directly in your database
-              </BlankChatHeading>
-              <BlankChatSubheading>
-                Our AI Assistant is a specialized programming and support agent
-                that makes you more effective and helps you solve problems as
-                you interface with your QuestDB database. Start a conversation.
-              </BlankChatSubheading>
-            </BlankChatContainer>
-          )}
-          <ChatInput
-            ref={chatInputRef}
-            onSend={(message) => handleSendMessage(message, hasUnactionedDiff)}
-            disabled={!canUse || isBlockingAIStatus(aiStatus)}
-            placeholder={getPlaceholder()}
-            conversationId={conversation?.id}
-            contextSQL={queryInfo.queryText}
-            contextTableId={conversation?.tableId}
-            onContextClick={handleContextClick}
+        {isHistoryOpen ? (
+          <ChatHistoryView
+            currentConversationId={
+              chatWindowState.previousConversationId ?? null
+            }
           />
-        </ChatPanel>
+        ) : (
+          <ChatPanel>
+            {shouldShowMessages ? (
+              <ChatMessages
+                messages={messages}
+                onAcceptChange={handleAcceptChange}
+                onRejectChange={handleRejectChange}
+                onRunQuery={handleRunQuery}
+                onExpandDiff={handleExpandDiff}
+                onApplyToEditor={handleApplyToEditor}
+                running={running}
+                aiSuggestionRequest={aiSuggestionRequest}
+                queryNotifications={queryNotifications}
+                queryStartOffset={queryInfo.startOffset}
+                isOperationInProgress={isBlockingAIStatus(aiStatus)}
+                editorSQL={queryInfo.queryText}
+              />
+            ) : currentSQL && currentSQL.trim() ? (
+              <InitialQueryContainer>
+                <InitialQueryBox>
+                  <InitialQueryEditor
+                    style={{
+                      height: Math.min(
+                        Math.max(currentSQL.split("\n").length * 20, 60),
+                        200,
+                      ),
+                    }}
+                  >
+                    <LiteEditor value={currentSQL.trim()} />
+                  </InitialQueryEditor>
+                </InitialQueryBox>
+                {(shouldShowExplainButton || shouldShowFixButton) && (
+                  <ButtonContainer ref={explainButtonRef}>
+                    {shouldShowExplainButton && (
+                      <ExplainQueryButton
+                        conversationId={conversation.id}
+                        queryText={currentSQL.trim()}
+                      />
+                    )}
+                    {shouldShowFixButton && <FixQueryButton />}
+                  </ButtonContainer>
+                )}
+              </InitialQueryContainer>
+            ) : (
+              <BlankChatContainer>
+                <BlankChatHeading>
+                  Leverage AI directly in your database
+                </BlankChatHeading>
+                <BlankChatSubheading>
+                  Our AI Assistant is a specialized programming and support
+                  agent that makes you more effective and helps you solve
+                  problems as you interface with your QuestDB database. Start a
+                  conversation.
+                </BlankChatSubheading>
+              </BlankChatContainer>
+            )}
+            <ChatInput
+              ref={chatInputRef}
+              onSend={(message) =>
+                handleSendMessage(message, hasUnactionedDiff)
+              }
+              disabled={!canUse || isBlockingAIStatus(aiStatus)}
+              placeholder={getPlaceholder()}
+              conversationId={conversation?.id}
+              contextSQL={queryInfo.queryText}
+              contextTableId={conversation?.tableId}
+              onContextClick={handleContextClick}
+            />
+          </ChatPanel>
+        )}
       </ChatWindowContent>
     </Container>
   )

@@ -56,5 +56,7 @@ export type AIConversation = {
 
 export type ChatWindowState = {
   isOpen: boolean
-  activeConversationId: ConversationId | null // The ID of the conversation currently shown in chat window
+  activeConversationId: ConversationId | null
+  isHistoryOpen?: boolean
+  previousConversationId?: ConversationId | null // Chat we came from when opening history
 }
