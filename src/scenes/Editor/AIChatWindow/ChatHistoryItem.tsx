@@ -39,7 +39,7 @@ const Content = styled.div`
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 `
 
 const Title = styled.div.attrs({ className: "chat-title" })`
@@ -54,6 +54,7 @@ const Title = styled.div.attrs({ className: "chat-title" })`
 `
 
 const TitleInput = styled.input`
+  width: 100%;
   line-height: 1.5rem;
   color: ${color("foreground")};
   background: transparent;
@@ -127,6 +128,7 @@ type ChatHistoryItemProps = {
   conversation: AIConversation
   subtitle?: string
   isCurrent: boolean
+  hasOngoingProcess?: boolean
   onSelect: (id: string) => void
   onRename: (id: string, newName: string) => void
   onDelete: (id: string) => void
@@ -136,6 +138,7 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
   conversation,
   subtitle,
   isCurrent,
+  hasOngoingProcess,
   onSelect,
   onRename,
   onDelete,
@@ -215,9 +218,11 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
             <ActionButton onClick={handleEditClick} title="Edit title">
               <PencilSimpleLineIcon size={18} />
             </ActionButton>
-            <ActionButton onClick={handleDeleteClick} title="Delete">
-              <TrashSimpleIcon size={18} />
-            </ActionButton>
+            {!hasOngoingProcess && (
+              <ActionButton onClick={handleDeleteClick} title="Delete">
+                <TrashSimpleIcon size={18} />
+              </ActionButton>
+            )}
           </>
         )}
         {isCurrent && <CurrentIndicator>Current</CurrentIndicator>}

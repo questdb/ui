@@ -79,14 +79,15 @@ const HeaderLeft = styled.div`
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 `
 
-const HeaderTitle = styled.div`
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const HeaderTitle = styled.span`
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 1.6rem;
 `
 
@@ -110,6 +111,7 @@ const HeaderRight = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 `
 
 const ChatWindowContent = styled.div`
@@ -334,6 +336,15 @@ export const AIChatWindow: React.FC = () => {
 
   const isHistoryOpen = chatWindowState.isHistoryOpen ?? false
   const hasConversations = conversations.size > 0
+
+  const addButtonDisabled = useMemo(() => {
+    if (!conversation) return false
+    return (
+      conversation.messages.length === 0 &&
+      !conversation.queryKey &&
+      !conversation.tableId
+    )
+  }, [conversation])
 
   const headerTitle = useMemo(() => {
     if (isHistoryOpen) {
@@ -735,7 +746,11 @@ export const AIChatWindow: React.FC = () => {
           <HeaderTitle>{headerTitle}</HeaderTitle>
         </HeaderLeft>
         <HeaderRight>
-          <HeaderButton onClick={openBlankChatWindow} title="New chat">
+          <HeaderButton
+            onClick={openBlankChatWindow}
+            title="New chat"
+            disabled={addButtonDisabled}
+          >
             <PlusIcon size={16} weight="bold" />
           </HeaderButton>
           <HeaderButton

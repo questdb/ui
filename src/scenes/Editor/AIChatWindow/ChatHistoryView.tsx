@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import styled from "styled-components"
-import { MagnifyingGlassIcon } from "@phosphor-icons/react"
+import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react"
 import { useSelector } from "react-redux"
 import { color } from "../../../utils"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { useEditor } from "../../../providers"
 import { selectors } from "../../../store"
 import {
@@ -15,7 +16,7 @@ import {
 } from "../../../components"
 import { ChatHistoryItem } from "./ChatHistoryItem"
 import { DateSeparator } from "./DateSeparator"
-import { groupConversationsByDate, filterConversations } from "./historyUtils"
+import { useGroupedConversations, filterConversations } from "./historyUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 
 const Container = styled.div`
@@ -45,12 +46,31 @@ const SearchIcon = styled.div`
   z-index: 1;
 `
 
+const ClearButton = styled.button`
+  position: absolute;
+  right: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: ${color("gray2")};
+
+  &:hover {
+    color: ${color("foreground")};
+  }
+`
+
 const SearchInput = styled(Input)`
   width: 100%;
   background: transparent;
   color: ${color("foreground")};
-  padding-left: 3.6rem;
-  border: 1px solid transparent;
+  padding: 0.8rem 3.6rem 0.8rem 3.6rem;
+  border: 1px solid ${color("gray2")}4d;
+  height: 3rem;
   border-radius: 0.6rem;
 
   &:focus {
@@ -63,7 +83,7 @@ const ListContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  padding: 0.8rem 0.4rem;
+  padding: 2rem 0.4rem;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
@@ -145,6 +165,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
     closeHistoryView,
   } = useAIConversation()
 
+  const { activeConversationId: aiProcessingConversationId } = useAIStatus()
   const { buffers } = useEditor()
   const tables = useSelector(selectors.query.getTables)
 
@@ -158,10 +179,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
     [conversationList, searchQuery],
   )
 
-  const groupedConversations = useMemo(
-    () => groupConversationsByDate(filteredConversations),
-    [filteredConversations],
-  )
+  const groupedConversations = useGroupedConversations(filteredConversations)
 
   const getSubtitle = (bufferId: number | string | null, tableId?: number) => {
     if (bufferId != null) {
@@ -234,7 +252,17 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
           placeholder="Search chats"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && searchQuery) {
+              setSearchQuery("")
+            }
+          }}
         />
+        {searchQuery && (
+          <ClearButton onClick={() => setSearchQuery("")} title="Clear search">
+            <XIcon size={16} />
+          </ClearButton>
+        )}
       </SearchContainer>
 
       <ListContainer>
@@ -249,6 +277,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
                     conversation={conv}
                     subtitle={getSubtitle(conv.bufferId, conv.tableId)}
                     isCurrent={isCurrent}
+                    hasOngoingProcess={conv.id === aiProcessingConversationId}
                     onSelect={handleSelect}
                     onRename={handleRename}
                     onDelete={handleDeleteClick}

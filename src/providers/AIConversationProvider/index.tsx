@@ -487,13 +487,31 @@ export const AIConversationProvider: React.FC<{
     })
   }, [])
 
-  // ============ CHAT WINDOW FUNCTIONS ============
-
   const openChatWindow = useCallback((conversationId: ConversationId) => {
-    setChatWindowState({
-      isOpen: true,
-      activeConversationId: conversationId,
+    let prevId: ConversationId | null = null
+
+    setChatWindowState((prev) => {
+      prevId = prev.activeConversationId
+      return {
+        ...prev,
+        isOpen: true,
+        isHistoryOpen: false,
+        previousConversationId: null,
+        activeConversationId: conversationId,
+      }
     })
+
+    if (prevId && prevId !== conversationId) {
+      setConversations((currentConversations) => {
+        const prevConversation = currentConversations.get(prevId!)
+        if (prevConversation && prevConversation.messages.length === 0) {
+          const next = new Map(currentConversations)
+          next.delete(prevId!)
+          return next
+        }
+        return currentConversations
+      })
+    }
   }, [])
 
   const openChatWindowForQuery = useCallback(

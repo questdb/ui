@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from "react"
 import { formatDistance } from "date-fns"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import type { AIConversation } from "../../../providers/AIConversationProvider/types"
@@ -7,6 +8,8 @@ export type DateGroup = {
   conversations: AIConversation[]
 }
 
+const UPDATE_INTERVAL_MS = 60_000
+
 export function getRelativeDateLabel(timestamp: number): string {
   const userLocale = fetchUserLocale()
   const locale = getLocaleFromLanguage(userLocale)
@@ -14,7 +17,7 @@ export function getRelativeDateLabel(timestamp: number): string {
   return formatDistance(timestamp, new Date().getTime(), { locale }) + " ago"
 }
 
-export function groupConversationsByDate(
+function groupConversationsByDate(
   conversations: AIConversation[],
 ): DateGroup[] {
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -42,6 +45,25 @@ export function groupConversationsByDate(
   }
 
   return result
+}
+
+export function useGroupedConversations(
+  conversations: AIConversation[],
+): DateGroup[] {
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTick((t) => t + 1)
+    }, UPDATE_INTERVAL_MS)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  return useMemo(
+    () => groupConversationsByDate(conversations),
+    [conversations, tick],
+  )
 }
 
 export function filterConversations(
