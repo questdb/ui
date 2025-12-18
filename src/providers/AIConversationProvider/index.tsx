@@ -86,6 +86,8 @@ type AIConversationContextType = {
     bufferId: string | number,
     queryKey: QueryKey,
   ) => void
+  openOrCreateBlankChatWindow: () => void
+  openBlankChatWindow: () => void
   closeChatWindow: () => void
 
   // Message operations (now use ConversationId)
@@ -596,6 +598,40 @@ export const AIConversationProvider: React.FC<{
     }))
   }, [])
 
+  const openOrCreateBlankChatWindow = useCallback(() => {
+    if (chatWindowState.activeConversationId) {
+      const existingConv = conversations.get(
+        chatWindowState.activeConversationId,
+      )
+      if (existingConv) {
+        openChatWindow(chatWindowState.activeConversationId)
+        return
+      }
+    }
+
+    const allConversations = Array.from(conversations.values())
+    if (allConversations.length > 0) {
+      const latestConversation = allConversations.reduce((latest, conv) =>
+        conv.updatedAt > latest.updatedAt ? conv : latest,
+      )
+      openChatWindow(latestConversation.id)
+      return
+    }
+
+    const blankConversation = createConversation({})
+    openChatWindow(blankConversation.id)
+  }, [
+    chatWindowState.activeConversationId,
+    conversations,
+    openChatWindow,
+    createConversation,
+  ])
+
+  const openBlankChatWindow = useCallback(() => {
+    const blankConversation = createConversation({})
+    openChatWindow(blankConversation.id)
+  }, [createConversation, openChatWindow])
+
   // Get editor functions for accept/reject operations
   const {
     editorRef,
@@ -879,6 +915,8 @@ export const AIConversationProvider: React.FC<{
         updateConversationAssociations,
         openChatWindow,
         openChatWindowForQuery,
+        openOrCreateBlankChatWindow,
+        openBlankChatWindow,
         closeChatWindow,
         addMessage,
         updateConversationSQL,

@@ -9,9 +9,6 @@ import { Text } from "../Text"
 import { Box } from "../Box"
 import { AISparkle } from "../AISparkle"
 import { TransitionDuration } from "../Transition"
-import { platform } from "../../utils"
-
-const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 
 const TooltipContainer = styled.div<{ $positionReady: boolean }>`
   position: relative;
@@ -164,37 +161,11 @@ const ModeTitleRow = styled(Box).attrs({
 `
 
 const ModeTitle = styled(Text)`
-  font-weight: 500;
+  font-weight: 600;
   font-size: 1.4rem;
   line-height: 1.8rem;
   text-align: left;
   color: ${({ theme }) => theme.color.white};
-`
-
-const KeyContainer = styled(Box).attrs({
-  gap: "0.4rem",
-  align: "center",
-})``
-
-const KeyBadge = styled.div`
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 0.075rem solid ${({ theme }) => theme.color.midnight};
-  border-radius: 0.25rem;
-  width: 2.5rem;
-  height: 2.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  box-shadow: inset 0 0 0.4889rem 0 rgba(96, 96, 96, 0.2);
-`
-
-const KeyText = styled(Text)`
-  font-family: ${({ theme }) => theme.font};
-  font-weight: 600;
-  font-size: 1.5rem;
-  color: ${({ theme }) => theme.color.pinkPrimary};
-  line-height: 0;
 `
 
 const ModeDescription = styled(Text)`
@@ -392,14 +363,6 @@ export const AIAssistantPromo = ({
                   <ModeContent>
                     <ModeTitleRow>
                       <ModeTitle>Generate Queries</ModeTitle>
-                      <KeyContainer>
-                        <KeyBadge>
-                          <KeyText>{ctrlCmd}</KeyText>
-                        </KeyBadge>
-                        <KeyBadge>
-                          <KeyText>G</KeyText>
-                        </KeyBadge>
-                      </KeyContainer>
                     </ModeTitleRow>
                     <ModeDescription>
                       Create SQL queries from natural language, with
@@ -407,7 +370,6 @@ export const AIAssistantPromo = ({
                     </ModeDescription>
                   </ModeContent>
                 </AssistantMode>
-
                 <AssistantMode>
                   <IconContainer>
                     <ModeIcon
@@ -418,14 +380,6 @@ export const AIAssistantPromo = ({
                   <ModeContent>
                     <ModeTitleRow>
                       <ModeTitle>Explain Queries</ModeTitle>
-                      <KeyContainer>
-                        <KeyBadge>
-                          <KeyText>{ctrlCmd}</KeyText>
-                        </KeyBadge>
-                        <KeyBadge>
-                          <KeyText>E</KeyText>
-                        </KeyBadge>
-                      </KeyContainer>
                     </ModeTitleRow>
                     <ModeDescription>
                       Get an inline explanation of your query.

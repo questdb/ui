@@ -64,7 +64,7 @@ export const schemaExplanationToMarkdown = (
     md += `| Column | Type | Description |\n`
     md += `|--------|------|-------------|\n`
     for (const col of explanation.columns) {
-      md += `| \`${col.name}\` | \`${col.data_type}\` | ${col.description} |\n`
+      md += `| ${col.name} | \`${col.data_type}\` | ${col.description} |\n`
     }
     md += `\n`
   }

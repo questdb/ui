@@ -337,6 +337,7 @@ const MarkdownContent = styled.div`
   table {
     border-collapse: collapse;
     min-width: max-content;
+    border-radius: 0.8rem;
   }
 
   th,

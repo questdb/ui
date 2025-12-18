@@ -11,6 +11,7 @@ import { Button, Box } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { FixQueryButton } from "../../../components/FixQueryButton"
+import { PlusIcon, XIcon } from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
@@ -83,8 +84,15 @@ const HeaderTitle = styled.div`
   font-size: 1.6rem;
 `
 
-const CloseButton = styled(Button).attrs({ skin: "transparent" })`
-  color: ${color("offWhite")};
+const HeaderButton = styled(Button).attrs({ skin: "transparent" })`
+  color: ${color("foreground")};
+  padding: 0.6rem;
+`
+
+const HeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `
 
 const ChatWindowContent = styled.div`
@@ -128,6 +136,37 @@ const ButtonContainer = styled.div`
   margin-top: 0.5rem;
 `
 
+const BlankChatContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.2rem;
+  padding: 1.8rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 40rem;
+  text-align: center;
+  margin: 0 auto;
+`
+
+const BlankChatHeading = styled.h2`
+  font-size: 2rem;
+  font-weight: 600;
+  text-align: left;
+  color: ${color("foreground")};
+  margin: 0;
+`
+
+const BlankChatSubheading = styled.p`
+  font-size: 1.4rem;
+  font-weight: 400;
+  color: ${color("gray2")};
+  text-align: left;
+  margin: 0;
+  line-height: 1.5;
+`
+
 const ChatPanel = styled(Box)`
   display: flex;
   flex-direction: column;
@@ -152,6 +191,7 @@ export const AIChatWindow: React.FC = () => {
   const {
     chatWindowState,
     closeChatWindow,
+    openBlankChatWindow,
     getConversation,
     addMessage,
     addMessageAndUpdateSQL,
@@ -305,9 +345,9 @@ export const AIChatWindow: React.FC = () => {
       return "Ask a follow up question or request refinement..."
     }
     if (conversation?.schemaData || conversation?.originalQuery) {
-      return `Ask a question or request an edit...`
+      return "Ask a question or request an edit..."
     }
-    return "Ask a question or request an edit..."
+    return "Ask AI about your tables, or generate a query..."
   }
 
   const handleSendMessage = (
@@ -325,18 +365,16 @@ export const AIChatWindow: React.FC = () => {
       void closeDiffBufferForConversation(conversationId)
     }
 
-    // Determine if this is the first message (no assistant messages yet)
     const hasAssistantMessages = conversation.messages.some(
       (msg) => msg.role === "assistant",
     )
 
-    // Build the user message content with context if needed
     let userMessageContent = userMessage
     let displayType: "ask_request" | undefined = undefined
     let displaySQL: string | undefined = undefined
     let displayUserMessage: string | undefined = undefined
 
-    if (!hasAssistantMessages && currentSQL && currentSQL.trim() !== "\n") {
+    if (!hasAssistantMessages && currentSQL && currentSQL.trim()) {
       // First message with SQL context (like "Ask AI" flow)
       // Store the enriched message so it's preserved in conversation history for API
       userMessageContent = `Current SQL query:\n\`\`\`sql\n${currentSQL}\n\`\`\`\n\nUser request: ${userMessage}`
@@ -677,9 +715,14 @@ export const AIChatWindow: React.FC = () => {
           <AISparkle size={20} variant="filled" />
           <HeaderTitle>{headerTitle}</HeaderTitle>
         </HeaderLeft>
-        <CloseButton onClick={closeChatWindow} title="Close">
-          ✕
-        </CloseButton>
+        <HeaderRight>
+          <HeaderButton onClick={openBlankChatWindow} title="New chat">
+            <PlusIcon size={16} weight="bold" />
+          </HeaderButton>
+          <HeaderButton onClick={closeChatWindow} title="Close">
+            <XIcon size={16} weight="bold" />
+          </HeaderButton>
+        </HeaderRight>
       </Header>
       <ChatWindowContent>
         <ChatPanel>
@@ -698,7 +741,7 @@ export const AIChatWindow: React.FC = () => {
               isOperationInProgress={isBlockingAIStatus(aiStatus)}
               editorSQL={conversation?.acceptedSQL}
             />
-          ) : currentSQL && currentSQL.trim() !== "\n" ? (
+          ) : currentSQL && currentSQL.trim() ? (
             // Show initial SQL as a user message bubble when no messages exist
             <InitialQueryContainer>
               <InitialQueryBox>
@@ -725,7 +768,18 @@ export const AIChatWindow: React.FC = () => {
                 </ButtonContainer>
               )}
             </InitialQueryContainer>
-          ) : null}
+          ) : (
+            <BlankChatContainer>
+              <BlankChatHeading>
+                Leverage AI directly in your database
+              </BlankChatHeading>
+              <BlankChatSubheading>
+                Our AI Assistant is a specialized programming and support agent
+                that makes you more effective and helps you solve problems as
+                you interface with your QuestDB database. Start a conversation.
+              </BlankChatSubheading>
+            </BlankChatContainer>
+          )}
           <ChatInput
             ref={chatInputRef}
             onSend={(message) => handleSendMessage(message, hasUnactionedDiff)}

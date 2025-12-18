@@ -42,6 +42,7 @@ import {
 import { Help } from "./help"
 import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
+import { AIChatButton } from "./AIChatButton"
 
 import "allotment/dist/style.css"
 
@@ -124,9 +125,8 @@ const Layout = () => {
 
               <Sidebar align="top">
                 <Help />
-
+                <AIChatButton />
                 <News />
-
                 <CreateTableDialog />
               </Sidebar>
             </Root>
