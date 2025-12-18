@@ -15,6 +15,7 @@ import { PlusIcon, XIcon } from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
+import { getQueryInfoFromKey } from "../Monaco/utils"
 import type { ExecutionRefs } from "../index"
 import {
   trimSemicolonForDisplay,
@@ -232,6 +233,10 @@ export const AIChatWindow: React.FC = () => {
   const currentSQL = useMemo(() => {
     return trimSemicolonForDisplay(conversation?.currentSQL)
   }, [conversation])
+
+  const queryInfo = useMemo(() => {
+    return getQueryInfoFromKey(conversation?.queryKey ?? null)
+  }, [conversation?.queryKey])
 
   const messages = useMemo(() => {
     return conversation?.messages || []
@@ -527,10 +532,6 @@ export const AIChatWindow: React.FC = () => {
   }
 
   const handleRunQuery = (sql: string) => {
-    // Get the original query's start offset from the conversation
-    // This allows the queryKey to match the original query position in the editor
-    const startOffset = conversation?.queryStartOffset ?? 0
-
     // Normalize the SQL (remove trailing semicolon if present)
     const normalizedSQL = sql.trim().endsWith(";")
       ? sql.trim().slice(0, -1)
@@ -540,7 +541,7 @@ export const AIChatWindow: React.FC = () => {
     dispatch(
       actions.query.setAISuggestionRequest({
         query: normalizedSQL,
-        startOffset,
+        startOffset: queryInfo.startOffset,
       }),
     )
     // Trigger execution with AI_SUGGESTION type
@@ -576,14 +577,7 @@ export const AIChatWindow: React.FC = () => {
 
   // Handle context badge click - navigate to query and highlight it
   const handleContextClick = useCallback(async () => {
-    if (!conversation || !editorRef.current) {
-      return
-    }
-
-    const queryStartOffset = conversation.queryStartOffset
-    const queryEndOffset = conversation.queryEndOffset
-
-    if (queryStartOffset === undefined || queryEndOffset === undefined) {
+    if (!conversation || !editorRef.current || !conversation.queryKey) {
       return
     }
 
@@ -595,9 +589,8 @@ export const AIChatWindow: React.FC = () => {
       const model = editorRef.current.getModel()
       if (!model) return
 
-      // Get positions for revealing and highlighting
-      const startPosition = model.getPositionAt(queryStartOffset)
-      const endPosition = model.getPositionAt(queryEndOffset)
+      const startPosition = model.getPositionAt(queryInfo.startOffset)
+      const endPosition = model.getPositionAt(queryInfo.endOffset)
 
       // Reveal the position in the center of the viewport
       editorRef.current.revealPositionNearTop(startPosition)
@@ -631,7 +624,7 @@ export const AIChatWindow: React.FC = () => {
     } catch (error) {
       console.error("Error highlighting query:", error)
     }
-  }, [conversation, editorRef, navigateToBuffer])
+  }, [conversation, editorRef, navigateToBuffer, queryInfo])
 
   const handleApplyToEditor = useCallback(
     async (sql: string, messageIndex: number) => {
@@ -734,9 +727,9 @@ export const AIChatWindow: React.FC = () => {
               running={running}
               aiSuggestionRequest={aiSuggestionRequest}
               queryNotifications={queryNotifications}
-              queryStartOffset={conversation?.queryStartOffset ?? 0}
+              queryStartOffset={queryInfo.startOffset}
               isOperationInProgress={isBlockingAIStatus(aiStatus)}
-              editorSQL={conversation?.acceptedSQL}
+              editorSQL={queryInfo.queryText}
             />
           ) : currentSQL && currentSQL.trim() ? (
             // Show initial SQL as a user message bubble when no messages exist
@@ -783,7 +776,7 @@ export const AIChatWindow: React.FC = () => {
             disabled={!canUse || isBlockingAIStatus(aiStatus)}
             placeholder={getPlaceholder()}
             conversationId={conversation?.id}
-            contextSQL={conversation?.acceptedSQL}
+            contextSQL={queryInfo.queryText}
             contextSchemaData={conversation?.schemaData}
             onContextClick={handleContextClick}
           />

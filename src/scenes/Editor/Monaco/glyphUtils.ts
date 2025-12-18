@@ -65,7 +65,7 @@ export const createGlyphWidget = (
       setTimeout(() => {
         currentBaseState = "active"
         applyGutterIconState(aiIconWrapper, "active", 16)
-      }, 2000)
+      }, 1000)
     }
 
     aiIconWrapper.addEventListener("mouseenter", () => {

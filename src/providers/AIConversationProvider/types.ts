@@ -47,17 +47,13 @@ export type ConversationMessage = {
 
 export type AIConversation = {
   id: ConversationId // Stable identifier - never changes throughout conversation lifecycle
-  queryKey: QueryKey | null // Can be null for blank/orphaned conversations
+  queryKey: QueryKey | null // Single source of truth - contains query text, start/end offsets
   bufferId: number | string | null // Can be null for schema/blank conversations
-  currentSQL: string // Current SQL with all pending changes
-  acceptedSQL: string // Last accepted SQL state (what's currently in editor)
+  currentSQL: string // Current SQL with all pending changes (may differ from queryKey)
   conversationName?: string // AI-generated name for the conversation
   messages: ConversationMessage[]
   createdAt: number
   updatedAt: number
-  // Query position in editor - for replacement on accept
-  queryStartOffset?: number // Start offset of original query in editor
-  queryEndOffset?: number // End offset of original query in editor
   // Schema identification (for schema conversations - enables reopening same table's conversation)
   schemaIdentifier?: string // Format: "schema:tableName:ddlHash" - stable for reopening
   // Schema explanation data - cleared when conversation transitions to query generation

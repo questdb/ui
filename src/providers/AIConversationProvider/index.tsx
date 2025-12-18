@@ -16,6 +16,8 @@ import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
   normalizeQueryText,
   createQueryKey,
+  getQueryInfoFromKey,
+  shiftQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
 import { normalizeSql } from "../../utils/aiAssistant"
@@ -57,26 +59,23 @@ type AIConversationContextType = {
     bufferId?: string | number | null
     queryKey?: QueryKey | null
     schemaIdentifier?: string
-    sql?: string
-    queryStartOffset?: number
-    queryEndOffset?: number
     schemaData?: SchemaDisplayData
   }) => AIConversation
   getOrCreateConversationForQuery: (options: {
     bufferId: string | number
     queryKey: QueryKey
-    queryText: string
-    queryStartOffset?: number
-    queryEndOffset?: number
   }) => AIConversation
   updateConversationAssociations: (
     conversationId: ConversationId,
     updates: {
       bufferId?: string | number | null
       queryKey?: QueryKey | null
-      queryStartOffset?: number
-      queryEndOffset?: number
     },
+  ) => void
+  shiftQueryKeysForBuffer: (
+    bufferId: string | number,
+    changeOffset: number,
+    delta: number,
   ) => void
 
   // Chat window
@@ -190,25 +189,19 @@ export const AIConversationProvider: React.FC<{
       bufferId?: string | number | null
       queryKey?: QueryKey | null
       schemaIdentifier?: string
-      sql?: string
-      queryStartOffset?: number
-      queryEndOffset?: number
       schemaData?: SchemaDisplayData
     }): AIConversation => {
       const id = generateConversationId()
-      const sql = options.sql || ""
+      const { queryText } = getQueryInfoFromKey(options.queryKey ?? null)
       const conversation: AIConversation = {
         id,
         queryKey: options.queryKey ?? null,
         bufferId: options.bufferId ?? null,
         schemaIdentifier: options.schemaIdentifier,
-        currentSQL: sql,
-        acceptedSQL: sql,
+        currentSQL: queryText,
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        queryStartOffset: options.queryStartOffset,
-        queryEndOffset: options.queryEndOffset,
         schemaData: options.schemaData,
       }
 
@@ -227,9 +220,6 @@ export const AIConversationProvider: React.FC<{
     (options: {
       bufferId: string | number
       queryKey: QueryKey
-      queryText: string
-      queryStartOffset?: number
-      queryEndOffset?: number
     }): AIConversation => {
       const existing = findConversationByQuery(
         options.bufferId,
@@ -242,9 +232,6 @@ export const AIConversationProvider: React.FC<{
       return createConversation({
         bufferId: options.bufferId,
         queryKey: options.queryKey,
-        sql: options.queryText,
-        queryStartOffset: options.queryStartOffset,
-        queryEndOffset: options.queryEndOffset,
       })
     },
     [findConversationByQuery, createConversation],
@@ -256,8 +243,6 @@ export const AIConversationProvider: React.FC<{
       updates: {
         bufferId?: string | number | null
         queryKey?: QueryKey | null
-        queryStartOffset?: number
-        queryEndOffset?: number
       },
     ): void => {
       setConversations((prev) => {
@@ -271,6 +256,38 @@ export const AIConversationProvider: React.FC<{
           updatedAt: Date.now(),
         })
         return next
+      })
+    },
+    [],
+  )
+
+  const shiftQueryKeysForBuffer = useCallback(
+    (bufferId: string | number, changeOffset: number, delta: number): void => {
+      setConversations((prev) => {
+        const next = new Map(prev)
+        let hasChanges = false
+
+        for (const [id, conv] of prev) {
+          if (conv.bufferId === bufferId && conv.queryKey) {
+            const { startOffset } = getQueryInfoFromKey(conv.queryKey)
+            // Only shift if the query starts at or after the change point
+            if (startOffset >= changeOffset) {
+              const newQueryKey = shiftQueryKey(
+                conv.queryKey,
+                changeOffset,
+                delta,
+              )
+              next.set(id, {
+                ...conv,
+                queryKey: newQueryKey,
+                updatedAt: Date.now(),
+              })
+              hasChanges = true
+            }
+          }
+        }
+
+        return hasChanges ? next : prev
       })
     },
     [],
@@ -313,12 +330,14 @@ export const AIConversationProvider: React.FC<{
         const next = new Map(prev)
         const conv = next.get(conversationId)
         if (conv) {
+          // When SQL is applied to editor, update both currentSQL and queryKey
+          // queryKey is the source of truth for what's in the editor
+          const { startOffset } = getQueryInfoFromKey(conv.queryKey)
+          const newQueryKey = createQueryKey(sql, startOffset)
           next.set(conversationId, {
             ...conv,
             currentSQL: sql,
-            // Also update acceptedSQL since this is called when user explicitly applies SQL to editor
-            // This ensures future diffs show correct "original" (what's in editor)
-            acceptedSQL: sql,
+            queryKey: newQueryKey,
             updatedAt: Date.now(),
           })
         }
@@ -339,19 +358,14 @@ export const AIConversationProvider: React.FC<{
           const hasSQLChange = message.sql !== undefined
           const sql = message.sql || ""
 
-          // Check if the SQL actually changed from what's accepted in the editor
-          // Normalize both for comparison to avoid whitespace/formatting differences
           const normalizedNewSQL = hasSQLChange ? normalizeQueryText(sql) : ""
-          const normalizedAcceptedSQL = conv.acceptedSQL
-            ? normalizeQueryText(conv.acceptedSQL)
-            : ""
+          const { queryText: acceptedSQL } = getQueryInfoFromKey(conv.queryKey)
+          const normalizedAcceptedSQL = normalizeQueryText(acceptedSQL)
           const sqlActuallyChanged =
             hasSQLChange && normalizedNewSQL !== normalizedAcceptedSQL
 
-          // Use acceptedSQL as previousSQL for diff display
           // This ensures the diff shows "what's in editor" vs "what model suggests"
-          // rather than "previous suggestion" vs "new suggestion"
-          const previousSQL = sqlActuallyChanged ? conv.acceptedSQL : undefined
+          const previousSQL = sqlActuallyChanged ? acceptedSQL : undefined
 
           // Mark previous assistant messages as non-rejectable if this is a new SQL change
           const updatedMessages = conv.messages.map((msg) => {
@@ -430,6 +444,9 @@ export const AIConversationProvider: React.FC<{
           targetIndex !== undefined ? conv.messages[targetIndex] : undefined
         const sqlToAccept = targetMessage?.sql || conv.currentSQL
 
+        const { startOffset } = getQueryInfoFromKey(conv.queryKey)
+        const newQueryKey = createQueryKey(sqlToAccept, startOffset)
+
         const updatedMessages = conv.messages.map((msg, idx) => {
           if (msg.role === "assistant" && msg.sql) {
             if (idx === targetIndex) {
@@ -445,7 +462,7 @@ export const AIConversationProvider: React.FC<{
 
         next.set(conversationId, {
           ...conv,
-          acceptedSQL: sqlToAccept,
+          queryKey: newQueryKey,
           messages: updatedMessages,
           updatedAt: Date.now(),
         })
@@ -479,11 +496,12 @@ export const AIConversationProvider: React.FC<{
           return next
         }
 
-        // Revert currentSQL to previous SQL
+        // Revert currentSQL to previous SQL (from message or queryKey as fallback)
+        const { queryText: acceptedSQL } = getQueryInfoFromKey(conv.queryKey)
         const revertedSQL =
           typeof latestMessage.previousSQL === "string"
             ? latestMessage.previousSQL
-            : conv.acceptedSQL
+            : acceptedSQL
 
         // Mark latest message as rejected and non-rejectable
         const updatedMessages = conv.messages.map((msg, idx) => {
@@ -725,8 +743,6 @@ export const AIConversationProvider: React.FC<{
     ): void => {
       const result = applyAISQLChange({
         newSQL: normalizedSQL,
-        queryStartOffset: conversation.queryStartOffset,
-        queryEndOffset: conversation.queryEndOffset,
         queryKey: conversation.queryKey ?? undefined,
       })
 
@@ -734,16 +750,8 @@ export const AIConversationProvider: React.FC<{
         return
       }
 
-      // Calculate new offsets
-      const normalizedQuery = normalizeQueryText(normalizedSQL)
-      const newQueryStartOffset = result.queryStartOffset ?? 0
-      const newQueryEndOffset = newQueryStartOffset + normalizedQuery.length
-
-      // Update conversation associations with new queryKey and offsets
       updateConversationAssociations(conversationId, {
         queryKey: result.finalQueryKey ?? conversation.queryKey,
-        queryStartOffset: newQueryStartOffset,
-        queryEndOffset: newQueryEndOffset,
       })
 
       // Update SQL and mark as accepted
@@ -831,8 +839,6 @@ export const AIConversationProvider: React.FC<{
       updateConversationAssociations(conversationId, {
         bufferId: newBuffer.id,
         queryKey: newQueryKey,
-        queryStartOffset,
-        queryEndOffset,
       })
 
       updateConversationSQL(conversationId, normalizedSQL)
@@ -904,6 +910,7 @@ export const AIConversationProvider: React.FC<{
         createConversation,
         getOrCreateConversationForQuery,
         updateConversationAssociations,
+        shiftQueryKeysForBuffer,
         openChatWindow,
         openChatWindowForQuery,
         openOrCreateBlankChatWindow,

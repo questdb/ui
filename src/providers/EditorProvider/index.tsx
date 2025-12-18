@@ -50,13 +50,11 @@ export type DiffModeState = {
 export type DiffBufferContent = {
   original: string
   modified: string
-  conversationId?: ConversationId // Links the diff buffer to its source conversation
+  conversationId?: ConversationId
 }
 
 export type ApplyAISQLChangeOptions = {
   newSQL: string
-  queryStartOffset?: number
-  queryEndOffset?: number
   queryKey?: QueryKey
 }
 
@@ -540,10 +538,8 @@ export const EditorProvider: React.FC = ({ children }) => {
       }
     }
 
-  // Shared logic for applying AI SQL changes to editor
-  // Used by both AIChatWindow and diff editor button bar
   const applyAISQLChange: EditorContext["applyAISQLChange"] = (options) => {
-    const { newSQL, queryStartOffset, queryEndOffset, queryKey } = options
+    const { newSQL, queryKey } = options
 
     if (!editorRef.current) {
       return { success: false }
@@ -558,46 +554,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     let replaceRange: IRange | null = null
     let shouldReplace = false
 
-    // First try using stored offsets (more reliable)
-    if (queryStartOffset !== undefined && queryEndOffset !== undefined) {
-      const startOffset = queryStartOffset
-      const endOffset = queryEndOffset
-      const currentEditorText = model.getValue()
-      const queryToMatch = queryKey ? parseQueryKey(queryKey).queryText : ""
-
-      // Verify the query still exists at this position
-      const queryInEditor = currentEditorText.slice(startOffset, endOffset)
-      const normalizedQueryInEditor = normalizeQueryText(queryInEditor)
-      const normalizedOriginalQuery = normalizeQueryText(queryToMatch)
-
-      if (normalizedQueryInEditor === normalizedOriginalQuery) {
-        const startPosition = model.getPositionAt(startOffset)
-
-        // Extend endOffset to include any trailing semicolon and whitespace
-        let extendedEndOffset = endOffset
-        const textAfterQuery = currentEditorText.slice(
-          endOffset,
-          endOffset + 10,
-        )
-        const semicolonMatch = textAfterQuery.match(/^(\s*;)/)
-        if (semicolonMatch) {
-          extendedEndOffset = endOffset + semicolonMatch[0].length
-        }
-
-        const endPosition = model.getPositionAt(extendedEndOffset)
-        replaceRange = {
-          startLineNumber: startPosition.lineNumber,
-          startColumn: startPosition.column,
-          endLineNumber: endPosition.lineNumber,
-          endColumn: endPosition.column,
-        }
-        finalQueryStartOffset = startOffset
-        shouldReplace = true
-      }
-    }
-
-    // Fallback: try parsing from queryKey
-    if (!shouldReplace && queryKey) {
+    if (queryKey) {
       try {
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const currentEditorText = model.getValue()

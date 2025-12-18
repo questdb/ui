@@ -29,6 +29,7 @@ import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
 import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
+import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
@@ -201,6 +202,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     getOrCreateConversationForQuery,
     openChatWindow,
     hasConversationForQuery,
+    findConversationByQuery,
+    shiftQueryKeysForBuffer,
   } = useAIConversation()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
@@ -239,13 +242,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     startOffset: number
   } | null>(aiSuggestionRequest)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
+  const findConversationByQueryRef = useRef(findConversationByQuery)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const glyphLineNumbersRef = useRef<Set<number>>(new Set())
   const decorationCollectionRef =
     useRef<editor.IEditorDecorationsCollection | null>(null)
   const glyphWidgetsRef = useRef<editor.IGlyphMarginWidget[]>([])
-  const prevConversationStateRef = useRef<Map<QueryKey, boolean>>(new Map())
+  const seenConversationsRef = useRef<Set<ConversationId>>(new Set())
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -429,28 +433,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     setDropdownOpen(false)
     if (!query || !editorRef.current) return
 
-    const model = editorRef.current.getModel()
-    if (!model) return
-
-    const queryText = query.selection ? query.selection.queryText : query.query
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
-
-    // Calculate query offsets for navigation
-    const queryStartOffset = model.getOffsetAt({
-      lineNumber: query.row + 1,
-      column: query.column,
-    })
-    const queryEndOffset = model.getOffsetAt({
-      lineNumber: query.endRow + 1,
-      column: query.endColumn,
-    })
 
     const conversation = getOrCreateConversationForQuery({
       queryKey,
       bufferId: activeBufferRef.current.id!,
-      queryText,
-      queryStartOffset,
-      queryEndOffset,
     })
 
     openChatWindow(conversation.id)
@@ -611,15 +598,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
+        const conversation = canUseAI
+          ? findConversationByQueryRef.current(activeBufferId, queryKey)
+          : undefined
         const hasConversation =
-          canUseAI &&
-          hasConversationForQueryRef.current(activeBufferId, queryKey)
+          conversation !== undefined && conversation.messages.length > 0
 
         // Check if this is a newly created conversation (for highlight animation)
-        const hadConversationBefore =
-          prevConversationStateRef.current.get(queryKey) ?? false
         const isNewlyCreatedConversation =
-          hasConversation && !hadConversationBefore
+          hasConversation &&
+          conversation !== undefined &&
+          !seenConversationsRef.current.has(conversation.id)
 
         const isRunningQuery =
           runningValueRef.current !== RunningType.NONE &&
@@ -694,8 +683,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           glyphWidgetsRef.current.push(widget)
         }
 
-        // Update conversation state tracking for next render
-        prevConversationStateRef.current.set(queryKey, hasConversation)
+        if (conversation && conversation.messages.length > 0) {
+          seenConversationsRef.current.add(conversation.id)
+        }
       })
     }
 
@@ -940,6 +930,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       contentJustChangedRef.current = false
       notificationUpdates.forEach((update) => update())
+
+      if (e.changes.length > 0) {
+        const earliestChangeOffset = Math.min(
+          ...e.changes.map((c) => c.rangeOffset),
+        )
+        const totalDelta = e.changes.reduce(
+          (acc, c) => acc + c.text.length - c.rangeLength,
+          0,
+        )
+        if (totalDelta !== 0) {
+          shiftQueryKeysForBuffer(
+            activeBufferId,
+            earliestChangeOffset,
+            totalDelta,
+          )
+        }
+      }
     })
 
     editor.onDidChangeModel(() => {
@@ -1752,10 +1759,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     hasConversationForQueryRef.current = hasConversationForQuery
+    findConversationByQueryRef.current = findConversationByQuery
     if (monacoRef.current && editorRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
-  }, [hasConversationForQuery])
+  }, [hasConversationForQuery, findConversationByQuery])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)

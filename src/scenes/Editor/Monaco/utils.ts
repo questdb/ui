@@ -1126,6 +1126,23 @@ export const parseQueryKey = (
   }
 }
 
+export const getQueryInfoFromKey = (
+  queryKey: QueryKey | null,
+): { queryText: string; startOffset: number; endOffset: number } => {
+  if (!queryKey) return { queryText: "", startOffset: 0, endOffset: 0 }
+  return parseQueryKey(queryKey)
+}
+
+export const shiftQueryKey = (
+  queryKey: QueryKey,
+  changeOffset: number,
+  delta: number,
+): QueryKey => {
+  const { queryText, startOffset } = parseQueryKey(queryKey)
+  const newStartOffset = shiftOffset(startOffset, changeOffset, delta)
+  return createQueryKey(queryText, newStartOffset)
+}
+
 export const shiftOffset = (
   offset: number,
   changeOffset: number,
