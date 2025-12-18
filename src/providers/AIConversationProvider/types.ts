@@ -47,17 +47,13 @@ export type ConversationMessage = {
 
 export type AIConversation = {
   id: ConversationId // Stable identifier - never changes throughout conversation lifecycle
-  queryKey: QueryKey | null // Single source of truth - contains query text, start/end offsets
-  bufferId: number | string | null // Can be null for schema/blank conversations
-  currentSQL: string // Current SQL with all pending changes (may differ from queryKey)
-  conversationName?: string // AI-generated name for the conversation
-  messages: ConversationMessage[]
-  createdAt: number
+  conversationName: string // AI-generated name for the conversation
   updatedAt: number
-  // Schema identification (for schema conversations - enables reopening same table's conversation)
-  schemaIdentifier?: string // Format: "schema:tableName:ddlHash" - stable for reopening
-  // Schema explanation data - cleared when conversation transitions to query generation
-  schemaData?: SchemaDisplayData
+  tableId?: number // Table ID for schema conversations - lookup fresh metadata from Redux
+  bufferId: number | string | null // Can be null for schema/blank conversations
+  queryKey: QueryKey | null // Single source of truth - contains query text, start/end offsets
+  currentSQL: string // Current SQL with all pending changes (may differ from queryKey)
+  messages: ConversationMessage[]
 }
 
 export type ChatWindowState = {

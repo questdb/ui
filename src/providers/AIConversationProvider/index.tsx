@@ -9,7 +9,6 @@ import type {
   AIConversation,
   ConversationMessage,
   ChatWindowState,
-  SchemaDisplayData,
   ConversationId,
 } from "./types"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
@@ -21,11 +20,7 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
 import { normalizeSql } from "../../utils/aiAssistant"
-import {
-  buildIndices,
-  createQueryLookupKey,
-  createSchemaIdentifier,
-} from "./indices"
+import { buildIndices, createQueryLookupKey } from "./indices"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
@@ -45,10 +40,7 @@ type AIConversationContextType = {
     bufferId: string | number,
     queryKey: QueryKey,
   ) => AIConversation | undefined
-  findConversationBySchema: (
-    tableName: string,
-    ddlHash: string,
-  ) => AIConversation | undefined
+  findConversationByTableId: (tableId: number) => AIConversation | undefined
   hasConversationForQuery: (
     bufferId: string | number,
     queryKey: QueryKey,
@@ -58,8 +50,7 @@ type AIConversationContextType = {
   createConversation: (options: {
     bufferId?: string | number | null
     queryKey?: QueryKey | null
-    schemaIdentifier?: string
-    schemaData?: SchemaDisplayData
+    tableId?: number
   }) => AIConversation
   getOrCreateConversationForQuery: (options: {
     bufferId: string | number
@@ -163,10 +154,9 @@ export const AIConversationProvider: React.FC<{
     [conversations, indices],
   )
 
-  const findConversationBySchema = useCallback(
-    (tableName: string, ddlHash: string): AIConversation | undefined => {
-      const schemaId = createSchemaIdentifier(tableName, ddlHash)
-      const id = indices.schemaIndex.get(schemaId)
+  const findConversationByTableId = useCallback(
+    (tableId: number): AIConversation | undefined => {
+      const id = indices.tableIndex.get(tableId)
       return id ? conversations.get(id) : undefined
     },
     [conversations, indices],
@@ -188,8 +178,7 @@ export const AIConversationProvider: React.FC<{
     (options: {
       bufferId?: string | number | null
       queryKey?: QueryKey | null
-      schemaIdentifier?: string
-      schemaData?: SchemaDisplayData
+      tableId?: number
     }): AIConversation => {
       const id = generateConversationId()
       const { queryText } = getQueryInfoFromKey(options.queryKey ?? null)
@@ -197,12 +186,11 @@ export const AIConversationProvider: React.FC<{
         id,
         queryKey: options.queryKey ?? null,
         bufferId: options.bufferId ?? null,
-        schemaIdentifier: options.schemaIdentifier,
+        tableId: options.tableId,
         currentSQL: queryText,
+        conversationName: "AI Assistant",
         messages: [],
-        createdAt: Date.now(),
         updatedAt: Date.now(),
-        schemaData: options.schemaData,
       }
 
       setConversations((prev) => {
@@ -392,8 +380,6 @@ export const AIConversationProvider: React.FC<{
             // Only update currentSQL if there's an actual SQL change
             currentSQL: hasSQLChange ? sql : conv.currentSQL,
             updatedAt: Date.now(),
-            // Clear schemaData when conversation transitions to having SQL (schema→query)
-            ...(hasSQLChange ? { schemaData: undefined } : {}),
           })
         }
         return next
@@ -758,16 +744,14 @@ export const AIConversationProvider: React.FC<{
       updateConversationSQL(conversationId, normalizedSQL)
       acceptConversationChanges(conversationId, messageIndex)
 
-      // Clear schema data if transitioning from schema conversation
-      if (conversation.schemaIdentifier) {
+      if (conversation.tableId != null) {
         setConversations((prev) => {
           const next = new Map(prev)
           const conv = next.get(conversationId)
           if (conv) {
             next.set(conversationId, {
               ...conv,
-              schemaIdentifier: undefined,
-              schemaData: undefined,
+              tableId: undefined,
             })
           }
           return next
@@ -847,11 +831,10 @@ export const AIConversationProvider: React.FC<{
       setConversations((prev) => {
         const next = new Map(prev)
         const conv = next.get(conversationId)
-        if (conv && conv.schemaIdentifier) {
+        if (conv && conv.tableId != null) {
           next.set(conversationId, {
             ...conv,
-            schemaIdentifier: undefined,
-            schemaData: undefined,
+            tableId: undefined,
           })
         }
         return next
@@ -905,7 +888,7 @@ export const AIConversationProvider: React.FC<{
         chatWindowState,
         getConversation,
         findConversationByQuery,
-        findConversationBySchema,
+        findConversationByTableId,
         hasConversationForQuery,
         createConversation,
         getOrCreateConversationForQuery,

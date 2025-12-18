@@ -54,10 +54,6 @@ import {
 } from "../../../utils/aiAssistant"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
-  createSchemaIdentifier,
-  hashString,
-} from "../../../providers/AIConversationProvider/indices"
-import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
@@ -191,7 +187,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   } = useAIStatus()
 
   const {
-    findConversationBySchema,
+    findConversationByTableId,
     createConversation,
     openChatWindow,
     addMessage,
@@ -290,6 +286,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const handleExplainSchema = async (item: FlattenedTreeItem) => {
     const tableName = item.name
     const isMatView = item.kind === "matview"
+    const tableId = item.table?.id
 
     if (!canUse) {
       toast.error(
@@ -298,32 +295,24 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return
     }
 
+    if (tableId == null) {
+      toast.error("Cannot find table ID")
+      return
+    }
+
     const schema = await getTableSchema(tableName, isMatView)
     if (!schema) {
       return
     }
 
-    // Create schema identifier for lookup
-    const ddlHash = hashString(schema)
-    const schemaIdentifier = createSchemaIdentifier(tableName, ddlHash)
-
-    // Check if conversation already exists for this schema
-    const existingConversation = findConversationBySchema(tableName, ddlHash)
+    const existingConversation = findConversationByTableId(tableId)
     if (existingConversation) {
       openChatWindow(existingConversation.id)
       return
     }
 
-    // Create new conversation for this schema
     const conversation = createConversation({
-      schemaIdentifier,
-      schemaData: {
-        tableName,
-        isMatView,
-        partitionBy: item.partitionBy,
-        walEnabled: item.walEnabled,
-        designatedTimestamp: item.designatedTimestamp,
-      },
+      tableId,
     })
 
     updateConversationName(conversation.id, `${tableName} schema explanation`)

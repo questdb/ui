@@ -4,7 +4,9 @@ import React, {
   useEffect,
   forwardRef,
   useImperativeHandle,
+  useMemo,
 } from "react"
+import { useSelector } from "react-redux"
 import styled, { css } from "styled-components"
 import { Box } from "../../../components"
 import { Text } from "../../../components/Text"
@@ -18,11 +20,9 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { slideAnimation, spinAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
-import type {
-  SchemaDisplayData,
-  ConversationId,
-} from "../../../providers/AIConversationProvider/types"
+import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { TableIcon } from "../../Schema/table-icon"
+import { selectors } from "../../../store"
 
 // Gradient spinner icon (same as AIStatusIndicator)
 const CircleNotch = (props: React.SVGProps<SVGSVGElement>) => (
@@ -265,7 +265,7 @@ type ChatInputProps = {
   placeholder?: string
   conversationId?: ConversationId
   contextSQL?: string
-  contextSchemaData?: SchemaDisplayData
+  contextTableId?: number
   onContextClick: () => void
 }
 
@@ -288,17 +288,23 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       placeholder = "Ask a question or request a refinement...",
       conversationId,
       contextSQL,
-      contextSchemaData,
+      contextTableId,
       onContextClick,
     },
     ref,
   ) => {
     const [input, setInput] = useState("")
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const tables = useSelector(selectors.query.getTables)
+
+    const tableData = useMemo(() => {
+      if (contextTableId == null) return null
+      return tables.find((t) => t.id === contextTableId) ?? null
+    }, [contextTableId, tables])
 
     // Determine what to show in context badge
-    const contextText = contextSchemaData?.tableName
-      ? truncateText(contextSchemaData.tableName)
+    const contextText = tableData?.table_name
+      ? truncateText(tableData.table_name)
       : contextSQL
         ? truncateText(contextSQL)
         : null
@@ -354,7 +360,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }
 
     const handleContextClickInternal = () => {
-      if (!contextSchemaData) {
+      if (!tableData) {
         onContextClick()
       }
     }
@@ -386,17 +392,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 <ContextBadge
                   role="presentation"
                   onClick={handleContextClickInternal}
-                  $type={contextSchemaData ? "table" : "sql"}
+                  $type={tableData ? "table" : "sql"}
                 >
                   <ContextBadgeIcon>
-                    {contextSchemaData ? (
+                    {tableData ? (
                       <TableIcon
-                        isMaterializedView={contextSchemaData.isMatView}
-                        partitionBy={contextSchemaData.partitionBy}
-                        walEnabled={contextSchemaData.walEnabled}
-                        designatedTimestamp={
-                          contextSchemaData.designatedTimestamp
-                        }
+                        isMaterializedView={tableData.matView}
+                        partitionBy={tableData.partitionBy}
+                        walEnabled={tableData.walEnabled}
+                        designatedTimestamp={tableData.designatedTimestamp}
                       />
                     ) : (
                       <CodeBlockIcon size={14} weight="regular" />

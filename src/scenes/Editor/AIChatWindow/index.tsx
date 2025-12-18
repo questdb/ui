@@ -318,7 +318,6 @@ export const AIChatWindow: React.FC = () => {
   const headerTitle = useMemo(() => {
     if (!conversation) return ""
 
-    // If we have a generated conversation name, use it
     if (conversation.conversationName) {
       return conversation.conversationName
     }
@@ -339,7 +338,6 @@ export const AIChatWindow: React.FC = () => {
       }
     }
 
-    // Fallback for conversations without displayType
     return "AI Assistant"
   }, [conversation])
 
@@ -347,7 +345,7 @@ export const AIChatWindow: React.FC = () => {
     if (messages.length > 0) {
       return "Ask a follow up question or request refinement..."
     }
-    if (conversation?.schemaData || currentSQL?.trim()) {
+    if (conversation?.tableId != null || currentSQL?.trim()) {
       return "Ask a question or request an edit..."
     }
     return "Ask AI about your tables, or generate a query..."
@@ -777,7 +775,7 @@ export const AIChatWindow: React.FC = () => {
             placeholder={getPlaceholder()}
             conversationId={conversation?.id}
             contextSQL={queryInfo.queryText}
-            contextSchemaData={conversation?.schemaData}
+            contextTableId={conversation?.tableId}
             onContextClick={handleContextClick}
           />
         </ChatPanel>
