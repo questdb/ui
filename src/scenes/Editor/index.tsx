@@ -217,7 +217,6 @@ const Editor = ({
       return null
     }
 
-    // Check if there's an unactioned diff (last visible assistant message with SQL that isn't accepted/rejected)
     const visibleMessages = conversation.messages.filter((m) => !m.hideFromUI)
     if (visibleMessages.length === 0) {
       return null
@@ -228,8 +227,7 @@ const Editor = ({
       lastVisible.sql !== undefined &&
       lastVisible.previousSQL !== undefined &&
       !lastVisible.isAccepted &&
-      !lastVisible.isRejected &&
-      !lastVisible.isRejectedWithFollowUp
+      !lastVisible.isRejected
 
     if (!hasUnactionedDiff) {
       return null

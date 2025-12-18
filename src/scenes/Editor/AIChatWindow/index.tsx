@@ -197,7 +197,6 @@ export const AIChatWindow: React.FC = () => {
     addMessage,
     addMessageAndUpdateSQL,
     updateConversationName,
-    markLatestAsRejectedWithFollowUp,
     acceptSuggestion,
     rejectSuggestion,
   } = useAIConversation()
@@ -362,7 +361,6 @@ export const AIChatWindow: React.FC = () => {
     const conversationId = chatWindowState.activeConversationId
 
     if (hasUnactionedDiffParam) {
-      markLatestAsRejectedWithFollowUp(conversationId)
       void closeDiffBufferForConversation(conversationId)
     }
 

@@ -19,8 +19,6 @@ export const trimSemicolonForDisplay = (
  * Finds the last visible assistant message with an unactioned SQL diff.
  * Returns the message if found, null otherwise.
  *
- * "Unactioned" means the message has SQL changes that haven't been accepted, rejected,
- * or implicitly rejected via follow-up.
  */
 export const getLastUnactionedDiff = (
   messages: ConversationMessage[],
@@ -37,8 +35,7 @@ export const getLastUnactionedDiff = (
     lastVisible.sql !== undefined &&
     lastVisible.previousSQL !== undefined &&
     !lastVisible.isAccepted &&
-    !lastVisible.isRejected &&
-    !lastVisible.isRejectedWithFollowUp
+    !lastVisible.isRejected
 
   return hasUnactionedDiff ? lastVisible : null
 }

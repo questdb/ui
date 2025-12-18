@@ -666,6 +666,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       ? visibleMessages[visibleMessages.length - 1].originalIndex
       : -1
 
+  const hasVisibleUserMessageAfter = (index: number): boolean => {
+    for (let i = index + 1; i < messages.length; i++) {
+      if (messages[i].role === "user" && !messages[i].hideFromUI) {
+        return true
+      }
+    }
+    return false
+  }
+
   return (
     <MessagesContainer>
       {visibleMessages.map(({ message, originalIndex }) => {
@@ -796,10 +805,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             !!message.sql && message.previousSQL !== undefined
           const isExpanded = expandedDiffs.has(originalIndex)
 
-          // Read status directly from message
+          // Read status from message, compute isRejectedWithFollowUp from message positions
           const isAccepted = message.isAccepted === true
           const isRejected = message.isRejected === true
-          const isRejectedWithFollowUp = message.isRejectedWithFollowUp === true
+          // A message is "followed up" if it has SQL, isn't accepted/rejected, and has a visible user message after it
+          const isRejectedWithFollowUp =
+            hasSQLChange &&
+            !isAccepted &&
+            !isRejected &&
+            hasVisibleUserMessageAfter(originalIndex)
 
           const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
           const showButtons =

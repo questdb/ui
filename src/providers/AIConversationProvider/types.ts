@@ -33,10 +33,8 @@ export type ConversationMessage = {
   explanation?: string // Explanation for this turn
   tokenUsage?: TokenUsage // Token usage for assistant messages
   previousSQL?: string // SQL before this change (for diff display)
-  isRejectable?: boolean // Whether this change can be rejected (only latest change)
   isRejected?: boolean // Whether this change has been rejected
   isAccepted?: boolean // Whether this change has been accepted
-  isRejectedWithFollowUp?: boolean // Whether this suggestion was implicitly rejected by sending a follow-up
   hideFromUI?: boolean // Whether to hide this message from UI (e.g., rejection messages)
   // UI display fields - for cleaner presentation
   displayType?: UserMessageDisplayType // How to render this message in UI

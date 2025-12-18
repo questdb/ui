@@ -95,7 +95,6 @@ type AIConversationContextType = {
     messageIndex?: number,
   ) => void
   rejectLatestChange: (conversationId: ConversationId) => void
-  markLatestAsRejectedWithFollowUp: (conversationId: ConversationId) => void
 
   // Accept/reject suggestions
   acceptSuggestion: (params: AcceptSuggestionParams) => Promise<void>
@@ -287,22 +286,9 @@ export const AIConversationProvider: React.FC<{
         const next = new Map(prev)
         const conv = next.get(conversationId)
         if (conv) {
-          // If adding a visible user message (follow-up), mark all previous assistant messages as non-rejectable
-          // Hidden messages (context messages) should not affect rejectability
-          const shouldMarkAsNonRejectable =
-            message.role === "user" && !message.hideFromUI
-          const updatedMessages = shouldMarkAsNonRejectable
-            ? conv.messages.map((msg) => {
-                if (msg.role === "assistant" && msg.isRejectable) {
-                  return { ...msg, isRejectable: false }
-                }
-                return msg
-              })
-            : conv.messages
-
           next.set(conversationId, {
             ...conv,
-            messages: [...updatedMessages, message],
+            messages: [...conv.messages, message],
             updatedAt: Date.now(),
           })
         }
@@ -355,28 +341,14 @@ export const AIConversationProvider: React.FC<{
           // This ensures the diff shows "what's in editor" vs "what model suggests"
           const previousSQL = sqlActuallyChanged ? acceptedSQL : undefined
 
-          // Mark previous assistant messages as non-rejectable if this is a new SQL change
-          const updatedMessages = conv.messages.map((msg) => {
-            if (
-              msg.role === "assistant" &&
-              msg.isRejectable &&
-              sqlActuallyChanged
-            ) {
-              return { ...msg, isRejectable: false }
-            }
-            return msg
-          })
-
-          // Add new message with previousSQL and isRejectable flag (only if SQL actually changed)
           const messageWithHistory: ConversationMessage = {
             ...message,
             previousSQL,
-            isRejectable: sqlActuallyChanged,
           }
 
           next.set(conversationId, {
             ...conv,
-            messages: [...updatedMessages, messageWithHistory],
+            messages: [...conv.messages, messageWithHistory],
             // Only update currentSQL if there's an actual SQL change
             currentSQL: hasSQLChange ? sql : conv.currentSQL,
             updatedAt: Date.now(),
@@ -434,14 +406,8 @@ export const AIConversationProvider: React.FC<{
         const newQueryKey = createQueryKey(sqlToAccept, startOffset)
 
         const updatedMessages = conv.messages.map((msg, idx) => {
-          if (msg.role === "assistant" && msg.sql) {
-            if (idx === targetIndex) {
-              // Mark this specific message as accepted
-              return { ...msg, isRejectable: false, isAccepted: true }
-            }
-            if (msg.isRejectable) {
-              return { ...msg, isRejectable: false }
-            }
+          if (msg.role === "assistant" && msg.sql && idx === targetIndex) {
+            return { ...msg, isAccepted: true }
           }
           return msg
         })
@@ -489,10 +455,9 @@ export const AIConversationProvider: React.FC<{
             ? latestMessage.previousSQL
             : acceptedSQL
 
-        // Mark latest message as rejected and non-rejectable
         const updatedMessages = conv.messages.map((msg, idx) => {
           if (idx === latestAssistantIndex) {
-            return { ...msg, isRejectable: false, isRejected: true }
+            return { ...msg, isRejected: true }
           }
           return msg
         })
@@ -516,56 +481,6 @@ export const AIConversationProvider: React.FC<{
       return next
     })
   }, [])
-
-  const markLatestAsRejectedWithFollowUp = useCallback(
-    (conversationId: ConversationId) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          let latestAssistantIndex = -1
-          for (let i = conv.messages.length - 1; i >= 0; i--) {
-            if (
-              conv.messages[i].role === "assistant" &&
-              conv.messages[i].sql &&
-              conv.messages[i].isRejectable
-            ) {
-              latestAssistantIndex = i
-              break
-            }
-          }
-
-          if (latestAssistantIndex === -1) {
-            return next
-          }
-
-          // Mark latest message as rejected with follow-up (not just rejected)
-          // Note: We do NOT revert currentSQL here because:
-          // 1. User may have applied a different suggestion via "Apply to Editor"
-          // 2. The diff view uses message.previousSQL, not conv.currentSQL
-          // 3. addMessageAndUpdateSQL will correctly capture currentSQL as previousSQL for the next suggestion
-          const updatedMessages = conv.messages.map((msg, idx) => {
-            if (idx === latestAssistantIndex) {
-              return {
-                ...msg,
-                isRejectable: false,
-                isRejectedWithFollowUp: true,
-              }
-            }
-            return msg
-          })
-
-          next.set(conversationId, {
-            ...conv,
-            messages: updatedMessages,
-            updatedAt: Date.now(),
-          })
-        }
-        return next
-      })
-    },
-    [],
-  )
 
   // ============ CHAT WINDOW FUNCTIONS ============
 
@@ -905,7 +820,6 @@ export const AIConversationProvider: React.FC<{
         updateConversationName,
         acceptConversationChanges,
         rejectLatestChange,
-        markLatestAsRejectedWithFollowUp,
         acceptSuggestion,
         rejectSuggestion,
       }}
