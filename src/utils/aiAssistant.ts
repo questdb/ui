@@ -127,23 +127,6 @@ const ExplainFormat: ResponseTextConfig = {
   },
 }
 
-const GeneratedSQLFormat: ResponseTextConfig = {
-  format: {
-    type: "json_schema" as const,
-    name: "generated_sql_format",
-    schema: {
-      type: "object",
-      properties: {
-        sql: { type: "string" },
-        explanation: { type: "string" },
-      },
-      required: ["sql", "explanation"],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-}
-
 const FixSQLFormat: ResponseTextConfig = {
   format: {
     type: "json_schema" as const,
@@ -1526,13 +1509,12 @@ Return a JSON object with the following structure: { "title": "Your title here" 
   }
 }
 
-export type AIOperation = "explain" | "generate" | "fix" | "followup"
+export type AIOperation = "explain" | "fix" | "followup"
 
 export const continueConversation = async ({
   userMessage,
   conversationHistory,
   currentSQL,
-  originalQuery,
   settings,
   modelToolsClient,
   setStatus,
@@ -1543,7 +1525,6 @@ export const continueConversation = async ({
   userMessage: string
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
   currentSQL?: string
-  originalQuery?: string
   settings: ActiveProviderSettings
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
@@ -1551,8 +1532,6 @@ export const continueConversation = async ({
   operation?: AIOperation
   conversationId?: ConversationId
 }): Promise<GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError> => {
-  // originalQuery is kept for potential future use
-  void originalQuery
   if (!settings.apiKey || !settings.model) {
     return {
       type: "invalid_key",
@@ -1570,14 +1549,12 @@ export const continueConversation = async ({
 
   const responseFormat = {
     explain: ExplainFormat,
-    generate: GeneratedSQLFormat,
     fix: FixSQLFormat,
     followup: ConversationResponseFormat,
   }[operation]
 
   const statusType = {
     explain: "explain" as const,
-    generate: "generate" as const,
     fix: "fix" as const,
     followup: "followup" as const,
   }[operation]

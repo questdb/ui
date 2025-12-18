@@ -22,7 +22,6 @@ export type UserMessageDisplayType =
   | "fix_request"
   | "explain_request"
   | "ask_request"
-  | "generate_request"
   | "schema_explain_request"
   | "text"
 
@@ -42,7 +41,6 @@ export type ConversationMessage = {
   // UI display fields - for cleaner presentation
   displayType?: UserMessageDisplayType // How to render this message in UI
   displaySQL?: string // SQL to show in inline editor (for fix/explain/ask requests)
-  displayDescription?: string // Description to show (for generate_request)
   displayUserMessage?: string // User's actual message/question (for ask_request)
   displaySchemaData?: SchemaDisplayData // Schema data (for schema_explain_request)
 }
@@ -51,11 +49,8 @@ export type AIConversation = {
   id: ConversationId // Stable identifier - never changes throughout conversation lifecycle
   queryKey: QueryKey | null // Can be null for blank/orphaned conversations
   bufferId: number | string | null // Can be null for schema/blank conversations
-  originalQuery?: string // Original query text (for Fix/Ask flows) or description (for Generate flow)
-  initialSQL: string // Initial SQL for diff editor (empty for Generate, original SQL for Fix/Ask)
-  currentSQL: string // Current SQL with all unaccepted changes
-  acceptedSQL: string // Last accepted SQL state (initially = initialSQL)
-  acceptedAt: number // Timestamp of last acceptance
+  currentSQL: string // Current SQL with all pending changes
+  acceptedSQL: string // Last accepted SQL state (what's currently in editor)
   conversationName?: string // AI-generated name for the conversation
   messages: ConversationMessage[]
   createdAt: number

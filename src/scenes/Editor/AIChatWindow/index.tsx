@@ -323,8 +323,6 @@ export const AIChatWindow: React.FC = () => {
     const firstMessage = conversation.messages[0]
     if (firstMessage?.displayType) {
       switch (firstMessage.displayType) {
-        case "generate_request":
-          return "Generate query"
         case "fix_request":
           return "Fix query"
         case "explain_request":
@@ -344,7 +342,7 @@ export const AIChatWindow: React.FC = () => {
     if (messages.length > 0) {
       return "Ask a follow up question or request refinement..."
     }
-    if (conversation?.schemaData || conversation?.originalQuery) {
+    if (conversation?.schemaData || currentSQL?.trim()) {
       return "Ask a question or request an edit..."
     }
     return "Ask AI about your tables, or generate a query..."
@@ -436,7 +434,6 @@ export const AIChatWindow: React.FC = () => {
         userMessage: userMessageContent,
         conversationHistory,
         currentSQL: currentSQL || undefined,
-        originalQuery: conversation.originalQuery,
         settings,
         modelToolsClient: createModelToolsClient(
           quest,

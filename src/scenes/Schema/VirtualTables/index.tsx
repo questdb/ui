@@ -317,8 +317,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     // Create new conversation for this schema
     const conversation = createConversation({
       schemaIdentifier,
-      initialSQL: "",
-      originalQuery: schema,
       schemaData: {
         tableName,
         isMatView,

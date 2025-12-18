@@ -69,7 +69,6 @@ export type Buffer = {
     original: string
     modified: string
     queryStartOffset: number
-    originalQuery: string
     conversationId?: string
   }
 }
@@ -133,7 +132,6 @@ export const makeBuffer = ({
     original: string
     modified: string
     queryStartOffset: number
-    originalQuery: string
     conversationId?: string
   }
 }): Omit<Buffer, "id"> => ({

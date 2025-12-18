@@ -57,7 +57,6 @@ export type ApplyAISQLChangeOptions = {
   newSQL: string
   queryStartOffset?: number
   queryEndOffset?: number
-  originalQuery?: string
   queryKey?: QueryKey
 }
 
@@ -494,7 +493,6 @@ export const EditorProvider: React.FC = ({ children }) => {
           modified: content.modified,
           conversationId: content.conversationId,
           queryStartOffset: 0,
-          originalQuery: content.original,
         },
       })
       // Switch to it
@@ -505,7 +503,6 @@ export const EditorProvider: React.FC = ({ children }) => {
           modified: content.modified,
           conversationId: content.conversationId,
           queryStartOffset: 0,
-          originalQuery: content.original,
         },
       }
       await setActiveBuffer(updatedBuffer)
@@ -524,7 +521,6 @@ export const EditorProvider: React.FC = ({ children }) => {
           modified: content.modified,
           conversationId: content.conversationId,
           queryStartOffset: 0,
-          originalQuery: content.original,
         },
       })
       // addBuffer already switches to it
@@ -547,13 +543,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   // Shared logic for applying AI SQL changes to editor
   // Used by both AIChatWindow and diff editor button bar
   const applyAISQLChange: EditorContext["applyAISQLChange"] = (options) => {
-    const {
-      newSQL,
-      queryStartOffset,
-      queryEndOffset,
-      originalQuery,
-      queryKey,
-    } = options
+    const { newSQL, queryStartOffset, queryEndOffset, queryKey } = options
 
     if (!editorRef.current) {
       return { success: false }
@@ -573,7 +563,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       const startOffset = queryStartOffset
       const endOffset = queryEndOffset
       const currentEditorText = model.getValue()
-      const queryToMatch = originalQuery || ""
+      const queryToMatch = queryKey ? parseQueryKey(queryKey).queryText : ""
 
       // Verify the query still exists at this position
       const queryInEditor = currentEditorText.slice(startOffset, endOffset)

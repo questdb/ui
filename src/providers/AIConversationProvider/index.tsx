@@ -57,8 +57,7 @@ type AIConversationContextType = {
     bufferId?: string | number | null
     queryKey?: QueryKey | null
     schemaIdentifier?: string
-    initialSQL?: string
-    originalQuery?: string
+    sql?: string
     queryStartOffset?: number
     queryEndOffset?: number
     schemaData?: SchemaDisplayData
@@ -191,24 +190,20 @@ export const AIConversationProvider: React.FC<{
       bufferId?: string | number | null
       queryKey?: QueryKey | null
       schemaIdentifier?: string
-      initialSQL?: string
-      originalQuery?: string
+      sql?: string
       queryStartOffset?: number
       queryEndOffset?: number
       schemaData?: SchemaDisplayData
     }): AIConversation => {
       const id = generateConversationId()
-      const initialSQL = options.initialSQL || ""
+      const sql = options.sql || ""
       const conversation: AIConversation = {
         id,
         queryKey: options.queryKey ?? null,
         bufferId: options.bufferId ?? null,
         schemaIdentifier: options.schemaIdentifier,
-        originalQuery: options.originalQuery,
-        initialSQL,
-        currentSQL: initialSQL,
-        acceptedSQL: initialSQL,
-        acceptedAt: Date.now(),
+        currentSQL: sql,
+        acceptedSQL: sql,
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -247,8 +242,7 @@ export const AIConversationProvider: React.FC<{
       return createConversation({
         bufferId: options.bufferId,
         queryKey: options.queryKey,
-        originalQuery: options.queryText,
-        initialSQL: options.queryText,
+        sql: options.queryText,
         queryStartOffset: options.queryStartOffset,
         queryEndOffset: options.queryEndOffset,
       })
@@ -325,7 +319,6 @@ export const AIConversationProvider: React.FC<{
             // Also update acceptedSQL since this is called when user explicitly applies SQL to editor
             // This ensures future diffs show correct "original" (what's in editor)
             acceptedSQL: sql,
-            acceptedAt: Date.now(),
             updatedAt: Date.now(),
           })
         }
@@ -453,7 +446,6 @@ export const AIConversationProvider: React.FC<{
         next.set(conversationId, {
           ...conv,
           acceptedSQL: sqlToAccept,
-          acceptedAt: Date.now(),
           messages: updatedMessages,
           updatedAt: Date.now(),
         })
@@ -735,7 +727,6 @@ export const AIConversationProvider: React.FC<{
         newSQL: normalizedSQL,
         queryStartOffset: conversation.queryStartOffset,
         queryEndOffset: conversation.queryEndOffset,
-        originalQuery: conversation.originalQuery || conversation.initialSQL,
         queryKey: conversation.queryKey ?? undefined,
       })
 

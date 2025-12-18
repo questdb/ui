@@ -485,8 +485,6 @@ const formatDetailedStatusMessage = (
     switch (args.type) {
       case "fix":
         return "Processing fix request"
-      case "generate":
-        return "Processing generate request"
       case "explain":
         return "Processing explain request"
       default:

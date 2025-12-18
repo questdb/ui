@@ -4,16 +4,10 @@ import { useDispatch, useSelector } from "react-redux"
 import { Stop } from "@styled-icons/remix-line"
 import { Key } from "../../../components"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
-import {
-  Box,
-  Button,
-  GenerateSQLButton,
-  PopperToggle,
-} from "../../../components"
+import { Box, Button, PopperToggle } from "../../../components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
@@ -22,31 +16,21 @@ type ButtonBarProps = {
 
 const ButtonBarWrapper = styled.div<{
   $searchWidgetType: "find" | "replace" | null
-  $aiAssistantEnabled: boolean
 }>`
-  ${({ $aiAssistantEnabled, $searchWidgetType }) =>
-    !$aiAssistantEnabled
-      ? css`
-          position: absolute;
-          top: ${$searchWidgetType === "replace"
-            ? "8.2rem"
-            : $searchWidgetType === "find"
-              ? "5.3rem"
-              : "1rem"};
-          right: 2.4rem;
-          z-index: 1;
-          transition: top 0.1s linear;
-          display: flex;
-          gap: 1rem;
-          align-items: center;
-        `
-      : css`
-          padding: 1rem 0;
-          display: flex;
-          gap: 1rem;
-          align-items: center;
-          margin: 0 2.4rem;
-        `}
+  ${({ $searchWidgetType }) => css`
+    position: absolute;
+    top: ${$searchWidgetType === "replace"
+      ? "8.2rem"
+      : $searchWidgetType === "find"
+        ? "5.3rem"
+        : "1rem"};
+    right: 2.4rem;
+    z-index: 1;
+    transition: top 0.1s linear;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  `}
 `
 
 const ButtonGroup = styled.div`
@@ -172,10 +156,8 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
-  const { canUse } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
-  const aiAssistantEnabled = canUse
 
   const [searchWidgetType, setSearchWidgetType] = useState<
     "find" | "replace" | null
@@ -199,14 +181,6 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   }, [])
 
   useEffect(() => {
-    if (aiAssistantEnabled) {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
-        observerRef.current = null
-      }
-      return
-    }
-
     const checkFindWidgetVisibility = () => {
       const findWidget = document.querySelector(".find-widget")
       const isVisible = !!findWidget && findWidget.classList.contains("visible")
@@ -261,7 +235,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
         observerRef.current = null
       }
     }
-  }, [aiAssistantEnabled])
+  }, [])
 
   const renderRunScriptButton = () => {
     if (running === RunningType.SCRIPT) {
@@ -382,11 +356,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   }
 
   return (
-    <ButtonBarWrapper
-      $searchWidgetType={searchWidgetType}
-      $aiAssistantEnabled={aiAssistantEnabled}
-    >
-      <GenerateSQLButton />
+    <ButtonBarWrapper $searchWidgetType={searchWidgetType}>
       {running === RunningType.SCRIPT
         ? renderRunScriptButton()
         : renderRunQueryButton()}

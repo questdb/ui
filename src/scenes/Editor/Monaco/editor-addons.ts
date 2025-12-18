@@ -43,7 +43,6 @@ enum Command {
   ADD_NEW_TAB = "add_new_tab",
   CLOSE_ACTIVE_TAB = "close_active_tab",
   SEARCH_DOCS = "search_docs",
-  GENERATE_QUERY = "generate_query",
   EXPLAIN_QUERY = "explain_query",
 }
 
@@ -141,17 +140,6 @@ export const registerEditorActions = ({
         if (docSearchButton) {
           docSearchButton.click()
         }
-      },
-    }),
-  )
-
-  actions.push(
-    editor.addAction({
-      id: Command.GENERATE_QUERY,
-      label: "Generate query",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG],
-      run: () => {
-        eventBus.publish(EventType.GENERATE_QUERY_OPEN)
       },
     }),
   )

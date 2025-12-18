@@ -50,7 +50,6 @@ export enum AIOperationStatus {
 
 export type StatusArgs =
   | ({ conversationId?: ConversationId } & (
-      | { type: "generate" }
       | { type: "fix" }
       | { type: "explain" }
       | { type: "followup" }

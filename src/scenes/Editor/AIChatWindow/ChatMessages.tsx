@@ -532,7 +532,6 @@ type ChatMessagesProps = {
 
 const getOperationBadgeInfo = (
   displayType: UserMessageDisplayType,
-  displayDescription?: string,
 ): { icon: string; title: string; description?: string } | null => {
   switch (displayType) {
     case "fix_request":
@@ -547,13 +546,6 @@ const getOperationBadgeInfo = (
         icon: "/assets/icon-explain-queries.svg",
         title: "Explain Query",
         description: "Explain this query in detail",
-      }
-    case "generate_request":
-      return {
-        icon: "/assets/icon-generate-queries.svg",
-        title: "Generate Query",
-        description:
-          displayDescription || "Generating a query from your description",
       }
     case "schema_explain_request": {
       return {
@@ -682,20 +674,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           // Check if this is a special request type with inline SQL display
           const displayType = message.displayType
           const displaySQL = message.displaySQL
-          const displayDescription = message.displayDescription
 
           // Render badge/title/description types
           if (
             displayType &&
             (displayType === "fix_request" ||
               displayType === "explain_request" ||
-              displayType === "generate_request" ||
               displayType === "schema_explain_request")
           ) {
-            const badgeInfo = getOperationBadgeInfo(
-              displayType,
-              displayDescription,
-            )
+            const badgeInfo = getOperationBadgeInfo(displayType)
 
             // Determine content to render below badge/description
             let content: React.ReactNode = null
