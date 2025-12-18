@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { of } from "rxjs"
+import { of, Subject } from "rxjs"
 import { StateObservable } from "redux-observable"
 import { TelemetryAT } from "../../types"
 
@@ -77,7 +77,7 @@ describe("startTelemetry epic", () => {
     vi.clearAllMocks()
   })
 
-  it("should schedule next check when lastUpdated is missing (skip path)", (done) => {
+  it("should schedule next check when lastUpdated is missing (skip path)", async () => {
     mockGetRemoteConfig.mockReturnValue(undefined)
 
     const action$ = of({
@@ -85,12 +85,11 @@ describe("startTelemetry epic", () => {
       payload: {},
     })
 
-    const state$ = new StateObservable(of({}), {})
+    const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
 
     // The epic should not error when lastUpdated is missing
-    // It returns the "skip" path which delays for 1 hour then re-dispatches
     let errored = false
     const sub = epic$.subscribe({
       error: () => {
@@ -99,14 +98,12 @@ describe("startTelemetry epic", () => {
     })
 
     // Give it a moment to process
-    setTimeout(() => {
-      sub.unsubscribe()
-      expect(errored).toBe(false)
-      done()
-    }, 50)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    sub.unsubscribe()
+    expect(errored).toBe(false)
   })
 
-  it("should handle empty query result and schedule next check", (done) => {
+  it("should handle empty query result and schedule next check", async () => {
     const mockRemoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
     mockGetRemoteConfig.mockReturnValue(mockRemoteConfig)
     mockGetConfig.mockReturnValue({
@@ -130,7 +127,7 @@ describe("startTelemetry epic", () => {
       payload: mockRemoteConfig,
     })
 
-    const state$ = new StateObservable(of({}), {})
+    const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
 
@@ -141,16 +138,14 @@ describe("startTelemetry epic", () => {
       },
     })
 
-    setTimeout(() => {
-      sub.unsubscribe()
-      expect(errored).toBe(false)
-      // fromFetch should NOT be called when there's no data
-      expect(mockFromFetch).not.toHaveBeenCalled()
-      done()
-    }, 50)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    sub.unsubscribe()
+    expect(errored).toBe(false)
+    // fromFetch should NOT be called when there's no data
+    expect(mockFromFetch).not.toHaveBeenCalled()
   })
 
-  it("should send telemetry data when query returns results", (done) => {
+  it("should send telemetry data when query returns results", async () => {
     const mockRemoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
     mockGetRemoteConfig.mockReturnValue(mockRemoteConfig)
     mockGetConfig.mockReturnValue({
@@ -184,7 +179,7 @@ describe("startTelemetry epic", () => {
       payload: mockRemoteConfig,
     })
 
-    const state$ = new StateObservable(of({}), {})
+    const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
 
@@ -195,24 +190,22 @@ describe("startTelemetry epic", () => {
       },
     })
 
-    setTimeout(() => {
-      sub.unsubscribe()
-      expect(errored).toBe(false)
-      // fromFetch SHOULD be called when there's data
-      expect(mockFromFetch).toHaveBeenCalledTimes(1)
-      expect(mockFromFetch).toHaveBeenCalledWith(
-        "https://test.questdb.io/add",
-        expect.objectContaining({
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        }),
-        false,
-      )
-      done()
-    }, 50)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    sub.unsubscribe()
+    expect(errored).toBe(false)
+    // fromFetch SHOULD be called when there's data
+    expect(mockFromFetch).toHaveBeenCalledTimes(1)
+    expect(mockFromFetch).toHaveBeenCalledWith(
+      "https://test.questdb.io/add",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+      false,
+    )
   })
 
-  it("should retry on fetch failure", (done) => {
+  it("should retry on fetch failure", async () => {
     const mockRemoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
     mockGetRemoteConfig.mockReturnValue(mockRemoteConfig)
     mockGetConfig.mockReturnValue({
@@ -242,7 +235,7 @@ describe("startTelemetry epic", () => {
       payload: mockRemoteConfig,
     })
 
-    const state$ = new StateObservable(of({}), {})
+    const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
 
@@ -254,16 +247,13 @@ describe("startTelemetry epic", () => {
     })
 
     // Wait for retries (first attempt + retries with delays 1s, 2s, 4s...)
-    // We can't wait for all retries in a unit test, but we can verify retry happens
-    setTimeout(() => {
-      sub.unsubscribe()
-      // Should have attempted at least 1 fetch (initial attempt)
-      expect(fetchAttempts).toBeGreaterThanOrEqual(1)
-      done()
-    }, 100)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    sub.unsubscribe()
+    // Should have attempted at least 1 fetch (initial attempt)
+    expect(fetchAttempts).toBeGreaterThanOrEqual(1)
   })
 
-  it("should not propagate errors after max retries - continues loop via catchError", (done) => {
+  it("should not propagate errors after max retries - continues loop via catchError", async () => {
     const mockRemoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
     mockGetRemoteConfig.mockReturnValue(mockRemoteConfig)
     mockGetConfig.mockReturnValue({
@@ -289,7 +279,7 @@ describe("startTelemetry epic", () => {
       payload: mockRemoteConfig,
     })
 
-    const state$ = new StateObservable(of({}), {})
+    const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
 
@@ -301,17 +291,13 @@ describe("startTelemetry epic", () => {
       },
     })
 
-    setTimeout(() => {
-      sub.unsubscribe()
-      // catchError in the epic should prevent error propagation
-      // However, the retryWhen might still be retrying
-      // The key point is the observable doesn't complete with error immediately
-      expect(errorReceived).toBe(false)
-      done()
-    }, 50)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    sub.unsubscribe()
+    // catchError in the epic should prevent error propagation
+    expect(errorReceived).toBe(false)
   })
 
-  it("should update lastUpdated on successful send", (done) => {
+  it("should call fetch on successful send", async () => {
     const mockRemoteConfig = { lastUpdated: "2024-01-01T00:00:00.000Z" }
     const newTimestamp = "1704153600000"
 
@@ -339,18 +325,15 @@ describe("startTelemetry epic", () => {
       payload: mockRemoteConfig,
     })
 
-    const state$ = new StateObservable(of({}), {})
+    const state$ = new StateObservable(new Subject(), {})
 
     const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
 
     const sub = epic$.subscribe()
 
-    setTimeout(() => {
-      sub.unsubscribe()
-      // setRemoteConfig should be called (eventually, after the 1 hour delay)
-      // We can't wait for the delay, but we can verify the fetch was called
-      expect(mockFromFetch).toHaveBeenCalled()
-      done()
-    }, 50)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    sub.unsubscribe()
+    // Verify the fetch was called
+    expect(mockFromFetch).toHaveBeenCalled()
   })
 })
