@@ -118,14 +118,16 @@ export const getLatestTelemetryTimestamp: Epic<
     switchMap(([_, state]) => {
       const serverInfo = selectors.telemetry.getConfig(state)
       if (serverInfo) {
-        sendServerInfoTelemetry(serverInfo)
+        void sendServerInfoTelemetry(serverInfo)
       }
       return getTelemetryTimestamp(serverInfo)
     }),
     map((response) => {
       // Start the loop even if fetching remote config fails.
       // startTelemetry will handle missing lastUpdated by scheduling next check.
-      return actions.telemetry.setRemoteConfig(response.error ? {} : response.data)
+      return actions.telemetry.setRemoteConfig(
+        response.error ? {} : response.data,
+      )
     }),
   )
 
