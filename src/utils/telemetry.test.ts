@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import type { MockInstance } from "vitest"
 
 const { mockGetValue } = vi.hoisted(() => ({
   mockGetValue: vi.fn(),
@@ -22,7 +23,10 @@ import { sendServerInfoTelemetry } from "./telemetry"
 import { TelemetryConfigShape } from "../store/Telemetry/types"
 
 describe("sendServerInfoTelemetry", () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>
+  let fetchSpy: MockInstance<
+    [input: RequestInfo | URL, init?: RequestInit],
+    Promise<Response>
+  >
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -40,13 +44,16 @@ describe("sendServerInfoTelemetry", () => {
     version: "1.0.0",
     os: "linux",
     package: "test",
-    enabled: true,
+    enabled: "true",
+    instance_name: "",
+    instance_type: "",
+    instance_desc: "",
   }
 
   it("should not send telemetry when releaseType is not EE and telemetry is disabled", async () => {
     mockGetValue.mockReturnValue("OSS")
 
-    const disabledServerInfo = { ...mockServerInfo, enabled: false }
+    const disabledServerInfo = { ...mockServerInfo, enabled: "" }
     const promise = sendServerInfoTelemetry(disabledServerInfo)
 
     await vi.runAllTimersAsync()
