@@ -23,8 +23,23 @@
  ******************************************************************************/
 
 import { Epic, ofType } from "redux-observable"
-import { delay, filter, map, switchMap, withLatestFrom } from "rxjs/operators"
-import { from, NEVER, of } from "rxjs"
+import {
+  delay,
+  map,
+  switchMap,
+  withLatestFrom,
+  retryWhen,
+  tap,
+  catchError,
+  scan,
+  delayWhen,
+} from "rxjs/operators"
+import { defer, from, NEVER, of, timer, throwError } from "rxjs"
+
+const MAX_RETRIES = 5
+const RETRY_BASE_DELAY_MS = 1000
+const RETRY_MAX_DELAY_MS = 30000
+const TELEMETRY_INTERVAL_MS = 36e5 // 1 hour
 
 import { API, TelemetryTable } from "../../consts"
 import { actions, selectors } from "../../store"
@@ -103,16 +118,16 @@ export const getLatestTelemetryTimestamp: Epic<
     switchMap(([_, state]) => {
       const serverInfo = selectors.telemetry.getConfig(state)
       if (serverInfo) {
-        sendServerInfoTelemetry(serverInfo)
+        void sendServerInfoTelemetry(serverInfo)
       }
       return getTelemetryTimestamp(serverInfo)
     }),
-    switchMap((response) => {
-      if (response.error) {
-        return NEVER
-      }
-
-      return of(actions.telemetry.setRemoteConfig(response.data))
+    map((response) => {
+      // Start the loop even if fetching remote config fails.
+      // startTelemetry will handle missing lastUpdated by scheduling next check.
+      return actions.telemetry.setRemoteConfig(
+        response.error ? {} : response.data,
+      )
     }),
   )
 
@@ -128,91 +143,124 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
     switchMap(([_, state]) => {
       const remoteConfig = selectors.telemetry.getRemoteConfig(state)
 
-      if (remoteConfig?.lastUpdated) {
-        const ts = new Date(remoteConfig.lastUpdated).toISOString()
-        return from(
-          quest.queryRaw(
-            `with tel as (
-              SELECT cast(created as long), event, origin
-              FROM ${TelemetryTable.MAIN}
-              WHERE created > '${ts}'
-              LIMIT -10000 
-            )            
-            SELECT cast(created as long), cast(1000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
-              SELECT created, cast(ceil(sum(rowCount) / 1000.0) as short) sm
-              FROM ${TelemetryTable.WAL}
-              WHERE created > '${ts}' and rowCount > 0
-              SAMPLE BY 1h align to calendar
-            )
-            UNION ALL 
-            SELECT cast(created as long), cast(2000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
-              SELECT created, cast(count() as short) sm
-              FROM ${TelemetryTable.WAL}
-              WHERE created > '${ts}' and rowCount > 0
-              SAMPLE BY 1h align to calendar
-            )
-            UNION ALL 
-            SELECT cast(created as long), cast(3000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
-              SELECT created, cast(max(latency) / 1000.0 as short) sm
-              FROM ${TelemetryTable.WAL}
-              WHERE created > '${ts}' and rowCount > 0
-              SAMPLE BY 1h align to calendar
-             )
-             UNION ALL
-             SELECT * FROM tel
-             `
-              .replace(/\s+/g, " ")
-              .trim(),
+      if (!remoteConfig?.lastUpdated) {
+        // No lastUpdated yet, schedule next check in 1 hour
+        return of({ type: "skip" as const, remoteConfig })
+      }
+
+      const ts = new Date(remoteConfig.lastUpdated).toISOString()
+      return from(
+        quest.queryRaw(
+          `with tel as (
+            SELECT cast(created as long), event, origin
+            FROM ${TelemetryTable.MAIN}
+            WHERE created > '${ts}'
+            LIMIT -10000
+          )
+          SELECT cast(created as long), cast(1000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
+            SELECT created, cast(ceil(sum(rowCount) / 1000.0) as short) sm
+            FROM ${TelemetryTable.WAL}
+            WHERE created > '${ts}' and rowCount > 0
+            SAMPLE BY 1h align to calendar
+          )
+          UNION ALL
+          SELECT cast(created as long), cast(2000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
+            SELECT created, cast(count() as short) sm
+            FROM ${TelemetryTable.WAL}
+            WHERE created > '${ts}' and rowCount > 0
+            SAMPLE BY 1h align to calendar
+          )
+          UNION ALL
+          SELECT cast(created as long), cast(3000 as short), cast(case when sm >= 0 then sm else 32767 end as short) FROM (
+            SELECT created, cast(max(latency) / 1000.0 as short) sm
+            FROM ${TelemetryTable.WAL}
+            WHERE created > '${ts}' and rowCount > 0
+            SAMPLE BY 1h align to calendar
+           )
+           UNION ALL
+           SELECT * FROM tel
+           `
+            .replace(/\s+/g, " ")
+            .trim(),
+        ),
+      ).pipe(map((result) => ({ type: "data" as const, result, remoteConfig })))
+    }),
+    withLatestFrom(state$),
+    switchMap(([payload, state]) => {
+      const config = selectors.telemetry.getConfig(state)
+
+      if (payload.type === "skip") {
+        // No lastUpdated, schedule next check
+        return of(null).pipe(
+          delay(TELEMETRY_INTERVAL_MS),
+          map(() =>
+            actions.telemetry.setRemoteConfig(payload.remoteConfig ?? {}),
           ),
         )
       }
 
-      return NEVER
-    }),
-    withLatestFrom(state$),
-    switchMap(([result, state]) => {
-      const remoteConfig = selectors.telemetry.getRemoteConfig(state)
-      const config = selectors.telemetry.getConfig(state)
+      const { result, remoteConfig } = payload
 
       if (
         config?.id != null &&
         result.type === QuestDB.Type.DQL &&
         result.count > 0
       ) {
-        return fromFetch<{ _: void }>(
-          `${API}/add`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+        return defer(() =>
+          fromFetch<{ _: void }>(
+            `${API}/add`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                columns: result.columns,
+                dataset: result.dataset,
+                id: config.id,
+                version: config.version,
+                os: config.os,
+                package: config.package,
+              }),
             },
-            body: JSON.stringify({
-              columns: result.columns,
-              dataset: result.dataset,
-              id: config.id,
-              version: config.version,
-              os: config.os,
-              package: config.package,
-            }),
-          },
-          false,
+            false,
+          ),
         ).pipe(
-          map((response) => {
-            if (!response.error) {
-              const timestamp = result.dataset[result.count - 1][0] as string
-
-              return actions.telemetry.setRemoteConfig({
-                ...remoteConfig,
-                lastUpdated: timestamp,
-              })
+          tap((response) => {
+            if (response.error) {
+              throw new Error("Telemetry request failed")
             }
           }),
-          delay(36e5),
-          filter((a): a is TelemetryAction => !!a),
+          retryWhen((errors) =>
+            errors.pipe(
+              scan((retryCount) => retryCount + 1, 0),
+              delayWhen((retryCount) => {
+                if (retryCount > MAX_RETRIES) {
+                  return throwError(() => new Error("Max retries exceeded"))
+                }
+                const delayMs = Math.min(
+                  RETRY_BASE_DELAY_MS * Math.pow(2, retryCount - 1),
+                  RETRY_MAX_DELAY_MS,
+                )
+                return timer(delayMs)
+              }),
+            ),
+          ),
+          map(() => {
+            const timestamp = result.dataset[result.count - 1][0] as string
+            return { ...remoteConfig, lastUpdated: timestamp }
+          }),
+          catchError(() => of(remoteConfig)),
+          delay(TELEMETRY_INTERVAL_MS),
+          map((cfg) => actions.telemetry.setRemoteConfig(cfg ?? {})),
         )
       }
 
-      return NEVER
+      // No data to send, but still schedule next check in 1 hour
+      return of(null).pipe(
+        delay(TELEMETRY_INTERVAL_MS),
+        map(() => actions.telemetry.setRemoteConfig(remoteConfig ?? {})),
+      )
     }),
   )
 
