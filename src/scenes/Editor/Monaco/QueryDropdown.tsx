@@ -67,8 +67,8 @@ type QueryDropdownProps = {
   positionRef: React.MutableRefObject<{ x: number; y: number } | null>
   queriesRef: React.MutableRefObject<Request[]>
   isContextMenuRef: React.MutableRefObject<boolean>
-  onRunQuery: (query?: Request) => void
-  onExplainQuery: (query?: Request) => void
+  onRunQuery: (query: Request) => void
+  onExplainQuery: (query: Request) => void
 }
 
 export const QueryDropdown: React.FC<QueryDropdownProps> = ({

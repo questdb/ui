@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useState, useMemo } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
 import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
@@ -25,11 +25,17 @@ type Tab = {
 const Root = styled(Box).attrs({
   align: "center",
   justifyContent: "space-between",
-})`
+})<{ $tabsDisabled: boolean }>`
   width: 100%;
   display: flex;
   background: ${({ theme }) => theme.color.backgroundLighter};
   padding-right: 1rem;
+  ${({ $tabsDisabled }) =>
+    $tabsDisabled &&
+    css`
+      opacity: 0.5;
+      pointer-events: none;
+    `}
 `
 
 const HistoryButton = styled(Button)`
@@ -61,6 +67,7 @@ export const Tabs = () => {
     updateBuffersPositions,
     deleteBuffer,
     archiveBuffer,
+    tabsDisabled,
   } = useEditor()
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
@@ -188,7 +195,10 @@ export const Tabs = () => {
   }
 
   return (
-    <Root>
+    <Root
+      $tabsDisabled={tabsDisabled}
+      data-hook={`editor-tabs${tabsDisabled ? "-disabled" : ""}`}
+    >
       <ReactChromeTabs
         limit={40}
         darkMode

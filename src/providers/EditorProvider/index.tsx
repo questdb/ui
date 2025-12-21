@@ -38,6 +38,8 @@ export type EditorContext = {
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string, options?: AppendQueryOptions) => void
+  tabsDisabled: boolean
+  setTabsDisabled: (disabled: boolean) => void
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (
@@ -72,6 +74,8 @@ const defaultValues = {
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
   appendQuery: () => undefined,
+  tabsDisabled: false,
+  setTabsDisabled: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
@@ -97,7 +101,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
-
+  const [tabsDisabled, setTabsDisabled] = useState(false)
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
@@ -396,6 +400,8 @@ export const EditorProvider: React.FC = ({ children }) => {
           }
         },
         inFocus,
+        tabsDisabled,
+        setTabsDisabled,
         buffers,
         activeBuffer,
         setActiveBuffer,

@@ -206,6 +206,7 @@ const MonacoEditor = ({
   const editorContext = useEditor()
   const {
     buffers,
+    setTabsDisabled,
     editorRef,
     monacoRef,
     insertTextAtCursor,
@@ -236,6 +237,15 @@ const MonacoEditor = ({
   const queryOffsetsRef = useRef<
     { startOffset: number; endOffset: number }[] | null
   >([])
+  const pendingActionRef = useRef<
+    | { type: RunningType.SCRIPT }
+    | {
+        type: RunningType.QUERY | RunningType.EXPLAIN
+        queryText: string
+        startOffset: number
+      }
+    | undefined
+  >(undefined)
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const stopAfterFailureRef = useRef(true)
@@ -386,13 +396,6 @@ const MonacoEditor = ({
   }
 
   const handleEditorClick = (e: React.MouseEvent) => {
-    if (
-      isRunningScriptRef.current &&
-      e.target instanceof Element &&
-      e.target.classList.contains("cursorQueryGlyph")
-    ) {
-      return
-    }
     const editor = editorRef.current
     const model = editor?.getModel()
     if (!editor || !model) return
@@ -409,6 +412,10 @@ const MonacoEditor = ({
       e.target instanceof Element &&
       e.target.classList.contains("cursorQueryGlyph")
     ) {
+      if (e.target.classList.contains("loading-glyph")) {
+        return
+      }
+
       editor.focus()
       const target = editor.getTargetAtClientPoint(e.clientX, e.clientY)
 
@@ -424,34 +431,66 @@ const MonacoEditor = ({
           return
         }
         if (dropdownQueries.length === 1) {
-          setCursorBeforeRunning(dropdownQueries[0])
-          toggleRunning()
+          runQueryAction(dropdownQueries[0], RunningType.QUERY)
         }
       }
     }
   }
 
-  const handleRunQuery = (query?: Request) => {
+  const handleRunQuery = (query: Request) => {
     setDropdownOpen(false)
-
-    if (query) {
-      setCursorBeforeRunning(query)
-    } else if (targetPositionRef.current) {
-      editorRef.current?.setPosition(targetPositionRef.current)
-    }
-
-    toggleRunning()
+    runQueryAction(query, RunningType.QUERY)
   }
 
-  const handleExplainQuery = (query?: Request) => {
+  const handleExplainQuery = (query: Request) => {
     setDropdownOpen(false)
-    if (query) {
+    runQueryAction(query, RunningType.EXPLAIN)
+  }
+
+  const runQueryAction = (
+    query: Request,
+    type: RunningType.QUERY | RunningType.EXPLAIN,
+  ) => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+
+    const startOffset = getQueryStartOffset(editor, query)
+    const queryText = query.query
+
+    if (runningValueRef.current === RunningType.NONE) {
       setCursorBeforeRunning(query)
-    } else if (targetPositionRef.current) {
-      editorRef.current?.setPosition(targetPositionRef.current)
+      toggleRunning(type)
+      return
     }
 
-    toggleRunning(RunningType.EXPLAIN)
+    pendingActionRef.current = { type, queryText, startOffset }
+    toggleRunning(RunningType.NONE)
+  }
+
+  const executePendingAction = () => {
+    const pending = pendingActionRef.current
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!pending || !editor || !model) return
+
+    pendingActionRef.current = undefined
+
+    if (pending.type === RunningType.SCRIPT) {
+      setScriptConfirmationOpen(true)
+      return
+    }
+
+    if (
+      !validateQueryAtOffset(editor, pending.queryText, pending.startOffset)
+    ) {
+      return
+    }
+
+    const position = model.getPositionAt(pending.startOffset)
+    editor.setPosition(position)
+
+    toggleRunning(pending.type)
   }
 
   const applyLineMarkings = (
@@ -668,18 +707,14 @@ const MonacoEditor = ({
         editor,
         monaco,
         runQuery: () => {
-          if (runningValueRef.current === RunningType.NONE) {
-            if (queriesToRunRef.current.length === 1) {
-              toggleRunning()
-            } else if (queriesToRunRef.current.length > 1) {
-              handleTriggerRunScript()
-            }
+          if (queriesToRunRef.current.length === 1) {
+            handleRunQuery(queriesToRunRef.current[0])
+          } else if (queriesToRunRef.current.length > 1) {
+            handleTriggerRunScript()
           }
         },
         runScript: () => {
-          if (runningValueRef.current === RunningType.NONE) {
-            handleTriggerRunScript(true)
-          }
+          handleTriggerRunScript(true)
         },
         deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
         addBuffer: () => editorContext.addBuffer(),
@@ -1131,7 +1166,10 @@ const MonacoEditor = ({
   const handleTriggerRunScript = (runAll?: boolean) => {
     if (running === RunningType.SCRIPT) {
       dispatch(actions.query.toggleRunning())
-    } else if (running === RunningType.NONE) {
+      return
+    }
+
+    const triggerScript = () => {
       if (runAll) {
         setScriptConfirmationOpen(true)
         return
@@ -1147,6 +1185,15 @@ const MonacoEditor = ({
         dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
       }
     }
+
+    if (runningValueRef.current === RunningType.NONE) {
+      triggerScript()
+      return
+    }
+
+    // Store script action for later execution
+    pendingActionRef.current = { type: RunningType.SCRIPT }
+    toggleRunning(RunningType.NONE)
   }
 
   const handleConfirmRunScript = () => {
@@ -1183,7 +1230,7 @@ const MonacoEditor = ({
     }
 
     isRunningScriptRef.current = true
-
+    setTabsDisabled(true)
     const queries = queriesToRun ?? getAllQueries(editor)
     const individualQueryResults: Array<IndividualQueryResult> = []
 
@@ -1317,10 +1364,14 @@ const MonacoEditor = ({
         activeBufferRef.current.id as number,
       ),
     )
+    setTabsDisabled(false)
     isRunningScriptRef.current = false
-    scriptStopRef.current = false
     stopAfterFailureRef.current = true
     editor.updateOptions({ readOnly: false })
+    if (scriptStopRef.current) {
+      scriptStopRef.current = false
+      executePendingAction()
+    }
   }
 
   useEffect(() => {
@@ -1352,10 +1403,9 @@ const MonacoEditor = ({
   useEffect(() => {
     if (running === RunningType.NONE && request) {
       quest.abort()
-      dispatch(actions.query.stopRunning())
       setRequest(undefined)
     }
-  }, [request, quest, dispatch, running])
+  }, [request, quest, running])
 
   useEffect(() => {
     runningValueRef.current = running
@@ -1619,6 +1669,9 @@ const MonacoEditor = ({
                 ),
               )
             }
+          })
+          .finally(() => {
+            executePendingAction()
           })
         setRequest(request)
       } else {
