@@ -2,6 +2,7 @@ import Editor from "@monaco-editor/react"
 import type { Monaco } from "@monaco-editor/react"
 import { loader } from "@monaco-editor/react"
 import { Stop } from "@styled-icons/remix-line"
+import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import type { editor, IDisposable } from "monaco-editor"
 import React, {
   useCallback,
@@ -223,6 +224,9 @@ const MonacoEditor = ({
   const [refreshingTables, setRefreshingTables] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
+  const [abortConfirmationOpen, setAbortConfirmationOpen] = useState(false)
+  const abortConfirmationOpenRef = useRef(false)
+  const scriptConfirmationOpenRef = useRef(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
@@ -465,7 +469,7 @@ const MonacoEditor = ({
     }
 
     pendingActionRef.current = { type, queryText, startOffset }
-    toggleRunning(RunningType.NONE)
+    setAbortConfirmationOpen(true)
   }
 
   const executePendingAction = () => {
@@ -477,7 +481,8 @@ const MonacoEditor = ({
     pendingActionRef.current = undefined
 
     if (pending.type === RunningType.SCRIPT) {
-      setScriptConfirmationOpen(true)
+      queriesToRunRef.current = []
+      dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
       return
     }
 
@@ -1063,7 +1068,10 @@ const MonacoEditor = ({
     try {
       const result = await quest.queryRaw(
         normalizeQueryText(effectiveQueryText),
-        { limit: "0,1000", explain: true },
+        {
+          limit: "0,1000",
+          explain: true,
+        },
       )
 
       if (executionRefs.current[activeBufferId]) {
@@ -1193,11 +1201,21 @@ const MonacoEditor = ({
 
     // Store script action for later execution
     pendingActionRef.current = { type: RunningType.SCRIPT }
-    toggleRunning(RunningType.NONE)
+    setScriptConfirmationOpen(true)
   }
 
   const handleConfirmRunScript = () => {
     setScriptConfirmationOpen(false)
+
+    if (pendingActionRef.current) {
+      if (runningValueRef.current === RunningType.NONE) {
+        executePendingAction()
+      } else {
+        toggleRunning(RunningType.NONE)
+      }
+      return
+    }
+
     queriesToRunRef.current = []
     dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
   }
@@ -1207,6 +1225,17 @@ const MonacoEditor = ({
     if (!open) {
       setTimeout(() => editorRef.current?.focus())
     }
+  }
+
+  const handleCloseDialog = () => {
+    if (!scriptConfirmationOpen) return
+    pendingActionRef.current = undefined
+    handleToggleDialog(false)
+  }
+  const handleCloseAbortDialog = () => {
+    if (!abortConfirmationOpen) return
+    pendingActionRef.current = undefined
+    setAbortConfirmationOpen(false)
   }
 
   const handleRunScript = async () => {
@@ -1370,7 +1399,12 @@ const MonacoEditor = ({
     editor.updateOptions({ readOnly: false })
     if (scriptStopRef.current) {
       scriptStopRef.current = false
-      executePendingAction()
+      if (
+        !abortConfirmationOpenRef.current &&
+        !scriptConfirmationOpenRef.current
+      ) {
+        executePendingAction()
+      }
     }
   }
 
@@ -1386,6 +1420,14 @@ const MonacoEditor = ({
   useEffect(() => {
     activeNotificationRef.current = activeNotification
   }, [activeNotification])
+
+  useEffect(() => {
+    abortConfirmationOpenRef.current = abortConfirmationOpen
+  }, [abortConfirmationOpen])
+
+  useEffect(() => {
+    scriptConfirmationOpenRef.current = scriptConfirmationOpen
+  }, [scriptConfirmationOpen])
 
   useEffect(() => {
     const gridNotificationKeySuffix = `@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
@@ -1671,7 +1713,12 @@ const MonacoEditor = ({
             }
           })
           .finally(() => {
-            executePendingAction()
+            if (
+              !abortConfirmationOpenRef.current &&
+              !scriptConfirmationOpenRef.current
+            ) {
+              executePendingAction()
+            }
           })
         setRequest(request)
       } else {
@@ -1833,12 +1880,24 @@ const MonacoEditor = ({
           </ForwardRef>
 
           <Dialog.Content
-            onEscapeKeyDown={() => handleToggleDialog(false)}
-            onInteractOutside={() => handleToggleDialog(false)}
+            onEscapeKeyDown={handleCloseDialog}
+            onInteractOutside={handleCloseDialog}
           >
             <Dialog.Title>Run all queries</Dialog.Title>
 
             <StyledDialogDescription>
+              {pendingActionRef.current && (
+                <Box
+                  margin="0 0 1rem 0"
+                  gap="0.8rem"
+                  data-hook="run-all-queries-warning"
+                >
+                  <ErrorIcon size="16px" color={theme.color.orange} />
+                  <Text color="orange">
+                    Current query execution will be aborted.
+                  </Text>
+                </Box>
+              )}
               <Text color="foreground">
                 You are about to run all queries in this tab. This action may
                 modify or delete your data permanently.
@@ -1872,7 +1931,7 @@ const MonacoEditor = ({
               <Dialog.Close asChild>
                 <StyledDialogButton
                   skin="secondary"
-                  onClick={() => handleToggleDialog(false)}
+                  onClick={handleCloseDialog}
                 >
                   Cancel
                 </StyledDialogButton>
@@ -1884,6 +1943,61 @@ const MonacoEditor = ({
                 onClick={handleConfirmRunScript}
               >
                 Run all queries
+              </StyledDialogButton>
+            </Dialog.ActionButtons>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root
+        open={abortConfirmationOpen}
+        onOpenChange={(open) => {
+          setAbortConfirmationOpen(open)
+        }}
+      >
+        <Dialog.Portal>
+          <ForwardRef>
+            <Overlay primitive={Dialog.Overlay} />
+          </ForwardRef>
+
+          <Dialog.Content
+            onEscapeKeyDown={handleCloseAbortDialog}
+            onInteractOutside={handleCloseAbortDialog}
+            data-hook="abort-confirmation-dialog"
+          >
+            <Dialog.Title>Cancel current query?</Dialog.Title>
+
+            <StyledDialogDescription>
+              <Text color="foreground">
+                A query is currently running. Starting a new query will cancel
+                the current execution.
+              </Text>
+            </StyledDialogDescription>
+
+            <Dialog.ActionButtons>
+              <Dialog.Close asChild>
+                <StyledDialogButton
+                  skin="secondary"
+                  data-hook="abort-confirmation-dialog-dismiss"
+                  onClick={handleCloseAbortDialog}
+                >
+                  Dismiss
+                </StyledDialogButton>
+              </Dialog.Close>
+
+              <StyledDialogButton
+                skin="primary"
+                data-hook="abort-confirmation-dialog-confirm"
+                onClick={() => {
+                  setAbortConfirmationOpen(false)
+                  if (runningValueRef.current === RunningType.NONE) {
+                    executePendingAction()
+                  } else {
+                    toggleRunning(RunningType.NONE)
+                  }
+                }}
+              >
+                Cancel current query
               </StyledDialogButton>
             </Dialog.ActionButtons>
           </Dialog.Content>
