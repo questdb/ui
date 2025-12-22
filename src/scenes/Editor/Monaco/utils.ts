@@ -264,7 +264,8 @@ export const getQueriesFromPosition = (
         break
       }
 
-      case " ": {
+      case " ":
+      case "\t": {
         if (startPos === i) {
           startRow = row
           startCol = column + 1

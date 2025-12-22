@@ -1,15 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { of, Subject } from "rxjs"
-import { StateObservable } from "redux-observable"
-import { TelemetryAT } from "../../types"
+import { ActionsObservable, StateObservable } from "redux-observable"
+import {
+  TelemetryAT,
+  TelemetryRemoteConfigShape,
+  TelemetryConfigShape,
+  StoreAction,
+  StoreShape,
+} from "../../types"
 
 // Hoist mock functions so they're available when vi.mock runs
-const { mockQueryRaw, mockFromFetch, mockGetRemoteConfig, mockGetConfig, mockSetRemoteConfig } = vi.hoisted(() => ({
+const {
+  mockQueryRaw,
+  mockFromFetch,
+  mockGetRemoteConfig,
+  mockGetConfig,
+  mockSetRemoteConfig,
+} = vi.hoisted(() => ({
   mockQueryRaw: vi.fn(),
   mockFromFetch: vi.fn(),
   mockGetRemoteConfig: vi.fn(),
   mockGetConfig: vi.fn(),
-  mockSetRemoteConfig: vi.fn((config: any) => ({
+  mockSetRemoteConfig: vi.fn((config: TelemetryRemoteConfigShape) => ({
     type: "telemetry/SET_REMOTE_CONFIG",
     payload: config,
   })),
@@ -42,13 +54,16 @@ vi.mock("../../consts", () => ({
 vi.mock("../../store", () => ({
   actions: {
     telemetry: {
-      setRemoteConfig: (config: any) => mockSetRemoteConfig(config),
+      setRemoteConfig: (config: TelemetryRemoteConfigShape) =>
+        mockSetRemoteConfig(config),
     },
   },
   selectors: {
     telemetry: {
-      getRemoteConfig: () => mockGetRemoteConfig(),
-      getConfig: () => mockGetConfig(),
+      getRemoteConfig: (): TelemetryRemoteConfigShape | undefined =>
+        mockGetRemoteConfig() as TelemetryRemoteConfigShape | undefined,
+      getConfig: (): TelemetryConfigShape | undefined =>
+        mockGetConfig() as TelemetryConfigShape | undefined,
     },
   },
 }))
@@ -87,7 +102,11 @@ describe("startTelemetry epic", () => {
 
     const state$ = new StateObservable(new Subject(), {})
 
-    const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
+    const epic$ = startTelemetry(
+      action$ as ActionsObservable<StoreAction>,
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    )
 
     // The epic should not error when lastUpdated is missing
     let errored = false
@@ -129,7 +148,11 @@ describe("startTelemetry epic", () => {
 
     const state$ = new StateObservable(new Subject(), {})
 
-    const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
+    const epic$ = startTelemetry(
+      action$ as ActionsObservable<StoreAction>,
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    )
 
     let errored = false
     const sub = epic$.subscribe({
@@ -181,7 +204,11 @@ describe("startTelemetry epic", () => {
 
     const state$ = new StateObservable(new Subject(), {})
 
-    const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
+    const epic$ = startTelemetry(
+      action$ as ActionsObservable<StoreAction>,
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    )
 
     let errored = false
     const sub = epic$.subscribe({
@@ -237,8 +264,13 @@ describe("startTelemetry epic", () => {
 
     const state$ = new StateObservable(new Subject(), {})
 
-    const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
+    const epic$ = startTelemetry(
+      action$ as ActionsObservable<StoreAction>,
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    )
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let errored = false
     const sub = epic$.subscribe({
       error: () => {
@@ -281,7 +313,11 @@ describe("startTelemetry epic", () => {
 
     const state$ = new StateObservable(new Subject(), {})
 
-    const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
+    const epic$ = startTelemetry(
+      action$ as ActionsObservable<StoreAction>,
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    )
 
     // The epic should catch errors and not propagate them
     let errorReceived = false
@@ -327,7 +363,11 @@ describe("startTelemetry epic", () => {
 
     const state$ = new StateObservable(new Subject(), {})
 
-    const epic$ = startTelemetry(action$ as any, state$ as any, undefined as any)
+    const epic$ = startTelemetry(
+      action$ as ActionsObservable<StoreAction>,
+      state$ as StateObservable<StoreShape>,
+      undefined,
+    )
 
     const sub = epic$.subscribe()
 

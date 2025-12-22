@@ -1235,3 +1235,106 @@ describe("multiple run buttons with dynamic query log", () => {
     cy.get(".cursorQueryGlyph").should("have.length", 3)
   })
 })
+
+describe("abortion on new query execution", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth()
+    cy.getEditorContent().should("be.visible")
+    cy.clearEditor()
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1200)
+      })
+    })
+  })
+
+  it("should show abort confirmation dialog when triggering new query while another is running", () => {
+    // When
+    cy.typeQuery("select 1;\nselect 2;")
+    cy.clickRunIconInLine(1)
+
+    // Then
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // When
+    cy.clickRunIconInLine(2)
+
+    // Then
+    cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+    // When
+    cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 2")
+
+    // When
+    cy.clickLine(1)
+
+    // Then
+    cy.getByDataHook("error-notification").should(
+      "contain",
+      "Cancelled by user",
+    )
+
+    // When
+    cy.clickLine(2)
+
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 2")
+  })
+
+  it("should keep original query running when dismiss is clicked in abort dialog", () => {
+    // When
+    cy.typeQuery("select 1;\nselect 2;")
+    cy.clickRunIconInLine(1)
+
+    // Then
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // When
+    cy.clickRunIconInLine(2)
+
+    // Then
+    cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+    // When
+    cy.getByDataHook("abort-confirmation-dialog-dismiss").click()
+
+    // Then
+    cy.getByDataHook("abort-confirmation-dialog").should("not.exist")
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+  })
+
+  it("should run new query after original completes while abort dialog is open", () => {
+    // When
+    cy.typeQuery("select 1;\nselect 2;")
+    cy.clickRunIconInLine(1)
+
+    // Then
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // When
+    cy.clickRunIconInLine(2)
+
+    // Then
+    cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+    // When (wait for original to complete naturally)
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+    cy.wait(100)
+
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+
+    // When
+    cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+
+    // Then
+    cy.getByDataHook("success-notification").should("contain", "select 2")
+    cy.clickLine(1)
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+    cy.clickLine(2)
+    cy.getByDataHook("success-notification").should("contain", "select 2")
+  })
+})
