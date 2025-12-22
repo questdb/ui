@@ -619,19 +619,17 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { status } = useAIStatus()
+  const scrolledRef = useRef(false)
 
   const handleScrollNeeded = useCallback(() => {
-    setTimeout(
-      () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
-      50,
-    )
+    const behavior = scrolledRef.current ? "smooth" : "instant"
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior }), 50)
+    scrolledRef.current = true
   }, [])
 
-  // Find the latest assistant message with SQL changes and auto-expand it
   const latestDiffIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
-      // Note: previousSQL can be empty string for generate flow, so we check for undefined
       if (
         msg.role === "assistant" &&
         msg.sql &&
@@ -643,7 +641,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     return -1
   }, [messages])
 
-  // Track the previous latest diff index to detect new diffs
   const prevLatestDiffIndexRef = useRef<number>(
     latestDiffIndex >= 0 ? latestDiffIndex : -1,
   )
@@ -652,7 +649,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     latestDiffIndex >= 0 ? new Set([latestDiffIndex]) : new Set(),
   )
 
-  // Only auto-expand when a NEW diff is added (not when user manually collapses)
   useEffect(() => {
     // Only auto-expand if this is a genuinely new diff (index changed)
     if (
@@ -686,13 +682,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   )
 
   useEffect(() => {
-    setTimeout(
-      () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
-      50,
-    )
+    handleScrollNeeded()
   }, [visibleMessagesCount])
 
-  // Filter out hidden messages for display, but keep original indices for status computation
   const visibleMessages: Array<{
     message: ConversationMessage
     originalIndex: number

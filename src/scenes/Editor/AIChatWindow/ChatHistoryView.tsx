@@ -227,7 +227,6 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
   useEffect(() => {
     if (currentItemRef.current) {
       currentItemRef.current.scrollIntoView({
-        behavior: "smooth",
         block: "center",
       })
     }
