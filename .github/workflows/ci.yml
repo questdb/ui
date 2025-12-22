@@ -52,7 +52,7 @@ jobs:
           QDB_TELEMETRY_ENABLED: "false"
 
       - name: Run e2e tests
-        run: yarn test:e2e
+        run: yarn preview & yarn test:e2e
 
       - name: Print Log Files
         if: success() || failure()
