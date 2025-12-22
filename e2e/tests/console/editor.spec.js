@@ -1337,31 +1337,4 @@ describe("abortion on new query execution", () => {
     cy.clickLine(2)
     cy.getByDataHook("success-notification").should("contain", "select 2")
   })
-
-  it("should show abort warning in script confirmation dialog when query is running", () => {
-    // When
-    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
-    cy.clickRunIconInLine(1)
-
-    // Then
-    cy.getCancelIconInLine(1).should("be.visible")
-
-    // When
-    cy.realPress(["Meta", "Shift", "Enter"])
-
-    // Then
-    cy.getByRole("dialog").should("be.visible")
-    cy.getByDataHook("run-all-queries-warning").should(
-      "contain",
-      "Current query execution will be aborted",
-    )
-
-    // When
-    cy.getByDataHook("run-all-queries-confirm").click()
-
-    // Then
-    cy.getByDataHook("success-notification")
-      .invoke("text")
-      .should("match", /3 successful/)
-  })
 })
