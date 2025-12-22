@@ -47,10 +47,10 @@ import { Checkbox } from "../checkbox"
 import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
-import { MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY } from "../localStorageUtils"
+import { MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY, VIEWS_GROUP_KEY } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
 
-export type TreeNodeKind = "column" | "table" | "matview" | "folder" | "detail"
+export type TreeNodeKind = "column" | "table" | "matview" | "view" | "folder" | "detail"
 
 type Props = Readonly<{
   id: string
@@ -334,12 +334,12 @@ const Row = ({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const isExpandable =
-    ["folder", "table", "matview"].includes(kind) ||
+    ["folder", "table", "matview", "view"].includes(kind) ||
     (kind === "column" && type === "SYMBOL")
-  const isTableKind = ["table", "matview"].includes(kind)
-  const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY].includes(id ?? "")
+  const isTableKind = ["table", "matview", "view"].includes(kind)
+  const isRootFolder = [MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY, VIEWS_GROUP_KEY].includes(id ?? "")
   const matchesSearch =
-    ["column", "table", "matview"].includes(kind) &&
+    ["column", "table", "matview", "view"].includes(kind) &&
     query &&
     name.toLowerCase().includes(query.toLowerCase())
 
@@ -500,10 +500,11 @@ const Row = ({
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
                 isMaterializedView={kind === "matview"}
+                isView={kind === "view"}
               />
             )}
             {kind === "detail" && <InfoCircle size="14px" />}
-            {["column", "table", "matview"].includes(kind) ? (
+            {["column", "table", "matview", "view"].includes(kind) ? (
               <Highlighter
                 highlightClassName="highlight"
                 searchWords={[query ?? ""]}
