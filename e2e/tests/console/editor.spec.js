@@ -1250,14 +1250,13 @@ describe("abortion on new query execution", () => {
 
   it("should show abort confirmation dialog when triggering new query while another is running", () => {
     // When
-    cy.typeQuery("select 1;")
+    cy.typeQuery("select 1;\nselect 2;")
     cy.clickRunIconInLine(1)
 
     // Then
-    cy.getByDataHook("loading-notification").should("be.visible")
+    cy.getCancelIconInLine(1).should("be.visible")
 
     // When
-    cy.typeQueryDirectly("select 1;\nselect 2;")
     cy.clickRunIconInLine(2)
 
     // Then
@@ -1287,14 +1286,13 @@ describe("abortion on new query execution", () => {
 
   it("should keep original query running when dismiss is clicked in abort dialog", () => {
     // When
-    cy.typeQuery("select 1;")
+    cy.typeQuery("select 1;\nselect 2;")
     cy.clickRunIconInLine(1)
 
     // Then
-    cy.getByDataHook("loading-notification").should("be.visible")
+    cy.getCancelIconInLine(1).should("be.visible")
 
     // When
-    cy.typeQueryDirectly("select 1;\nselect 2;")
     cy.clickRunIconInLine(2)
 
     // Then
@@ -1310,14 +1308,13 @@ describe("abortion on new query execution", () => {
 
   it("should run new query after original completes while abort dialog is open", () => {
     // When
-    cy.typeQuery("select 1;")
+    cy.typeQuery("select 1;\nselect 2;")
     cy.clickRunIconInLine(1)
 
     // Then
-    cy.getByDataHook("loading-notification").should("be.visible")
+    cy.getCancelIconInLine(1).should("be.visible")
 
     // When
-    cy.typeQueryDirectly("select 1;\nselect 2;")
     cy.clickRunIconInLine(2)
 
     // Then
@@ -1342,22 +1339,18 @@ describe("abortion on new query execution", () => {
   })
 
   it("should show abort warning in script confirmation dialog when query is running", () => {
-    // Given
-    cy.intercept("/exec*", (req) => {
-      req.on("response", (res) => {
-        res.setDelay(1200)
-      })
-    })
+    // When
     cy.typeQuery("select 1;\nselect 2;\nselect 3;")
     cy.clickRunIconInLine(1)
-    cy.getByDataHook("loading-notification").should("be.visible")
+
+    // Then
+    cy.getCancelIconInLine(1).should("be.visible")
 
     // When
-    cy.typeQuery(`${ctrlOrCmd}{shift}{enter}`)
+    cy.realPress(["Meta", "Shift", "Enter"])
 
     // Then
     cy.getByRole("dialog").should("be.visible")
-    cy.getByDataHook("run-all-queries-warning").should("be.visible")
     cy.getByDataHook("run-all-queries-warning").should(
       "contain",
       "Current query execution will be aborted",
