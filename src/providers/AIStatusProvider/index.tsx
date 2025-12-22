@@ -68,7 +68,11 @@ export type OperationHistory = StatusEntry[]
 
 type BaseAIStatusContextType = {
   status: AIOperationStatus | null
-  setStatus: (status: AIOperationStatus | null, args?: StatusArgs) => void
+  setStatus: (
+    status: AIOperationStatus | null,
+    args?: StatusArgs,
+    onUpdate?: (history: OperationHistory) => void,
+  ) => void
   abortController: AbortController | null
   abortOperation: () => void
   hasSchemaAccess: boolean
@@ -147,7 +151,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   }, [aiAssistantSettings])
 
   const setStatus = useCallback(
-    (newStatus: AIOperationStatus | null, args?: StatusArgs) => {
+    (
+      newStatus: AIOperationStatus | null,
+      args?: StatusArgs,
+      onUpdate?: (history: OperationHistory) => void,
+    ) => {
       if (newStatus !== null) {
         const statusPayload = {
           type: newStatus,
@@ -160,6 +168,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           currentOperationRef.current = [statusPayload]
         } else {
           currentOperationRef.current.push(statusPayload)
+        }
+        if (onUpdate) {
+          onUpdate([...currentOperationRef.current])
         }
       }
       setCurrentOperation([...currentOperationRef.current])

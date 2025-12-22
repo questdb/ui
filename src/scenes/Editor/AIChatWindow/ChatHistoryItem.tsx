@@ -11,7 +11,7 @@ import type { AIConversation } from "../../../providers/AIConversationProvider/t
 const Container = styled.div`
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.6rem;
   padding: 0.4rem 0.8rem;
   border-radius: 4px;
   cursor: pointer;
@@ -39,12 +39,11 @@ const Content = styled.div`
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  padding-left: 0.4rem;
 `
 
 const Title = styled.div.attrs({ className: "chat-title" })`
   padding: 0.2rem 0.4rem;
-  line-height: 1.5rem;
   border: 1px solid transparent;
   color: ${color("offWhite")};
   white-space: nowrap;
@@ -54,12 +53,10 @@ const Title = styled.div.attrs({ className: "chat-title" })`
 `
 
 const TitleInput = styled.input`
-  width: 100%;
-  line-height: 1.5rem;
   color: ${color("foreground")};
   background: transparent;
   border: 1px solid ${color("pinkDarker")};
-  border-radius: 4px;
+  border-radius: 6px;
   outline: none;
   padding: 0.2rem 0.4rem;
   font-family: inherit;

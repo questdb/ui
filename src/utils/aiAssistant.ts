@@ -870,7 +870,10 @@ const executeOpenAIFlow = async <T>({
 }: ExecuteOpenAIFlowParams<T>): Promise<T | AiAssistantAPIError> => {
   let input: OpenAI.Responses.ResponseInput = []
   if (config.conversationHistory && config.conversationHistory.length > 0) {
-    for (const msg of config.conversationHistory) {
+    const validMessages = config.conversationHistory.filter(
+      (msg) => msg.content && msg.content.trim() !== "",
+    )
+    for (const msg of validMessages) {
       input.push({
         role: msg.role,
         content: msg.content,
@@ -1004,7 +1007,10 @@ const executeAnthropicFlow = async <T>({
 }: ExecuteAnthropicFlowParams<T>): Promise<T | AiAssistantAPIError> => {
   const initialMessages: MessageParam[] = []
   if (config.conversationHistory && config.conversationHistory.length > 0) {
-    for (const msg of config.conversationHistory) {
+    const validMessages = config.conversationHistory.filter(
+      (msg) => msg.content && msg.content.trim() !== "",
+    )
+    for (const msg of validMessages) {
       initialMessages.push({
         role: msg.role,
         content: msg.content,
@@ -1590,6 +1596,7 @@ export const continueConversation = async ({
       // Otherwise, if it's the first message and we have currentSQL, add context
       else if (
         currentSQL &&
+        currentSQL.trim() !== "" &&
         !userMessage.includes("Current SQL query:") &&
         !userMessage.includes("```sql")
       ) {

@@ -5,55 +5,22 @@ import {
   CloseCircle,
   Stop as StopFill,
 } from "@styled-icons/remix-fill"
-import { FileText, Table } from "@styled-icons/remix-line"
 import { SidebarSimpleIcon, XIcon } from "@phosphor-icons/react"
-import { ChevronDown, ChevronRight } from "@styled-icons/boxicons-solid"
 import {
   useAIStatus,
   AIOperationStatus,
-  StatusArgs,
   isBlockingAIStatus,
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
-import { slideAnimation, spinAnimation } from "../Animation"
-import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
+import { slideAnimation } from "../Animation"
 import { AISparkle } from "../AISparkle"
 import { pinkLinearGradientHorizontal } from "../../theme"
 import { MODEL_OPTIONS } from "../../utils/aiAssistantSettings"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Button } from "../../components/Button"
-
-const CircleNotch = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    {...props}
-  >
-    <path
-      d="M15.75 3.75C17.32 4.48224 18.6482 5.64772 19.5783 7.10926C20.5084 8.57081 21.0016 10.2676 21 12C21 14.3869 20.0518 16.6761 18.364 18.364C16.6761 20.0518 14.387 21 12 21C9.61306 21 7.32387 20.0518 5.63604 18.364C3.94822 16.6761 3 14.3869 3 12C2.99838 10.2676 3.49163 8.57081 4.4217 7.10926C5.35178 5.64772 6.67998 4.48224 8.25 3.75"
-      stroke="url(#paint0_linear_140_9487)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <defs>
-      <linearGradient
-        id="paint0_linear_140_9487"
-        x1="12"
-        y1="3.75"
-        x2="12"
-        y2="21"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop stopColor="#D14671" />
-        <stop offset="1" stopColor="#892C6C" />
-      </linearGradient>
-    </defs>
-  </svg>
-)
+import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
+import { AssistantModes, buildOperationSections } from "./AssistantModes"
+import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 
 const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -213,14 +180,6 @@ const CloseCircleIcon = styled(CloseCircle)`
   flex-shrink: 0;
 `
 
-const SpinnerIcon = styled(CircleNotch)`
-  width: 2.4rem;
-  height: 2.4rem;
-  ${spinAnimation};
-  flex-shrink: 0;
-  transform-origin: center;
-`
-
 const ThoughtText = styled.div<{ $active: boolean }>`
   font-weight: 500;
   font-size: 1.6rem;
@@ -327,7 +286,7 @@ const ExtendedThinkingText = styled.p`
   margin: 0;
 `
 
-const AssistantModes = styled.div`
+const AssistantModesContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
@@ -342,167 +301,6 @@ const AssistantModes = styled.div`
   box-shadow: inset 0 0.1rem 0.4rem rgba(0, 0, 0, 0.3);
 `
 
-const ModeHeader = styled.div<{ $expanded: boolean; $abort: boolean }>`
-  border: 1px solid ${color("selection")};
-  border-radius: 0.4rem;
-  display: flex;
-  ${({ $expanded }) =>
-    $expanded
-      ? css`
-          flex-direction: column;
-          align-items: flex-start;
-        `
-      : css`
-          align-items: center;
-          justify-content: space-between;
-          padding: 1rem 1.2rem;
-        `}
-  ${({ $abort }) =>
-    $abort &&
-    css`
-      border-color: ${color("red")};
-    `}
-  width: 100%;
-`
-
-const ModeHeaderTop = styled.div<{ $expanded: boolean }>`
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  ${({ $expanded }) =>
-    $expanded &&
-    css`
-      border-bottom: 1px solid ${color("selection")};
-      padding: 1rem 1.2rem;
-      width: 100%;
-    `}
-  ${({ $expanded }) =>
-    !$expanded &&
-    css`
-      flex: 1 0 0;
-      min-height: 0;
-      min-width: 0;
-    `}
-`
-
-const ModeChevron = styled.div`
-  width: 1.6rem;
-  height: 1.6rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${color("foreground")};
-  cursor: pointer;
-
-  &:hover {
-    opacity: 0.8;
-  }
-`
-
-const ModeTitle = styled.div`
-  font-weight: 500;
-  font-size: 1.4rem;
-  color: ${color("foreground")};
-  text-align: center;
-  margin-right: auto;
-`
-
-const ReasoningThread = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  align-items: flex-start;
-  padding: 1rem 1.2rem;
-  width: 100%;
-`
-
-const ReasoningItem = styled.div`
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  padding: 0.2rem 0.6rem;
-  padding-left: 0;
-  width: 100%;
-`
-
-const ReasoningIcon = styled.div`
-  width: 1.6rem;
-  height: 1.6rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${color("foreground")};
-`
-
-const ReasoningText = styled.div`
-  display: flex;
-  flex: 1 0 0;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-  min-height: 0;
-  min-width: 0;
-`
-
-const ReasoningTextPart = styled.span`
-  font-weight: 400;
-  font-size: 1.3rem;
-  color: ${color("gray2")};
-`
-
-const CodeBadge = styled.div`
-  background: #2d303e;
-  border: 1px solid #44475a;
-  border-radius: 0.6rem;
-  padding: 0.2rem 0.6rem;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  position: relative;
-`
-
-const CodeBadgeText = styled.span`
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
-  color: #9089fc;
-`
-
-type OperationSection = {
-  id: string
-  type: AIOperationStatus
-  active: boolean
-  operations: Array<{ type: AIOperationStatus; args?: StatusArgs }>
-  abort: boolean
-}
-
-const formatDetailedStatusMessage = (
-  status: AIOperationStatus,
-  args?: StatusArgs,
-): string => {
-  if (status === AIOperationStatus.Processing && args && "type" in args) {
-    switch (args.type) {
-      case "fix":
-        return "Processing fix request"
-      case "explain":
-        return "Processing explain request"
-      default:
-        return status
-    }
-  }
-  return status
-}
-
-const getIsExpandableSection = (section: OperationSection) => {
-  return ![
-    AIOperationStatus.RetrievingTables,
-    AIOperationStatus.RetrievingDocumentation,
-    AIOperationStatus.Aborted,
-    AIOperationStatus.ValidatingQuery,
-  ].includes(section.type)
-}
-
 export const AIStatusIndicator: React.FC = () => {
   const {
     status,
@@ -514,9 +312,6 @@ export const AIStatusIndicator: React.FC = () => {
   } = useAIStatus()
   const { chatWindowState, openChatWindow } = useAIConversation()
   const [expanded, setExpanded] = useState(true)
-  const [collapsedSections, setCollapsedSections] = useState<
-    Record<string, boolean>
-  >({})
   const [isClosed, setIsClosed] = useState(false)
   const isCompleted = status === null && currentOperation.length > 0
   const isAborted = status === AIOperationStatus.Aborted
@@ -527,35 +322,10 @@ export const AIStatusIndicator: React.FC = () => {
     return MODEL_OPTIONS.find((model) => model.value === currentModel)?.isSlow
   }, [currentModel])
 
-  const operationSections = useMemo(() => {
-    const sections: OperationSection[] = []
-    let currentSection: OperationSection | null = null
-
-    for (const op of currentOperation) {
-      const sectionType = op.type
-      if (!currentSection || currentSection.type !== sectionType) {
-        currentSection = {
-          id: `section-${sections.length}-${sectionType}`,
-          type: sectionType,
-          active: false,
-          abort: sectionType === AIOperationStatus.Aborted,
-          operations: [op],
-        }
-        sections.push(currentSection)
-      } else {
-        currentSection.operations.push(op)
-      }
-    }
-    const lastSection = sections[sections.length - 1]
-    if (lastSection && lastSection.type === status) {
-      lastSection.active = true
-    }
-    if (lastSection && lastSection.type === AIOperationStatus.Aborted) {
-      lastSection.active = false
-    }
-
-    return sections
-  }, [currentOperation, status])
+  const operationSections = useMemo(
+    () => buildOperationSections(currentOperation, status),
+    [currentOperation, status],
+  )
 
   const handleToggleExpand = () => {
     setExpanded(!expanded)
@@ -569,13 +339,6 @@ export const AIStatusIndicator: React.FC = () => {
     }
   }
 
-  const handleToggleSection = (sectionId: string) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }))
-  }
-
   const handleClose = () => {
     if (isCompleted) {
       clearOperation()
@@ -583,14 +346,18 @@ export const AIStatusIndicator: React.FC = () => {
     setIsClosed(true)
   }
 
+  const handleScrollNeeded = () => {
+    setTimeout(() =>
+      assistantModesRef.current?.scrollTo({
+        top: assistantModesRef.current.scrollHeight,
+        behavior: "smooth",
+      }),
+    )
+  }
+
   useEffect(() => {
     if (expanded) {
-      setTimeout(() =>
-        assistantModesRef.current?.scrollTo({
-          top: assistantModesRef.current.scrollHeight,
-          behavior: "smooth",
-        }),
-      )
+      handleScrollNeeded()
     }
   }, [operationSections, expanded])
 
@@ -627,7 +394,7 @@ export const AIStatusIndicator: React.FC = () => {
             >
               <ThoughtStreamContent>
                 {section.active ? (
-                  <SpinnerIcon />
+                  <CircleNotchSpinner size={24} />
                 ) : section.abort ? (
                   <CloseCircleIcon size={24} />
                 ) : (
@@ -690,211 +457,14 @@ export const AIStatusIndicator: React.FC = () => {
       )}
 
       {expanded && (
-        <AssistantModes ref={assistantModesRef}>
-          {operationSections.map((section) => {
-            const isExpandable = getIsExpandableSection(section)
-            const isExpanded =
-              collapsedSections[section.id] !== true && isExpandable
-
-            return (
-              <ModeHeader
-                key={section.id}
-                $expanded={isExpanded}
-                $abort={section.abort}
-              >
-                <ModeHeaderTop $expanded={isExpanded}>
-                  <ReasoningIcon>
-                    {section.active ? (
-                      <SpinnerIcon style={{ width: "16px", height: "16px" }} />
-                    ) : section.abort ? (
-                      <CloseCircleIcon size={16} />
-                    ) : (
-                      <CheckIcon style={{ width: "16px", height: "16px" }} />
-                    )}
-                  </ReasoningIcon>
-
-                  <ModeTitle>{section.type}</ModeTitle>
-                  {isExpandable && (
-                    <ModeChevron
-                      onClick={() => handleToggleSection(section.id)}
-                    >
-                      {isExpanded ? (
-                        <ChevronDown size={16} />
-                      ) : (
-                        <ChevronRight size={16} />
-                      )}
-                    </ModeChevron>
-                  )}
-                </ModeHeaderTop>
-                {isExpanded && (
-                  <ReasoningThread>
-                    {section.operations.map((op, idx) => {
-                      const opKey = `${section.id}-${idx}-${JSON.stringify(op.args)}`
-
-                      if (op.type === AIOperationStatus.Processing) {
-                        const stepMessage = formatDetailedStatusMessage(
-                          op.type,
-                          op.args,
-                        )
-                        return (
-                          <ReasoningItem key={opKey}>
-                            <ReasoningIcon>
-                              <BrainIcon
-                                style={{ width: "16px", height: "16px" }}
-                              />
-                            </ReasoningIcon>
-                            <ReasoningText>
-                              <ReasoningTextPart>
-                                {stepMessage}
-                              </ReasoningTextPart>
-                            </ReasoningText>
-                          </ReasoningItem>
-                        )
-                      }
-
-                      if (
-                        op.type === AIOperationStatus.InvestigatingTableSchema
-                      ) {
-                        const tableName =
-                          op.args && "name" in op.args ? op.args.name : "table"
-                        return (
-                          <ReasoningItem key={opKey}>
-                            <ReasoningIcon>
-                              <Table size={16} />
-                            </ReasoningIcon>
-                            <ReasoningText>
-                              <ReasoningTextPart>Reading</ReasoningTextPart>
-                              <CodeBadge>
-                                <CodeBadgeText>{tableName}</CodeBadgeText>
-                              </CodeBadge>
-                              <ReasoningTextPart>schema</ReasoningTextPart>
-                            </ReasoningText>
-                          </ReasoningItem>
-                        )
-                      }
-
-                      if (op.type === AIOperationStatus.InvestigatingDocs) {
-                        const items =
-                          op.args &&
-                          "items" in op.args &&
-                          Array.isArray(op.args.items)
-                            ? op.args.items
-                            : null
-
-                        if (items && items.length > 0) {
-                          return (
-                            <>
-                              {items.map((item, itemIdx) => {
-                                const itemKey = `${opKey}-item-${itemIdx}`
-                                return (
-                                  <ReasoningItem key={itemKey}>
-                                    <ReasoningIcon>
-                                      <FileText size={16} />
-                                    </ReasoningIcon>
-                                    <ReasoningText>
-                                      {item.section ? (
-                                        <>
-                                          <ReasoningTextPart>
-                                            Investigating
-                                          </ReasoningTextPart>
-                                          <CodeBadge>
-                                            <CodeBadgeText>
-                                              {item.section}
-                                            </CodeBadgeText>
-                                          </CodeBadge>
-                                          <ReasoningTextPart>
-                                            in
-                                          </ReasoningTextPart>
-                                          <CodeBadge>
-                                            <CodeBadgeText>
-                                              {item.name}
-                                            </CodeBadgeText>
-                                          </CodeBadge>
-                                          <ReasoningTextPart>
-                                            documentation
-                                          </ReasoningTextPart>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <ReasoningTextPart>
-                                            Investigating
-                                          </ReasoningTextPart>
-                                          <CodeBadge>
-                                            <CodeBadgeText>
-                                              {item.name}
-                                            </CodeBadgeText>
-                                          </CodeBadge>
-                                          <ReasoningTextPart>
-                                            documentation
-                                          </ReasoningTextPart>
-                                        </>
-                                      )}
-                                    </ReasoningText>
-                                  </ReasoningItem>
-                                )
-                              })}
-                            </>
-                          )
-                        }
-
-                        const name =
-                          op.args && "name" in op.args ? op.args.name : null
-                        const docSection =
-                          op.args && "section" in op.args
-                            ? op.args.section
-                            : null
-                        return (
-                          <ReasoningItem key={opKey}>
-                            <ReasoningIcon>
-                              <FileText size={16} />
-                            </ReasoningIcon>
-                            <ReasoningText>
-                              {name && docSection ? (
-                                <>
-                                  <ReasoningTextPart>
-                                    Investigating
-                                  </ReasoningTextPart>
-                                  <CodeBadge>
-                                    <CodeBadgeText>{docSection}</CodeBadgeText>
-                                  </CodeBadge>
-                                  <ReasoningTextPart>in</ReasoningTextPart>
-                                  <CodeBadge>
-                                    <CodeBadgeText>{name}</CodeBadgeText>
-                                  </CodeBadge>
-                                  <ReasoningTextPart>
-                                    documentation
-                                  </ReasoningTextPart>
-                                </>
-                              ) : name ? (
-                                <>
-                                  <ReasoningTextPart>
-                                    Investigating
-                                  </ReasoningTextPart>
-                                  <CodeBadge>
-                                    <CodeBadgeText>{name}</CodeBadgeText>
-                                  </CodeBadge>
-                                  <ReasoningTextPart>
-                                    documentation
-                                  </ReasoningTextPart>
-                                </>
-                              ) : (
-                                <ReasoningTextPart>
-                                  Investigating documentation
-                                </ReasoningTextPart>
-                              )}
-                            </ReasoningText>
-                          </ReasoningItem>
-                        )
-                      }
-
-                      return null
-                    })}
-                  </ReasoningThread>
-                )}
-              </ModeHeader>
-            )
-          })}
-        </AssistantModes>
+        <AssistantModesContainer ref={assistantModesRef}>
+          <AssistantModes
+            operationHistory={currentOperation}
+            status={status}
+            isLive
+            onScrollNeeded={handleScrollNeeded}
+          />
+        </AssistantModesContainer>
       )}
     </Container>
   )

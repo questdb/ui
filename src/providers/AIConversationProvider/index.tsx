@@ -87,6 +87,11 @@ type AIConversationContextType = {
     conversationId: ConversationId,
     message: ConversationMessage,
   ) => void
+  updateMessage: (
+    conversationId: ConversationId,
+    messageId: string,
+    updates: Partial<ConversationMessage>,
+  ) => void
   updateConversationSQL: (conversationId: ConversationId, sql: string) => void
   addMessageAndUpdateSQL: (
     conversationId: ConversationId,
@@ -138,6 +143,8 @@ export const AIConversationProvider: React.FC<{
     (): ConversationId => crypto.randomUUID(),
     [],
   )
+
+  const generateMessageId = useCallback((): string => crypto.randomUUID(), [])
 
   const getConversation = useCallback(
     (id: ConversationId): AIConversation | undefined => {
@@ -291,9 +298,62 @@ export const AIConversationProvider: React.FC<{
         const next = new Map(prev)
         const conv = next.get(conversationId)
         if (conv) {
+          const messageWithId: ConversationMessage = {
+            ...message,
+            id: message.id || generateMessageId(),
+          }
           next.set(conversationId, {
             ...conv,
-            messages: [...conv.messages, message],
+            messages: [...conv.messages, messageWithId],
+            updatedAt: Date.now(),
+          })
+        }
+        return next
+      })
+    },
+    [generateMessageId],
+  )
+
+  const updateMessage = useCallback(
+    (
+      conversationId: ConversationId,
+      messageId: string,
+      updates: Partial<ConversationMessage>,
+    ) => {
+      setConversations((prev) => {
+        const next = new Map(prev)
+        const conv = next.get(conversationId)
+        if (conv) {
+          const updatedMessages = conv.messages.map((msg) => {
+            if (msg.id !== messageId) return msg
+
+            // If sql is being set and message doesn't have previousSQL yet, compute it
+            let finalUpdates = updates
+            const newSql = updates.sql
+            if (
+              newSql !== undefined &&
+              msg.previousSQL === undefined &&
+              updates.previousSQL === undefined
+            ) {
+              const { queryText: acceptedSQL } = getQueryInfoFromKey(
+                conv.queryKey,
+              )
+              const normalizedNewSQL = normalizeQueryText(newSql || "")
+              const normalizedAcceptedSQL = normalizeQueryText(acceptedSQL)
+              const sqlActuallyChanged =
+                normalizedNewSQL !== normalizedAcceptedSQL
+
+              finalUpdates = {
+                ...updates,
+                previousSQL: sqlActuallyChanged ? acceptedSQL : undefined,
+              }
+            }
+
+            return { ...msg, ...finalUpdates }
+          })
+          next.set(conversationId, {
+            ...conv,
+            messages: updatedMessages,
             updatedAt: Date.now(),
           })
         }
@@ -348,6 +408,7 @@ export const AIConversationProvider: React.FC<{
 
           const messageWithHistory: ConversationMessage = {
             ...message,
+            id: message.id || generateMessageId(),
             previousSQL,
           }
 
@@ -362,7 +423,7 @@ export const AIConversationProvider: React.FC<{
         return next
       })
     },
-    [],
+    [generateMessageId],
   )
 
   const updateConversationName = useCallback(
@@ -876,6 +937,7 @@ export const AIConversationProvider: React.FC<{
         closeHistoryView,
         deleteConversation,
         addMessage,
+        updateMessage,
         updateConversationSQL,
         addMessageAndUpdateSQL,
         updateConversationName,

@@ -1,5 +1,6 @@
 import type { PartitionBy } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
+import type { OperationHistory } from "../AIStatusProvider"
 
 export type { QueryKey }
 
@@ -26,9 +27,11 @@ export type UserMessageDisplayType =
   | "text"
 
 export type ConversationMessage = {
+  id?: string // Unique message identifier (auto-generated if not provided)
   role: "user" | "assistant"
   content: string // Full content sent to API
   timestamp: number
+  error?: string // Error message if operation failed
   sql?: string | null // Current SQL after this message (null = no SQL change in this message)
   explanation?: string // Explanation for this turn
   tokenUsage?: TokenUsage // Token usage for assistant messages
@@ -36,6 +39,7 @@ export type ConversationMessage = {
   isRejected?: boolean // Whether this change has been rejected
   isAccepted?: boolean // Whether this change has been accepted
   hideFromUI?: boolean // Whether to hide this message from UI (e.g., rejection messages)
+  operationHistory?: OperationHistory // AI operation steps that produced this response
   // UI display fields - for cleaner presentation
   displayType?: UserMessageDisplayType // How to render this message in UI
   displaySQL?: string // SQL to show in inline editor (for fix/explain/ask requests)

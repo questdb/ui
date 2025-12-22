@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useMemo, useState } from "react"
+import React, { useEffect, useRef, useMemo, useState, useCallback } from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
+import { AssistantModes } from "../../../components/AIStatusIndicator/AssistantModes"
 import { color } from "../../../utils"
 import type {
   ConversationMessage,
@@ -25,11 +26,13 @@ import {
   KeyReturnIcon,
   ChatDotsIcon,
 } from "@phosphor-icons/react"
+import { CloseCircle } from "@styled-icons/remix-fill"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { TableIcon } from "../../Schema/table-icon"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -243,6 +246,31 @@ const ExplanationContent = styled(Box)`
   padding: 0.8rem;
   overflow: visible;
   flex-shrink: 0;
+  width: 100%;
+`
+
+const OperationHistoryContainer = styled.div<{ $hasError: boolean }>`
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  width: 100%;
+  ${({ $hasError }) =>
+    $hasError &&
+    css`
+      margin-bottom: 0;
+      padding-bottom: 0.3rem;
+    `}
+`
+
+const ErrorContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border-radius: 0.6rem;
+  border: 1px solid ${color("red")};
+  color: ${color("foreground")};
+  font-size: 1.4rem;
+  line-height: 2rem;
   width: 100%;
 `
 
@@ -590,6 +618,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { status } = useAIStatus()
+
+  const handleScrollNeeded = useCallback(() => {
+    setTimeout(
+      () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
+      50,
+    )
+  }, [])
 
   // Find the latest assistant message with SQL changes and auto-expand it
   const latestDiffIndex = useMemo(() => {
@@ -635,10 +671,17 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     return count.toString()
   }
 
-  // Only scroll to bottom when there are new visible messages
-  // Hidden messages (like context messages for model) shouldn't trigger scroll
   const visibleMessagesCount = useMemo(
-    () => messages.filter((m) => !m.hideFromUI).length,
+    () =>
+      messages.reduce(
+        (acc, msg) =>
+          acc +
+          (msg.hideFromUI
+            ? 0
+            : (msg.operationHistory?.length ?? 0) +
+              (msg.error || msg.content ? 1 : 0)),
+        0,
+      ),
     [messages],
   )
 
@@ -660,11 +703,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     }
   })
 
-  // Get the index of the last visible message (for button visibility)
   const lastVisibleMessageIndex =
     visibleMessages.length > 0
       ? visibleMessages[visibleMessages.length - 1].originalIndex
       : -1
+
+  const lastAssistantMessageIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && !messages[i].hideFromUI) {
+        return i
+      }
+    }
+    return -1
+  }, [messages])
 
   const hasVisibleUserMessageAfter = (index: number): boolean => {
     for (let i = index + 1; i < messages.length; i++) {
@@ -862,222 +913,264 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           )
           const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
 
+          const operationHistory = message.operationHistory
+          const hasError = !!message.error
+
+          const isLiveOperation =
+            originalIndex === lastAssistantMessageIndex &&
+            isOperationInProgress === true
+
           return (
             <ExplanationBox key={key}>
-              <AssistantHeader>
-                <AISparkle size={20} variant="filled" />
-                <AssistantLabel>Assistant</AssistantLabel>
-                {tokenDisplay && (
-                  <TokenDisplay className="token-display">
-                    <GaugeIcon size="16px" color={theme.color.gray2} />
-                    <Text size="sm" color="gray2">
-                      {tokenDisplay}
-                    </Text>
-                  </TokenDisplay>
-                )}
-              </AssistantHeader>
-              <ExplanationContent>
-                <MarkdownContent>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      a: ({
-                        children,
-                        href,
-                        ...props
-                      }: React.ComponentProps<"a">) => (
-                        <a
-                          {...(typeof href === "string" &&
-                          href.startsWith("http")
-                            ? { target: "_blank", rel: "noopener noreferrer" }
-                            : {})}
-                          href={href}
-                          {...props}
-                        >
-                          {children}
-                        </a>
-                      ),
-                      table: ({
-                        children,
-                        ...props
-                      }: React.ComponentProps<"table">) => (
-                        <div className="table-wrapper">
-                          <table {...props}>{children}</table>
-                        </div>
-                      ),
-                      // Render pre as fragment since code blocks are handled by code component
-                      pre: ({ children }: React.ComponentProps<"pre">) => (
-                        <>{children}</>
-                      ),
-                      code: ({
-                        children,
-                        className,
-                      }: React.ComponentProps<"code">) => {
-                        // Check if this is a code block (has language class) or inline code
-                        const isCodeBlock =
-                          typeof className === "string" &&
-                          className.includes("language-")
-                        if (isCodeBlock) {
-                          // Extract text content from children (can be string or array)
-                          const codeContent = (
-                            Array.isArray(children)
-                              ? children.join("")
-                              : typeof children === "string"
-                                ? children
-                                : ""
-                          ).replace(/\n$/, "")
-                          const lineCount = codeContent.split("\n").length
-                          // LiteEditor has 8px padding top and bottom (16px total)
-                          const editorHeight = Math.min(
-                            Math.max(lineCount * 20 + 16, 56),
-                            316,
-                          )
-                          return (
-                            <CodeBlockWrapper style={{ height: editorHeight }}>
-                              <LiteEditor value={codeContent} />
-                            </CodeBlockWrapper>
-                          )
-                        }
-                        // Inline code - render as default
-                        return <code>{children}</code>
-                      },
-                    }}
-                  >
-                    {explanation}
-                  </ReactMarkdown>
-                </MarkdownContent>
-                {hasSQLChange && (
-                  <DiffContainer>
-                    <DiffHeader $isExpanded={isExpanded}>
-                      <DiffHeaderLeft>
-                        <CodeIcon size={22} color="#BDBDBD" />
-                        <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
-                      </DiffHeaderLeft>
-                      {(isAccepted || isRejected || isRejectedWithFollowUp) && (
-                        <DiffHeaderStatus
-                          $isAccepted={isAccepted}
-                          $isRejected={isRejected}
-                          $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                        >
-                          <StatusIcon
-                            $isAccepted={isAccepted}
-                            $isRejected={isRejected}
-                            $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                          >
-                            {isRejected ? (
-                              <CloseOutline size="14px" />
-                            ) : isRejectedWithFollowUp ? (
-                              <ChatDotsIcon size="14px" />
-                            ) : (
-                              <CheckmarkOutline size="14px" />
-                            )}
-                          </StatusIcon>
-                          {isRejected
-                            ? "Rejected"
-                            : isRejectedWithFollowUp
-                              ? "Followed up"
-                              : "Accepted"}
-                        </DiffHeaderStatus>
-                      )}
-                      <DiffHeaderRight>
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (message.sql && onRunQuery) {
-                              onRunQuery(message.sql)
+              {operationHistory && operationHistory.length > 0 && (
+                <OperationHistoryContainer $hasError={hasError}>
+                  <AssistantModes
+                    operationHistory={operationHistory}
+                    status={status}
+                    isLive={isLiveOperation}
+                    onScrollNeeded={handleScrollNeeded}
+                  />
+                </OperationHistoryContainer>
+              )}
+              {hasError && (
+                <ErrorContainer>
+                  <CloseCircle size={16} color={theme.color.red} />
+                  {message.error}
+                </ErrorContainer>
+              )}
+
+              {message.content && (
+                <>
+                  <AssistantHeader>
+                    <AISparkle size={20} variant="filled" />
+                    <AssistantLabel>Assistant</AssistantLabel>
+                    {tokenDisplay && (
+                      <TokenDisplay className="token-display">
+                        <GaugeIcon size="16px" color={theme.color.gray2} />
+                        <Text size="sm" color="gray2">
+                          {tokenDisplay}
+                        </Text>
+                      </TokenDisplay>
+                    )}
+                  </AssistantHeader>
+                  <ExplanationContent>
+                    <MarkdownContent>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({
+                            children,
+                            href,
+                            ...props
+                          }: React.ComponentProps<"a">) => (
+                            <a
+                              {...(typeof href === "string" &&
+                              href.startsWith("http")
+                                ? {
+                                    target: "_blank",
+                                    rel: "noopener noreferrer",
+                                  }
+                                : {})}
+                              href={href}
+                              {...props}
+                            >
+                              {children}
+                            </a>
+                          ),
+                          table: ({
+                            children,
+                            ...props
+                          }: React.ComponentProps<"table">) => (
+                            <div className="table-wrapper">
+                              <table {...props}>{children}</table>
+                            </div>
+                          ),
+                          // Render pre as fragment since code blocks are handled by code component
+                          pre: ({ children }: React.ComponentProps<"pre">) => (
+                            <>{children}</>
+                          ),
+                          code: ({
+                            children,
+                            className,
+                          }: React.ComponentProps<"code">) => {
+                            // Check if this is a code block (has language class) or inline code
+                            const isCodeBlock =
+                              typeof className === "string" &&
+                              className.includes("language-")
+                            if (isCodeBlock) {
+                              // Extract text content from children (can be string or array)
+                              const codeContent = (
+                                Array.isArray(children)
+                                  ? children.join("")
+                                  : typeof children === "string"
+                                    ? children
+                                    : ""
+                              ).replace(/\n$/, "")
+                              const lineCount = codeContent.split("\n").length
+                              // LiteEditor has 8px padding top and bottom (16px total)
+                              const editorHeight = Math.min(
+                                Math.max(lineCount * 20 + 16, 56),
+                                316,
+                              )
+                              return (
+                                <CodeBlockWrapper
+                                  style={{ height: editorHeight }}
+                                >
+                                  <LiteEditor value={codeContent} />
+                                </CodeBlockWrapper>
+                              )
                             }
-                          }}
-                          title="Run this query"
-                        >
-                          {getQueryStatusIcon(queryRunStatus)}
-                        </IconButton>
-                        {/* Show Apply to Editor button only when:
+                            // Inline code - render as default
+                            return <code>{children}</code>
+                          },
+                        }}
+                      >
+                        {explanation}
+                      </ReactMarkdown>
+                    </MarkdownContent>
+                    {hasSQLChange && (
+                      <DiffContainer>
+                        <DiffHeader $isExpanded={isExpanded}>
+                          <DiffHeaderLeft>
+                            <CodeIcon size={22} color="#BDBDBD" />
+                            <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
+                          </DiffHeaderLeft>
+                          {(isAccepted ||
+                            isRejected ||
+                            isRejectedWithFollowUp) && (
+                            <DiffHeaderStatus
+                              $isAccepted={isAccepted}
+                              $isRejected={isRejected}
+                              $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                            >
+                              <StatusIcon
+                                $isAccepted={isAccepted}
+                                $isRejected={isRejected}
+                                $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                              >
+                                {isRejected ? (
+                                  <CloseOutline size="14px" />
+                                ) : isRejectedWithFollowUp ? (
+                                  <ChatDotsIcon size="14px" />
+                                ) : (
+                                  <CheckmarkOutline size="14px" />
+                                )}
+                              </StatusIcon>
+                              {isRejected
+                                ? "Rejected"
+                                : isRejectedWithFollowUp
+                                  ? "Followed up"
+                                  : "Accepted"}
+                            </DiffHeaderStatus>
+                          )}
+                          <DiffHeaderRight>
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (message.sql && onRunQuery) {
+                                  onRunQuery(message.sql)
+                                }
+                              }}
+                              title="Run this query"
+                            >
+                              {getQueryStatusIcon(queryRunStatus)}
+                            </IconButton>
+                            {/* Show Apply to Editor button only when:
                             - accept/reject buttons are NOT shown
                             - NOT the latest suggestion that is already accepted (would have no effect)
                             - suggestion SQL differs from what's in editor (otherwise no effect)
                         */}
-                        {!showButtons &&
-                          onApplyToEditor &&
-                          !(originalIndex === latestDiffIndex && isAccepted) &&
-                          normalizeQueryText(message.sql || "") !==
-                            normalizeQueryText(editorSQL || "") && (
-                            <IconButton
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (message.sql && !isOperationInProgress) {
-                                  onApplyToEditor(message.sql, originalIndex)
-                                }
-                              }}
-                              title="Apply to editor"
-                              disabled={isOperationInProgress}
-                              style={{
-                                opacity: isOperationInProgress ? 0.5 : 1,
-                                cursor: isOperationInProgress
-                                  ? "not-allowed"
-                                  : "pointer",
+                            {!showButtons &&
+                              onApplyToEditor &&
+                              !(
+                                originalIndex === latestDiffIndex && isAccepted
+                              ) &&
+                              normalizeQueryText(message.sql || "") !==
+                                normalizeQueryText(editorSQL || "") && (
+                                <IconButton
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (message.sql && !isOperationInProgress) {
+                                      onApplyToEditor(
+                                        message.sql,
+                                        originalIndex,
+                                      )
+                                    }
+                                  }}
+                                  title="Apply to editor"
+                                  disabled={isOperationInProgress}
+                                  style={{
+                                    opacity: isOperationInProgress ? 0.5 : 1,
+                                    cursor: isOperationInProgress
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  }}
+                                >
+                                  <KeyReturnIcon size={22} color="#BDBDBD" />
+                                </IconButton>
+                              )}
+                            <ExpandButton
+                              title="Expand diff view"
+                              onClick={() => {
+                                setExpandedDiffs((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(originalIndex)) {
+                                    next.delete(originalIndex)
+                                  } else {
+                                    next.add(originalIndex)
+                                  }
+                                  return next
+                                })
                               }}
                             >
-                              <KeyReturnIcon size={22} color="#BDBDBD" />
-                            </IconButton>
-                          )}
-                        <ExpandButton
-                          title="Expand diff view"
-                          onClick={() => {
-                            setExpandedDiffs((prev) => {
-                              const next = new Set(prev)
-                              if (next.has(originalIndex)) {
-                                next.delete(originalIndex)
-                              } else {
-                                next.add(originalIndex)
-                              }
-                              return next
-                            })
-                          }}
-                        >
-                          <ExpandUpDownIcon />
-                        </ExpandButton>
-                      </DiffHeaderRight>
-                    </DiffHeader>
-                    {isExpanded && (
-                      <>
-                        <DiffEditorWrapper>
-                          <LiteEditor
-                            diffEditor
-                            original={previousSQLForDiff}
-                            modified={currentSQLForDiff}
-                            noBorder
-                            onExpandDiff={
-                              onExpandDiff
-                                ? () =>
-                                    onExpandDiff(
-                                      message.previousSQL || "",
-                                      message.sql || "",
-                                    )
-                                : undefined
-                            }
-                          />
-                        </DiffEditorWrapper>
-                        {showButtons && (
-                          <ButtonBar align="center" justifyContent="center">
-                            {onRejectChange && (
-                              <RejectButton onClick={onRejectChange}>
-                                Reject
-                              </RejectButton>
+                              <ExpandUpDownIcon />
+                            </ExpandButton>
+                          </DiffHeaderRight>
+                        </DiffHeader>
+                        {isExpanded && (
+                          <>
+                            <DiffEditorWrapper>
+                              <LiteEditor
+                                diffEditor
+                                original={previousSQLForDiff}
+                                modified={currentSQLForDiff}
+                                noBorder
+                                onExpandDiff={
+                                  onExpandDiff
+                                    ? () =>
+                                        onExpandDiff(
+                                          message.previousSQL || "",
+                                          message.sql || "",
+                                        )
+                                    : undefined
+                                }
+                              />
+                            </DiffEditorWrapper>
+                            {showButtons && (
+                              <ButtonBar align="center" justifyContent="center">
+                                {onRejectChange && (
+                                  <RejectButton onClick={onRejectChange}>
+                                    Reject
+                                  </RejectButton>
+                                )}
+                                {onAcceptChange && (
+                                  <AcceptButton
+                                    onClick={() =>
+                                      onAcceptChange(originalIndex)
+                                    }
+                                  >
+                                    Accept
+                                  </AcceptButton>
+                                )}
+                              </ButtonBar>
                             )}
-                            {onAcceptChange && (
-                              <AcceptButton
-                                onClick={() => onAcceptChange(originalIndex)}
-                              >
-                                Accept
-                              </AcceptButton>
-                            )}
-                          </ButtonBar>
+                          </>
                         )}
-                      </>
+                      </DiffContainer>
                     )}
-                  </DiffContainer>
-                )}
-              </ExplanationContent>
+                  </ExplanationContent>
+                </>
+              )}
             </ExplanationBox>
           )
         }

@@ -28,6 +28,7 @@ import {
 import {
   isBlockingAIStatus,
   useAIStatus,
+  type OperationHistory,
 } from "../../../providers/AIStatusProvider"
 import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
@@ -216,7 +217,7 @@ export const AIChatWindow: React.FC = () => {
     closeHistoryView,
     getConversation,
     addMessage,
-    addMessageAndUpdateSQL,
+    updateMessage,
     updateConversationName,
     acceptSuggestion,
     rejectSuggestion,
@@ -436,8 +437,16 @@ export const AIChatWindow: React.FC = () => {
       ...(displayUserMessage && { displayUserMessage }),
     }
 
-    // Add user message immediately so it appears in the UI right away
     addMessage(conversationId, userMessageEntry)
+
+    const assistantMessageId = crypto.randomUUID()
+    addMessage(conversationId, {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      operationHistory: [],
+    })
 
     const provider = providerForModel(currentModel)
     const settings: ActiveProviderSettings = {
@@ -473,6 +482,12 @@ export const AIChatWindow: React.FC = () => {
       { role: "user" as const, content: userMessageContent },
     ]
 
+    const handleStatusUpdate = (history: OperationHistory) => {
+      updateMessage(conversationId, assistantMessageId, {
+        operationHistory: [...history],
+      })
+    }
+
     const processResponse = async () => {
       const response = await continueConversation({
         // Pass the enriched message content so continueConversation doesn't double-add context
@@ -484,13 +499,18 @@ export const AIChatWindow: React.FC = () => {
           quest,
           hasSchemaAccess ? tables : undefined,
         ),
-        setStatus,
+        setStatus: (status, args) =>
+          setStatus(status, args, handleStatusUpdate),
         abortSignal: abortController?.signal,
         conversationId: conversation.id,
       })
 
       if (isAiAssistantError(response)) {
         const error = response
+        updateMessage(conversationId, assistantMessageId, {
+          error:
+            error.type !== "aborted" ? error.message : "Operation cancelled",
+        })
         if (error.type !== "aborted") {
           toast.error(error.message, { autoClose: 10000 })
         }
@@ -508,17 +528,14 @@ export const AIChatWindow: React.FC = () => {
         assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
       }
 
-      // Add assistant response after API call completes
       // Only include sql field if there's an actual SQL change (not null/undefined/empty)
       const hasSQLInResult =
         result.sql !== undefined &&
         result.sql !== null &&
         result.sql.trim() !== ""
 
-      addMessageAndUpdateSQL(conversationId, {
-        role: "assistant" as const,
+      updateMessage(conversationId, assistantMessageId, {
         content: assistantContent,
-        timestamp: Date.now(),
         ...(hasSQLInResult && { sql: result.sql }),
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,

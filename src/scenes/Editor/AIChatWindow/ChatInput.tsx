@@ -18,44 +18,12 @@ import {
   isBlockingAIStatus,
   AIOperationStatus,
 } from "../../../providers/AIStatusProvider"
-import { slideAnimation, spinAnimation } from "../../../components/Animation"
+import { slideAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { TableIcon } from "../../Schema/table-icon"
 import { selectors } from "../../../store"
-
-// Gradient spinner icon (same as AIStatusIndicator)
-const CircleNotch = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    {...props}
-  >
-    <path
-      d="M15.75 3.75C17.32 4.48224 18.6482 5.64772 19.5783 7.10926C20.5084 8.57081 21.0016 10.2676 21 12C21 14.3869 20.0518 16.6761 18.364 18.364C16.6761 20.0518 14.387 21 12 21C9.61306 21 7.32387 20.0518 5.63604 18.364C3.94822 16.6761 3 14.3869 3 12C2.99838 10.2676 3.49163 8.57081 4.4217 7.10926C5.35178 5.64772 6.67998 4.48224 8.25 3.75"
-      stroke="url(#paint0_linear_chat_spinner)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <defs>
-      <linearGradient
-        id="paint0_linear_chat_spinner"
-        x1="12"
-        y1="3.75"
-        x2="12"
-        y2="21"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop stopColor="#D14671" />
-        <stop offset="1" stopColor="#892C6C" />
-      </linearGradient>
-    </defs>
-  </svg>
-)
+import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 
 const InputContainer = styled(Box)`
   display: flex;
@@ -214,14 +182,6 @@ const ThoughtStreamContent = styled.div<{ $aborted?: boolean }>`
   padding-right: ${({ $aborted }) => ($aborted ? "1.2rem" : "4.5rem")};
 `
 
-const SpinnerIcon = styled(CircleNotch)`
-  width: 2rem;
-  height: 2rem;
-  ${spinAnimation};
-  flex-shrink: 0;
-  transform-origin: center;
-`
-
 const CloseCircleIcon = styled(CloseCircle)`
   width: 2rem;
   height: 2rem;
@@ -376,7 +336,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         {showThoughtStream ? (
           <ThoughtStream $aborted={isAborted}>
             <ThoughtStreamContent $aborted={isAborted}>
-              {isAborted ? <CloseCircleIcon /> : <SpinnerIcon />}
+              {isAborted ? (
+                <CloseCircleIcon />
+              ) : (
+                <CircleNotchSpinner size={20} />
+              )}
               <ThoughtText $aborted={isAborted}>{aiStatus}</ThoughtText>
             </ThoughtStreamContent>
             {!isAborted && (

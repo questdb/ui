@@ -20,7 +20,10 @@ import {
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
-import { useAIStatus } from "../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  type OperationHistory,
+} from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
@@ -39,7 +42,7 @@ export const FixQueryButton = () => {
     chatWindowState,
     getConversation,
     addMessage,
-    addMessageAndUpdateSQL,
+    updateMessage,
     updateConversationName,
   } = useAIConversation()
 
@@ -66,6 +69,15 @@ export const FixQueryButton = () => {
       displaySQL: queryText,
     })
 
+    const assistantMessageId = crypto.randomUUID()
+    addMessage(conversation.id, {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      operationHistory: [],
+    })
+
     const provider = providerForModel(currentModel!)
     const settings: ActiveProviderSettings = {
       model: currentModel!,
@@ -87,6 +99,12 @@ export const FixQueryButton = () => {
       })
     }
 
+    const handleStatusUpdate = (history: OperationHistory) => {
+      updateMessage(conversation.id, assistantMessageId, {
+        operationHistory: [...history],
+      })
+    }
+
     const response = await continueConversation({
       userMessage: fullApiMessage,
       conversationHistory: [],
@@ -96,7 +114,7 @@ export const FixQueryButton = () => {
         quest,
         hasSchemaAccess ? tables : undefined,
       ),
-      setStatus,
+      setStatus: (status, args) => setStatus(status, args, handleStatusUpdate),
       abortSignal: abortController?.signal,
       operation: "fix",
       conversationId: conversation.id,
@@ -104,6 +122,9 @@ export const FixQueryButton = () => {
 
     if (isAiAssistantError(response)) {
       const error = response
+      updateMessage(conversation.id, assistantMessageId, {
+        error: error.type !== "aborted" ? error.message : "Operation cancelled",
+      })
       if (error.type !== "aborted") {
         toast.error(error.message, { autoClose: 10000 })
       }
@@ -113,10 +134,8 @@ export const FixQueryButton = () => {
     const result = response as GeneratedSQL
 
     if (!result.sql && result.explanation) {
-      addMessageAndUpdateSQL(conversation.id, {
-        role: "assistant",
+      updateMessage(conversation.id, assistantMessageId, {
         content: result.explanation,
-        timestamp: Date.now(),
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })
@@ -124,6 +143,9 @@ export const FixQueryButton = () => {
     }
 
     if (!result.sql) {
+      updateMessage(conversation.id, assistantMessageId, {
+        error: "No fixed query or explanation received from AI Assistant",
+      })
       toast.error("No fixed query or explanation received from AI Assistant", {
         autoClose: 10000,
       })
@@ -134,10 +156,8 @@ export const FixQueryButton = () => {
       ? `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation}`
       : `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\``
 
-    addMessageAndUpdateSQL(conversation.id, {
-      role: "assistant",
+    updateMessage(conversation.id, assistantMessageId, {
       content: assistantContent,
-      timestamp: Date.now(),
       sql: result.sql,
       explanation: result.explanation,
       tokenUsage: result.tokenUsage,

@@ -18,7 +18,10 @@ import { AISparkle } from "../AISparkle"
 import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
-import { useAIStatus } from "../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  type OperationHistory,
+} from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import type { ConversationId } from "../../providers/AIConversationProvider/types"
 
@@ -53,7 +56,7 @@ export const ExplainQueryButton = ({
     currentModel: currentModelValue,
     apiKey: apiKeyValue,
   } = useAIStatus()
-  const { addMessage, addMessageAndUpdateSQL, updateConversationName } =
+  const { addMessage, updateMessage, updateConversationName } =
     useAIConversation()
 
   const handleExplainQuery = () => {
@@ -68,6 +71,15 @@ export const ExplainQueryButton = ({
         timestamp: Date.now(),
         displayType: "explain_request",
         displaySQL: queryText,
+      })
+
+      const assistantMessageId = crypto.randomUUID()
+      addMessage(conversationId, {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        operationHistory: [],
       })
 
       const provider = providerForModel(currentModel)
@@ -91,6 +103,12 @@ export const ExplainQueryButton = ({
         })
       }
 
+      const handleStatusUpdate = (history: OperationHistory) => {
+        updateMessage(conversationId, assistantMessageId, {
+          operationHistory: [...history],
+        })
+      }
+
       const response = await continueConversation({
         userMessage: fullApiMessage,
         conversationHistory: [],
@@ -100,7 +118,8 @@ export const ExplainQueryButton = ({
           quest,
           hasSchemaAccess ? tables : undefined,
         ),
-        setStatus,
+        setStatus: (status, args) =>
+          setStatus(status, args, handleStatusUpdate),
         abortSignal: abortController?.signal,
         operation: "explain",
         conversationId,
@@ -108,6 +127,10 @@ export const ExplainQueryButton = ({
 
       if (isAiAssistantError(response)) {
         const error = response
+        updateMessage(conversationId, assistantMessageId, {
+          error:
+            error.type !== "aborted" ? error.message : "Operation cancelled",
+        })
         if (error.type !== "aborted") {
           toast.error(error.message, { autoClose: 10000 })
         }
@@ -116,18 +139,17 @@ export const ExplainQueryButton = ({
 
       const result = response
       if (!result.explanation) {
+        updateMessage(conversationId, assistantMessageId, {
+          error: "No explanation received from AI Assistant",
+        })
         toast.error("No explanation received from AI Assistant", {
           autoClose: 10000,
         })
         return
       }
 
-      const assistantContent = result.explanation
-
-      addMessageAndUpdateSQL(conversationId, {
-        role: "assistant",
-        content: assistantContent,
-        timestamp: Date.now(),
+      updateMessage(conversationId, assistantMessageId, {
+        content: result.explanation,
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })

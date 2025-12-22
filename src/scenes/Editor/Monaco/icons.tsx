@@ -1,4 +1,6 @@
+import { spinAnimation } from "../../../components/Animation"
 import React from "react"
+import styled from "styled-components"
 
 // Gutter icon state types
 export type GutterIconState =
@@ -123,6 +125,50 @@ export const ExpandUpDownIcon = () => (
     />
   </svg>
 )
+
+const CircleNotch = (
+  props: React.SVGProps<SVGSVGElement> & { size?: number },
+) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={props.size || 24}
+    height={props.size || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    {...(props as React.SVGProps<SVGSVGElement>)}
+  >
+    <path
+      d="M15.75 3.75C17.32 4.48224 18.6482 5.64772 19.5783 7.10926C20.5084 8.57081 21.0016 10.2676 21 12C21 14.3869 20.0518 16.6761 18.364 18.364C16.6761 20.0518 14.387 21 12 21C9.61306 21 7.32387 20.0518 5.63604 18.364C3.94822 16.6761 3 14.3869 3 12C2.99838 10.2676 3.49163 8.57081 4.4217 7.10926C5.35178 5.64772 6.67998 4.48224 8.25 3.75"
+      stroke="url(#paint0_linear_140_9487)"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <defs>
+      <linearGradient
+        id="paint0_linear_140_9487"
+        x1="12"
+        y1="3.75"
+        x2="12"
+        y2="21"
+        gradientUnits="userSpaceOnUse"
+      >
+        <stop stopColor="#D14671" />
+        <stop offset="1" stopColor="#892C6C" />
+      </linearGradient>
+    </defs>
+  </svg>
+)
+
+const CircleNotchStyled = styled(CircleNotch)<{ size?: number }>`
+  ${spinAnimation};
+  flex-shrink: 0;
+  transform-origin: center;
+`
+
+export const CircleNotchSpinner = (
+  props: Omit<React.SVGProps<SVGSVGElement>, "ref"> & { size?: number },
+) => <CircleNotchStyled size={props.size} {...props} />
 
 /**
  * Creates an SVG element for use in vanilla DOM (glyph widgets).
