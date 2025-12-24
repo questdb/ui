@@ -247,6 +247,7 @@ const Editor = ({
 
     return {
       conversationId,
+      messageId: lastVisible.id,
       conversation,
     }
   }, [activeBuffer, getConversation])
@@ -256,12 +257,11 @@ const Editor = ({
     if (!pendingDiffInfo || !activeBuffer.diffContent) return
 
     const { conversationId } = pendingDiffInfo
-    const modifiedSQL = activeBuffer.diffContent.modified
 
     // Use unified acceptSuggestion from provider
     await acceptSuggestion({
       conversationId,
-      sql: modifiedSQL,
+      messageId: pendingDiffInfo.messageId,
     })
   }, [pendingDiffInfo, activeBuffer.diffContent, acceptSuggestion])
 

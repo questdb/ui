@@ -72,7 +72,7 @@ ${summary}
 }
 
 function toTokenMessages(
-  messages: ConversationMessage[],
+  messages: [...ConversationMessage[], Omit<ConversationMessage, "id">],
 ): TokenConversationMessage[] {
   return messages
     .filter((m) => m.content && m.content.trim() !== "")
@@ -142,8 +142,8 @@ export async function compactConversationIfNeeded(
       role: "user" as const,
       content: userMessage,
       timestamp: Date.now(),
-    },
-  ]
+    } as Omit<ConversationMessage, "id">,
+  ] as [...ConversationMessage[], Omit<ConversationMessage, "id">]
   const totalChars =
     systemPrompt.length + messages.reduce((sum, m) => sum + m.content.length, 0)
   if (totalChars < COMPACTION_THRESHOLDS[provider]) {

@@ -24,57 +24,37 @@ import { buildIndices, createQueryLookupKey } from "./indices"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
-  sql: string
-  messageIndex?: number // Index of the specific message to mark as accepted
-  skipHiddenMessage?: boolean
+  messageId: string
 }
 
 type AIConversationContextType = {
-  // Storage
   conversations: Map<ConversationId, AIConversation>
   chatWindowState: ChatWindowState
 
-  // Lookup functions
   getConversation: (id: ConversationId) => AIConversation | undefined
   findConversationByQuery: (
-    bufferId: string | number,
+    bufferId: number,
     queryKey: QueryKey,
   ) => AIConversation | undefined
   findConversationByTableId: (tableId: number) => AIConversation | undefined
-  hasConversationForQuery: (
-    bufferId: string | number,
-    queryKey: QueryKey,
-  ) => boolean
+  hasConversationForQuery: (bufferId: number, queryKey: QueryKey) => boolean
 
-  // Creation and mutation
   createConversation: (options: {
-    bufferId?: string | number | null
-    queryKey?: QueryKey | null
+    bufferId?: number
+    queryKey?: QueryKey
     tableId?: number
   }) => AIConversation
   getOrCreateConversationForQuery: (options: {
-    bufferId: string | number
+    bufferId: number
     queryKey: QueryKey
   }) => AIConversation
-  updateConversationAssociations: (
-    conversationId: ConversationId,
-    updates: {
-      bufferId?: string | number | null
-      queryKey?: QueryKey | null
-    },
-  ) => void
   shiftQueryKeysForBuffer: (
     bufferId: string | number,
     changeOffset: number,
     delta: number,
   ) => void
 
-  // Chat window
   openChatWindow: (conversationId: ConversationId) => void
-  openChatWindowForQuery: (
-    bufferId: string | number,
-    queryKey: QueryKey,
-  ) => void
   openOrCreateBlankChatWindow: () => void
   openBlankChatWindow: () => void
   closeChatWindow: () => void
@@ -82,10 +62,9 @@ type AIConversationContextType = {
   closeHistoryView: () => void
   deleteConversation: (conversationId: ConversationId) => void
 
-  // Message operations (now use ConversationId)
   addMessage: (
     conversationId: ConversationId,
-    message: ConversationMessage,
+    message: Omit<ConversationMessage, "id"> & { id?: string },
   ) => void
   updateMessage: (
     conversationId: ConversationId,
@@ -96,19 +75,8 @@ type AIConversationContextType = {
     conversationId: ConversationId,
     newMessages: Array<ConversationMessage>,
   ) => void
-  updateConversationSQL: (conversationId: ConversationId, sql: string) => void
-  addMessageAndUpdateSQL: (
-    conversationId: ConversationId,
-    message: ConversationMessage,
-  ) => void
   updateConversationName: (conversationId: ConversationId, name: string) => void
-  acceptConversationChanges: (
-    conversationId: ConversationId,
-    messageIndex?: number,
-  ) => void
-  rejectLatestChange: (conversationId: ConversationId) => void
 
-  // Accept/reject suggestions
   acceptSuggestion: (params: AcceptSuggestionParams) => Promise<void>
   rejectSuggestion: (conversationId: ConversationId) => Promise<void>
 }
@@ -142,11 +110,6 @@ export const AIConversationProvider: React.FC<{
   })
 
   const indices = useMemo(() => buildIndices(conversations), [conversations])
-
-  const generateConversationId = useCallback(
-    (): ConversationId => crypto.randomUUID(),
-    [],
-  )
 
   const getConversation = useCallback(
     (id: ConversationId): AIConversation | undefined => {
@@ -189,16 +152,16 @@ export const AIConversationProvider: React.FC<{
 
   const createConversation = useCallback(
     (options: {
-      bufferId?: string | number | null
-      queryKey?: QueryKey | null
+      bufferId?: number
+      queryKey?: QueryKey
       tableId?: number
     }): AIConversation => {
-      const id = generateConversationId()
-      const { queryText } = getQueryInfoFromKey(options.queryKey ?? null)
+      const id = crypto.randomUUID()
+      const { queryText } = getQueryInfoFromKey(options.queryKey)
       const conversation: AIConversation = {
         id,
-        queryKey: options.queryKey ?? null,
-        bufferId: options.bufferId ?? null,
+        queryKey: options.queryKey,
+        bufferId: options.bufferId,
         tableId: options.tableId,
         currentSQL: queryText,
         conversationName: "AI Assistant",
@@ -214,14 +177,11 @@ export const AIConversationProvider: React.FC<{
 
       return conversation
     },
-    [generateConversationId],
+    [],
   )
 
   const getOrCreateConversationForQuery = useCallback(
-    (options: {
-      bufferId: string | number
-      queryKey: QueryKey
-    }): AIConversation => {
+    (options: { bufferId: number; queryKey: QueryKey }): AIConversation => {
       const existing = findConversationByQuery(
         options.bufferId,
         options.queryKey,
@@ -242,8 +202,8 @@ export const AIConversationProvider: React.FC<{
     (
       conversationId: ConversationId,
       updates: {
-        bufferId?: string | number | null
-        queryKey?: QueryKey | null
+        bufferId?: number
+        queryKey?: QueryKey
       },
     ): void => {
       setConversations((prev) => {
@@ -295,7 +255,10 @@ export const AIConversationProvider: React.FC<{
   )
 
   const addMessage = useCallback(
-    (conversationId: ConversationId, message: ConversationMessage) => {
+    (
+      conversationId: ConversationId,
+      message: Omit<ConversationMessage, "id"> & { id?: string },
+    ) => {
       setConversations((prev) => {
         const next = new Map(prev)
         const conv = next.get(conversationId)
@@ -326,6 +289,7 @@ export const AIConversationProvider: React.FC<{
         const next = new Map(prev)
         const conv = next.get(conversationId)
         if (conv) {
+          let hasSQLChange = false
           const updatedMessages = conv.messages.map((msg) => {
             if (msg.id !== messageId) return msg
 
@@ -345,6 +309,10 @@ export const AIConversationProvider: React.FC<{
               const sqlActuallyChanged =
                 normalizedNewSQL !== normalizedAcceptedSQL
 
+              if (sqlActuallyChanged) {
+                hasSQLChange = true
+              }
+
               finalUpdates = {
                 ...updates,
                 previousSQL: sqlActuallyChanged ? acceptedSQL : undefined,
@@ -356,6 +324,7 @@ export const AIConversationProvider: React.FC<{
           next.set(conversationId, {
             ...conv,
             messages: updatedMessages,
+            currentSQL: hasSQLChange ? updates.sql : conv.currentSQL,
             updatedAt: Date.now(),
           })
         }
@@ -411,54 +380,12 @@ export const AIConversationProvider: React.FC<{
         const next = new Map(prev)
         const conv = next.get(conversationId)
         if (conv) {
-          // When SQL is applied to editor, update both currentSQL and queryKey
-          // queryKey is the source of truth for what's in the editor
           const { startOffset } = getQueryInfoFromKey(conv.queryKey)
           const newQueryKey = createQueryKey(sql, startOffset)
           next.set(conversationId, {
             ...conv,
             currentSQL: sql,
             queryKey: newQueryKey,
-            updatedAt: Date.now(),
-          })
-        }
-        return next
-      })
-    },
-    [],
-  )
-
-  const addMessageAndUpdateSQL = useCallback(
-    (conversationId: ConversationId, message: ConversationMessage) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          // Track previous SQL only if this message contains SQL changes
-          // (message.sql will be undefined if no SQL change, due to conditional spreading)
-          const hasSQLChange = message.sql !== undefined
-          const sql = message.sql || ""
-
-          const normalizedNewSQL = hasSQLChange ? normalizeQueryText(sql) : ""
-          const { queryText: acceptedSQL } = getQueryInfoFromKey(conv.queryKey)
-          const normalizedAcceptedSQL = normalizeQueryText(acceptedSQL)
-          const sqlActuallyChanged =
-            hasSQLChange && normalizedNewSQL !== normalizedAcceptedSQL
-
-          // This ensures the diff shows "what's in editor" vs "what model suggests"
-          const previousSQL = sqlActuallyChanged ? acceptedSQL : undefined
-
-          const messageWithHistory: ConversationMessage = {
-            ...message,
-            id: message.id || crypto.randomUUID(),
-            previousSQL,
-          }
-
-          next.set(conversationId, {
-            ...conv,
-            messages: [...conv.messages, messageWithHistory],
-            // Only update currentSQL if there's an actual SQL change
-            currentSQL: hasSQLChange ? sql : conv.currentSQL,
             updatedAt: Date.now(),
           })
         }
@@ -487,34 +414,22 @@ export const AIConversationProvider: React.FC<{
   )
 
   const acceptConversationChanges = useCallback(
-    (conversationId: ConversationId, messageIndex?: number) => {
+    (conversationId: ConversationId, messageId: string) => {
       setConversations((prev) => {
         const next = new Map(prev)
         const conv = next.get(conversationId)
         if (!conv) return next
 
-        let targetIndex = messageIndex
-        if (targetIndex === undefined) {
-          for (let i = conv.messages.length - 1; i >= 0; i--) {
-            if (
-              conv.messages[i].role === "assistant" &&
-              conv.messages[i].sql !== undefined
-            ) {
-              targetIndex = i
-              break
-            }
-          }
+        const targetMessage = conv.messages.find((m) => m.id === messageId)
+        if (!targetMessage || !targetMessage.sql) {
+          return next
         }
 
-        const targetMessage =
-          targetIndex !== undefined ? conv.messages[targetIndex] : undefined
-        const sqlToAccept = targetMessage?.sql || conv.currentSQL
-
         const { startOffset } = getQueryInfoFromKey(conv.queryKey)
-        const newQueryKey = createQueryKey(sqlToAccept, startOffset)
+        const newQueryKey = createQueryKey(targetMessage.sql, startOffset)
 
-        const updatedMessages = conv.messages.map((msg, idx) => {
-          if (msg.role === "assistant" && msg.sql && idx === targetIndex) {
+        const updatedMessages = conv.messages.map((msg) => {
+          if (msg.id === messageId) {
             return { ...msg, isAccepted: true }
           }
           return msg
@@ -547,7 +462,6 @@ export const AIConversationProvider: React.FC<{
         }
 
         if (latestAssistantIndex === -1) {
-          // No change to reject
           return next
         }
 
@@ -573,6 +487,7 @@ export const AIConversationProvider: React.FC<{
         // Add user message about rejection so model is aware in future conversations
         // Hide from UI but include in conversation history for API calls
         const rejectionMessage: ConversationMessage = {
+          id: crypto.randomUUID(),
           role: "user",
           content: `User rejected your latest change. Please use the previous version as the base for future modifications.`,
           timestamp: Date.now(),
@@ -616,16 +531,6 @@ export const AIConversationProvider: React.FC<{
       })
     }
   }, [])
-
-  const openChatWindowForQuery = useCallback(
-    (bufferId: string | number, queryKey: QueryKey) => {
-      const conv = findConversationByQuery(bufferId, queryKey)
-      if (conv) {
-        openChatWindow(conv.id)
-      }
-    },
-    [findConversationByQuery, openChatWindow],
-  )
 
   const closeChatWindow = useCallback(() => {
     setChatWindowState((prev) => ({
@@ -715,94 +620,15 @@ export const AIConversationProvider: React.FC<{
     applyAISQLChange,
   } = useEditor()
 
-  // Unified accept function - handles all scenarios
-  const acceptSuggestion = useCallback(
-    async (params: AcceptSuggestionParams): Promise<void> => {
-      const { conversationId, sql, messageIndex, skipHiddenMessage } = params
-      const conversation = conversations.get(conversationId)
-      if (!conversation) return
-
-      const normalizedSQL = normalizeSql(sql, false)
-
-      // Close any open diff buffer for this conversation first
-      await closeDiffBufferForConversation(conversationId)
-
-      // Determine buffer status
-      const conversationBufferId = conversation.bufferId
-      const buffer = buffers.find((b) => b.id === conversationBufferId)
-
-      const bufferStatus =
-        conversationBufferId == null
-          ? ("none" as const)
-          : !buffer
-            ? ("deleted" as const)
-            : buffer.archived
-              ? ("archived" as const)
-              : buffer.id === activeBuffer.id
-                ? ("active" as const)
-                : ("inactive" as const)
-
-      try {
-        // Handle based on buffer status
-        if (bufferStatus === "active") {
-          applyChangesToActiveTab(
-            conversationId,
-            normalizedSQL,
-            conversation,
-            messageIndex,
-          )
-        } else if (
-          bufferStatus === "deleted" ||
-          bufferStatus === "archived" ||
-          bufferStatus === "none"
-        ) {
-          await applyChangesToNewTab(
-            conversationId,
-            normalizedSQL,
-            messageIndex,
-          )
-        } else if (bufferStatus === "inactive" && buffer) {
-          await setActiveBuffer(buffer)
-          await new Promise((resolve) => setTimeout(resolve, 100))
-          applyChangesToActiveTab(
-            conversationId,
-            normalizedSQL,
-            conversation,
-            messageIndex,
-          )
-        }
-
-        // Add hidden message to inform model about acceptance (unless skipped)
-        if (!skipHiddenMessage) {
-          addMessage(conversationId, {
-            role: "user" as const,
-            content: `User accepted your latest SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
-            timestamp: Date.now(),
-            hideFromUI: true,
-          })
-        }
-      } catch (error) {
-        console.error("Error applying changes:", error)
-      }
-    },
-    [
-      conversations,
-      buffers,
-      activeBuffer,
-      setActiveBuffer,
-      closeDiffBufferForConversation,
-      addMessage,
-    ],
-  )
-
-  // Helper: Apply changes to active tab
   const applyChangesToActiveTab = useCallback(
     (
       conversationId: ConversationId,
       normalizedSQL: string,
-      conversation: AIConversation,
-      messageIndex?: number,
+      messageId: string,
     ): void => {
+      const conversation = conversations.get(conversationId)
+      if (!conversation) return
+
       const result = applyAISQLChange({
         newSQL: normalizedSQL,
         queryKey: conversation.queryKey ?? undefined,
@@ -818,7 +644,7 @@ export const AIConversationProvider: React.FC<{
 
       // Update SQL and mark as accepted
       updateConversationSQL(conversationId, normalizedSQL)
-      acceptConversationChanges(conversationId, messageIndex)
+      acceptConversationChanges(conversationId, messageId)
 
       if (conversation.tableId != null) {
         setConversations((prev) => {
@@ -835,6 +661,7 @@ export const AIConversationProvider: React.FC<{
       }
     },
     [
+      conversations,
       applyAISQLChange,
       updateConversationAssociations,
       updateConversationSQL,
@@ -847,7 +674,7 @@ export const AIConversationProvider: React.FC<{
     async (
       conversationId: ConversationId,
       normalizedSQL: string,
-      messageIndex?: number,
+      messageId: string,
     ): Promise<void> => {
       const sqlWithSemicolon = normalizeSql(normalizedSQL)
       const newBuffer = await addBuffer({
@@ -902,7 +729,7 @@ export const AIConversationProvider: React.FC<{
       })
 
       updateConversationSQL(conversationId, normalizedSQL)
-      acceptConversationChanges(conversationId, messageIndex)
+      acceptConversationChanges(conversationId, messageId)
 
       setConversations((prev) => {
         const next = new Map(prev)
@@ -922,6 +749,71 @@ export const AIConversationProvider: React.FC<{
       updateConversationAssociations,
       updateConversationSQL,
       acceptConversationChanges,
+    ],
+  )
+
+  const acceptSuggestion = useCallback(
+    async (params: AcceptSuggestionParams): Promise<void> => {
+      const { conversationId, messageId } = params
+      const conversation = conversations.get(conversationId)
+      if (!conversation) return
+
+      const message = conversation.messages.find((m) => m.id === messageId)
+      if (!message || !message.sql) return
+
+      const normalizedSQL = normalizeSql(message.sql, false)
+
+      await closeDiffBufferForConversation(conversationId)
+
+      const conversationBufferId = conversation.bufferId
+      const buffer = buffers.find((b) => b.id === conversationBufferId)
+
+      const bufferStatus =
+        conversationBufferId == null
+          ? ("none" as const)
+          : !buffer
+            ? ("deleted" as const)
+            : buffer.archived
+              ? ("archived" as const)
+              : buffer.id === activeBuffer.id
+                ? ("active" as const)
+                : ("inactive" as const)
+
+      try {
+        if (bufferStatus === "active") {
+          applyChangesToActiveTab(conversationId, normalizedSQL, messageId)
+        } else if (
+          bufferStatus === "deleted" ||
+          bufferStatus === "archived" ||
+          bufferStatus === "none"
+        ) {
+          await applyChangesToNewTab(conversationId, normalizedSQL, messageId)
+        } else if (bufferStatus === "inactive" && buffer) {
+          await setActiveBuffer(buffer)
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          applyChangesToActiveTab(conversationId, normalizedSQL, messageId)
+        }
+
+        addMessage(conversationId, {
+          id: crypto.randomUUID(),
+          role: "user" as const,
+          content: `User accepted your SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+          timestamp: Date.now(),
+          hideFromUI: true,
+        })
+      } catch (error) {
+        console.error("Error applying changes:", error)
+      }
+    },
+    [
+      conversations,
+      buffers,
+      activeBuffer,
+      setActiveBuffer,
+      closeDiffBufferForConversation,
+      applyChangesToActiveTab,
+      applyChangesToNewTab,
+      addMessage,
     ],
   )
 
@@ -968,10 +860,8 @@ export const AIConversationProvider: React.FC<{
         hasConversationForQuery,
         createConversation,
         getOrCreateConversationForQuery,
-        updateConversationAssociations,
         shiftQueryKeysForBuffer,
         openChatWindow,
-        openChatWindowForQuery,
         openOrCreateBlankChatWindow,
         openBlankChatWindow,
         closeChatWindow,
@@ -981,11 +871,7 @@ export const AIConversationProvider: React.FC<{
         addMessage,
         updateMessage,
         replaceConversationMessages,
-        updateConversationSQL,
-        addMessageAndUpdateSQL,
         updateConversationName,
-        acceptConversationChanges,
-        rejectLatestChange,
         acceptSuggestion,
         rejectSuggestion,
       }}

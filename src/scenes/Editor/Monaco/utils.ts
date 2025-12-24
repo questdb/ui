@@ -1127,7 +1127,7 @@ export const parseQueryKey = (
 }
 
 export const getQueryInfoFromKey = (
-  queryKey: QueryKey | null,
+  queryKey?: QueryKey,
 ): { queryText: string; startOffset: number; endOffset: number } => {
   if (!queryKey) return { queryText: "", startOffset: 0, endOffset: 0 }
   return parseQueryKey(queryKey)

@@ -27,12 +27,12 @@ export type UserMessageDisplayType =
   | "text"
 
 export type ConversationMessage = {
-  id?: string // Unique message identifier (auto-generated if not provided)
+  id: string
   role: "user" | "assistant"
-  content: string // Full content sent to API
+  content: string
   timestamp: number
   error?: string // Error message if operation failed
-  sql?: string | null // Current SQL after this message (null = no SQL change in this message)
+  sql?: string
   explanation?: string // Explanation for this turn
   tokenUsage?: TokenUsage // Token usage for assistant messages
   previousSQL?: string // SQL before this change (for diff display)
@@ -49,14 +49,14 @@ export type ConversationMessage = {
 }
 
 export type AIConversation = {
-  id: ConversationId // Stable identifier - never changes throughout conversation lifecycle
-  conversationName: string // AI-generated name for the conversation
-  updatedAt: number
-  tableId?: number // Table ID for schema conversations - lookup fresh metadata from Redux
-  bufferId: number | string | null // Can be null for schema/blank conversations
-  queryKey: QueryKey | null // Single source of truth - contains query text, start/end offsets
-  currentSQL: string // Current SQL with all pending changes (may differ from queryKey)
+  id: ConversationId
+  conversationName: string
   messages: ConversationMessage[]
+  updatedAt: number
+  tableId?: number
+  bufferId?: number
+  queryKey?: QueryKey
+  currentSQL?: string
 }
 
 export type ChatWindowState = {

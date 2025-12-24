@@ -1641,6 +1641,7 @@ export const continueConversation = async ({
           workingConversationHistory = [
             ...conversationHistory.map((m) => ({ ...m, isCompacted: true })),
             {
+              id: crypto.randomUUID(),
               role: "assistant" as const,
               content: compactionResult.compactedMessage,
               hideFromUI: true,

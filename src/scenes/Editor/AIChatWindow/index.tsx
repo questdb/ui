@@ -242,7 +242,7 @@ export const AIChatWindow: React.FC = () => {
 
   // Get query notifications for the conversation's buffer
   // Use the conversation's bufferId (original buffer, not diff buffer) for looking up notifications
-  const conversationBufferId = conversation?.bufferId as number | undefined
+  const conversationBufferId = conversation?.bufferId
   const queryNotifications = useSelector(
     selectors.query.getQueryNotificationsForBuffer(conversationBufferId ?? -1),
   )
@@ -255,7 +255,7 @@ export const AIChatWindow: React.FC = () => {
   }, [conversation])
 
   const queryInfo = useMemo(() => {
-    return getQueryInfoFromKey(conversation?.queryKey ?? null)
+    return getQueryInfoFromKey(conversation?.queryKey)
   }, [conversation?.queryKey])
 
   const messages = useMemo(() => {
@@ -483,7 +483,7 @@ export const AIChatWindow: React.FC = () => {
         conversationHistory: conversation.messages.filter(
           (m) => !m.isCompacted,
         ),
-        currentSQL: currentSQL || undefined,
+        currentSQL,
         settings,
         modelToolsClient: createModelToolsClient(
           quest,
@@ -527,7 +527,7 @@ export const AIChatWindow: React.FC = () => {
 
       updateMessage(conversationId, assistantMessageId, {
         content: assistantContent,
-        ...(hasSQLInResult && { sql: result.sql }),
+        ...(hasSQLInResult && { sql: result.sql as string }),
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })
@@ -548,16 +548,12 @@ export const AIChatWindow: React.FC = () => {
     [showDiffBuffer, conversation?.id],
   )
 
-  const handleAcceptChange = async (messageIndex: number) => {
-    if (!conversation || !chatWindowState.activeConversationId) return
-
-    const targetMessage = conversation.messages[messageIndex]
-    if (!targetMessage || !targetMessage.sql) return
+  const handleAcceptChange = async (messageId: string) => {
+    if (!chatWindowState.activeConversationId) return
 
     await acceptSuggestion({
       conversationId: chatWindowState.activeConversationId,
-      sql: targetMessage.sql,
-      messageIndex,
+      messageId,
     })
 
     dispatch(actions.query.setAISuggestionRequest(null))
@@ -663,18 +659,15 @@ export const AIChatWindow: React.FC = () => {
   }, [conversation, editorRef, navigateToBuffer, queryInfo])
 
   const handleApplyToEditor = useCallback(
-    async (sql: string, messageIndex: number) => {
-      if (!conversation || !chatWindowState.activeConversationId) return
+    async (messageId: string, sql: string) => {
+      if (!chatWindowState.activeConversationId) return
 
       const normalizedSQL = normalizeSql(sql, false)
 
       try {
-        // Use unified acceptSuggestion with messageIndex to mark the correct message as accepted
         await acceptSuggestion({
           conversationId: chatWindowState.activeConversationId,
-          sql,
-          messageIndex, // Pass messageIndex to mark the specific message as accepted
-          skipHiddenMessage: true, // We'll add our own custom message
+          messageId,
         })
 
         // Add a custom hidden message to inform the model for the next round
@@ -689,12 +682,7 @@ export const AIChatWindow: React.FC = () => {
         toast.error("Failed to apply changes to editor")
       }
     },
-    [
-      conversation,
-      chatWindowState.activeConversationId,
-      acceptSuggestion,
-      addMessage,
-    ],
+    [chatWindowState.activeConversationId, acceptSuggestion, addMessage],
   )
 
   const explainButtonRef = useRef<HTMLDivElement | null>(null)

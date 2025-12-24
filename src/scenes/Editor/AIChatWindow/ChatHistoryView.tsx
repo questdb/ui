@@ -181,15 +181,17 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
 
   const groupedConversations = useGroupedConversations(filteredConversations)
 
-  const getSubtitle = (bufferId: number | string | null, tableId?: number) => {
-    if (bufferId != null) {
-      const buffer = buffers.find((b) => b.id === bufferId)
+  const getSubtitle = (id: number, type: "buffer" | "table") => {
+    if (!id) {
+      return undefined
+    }
+    if (type === "buffer") {
+      const buffer = buffers.find((b) => b.id === id)
       if (buffer) {
         return buffer.label
       }
-    }
-    if (tableId != null) {
-      const table = tables.find((t) => t.id === tableId)
+    } else if (type === "table") {
+      const table = tables.find((t) => t.id === id)
       if (table) {
         return table.table_name
       }
@@ -274,7 +276,14 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
                 <div key={conv.id} ref={isCurrent ? currentItemRef : undefined}>
                   <ChatHistoryItem
                     conversation={conv}
-                    subtitle={getSubtitle(conv.bufferId, conv.tableId)}
+                    subtitle={
+                      (conv.bufferId ?? conv.tableId)
+                        ? getSubtitle(
+                            conv.bufferId ?? conv.tableId!,
+                            conv.bufferId ? "buffer" : "table",
+                          )
+                        : undefined
+                    }
                     isCurrent={isCurrent}
                     hasOngoingProcess={conv.id === aiProcessingConversationId}
                     onSelect={handleSelect}

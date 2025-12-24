@@ -7,7 +7,6 @@ import React, {
   useEffect,
   useMemo,
 } from "react"
-import { useEditor } from "../EditorProvider"
 import { useLocalStorage } from "../LocalStorageProvider"
 import {
   isAiAssistantConfigured,
@@ -100,7 +99,6 @@ interface AIStatusProviderProps {
 export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   children,
 }) => {
-  const { editorRef } = useEditor()
   const { aiAssistantSettings } = useLocalStorage()
   const [status, setStatusState] = useState<AIOperationStatus | null>(null)
   const [currentOperation, setCurrentOperation] = useState<OperationHistory>([])
@@ -192,7 +190,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       setAbortController(new AbortController())
       setStatus(AIOperationStatus.Aborted)
     }
-  }, [status, editorRef, setStatus])
+  }, [setStatus])
 
   useEffect(() => {
     if (status === AIOperationStatus.Aborted && timeoutRef.current === null) {

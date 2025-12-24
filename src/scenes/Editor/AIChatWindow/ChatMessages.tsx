@@ -553,12 +553,12 @@ const RejectButton = styled(Button)`
 
 type ChatMessagesProps = {
   messages: ConversationMessage[]
-  onAcceptChange?: (messageIndex: number) => void
+  onAcceptChange?: (messageId: string) => void
   onRejectChange?: () => void
   onRunQuery?: (sql: string) => void
   onExpandDiff?: (original: string, modified: string) => void
   // Apply SQL to editor and mark that specific message as accepted
-  onApplyToEditor?: (sql: string, messageIndex: number) => void
+  onApplyToEditor?: (messageId: string, sql: string) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -1104,11 +1104,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 <IconButton
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    if (message.sql && !isOperationInProgress) {
-                                      onApplyToEditor(
-                                        message.sql,
-                                        originalIndex,
-                                      )
+                                    if (
+                                      message.id &&
+                                      message.sql &&
+                                      !isOperationInProgress
+                                    ) {
+                                      onApplyToEditor(message.id, message.sql)
                                     }
                                   }}
                                   title="Apply to editor"
@@ -1167,11 +1168,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                     Reject
                                   </RejectButton>
                                 )}
-                                {onAcceptChange && (
+                                {onAcceptChange && message.id && (
                                   <AcceptButton
-                                    onClick={() =>
-                                      onAcceptChange(originalIndex)
-                                    }
+                                    onClick={() => onAcceptChange(message.id)}
                                   >
                                     Accept
                                   </AcceptButton>
