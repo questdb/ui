@@ -637,7 +637,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   const handleScrollNeeded = useCallback(() => {
     const behavior = scrolledRef.current ? "smooth" : "instant"
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior }), 50)
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior }))
     scrolledRef.current = true
   }, [])
 
