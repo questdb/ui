@@ -18,7 +18,11 @@ import type {
   ResponseTextConfig,
 } from "openai/resources/responses/responses"
 import type { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/messages"
-import type { ConversationId } from "../providers/AIConversationProvider/types"
+import type {
+  ConversationId,
+  ConversationMessage,
+} from "../providers/AIConversationProvider/types"
+import { compactConversationIfNeeded } from "./contextCompaction"
 
 export type ActiveProviderSettings = {
   model: string
@@ -96,7 +100,7 @@ export interface ModelToolsClient {
   getTableSchema?: (tableName: string) => Promise<string | null>
 }
 
-type StatusCallback = (
+export type StatusCallback = (
   status: AIOperationStatus | null,
   args?: StatusArgs,
 ) => void
@@ -555,6 +559,22 @@ const executeTool = async (
           }
         }
         const result = await modelToolsClient.getTables()
+        const MAX_TABLES = 1000
+        if (result.length > MAX_TABLES) {
+          const truncated = result.slice(0, MAX_TABLES)
+          return {
+            content: JSON.stringify(
+              {
+                tables: truncated,
+                total_count: result.length,
+                truncated: true,
+                message: `Showing ${MAX_TABLES} of ${result.length} tables. Use get_table_schema with a specific table name to get details if you are interested in a specific table.`,
+              },
+              null,
+              2,
+            ),
+          }
+        }
         return { content: JSON.stringify(result, null, 2) }
       }
       case "get_table_schema": {
@@ -1135,14 +1155,12 @@ export const explainTableSchema = async ({
   isMatView,
   settings,
   setStatus,
-  conversationId,
 }: {
   tableName: string
   schema: string
   isMatView: boolean
   settings: ActiveProviderSettings
   setStatus: StatusCallback
-  conversationId?: ConversationId
 }): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
   if (!settings.apiKey || !settings.model) {
     return {
@@ -1158,7 +1176,7 @@ export const explainTableSchema = async ({
   }
 
   await handleRateLimit()
-  setStatus(AIOperationStatus.Processing, { type: "explain", conversationId })
+  setStatus(AIOperationStatus.Processing)
 
   return tryWithRetries(async () => {
     const clients = createProviderClients(settings)
@@ -1293,7 +1311,7 @@ async function createAnthropicMessage(
   }
   if (message.stop_reason === "max_tokens") {
     throw new MaxTokensError(
-      "The response exceeded the maximum token limit. Please try generating shorter queries or increase token limits.",
+      "The response exceeded the maximum token limit. Please try again with a different prompt or model.",
     )
   }
 
@@ -1313,7 +1331,7 @@ function handleAiAssistantError(error: unknown): AiAssistantAPIError {
     return {
       type: "unknown",
       message:
-        "The response exceeded the maximum token limit. Please try generating shorter queries or increase token limits.",
+        "The response exceeded the maximum token limit for the selected model. Please try again with a different prompt or model.",
       details: error.message,
     }
   }
@@ -1526,10 +1544,9 @@ export const continueConversation = async ({
   setStatus,
   abortSignal,
   operation = "followup",
-  conversationId,
 }: {
   userMessage: string
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
+  conversationHistory: Array<ConversationMessage>
   currentSQL?: string
   settings: ActiveProviderSettings
   modelToolsClient: ModelToolsClient
@@ -1537,7 +1554,11 @@ export const continueConversation = async ({
   abortSignal?: AbortSignal
   operation?: AIOperation
   conversationId?: ConversationId
-}): Promise<GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError> => {
+}): Promise<
+  (GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError) & {
+    compactedConversationHistory?: Array<ConversationMessage>
+  }
+> => {
   if (!settings.apiKey || !settings.model) {
     return {
       type: "invalid_key",
@@ -1559,66 +1580,59 @@ export const continueConversation = async ({
     followup: ConversationResponseFormat,
   }[operation]
 
-  const statusType = {
-    explain: "explain" as const,
-    fix: "fix" as const,
-    followup: "followup" as const,
-  }[operation]
-
-  setStatus(AIOperationStatus.Processing, { type: statusType, conversationId })
-
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
       const grantSchemaAccess = !!modelToolsClient.getTables
+      const systemPrompt = getUnifiedPrompt(grantSchemaAccess)
 
-      const hasAssistantMessages = conversationHistory.some(
-        (msg) => msg.role === "assistant",
-      )
+      let workingConversationHistory = conversationHistory
+      let isCompacted = false
 
-      let userMessageWithContext = userMessage
-      if (hasAssistantMessages) {
-        // This is a true follow-up message (has previous assistant responses)
-        // Check if userMessage already contains SQL context (from stored enriched message)
-        // If it does, use it as-is; otherwise add follow-up prefix
-        if (
-          userMessage.includes("Current SQL query:") ||
-          userMessage.includes("```sql")
-        ) {
-          // Already enriched, use as-is
-          userMessageWithContext = userMessage
-        } else {
-          // Plain follow-up, add prefix
-          userMessageWithContext = `Follow-up message on top of your latest changes: ${userMessage}`
+      if (conversationHistory.length > 0) {
+        const compactionResult = await compactConversationIfNeeded(
+          conversationHistory,
+          settings.provider,
+          systemPrompt,
+          userMessage,
+          () => setStatus(AIOperationStatus.Compacting),
+          {
+            anthropicClient:
+              clients.provider === "anthropic" ? clients.anthropic : undefined,
+            openaiClient:
+              clients.provider === "openai" ? clients.openai : undefined,
+            model: settings.model,
+          },
+        )
+
+        if ("error" in compactionResult) {
+          setStatus(null)
+          return {
+            type: "unknown" as const,
+            message: compactionResult.error,
+          }
+        }
+
+        if (compactionResult.wasCompacted) {
+          workingConversationHistory = [
+            ...conversationHistory.map((m) => ({ ...m, isCompacted: true })),
+            {
+              role: "assistant" as const,
+              content: compactionResult.compactedMessage,
+              hideFromUI: true,
+              timestamp: Date.now(),
+            },
+          ]
+          isCompacted = true
         }
       }
-      // If userMessage already contains SQL context (from stored enriched message), use it as-is
-      // Otherwise, if it's the first message and we have currentSQL, add context
-      else if (
-        currentSQL &&
-        currentSQL.trim() !== "" &&
-        !userMessage.includes("Current SQL query:") &&
-        !userMessage.includes("```sql")
-      ) {
-        // First message with SQL context (like "Ask AI" flow)
-        userMessageWithContext = `Current SQL query:\n\`\`\`sql\n${currentSQL}\n\`\`\`\n\nUser request: ${userMessage}`
-      }
-
-      // Build the conversation history to pass to execute functions
-      // This should exclude the last message since it will be added as initialUserContent
-      const historyWithoutLastMessage =
-        conversationHistory && conversationHistory.length > 0
-          ? conversationHistory.slice(0, -1)
-          : []
+      setStatus(AIOperationStatus.Processing)
 
       const postProcess = (formatted: {
         sql?: string | null
         explanation: string
         tokenUsage?: TokenUsage
       }): GeneratedSQL => {
-        // If SQL is explicitly null, preserve that (no SQL change)
-        // If SQL is undefined or empty, fall back to currentSQL
-        // Otherwise normalize and use the provided SQL
         const sql =
           formatted?.sql === null
             ? null
@@ -1642,8 +1656,10 @@ export const continueConversation = async ({
           model: settings.model,
           config: {
             systemInstructions: getUnifiedPrompt(grantSchemaAccess),
-            initialUserContent: userMessageWithContext,
-            conversationHistory: historyWithoutLastMessage,
+            initialUserContent: userMessage,
+            conversationHistory: workingConversationHistory.filter(
+              (m) => !m.isCompacted,
+            ),
             responseFormat,
             postProcess: (formatted) => {
               const sql =
@@ -1666,7 +1682,12 @@ export const continueConversation = async ({
         if (isAiAssistantError(result)) {
           return result
         }
-        return postProcess(result)
+        return {
+          ...postProcess(result),
+          compactedConversationHistory: isCompacted
+            ? workingConversationHistory
+            : undefined,
+        }
       }
 
       const result = await executeAnthropicFlow<{
@@ -1678,8 +1699,10 @@ export const continueConversation = async ({
         model: settings.model,
         config: {
           systemInstructions: getUnifiedPrompt(grantSchemaAccess),
-          initialUserContent: userMessageWithContext,
-          conversationHistory: historyWithoutLastMessage,
+          initialUserContent: userMessage,
+          conversationHistory: workingConversationHistory.filter(
+            (m) => !m.isCompacted,
+          ),
           responseFormat,
           postProcess: (formatted) => {
             const sql =
@@ -1702,7 +1725,12 @@ export const continueConversation = async ({
       if (isAiAssistantError(result)) {
         return result
       }
-      return postProcess(result)
+      return {
+        ...postProcess(result),
+        compactedConversationHistory: isCompacted
+          ? workingConversationHistory
+          : undefined,
+      }
     },
     setStatus,
     abortSignal,

@@ -56,6 +56,8 @@ import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
   useAIStatus,
   isBlockingAIStatus,
+  type AIOperationStatus,
+  type StatusArgs,
 } from "../../../providers/AIStatusProvider"
 import { providerForModel } from "../../../utils/aiAssistantSettings"
 import { AISparkle } from "../../../components/AISparkle"
@@ -347,8 +349,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       schema,
       isMatView,
       settings,
-      setStatus,
-      conversationId: conversation.id,
+      setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
+        setStatus(status, { ...(args ?? {}), conversationId: conversation.id }),
     })
 
     if (isAiAssistantError(response)) {

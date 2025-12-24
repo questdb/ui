@@ -62,7 +62,7 @@ const MessagesContainer = styled(Box)`
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  padding: 1.5rem;
+  padding: 2rem 1rem;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -189,7 +189,7 @@ const MessageContent = styled(Text)`
   overflow: visible;
 `
 
-const ExplanationBox = styled(Box)`
+const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -201,6 +201,12 @@ const ExplanationBox = styled(Box)`
   border-radius: 0.6rem;
   flex-shrink: 0;
   overflow: visible;
+
+  ${({ $hasOperationHistory }) =>
+    $hasOperationHistory &&
+    css`
+      padding-top: 0;
+    `}
 
   .assistant-label,
   .token-display {
@@ -249,12 +255,19 @@ const ExplanationContent = styled(Box)`
   width: 100%;
 `
 
-const OperationHistoryContainer = styled.div<{ $hasError: boolean }>`
+const Divider = styled.div`
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, #9c274b 0%, rgba(54, 14, 26, 0) 100%);
+  margin-bottom: 1.5rem;
+`
+
+const OperationHistoryContainer = styled.div<{ $trimBottom: boolean }>`
   margin-bottom: 1rem;
   padding-bottom: 1rem;
   width: 100%;
-  ${({ $hasError }) =>
-    $hasError &&
+  ${({ $trimBottom }) =>
+    $trimBottom &&
     css`
       margin-bottom: 0;
       padding-bottom: 0.3rem;
@@ -264,6 +277,7 @@ const OperationHistoryContainer = styled.div<{ $hasError: boolean }>`
 const ErrorContainer = styled.div`
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 1rem;
   padding: 1rem 1.2rem;
   border-radius: 0.6rem;
@@ -630,11 +644,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   const latestDiffIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
-      if (
-        msg.role === "assistant" &&
-        msg.sql &&
-        msg.previousSQL !== undefined
-      ) {
+      if (msg.role === "assistant" && msg.sql) {
         return i
       }
     }
@@ -842,10 +852,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             )
           }
 
-          // Check if this message has SQL changes to show diff
-          // Note: previousSQL can be empty string for generate flow, so we check for undefined/null
-          const hasSQLChange =
-            !!message.sql && message.previousSQL !== undefined
+          const hasSQLChange = !!message.sql
           const isExpanded = expandedDiffs.has(originalIndex)
 
           // Read status from message, compute isRejectedWithFollowUp from message positions
@@ -912,21 +919,36 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             originalIndex === lastAssistantMessageIndex &&
             isOperationInProgress === true
 
+          const hasOperationHistory =
+            !!operationHistory && operationHistory.length > 0
+
           return (
-            <ExplanationBox key={key}>
-              {operationHistory && operationHistory.length > 0 && (
-                <OperationHistoryContainer $hasError={hasError}>
-                  <AssistantModes
-                    operationHistory={operationHistory}
-                    status={status}
-                    isLive={isLiveOperation}
-                    onScrollNeeded={handleScrollNeeded}
-                  />
-                </OperationHistoryContainer>
+            <ExplanationBox
+              key={key}
+              $hasOperationHistory={hasOperationHistory}
+            >
+              {hasOperationHistory && (
+                <>
+                  <Divider />
+                  <OperationHistoryContainer
+                    $trimBottom={hasError || !message.content}
+                  >
+                    <AssistantModes
+                      operationHistory={operationHistory}
+                      status={status}
+                      isLive={isLiveOperation}
+                      onScrollNeeded={handleScrollNeeded}
+                    />
+                  </OperationHistoryContainer>
+                </>
               )}
               {hasError && (
                 <ErrorContainer>
-                  <CloseCircle size={16} color={theme.color.red} />
+                  <CloseCircle
+                    size={16}
+                    color={theme.color.red}
+                    style={{ flexShrink: 0 }}
+                  />
                   {message.error}
                 </ErrorContainer>
               )}

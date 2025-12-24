@@ -102,8 +102,11 @@
     "sql-formatter": "^4.0.2",
     "styled-components": "5.3.5",
     "throttle-debounce": "2.2.1",
+    "tiktoken": "^1.0.22",
     "uplot": "^1.6.31",
-    "uplot-react": "^1.2.2"
+    "uplot-react": "^1.2.2",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
   },
   "devDependencies": {
     "@4tw/cypress-drag-drop": "^2.2.5",

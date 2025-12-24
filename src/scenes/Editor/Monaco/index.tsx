@@ -1400,6 +1400,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [buffers, executionRefs, cleanupExecutionRefs])
 
   useEffect(() => {
+    if (monacoRef.current && editorRef.current) {
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+    }
+  }, [canUseAI])
+
+  useEffect(() => {
     activeNotificationRef.current = activeNotification
   }, [activeNotification])
 

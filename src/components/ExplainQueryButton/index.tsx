@@ -21,6 +21,8 @@ import { selectors } from "../../store"
 import {
   useAIStatus,
   type OperationHistory,
+  type AIOperationStatus,
+  type StatusArgs,
 } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import type { ConversationId } from "../../providers/AIConversationProvider/types"
@@ -118,11 +120,14 @@ export const ExplainQueryButton = ({
           quest,
           hasSchemaAccess ? tables : undefined,
         ),
-        setStatus: (status, args) =>
-          setStatus(status, args, handleStatusUpdate),
+        setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
+          setStatus(
+            status,
+            { ...(args ?? {}), conversationId },
+            handleStatusUpdate,
+          ),
         abortSignal: abortController?.signal,
         operation: "explain",
-        conversationId,
       })
 
       if (isAiAssistantError(response)) {

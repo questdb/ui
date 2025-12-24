@@ -193,6 +193,8 @@ const getIsExpandableSection = (section: OperationSection) => {
     AIOperationStatus.RetrievingDocumentation,
     AIOperationStatus.Aborted,
     AIOperationStatus.ValidatingQuery,
+    AIOperationStatus.Processing,
+    AIOperationStatus.Compacting,
   ].includes(section.type)
 }
 

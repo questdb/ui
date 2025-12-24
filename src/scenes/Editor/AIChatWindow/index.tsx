@@ -41,9 +41,7 @@ import {
   isAiAssistantError,
   normalizeSql,
   generateChatTitle,
-  type GeneratedSQL,
   type ActiveProviderSettings,
-  type TokenUsage,
 } from "../../../utils/aiAssistant"
 import {
   providerForModel,
@@ -218,6 +216,7 @@ export const AIChatWindow: React.FC = () => {
     getConversation,
     addMessage,
     updateMessage,
+    replaceConversationMessages,
     updateConversationName,
     acceptSuggestion,
     rejectSuggestion,
@@ -472,16 +471,6 @@ export const AIChatWindow: React.FC = () => {
       }
     }
 
-    // Build conversation history including the user message we just added
-    // Since addMessage updates state asynchronously, we manually include the new message
-    const conversationHistory = [
-      ...conversation.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      { role: "user" as const, content: userMessageContent },
-    ]
-
     const handleStatusUpdate = (history: OperationHistory) => {
       updateMessage(conversationId, assistantMessageId, {
         operationHistory: [...history],
@@ -490,9 +479,10 @@ export const AIChatWindow: React.FC = () => {
 
     const processResponse = async () => {
       const response = await continueConversation({
-        // Pass the enriched message content so continueConversation doesn't double-add context
         userMessage: userMessageContent,
-        conversationHistory,
+        conversationHistory: conversation.messages.filter(
+          (m) => !m.isCompacted,
+        ),
         currentSQL: currentSQL || undefined,
         settings,
         modelToolsClient: createModelToolsClient(
@@ -500,9 +490,12 @@ export const AIChatWindow: React.FC = () => {
           hasSchemaAccess ? tables : undefined,
         ),
         setStatus: (status, args) =>
-          setStatus(status, args, handleStatusUpdate),
+          setStatus(
+            status,
+            { ...(args ?? {}), conversationId },
+            handleStatusUpdate,
+          ),
         abortSignal: abortController?.signal,
-        conversationId: conversation.id,
       })
 
       if (isAiAssistantError(response)) {
@@ -517,22 +510,20 @@ export const AIChatWindow: React.FC = () => {
         return
       }
 
-      // Handle different response types
-      const result = response as
-        | GeneratedSQL
-        | { explanation: string; sql?: string; tokenUsage?: TokenUsage }
-
-      // Build complete assistant response content (SQL + explanation)
+      const result = response
       let assistantContent = result.explanation || "Response received"
-      if (result.sql) {
+      const hasSQLInResult =
+        "sql" in result && result.sql && result.sql.trim() !== ""
+      if (hasSQLInResult) {
         assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
       }
 
-      // Only include sql field if there's an actual SQL change (not null/undefined/empty)
-      const hasSQLInResult =
-        result.sql !== undefined &&
-        result.sql !== null &&
-        result.sql.trim() !== ""
+      if (result.compactedConversationHistory) {
+        replaceConversationMessages(
+          conversationId,
+          result.compactedConversationHistory,
+        )
+      }
 
       updateMessage(conversationId, assistantMessageId, {
         content: assistantContent,
@@ -545,7 +536,6 @@ export const AIChatWindow: React.FC = () => {
     void processResponse()
   }
 
-  // Handle expand button click from chat messages
   const handleExpandDiff = useCallback(
     (original: string, modified: string) => {
       if (!conversation?.id) return
@@ -561,53 +551,42 @@ export const AIChatWindow: React.FC = () => {
   const handleAcceptChange = async (messageIndex: number) => {
     if (!conversation || !chatWindowState.activeConversationId) return
 
-    // Get the SQL from the message by index
     const targetMessage = conversation.messages[messageIndex]
     if (!targetMessage || !targetMessage.sql) return
 
-    // Use unified acceptSuggestion from provider
     await acceptSuggestion({
       conversationId: chatWindowState.activeConversationId,
       sql: targetMessage.sql,
       messageIndex,
     })
 
-    // Clear AI suggestion request after applying changes
     dispatch(actions.query.setAISuggestionRequest(null))
   }
 
   const handleRejectChange = async () => {
     if (!chatWindowState.activeConversationId) return
 
-    // Use unified rejectSuggestion from provider
     await rejectSuggestion(chatWindowState.activeConversationId)
 
-    // Focus the chat input so user can type corrections
     setTimeout(() => {
       chatInputRef.current?.focus()
     }, 100)
   }
 
   const handleRunQuery = (sql: string) => {
-    // Normalize the SQL (remove trailing semicolon if present)
     const normalizedSQL = sql.trim().endsWith(";")
       ? sql.trim().slice(0, -1)
       : sql.trim()
 
-    // Set the AI suggestion request with query and original position
     dispatch(
       actions.query.setAISuggestionRequest({
         query: normalizedSQL,
         startOffset: queryInfo.startOffset,
       }),
     )
-    // Trigger execution with AI_SUGGESTION type
     dispatch(actions.query.toggleRunning(RunningType.AI_SUGGESTION))
   }
 
-  // Handle applying SQL to editor without changing accepted/rejected state
-  // This is used for already-accepted/rejected suggestions that user wants to re-apply
-  // Navigate to inactive buffer - returns true if successful
   const navigateToBuffer = useCallback(async (): Promise<boolean> => {
     if (
       bufferStatus.type === "deleted" ||

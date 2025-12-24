@@ -46,18 +46,15 @@ export enum AIOperationStatus {
   InvestigatingDocs = "Investigating docs",
   ValidatingQuery = "Validating generated query",
   Aborted = "Operation has been cancelled",
+  Compacting = "Compacting conversation",
 }
 
-export type StatusArgs =
-  | ({ conversationId?: ConversationId } & (
-      | { type: "fix" }
-      | { type: "explain" }
-      | { type: "followup" }
-      | { name: string }
-      | { name: string; section: string }
-      | { items: Array<{ name: string; section?: string }> }
-    ))
-  | null
+export type StatusArgs = {
+  conversationId?: string
+  name?: string
+  section?: string
+  items?: Array<{ name: string; section?: string }>
+}
 
 export type StatusEntry = {
   type: AIOperationStatus

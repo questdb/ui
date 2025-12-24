@@ -39,6 +39,7 @@ export type ConversationMessage = {
   isRejected?: boolean // Whether this change has been rejected
   isAccepted?: boolean // Whether this change has been accepted
   hideFromUI?: boolean // Whether to hide this message from UI (e.g., rejection messages)
+  isCompacted?: boolean // Whether this message has been compacted
   operationHistory?: OperationHistory // AI operation steps that produced this response
   // UI display fields - for cleaner presentation
   displayType?: UserMessageDisplayType // How to render this message in UI

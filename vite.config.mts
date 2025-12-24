@@ -3,6 +3,8 @@ import { loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { checker } from 'vite-plugin-checker'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import wasm from 'vite-plugin-wasm'
+import topLevelAwait from 'vite-plugin-top-level-await'
 import path from 'path'
 
 export default defineConfig(({ mode }) => {
@@ -84,6 +86,8 @@ export default defineConfig(({ mode }) => {
         typescript: true,
         overlay: false,
       }),
+      wasm(),
+      topLevelAwait(),
       viteStaticCopy({
         targets: [
           {

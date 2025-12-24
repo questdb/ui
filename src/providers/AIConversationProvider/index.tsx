@@ -92,6 +92,10 @@ type AIConversationContextType = {
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
+  replaceConversationMessages: (
+    conversationId: ConversationId,
+    newMessages: Array<ConversationMessage>,
+  ) => void
   updateConversationSQL: (conversationId: ConversationId, sql: string) => void
   addMessageAndUpdateSQL: (
     conversationId: ConversationId,
@@ -143,8 +147,6 @@ export const AIConversationProvider: React.FC<{
     (): ConversationId => crypto.randomUUID(),
     [],
   )
-
-  const generateMessageId = useCallback((): string => crypto.randomUUID(), [])
 
   const getConversation = useCallback(
     (id: ConversationId): AIConversation | undefined => {
@@ -300,7 +302,7 @@ export const AIConversationProvider: React.FC<{
         if (conv) {
           const messageWithId: ConversationMessage = {
             ...message,
-            id: message.id || generateMessageId(),
+            id: message.id || crypto.randomUUID(),
           }
           next.set(conversationId, {
             ...conv,
@@ -311,7 +313,7 @@ export const AIConversationProvider: React.FC<{
         return next
       })
     },
-    [generateMessageId],
+    [],
   )
 
   const updateMessage = useCallback(
@@ -354,6 +356,46 @@ export const AIConversationProvider: React.FC<{
           next.set(conversationId, {
             ...conv,
             messages: updatedMessages,
+            updatedAt: Date.now(),
+          })
+        }
+        return next
+      })
+    },
+    [],
+  )
+
+  const replaceConversationMessages = useCallback(
+    (
+      conversationId: ConversationId,
+      newMessages: Array<ConversationMessage>,
+    ) => {
+      setConversations((prev) => {
+        const next = new Map(prev)
+        const conv = next.get(conversationId)
+        if (conv) {
+          const conversationMessages = [...conv.messages]
+          let lastReplaceIndex = -1
+          // Replace history messages with new messages (`isCompacted` flag is set to true in compaction)
+          for (const message of newMessages) {
+            const index = conversationMessages.findIndex(
+              (m) => m.id === message.id,
+            )
+            if (index !== -1) {
+              lastReplaceIndex = Math.max(lastReplaceIndex, index)
+              conversationMessages[index] = message
+            }
+          }
+          // Add the summarization message at the end of summarized part
+          conversationMessages.splice(
+            lastReplaceIndex + 1,
+            0,
+            newMessages[newMessages.length - 1],
+          )
+
+          next.set(conversationId, {
+            ...conv,
+            messages: conversationMessages,
             updatedAt: Date.now(),
           })
         }
@@ -408,7 +450,7 @@ export const AIConversationProvider: React.FC<{
 
           const messageWithHistory: ConversationMessage = {
             ...message,
-            id: message.id || generateMessageId(),
+            id: message.id || crypto.randomUUID(),
             previousSQL,
           }
 
@@ -423,7 +465,7 @@ export const AIConversationProvider: React.FC<{
         return next
       })
     },
-    [generateMessageId],
+    [],
   )
 
   const updateConversationName = useCallback(
@@ -938,6 +980,7 @@ export const AIConversationProvider: React.FC<{
         deleteConversation,
         addMessage,
         updateMessage,
+        replaceConversationMessages,
         updateConversationSQL,
         addMessageAndUpdateSQL,
         updateConversationName,

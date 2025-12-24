@@ -114,10 +114,14 @@ export const FixQueryButton = () => {
         quest,
         hasSchemaAccess ? tables : undefined,
       ),
-      setStatus: (status, args) => setStatus(status, args, handleStatusUpdate),
+      setStatus: (status, args) =>
+        setStatus(
+          status,
+          { ...(args ?? {}), conversationId: conversation.id },
+          handleStatusUpdate,
+        ),
       abortSignal: abortController?.signal,
       operation: "fix",
-      conversationId: conversation.id,
     })
 
     if (isAiAssistantError(response)) {
