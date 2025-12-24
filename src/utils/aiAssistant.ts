@@ -23,6 +23,7 @@ import type {
   ConversationMessage,
 } from "../providers/AIConversationProvider/types"
 import { compactConversationIfNeeded } from "./contextCompaction"
+import { COMPACTION_THRESHOLDS } from "./tokenCounting"
 
 export type ActiveProviderSettings = {
   model: string
@@ -713,6 +714,17 @@ async function handleToolCalls(
     },
   ]
 
+  const criticalTokenUsage =
+    message.usage.input_tokens >= COMPACTION_THRESHOLDS["anthropic"] &&
+    toolResults.length > 0
+  if (criticalTokenUsage) {
+    updatedHistory.push({
+      role: "user" as const,
+      content:
+        "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**",
+    })
+  }
+
   const followUpParams: Parameters<typeof createAnthropicMessage>[1] = {
     model,
     tools: modelToolsClient ? ALL_TOOLS : REFERENCE_TOOLS,
@@ -954,6 +966,18 @@ const executeOpenAIFlow = async <T>({
       } as OpenAI.Responses.ResponseFunctionToolCallOutputItem)
     }
     input = [...input, ...tool_outputs]
+
+    if (
+      (lastResponse.usage?.input_tokens ?? 0) >=
+        COMPACTION_THRESHOLDS["openai"] &&
+      tool_outputs.length > 0
+    ) {
+      input.push({
+        role: "user" as const,
+        content:
+          "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**",
+      })
+    }
     lastResponse = await openai.responses.create({
       ...getModelProps(model),
       instructions: config.systemInstructions,
