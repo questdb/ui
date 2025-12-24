@@ -24,28 +24,26 @@ export type UserMessageDisplayType =
   | "explain_request"
   | "ask_request"
   | "schema_explain_request"
-  | "text"
 
 export type ConversationMessage = {
   id: string
   role: "user" | "assistant"
   content: string
   timestamp: number
-  error?: string // Error message if operation failed
+  error?: string
   sql?: string
-  explanation?: string // Explanation for this turn
-  tokenUsage?: TokenUsage // Token usage for assistant messages
+  explanation?: string
+  tokenUsage?: TokenUsage // Token usage for current turn in total, including tool calls that we omit from the history after response
   previousSQL?: string // SQL before this change (for diff display)
-  isRejected?: boolean // Whether this change has been rejected
-  isAccepted?: boolean // Whether this change has been accepted
-  hideFromUI?: boolean // Whether to hide this message from UI (e.g., rejection messages)
-  isCompacted?: boolean // Whether this message has been compacted
-  operationHistory?: OperationHistory // AI operation steps that produced this response
-  // UI display fields - for cleaner presentation
-  displayType?: UserMessageDisplayType // How to render this message in UI
-  displaySQL?: string // SQL to show in inline editor (for fix/explain/ask requests)
-  displayUserMessage?: string // User's actual message/question (for ask_request)
-  displaySchemaData?: SchemaDisplayData // Schema data (for schema_explain_request)
+  isRejected?: boolean
+  isAccepted?: boolean
+  hideFromUI?: boolean // User messages for accept/reject and compaction result are hidden
+  isCompacted?: boolean // When converted to true, we include it in the history for UI, but do not send to the model anymore
+  operationHistory?: OperationHistory
+  // Predefined actions (Fix and Explain)
+  displayType?: UserMessageDisplayType
+  displayUserMessage?: string
+  displaySchemaData?: SchemaDisplayData
 }
 
 export type AIConversation = {
@@ -63,5 +61,5 @@ export type ChatWindowState = {
   isOpen: boolean
   activeConversationId: ConversationId | null
   isHistoryOpen?: boolean
-  previousConversationId?: ConversationId | null // Chat we came from when opening history
+  previousConversationId?: ConversationId | null // For navigating back after toggling off the history view
 }

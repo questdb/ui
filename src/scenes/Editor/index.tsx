@@ -45,6 +45,7 @@ import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
 import { color, platform } from "../../utils"
+import { getLastUnactionedDiff } from "../../providers/AIConversationProvider/utils"
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
@@ -192,16 +193,9 @@ const Editor = ({
     }
   }, [])
 
-  // Determine if Monaco editor UI should be hidden
-  // Hidden when viewing diff buffer or metrics, but component stays mounted for query execution
   const isMonacoHidden =
     !!activeBuffer.isDiffBuffer || !!activeBuffer.metricsViewState
 
-  // Check if the current diff buffer shows a pending AI suggestion
-  // A diff is "pending" if:
-  // 1. The diff buffer has a conversationId linking it to a conversation
-  // 2. That conversation has hasPendingDiff = true
-  // 3. The diff's modified content matches the conversation's currentSQL (handles multiple revisions)
   const pendingDiffInfo = useMemo(() => {
     if (
       !activeBuffer.isDiffBuffer ||
@@ -216,24 +210,11 @@ const Editor = ({
     if (!conversation) {
       return null
     }
-
-    const visibleMessages = conversation.messages.filter((m) => !m.hideFromUI)
-    if (visibleMessages.length === 0) {
-      return null
-    }
-    const lastVisible = visibleMessages[visibleMessages.length - 1]
-    const hasUnactionedDiff =
-      lastVisible.role === "assistant" &&
-      lastVisible.sql !== undefined &&
-      lastVisible.previousSQL !== undefined &&
-      !lastVisible.isAccepted &&
-      !lastVisible.isRejected
-
-    if (!hasUnactionedDiff) {
+    const lastUnactionedDiff = getLastUnactionedDiff(conversation.messages)
+    if (!lastUnactionedDiff) {
       return null
     }
 
-    // Compare normalized SQL to ensure this diff matches the current pending suggestion
     const normalizedDiffModified = normalizeQueryText(
       activeBuffer.diffContent.modified || "",
     )
@@ -247,7 +228,7 @@ const Editor = ({
 
     return {
       conversationId,
-      messageId: lastVisible.id,
+      messageId: lastUnactionedDiff.id,
       conversation,
     }
   }, [activeBuffer, getConversation])

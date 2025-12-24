@@ -72,7 +72,7 @@ export const ExplainQueryButton = ({
         content: fullApiMessage,
         timestamp: Date.now(),
         displayType: "explain_request",
-        displaySQL: queryText,
+        sql: queryText,
       })
 
       const assistantMessageId = crypto.randomUUID()

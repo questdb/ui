@@ -735,7 +735,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
         if (message.role === "user") {
           // Check if this is a special request type with inline SQL display
           const displayType = message.displayType
-          const displaySQL = message.displaySQL
+          const sql = message.sql
 
           // Render badge/title/description types
           if (
@@ -767,14 +767,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   </SchemaNameDisplay>
                 </UserRequestContent>
               )
-            } else if (displaySQL) {
+            } else if (sql) {
               // fix_request and explain_request show SQL editor
-              const lineCount = displaySQL.split("\n").length
+              const lineCount = sql.split("\n").length
               const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
               content = (
                 <UserRequestContent>
                   <InlineSQLEditor style={{ height: editorHeight }}>
-                    <LiteEditor value={displaySQL} />
+                    <LiteEditor value={sql} />
                   </InlineSQLEditor>
                 </UserRequestContent>
               )
@@ -801,9 +801,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           }
 
           // Special handling for ask_request: show user's question above SQL
-          if (displayType === "ask_request" && displaySQL) {
+          if (displayType === "ask_request" && sql) {
             const userQuestion = message.displayUserMessage || message.content
-            const lineCount = displaySQL.split("\n").length
+            const lineCount = sql.split("\n").length
             const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
 
             return (
@@ -813,7 +813,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 </UserRequestHeader>
                 <UserRequestContent>
                   <InlineSQLEditor style={{ height: editorHeight }}>
-                    <LiteEditor value={displaySQL} />
+                    <LiteEditor value={sql} />
                   </InlineSQLEditor>
                 </UserRequestContent>
               </UserRequestBox>

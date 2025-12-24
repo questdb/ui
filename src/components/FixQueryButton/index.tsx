@@ -66,7 +66,7 @@ export const FixQueryButton = () => {
       content: fullApiMessage,
       timestamp: Date.now(),
       displayType: "fix_request",
-      displaySQL: queryText,
+      sql: queryText,
     })
 
     const assistantMessageId = crypto.randomUUID()

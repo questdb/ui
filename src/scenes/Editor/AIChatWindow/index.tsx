@@ -414,7 +414,7 @@ export const AIChatWindow: React.FC = () => {
 
     let userMessageContent = userMessage
     let displayType: "ask_request" | undefined = undefined
-    let displaySQL: string | undefined = undefined
+    let sql: string | undefined = undefined
     let displayUserMessage: string | undefined = undefined
 
     if (!hasAssistantMessages && currentSQL && currentSQL.trim()) {
@@ -423,7 +423,7 @@ export const AIChatWindow: React.FC = () => {
       userMessageContent = `Current SQL query:\n\`\`\`sql\n${currentSQL}\n\`\`\`\n\nUser request: ${userMessage}`
       // Set display type for proper UI rendering (shows user message + SQL editor)
       displayType = "ask_request"
-      displaySQL = currentSQL.trim()
+      sql = currentSQL.trim()
       displayUserMessage = userMessage // Store the original user message for display
     }
 
@@ -432,7 +432,7 @@ export const AIChatWindow: React.FC = () => {
       content: userMessageContent,
       timestamp: Date.now(),
       ...(displayType && { displayType }),
-      ...(displaySQL && { displaySQL }),
+      ...(sql && { sql }),
       ...(displayUserMessage && { displayUserMessage }),
     }
 
