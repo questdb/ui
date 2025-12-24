@@ -730,7 +730,7 @@ export const AIChatWindow: React.FC = () => {
     }
   }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
 
-  if (!chatWindowState.isOpen || !conversation) {
+  if (!chatWindowState.isOpen || (!conversation && !isHistoryOpen)) {
     return null
   }
 
@@ -804,7 +804,7 @@ export const AIChatWindow: React.FC = () => {
                   <ButtonContainer ref={explainButtonRef}>
                     {shouldShowExplainButton && (
                       <ExplainQueryButton
-                        conversationId={conversation.id}
+                        conversationId={conversation!.id}
                         queryText={currentSQL.trim()}
                       />
                     )}
