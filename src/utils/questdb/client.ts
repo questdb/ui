@@ -391,9 +391,7 @@ export class Client {
   }
 
   async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
-    return await this.query<{ ddl: string }>(
-      `SHOW CREATE VIEW '${viewName}';`,
-    )
+    return await this.query<{ ddl: string }>(`SHOW CREATE VIEW '${viewName}';`)
   }
 
   async showViews(): Promise<QueryResult<View>> {

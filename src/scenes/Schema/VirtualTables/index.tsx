@@ -497,7 +497,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       ) {
         const isTable = item.id === TABLES_GROUP_KEY
         const isMatView = item.id === MATVIEWS_GROUP_KEY
-        const isView = item.id === VIEWS_GROUP_KEY
         const isEmpty = isTable
           ? regularTables.length === 0
           : isMatView
