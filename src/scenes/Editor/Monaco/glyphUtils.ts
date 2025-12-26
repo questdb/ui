@@ -35,7 +35,6 @@ export const createGlyphWidget = (
   domNode.style.display = "flex"
   domNode.style.alignItems = "center"
   domNode.style.gap = "5px"
-  domNode.style.cursor = "pointer"
   domNode.style.marginLeft = "1rem"
   domNode.style.width = "53px"
   domNode.style.height = "100%"
@@ -98,8 +97,9 @@ export const createGlyphWidget = (
   runIconWrapper.style.width = "24px"
   runIconWrapper.style.position = "absolute"
   runIconWrapper.style.top = "0"
-  runIconWrapper.style.right = "0"
+  runIconWrapper.style.right = options.showAI ? "0" : "20px"
   runIconWrapper.style.height = "100%"
+  runIconWrapper.style.cursor = "pointer"
 
   // Determine which icon to show
   let iconType: "play" | "cancel" | "loading" | "error" | "success" = "play"

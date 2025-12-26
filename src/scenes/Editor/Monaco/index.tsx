@@ -189,7 +189,9 @@ const EditorWrapper = styled.div`
   position: relative;
 `
 
-const DEFAULT_LINE_CHARS = 7
+const getDefaultLineNumbersMinChars = (canUseAI: boolean) => {
+  return canUseAI ? 7 : 5
+}
 
 const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const editorContext = useEditor()
@@ -263,6 +265,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     query: string
     startOffset: number
   } | null>(aiSuggestionRequest)
+  const canUseAIRef = useRef(canUseAI)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
   const findQueryByConversationIdRef = useRef(findQueryByConversationId)
@@ -305,7 +308,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
-    DEFAULT_LINE_CHARS +
+    (canUseAI ? 7 : 5) +
       activeBuffer.value.split("\n").length.toString().length -
       1,
   )
@@ -723,7 +726,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             isCancel: isRunningQuery,
             hasError,
             isSuccessful,
-            showAI: canUseAI,
+            showAI: canUseAIRef.current,
             hasConversation,
             aiButtonDisabled: isBlockingAIStatus(aiStatusRef.current),
             onRunClick: handleRunClick,
@@ -792,12 +795,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
       // This width is represented in char numbers.
-      const lineCount = editorRef.current?.getModel()?.getLineCount()
-      if (lineCount) {
-        setLineNumbersMinChars(
-          DEFAULT_LINE_CHARS + (lineCount.toString().length - 1),
-        )
-      }
 
       if (contentJustChangedRef.current) {
         return
@@ -825,6 +822,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editor.onDidChangeModelContent((e) => {
       const model = editor.getModel()
       if (!model) return
+
+      const lineCount = model.getLineCount()
+      if (lineCount) {
+        setLineNumbersMinChars(
+          getDefaultLineNumbersMinChars(canUseAIRef.current) +
+            (lineCount.toString().length - 1),
+        )
+      }
 
       contentJustChangedRef.current = true
 
@@ -1473,6 +1478,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [buffers, executionRefs, cleanupExecutionRefs])
 
   useEffect(() => {
+    canUseAIRef.current = canUseAI
+    const lineCount = editorRef.current?.getModel()?.getLineCount()
+    if (lineCount) {
+      setLineNumbersMinChars(
+        getDefaultLineNumbersMinChars(canUseAIRef.current) +
+          (lineCount.toString().length - 1),
+      )
+    }
     if (monacoRef.current && editorRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
