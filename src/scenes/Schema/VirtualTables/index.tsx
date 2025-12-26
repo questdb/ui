@@ -580,7 +580,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   {canSuspend && item.walTableData?.suspended && (
                     <SuspensionDialog
                       walTableData={item.walTableData}
-                      kind={item.kind}
+                      kind={item.kind as "table" | "matview"}
                       open={openedSuspensionDialog === item.id}
                       onOpenChange={(isOpen) => {
                         setOpenedSuspensionDialog(isOpen ? item.id : null)

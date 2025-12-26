@@ -141,6 +141,7 @@ export type Table = {
   dedup: boolean
   ttlValue: number
   ttlUnit: string
+  matView?: boolean // Optional for backward compatibility with older servers
   table_type?: TableType // Optional for backward compatibility with older servers
 }
 

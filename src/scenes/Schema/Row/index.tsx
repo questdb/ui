@@ -513,8 +513,7 @@ const Row = ({
                 designatedTimestamp={designatedTimestamp}
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
-                isMaterializedView={kind === "matview"}
-                isView={kind === "view"}
+                kind={kind as "table" | "matview" | "view"}
               />
             )}
             {kind === "detail" && <InfoCircle size="14px" />}

@@ -7,11 +7,10 @@ import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 
 type TableIconProps = {
+  kind: "table" | "matview" | "view"
   walEnabled?: boolean
   partitionBy?: QuestDB.PartitionBy
   designatedTimestamp?: string
-  isMaterializedView?: boolean
-  isView?: boolean
 }
 
 const WIDTH = "1.4rem"
@@ -92,11 +91,10 @@ export const ViewIcon = ({ height = "14px", width = "14px" }) => (
 )
 
 export const TableIcon: FC<TableIconProps> = ({
+  kind,
   walEnabled,
   partitionBy,
   designatedTimestamp,
-  isMaterializedView,
-  isView,
 }) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
   const partitionText = isPartitioned
@@ -111,25 +109,11 @@ export const TableIcon: FC<TableIconProps> = ({
     ? "WAL-based tables are the current and most up-to-date table format. This format supports advanced data recovery, replication and high-throughput ingestion. This is the recommended format if your table contains time-series data that has a designated timestamp."
     : "Legacy table format, without WAL (write-ahead-log). This table format should only be used when table does not have timestamp column and generally not a time series. These tables are not replicated and could be slower to ingress data into."
 
-  if (isView) {
-    return (
-      <PopperHover
-        trigger={
-          <Root data-hook="table-icon">
-            <ViewIcon height="14px" width="14px" />
-          </Root>
-        }
-        delay={1000}
-        placement="bottom"
-      >
-        <Tooltip>
-          View - a stored query that can be referenced like a table.
-        </Tooltip>
-      </PopperHover>
-    )
+  if (kind === "view") {
+    return <ViewIcon height="14px" width="14px" />
   }
 
-  if (isMaterializedView) {
+  if (kind === "matview") {
     return (
       <PopperHover
         trigger={

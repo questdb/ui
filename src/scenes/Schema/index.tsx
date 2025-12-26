@@ -158,8 +158,12 @@ const Schema = ({
       const response = await quest.showTables()
       if (response && response.type === QuestDB.Type.DQL) {
         errorRef.current = null
-        setTables(response.data)
-        dispatch(actions.query.setTables(response.data))
+        const data = response.data.map((item) => ({
+          ...item,
+          table_type: item.table_type ?? (item.matView ? "M" : "T"),
+        }))
+        setTables(data)
+        dispatch(actions.query.setTables(data))
         // Fetch WAL info about the tables
         const walTablesResponse =
           await quest.query<QuestDB.WalTable>("wal_tables()")
