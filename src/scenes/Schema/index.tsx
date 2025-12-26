@@ -319,6 +319,7 @@ const Schema = ({
       eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
         void fetchTables()
         void fetchColumns()
+        void fetchViews()
       })
 
       window.addEventListener("focus", focusListener)

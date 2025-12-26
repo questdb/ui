@@ -207,7 +207,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
             // Use table_type to categorize: 'T' = table, 'M' = matview, 'V' = view
             // Default to 'T' (table) for backward compatibility with older servers
             const tableType = table.table_type ?? "T"
-            const categoryIndex = tableType === "M" ? 1 : tableType === "V" ? 2 : 0
+            const categoryIndex =
+              tableType === "M" ? 1 : tableType === "V" ? 2 : 0
             acc[categoryIndex].push({
               ...table,
               hasColumnMatches: columnMatches,
@@ -232,7 +233,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }, [] as FlattenedTreeItem[])
   }, [schemaTree])
 
-  const handleCopyQuery = async (tableName: string, kind: "table" | "matview" | "view") => {
+  const handleCopyQuery = async (
+    tableName: string,
+    kind: "table" | "matview" | "view",
+  ) => {
     try {
       const response =
         kind === "matview"
@@ -246,7 +250,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         toast.success("Schema copied to clipboard")
       }
     } catch (error) {
-      const kindLabel = kind === "matview" ? "materialized view" : kind === "view" ? "view" : "table"
+      const kindLabel =
+        kind === "matview"
+          ? "materialized view"
+          : kind === "view"
+            ? "view"
+            : "table"
       toast.error(`Cannot copy schema for ${kindLabel} '${tableName}'`)
     }
   }
@@ -481,7 +490,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         )
       }
 
-      if (item.id === TABLES_GROUP_KEY || item.id === MATVIEWS_GROUP_KEY || item.id === VIEWS_GROUP_KEY) {
+      if (
+        item.id === TABLES_GROUP_KEY ||
+        item.id === MATVIEWS_GROUP_KEY ||
+        item.id === VIEWS_GROUP_KEY
+      ) {
         const isTable = item.id === TABLES_GROUP_KEY
         const isMatView = item.id === MATVIEWS_GROUP_KEY
         const isView = item.id === VIEWS_GROUP_KEY
@@ -490,7 +503,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           : isMatView
             ? matViewTables.length === 0
             : viewTables.length === 0
-        const hookLabel = isTable ? "tables" : isMatView ? "materialized-views" : "views"
+        const hookLabel = isTable
+          ? "tables"
+          : isMatView
+            ? "materialized-views"
+            : "views"
         return (
           <SectionHeader
             $disabled={isEmpty}
@@ -520,7 +537,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         )
       }
 
-      if (item.kind === "table" || item.kind === "matview" || item.kind === "view") {
+      if (
+        item.kind === "table" ||
+        item.kind === "matview" ||
+        item.kind === "view"
+      ) {
         const canSuspend = item.kind !== "view" // Views cannot be suspended
         return (
           <>
@@ -560,7 +581,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   {canSuspend && item.walTableData?.suspended && (
                     <SuspensionDialog
                       walTableData={item.walTableData}
-                      kind={item.kind as "table" | "matview"}
+                      kind={item.kind}
                       open={openedSuspensionDialog === item.id}
                       onOpenChange={(isOpen) => {
                         setOpenedSuspensionDialog(isOpen ? item.id : null)
@@ -573,7 +594,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 <MenuItem
                   data-hook="table-context-menu-copy-schema"
                   onClick={async () =>
-                    await handleCopyQuery(item.name, item.kind as "table" | "matview" | "view")
+                    await handleCopyQuery(
+                      item.name,
+                      item.kind as "table" | "matview" | "view",
+                    )
                   }
                   icon={<FileCopy size={16} />}
                 >
