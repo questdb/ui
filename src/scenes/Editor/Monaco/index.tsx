@@ -662,7 +662,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
-        const hasConversation = canUseAI
+        const hasConversation = canUseAIRef.current
           ? hasConversationForQueryRef.current(activeBufferId, queryKey)
           : false
 
