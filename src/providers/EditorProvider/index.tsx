@@ -69,6 +69,8 @@ export type EditorContext = {
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
   appendQuery: (query: string, options?: AppendQueryOptions) => void
+  tabsDisabled: boolean
+  setTabsDisabled: (disabled: boolean) => void
   buffers: Buffer[]
   activeBuffer: Buffer
   setActiveBuffer: (
@@ -122,6 +124,8 @@ const defaultValues = {
   monacoRef: { current: null },
   insertTextAtCursor: () => undefined,
   appendQuery: () => undefined,
+  tabsDisabled: false,
+  setTabsDisabled: () => undefined,
   buffers: [],
   activeBuffer: fallbackBuffer,
   setActiveBuffer: () => Promise.resolve(),
@@ -178,7 +182,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   const updateDiffMode = useCallback((original: string, modified: string) => {
     setDiffModeState((prev) => (prev ? { ...prev, original, modified } : null))
   }, [])
-
+  const [tabsDisabled, setTabsDisabled] = useState(false)
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
     if (!rawBuffers) return undefined
@@ -687,6 +691,8 @@ export const EditorProvider: React.FC = ({ children }) => {
             appendQuery(editorRef.current, text, options)
           }
         },
+        tabsDisabled,
+        setTabsDisabled,
         buffers,
         activeBuffer,
         setActiveBuffer,

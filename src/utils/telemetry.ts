@@ -8,18 +8,35 @@ import {
 import { fromFetch } from "./fromFetch"
 import { NEVER } from "rxjs"
 
-export const sendServerInfoTelemetry = (
+const MAX_RETRIES_ENT = 3
+const RETRY_BASE_DELAY_MS_ENT = 1000
+
+export const sendServerInfoTelemetry = async (
   serverInfo: Readonly<TelemetryConfigShape>,
 ) => {
   const releaseType = getValue(StoreKey.RELEASE_TYPE)
   if (releaseType === "EE" || serverInfo?.enabled) {
-    fetch(`${API}/add-ent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ...serverInfo, releaseType }),
-    }).catch(() => {})
+    for (let attempt = 0; attempt <= MAX_RETRIES_ENT; attempt++) {
+      try {
+        const response = await fetch(`${API}/add-ent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ...serverInfo, releaseType }),
+        })
+        if (response.ok) {
+          return
+        }
+      } catch {
+        // no-op, try again if not reached to max limit
+      }
+      if (attempt < MAX_RETRIES_ENT) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, RETRY_BASE_DELAY_MS_ENT * Math.pow(2, attempt)),
+        )
+      }
+    }
   }
 }
 

@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.8 - 2025.12.18
+### Fixed
+- add polyfill for crypto.randomUUID to be used in insecure contexts [#508](https://github.com/questdb/ui/pull/508)
+
+
 ## 1.1.7 - 2025.12.01
 ### Fixed
 - prefetch images for connection error - handle retry [#504](https://github.com/questdb/ui/pull/504)

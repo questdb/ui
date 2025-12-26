@@ -476,7 +476,7 @@ export const Toolbar = () => {
         )
         if (response.type === QuestDB.Type.DQL && response.count === 1) {
           const serverInfo = response.data[0]
-          sendServerInfoTelemetry(serverInfo)
+          void sendServerInfoTelemetry(serverInfo)
         }
         return
       }

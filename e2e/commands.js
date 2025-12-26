@@ -213,6 +213,12 @@ Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
   return cy.get(selector).first();
 });
 
+Cypress.Commands.add("getCancelIconInLine", (lineNumber) => {
+  cy.get(".cancelQueryGlyph").should("be.visible");
+  const selector = `.cancelQueryGlyph-line-${lineNumber}`;
+  return cy.get(selector).first();
+});
+
 Cypress.Commands.add("openRunDropdownInLine", (lineNumber) => {
   cy.getRunIconInLine(lineNumber).rightclick();
 });

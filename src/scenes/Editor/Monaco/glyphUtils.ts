@@ -92,7 +92,6 @@ export const createGlyphWidget = (
 
   // Run/Cancel/Status icon
   const runIconWrapper = document.createElement("span")
-  runIconWrapper.className = "glyph-run-icon"
   runIconWrapper.style.display = "inline-flex"
   runIconWrapper.style.alignItems = "center"
   runIconWrapper.style.justifyContent = "center"
@@ -113,6 +112,9 @@ export const createGlyphWidget = (
   } else if (options.isSuccessful) {
     iconType = "success"
   }
+
+  // Add icon type as class for later identification
+  runIconWrapper.className = `glyph-run-icon ${iconType}`
 
   const runSvg = createSvgElement(iconType, 22)
   runIconWrapper.appendChild(runSvg)
@@ -167,4 +169,66 @@ export const clearGlyphWidgets = (
     editor.removeGlyphMarginWidget(widget)
   })
   widgetsRef.current = []
+}
+
+type IconType = "play" | "cancel" | "loading" | "error" | "success"
+
+/**
+ * Toggles a glyph widget's run icon between loading and its previous state.
+ * Reads the current icon type from CSS classes on the runIconWrapper element.
+ */
+export const toggleGlyphWidgetLoading = (
+  widgetsRef: React.MutableRefObject<editor.IGlyphMarginWidget[]>,
+  lineNumber: number,
+  isLoading: boolean,
+): void => {
+  const widgetId = `glyph-widget-${lineNumber}`
+  const widget = widgetsRef.current.find((w) => w.getId() === widgetId)
+  if (!widget) return
+
+  const domNode = widget.getDomNode()
+  if (!domNode) return
+
+  const runIconWrapper = domNode.querySelector(".glyph-run-icon")
+  if (!(runIconWrapper instanceof HTMLElement)) return
+
+  // Get current icon type from classes
+  const iconTypes: IconType[] = [
+    "play",
+    "cancel",
+    "loading",
+    "error",
+    "success",
+  ]
+  const currentIconType =
+    iconTypes.find((type) => runIconWrapper.classList.contains(type)) || "play"
+
+  if (isLoading && currentIconType !== "loading") {
+    // Store current icon type and switch to loading
+    runIconWrapper.classList.remove(...iconTypes)
+    runIconWrapper.classList.add("loading")
+    runIconWrapper.dataset.previousIconType = currentIconType
+
+    // Replace with loading icon
+    const loadingSvg = createSvgElement("loading", 22)
+    runIconWrapper.innerHTML = ""
+    runIconWrapper.appendChild(loadingSvg)
+    runIconWrapper.style.animation = "glyph-spin 3s linear infinite"
+    runIconWrapper.style.pointerEvents = "none"
+  } else if (!isLoading && currentIconType === "loading") {
+    // Restore previous icon type
+    const previousIconType =
+      (runIconWrapper.dataset.previousIconType as IconType) || "play"
+    delete runIconWrapper.dataset.previousIconType
+
+    runIconWrapper.classList.remove("loading")
+    runIconWrapper.classList.add(previousIconType)
+
+    // Recreate the original icon
+    const originalSvg = createSvgElement(previousIconType, 22)
+    runIconWrapper.innerHTML = ""
+    runIconWrapper.appendChild(originalSvg)
+    runIconWrapper.style.animation = ""
+    runIconWrapper.style.pointerEvents = "auto"
+  }
 }

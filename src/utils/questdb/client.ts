@@ -137,6 +137,13 @@ export class Client {
     return Client.transformQueryRawResult<T>(result)
   }
 
+  private removeController(controller: AbortController) {
+    const index = this._controllers.indexOf(controller)
+    if (index >= 0) {
+      this._controllers.splice(index, 1)
+    }
+  }
+
   async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
     const controller = new AbortController()
     const payload = {
@@ -175,6 +182,9 @@ export class Client {
         headers: this.commonHeaders,
       })
     } catch (error) {
+      this.removeController(controller)
+      Client.numOfPendingQueries--
+
       const err = {
         position: -1,
         query,
@@ -199,115 +209,133 @@ export class Client {
       eventBus.publish(EventType.MSG_CONNECTION_ERROR, genericErrorPayload)
 
       return Promise.reject(genericErrorPayload)
-    } finally {
-      const index = this._controllers.indexOf(controller)
-
-      if (index >= 0) {
-        this._controllers.splice(index, 1)
-      }
-
-      Client.numOfPendingQueries--
     }
 
-    if (
-      response.ok ||
-      response.status === 400 ||
-      (response.ok && response.status === 403)
-    ) {
-      let responseText
-      try {
-        responseText = await response.text()
-      } catch (error) {
-        return Promise.reject({
-          error: `Failed to read response: ${error}`,
-          type: Type.ERROR,
-        })
-      }
-      const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
-      let data
-      try {
-        data = JSON.parse(responseText) as RawResult
-      } catch (error) {
-        return Promise.reject({
-          error: `Invalid JSON response from the server: ${error}`,
-          type: Type.ERROR,
-        })
+    try {
+      if (
+        response.ok ||
+        response.status === 400 ||
+        (response.ok && response.status === 403)
+      ) {
+        let responseText
+        try {
+          responseText = await response.text()
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return Promise.reject({
+              position: -1,
+              query,
+              type: Type.ERROR,
+              error: "Cancelled by user",
+            })
+          }
+          return Promise.reject({
+            error: `Failed to read response: ${error}`,
+            type: Type.ERROR,
+          })
+        }
+        const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
+        let data
+        try {
+          data = JSON.parse(responseText) as RawResult
+        } catch (error) {
+          return Promise.reject({
+            error: `Invalid JSON response from the server: ${error}`,
+            type: Type.ERROR,
+          })
+        }
+
+        eventBus.publish(EventType.MSG_CONNECTION_OK)
+
+        if (response.status === 403) {
+          eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, data)
+        }
+
+        if (data.ddl) {
+          return {
+            query,
+            type: Type.DDL,
+          }
+        }
+
+        if (data.dml) {
+          return {
+            query,
+            type: Type.DML,
+          }
+        }
+
+        if (data.error) {
+          return Promise.reject({
+            ...data,
+            type: Type.ERROR,
+          })
+        }
+
+        if (data.notice) {
+          return {
+            ...data,
+            type: Type.NOTICE,
+          }
+        }
+
+        return {
+          ...data,
+          timings: {
+            ...data.timings,
+            fetch: fetchTime,
+          },
+          type: Type.DQL,
+        }
       }
 
-      eventBus.publish(EventType.MSG_CONNECTION_OK)
+      const errorPayload: Record<string, string | number> = {
+        status: response.status,
+        error: response.statusText,
+      }
+
+      if (isServerError(response)) {
+        errorPayload.error = `QuestDB is not reachable [${response.status}]`
+        errorPayload.position = -1
+        errorPayload.query = query
+        errorPayload.type = Type.ERROR
+        eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
+      }
+
+      if (response.status === 401) {
+        errorPayload.error = `Unauthorized`
+        eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+      }
 
       if (response.status === 403) {
-        eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, data)
-      }
-
-      if (data.ddl) {
-        return {
-          query,
-          type: Type.DDL,
+        let errorText
+        try {
+          errorText = (await response.text()).trim()
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return Promise.reject({
+              position: -1,
+              query,
+              type: Type.ERROR,
+              error: "Cancelled by user",
+            })
+          }
+          throw error
         }
-      }
-
-      if (data.dml) {
-        return {
-          query,
-          type: Type.DML,
+        if (errorText.startsWith("{")) {
+          const data = JSON.parse(errorText) as ErrorResult
+          errorPayload.error = data.error
+        } else {
+          errorPayload.error = errorText
         }
+        eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
       }
 
-      if (data.error) {
-        return Promise.reject({
-          ...data,
-          type: Type.ERROR,
-        })
-      }
-
-      if (data.notice) {
-        return {
-          ...data,
-          type: Type.NOTICE,
-        }
-      }
-
-      return {
-        ...data,
-        timings: {
-          ...data.timings,
-          fetch: fetchTime,
-        },
-        type: Type.DQL,
-      }
+      return Promise.reject(errorPayload)
+    } finally {
+      this.removeController(controller)
+      Client.numOfPendingQueries--
     }
-
-    const errorPayload: Record<string, string | number> = {
-      status: response.status,
-      error: response.statusText,
-    }
-
-    if (isServerError(response)) {
-      errorPayload.error = `QuestDB is not reachable [${response.status}]`
-      errorPayload.position = -1
-      errorPayload.query = query
-      errorPayload.type = Type.ERROR
-      eventBus.publish(EventType.MSG_CONNECTION_ERROR, errorPayload)
-    }
-
-    if (response.status === 401) {
-      errorPayload.error = `Unauthorized`
-      eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
-    }
-
-    if (response.status === 403) {
-      const errorText = (await response.text()).trim()
-      if (errorText.startsWith("{")) {
-        const data = JSON.parse(errorText) as ErrorResult
-        errorPayload.error = data.error
-      } else {
-        errorPayload.error = errorText
-      }
-      eventBus.publish(EventType.MSG_CONNECTION_FORBIDDEN, errorPayload)
-    }
-
-    return Promise.reject(errorPayload)
   }
 
   async validateQuery(query: string): Promise<ValidateQueryResult> {

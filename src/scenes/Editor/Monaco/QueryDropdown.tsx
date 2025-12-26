@@ -69,8 +69,8 @@ type QueryDropdownProps = {
   queriesRef: React.MutableRefObject<Request[]>
   isContextMenuRef: React.MutableRefObject<boolean>
   isAIDropdownRef: React.MutableRefObject<boolean>
-  onRunQuery: (query?: Request) => void
-  onExplainQuery: (query?: Request) => void
+  onRunQuery: (query: Request) => void
+  onExplainQuery: (query: Request) => void
   onAskAIRef: React.MutableRefObject<(query?: Request) => void>
 }
 
