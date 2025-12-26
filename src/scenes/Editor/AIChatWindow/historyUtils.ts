@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from "react"
 import { formatDistance } from "date-fns"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
-import type { AIConversation } from "../../../providers/AIConversationProvider/types"
+import type { ConversationMeta } from "../../../store/db"
 
 export type DateGroup = {
   label: string
-  conversations: AIConversation[]
+  conversations: ConversationMeta[]
 }
 
 const UPDATE_INTERVAL_MS = 60_000
@@ -18,11 +18,11 @@ export function getRelativeDateLabel(timestamp: number): string {
 }
 
 function groupConversationsByDate(
-  conversations: AIConversation[],
+  conversations: ConversationMeta[],
 ): DateGroup[] {
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
 
-  const groups = new Map<string, AIConversation[]>()
+  const groups = new Map<string, ConversationMeta[]>()
 
   for (const conv of sorted) {
     const label = getRelativeDateLabel(conv.updatedAt)
@@ -48,7 +48,7 @@ function groupConversationsByDate(
 }
 
 export function useGroupedConversations(
-  conversations: AIConversation[],
+  conversations: ConversationMeta[],
 ): DateGroup[] {
   const [tick, setTick] = useState(0)
 
@@ -67,9 +67,9 @@ export function useGroupedConversations(
 }
 
 export function filterConversations(
-  conversations: AIConversation[],
+  conversations: ConversationMeta[],
   searchQuery: string,
-): AIConversation[] {
+): ConversationMeta[] {
   if (!searchQuery.trim()) {
     return conversations
   }

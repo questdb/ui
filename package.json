@@ -70,6 +70,7 @@
     "draggabilly": "^3.0.0",
     "echarts": "^5.2.2",
     "eventemitter3": "^5.0.1",
+    "fflate": "^0.8.2",
     "intersection-observer": "^0.12.2",
     "joi": "17.5.0",
     "jquery": "3.5.1",

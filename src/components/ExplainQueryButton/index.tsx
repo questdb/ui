@@ -26,6 +26,8 @@ import {
 } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import type { ConversationId } from "../../providers/AIConversationProvider/types"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   color: ${({ theme }) => theme.color.pinkPrimary};
@@ -58,7 +60,7 @@ export const ExplainQueryButton = ({
     currentModel: currentModelValue,
     apiKey: apiKeyValue,
   } = useAIStatus()
-  const { addMessage, updateMessage, updateConversationName } =
+  const { addMessage, updateMessage, updateConversationName, persistMessages } =
     useAIConversation()
 
   const handleExplainQuery = () => {
@@ -67,7 +69,7 @@ export const ExplainQueryButton = ({
     void (async () => {
       const fullApiMessage = `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${queryText}\n\`\`\``
 
-      addMessage(conversationId, {
+      addMessage({
         role: "user",
         content: fullApiMessage,
         timestamp: Date.now(),
@@ -76,13 +78,15 @@ export const ExplainQueryButton = ({
       })
 
       const assistantMessageId = crypto.randomUUID()
-      addMessage(conversationId, {
+      addMessage({
         id: assistantMessageId,
         role: "assistant",
         content: "",
         timestamp: Date.now(),
         operationHistory: [],
       })
+
+      eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
 
       const provider = providerForModel(currentModel)
       const settings: ActiveProviderSettings = {
@@ -100,7 +104,7 @@ export const ExplainQueryButton = ({
           settings: { model: testModel.value, provider, apiKey },
         }).then((title) => {
           if (title) {
-            updateConversationName(conversationId, title)
+            void updateConversationName(conversationId, title)
           }
         })
       }
@@ -139,6 +143,7 @@ export const ExplainQueryButton = ({
         if (error.type !== "aborted") {
           toast.error(error.message, { autoClose: 10000 })
         }
+        await persistMessages(conversationId)
         return
       }
 
@@ -147,9 +152,7 @@ export const ExplainQueryButton = ({
         updateMessage(conversationId, assistantMessageId, {
           error: "No explanation received from AI Assistant",
         })
-        toast.error("No explanation received from AI Assistant", {
-          autoClose: 10000,
-        })
+        await persistMessages(conversationId)
         return
       }
 
@@ -158,6 +161,8 @@ export const ExplainQueryButton = ({
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })
+
+      await persistMessages(conversationId)
     })()
   }
 

@@ -20,7 +20,6 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { slideAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
-import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { TableIcon } from "../../Schema/table-icon"
 import { selectors } from "../../../store"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
@@ -223,7 +222,6 @@ type ChatInputProps = {
   onSend: (message: string) => void
   disabled?: boolean
   placeholder?: string
-  conversationId?: ConversationId
   contextSQL?: string
   contextTableId?: number
   onContextClick: () => void
@@ -246,7 +244,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSend,
       disabled = false,
       placeholder = "Ask a question or request a refinement...",
-      conversationId,
       contextSQL,
       contextTableId,
       onContextClick,
@@ -275,21 +272,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         textareaRef.current?.focus()
       },
     }))
-    const {
-      status: aiStatus,
-      abortOperation,
-      activeConversationId,
-    } = useAIStatus()
+    const { status: aiStatus, abortOperation } = useAIStatus()
 
-    const isOperationForThisConversation = Boolean(
-      conversationId &&
-        activeConversationId &&
-        conversationId === activeConversationId,
-    )
-    const isAIInProgress =
-      isBlockingAIStatus(aiStatus) && isOperationForThisConversation
-    const isAborted =
-      aiStatus === AIOperationStatus.Aborted && isOperationForThisConversation
+    const isAIInProgress = isBlockingAIStatus(aiStatus)
+    const isAborted = aiStatus === AIOperationStatus.Aborted
 
     useEffect(() => {
       // Auto-resize textarea

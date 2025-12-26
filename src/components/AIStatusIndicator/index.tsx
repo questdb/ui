@@ -307,7 +307,6 @@ export const AIStatusIndicator: React.FC = () => {
     currentOperation,
     currentModel,
     abortOperation,
-    activeConversationId,
     clearOperation,
   } = useAIStatus()
   const { chatWindowState, openChatWindow } = useAIConversation()
@@ -323,7 +322,7 @@ export const AIStatusIndicator: React.FC = () => {
   }, [currentModel])
 
   const operationSections = useMemo(
-    () => buildOperationSections(currentOperation, status),
+    () => buildOperationSections(currentOperation, status, true),
     [currentOperation, status],
   )
 
@@ -422,9 +421,11 @@ export const AIStatusIndicator: React.FC = () => {
               <StopFill size="14px" color="#da1e28" />
             </AIStopButton>
           )}
-          {activeConversationId && (
+          {chatWindowState.activeConversationId && (
             <ViewChatButton
-              onClick={() => openChatWindow(activeConversationId)}
+              onClick={() =>
+                openChatWindow(chatWindowState.activeConversationId!)
+              }
             >
               View chat
               <SidebarSimpleIcon size={14} weight="fill" />

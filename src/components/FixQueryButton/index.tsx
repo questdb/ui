@@ -27,6 +27,8 @@ import {
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const FixButton = styled(Button)`
   gap: 1rem;
@@ -40,15 +42,16 @@ export const FixQueryButton = () => {
     useAIStatus()
   const {
     chatWindowState,
-    getConversation,
+    getConversationMeta,
     addMessage,
     updateMessage,
     updateConversationName,
+    persistMessages,
   } = useAIConversation()
 
   const handleFixQuery = async () => {
     const conversationId = chatWindowState.activeConversationId!
-    const conversation = getConversation(conversationId)!
+    const conversation = getConversationMeta(conversationId)!
 
     const errorInfo = extractErrorByQueryKey(
       conversation.queryKey!,
@@ -61,7 +64,7 @@ export const FixQueryButton = () => {
 
     const fullApiMessage = `Fix this SQL query that has an error:\n\n\`\`\`sql\n${queryText}\n\`\`\`\n\nError: ${errorMessage}${word ? `\n\nError near: "${word}"` : ""}`
 
-    addMessage(conversation.id, {
+    addMessage({
       role: "user",
       content: fullApiMessage,
       timestamp: Date.now(),
@@ -70,13 +73,15 @@ export const FixQueryButton = () => {
     })
 
     const assistantMessageId = crypto.randomUUID()
-    addMessage(conversation.id, {
+    addMessage({
       id: assistantMessageId,
       role: "assistant",
       content: "",
       timestamp: Date.now(),
       operationHistory: [],
     })
+
+    eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversation.id)
 
     const provider = providerForModel(currentModel!)
     const settings: ActiveProviderSettings = {
@@ -94,7 +99,7 @@ export const FixQueryButton = () => {
         settings: { model: testModel.value, provider, apiKey: apiKey! },
       }).then((title) => {
         if (title) {
-          updateConversationName(conversation.id, title)
+          void updateConversationName(conversation.id, title)
         }
       })
     }
@@ -132,6 +137,7 @@ export const FixQueryButton = () => {
       if (error.type !== "aborted") {
         toast.error(error.message, { autoClose: 10000 })
       }
+      await persistMessages(conversation.id)
       return
     }
 
@@ -143,6 +149,7 @@ export const FixQueryButton = () => {
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })
+      await persistMessages(conversation.id)
       return
     }
 
@@ -150,9 +157,7 @@ export const FixQueryButton = () => {
       updateMessage(conversation.id, assistantMessageId, {
         error: "No fixed query or explanation received from AI Assistant",
       })
-      toast.error("No fixed query or explanation received from AI Assistant", {
-        autoClose: 10000,
-      })
+      await persistMessages(conversation.id)
       return
     }
 
@@ -166,6 +171,8 @@ export const FixQueryButton = () => {
       explanation: result.explanation,
       tokenUsage: result.tokenUsage,
     })
+
+    await persistMessages(conversation.id)
   }
 
   return (

@@ -1613,6 +1613,7 @@ export const continueConversation = async ({
       let workingConversationHistory = conversationHistory
       let isCompacted = false
 
+      setStatus(AIOperationStatus.Processing)
       if (conversationHistory.length > 0) {
         const compactionResult = await compactConversationIfNeeded(
           conversationHistory,

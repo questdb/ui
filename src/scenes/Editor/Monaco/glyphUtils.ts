@@ -15,6 +15,7 @@ export type GlyphWidgetOptions = {
   showAI?: boolean
   hasConversation?: boolean
   isHighlighted?: boolean // For temporary highlight when conversation is first created
+  aiButtonDisabled?: boolean
   onRunClick: () => void
   onRunContextMenu?: () => void
   onAIClick?: () => void
@@ -55,7 +56,9 @@ export const createGlyphWidget = (
     aiIconWrapper.style.top = "50%"
     aiIconWrapper.style.left = "0"
     aiIconWrapper.style.transform = "translateY(-50%)"
-    aiIconWrapper.style.cursor = "pointer"
+    aiIconWrapper.style.cursor = options.aiButtonDisabled
+      ? "not-allowed"
+      : "pointer"
 
     // Track current state for hover transitions
     let currentBaseState = baseState
@@ -68,19 +71,21 @@ export const createGlyphWidget = (
       }, 1000)
     }
 
-    aiIconWrapper.addEventListener("mouseenter", () => {
-      const hoverState = getHoverState(currentBaseState)
-      applyGutterIconState(aiIconWrapper, hoverState, 16)
-    })
+    if (!options.aiButtonDisabled) {
+      aiIconWrapper.addEventListener("mouseenter", () => {
+        const hoverState = getHoverState(currentBaseState)
+        applyGutterIconState(aiIconWrapper, hoverState, 16)
+      })
 
-    aiIconWrapper.addEventListener("mouseleave", () => {
-      applyGutterIconState(aiIconWrapper, currentBaseState, 16)
-    })
+      aiIconWrapper.addEventListener("mouseleave", () => {
+        applyGutterIconState(aiIconWrapper, currentBaseState, 16)
+      })
 
-    aiIconWrapper.addEventListener("click", (e) => {
-      e.stopPropagation()
-      options.onAIClick?.()
-    })
+      aiIconWrapper.addEventListener("click", (e) => {
+        e.stopPropagation()
+        options.onAIClick?.()
+      })
+    }
 
     domNode.appendChild(aiIconWrapper)
   }

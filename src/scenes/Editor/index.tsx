@@ -177,8 +177,12 @@ const Editor = ({
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const dispatch = useDispatch()
   const { activeBuffer, addBuffer, cleanupExecutionRefs } = useEditor()
-  const { getConversation, acceptSuggestion, rejectSuggestion } =
-    useAIConversation()
+  const {
+    getConversationMeta,
+    activeConversationMessages,
+    acceptSuggestion,
+    rejectSuggestion,
+  } = useAIConversation()
 
   const handleClearNotifications = (bufferId: number) => {
     dispatch(actions.query.cleanupBufferNotifications(bufferId))
@@ -205,12 +209,13 @@ const Editor = ({
     }
 
     const conversationId = activeBuffer.diffContent.conversationId
-    const conversation = getConversation(conversationId)
+    const meta = getConversationMeta(conversationId)
 
-    if (!conversation) {
+    if (!meta) {
       return null
     }
-    const lastUnactionedDiff = getLastUnactionedDiff(conversation.messages)
+
+    const lastUnactionedDiff = getLastUnactionedDiff(activeConversationMessages)
     if (!lastUnactionedDiff) {
       return null
     }
@@ -218,9 +223,7 @@ const Editor = ({
     const normalizedDiffModified = normalizeQueryText(
       activeBuffer.diffContent.modified || "",
     )
-    const normalizedCurrentSQL = normalizeQueryText(
-      conversation.currentSQL || "",
-    )
+    const normalizedCurrentSQL = normalizeQueryText(meta.currentSQL || "")
 
     if (normalizedDiffModified !== normalizedCurrentSQL) {
       return null
@@ -229,9 +232,8 @@ const Editor = ({
     return {
       conversationId,
       messageId: lastUnactionedDiff.id,
-      conversation,
     }
-  }, [activeBuffer, getConversation])
+  }, [activeBuffer, getConversationMeta, activeConversationMessages])
 
   // Handle accept button click from diff editor button bar
   const handleAcceptFromDiffEditor = useCallback(async () => {
@@ -250,10 +252,10 @@ const Editor = ({
   const handleRejectFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo) return
 
-    const { conversationId } = pendingDiffInfo
+    const { conversationId, messageId } = pendingDiffInfo
 
     // Use unified rejectSuggestion from provider
-    await rejectSuggestion(conversationId)
+    await rejectSuggestion(conversationId, messageId)
   }, [pendingDiffInfo, rejectSuggestion])
 
   // Keyboard shortcut: Escape to reject diff

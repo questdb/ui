@@ -6,22 +6,25 @@ import {
   TrashSimpleIcon,
 } from "@phosphor-icons/react"
 import { color } from "../../../utils"
-import type { AIConversation } from "../../../providers/AIConversationProvider/types"
+import type { ConversationMeta } from "../../../store/db"
 
-const Container = styled.div`
+const Container = styled.div<{ $disabled?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.8rem;
   border-radius: 4px;
-  cursor: pointer;
+  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
   background: ${color("transparent")};
+  opacity: ${({ $disabled }) => ($disabled ? 0.5 : 1)};
 
   &:hover {
-    background: ${color("selection")};
+    background: ${({ $disabled }) =>
+      $disabled ? "transparent" : color("selection")};
 
     .chat-title {
-      color: ${color("foreground")};
+      color: ${({ $disabled }) =>
+        $disabled ? color("offWhite") : color("foreground")};
     }
   }
 `
@@ -122,10 +125,11 @@ const CurrentIndicator = styled.span`
 `
 
 type ChatHistoryItemProps = {
-  conversation: AIConversation
+  conversation: ConversationMeta
   subtitle?: string
   isCurrent: boolean
   hasOngoingProcess?: boolean
+  disabled?: boolean
   onSelect: (id: string) => void
   onRename: (id: string, newName: string) => void
   onDelete: (id: string) => void
@@ -136,6 +140,7 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
   subtitle,
   isCurrent,
   hasOngoingProcess,
+  disabled,
   onSelect,
   onRename,
   onDelete,
@@ -184,13 +189,13 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
   }
 
   const handleContainerClick = () => {
-    if (!isEditing) {
+    if (!isEditing && !disabled) {
       onSelect(conversation.id)
     }
   }
 
   return (
-    <Container onClick={handleContainerClick}>
+    <Container onClick={handleContainerClick} $disabled={disabled}>
       <IconWrapper>
         <ChatTextIcon size={18} />
       </IconWrapper>

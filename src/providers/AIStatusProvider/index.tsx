@@ -15,7 +15,6 @@ import {
   providerForModel,
   canUseAiAssistant,
 } from "../../utils/aiAssistantSettings"
-import type { ConversationId } from "../AIConversationProvider/types"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
@@ -74,7 +73,6 @@ type BaseAIStatusContextType = {
   hasSchemaAccess: boolean
   models: string[]
   currentOperation: OperationHistory
-  activeConversationId: ConversationId | null
   clearOperation: () => void
 }
 
@@ -220,10 +218,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     }
   }, [])
 
-  const activeConversationId =
-    currentOperation.find((entry) => entry.args?.conversationId)?.args
-      ?.conversationId ?? null
-
   const contextValue: AIStatusContextType = isConfigured
     ? {
         status,
@@ -238,7 +232,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey: apiKey!,
         models,
         currentOperation,
-        activeConversationId,
       }
     : {
         status,
@@ -253,7 +246,6 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey,
         models,
         currentOperation,
-        activeConversationId,
       }
 
   return (

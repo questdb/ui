@@ -58,7 +58,7 @@ const LoadingIcon = () => (
   </LoadingIconWrapper>
 )
 
-const MessagesContainer = styled(Box)`
+const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 2rem;
@@ -67,6 +67,11 @@ const MessagesContainer = styled(Box)`
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  ${({ $scrolled }) =>
+    !$scrolled &&
+    css`
+      opacity: 0;
+    `}
 `
 
 const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
@@ -554,7 +559,7 @@ const RejectButton = styled(Button)`
 type ChatMessagesProps = {
   messages: ConversationMessage[]
   onAcceptChange?: (messageId: string) => void
-  onRejectChange?: () => void
+  onRejectChange?: (messageId: string) => void
   onRunQuery?: (sql: string) => void
   onExpandDiff?: (original: string, modified: string) => void
   // Apply SQL to editor and mark that specific message as accepted
@@ -633,13 +638,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { status } = useAIStatus()
-  const scrolledRef = useRef(false)
+  const [scrolled, setScrolled] = useState(false)
 
   const handleScrollNeeded = useCallback(() => {
-    const behavior = scrolledRef.current ? "smooth" : "instant"
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior }))
-    scrolledRef.current = true
-  }, [])
+    const behavior = scrolled ? "smooth" : "instant"
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior })
+      setScrolled(true)
+    })
+  }, [scrolled])
 
   const latestDiffIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -729,9 +736,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   }
 
   return (
-    <MessagesContainer>
+    <MessagesContainer $scrolled={scrolled}>
       {visibleMessages.map(({ message, originalIndex }) => {
-        const key = `${message.role}-${message.timestamp}-${originalIndex}`
+        const key = `${message.id}`
         if (message.role === "user") {
           // Check if this is a special request type with inline SQL display
           const displayType = message.displayType
@@ -1023,11 +1030,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                               const lineCount = codeContent.split("\n").length
                               // LiteEditor has 8px padding top and bottom (16px total)
                               const editorHeight = Math.min(
-                                Math.max(lineCount * 20 + 16, 56),
+                                lineCount * 20 + 16,
                                 316,
                               )
                               return (
                                 <CodeBlockWrapper
+                                  key={`${message.id}-${codeContent}`}
                                   style={{ height: editorHeight }}
                                 >
                                   <LiteEditor value={codeContent} />
@@ -1163,8 +1171,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             </DiffEditorWrapper>
                             {showButtons && (
                               <ButtonBar align="center" justifyContent="center">
-                                {onRejectChange && (
-                                  <RejectButton onClick={onRejectChange}>
+                                {onRejectChange && message.id && (
+                                  <RejectButton
+                                    onClick={() => onRejectChange(message.id)}
+                                  >
                                     Reject
                                   </RejectButton>
                                 )}

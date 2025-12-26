@@ -194,6 +194,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     openChatWindow,
     addMessage,
     updateConversationName,
+    persistMessages,
   } = useAIConversation()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
@@ -309,18 +310,22 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
     const existingConversation = findConversationByTableId(tableId)
     if (existingConversation) {
-      openChatWindow(existingConversation.id)
+      void openChatWindow(existingConversation.id)
       return
     }
 
-    const conversation = createConversation({
+    const conversation = await createConversation({
       tableId,
     })
 
-    updateConversationName(conversation.id, `${tableName} schema explanation`)
+    void updateConversationName(
+      conversation.id,
+      `${tableName} schema explanation`,
+    )
     const userMessage = getExplainSchemaPrompt(tableName, schema, isMatView)
+    await openChatWindow(conversation.id)
 
-    addMessage(conversation.id, {
+    addMessage({
       role: "user",
       content: userMessage,
       timestamp: Date.now(),
@@ -333,8 +338,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         designatedTimestamp: item.designatedTimestamp,
       },
     })
-
-    openChatWindow(conversation.id)
 
     const provider = providerForModel(currentModel)
 
@@ -356,12 +359,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     if (isAiAssistantError(response)) {
       const error = response
       toast.error(error.message, { autoClose: 10000 })
-      addMessage(conversation.id, {
+      addMessage({
         role: "assistant",
         content: `Error: ${error.message}`,
         timestamp: Date.now(),
         explanation: `Error: ${error.message}`,
       })
+      await persistMessages(conversation.id)
       return
     }
 
@@ -374,13 +378,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }
 
     const markdownContent = schemaExplanationToMarkdown(result)
-    addMessage(conversation.id, {
+    addMessage({
       role: "assistant",
       content: markdownContent,
       timestamp: Date.now(),
       explanation: markdownContent,
       tokenUsage: result.tokenUsage,
     })
+
+    await persistMessages(conversation.id)
   }
 
   const fetchSymbolColumnDetails = useCallback(

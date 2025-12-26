@@ -27,7 +27,7 @@ export const AIChatButton = () => {
     if (chatWindowState.isOpen) {
       closeChatWindow()
     } else {
-      openOrCreateBlankChatWindow()
+      void openOrCreateBlankChatWindow()
     }
   }
 

@@ -4,7 +4,10 @@ import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react"
 import { useSelector } from "react-redux"
 import { color } from "../../../utils"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+} from "../../../providers/AIStatusProvider"
 import { useEditor } from "../../../providers"
 import { selectors } from "../../../store"
 import {
@@ -158,20 +161,20 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
   const currentItemRef = useRef<HTMLDivElement>(null)
 
   const {
-    conversations,
+    conversationMetas,
+    chatWindowState,
     openChatWindow,
     updateConversationName,
     deleteConversation,
-    closeHistoryView,
   } = useAIConversation()
 
-  const { activeConversationId: aiProcessingConversationId } = useAIStatus()
+  const { status } = useAIStatus()
   const { buffers } = useEditor()
   const tables = useSelector(selectors.query.getTables)
 
   const conversationList = useMemo(
-    () => Array.from(conversations.values()),
-    [conversations],
+    () => Array.from(conversationMetas.values()),
+    [conversationMetas],
   )
 
   const filteredConversations = useMemo(
@@ -200,12 +203,11 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
   }
 
   const handleSelect = (id: ConversationId) => {
-    openChatWindow(id)
-    closeHistoryView()
+    void openChatWindow(id)
   }
 
   const handleRename = (id: ConversationId, newName: string) => {
-    updateConversationName(id, newName)
+    void updateConversationName(id, newName)
   }
 
   const handleDeleteClick = (id: ConversationId) => {
@@ -215,7 +217,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
 
   const handleConfirmDelete = () => {
     if (conversationToDelete) {
-      deleteConversation(conversationToDelete)
+      void deleteConversation(conversationToDelete)
     }
     setDeleteDialogOpen(false)
     setConversationToDelete(null)
@@ -285,7 +287,14 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
                         : undefined
                     }
                     isCurrent={isCurrent}
-                    hasOngoingProcess={conv.id === aiProcessingConversationId}
+                    hasOngoingProcess={
+                      conv.id === chatWindowState.activeConversationId &&
+                      isBlockingAIStatus(status)
+                    }
+                    disabled={
+                      isBlockingAIStatus(status) &&
+                      conv.id !== chatWindowState.activeConversationId
+                    }
                     onSelect={handleSelect}
                     onRename={handleRename}
                     onDelete={handleDeleteClick}

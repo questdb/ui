@@ -54,6 +54,7 @@ import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { CircleNotchSpinner } from "../Monaco/icons"
 
 const Container = styled.div`
   display: flex;
@@ -207,19 +208,22 @@ export const AIChatWindow: React.FC = () => {
     executionRefs,
   } = useEditor()
   const {
-    conversations,
+    conversationMetas,
+    activeConversationMessages,
     chatWindowState,
+    isLoadingMessages,
     closeChatWindow,
     openBlankChatWindow,
     openHistoryView,
     closeHistoryView,
-    getConversation,
+    getConversationMeta,
     addMessage,
     updateMessage,
     replaceConversationMessages,
     updateConversationName,
     acceptSuggestion,
     rejectSuggestion,
+    persistMessages,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -236,9 +240,14 @@ export const AIChatWindow: React.FC = () => {
     selectors.query.getAISuggestionRequest,
   )
 
-  const conversation = chatWindowState.activeConversationId
-    ? getConversation(chatWindowState.activeConversationId)
+  const conversationMeta = chatWindowState.activeConversationId
+    ? getConversationMeta(chatWindowState.activeConversationId)
     : null
+
+  const conversation = useMemo(() => {
+    if (!conversationMeta) return null
+    return { ...conversationMeta, messages: activeConversationMessages }
+  }, [conversationMeta, activeConversationMessages])
 
   // Get query notifications for the conversation's buffer
   // Use the conversation's bufferId (original buffer, not diff buffer) for looking up notifications
@@ -258,9 +267,7 @@ export const AIChatWindow: React.FC = () => {
     return getQueryInfoFromKey(conversation?.queryKey)
   }, [conversation?.queryKey])
 
-  const messages = useMemo(() => {
-    return conversation?.messages || []
-  }, [conversation])
+  const messages = activeConversationMessages
 
   const hasUnactionedDiff = useMemo(() => {
     return checkHasUnactionedDiff(messages)
@@ -292,11 +299,9 @@ export const AIChatWindow: React.FC = () => {
     return { type: "inactive" as const, buffer }
   }, [conversation, buffers, activeBuffer])
 
-  // Determine if we should show the messages panel
-  // Show it when there are messages in the conversation
   const shouldShowMessages = useMemo(() => {
-    return messages.length > 0
-  }, [messages])
+    return messages.length > 0 && !isLoadingMessages
+  }, [messages, isLoadingMessages])
 
   const shouldShowExplainButton = useMemo(() => {
     return (
@@ -335,16 +340,17 @@ export const AIChatWindow: React.FC = () => {
     !isBlockingAIStatus(aiStatus)
 
   const isHistoryOpen = chatWindowState.isHistoryOpen ?? false
-  const hasConversations = conversations.size > 0
+  const hasConversations = conversationMetas.size > 0
 
   const addButtonDisabled = useMemo(() => {
+    if (isBlockingAIStatus(aiStatus)) return true
     if (!conversation) return false
     return (
       conversation.messages.length === 0 &&
       !conversation.queryKey &&
       !conversation.tableId
     )
-  }, [conversation])
+  }, [conversation, aiStatus])
 
   const headerTitle = useMemo(() => {
     if (isHistoryOpen) {
@@ -378,7 +384,7 @@ export const AIChatWindow: React.FC = () => {
 
   const handleHistoryToggle = useCallback(() => {
     if (isHistoryOpen) {
-      closeHistoryView()
+      void closeHistoryView()
     } else {
       openHistoryView()
     }
@@ -427,6 +433,10 @@ export const AIChatWindow: React.FC = () => {
       displayUserMessage = userMessage // Store the original user message for display
     }
 
+    if (!hasAssistantMessages) {
+      eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
+    }
+
     const userMessageEntry = {
       role: "user" as const,
       content: userMessageContent,
@@ -436,10 +446,10 @@ export const AIChatWindow: React.FC = () => {
       ...(displayUserMessage && { displayUserMessage }),
     }
 
-    addMessage(conversationId, userMessageEntry)
+    addMessage(userMessageEntry)
 
     const assistantMessageId = crypto.randomUUID()
-    addMessage(conversationId, {
+    addMessage({
       id: assistantMessageId,
       role: "assistant",
       content: "",
@@ -465,7 +475,7 @@ export const AIChatWindow: React.FC = () => {
           settings: { model: testModel.value, provider, apiKey },
         }).then((title) => {
           if (title) {
-            updateConversationName(conversationId, title)
+            void updateConversationName(conversationId, title)
           }
         })
       }
@@ -533,55 +543,66 @@ export const AIChatWindow: React.FC = () => {
       })
     }
 
-    void processResponse()
+    void processResponse().then(async () => {
+      await persistMessages(conversationId)
+    })
   }
 
   const handleExpandDiff = useCallback(
     (original: string, modified: string) => {
-      if (!conversation?.id) return
+      if (!chatWindowState.activeConversationId) return
       void showDiffBuffer({
         original,
         modified,
-        conversationId: conversation.id,
+        conversationId: chatWindowState.activeConversationId,
       })
     },
-    [showDiffBuffer, conversation?.id],
+    [showDiffBuffer, chatWindowState.activeConversationId],
   )
 
-  const handleAcceptChange = async (messageId: string) => {
-    if (!chatWindowState.activeConversationId) return
+  const handleAcceptChange = useCallback(
+    async (messageId: string) => {
+      if (!chatWindowState.activeConversationId) return
 
-    await acceptSuggestion({
-      conversationId: chatWindowState.activeConversationId,
-      messageId,
-    })
+      await acceptSuggestion({
+        conversationId: chatWindowState.activeConversationId,
+        messageId,
+      })
 
-    dispatch(actions.query.setAISuggestionRequest(null))
-  }
+      dispatch(actions.query.setAISuggestionRequest(null))
+    },
+    [chatWindowState.activeConversationId, acceptSuggestion],
+  )
 
-  const handleRejectChange = async () => {
-    if (!chatWindowState.activeConversationId) return
+  const handleRejectChange = useCallback(
+    async (messageId: string) => {
+      if (!chatWindowState.activeConversationId) return
 
-    await rejectSuggestion(chatWindowState.activeConversationId)
+      await rejectSuggestion(chatWindowState.activeConversationId, messageId)
 
-    setTimeout(() => {
-      chatInputRef.current?.focus()
-    }, 100)
-  }
+      setTimeout(() => {
+        chatInputRef.current?.focus()
+      }, 100)
+    },
+    [chatWindowState.activeConversationId, rejectSuggestion],
+  )
 
-  const handleRunQuery = (sql: string) => {
-    const normalizedSQL = sql.trim().endsWith(";")
-      ? sql.trim().slice(0, -1)
-      : sql.trim()
+  const handleRunQuery = useCallback(
+    (sql: string) => {
+      const normalizedSQL = sql.trim().endsWith(";")
+        ? sql.trim().slice(0, -1)
+        : sql.trim()
 
-    dispatch(
-      actions.query.setAISuggestionRequest({
-        query: normalizedSQL,
-        startOffset: queryInfo.startOffset,
-      }),
-    )
-    dispatch(actions.query.toggleRunning(RunningType.AI_SUGGESTION))
-  }
+      dispatch(
+        actions.query.setAISuggestionRequest({
+          query: normalizedSQL,
+          startOffset: queryInfo.startOffset,
+        }),
+      )
+      dispatch(actions.query.toggleRunning(RunningType.AI_SUGGESTION))
+    },
+    [queryInfo.startOffset],
+  )
 
   const navigateToBuffer = useCallback(async (): Promise<boolean> => {
     if (
@@ -649,7 +670,6 @@ export const AIChatWindow: React.FC = () => {
 
       editorRef.current.focus()
 
-      // Remove highlighting after 2 seconds
       setTimeout(() => {
         model.deltaDecorations(decorationIds, [])
       }, 1000)
@@ -668,21 +688,28 @@ export const AIChatWindow: React.FC = () => {
         await acceptSuggestion({
           conversationId: chatWindowState.activeConversationId,
           messageId,
+          skipDefaultMessage: true,
         })
 
-        // Add a custom hidden message to inform the model for the next round
-        addMessage(chatWindowState.activeConversationId, {
+        addMessage({
           role: "user" as const,
           content: `User replaced query with one of your previous suggestions. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
           timestamp: Date.now(),
           hideFromUI: true,
         })
+
+        await persistMessages(chatWindowState.activeConversationId)
       } catch (error) {
         console.error("Error applying SQL to editor:", error)
         toast.error("Failed to apply changes to editor")
       }
     },
-    [chatWindowState.activeConversationId, acceptSuggestion, addMessage],
+    [
+      chatWindowState.activeConversationId,
+      acceptSuggestion,
+      addMessage,
+      persistMessages,
+    ],
   )
 
   const explainButtonRef = useRef<HTMLDivElement | null>(null)
@@ -741,7 +768,7 @@ export const AIChatWindow: React.FC = () => {
             $active={isHistoryOpen}
             onClick={handleHistoryToggle}
             title={isHistoryOpen ? "Back to chat" : "Chat history"}
-            disabled={!hasConversations}
+            disabled={!hasConversations || isBlockingAIStatus(aiStatus)}
           >
             <ClockCounterClockwiseIcon size={16} weight="bold" />
           </HeaderButton>
@@ -751,7 +778,11 @@ export const AIChatWindow: React.FC = () => {
         </HeaderRight>
       </Header>
       <ChatWindowContent>
-        {isHistoryOpen ? (
+        {isLoadingMessages ? (
+          <ChatPanel>
+            <CircleNotchSpinner size={20} style={{ margin: "auto" }} />
+          </ChatPanel>
+        ) : isHistoryOpen ? (
           <ChatHistoryView
             currentConversationId={
               chatWindowState.previousConversationId ?? null
@@ -820,7 +851,6 @@ export const AIChatWindow: React.FC = () => {
               }
               disabled={!canUse || isBlockingAIStatus(aiStatus)}
               placeholder={getPlaceholder()}
-              conversationId={conversation?.id}
               contextSQL={queryInfo.queryText}
               contextTableId={conversation?.tableId}
               onContextClick={handleContextClick}

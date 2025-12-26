@@ -91,7 +91,6 @@ export type EditorContext = {
     positions: { id: number; position: number }[],
   ) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
-  inFocus: boolean
   setTemporaryBuffer: (buffer: Buffer) => Promise<void>
   temporaryBufferId: number | null
   queryParamProcessedRef: MutableRefObject<boolean>
@@ -133,7 +132,6 @@ const defaultValues = {
   updateBuffer: () => Promise.resolve(),
   updateBuffersPositions: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
-  inFocus: false,
   setTemporaryBuffer: () => Promise.resolve(),
   temporaryBufferId: null,
   queryParamProcessedRef: { current: false },
@@ -196,7 +194,6 @@ export const EditorProvider: React.FC = ({ children }) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
-  const [inFocus, setInFocus] = useState(false)
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
   const isNavigatingFromSearchRef = useRef(false)
@@ -690,7 +687,6 @@ export const EditorProvider: React.FC = ({ children }) => {
             appendQuery(editorRef.current, text, options)
           }
         },
-        inFocus,
         buffers,
         activeBuffer,
         setActiveBuffer,
@@ -717,11 +713,8 @@ export const EditorProvider: React.FC = ({ children }) => {
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()
-            setInFocus(true)
           }
 
-          editor.onDidFocusEditorWidget(() => setInFocus(true))
-          editor.onDidBlurEditorWidget(() => setInFocus(false))
           if (activeBuffer.editorViewState) {
             editor.restoreViewState(activeBuffer.editorViewState)
           }

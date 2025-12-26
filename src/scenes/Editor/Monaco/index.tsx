@@ -27,9 +27,11 @@ import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { QuestContext, useEditor } from "../../../providers"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+} from "../../../providers/AIStatusProvider"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
-import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
@@ -72,6 +74,8 @@ import { toast } from "../../../components/Toast"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import { createGlyphWidget, clearGlyphWidgets } from "./glyphUtils"
+import { applyGutterIconState } from "./icons"
+import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 
 type IndividualQueryResult = {
   success: boolean
@@ -197,13 +201,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     isNavigatingFromSearchRef,
   } = editorContext
   const { quest } = useContext(QuestContext)
-  const { canUse: canUseAI } = useAIStatus()
+  const { canUse: canUseAI, status: aiStatus } = useAIStatus()
   const {
     getOrCreateConversationForQuery,
     openChatWindow,
     hasConversationForQuery,
-    findConversationByQuery,
     shiftQueryKeysForBuffer,
+    findQueryByConversationId,
   } = useAIConversation()
   const [request, setRequest] = useState<Request | undefined>()
   const [editorReady, setEditorReady] = useState<boolean>(false)
@@ -242,14 +246,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     startOffset: number
   } | null>(aiSuggestionRequest)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
-  const findConversationByQueryRef = useRef(findConversationByQuery)
+  const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
+  const findQueryByConversationIdRef = useRef(findQueryByConversationId)
+  const aiStatusRef = useRef(aiStatus)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const glyphLineNumbersRef = useRef<Set<number>>(new Set())
   const decorationCollectionRef =
     useRef<editor.IEditorDecorationsCollection | null>(null)
   const glyphWidgetsRef = useRef<editor.IGlyphMarginWidget[]>([])
-  const seenConversationsRef = useRef<Set<ConversationId>>(new Set())
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -429,19 +434,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     toggleRunning(RunningType.EXPLAIN)
   }
 
-  const handleAskAI = (query?: Request) => {
+  const handleAskAI = async (query?: Request) => {
     setDropdownOpen(false)
     if (!query || !editorRef.current) return
 
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
 
-    const conversation = getOrCreateConversationForQuery({
+    const conversation = await getOrCreateConversationForQuery({
       queryKey,
       bufferId: activeBufferRef.current.id!,
     })
 
-    openChatWindow(conversation.id)
+    await openChatWindow(conversation.id)
   }
+  const handleAskAIRef = useRef(handleAskAI)
+  useEffect(() => {
+    handleAskAIRef.current = handleAskAI
+  }, [handleAskAI])
 
   const applyLineMarkings = (
     monaco: Monaco,
@@ -598,17 +607,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         // Convert 0-based row to 1-based line number for Monaco
         const startLineNumber = query.row + 1
 
-        const conversation = canUseAI
-          ? findConversationByQueryRef.current(activeBufferId, queryKey)
-          : undefined
-        const hasConversation =
-          conversation !== undefined && conversation.messages.length > 0
-
-        // Check if this is a newly created conversation (for highlight animation)
-        const isNewlyCreatedConversation =
-          hasConversation &&
-          conversation !== undefined &&
-          !seenConversationsRef.current.has(conversation.id)
+        const hasConversation = canUseAI
+          ? hasConversationForQueryRef.current(activeBufferId, queryKey)
+          : false
 
         const isRunningQuery =
           runningValueRef.current !== RunningType.NONE &&
@@ -648,7 +649,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               false,
             )
           } else if (dropdownQueries.length === 1) {
-            handleAskAI(dropdownQueries[0])
+            void handleAskAIRef.current(dropdownQueries[0])
           }
         }
 
@@ -673,7 +674,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             isSuccessful,
             showAI: canUseAI,
             hasConversation,
-            isHighlighted: isNewlyCreatedConversation,
+            aiButtonDisabled: isBlockingAIStatus(aiStatusRef.current),
             onRunClick: handleRunClick,
             onRunContextMenu: handleRunContextMenu,
             onAIClick: handleAIClick,
@@ -681,10 +682,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           editor.addGlyphMarginWidget(widget)
           glyphLineNumbersRef.current.add(startLineNumber)
           glyphWidgetsRef.current.push(widget)
-        }
-
-        if (conversation && conversation.messages.length > 0) {
-          seenConversationsRef.current.add(conversation.id)
         }
       })
     }
@@ -940,7 +937,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           0,
         )
         if (totalDelta !== 0) {
-          shiftQueryKeysForBuffer(
+          shiftQueryKeysForBufferRef.current(
             activeBufferId,
             earliestChangeOffset,
             totalDelta,
@@ -1765,11 +1762,22 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     hasConversationForQueryRef.current = hasConversationForQuery
-    findConversationByQueryRef.current = findConversationByQuery
     if (monacoRef.current && editorRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
-  }, [hasConversationForQuery, findConversationByQuery])
+  }, [hasConversationForQuery])
+
+  useEffect(() => {
+    findQueryByConversationIdRef.current = findQueryByConversationId
+    shiftQueryKeysForBufferRef.current = shiftQueryKeysForBuffer
+  }, [findQueryByConversationId, shiftQueryKeysForBuffer])
+
+  useEffect(() => {
+    aiStatusRef.current = aiStatus
+    if (monacoRef.current && editorRef.current) {
+      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+    }
+  }, [aiStatus])
 
   useEffect(() => {
     window.addEventListener("focus", setCompletionProvider)
@@ -1777,6 +1785,39 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       window.removeEventListener("focus", setCompletionProvider)
     }
   }, [setCompletionProvider])
+
+  useEffect(() => {
+    const handler = (conversationId: unknown) => {
+      if (!editorRef.current) return
+      const model = editorRef.current.getModel()
+      if (!model) return
+
+      const queryInfo = findQueryByConversationIdRef.current(
+        conversationId as ConversationId,
+      )
+      if (!queryInfo) return
+      const { queryKey, bufferId } = queryInfo
+      if (activeBufferRef.current.id !== bufferId) return
+      const startOffset = parseQueryKey(queryKey).startOffset
+      const lineNumber = model.getPositionAt(startOffset).lineNumber
+      const widget = glyphWidgetsRef.current.find(
+        (widget) => widget.getId() === `glyph-widget-${lineNumber}`,
+      )
+      if (widget) {
+        applyGutterIconState(
+          widget.getDomNode()?.querySelector(".ai-gutter-icon") as HTMLElement,
+          "highlight",
+          16,
+        )
+      }
+    }
+
+    eventBus.subscribe(EventType.AI_QUERY_HIGHLIGHT, handler)
+
+    return () => {
+      eventBus.unsubscribe(EventType.AI_QUERY_HIGHLIGHT, handler)
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -1865,7 +1906,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         isAIDropdownRef={isAIDropdownRef}
         onRunQuery={handleRunQuery}
         onExplainQuery={handleExplainQuery}
-        onAskAI={handleAskAI}
+        onAskAIRef={handleAskAIRef}
       />
 
       <Dialog.Root

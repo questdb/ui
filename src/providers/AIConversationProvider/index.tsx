@@ -4,12 +4,21 @@ import React, {
   useState,
   useCallback,
   useMemo,
+  useEffect,
+  useRef,
 } from "react"
+import { useLiveQuery } from "dexie-react-hooks"
+import {
+  db,
+  type ConversationMeta,
+  type ConversationMetaWithStatus,
+} from "../../store/db"
+import { aiConversationStore } from "../../store/aiConversations"
 import type {
-  AIConversation,
   ConversationMessage,
   ChatWindowState,
   ConversationId,
+  AIConversation,
 } from "./types"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
@@ -20,50 +29,58 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
 import { normalizeSql } from "../../utils/aiAssistant"
-import { buildIndices, createQueryLookupKey } from "./indices"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
   messageId: string
+  skipDefaultMessage?: boolean
 }
 
 type AIConversationContextType = {
-  conversations: Map<ConversationId, AIConversation>
+  conversationMetas: Map<ConversationId, ConversationMetaWithStatus>
+  activeConversationMessages: ConversationMessage[]
   chatWindowState: ChatWindowState
+  isLoadingMessages: boolean
 
-  getConversation: (id: ConversationId) => AIConversation | undefined
+  getConversationMeta: (
+    id: ConversationId,
+  ) => ConversationMetaWithStatus | undefined
   findConversationByQuery: (
     bufferId: number,
     queryKey: QueryKey,
-  ) => AIConversation | undefined
-  findConversationByTableId: (tableId: number) => AIConversation | undefined
+  ) => ConversationMetaWithStatus | undefined
+  findConversationByTableId: (
+    tableId: number,
+  ) => ConversationMetaWithStatus | undefined
+  findQueryByConversationId: (
+    conversationId: ConversationId,
+  ) => { queryKey: QueryKey; bufferId: number } | null
   hasConversationForQuery: (bufferId: number, queryKey: QueryKey) => boolean
 
   createConversation: (options: {
     bufferId?: number
     queryKey?: QueryKey
     tableId?: number
-  }) => AIConversation
+  }) => Promise<AIConversation>
   getOrCreateConversationForQuery: (options: {
     bufferId: number
     queryKey: QueryKey
-  }) => AIConversation
+  }) => Promise<AIConversation>
   shiftQueryKeysForBuffer: (
     bufferId: string | number,
     changeOffset: number,
     delta: number,
   ) => void
 
-  openChatWindow: (conversationId: ConversationId) => void
-  openOrCreateBlankChatWindow: () => void
-  openBlankChatWindow: () => void
+  openChatWindow: (conversationId: ConversationId) => Promise<void>
+  openOrCreateBlankChatWindow: () => Promise<void>
+  openBlankChatWindow: () => Promise<void>
   closeChatWindow: () => void
   openHistoryView: () => void
   closeHistoryView: () => void
-  deleteConversation: (conversationId: ConversationId) => void
+  deleteConversation: (conversationId: ConversationId) => Promise<void>
 
   addMessage: (
-    conversationId: ConversationId,
     message: Omit<ConversationMessage, "id"> & { id?: string },
   ) => void
   updateMessage: (
@@ -75,10 +92,17 @@ type AIConversationContextType = {
     conversationId: ConversationId,
     newMessages: Array<ConversationMessage>,
   ) => void
-  updateConversationName: (conversationId: ConversationId, name: string) => void
+  updateConversationName: (
+    conversationId: ConversationId,
+    name: string,
+  ) => Promise<void>
 
   acceptSuggestion: (params: AcceptSuggestionParams) => Promise<void>
-  rejectSuggestion: (conversationId: ConversationId) => Promise<void>
+  rejectSuggestion: (
+    conversationId: ConversationId,
+    messageId: string,
+  ) => Promise<void>
+  persistMessages: (conversationId: ConversationId) => Promise<void>
 }
 
 const AIConversationContext = createContext<
@@ -98,9 +122,41 @@ export const useAIConversation = () => {
 export const AIConversationProvider: React.FC<{
   children: React.ReactNode
 }> = ({ children }) => {
-  const [conversations, setConversations] = useState<
-    Map<ConversationId, AIConversation>
-  >(new Map())
+  const conversationMetasArray = useLiveQuery(
+    async () => {
+      const metas: ConversationMeta[] = await db.ai_conversations.toArray()
+      const metasWithStatus: ConversationMetaWithStatus[] = []
+      for (const meta of metas) {
+        const hasMessages = await db.ai_conversation_messages
+          .where("conversationId")
+          .equals(meta.id)
+          .count()
+        metasWithStatus.push({
+          ...meta,
+          hasMessages: hasMessages > 0,
+        })
+      }
+      return metasWithStatus
+    },
+    [],
+    [],
+  )
+
+  const conversationMetas = useMemo(
+    () => new Map(conversationMetasArray.map((m) => [m.id, m])),
+    [conversationMetasArray],
+  )
+
+  const [activeConversationMessages, setActiveConversationMessages] = useState<
+    ConversationMessage[]
+  >([])
+
+  const activeConversationMessagesRef = useRef<ConversationMessage[]>([])
+  useEffect(() => {
+    activeConversationMessagesRef.current = activeConversationMessages
+  }, [activeConversationMessages])
+
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
 
   const [chatWindowState, setChatWindowState] = useState<ChatWindowState>({
     isOpen: false,
@@ -109,114 +165,156 @@ export const AIConversationProvider: React.FC<{
     previousConversationId: null,
   })
 
-  const indices = useMemo(() => buildIndices(conversations), [conversations])
+  const activeConversationId = chatWindowState.activeConversationId
 
-  const getConversation = useCallback(
-    (id: ConversationId): AIConversation | undefined => {
-      return conversations.get(id)
+  const activeConversationIdRef = useRef(activeConversationId)
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
+  const persistMessages = useCallback(
+    async (conversationId: ConversationId, updateTimstamp: boolean = true) => {
+      if (conversationId !== activeConversationIdRef.current) {
+        return
+      }
+      await aiConversationStore.saveMessages(
+        conversationId,
+        activeConversationMessagesRef.current,
+      )
+      if (updateTimstamp) {
+        await aiConversationStore.updateMeta(conversationId, {
+          updatedAt: Date.now(),
+        })
+      }
     },
-    [conversations],
+    [],
+  )
+
+  const getConversationMeta = useCallback(
+    (id: ConversationId): ConversationMetaWithStatus | undefined => {
+      return conversationMetas.get(id)
+    },
+    [conversationMetas],
   )
 
   const findConversationByQuery = useCallback(
     (
       bufferId: string | number,
       queryKey: QueryKey,
-    ): AIConversation | undefined => {
-      const lookupKey = createQueryLookupKey(bufferId, queryKey)
-      const id = indices.queryIndex.get(lookupKey)
-      return id ? conversations.get(id) : undefined
+    ): ConversationMetaWithStatus | undefined => {
+      for (const meta of conversationMetas.values()) {
+        if (meta.bufferId === bufferId && meta.queryKey === queryKey) {
+          return meta
+        }
+      }
+      return undefined
     },
-    [conversations, indices],
+    [conversationMetas],
   )
 
   const findConversationByTableId = useCallback(
-    (tableId: number): AIConversation | undefined => {
-      const id = indices.tableIndex.get(tableId)
-      return id ? conversations.get(id) : undefined
+    (tableId: number): ConversationMetaWithStatus | undefined => {
+      for (const meta of conversationMetas.values()) {
+        if (meta.tableId === tableId) {
+          return meta
+        }
+      }
+      return undefined
     },
-    [conversations, indices],
+    [conversationMetas],
+  )
+
+  const findQueryByConversationId = useCallback(
+    (
+      conversationId: ConversationId,
+    ): { queryKey: QueryKey; bufferId: number } | null => {
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return null
+      if (!meta.queryKey || !meta.bufferId) return null
+      return { queryKey: meta.queryKey, bufferId: meta.bufferId }
+    },
+    [conversationMetas],
   )
 
   const hasConversationForQuery = useCallback(
     (bufferId: string | number, queryKey: QueryKey): boolean => {
-      const lookupKey = createQueryLookupKey(bufferId, queryKey)
-      const conversationId: ConversationId | undefined =
-        indices.queryIndex.get(lookupKey)
-      if (!conversationId) return false
-      const conversation = conversations.get(conversationId)
-      return conversation !== undefined && conversation.messages.length > 0
+      const meta = findConversationByQuery(bufferId, queryKey)
+      if (!meta) return false
+      return (
+        meta.hasMessages ||
+        (chatWindowState.activeConversationId === meta.id &&
+          activeConversationMessagesRef.current.length > 0)
+      )
     },
-    [indices, conversations],
+    [findConversationByQuery, chatWindowState.activeConversationId],
   )
 
   const createConversation = useCallback(
-    (options: {
+    async (options: {
       bufferId?: number
       queryKey?: QueryKey
       tableId?: number
-    }): AIConversation => {
+    }): Promise<AIConversation> => {
       const id = crypto.randomUUID()
       const { queryText } = getQueryInfoFromKey(options.queryKey)
-      const conversation: AIConversation = {
+      const meta: ConversationMeta = {
         id,
         queryKey: options.queryKey,
         bufferId: options.bufferId,
         tableId: options.tableId,
         currentSQL: queryText,
         conversationName: "AI Assistant",
-        messages: [],
         updatedAt: Date.now(),
       }
 
-      setConversations((prev) => {
-        const next = new Map(prev)
-        next.set(id, conversation)
-        return next
-      })
+      await aiConversationStore.saveMeta(meta)
 
-      return conversation
+      return { ...meta, messages: [] }
     },
     [],
   )
 
   const getOrCreateConversationForQuery = useCallback(
-    (options: { bufferId: number; queryKey: QueryKey }): AIConversation => {
+    async (options: {
+      bufferId: number
+      queryKey: QueryKey
+    }): Promise<AIConversation> => {
       const existing = findConversationByQuery(
         options.bufferId,
         options.queryKey,
       )
       if (existing) {
-        return existing
+        if (activeConversationId === existing.id) {
+          return { ...existing, messages: activeConversationMessages }
+        }
+        const messages = await aiConversationStore.getMessages(existing.id)
+        return { ...existing, messages }
       }
-
       return createConversation({
         bufferId: options.bufferId,
         queryKey: options.queryKey,
       })
     },
-    [findConversationByQuery, createConversation],
+    [
+      findConversationByQuery,
+      createConversation,
+      activeConversationId,
+      activeConversationMessages,
+    ],
   )
 
   const updateConversationAssociations = useCallback(
-    (
+    async (
       conversationId: ConversationId,
       updates: {
         bufferId?: number
         queryKey?: QueryKey
+        tableId?: number
       },
-    ): void => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (!conv) return prev
-
-        next.set(conversationId, {
-          ...conv,
-          ...updates,
-          updatedAt: Date.now(),
-        })
-        return next
+    ): Promise<void> => {
+      await aiConversationStore.updateMeta(conversationId, {
+        ...updates,
+        updatedAt: Date.now(),
       })
     },
     [],
@@ -224,57 +322,33 @@ export const AIConversationProvider: React.FC<{
 
   const shiftQueryKeysForBuffer = useCallback(
     (bufferId: string | number, changeOffset: number, delta: number): void => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        let hasChanges = false
-
-        for (const [id, conv] of prev) {
-          if (conv.bufferId === bufferId && conv.queryKey) {
-            const { startOffset } = getQueryInfoFromKey(conv.queryKey)
-            // Only shift if the query starts at or after the change point
-            if (startOffset >= changeOffset) {
-              const newQueryKey = shiftQueryKey(
-                conv.queryKey,
-                changeOffset,
-                delta,
-              )
-              next.set(id, {
-                ...conv,
-                queryKey: newQueryKey,
-                updatedAt: Date.now(),
-              })
-              hasChanges = true
-            }
+      for (const [id, meta] of conversationMetas) {
+        if (meta.bufferId === bufferId && meta.queryKey) {
+          const { startOffset } = getQueryInfoFromKey(meta.queryKey)
+          if (startOffset >= changeOffset) {
+            const newQueryKey = shiftQueryKey(
+              meta.queryKey,
+              changeOffset,
+              delta,
+            )
+            void aiConversationStore.updateMeta(id, {
+              queryKey: newQueryKey,
+              updatedAt: Date.now(),
+            })
           }
         }
-
-        return hasChanges ? next : prev
-      })
+      }
     },
-    [],
+    [conversationMetas],
   )
 
   const addMessage = useCallback(
-    (
-      conversationId: ConversationId,
-      message: Omit<ConversationMessage, "id"> & { id?: string },
-    ) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          const messageWithId: ConversationMessage = {
-            ...message,
-            id: message.id || crypto.randomUUID(),
-          }
-          next.set(conversationId, {
-            ...conv,
-            messages: [...conv.messages, messageWithId],
-            updatedAt: Date.now(),
-          })
-        }
-        return next
-      })
+    (message: Omit<ConversationMessage, "id"> & { id?: string }) => {
+      const messageWithId: ConversationMessage = {
+        ...message,
+        id: message.id || crypto.randomUUID(),
+      }
+      setActiveConversationMessages((prev) => [...prev, messageWithId])
     },
     [],
   )
@@ -285,293 +359,281 @@ export const AIConversationProvider: React.FC<{
       messageId: string,
       updates: Partial<ConversationMessage>,
     ) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          let hasSQLChange = false
-          const updatedMessages = conv.messages.map((msg) => {
-            if (msg.id !== messageId) return msg
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
 
-            // If sql is being set and message doesn't have previousSQL yet, compute it
-            let finalUpdates = updates
-            const newSql = updates.sql
-            if (
-              newSql !== undefined &&
-              msg.previousSQL === undefined &&
-              updates.previousSQL === undefined
-            ) {
-              const { queryText: acceptedSQL } = getQueryInfoFromKey(
-                conv.queryKey,
-              )
-              const normalizedNewSQL = normalizeQueryText(newSql || "")
-              const normalizedAcceptedSQL = normalizeQueryText(acceptedSQL)
-              const sqlActuallyChanged =
-                normalizedNewSQL !== normalizedAcceptedSQL
+      setActiveConversationMessages((prev) => {
+        let hasSQLChange = false
+        const updatedMessages = prev.map((msg) => {
+          if (msg.id !== messageId) return msg
 
-              if (sqlActuallyChanged) {
-                hasSQLChange = true
-              }
+          let finalUpdates = updates
+          const newSql = updates.sql
+          if (
+            newSql !== undefined &&
+            msg.previousSQL === undefined &&
+            updates.previousSQL === undefined
+          ) {
+            const { queryText: acceptedSQL } = getQueryInfoFromKey(
+              meta.queryKey,
+            )
+            const normalizedNewSQL = normalizeQueryText(newSql || "")
+            const normalizedAcceptedSQL = normalizeQueryText(acceptedSQL)
+            const sqlActuallyChanged =
+              normalizedNewSQL !== normalizedAcceptedSQL
 
-              finalUpdates = {
-                ...updates,
-                previousSQL: sqlActuallyChanged ? acceptedSQL : undefined,
-              }
+            if (sqlActuallyChanged) {
+              hasSQLChange = true
             }
 
-            return { ...msg, ...finalUpdates }
-          })
-          next.set(conversationId, {
-            ...conv,
-            messages: updatedMessages,
-            currentSQL: hasSQLChange ? updates.sql : conv.currentSQL,
+            finalUpdates = {
+              ...updates,
+              previousSQL: sqlActuallyChanged ? acceptedSQL : undefined,
+            }
+          }
+
+          return { ...msg, ...finalUpdates }
+        })
+
+        if (hasSQLChange && updates.sql) {
+          void aiConversationStore.updateMeta(conversationId, {
+            currentSQL: updates.sql,
             updatedAt: Date.now(),
           })
         }
-        return next
+
+        return updatedMessages
       })
     },
-    [],
+    [conversationMetas],
   )
 
   const replaceConversationMessages = useCallback(
     (
-      conversationId: ConversationId,
+      _conversationId: ConversationId,
       newMessages: Array<ConversationMessage>,
     ) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          const conversationMessages = [...conv.messages]
-          let lastReplaceIndex = -1
-          // Replace history messages with new messages (`isCompacted` flag is set to true in compaction)
-          for (const message of newMessages) {
-            const index = conversationMessages.findIndex(
-              (m) => m.id === message.id,
-            )
-            if (index !== -1) {
-              lastReplaceIndex = Math.max(lastReplaceIndex, index)
-              conversationMessages[index] = message
-            }
-          }
-          // Add the summarization message at the end of summarized part
-          conversationMessages.splice(
-            lastReplaceIndex + 1,
-            0,
-            newMessages[newMessages.length - 1],
+      setActiveConversationMessages((prev) => {
+        const conversationMessages = [...prev]
+        let lastReplaceIndex = -1
+        for (const message of newMessages) {
+          const index = conversationMessages.findIndex(
+            (m) => m.id === message.id,
           )
-
-          next.set(conversationId, {
-            ...conv,
-            messages: conversationMessages,
-            updatedAt: Date.now(),
-          })
+          if (index !== -1) {
+            lastReplaceIndex = Math.max(lastReplaceIndex, index)
+            conversationMessages[index] = message
+          }
         }
-        return next
+        conversationMessages.splice(
+          lastReplaceIndex + 1,
+          0,
+          newMessages[newMessages.length - 1],
+        )
+        return conversationMessages
       })
     },
     [],
   )
 
   const updateConversationSQL = useCallback(
-    (conversationId: ConversationId, sql: string) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          const { startOffset } = getQueryInfoFromKey(conv.queryKey)
-          const newQueryKey = createQueryKey(sql, startOffset)
-          next.set(conversationId, {
-            ...conv,
-            currentSQL: sql,
-            queryKey: newQueryKey,
-            updatedAt: Date.now(),
-          })
-        }
-        return next
+    async (conversationId: ConversationId, sql: string) => {
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
+
+      const { startOffset } = getQueryInfoFromKey(meta.queryKey)
+      const newQueryKey = createQueryKey(sql, startOffset)
+
+      await aiConversationStore.updateMeta(conversationId, {
+        currentSQL: sql,
+        queryKey: newQueryKey,
+        updatedAt: Date.now(),
       })
     },
-    [],
+    [conversationMetas],
   )
 
   const updateConversationName = useCallback(
-    (conversationId: ConversationId, name: string) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv) {
-          next.set(conversationId, {
-            ...conv,
-            conversationName: name,
-            updatedAt: Date.now(),
-          })
-        }
-        return next
+    async (conversationId: ConversationId, name: string) => {
+      await aiConversationStore.updateMeta(conversationId, {
+        conversationName: name,
       })
     },
     [],
   )
 
   const acceptConversationChanges = useCallback(
-    (conversationId: ConversationId, messageId: string) => {
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (!conv) return next
+    async (conversationId: ConversationId, messageId: string) => {
+      if (activeConversationId !== conversationId) return
 
-        const targetMessage = conv.messages.find((m) => m.id === messageId)
-        if (!targetMessage || !targetMessage.sql) {
-          return next
-        }
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
 
-        const { startOffset } = getQueryInfoFromKey(conv.queryKey)
-        const newQueryKey = createQueryKey(targetMessage.sql, startOffset)
+      const targetMessage = activeConversationMessages.find(
+        (m) => m.id === messageId,
+      )
+      if (!targetMessage || !targetMessage.sql) return
 
-        const updatedMessages = conv.messages.map((msg) => {
+      const { startOffset } = getQueryInfoFromKey(meta.queryKey)
+      const newQueryKey = createQueryKey(targetMessage.sql, startOffset)
+
+      await aiConversationStore.updateMeta(conversationId, {
+        queryKey: newQueryKey,
+        updatedAt: Date.now(),
+      })
+
+      setActiveConversationMessages((prev) =>
+        prev.map((msg) => {
           if (msg.id === messageId) {
             return { ...msg, isAccepted: true }
           }
           return msg
-        })
-
-        next.set(conversationId, {
-          ...conv,
-          queryKey: newQueryKey,
-          messages: updatedMessages,
-          updatedAt: Date.now(),
-        })
-        return next
-      })
+        }),
+      )
     },
-    [],
+    [activeConversationId, conversationMetas, activeConversationMessages],
   )
 
-  const rejectLatestChange = useCallback((conversationId: ConversationId) => {
-    setConversations((prev) => {
-      const next = new Map(prev)
-      const conv = next.get(conversationId)
-      if (conv) {
-        // Find the latest assistant message with SQL change
-        let latestAssistantIndex = -1
-        for (let i = conv.messages.length - 1; i >= 0; i--) {
-          if (conv.messages[i].role === "assistant" && conv.messages[i].sql) {
-            latestAssistantIndex = i
-            break
-          }
-        }
+  const rejectLatestChange = useCallback(
+    async (conversationId: ConversationId, messageId: string) => {
+      if (activeConversationId !== conversationId) return
 
-        if (latestAssistantIndex === -1) {
-          return next
-        }
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
 
-        const latestMessage = conv.messages[latestAssistantIndex]
-        if (!latestMessage) {
-          return next
-        }
+      const latestMessage = activeConversationMessages.find(
+        (m) => m.id === messageId,
+      )
+      if (!latestMessage || !latestMessage.sql) return
 
-        // Revert currentSQL to previous SQL (from message or queryKey as fallback)
-        const { queryText: acceptedSQL } = getQueryInfoFromKey(conv.queryKey)
-        const revertedSQL =
-          typeof latestMessage.previousSQL === "string"
-            ? latestMessage.previousSQL
-            : acceptedSQL
+      const { queryText: acceptedSQL } = getQueryInfoFromKey(meta.queryKey)
+      const revertedSQL =
+        typeof latestMessage.previousSQL === "string"
+          ? latestMessage.previousSQL
+          : acceptedSQL
 
-        const updatedMessages = conv.messages.map((msg, idx) => {
-          if (idx === latestAssistantIndex) {
+      await aiConversationStore.updateMeta(conversationId, {
+        currentSQL: revertedSQL,
+        updatedAt: Date.now(),
+      })
+
+      const rejectionMessage: ConversationMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: `User rejected your latest change. Please use the previous version as the base for future modifications.`,
+        timestamp: Date.now(),
+        hideFromUI: true,
+      }
+
+      setActiveConversationMessages((prev) => {
+        const updatedMessages = prev.map((msg) => {
+          if (msg.id === messageId) {
             return { ...msg, isRejected: true }
           }
           return msg
         })
+        return [...updatedMessages, rejectionMessage]
+      })
+    },
+    [activeConversationId, conversationMetas, activeConversationMessages],
+  )
 
-        // Add user message about rejection so model is aware in future conversations
-        // Hide from UI but include in conversation history for API calls
-        const rejectionMessage: ConversationMessage = {
-          id: crypto.randomUUID(),
-          role: "user",
-          content: `User rejected your latest change. Please use the previous version as the base for future modifications.`,
-          timestamp: Date.now(),
-          hideFromUI: true,
+  const openChatWindow = useCallback(
+    async (conversationId: ConversationId, loadMessages: boolean = true) => {
+      const prevId = chatWindowState.activeConversationId
+
+      if (prevId && prevId !== conversationId) {
+        const prevMeta = conversationMetas.get(prevId)
+        if (prevMeta && activeConversationMessages.length === 0) {
+          await aiConversationStore.deleteConversation(prevId)
+        } else {
+          await persistMessages(prevId, false)
         }
-
-        next.set(conversationId, {
-          ...conv,
-          currentSQL: revertedSQL,
-          messages: [...updatedMessages, rejectionMessage],
-          updatedAt: Date.now(),
-        })
+      } else if (
+        prevId === conversationId &&
+        !chatWindowState.isHistoryOpen &&
+        chatWindowState.isOpen
+      ) {
+        return
       }
-      return next
-    })
-  }, [])
 
-  const openChatWindow = useCallback((conversationId: ConversationId) => {
-    let prevId: ConversationId | null = null
+      if (!activeConversationId) {
+        setActiveConversationMessages([])
+      }
 
-    setChatWindowState((prev) => {
-      prevId = prev.activeConversationId
-      return {
+      if (loadMessages && conversationId !== prevId) {
+        setIsLoadingMessages(true)
+        const msgs = await aiConversationStore.getMessages(conversationId)
+        setActiveConversationMessages(msgs)
+        setIsLoadingMessages(false)
+      } else if (!loadMessages) {
+        setActiveConversationMessages([])
+      }
+
+      setChatWindowState((prev) => ({
         ...prev,
         isOpen: true,
         isHistoryOpen: false,
         previousConversationId: null,
         activeConversationId: conversationId,
-      }
-    })
-
-    if (prevId && prevId !== conversationId) {
-      setConversations((currentConversations) => {
-        const prevConversation = currentConversations.get(prevId!)
-        if (prevConversation && prevConversation.messages.length === 0) {
-          const next = new Map(currentConversations)
-          next.delete(prevId!)
-          return next
-        }
-        return currentConversations
-      })
-    }
-  }, [])
+      }))
+    },
+    [
+      chatWindowState,
+      conversationMetas,
+      activeConversationMessages,
+      persistMessages,
+    ],
+  )
 
   const closeChatWindow = useCallback(() => {
-    setChatWindowState((prev) => ({
-      ...prev,
-      isOpen: false,
-      // Keep activeConversationId so conversation persists after closing
-    }))
-  }, [])
-
-  const openOrCreateBlankChatWindow = useCallback(() => {
+    setChatWindowState((prev) => {
+      return {
+        ...prev,
+        isOpen: false,
+      }
+    })
     if (chatWindowState.activeConversationId) {
-      const existingConv = conversations.get(
+      if (activeConversationMessages.length === 0) {
+        void aiConversationStore.deleteConversation(
+          chatWindowState.activeConversationId,
+        )
+      }
+    }
+  }, [chatWindowState.activeConversationId, activeConversationMessages])
+
+  const openOrCreateBlankChatWindow = useCallback(async () => {
+    if (chatWindowState.activeConversationId) {
+      const existingMeta = conversationMetas.get(
         chatWindowState.activeConversationId,
       )
-      if (existingConv) {
-        openChatWindow(chatWindowState.activeConversationId)
+      if (existingMeta) {
+        await openChatWindow(chatWindowState.activeConversationId)
         return
       }
     }
 
-    const allConversations = Array.from(conversations.values())
-    if (allConversations.length > 0) {
-      const latestConversation = allConversations.reduce((latest, conv) =>
-        conv.updatedAt > latest.updatedAt ? conv : latest,
+    if (conversationMetasArray.length > 0) {
+      const latestMeta = conversationMetasArray.reduce((latest, meta) =>
+        meta.updatedAt > latest.updatedAt ? meta : latest,
       )
-      openChatWindow(latestConversation.id)
+      await openChatWindow(latestMeta.id)
       return
     }
 
-    const blankConversation = createConversation({})
-    openChatWindow(blankConversation.id)
+    const blankConversation = await createConversation({})
+    await openChatWindow(blankConversation.id)
   }, [
     chatWindowState.activeConversationId,
-    conversations,
+    conversationMetas,
+    conversationMetasArray,
     openChatWindow,
     createConversation,
   ])
 
-  const openBlankChatWindow = useCallback(() => {
-    const blankConversation = createConversation({})
-    openChatWindow(blankConversation.id)
+  const openBlankChatWindow = useCallback(async () => {
+    const blankConversation = await createConversation({})
+    await openChatWindow(blankConversation.id, false)
   }, [createConversation, openChatWindow])
 
   const openHistoryView = useCallback(() => {
@@ -591,24 +653,41 @@ export const AIConversationProvider: React.FC<{
     }))
   }, [])
 
-  const deleteConversation = useCallback((conversationId: ConversationId) => {
-    setConversations((prev) => {
-      const next = new Map(prev)
-      next.delete(conversationId)
-      return next
-    })
+  const deleteConversation = useCallback(
+    async (conversationId: ConversationId) => {
+      await aiConversationStore.deleteConversation(conversationId)
 
-    setChatWindowState((prev) => {
-      const updates: Partial<ChatWindowState> = {}
-      if (prev.activeConversationId === conversationId) {
-        updates.activeConversationId = null
+      let fallbackId: ConversationId | null = null
+      let latestUpdatedAt = 0
+      for (const [id, meta] of conversationMetas) {
+        if (id !== conversationId && meta.updatedAt > latestUpdatedAt) {
+          latestUpdatedAt = meta.updatedAt
+          fallbackId = id
+        }
       }
-      if (prev.previousConversationId === conversationId) {
-        updates.previousConversationId = null
+
+      if (activeConversationId === conversationId) {
+        if (fallbackId) {
+          const msgs = await aiConversationStore.getMessages(fallbackId)
+          setActiveConversationMessages(msgs)
+        } else {
+          setActiveConversationMessages([])
+        }
       }
-      return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
-    })
-  }, [])
+
+      setChatWindowState((prev) => {
+        const updates: Partial<ChatWindowState> = {}
+        if (prev.activeConversationId === conversationId) {
+          updates.activeConversationId = fallbackId
+        }
+        if (prev.previousConversationId === conversationId) {
+          updates.previousConversationId = fallbackId
+        }
+        return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
+      })
+    },
+    [activeConversationId, conversationMetas],
+  )
 
   const {
     editorRef,
@@ -621,61 +700,52 @@ export const AIConversationProvider: React.FC<{
   } = useEditor()
 
   const applyChangesToActiveTab = useCallback(
-    (
+    async (
       conversationId: ConversationId,
       normalizedSQL: string,
       messageId: string,
-    ): void => {
-      const conversation = conversations.get(conversationId)
-      if (!conversation) return
+    ): Promise<void> => {
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
 
       const result = applyAISQLChange({
         newSQL: normalizedSQL,
-        queryKey: conversation.queryKey ?? undefined,
+        queryKey: meta.queryKey ?? undefined,
       })
 
-      if (!result.success) {
-        return
-      }
+      if (!result.success) return
 
-      updateConversationAssociations(conversationId, {
-        queryKey: result.finalQueryKey ?? conversation.queryKey,
+      await updateConversationAssociations(conversationId, {
+        queryKey: result.finalQueryKey ?? meta.queryKey,
       })
 
-      // Update SQL and mark as accepted
-      updateConversationSQL(conversationId, normalizedSQL)
-      acceptConversationChanges(conversationId, messageId)
+      await updateConversationSQL(conversationId, normalizedSQL)
+      await acceptConversationChanges(conversationId, messageId)
 
-      if (conversation.tableId != null) {
-        setConversations((prev) => {
-          const next = new Map(prev)
-          const conv = next.get(conversationId)
-          if (conv) {
-            next.set(conversationId, {
-              ...conv,
-              tableId: undefined,
-            })
-          }
-          return next
+      if (meta.tableId != null) {
+        await aiConversationStore.updateMeta(conversationId, {
+          tableId: undefined,
+          updatedAt: Date.now(),
         })
       }
     },
     [
-      conversations,
-      applyAISQLChange,
+      conversationMetas,
       updateConversationAssociations,
       updateConversationSQL,
       acceptConversationChanges,
     ],
   )
 
-  // Helper: Apply changes to new tab (when original is deleted/archived or no buffer)
   const applyChangesToNewTab = useCallback(
     async (
       conversationId: ConversationId,
       normalizedSQL: string,
       messageId: string,
     ): Promise<void> => {
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
+
       const sqlWithSemicolon = normalizeSql(normalizedSQL)
       const newBuffer = await addBuffer({
         value: sqlWithSemicolon,
@@ -695,7 +765,6 @@ export const AIConversationProvider: React.FC<{
       const startPosition = model.getPositionAt(queryStartOffset)
       const endPosition = model.getPositionAt(queryEndOffset)
 
-      // Apply highlighting decoration
       const highlightRange = {
         startLineNumber: startPosition.lineNumber,
         startColumn: startPosition.column,
@@ -723,29 +792,24 @@ export const AIConversationProvider: React.FC<{
       }, 2000)
 
       const newQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
-      updateConversationAssociations(conversationId, {
+      await updateConversationAssociations(conversationId, {
         bufferId: newBuffer.id,
         queryKey: newQueryKey,
       })
 
-      updateConversationSQL(conversationId, normalizedSQL)
-      acceptConversationChanges(conversationId, messageId)
+      await updateConversationSQL(conversationId, normalizedSQL)
+      await acceptConversationChanges(conversationId, messageId)
 
-      setConversations((prev) => {
-        const next = new Map(prev)
-        const conv = next.get(conversationId)
-        if (conv && conv.tableId != null) {
-          next.set(conversationId, {
-            ...conv,
-            tableId: undefined,
-          })
-        }
-        return next
-      })
+      if (meta.tableId != null) {
+        await aiConversationStore.updateMeta(conversationId, {
+          tableId: undefined,
+          updatedAt: Date.now(),
+        })
+      }
     },
     [
+      conversationMetas,
       addBuffer,
-      editorRef,
       updateConversationAssociations,
       updateConversationSQL,
       acceptConversationChanges,
@@ -754,18 +818,21 @@ export const AIConversationProvider: React.FC<{
 
   const acceptSuggestion = useCallback(
     async (params: AcceptSuggestionParams): Promise<void> => {
-      const { conversationId, messageId } = params
-      const conversation = conversations.get(conversationId)
-      if (!conversation) return
+      const { conversationId, messageId, skipDefaultMessage } = params
 
-      const message = conversation.messages.find((m) => m.id === messageId)
+      if (activeConversationId !== conversationId) return
+
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
+
+      const message = activeConversationMessages.find((m) => m.id === messageId)
       if (!message || !message.sql) return
 
       const normalizedSQL = normalizeSql(message.sql, false)
 
       await closeDiffBufferForConversation(conversationId)
 
-      const conversationBufferId = conversation.bufferId
+      const conversationBufferId = meta.bufferId
       const buffer = buffers.find((b) => b.id === conversationBufferId)
 
       const bufferStatus =
@@ -781,7 +848,11 @@ export const AIConversationProvider: React.FC<{
 
       try {
         if (bufferStatus === "active") {
-          applyChangesToActiveTab(conversationId, normalizedSQL, messageId)
+          await applyChangesToActiveTab(
+            conversationId,
+            normalizedSQL,
+            messageId,
+          )
         } else if (
           bufferStatus === "deleted" ||
           bufferStatus === "archived" ||
@@ -791,73 +862,91 @@ export const AIConversationProvider: React.FC<{
         } else if (bufferStatus === "inactive" && buffer) {
           await setActiveBuffer(buffer)
           await new Promise((resolve) => setTimeout(resolve, 100))
-          applyChangesToActiveTab(conversationId, normalizedSQL, messageId)
+          await applyChangesToActiveTab(
+            conversationId,
+            normalizedSQL,
+            messageId,
+          )
         }
 
-        addMessage(conversationId, {
-          id: crypto.randomUUID(),
-          role: "user" as const,
-          content: `User accepted your SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
-          timestamp: Date.now(),
-          hideFromUI: true,
-        })
+        if (!skipDefaultMessage) {
+          addMessage({
+            id: crypto.randomUUID(),
+            role: "user" as const,
+            content: `User accepted your SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+            timestamp: Date.now(),
+            hideFromUI: true,
+          })
+        }
+
+        await persistMessages(conversationId)
       } catch (error) {
         console.error("Error applying changes:", error)
       }
     },
     [
-      conversations,
+      activeConversationId,
+      conversationMetas,
+      activeConversationMessages,
       buffers,
-      activeBuffer,
+      activeBuffer.id,
       setActiveBuffer,
       closeDiffBufferForConversation,
       applyChangesToActiveTab,
       applyChangesToNewTab,
       addMessage,
+      persistMessages,
     ],
   )
 
-  // Unified reject function
   const rejectSuggestion = useCallback(
-    async (conversationId: ConversationId): Promise<void> => {
-      const conversation = conversations.get(conversationId)
-      if (!conversation) return
+    async (
+      conversationId: ConversationId,
+      messageId: string,
+    ): Promise<void> => {
+      if (activeConversationId !== conversationId) return
 
-      // Update conversation state (marks as rejected, adds hidden message)
-      rejectLatestChange(conversationId)
+      const meta = conversationMetas.get(conversationId)
+      if (!meta) return
 
-      // Close any open diff buffer
+      await rejectLatestChange(conversationId, messageId)
       await closeDiffBufferForConversation(conversationId)
 
-      // If we're currently viewing a diff buffer, switch back to original
       if (activeBuffer.isDiffBuffer) {
         const originalBuffer = buffers.find(
-          (b) => b.id === conversation.bufferId && !b.archived,
+          (b) => b.id === meta.bufferId && !b.archived,
         )
         if (originalBuffer) {
           await setActiveBuffer(originalBuffer)
         }
       }
+
+      await persistMessages(conversationId)
     },
     [
-      conversations,
+      activeConversationId,
+      conversationMetas,
       rejectLatestChange,
       closeDiffBufferForConversation,
       activeBuffer,
       buffers,
       setActiveBuffer,
+      persistMessages,
     ],
   )
 
   return (
     <AIConversationContext.Provider
       value={{
-        conversations,
+        conversationMetas,
+        activeConversationMessages,
         chatWindowState,
-        getConversation,
+        isLoadingMessages,
+        getConversationMeta,
         findConversationByQuery,
         findConversationByTableId,
         hasConversationForQuery,
+        findQueryByConversationId,
         createConversation,
         getOrCreateConversationForQuery,
         shiftQueryKeysForBuffer,
@@ -874,6 +963,7 @@ export const AIConversationProvider: React.FC<{
         updateConversationName,
         acceptSuggestion,
         rejectSuggestion,
+        persistMessages,
       }}
     >
       {children}

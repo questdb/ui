@@ -71,7 +71,7 @@ type QueryDropdownProps = {
   isAIDropdownRef: React.MutableRefObject<boolean>
   onRunQuery: (query?: Request) => void
   onExplainQuery: (query?: Request) => void
-  onAskAI: (query?: Request) => void
+  onAskAIRef: React.MutableRefObject<(query?: Request) => void>
 }
 
 export const QueryDropdown: React.FC<QueryDropdownProps> = ({
@@ -83,7 +83,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
   isAIDropdownRef,
   onRunQuery,
   onExplainQuery,
-  onAskAI,
+  onAskAIRef,
 }) => {
   const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen)
@@ -121,7 +121,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                 <StyledDropdownItem
                   // eslint-disable-next-line react/no-array-index-key
                   key={`ask-ai-${query.query}-${index}`}
-                  onClick={() => onAskAI(query)}
+                  onClick={() => onAskAIRef.current(query)}
                   data-hook={`dropdown-item-ask-ai-${index}`}
                 >
                   <IconWrapper>
