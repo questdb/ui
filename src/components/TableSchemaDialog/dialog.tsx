@@ -225,6 +225,7 @@ export const Dialog = ({
           onSubmit={(values) => {
             onSchemaChange(values)
             onOpenChange(undefined)
+            dispatch(actions.console.setActiveSidebar(undefined))
           }}
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}
           validationSchema={validationSchema}

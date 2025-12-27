@@ -26,7 +26,7 @@ const overlayHide = css`
 `
 
 const StyledOverlay = styled.div`
-  background-color: ${({ theme }) => theme.color.black70};
+  background-color: ${({ theme }) => theme.color.overlayBackground};
   position: fixed;
   inset: 0;
   z-index: 100;

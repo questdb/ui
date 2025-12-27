@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { Information } from "@styled-icons/remix-line"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
+import { AISparkle } from "../../../components/AISparkle"
 import type { Request } from "./utils"
 
 const StyledDropdownContent = styled(DropdownMenu.Content)`
@@ -67,8 +68,10 @@ type QueryDropdownProps = {
   positionRef: React.MutableRefObject<{ x: number; y: number } | null>
   queriesRef: React.MutableRefObject<Request[]>
   isContextMenuRef: React.MutableRefObject<boolean>
+  isAIDropdownRef: React.MutableRefObject<boolean>
   onRunQuery: (query: Request) => void
   onExplainQuery: (query: Request) => void
+  onAskAIRef: React.MutableRefObject<(query?: Request) => void>
 }
 
 export const QueryDropdown: React.FC<QueryDropdownProps> = ({
@@ -77,8 +80,10 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
   positionRef,
   queriesRef,
   isContextMenuRef,
+  isAIDropdownRef,
   onRunQuery,
   onExplainQuery,
+  onAskAIRef,
 }) => {
   const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen)
@@ -110,68 +115,83 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <StyledDropdownContent>
-          {queriesRef.current.length > 1
-            ? // Multiple queries - show options for each
-              queriesRef.current
-                .map((query, index) => {
-                  const items = [
-                    <StyledDropdownItem
-                      // eslint-disable-next-line react/no-array-index-key
-                      key={`run-${query.query}-${index}`}
-                      onClick={() => onRunQuery(query)}
-                      data-hook={`dropdown-item-run-query-${index}`}
-                    >
-                      <IconWrapper>
-                        <StyledPlayFilled size={18} color="#fff" />
-                      </IconWrapper>
-                      Run {extractQueryTextToRun(query)}
-                    </StyledDropdownItem>,
-                  ]
-
-                  if (isContextMenuRef.current) {
-                    items.push(
+          {isAIDropdownRef.current
+            ? // AI dropdown - show "Ask AI about query X" options
+              queriesRef.current.map((query, index) => (
+                <StyledDropdownItem
+                  // eslint-disable-next-line react/no-array-index-key
+                  key={`ask-ai-${query.query}-${index}`}
+                  onClick={() => onAskAIRef.current(query)}
+                  data-hook={`dropdown-item-ask-ai-${index}`}
+                >
+                  <IconWrapper>
+                    <AISparkle size={18} variant="filled" />
+                  </IconWrapper>
+                  Ask AI about {extractQueryTextToRun(query)}
+                </StyledDropdownItem>
+              ))
+            : queriesRef.current.length > 1
+              ? // Multiple queries - show options for each
+                queriesRef.current
+                  .map((query, index) => {
+                    const items = [
                       <StyledDropdownItem
                         // eslint-disable-next-line react/no-array-index-key
-                        key={`explain-${query.query}-${index}`}
-                        disabled={isExplainDisabled(query)}
-                        onClick={() => onExplainQuery(query)}
-                        data-hook={`dropdown-item-explain-query-${index}`}
+                        key={`run-${query.query}-${index}`}
+                        onClick={() => onRunQuery(query)}
+                        data-hook={`dropdown-item-run-query-${index}`}
                       >
                         <IconWrapper>
-                          <Information size={18} />
+                          <StyledPlayFilled size={18} color="#fff" />
                         </IconWrapper>
-                        Get query plan for {extractQueryTextToRun(query)}
+                        Run {extractQueryTextToRun(query)}
                       </StyledDropdownItem>,
-                    )
-                  }
+                    ]
 
-                  return items
-                })
-                .flat()
-            : [
-                <StyledDropdownItem
-                  key="run"
-                  onClick={() => onRunQuery(queriesRef.current[0])}
-                  data-hook="dropdown-item-run-query"
-                >
-                  <IconWrapper>
-                    <StyledPlayFilled size={18} color="#fff" />
-                  </IconWrapper>
-                  Run {extractQueryTextToRun(queriesRef.current[0])}
-                </StyledDropdownItem>,
-                <StyledDropdownItem
-                  key="explain"
-                  disabled={isExplainDisabled(queriesRef.current[0])}
-                  onClick={() => onExplainQuery(queriesRef.current[0])}
-                  data-hook="dropdown-item-get-query-plan"
-                >
-                  <IconWrapper>
-                    <Information size={18} />
-                  </IconWrapper>
-                  Get query plan for{" "}
-                  {extractQueryTextToRun(queriesRef.current[0])}
-                </StyledDropdownItem>,
-              ]}
+                    if (isContextMenuRef.current) {
+                      items.push(
+                        <StyledDropdownItem
+                          // eslint-disable-next-line react/no-array-index-key
+                          key={`explain-${query.query}-${index}`}
+                          disabled={isExplainDisabled(query)}
+                          onClick={() => onExplainQuery(query)}
+                          data-hook={`dropdown-item-explain-query-${index}`}
+                        >
+                          <IconWrapper>
+                            <Information size={18} />
+                          </IconWrapper>
+                          Get query plan for {extractQueryTextToRun(query)}
+                        </StyledDropdownItem>,
+                      )
+                    }
+
+                    return items
+                  })
+                  .flat()
+              : [
+                  <StyledDropdownItem
+                    key="run"
+                    onClick={() => onRunQuery(queriesRef.current[0])}
+                    data-hook="dropdown-item-run-query"
+                  >
+                    <IconWrapper>
+                      <StyledPlayFilled size={18} color="#fff" />
+                    </IconWrapper>
+                    Run {extractQueryTextToRun(queriesRef.current[0])}
+                  </StyledDropdownItem>,
+                  <StyledDropdownItem
+                    key="explain"
+                    disabled={isExplainDisabled(queriesRef.current[0])}
+                    onClick={() => onExplainQuery(queriesRef.current[0])}
+                    data-hook="dropdown-item-get-query-plan"
+                  >
+                    <IconWrapper>
+                      <Information size={18} />
+                    </IconWrapper>
+                    Get query plan for{" "}
+                    {extractQueryTextToRun(queriesRef.current[0])}
+                  </StyledDropdownItem>,
+                ]}
         </StyledDropdownContent>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

@@ -7,8 +7,8 @@ import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
 import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { Tools, ShieldCheck } from "@styled-icons/bootstrap"
 import { Flask } from "@styled-icons/boxicons-solid"
+import { toast } from "../Toast"
 import { Box, Button } from "../../components"
-import { toast } from "../"
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
@@ -49,7 +49,7 @@ const CustomTooltipWrapper = styled.div<{
   display: flex;
   flex-direction: column;
   padding: 1.5rem 0;
-  background: ${({ theme }) => theme.color.background};
+  background: ${({ theme }) => theme.color.backgroundDarker};
   font-size: 1.4rem;
   border-radius: 0.8rem;
   border: 1px solid ${({ $badgeColors }) => $badgeColors.primary};

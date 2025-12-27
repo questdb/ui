@@ -8,7 +8,6 @@ import {
   ToastContent,
 } from "react-toastify"
 import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
-import { NotificationCenterItem as RNotificationCenterItem } from "react-toastify/addons/use-notification-center/useNotificationCenter"
 import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
 import {
   CloseCircle,
@@ -29,8 +28,6 @@ type StyledIconProps = {
 export type ToastOptions = RTToastOptions
 
 export const useNotificationCenter = RTNotificationCenter
-
-export type NotificationCenterItem<Data> = RNotificationCenterItem<Data>
 
 export const ToastIcon = ({
   type,

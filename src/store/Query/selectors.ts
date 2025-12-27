@@ -28,6 +28,7 @@ import {
   StoreShape,
   QueryNotifications,
   QueriesToRun,
+  AISuggestionRequest,
 } from "types"
 import type {
   QueryRawResult,
@@ -68,6 +69,10 @@ const getColumns: (
   store: StoreShape,
 ) => Record<string, InformationSchemaColumn[]> = (store) => store.query.columns
 
+const getAISuggestionRequest: (
+  store: StoreShape,
+) => AISuggestionRequest | null = (store) => store.query.aiSuggestionRequest
+
 export default {
   getNotifications,
   getQueryNotifications,
@@ -78,4 +83,5 @@ export default {
   getRunning,
   getTables,
   getColumns,
+  getAISuggestionRequest,
 }

@@ -176,11 +176,16 @@ const News = () => {
     <Drawer
       mode="side"
       title="QuestDB News"
+      withCloseButton
       open={newsOpened}
       onOpenChange={(newsOpened) => {
         dispatch(
           actions.console.setActiveSidebar(newsOpened ? "news" : undefined),
         )
+      }}
+      onDismiss={() => {
+        setNewsOpened(false)
+        dispatch(actions.console.setActiveSidebar(undefined))
       }}
       trigger={
         <IconWithTooltip

@@ -33,6 +33,7 @@ export const initialState: QueryStateShape = {
   queryNotifications: {},
   activeNotification: null,
   queriesToRun: [],
+  aiSuggestionRequest: null,
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
@@ -265,6 +266,14 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         queriesToRun: action.payload,
       }
     }
+
+    case QueryAT.SET_AI_SUGGESTION_REQUEST: {
+      return {
+        ...state,
+        aiSuggestionRequest: action.payload,
+      }
+    }
+
     default:
       return state
   }

@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-export type Sidebar = "news" | "create" | undefined
+export type Sidebar = "news" | "create" | "aiChat" | undefined
 
 export type BottomPanel = "result" | "zeroState" | "import"
 

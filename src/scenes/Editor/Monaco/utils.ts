@@ -24,6 +24,7 @@
 import type { editor, IPosition, IRange } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
+import { hashString } from "../../../utils"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -682,6 +683,33 @@ export const getQueryRequestFromLastExecutedQuery = (
   }
 }
 
+// Creates a Request from an AI suggestion, using the original query's start offset
+// so that the queryKey matches the original query position in the editor
+export const getQueryRequestFromAISuggestion = (
+  editor: IStandaloneCodeEditor,
+  aiSuggestion: { query: string; startOffset: number },
+): Request | undefined => {
+  const model = editor.getModel()
+  if (!model) return undefined
+
+  // Convert the startOffset back to row/column position
+  const position = model.getPositionAt(aiSuggestion.startOffset)
+
+  // Calculate end position from query length
+  const lines = aiSuggestion.query.split("\n")
+  const endRow = lines.length
+  const endColumn = lines[lines.length - 1].length + 1
+
+  return {
+    query: aiSuggestion.query,
+    // row is 0-indexed for Request, but position.lineNumber is 1-indexed
+    row: position.lineNumber - 1,
+    column: position.column,
+    endRow: position.lineNumber - 1 + endRow - 1,
+    endColumn: endRow === 1 ? position.column + endColumn - 1 : endColumn,
+  }
+}
+
 export const getErrorRange = (
   editor: IStandaloneCodeEditor,
   request: Request,
@@ -1099,6 +1127,23 @@ export const parseQueryKey = (
   }
 }
 
+export const getQueryInfoFromKey = (
+  queryKey?: QueryKey,
+): { queryText: string; startOffset: number; endOffset: number } => {
+  if (!queryKey) return { queryText: "", startOffset: 0, endOffset: 0 }
+  return parseQueryKey(queryKey)
+}
+
+export const shiftQueryKey = (
+  queryKey: QueryKey,
+  changeOffset: number,
+  delta: number,
+): QueryKey => {
+  const { queryText, startOffset } = parseQueryKey(queryKey)
+  const newStartOffset = shiftOffset(startOffset, changeOffset, delta)
+  return createQueryKey(queryText, newStartOffset)
+}
+
 export const shiftOffset = (
   offset: number,
   changeOffset: number,
@@ -1198,4 +1243,14 @@ export const setErrorMarkerForQuery = (
   }
 
   monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
+}
+
+// Creates a QueryKey for schema explanation conversations
+// Uses DDL hash so same schema = same queryKey = cached conversation
+export const createSchemaQueryKey = (
+  tableName: string,
+  ddl: string,
+): QueryKey => {
+  const ddlHash = hashString(ddl)
+  return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
 }

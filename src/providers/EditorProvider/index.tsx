@@ -1,5 +1,5 @@
 import type { Monaco } from "@monaco-editor/react"
-import type { editor } from "monaco-editor"
+import type { editor, IRange } from "monaco-editor"
 import React, {
   createContext,
   MutableRefObject,
@@ -16,8 +16,15 @@ import {
   clearModelMarkers,
   insertTextAtCursor,
   QuestDBLanguageName,
+  QueryKey,
+  normalizeQueryText,
+  parseQueryKey,
+  createQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
+import type { ConversationId } from "../AIConversationProvider/types"
+import { normalizeSql } from "../../utils/aiAssistant"
 import type { Buffer } from "../../store/buffers"
+import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
   BufferType,
@@ -32,6 +39,30 @@ import { EventType } from "../../modules/EventBus/types"
 import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
+
+export type DiffModeState = {
+  bufferId: number | string
+  queryKey: QueryKey
+  original: string
+  modified: string
+} | null
+
+export type DiffBufferContent = {
+  original: string
+  modified: string
+  conversationId?: ConversationId
+}
+
+export type ApplyAISQLChangeOptions = {
+  newSQL: string
+  queryKey?: QueryKey
+}
+
+export type ApplyAISQLChangeResult = {
+  success: boolean
+  finalQueryKey?: QueryKey
+  queryStartOffset?: number
+}
 
 export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
@@ -50,7 +81,7 @@ export type EditorContext = {
     buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
   ) => Promise<Buffer>
-  deleteBuffer: (id: number) => Promise<void>
+  deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
   deleteAllBuffers: () => Promise<void>
   updateBuffer: (
@@ -62,11 +93,30 @@ export type EditorContext = {
     positions: { id: number; position: number }[],
   ) => Promise<void>
   editorReadyTrigger: (editor: IStandaloneCodeEditor) => void
-  inFocus: boolean
   setTemporaryBuffer: (buffer: Buffer) => Promise<void>
   temporaryBufferId: number | null
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
+  // Diff mode for AI chat integration
+  diffModeState: DiffModeState
+  enterDiffMode: (
+    bufferId: number | string,
+    queryKey: QueryKey,
+    original: string,
+    modified: string,
+  ) => void
+  exitDiffMode: () => void
+  updateDiffMode: (original: string, modified: string) => void
+  // Global diff buffer management
+  showDiffBuffer: (content: DiffBufferContent) => Promise<void>
+  closeDiffBufferForConversation: (
+    conversationId: ConversationId,
+  ) => Promise<void>
+  // Apply AI SQL change to editor
+  applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
+  executionRefs: MutableRefObject<ExecutionRefs>
+  cleanupExecutionRefs: (bufferId: number) => void
+  cleanupAllExecutionRefs: () => void
 }
 
 const defaultValues = {
@@ -86,11 +136,20 @@ const defaultValues = {
   updateBuffer: () => Promise.resolve(),
   updateBuffersPositions: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
-  inFocus: false,
   setTemporaryBuffer: () => Promise.resolve(),
   temporaryBufferId: null,
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
+  diffModeState: null,
+  enterDiffMode: () => undefined,
+  exitDiffMode: () => undefined,
+  updateDiffMode: () => undefined,
+  showDiffBuffer: () => Promise.resolve(),
+  closeDiffBufferForConversation: () => Promise.resolve(),
+  applyAISQLChange: () => ({ success: false }),
+  executionRefs: { current: {} },
+  cleanupExecutionRefs: () => undefined,
+  cleanupAllExecutionRefs: () => undefined,
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -98,9 +157,31 @@ const EditorContext = createContext<EditorContext>(defaultValues)
 export const EditorProvider: React.FC = ({ children }) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
+  const executionRefs = useRef<ExecutionRefs>({})
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
+  const [diffModeState, setDiffModeState] = useState<DiffModeState>(null)
+
+  const enterDiffMode = useCallback(
+    (
+      bufferId: number | string,
+      queryKey: QueryKey,
+      original: string,
+      modified: string,
+    ) => {
+      setDiffModeState({ bufferId, queryKey, original, modified })
+    },
+    [],
+  )
+
+  const exitDiffMode = useCallback(() => {
+    setDiffModeState(null)
+  }, [])
+
+  const updateDiffMode = useCallback((original: string, modified: string) => {
+    setDiffModeState((prev) => (prev ? { ...prev, original, modified } : null))
+  }, [])
   const [tabsDisabled, setTabsDisabled] = useState(false)
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
@@ -117,7 +198,6 @@ export const EditorProvider: React.FC = ({ children }) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
-  const [inFocus, setInFocus] = useState(false)
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
   const isNavigatingFromSearchRef = useRef(false)
@@ -129,6 +209,14 @@ export const EditorProvider: React.FC = ({ children }) => {
     const activeBuffers = buffers.filter((b) => !b.archived || b.isTemporary)
     return Math.max(...activeBuffers.map((b) => b.position), -1) + 1
   }, [buffers])
+
+  const cleanupExecutionRefs = useCallback((bufferId: number) => {
+    delete executionRefs.current[bufferId.toString()]
+  }, [])
+
+  const cleanupAllExecutionRefs = useCallback(() => {
+    executionRefs.current = {}
+  }, [])
 
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
@@ -252,6 +340,7 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const deleteAllBuffers = async () => {
     await bufferStore.deleteAll()
+    cleanupAllExecutionRefs()
     eventBus.publish(EventType.BUFFERS_UPDATED, { type: "deleteAll" })
   }
 
@@ -350,9 +439,15 @@ export const EditorProvider: React.FC = ({ children }) => {
     })
   }
 
-  const deleteBuffer: EditorContext["deleteBuffer"] = async (id) => {
+  const deleteBuffer: EditorContext["deleteBuffer"] = async (
+    id,
+    setActiveBuffer = true,
+  ) => {
     await bufferStore.delete(id)
-    await setActiveBufferOnRemoved(id)
+    cleanupExecutionRefs(id)
+    if (setActiveBuffer) {
+      await setActiveBufferOnRemoved(id)
+    }
     eventBus.publish(EventType.BUFFERS_UPDATED, {
       type: "delete",
       bufferId: id,
@@ -384,6 +479,203 @@ export const EditorProvider: React.FC = ({ children }) => {
       })
     }
 
+  const showDiffBuffer: EditorContext["showDiffBuffer"] = async (content) => {
+    const existingDiffBuffer = buffers.find(
+      (b) => b.isDiffBuffer && !b.archived,
+    )
+
+    if (existingDiffBuffer && existingDiffBuffer.id) {
+      // Update existing diff buffer
+      await bufferStore.update(existingDiffBuffer.id, {
+        diffContent: {
+          original: content.original,
+          modified: content.modified,
+          conversationId: content.conversationId,
+          queryStartOffset: 0,
+        },
+      })
+      // Switch to it
+      const updatedBuffer = {
+        ...existingDiffBuffer,
+        diffContent: {
+          original: content.original,
+          modified: content.modified,
+          conversationId: content.conversationId,
+          queryStartOffset: 0,
+        },
+      }
+      await setActiveBuffer(updatedBuffer)
+    } else {
+      // Create new diff buffer
+      const position = buffers.filter(
+        (b) => !b.archived && !b.isTemporary,
+      ).length
+      await addBuffer({
+        label: "AI Suggestion",
+        value: "",
+        isDiffBuffer: true,
+        position,
+        diffContent: {
+          original: content.original,
+          modified: content.modified,
+          conversationId: content.conversationId,
+          queryStartOffset: 0,
+        },
+      })
+      // addBuffer already switches to it
+    }
+  }
+
+  const closeDiffBufferForConversation: EditorContext["closeDiffBufferForConversation"] =
+    async (conversationId) => {
+      const diffBuffer = buffers.find(
+        (b) =>
+          b.isDiffBuffer &&
+          !b.archived &&
+          b.diffContent?.conversationId === conversationId,
+      )
+      if (diffBuffer && diffBuffer.id) {
+        await deleteBuffer(diffBuffer.id, true)
+      }
+    }
+
+  const applyAISQLChange: EditorContext["applyAISQLChange"] = (options) => {
+    const { newSQL, queryKey } = options
+
+    if (!editorRef.current) {
+      return { success: false }
+    }
+
+    const model = editorRef.current.getModel()
+    if (!model) {
+      return { success: false }
+    }
+
+    let finalQueryStartOffset: number = 0
+    let replaceRange: IRange | null = null
+    let shouldReplace = false
+
+    if (queryKey) {
+      try {
+        const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+        const currentEditorText = model.getValue()
+        const queryInEditor = currentEditorText.slice(startOffset, endOffset)
+        const normalizedQueryInEditor = normalizeQueryText(queryInEditor)
+        const normalizedOriginalQuery = normalizeQueryText(queryText)
+
+        if (normalizedQueryInEditor === normalizedOriginalQuery) {
+          const startPosition = model.getPositionAt(startOffset)
+
+          let extendedEndOffset = endOffset
+          const textAfterQuery = currentEditorText.slice(
+            endOffset,
+            endOffset + 10,
+          )
+          const semicolonMatch = textAfterQuery.match(/^(\s*;)/)
+          if (semicolonMatch) {
+            extendedEndOffset = endOffset + semicolonMatch[0].length
+          }
+
+          const endPosition = model.getPositionAt(extendedEndOffset)
+          replaceRange = {
+            startLineNumber: startPosition.lineNumber,
+            startColumn: startPosition.column,
+            endLineNumber: endPosition.lineNumber,
+            endColumn: endPosition.column,
+          }
+          finalQueryStartOffset = startOffset
+          shouldReplace = true
+        }
+      } catch {
+        // Invalid queryKey or query not found, fall back to appending
+      }
+    }
+
+    if (!shouldReplace || !replaceRange) {
+      // Append to end of editor
+      const lineNumber = model.getLineCount()
+      const column = model.getLineMaxColumn(lineNumber)
+      finalQueryStartOffset = model.getOffsetAt({ lineNumber, column })
+      replaceRange = {
+        startLineNumber: lineNumber,
+        startColumn: column,
+        endLineNumber: lineNumber,
+        endColumn: column,
+      }
+    }
+
+    // Apply the edit with proper semicolon handling
+    // normalizeSql ensures: removes trailing semicolon, formats, then adds single semicolon
+    const sqlWithSemicolon = normalizeSql(newSQL)
+    const isAppend =
+      replaceRange.startColumn === replaceRange.endColumn &&
+      replaceRange.startLineNumber === replaceRange.endLineNumber
+    editorRef.current.executeEdits("accept-ai-change", [
+      {
+        range: replaceRange,
+        text: isAppend ? "\n" + sqlWithSemicolon + "\n" : sqlWithSemicolon,
+        forceMoveMarkers: true,
+      },
+    ])
+
+    // Recalculate positions after edit
+    const finalModel = editorRef.current.getModel()
+    if (!finalModel) {
+      return { success: false }
+    }
+
+    const actualQueryStartOffset = isAppend
+      ? finalQueryStartOffset + 1
+      : finalQueryStartOffset
+    const normalizedQuery = normalizeQueryText(newSQL)
+    const actualQueryEndOffset = actualQueryStartOffset + normalizedQuery.length
+
+    const finalStartPosition = finalModel.getPositionAt(actualQueryStartOffset)
+    const finalEndPosition = finalModel.getPositionAt(actualQueryEndOffset)
+
+    // Apply highlighting decoration
+    const highlightRange = {
+      startLineNumber: finalStartPosition.lineNumber,
+      startColumn: finalStartPosition.column,
+      endLineNumber: finalEndPosition.lineNumber,
+      endColumn: finalEndPosition.column,
+    }
+
+    const decorationId = finalModel.deltaDecorations(
+      [],
+      [
+        {
+          range: highlightRange,
+          options: {
+            isWholeLine: false,
+            className: "aiQueryHighlight",
+          },
+        },
+      ],
+    )
+
+    // Set cursor to beginning of the query and focus the editor
+    editorRef.current.setPosition(finalStartPosition)
+    editorRef.current.revealPositionNearTop(finalStartPosition)
+    editorRef.current.focus()
+
+    setTimeout(() => {
+      finalModel.deltaDecorations(decorationId, [])
+    }, 1000)
+
+    // Return the final query key for caller to update conversation state
+    const finalQueryKey = createQueryKey(
+      normalizedQuery,
+      actualQueryStartOffset,
+    )
+
+    return {
+      success: true,
+      finalQueryKey,
+      queryStartOffset: actualQueryStartOffset,
+    }
+  }
+
   return (
     <EditorContext.Provider
       value={{
@@ -399,7 +691,6 @@ export const EditorProvider: React.FC = ({ children }) => {
             appendQuery(editorRef.current, text, options)
           }
         },
-        inFocus,
         tabsDisabled,
         setTabsDisabled,
         buffers,
@@ -415,14 +706,21 @@ export const EditorProvider: React.FC = ({ children }) => {
         temporaryBufferId,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
+        diffModeState,
+        enterDiffMode,
+        exitDiffMode,
+        updateDiffMode,
+        showDiffBuffer,
+        closeDiffBufferForConversation,
+        applyAISQLChange,
+        executionRefs,
+        cleanupExecutionRefs,
+        cleanupAllExecutionRefs,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()
-            setInFocus(true)
           }
 
-          editor.onDidFocusEditorWidget(() => setInFocus(true))
-          editor.onDidBlurEditorWidget(() => setInFocus(false))
           if (activeBuffer.editorViewState) {
             editor.restoreViewState(activeBuffer.editorViewState)
           }

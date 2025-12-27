@@ -76,7 +76,10 @@ export const Form = <
 
   useEffect(() => {
     if (onDirtyChange) {
-      onDirtyChange(methods.formState.isDirty, methods.formState.dirtyFields)
+      onDirtyChange(
+        methods.formState.isDirty,
+        methods.formState.dirtyFields as FieldNamesMarkedBoolean<TFormValues>,
+      )
     }
   }, [methods.formState])
 

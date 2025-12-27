@@ -50,8 +50,7 @@ const Title = styled(Text)`
   display: flex;
   align-items: center;
   padding-left: 1rem;
-  font-size: 1.8rem;
-  font-weight: 600;
+  font-size: 1.6rem;
 `
 
 export const Header = ({
