@@ -298,7 +298,7 @@ export const createAIGutterIcon = (
   size = 16,
 ): HTMLElement => {
   const wrapper = document.createElement("span")
-  wrapper.className = "ai-gutter-icon"
+  wrapper.className = "glyph-ai-icon"
 
   const wrapperSize = size + 8 // 4px padding on each side
   wrapper.style.display = "inline-flex"

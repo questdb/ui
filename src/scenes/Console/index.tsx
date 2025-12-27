@@ -66,9 +66,14 @@ const Tab = styled.div`
   overflow: auto;
 `
 
-const Drawer = styled.div`
+const Drawer = styled.div<{ $aiChat: boolean }>`
   background: ${color("chatBackground")};
   height: 100%;
+  ${({ $aiChat }) =>
+    $aiChat &&
+    `
+    display: none;
+  `}
 `
 
 const viewModes: {
@@ -325,7 +330,7 @@ const Console = () => {
           preferredSize={aiChatPanelWidth}
           visible={!!activeSidebar}
         >
-          <Drawer id="side-panel-right" />
+          <Drawer id="side-panel-right" $aiChat={activeSidebar === "aiChat"} />
           <AIChatWindow />
         </Allotment.Pane>
       </Allotment>

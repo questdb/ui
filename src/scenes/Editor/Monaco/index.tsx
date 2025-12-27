@@ -1908,7 +1908,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       )
       if (widget) {
         applyGutterIconState(
-          widget.getDomNode()?.querySelector(".ai-gutter-icon") as HTMLElement,
+          widget.getDomNode()?.querySelector(".glyph-ai-icon") as HTMLElement,
           "highlight",
           16,
         )

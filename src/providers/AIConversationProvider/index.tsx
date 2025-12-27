@@ -575,7 +575,6 @@ export const AIConversationProvider: React.FC<{
 
       setChatWindowState((prev) => ({
         ...prev,
-        isOpen: true,
         isHistoryOpen: false,
         previousConversationId: null,
         activeConversationId: conversationId,

@@ -28,13 +28,15 @@ describe("run query", () => {
     cy.typeQuery(" select count(*) from longseq;select 1;")
 
     // go to the end of second query
-    cy.clickLine(4).type(`${ctrlOrCmd}{enter}`)
+    cy.clickLine(4)
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
     cy.getGridCol(0).should("contain", "1")
     cy.getGridRow(0).should("contain", "1")
 
     // go inside the second query
     cy.clickLine(4)
     cy.realPress("ArrowLeft")
+    cy.wait(50)
     cy.realPress("ArrowLeft")
     cy.focused().type(`${ctrlOrCmd}{enter}`)
     cy.getColumnName(0).should("contain", "1")
@@ -44,6 +46,7 @@ describe("run query", () => {
     cy.clickLine(4)
     for (let i = 0; i < 10; i++) {
       cy.realPress("ArrowLeft")
+      cy.wait(50)
     }
     cy.focused().type(`${ctrlOrCmd}{enter}`)
     cy.getColumnName(0).should("contain", "count()")
@@ -53,6 +56,7 @@ describe("run query", () => {
     cy.clickLine(4)
     for (let i = 0; i < 11; i++) {
       cy.realPress("ArrowLeft")
+      cy.wait(50)
     }
     cy.focused().type(`${ctrlOrCmd}{enter}`)
     cy.getColumnName(0).should("contain", "count()")
@@ -261,8 +265,8 @@ describe("run all queries in tab", () => {
     cy.scrollToLine(1)
 
     // Then
-    cy.get(".success-glyph").should("have.length", 3)
-    cy.get(".error-glyph").should("have.length", 1)
+    cy.getSuccessIcons().should("have.length", 3)
+    cy.getErrorIcons().should("have.length", 1)
 
     // When
     cy.clickLine(9)
@@ -296,9 +300,9 @@ describe("run all queries in tab", () => {
         "match",
         /Stopped after running\s+1 successful\s+and\s+1 failed\s+queries/,
       )
-    cy.get(".success-glyph").should("have.length", 1)
-    cy.get(".error-glyph").should("have.length", 1)
-    cy.get(".cursorQueryGlyph").should("have.length", 3)
+    cy.getSuccessIcons().should("have.length", 1)
+    cy.getErrorIcons().should("have.length", 1)
+    cy.getCursorQueryGlyph().should("have.length", 3)
   })
 
   it("should run all queries if stop after failure is unchecked", () => {
@@ -315,9 +319,9 @@ describe("run all queries in tab", () => {
         "match",
         /Running completed in \d+ms with\s+2 successful\s+and\s+1 failed\s+queries/,
       )
-    cy.get(".success-glyph").should("have.length", 2)
-    cy.get(".error-glyph").should("have.length", 1)
-    cy.get(".cursorQueryGlyph").should("have.length", 3)
+    cy.getSuccessIcons().should("have.length", 2)
+    cy.getErrorIcons().should("have.length", 1)
+    cy.getCursorQueryGlyph().should("have.length", 3)
   })
 
   it("should scroll to the running query and show the loading notification", () => {
@@ -551,6 +555,7 @@ describe("&query URL param", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c"
     cy.typeQueryDirectly(query)
     cy.clickRunIconInLine(1)
+    cy.wait(1000)
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
     cy.getEditorContent().should("be.visible")
     cy.getEditorContent().should("have.value", query)
@@ -1199,9 +1204,9 @@ describe("multiple run buttons with dynamic query log", () => {
         "match",
         /Running completed in \d+ms with\s+2 successful\s+and\s+1 failed\s+queries/,
       )
-    cy.get(".success-glyph").should("have.length", 2)
-    cy.get(".error-glyph").should("have.length", 1)
-    cy.get(".cursorQueryGlyph").should("have.length", 3)
+    cy.getSuccessIcons().should("have.length", 2)
+    cy.getErrorIcons().should("have.length", 1)
+    cy.getCursorQueryGlyph().should("have.length", 3)
 
     // When
     cy.get(".new-tab-button").click()
@@ -1213,16 +1218,16 @@ describe("multiple run buttons with dynamic query log", () => {
     // When
     cy.typeQuery("select 1;\nselect a;\nselect 3;")
     // Then
-    cy.get(".success-glyph").should("have.length", 0)
-    cy.get(".error-glyph").should("have.length", 0)
-    cy.get(".cursorQueryGlyph").should("have.length", 3)
+    cy.getSuccessIcons().should("have.length", 0)
+    cy.getErrorIcons().should("have.length", 0)
+    cy.getCursorQueryGlyph().should("have.length", 3)
 
     // When
     cy.clickRunIconInLine(3)
     // Then
-    cy.get(".success-glyph").should("have.length", 1)
-    cy.get(".error-glyph").should("have.length", 0)
-    cy.get(".cursorQueryGlyph").should("have.length", 3)
+    cy.getSuccessIcons().should("have.length", 1)
+    cy.getErrorIcons().should("have.length", 0)
+    cy.getCursorQueryGlyph().should("have.length", 3)
 
     // When
     cy.getEditorTabByTitle("SQL").within(() => {
@@ -1230,9 +1235,9 @@ describe("multiple run buttons with dynamic query log", () => {
     })
     // Then
     cy.getEditorTabByTitle("SQL").should("have.attr", "active")
-    cy.get(".success-glyph").should("have.length", 2)
-    cy.get(".error-glyph").should("have.length", 1)
-    cy.get(".cursorQueryGlyph").should("have.length", 3)
+    cy.getSuccessIcons().should("have.length", 2)
+    cy.getErrorIcons().should("have.length", 1)
+    cy.getCursorQueryGlyph().should("have.length", 3)
   })
 })
 
