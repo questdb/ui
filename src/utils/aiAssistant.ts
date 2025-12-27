@@ -842,6 +842,12 @@ const tryWithRetries = async <T>(
       return await fn()
     } catch (error) {
       retries++
+      console.error(
+        "AI Assistant error: ",
+        error instanceof Error ? error.message : String(error),
+        "Remaining retries: ",
+        MAX_RETRIES - retries,
+      )
       if (retries > MAX_RETRIES || isNonRetryableError(error)) {
         setStatus(null)
         return handleAiAssistantError(error)

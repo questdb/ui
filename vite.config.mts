@@ -163,6 +163,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: !isProduction,
+      ssr: false,
+      minify: 'esbuild',
       rollupOptions: {
         output: {
           manualChunks: {
@@ -174,7 +176,9 @@ export default defineConfig(({ mode }) => {
               'redux-observable',
               'rxjs',
               'styled-components',
+              'echarts',
             ],
+            'tiktoken': ['js-tiktoken/lite', 'js-tiktoken/ranks/o200k_base'],
           },
         },
       },

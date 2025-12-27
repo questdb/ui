@@ -26,7 +26,8 @@ import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
 import { AIChatWindow } from "../Editor/AIChatWindow"
-import { useAIConversation } from "../../providers/AIConversationProvider"
+import { color } from "../../utils/styled"
+import { AIStatusIndicator } from "../../components/AIStatusIndicator"
 
 const Root = styled.div`
   display: flex;
@@ -65,6 +66,11 @@ const Tab = styled.div`
   overflow: auto;
 `
 
+const Drawer = styled.div`
+  background: ${color("chatBackground")};
+  height: 100%;
+`
+
 const viewModes: {
   icon: React.ReactNode
   mode: ResultViewMode
@@ -94,10 +100,10 @@ const Console = () => {
     updateAiChatPanelWidth,
   } = useLocalStorage()
   const result = useSelector(selectors.query.getResult)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const activeBottomPanel = useSelector(selectors.console.getActiveBottomPanel)
   const { consoleConfig } = useSettings()
   const { isSearchPanelOpen, setSearchPanelOpen, searchPanelRef } = useSearch()
-  const { chatWindowState } = useAIConversation()
 
   const isDataSourcesPanelOpen =
     leftPanelState.type === LeftPanelType.DATASOURCES
@@ -138,7 +144,7 @@ const Console = () => {
       <Allotment
         onDragEnd={(sizes) => {
           // sizes[1] is the AI chat panel width when it's open
-          if (chatWindowState.isOpen && sizes[1] !== undefined) {
+          if (activeSidebar !== undefined && sizes[1] !== undefined) {
             updateAiChatPanelWidth(sizes[1])
           }
         }}
@@ -312,12 +318,16 @@ const Console = () => {
               </Allotment.Pane>
             </Allotment>
           </MainContent>
+          <AIStatusIndicator />
         </Allotment.Pane>
-        {chatWindowState.isOpen && (
-          <Allotment.Pane minSize={420} preferredSize={aiChatPanelWidth}>
-            <AIChatWindow />
-          </Allotment.Pane>
-        )}
+        <Allotment.Pane
+          minSize={470}
+          preferredSize={aiChatPanelWidth}
+          visible={!!activeSidebar}
+        >
+          <Drawer id="side-panel-right" />
+          <AIChatWindow />
+        </Allotment.Pane>
       </Allotment>
     </Root>
   )

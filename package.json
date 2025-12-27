@@ -35,7 +35,7 @@
     "@date-fns/tz": "^1.2.0",
     "@docsearch/css": "^3.5.2",
     "@docsearch/react": "^3.5.2",
-    "@hookform/resolvers": "2.8.5",
+    "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.6.0",
     "@phosphor-icons/react": "^2.1.10",
     "@popperjs/core": "2.4.2",
@@ -76,6 +76,7 @@
     "jquery": "3.5.1",
     "js-base64": "^3.7.7",
     "js-sha256": "^0.11.0",
+    "js-tiktoken": "^1.0.21",
     "lodash.isequal": "^4.5.0",
     "lodash.merge": "^4.6.2",
     "monaco-editor": "^0.44.0",
@@ -86,7 +87,7 @@
     "react-calendar": "^4.0.0",
     "react-dom": "17.0.2",
     "react-highlight-words": "^0.20.0",
-    "react-hook-form": "7.22.3",
+    "react-hook-form": "^7.56.0",
     "react-is": "^18.1.0",
     "react-markdown": "^8.0.7",
     "react-popper": "2.2.3",
@@ -103,7 +104,6 @@
     "sql-formatter": "^4.0.2",
     "styled-components": "5.3.5",
     "throttle-debounce": "2.2.1",
-    "tiktoken": "^1.0.22",
     "uplot": "^1.6.31",
     "uplot-react": "^1.2.2",
     "vite-plugin-top-level-await": "^1.6.0",
@@ -172,7 +172,7 @@
     "files": [
       {
         "path": "dist/assets/vendor-*.js",
-        "maxSize": "500KB",
+        "maxSize": "1MB",
         "compression": "none"
       },
       {

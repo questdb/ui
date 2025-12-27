@@ -2069,12 +2069,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hookform/resolvers@npm:2.8.5":
-  version: 2.8.5
-  resolution: "@hookform/resolvers@npm:2.8.5"
+"@hookform/resolvers@npm:^5.2.2":
+  version: 5.2.2
+  resolution: "@hookform/resolvers@npm:5.2.2"
+  dependencies:
+    "@standard-schema/utils": "npm:^0.3.0"
   peerDependencies:
-    react-hook-form: ^7.0.0
-  checksum: 10/7b5306648212d96014fdfa6bedab99c81232fe60e7f421abaf9c1287851030395be76a9bd148ef0647986348768a9ede8bfba95c4ed48ad68587b7708ca765ca
+    react-hook-form: ^7.55.0
+  checksum: 10/93447287dc89827c517c72dc61e3be0217d3a5d9cbdb532317e5f5fd176c3eedb2ccd62d3c51fb403812939c9b7a4ebcaca35659a9bfb90e16ec38a2092d13a2
   languageName: node
   linkType: hard
 
@@ -2470,7 +2472,7 @@ __metadata:
     "@docsearch/css": "npm:^3.5.2"
     "@docsearch/react": "npm:^3.5.2"
     "@eslint/js": "npm:^9.13.0"
-    "@hookform/resolvers": "npm:2.8.5"
+    "@hookform/resolvers": "npm:^5.2.2"
     "@monaco-editor/react": "npm:^4.6.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@popperjs/core": "npm:2.4.2"
@@ -2542,6 +2544,7 @@ __metadata:
     jquery: "npm:3.5.1"
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
+    js-tiktoken: "npm:^1.0.21"
     lint-staged: "npm:^16.2.6"
     lodash.isequal: "npm:^4.5.0"
     lodash.merge: "npm:^4.6.2"
@@ -2554,7 +2557,7 @@ __metadata:
     react-calendar: "npm:^4.0.0"
     react-dom: "npm:17.0.2"
     react-highlight-words: "npm:^0.20.0"
-    react-hook-form: "npm:7.22.3"
+    react-hook-form: "npm:^7.56.0"
     react-is: "npm:^18.1.0"
     react-markdown: "npm:^8.0.7"
     react-popper: "npm:2.2.3"
@@ -2577,7 +2580,6 @@ __metadata:
     stylelint-config-styled-components: "npm:0.1.1"
     stylelint-processor-styled-components: "npm:1.10.0"
     throttle-debounce: "npm:2.2.1"
-    tiktoken: "npm:^1.0.22"
     typescript: "npm:^5.7.0"
     typescript-eslint: "npm:^8.46.0"
     uplot: "npm:^1.6.31"
@@ -3400,6 +3402,13 @@ __metadata:
   version: 0.27.8
   resolution: "@sinclair/typebox@npm:0.27.8"
   checksum: 10/297f95ff77c82c54de8c9907f186076e715ff2621c5222ba50b8d40a170661c0c5242c763cba2a4791f0f91cb1d8ffa53ea1d7294570cf8cd4694c0e383e484d
+  languageName: node
+  linkType: hard
+
+"@standard-schema/utils@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@standard-schema/utils@npm:0.3.0"
+  checksum: 10/7084f875d322792f2e0a5904009434c8374b9345b09ba89828b68fd56fa3c2b366d35bf340d9e8c72736ef01793c2f70d350c372ed79845dc3566c58d34b4b51
   languageName: node
   linkType: hard
 
@@ -4839,7 +4848,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"base64-js@npm:^1.3.1":
+"base64-js@npm:^1.3.1, base64-js@npm:^1.5.1":
   version: 1.5.1
   resolution: "base64-js@npm:1.5.1"
   checksum: 10/669632eb3745404c2f822a18fc3a0122d2f9a7a13f7fb8b5823ee19d1d2ff9ee5b52c53367176ea4ad093c332fd5ab4bd0ebae5a8e27917a4105a4cfc86b1005
@@ -8066,6 +8075,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"js-tiktoken@npm:^1.0.21":
+  version: 1.0.21
+  resolution: "js-tiktoken@npm:1.0.21"
+  dependencies:
+    base64-js: "npm:^1.5.1"
+  checksum: 10/9850a943649d4e6f0d77f9429df626149b546b15ccd47a4fbf027d99b475b70f90673de2904856d0cb3a80ccc751a0604786a007511e136c1dee9a2c4d8a5ae8
+  languageName: node
+  linkType: hard
+
 "js-tokens@npm:^3.0.0 || ^4.0.0, js-tokens@npm:^4.0.0":
   version: 4.0.0
   resolution: "js-tokens@npm:4.0.0"
@@ -10288,12 +10306,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-hook-form@npm:7.22.3":
-  version: 7.22.3
-  resolution: "react-hook-form@npm:7.22.3"
+"react-hook-form@npm:^7.56.0":
+  version: 7.69.0
+  resolution: "react-hook-form@npm:7.69.0"
   peerDependencies:
-    react: ^16.8.0 || ^17
-  checksum: 10/8b3a22b91d84f116e1b204220e7900c6ca8f33f0501f2486096057d81203c6a9bb4813314349760cf5c403da6443b7cde96e0150dcfe3d591319e0e0d321c8f9
+    react: ^16.8.0 || ^17 || ^18 || ^19
+  checksum: 10/12a8b90d337c557cb53cfb6c9fd7ed3972a20960834b060bb239101a2765cd762ef6651b3231feb0932d3582d51801fda57bc660bfac88688b538b6609e4a1ec
   languageName: node
   linkType: hard
 
@@ -11864,13 +11882,6 @@ __metadata:
   version: 2.3.8
   resolution: "through@npm:2.3.8"
   checksum: 10/5da78346f70139a7d213b65a0106f3c398d6bc5301f9248b5275f420abc2c4b1e77c2abc72d218dedc28c41efb2e7c312cb76a7730d04f9c2d37d247da3f4198
-  languageName: node
-  linkType: hard
-
-"tiktoken@npm:^1.0.22":
-  version: 1.0.22
-  resolution: "tiktoken@npm:1.0.22"
-  checksum: 10/f483ef7877ce6a993c4e8147a4ebafc70b415440836bcb2e9fbca56d3ffdaf6407ea0679a5924311ebfc5ee0fc2c8ecb0ff8088801ad8901cffe19287b9c58db
   languageName: node
   linkType: hard
 

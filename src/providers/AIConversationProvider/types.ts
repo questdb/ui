@@ -58,7 +58,6 @@ export type AIConversation = {
 }
 
 export type ChatWindowState = {
-  isOpen: boolean
   activeConversationId: ConversationId | null
   isHistoryOpen?: boolean
   previousConversationId?: ConversationId | null // For navigating back after toggling off the history view

@@ -29,9 +29,6 @@ import Console from "../Console"
 import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
-import { AIStatusIndicator } from "../../components/AIStatusIndicator"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
 import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
 import {
@@ -72,21 +69,14 @@ const Root = styled.div`
   overflow-y: auto;
 `
 
-const Main = styled.div<{ sideOpened: boolean }>`
+const Main = styled.div`
   position: relative;
   flex: 1;
   display: flex;
-  width: ${({ sideOpened }) =>
-    sideOpened ? "calc(100% - 50rem - 4.5rem)" : "calc(100% - 4.5rem)"};
-`
-
-const Drawer = styled.div`
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  width: calc(100% - 4.5rem);
 `
 
 const Layout = () => {
-  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-
   const focusListener = useCallback(() => {
     eventBus.publish(EventType.TAB_FOCUS)
   }, [])
@@ -113,15 +103,12 @@ const Layout = () => {
             <TopBar />
             <Warnings />
             <Root>
-              <Main sideOpened={activeSidebar !== undefined}>
+              <Main>
                 <ImageZoom />
                 <Page>
                   <Console />
                 </Page>
-                <AIStatusIndicator />
               </Main>
-
-              <Drawer id="side-panel-right" />
 
               <Sidebar align="top">
                 <Help />

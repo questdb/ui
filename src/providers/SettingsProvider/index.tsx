@@ -6,7 +6,7 @@ import React, {
   useReducer,
   useState,
 } from "react"
-import _ from "lodash"
+import isEqual from "lodash.isequal"
 import styled from "styled-components"
 import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout, Box, Text, Button } from "../../components"
@@ -278,10 +278,10 @@ export const SettingsProvider = ({
         version: result["preferences.version"],
         ...result?.preferences,
       }
-      if (!_.isEqual(newSettings, settings)) {
+      if (!isEqual(newSettings, settings)) {
         setSettings(newSettings)
       }
-      if (!_.isEqual(newPreferences, preferences)) {
+      if (!isEqual(newPreferences, preferences)) {
         setPreferences(newPreferences)
       }
       return {

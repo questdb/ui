@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
-import { encoding_for_model, TiktokenModel } from "tiktoken"
 import type { Provider } from "./aiAssistantSettings"
+import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 
 export interface ConversationMessage {
   role: "user" | "assistant"
@@ -36,15 +36,18 @@ export async function countTokensAnthropic(
 
   return response.input_tokens
 }
+let tiktokenEncoder: Tiktoken | null = null
 
-let tiktokenEncoder: ReturnType<typeof encoding_for_model> | null = null
-
-export function countTokensOpenAI(
+export async function countTokensOpenAI(
   messages: ConversationMessage[],
   systemPrompt: string,
-): number {
+): Promise<number> {
   if (!tiktokenEncoder) {
-    tiktokenEncoder = encoding_for_model("gpt-5" as TiktokenModel)
+    const { Tiktoken } = await import("js-tiktoken/lite")
+    const o200k_base = await import("js-tiktoken/ranks/o200k_base").then(
+      (module: { default: TiktokenBPE }) => module.default,
+    )
+    tiktokenEncoder = new Tiktoken(o200k_base)
   }
 
   let totalTokens = 0

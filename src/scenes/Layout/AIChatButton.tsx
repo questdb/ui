@@ -4,6 +4,8 @@ import { PrimaryToggleButton, IconWithTooltip, Box } from "../../components"
 import { AISparkle } from "../../components/AISparkle"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { useAIStatus } from "../../providers/AIStatusProvider"
+import { useSelector } from "react-redux"
+import { selectors } from "../../store"
 
 const ChatButton = styled(PrimaryToggleButton)`
   padding: 0;
@@ -15,16 +17,16 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
 `
 
 export const AIChatButton = () => {
-  const { chatWindowState, openOrCreateBlankChatWindow, closeChatWindow } =
-    useAIConversation()
+  const { openOrCreateBlankChatWindow, closeChatWindow } = useAIConversation()
   const { canUse } = useAIStatus()
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 
   if (!canUse) {
     return null
   }
 
   const handleClick = () => {
-    if (chatWindowState.isOpen) {
+    if (activeSidebar === "aiChat") {
       closeChatWindow()
     } else {
       void openOrCreateBlankChatWindow()
@@ -33,7 +35,7 @@ export const AIChatButton = () => {
 
   return (
     <ChatButton
-      selected={chatWindowState.isOpen}
+      selected={activeSidebar === "aiChat"}
       onClick={handleClick}
       data-hook="ai-chat-button"
     >

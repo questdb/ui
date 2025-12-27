@@ -50,7 +50,7 @@ const defaultConfig: LocalConfig = {
     type: LeftPanelType.DATASOURCES,
     width: 350,
   },
-  aiChatPanelWidth: 400,
+  aiChatPanelWidth: 500,
 }
 
 type ContextProps = {

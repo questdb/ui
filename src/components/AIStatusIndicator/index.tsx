@@ -21,6 +21,8 @@ import { Button } from "../../components/Button"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import { AssistantModes, buildOperationSections } from "./AssistantModes"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
+import { useSelector } from "react-redux"
+import { selectors } from "../../store"
 
 const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -315,7 +317,7 @@ export const AIStatusIndicator: React.FC = () => {
   const isCompleted = status === null && currentOperation.length > 0
   const isAborted = status === AIOperationStatus.Aborted
   const assistantModesRef = useRef<HTMLDivElement | null>(null)
-  const isChatWindowOpen = chatWindowState.isOpen
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const statusRef = useRef<AIOperationStatus | null>(null)
   const hasExtendedThinking = useMemo(() => {
     return MODEL_OPTIONS.find((model) => model.value === currentModel)?.isSlow
@@ -364,17 +366,17 @@ export const AIStatusIndicator: React.FC = () => {
     if (statusRef.current === null && status !== null) {
       setIsClosed(false)
     }
-    if (status === null && chatWindowState.isOpen) {
+    if (status === null && activeSidebar === "aiChat") {
       clearOperation()
     }
     statusRef.current = status
-  }, [status, chatWindowState.isOpen, clearOperation])
+  }, [status, activeSidebar, clearOperation])
 
   if (
     !currentOperation ||
     currentOperation.length === 0 ||
     isClosed ||
-    isChatWindowOpen
+    activeSidebar === "aiChat"
   ) {
     return null
   }

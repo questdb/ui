@@ -63,6 +63,7 @@ const Container = styled.div`
   width: 100%;
   overflow: hidden;
   background: ${color("chatBackground")};
+  border-left: 0.2rem ${color("backgroundDarker")} solid;
 `
 
 const Header = styled.div`
@@ -197,6 +198,7 @@ const ChatPanel = styled(Box)`
 
 export const AIChatWindow: React.FC = () => {
   const dispatch = useDispatch()
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const { quest } = useContext(QuestContext)
   const {
     editorRef,
@@ -745,7 +747,7 @@ export const AIChatWindow: React.FC = () => {
     }
   }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
 
-  if (!chatWindowState.isOpen || (!conversation && !isHistoryOpen)) {
+  if (activeSidebar !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }
 

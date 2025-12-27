@@ -14,6 +14,7 @@ import {
   type ConversationMetaWithStatus,
 } from "../../store/db"
 import { aiConversationStore } from "../../store/aiConversations"
+import { actions, selectors } from "../../store"
 import type {
   ConversationMessage,
   ChatWindowState,
@@ -29,6 +30,7 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
 import { normalizeSql } from "../../utils/aiAssistant"
+import { useDispatch, useSelector } from "react-redux"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
@@ -122,6 +124,8 @@ export const useAIConversation = () => {
 export const AIConversationProvider: React.FC<{
   children: React.ReactNode
 }> = ({ children }) => {
+  const dispatch = useDispatch()
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const conversationMetasArray = useLiveQuery(
     async () => {
       const metas: ConversationMeta[] = await db.ai_conversations.toArray()
@@ -159,7 +163,6 @@ export const AIConversationProvider: React.FC<{
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
 
   const [chatWindowState, setChatWindowState] = useState<ChatWindowState>({
-    isOpen: false,
     activeConversationId: null,
     isHistoryOpen: false,
     previousConversationId: null,
@@ -552,7 +555,7 @@ export const AIConversationProvider: React.FC<{
       } else if (
         prevId === conversationId &&
         !chatWindowState.isHistoryOpen &&
-        chatWindowState.isOpen
+        activeSidebar === "aiChat"
       ) {
         return
       }
@@ -577,8 +580,10 @@ export const AIConversationProvider: React.FC<{
         previousConversationId: null,
         activeConversationId: conversationId,
       }))
+      dispatch(actions.console.setActiveSidebar("aiChat"))
     },
     [
+      activeSidebar,
       chatWindowState,
       conversationMetas,
       activeConversationMessages,
@@ -587,12 +592,7 @@ export const AIConversationProvider: React.FC<{
   )
 
   const closeChatWindow = useCallback(() => {
-    setChatWindowState((prev) => {
-      return {
-        ...prev,
-        isOpen: false,
-      }
-    })
+    dispatch(actions.console.setActiveSidebar(undefined))
     if (chatWindowState.activeConversationId) {
       if (activeConversationMessages.length === 0) {
         void aiConversationStore.deleteConversation(
