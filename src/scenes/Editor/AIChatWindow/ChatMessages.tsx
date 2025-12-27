@@ -777,7 +777,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             } else if (sql) {
               // fix_request and explain_request show SQL editor
               const lineCount = sql.split("\n").length
-              const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
+              const editorHeight = Math.min(lineCount * 20 + 16, 200)
               content = (
                 <UserRequestContent>
                   <InlineSQLEditor style={{ height: editorHeight }}>
@@ -811,7 +811,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           if (displayType === "ask_request" && sql) {
             const userQuestion = message.displayUserMessage || message.content
             const lineCount = sql.split("\n").length
-            const editorHeight = Math.min(Math.max(lineCount * 20, 60), 200)
+            const editorHeight = Math.min(lineCount * 20 + 16, 200)
 
             return (
               <UserRequestBox key={key}>

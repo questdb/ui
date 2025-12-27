@@ -79,7 +79,6 @@ import {
   clearGlyphWidgets,
   toggleGlyphWidgetLoading,
 } from "./glyphUtils"
-import { applyGutterIconState } from "./icons"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 
 type IndividualQueryResult = {
@@ -269,13 +268,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
   const findQueryByConversationIdRef = useRef(findQueryByConversationId)
-  const aiStatusRef = useRef(aiStatus)
+  const isBlockingAIStatusRef = useRef(isBlockingAIStatus(aiStatus) ?? false)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
-  const glyphLineNumbersRef = useRef<Set<number>>(new Set())
   const decorationCollectionRef =
     useRef<editor.IEditorDecorationsCollection | null>(null)
   const glyphWidgetsRef = useRef<editor.IGlyphMarginWidget[]>([])
+  const highlightedLineNumberRef = useRef<number | null>(null)
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -634,7 +633,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const allQueryOffsets: { startOffset: number; endOffset: number }[] = []
 
     clearGlyphWidgets(editor, glyphWidgetsRef)
-    glyphLineNumbersRef.current.clear()
+    const newGlyphLineNumbers = new Set<number>()
 
     if (queries.length > 0) {
       queries.forEach((query) => {
@@ -721,21 +720,28 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           }
         }
 
-        if (!glyphLineNumbersRef.current.has(startLineNumber)) {
+        const isHighlighted =
+          highlightedLineNumberRef.current === startLineNumber
+
+        if (!newGlyphLineNumbers.has(startLineNumber) || isHighlighted) {
           const widget = createGlyphWidget(startLineNumber, {
+            isHighlighted,
             isCancel: isRunningQuery,
             hasError,
             isSuccessful,
             showAI: canUseAIRef.current,
             hasConversation,
-            aiButtonDisabled: isBlockingAIStatus(aiStatusRef.current),
+            aiButtonDisabled: isBlockingAIStatusRef.current,
             onRunClick: handleRunClick,
             onRunContextMenu: handleRunContextMenu,
             onAIClick: handleAIClick,
           })
           editor.addGlyphMarginWidget(widget)
-          glyphLineNumbersRef.current.add(startLineNumber)
+          newGlyphLineNumbers.add(startLineNumber)
           glyphWidgetsRef.current.push(widget)
+        }
+        if (isHighlighted) {
+          highlightedLineNumberRef.current = null
         }
       })
     }
@@ -1876,10 +1882,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [findQueryByConversationId, shiftQueryKeysForBuffer])
 
   useEffect(() => {
-    aiStatusRef.current = aiStatus
-    if (monacoRef.current && editorRef.current) {
+    const newIsBlocking = isBlockingAIStatus(aiStatus) ?? false
+    if (
+      monacoRef.current &&
+      editorRef.current &&
+      newIsBlocking !== isBlockingAIStatusRef.current
+    ) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
+    isBlockingAIStatusRef.current = newIsBlocking
   }, [aiStatus])
 
   useEffect(() => {
@@ -1903,16 +1914,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       if (activeBufferRef.current.id !== bufferId) return
       const startOffset = parseQueryKey(queryKey).startOffset
       const lineNumber = model.getPositionAt(startOffset).lineNumber
-      const widget = glyphWidgetsRef.current.find(
-        (widget) => widget.getId() === `glyph-widget-${lineNumber}`,
-      )
-      if (widget) {
-        applyGutterIconState(
-          widget.getDomNode()?.querySelector(".glyph-ai-icon") as HTMLElement,
-          "highlight",
-          16,
-        )
-      }
+      highlightedLineNumberRef.current = lineNumber
     }
 
     eventBus.subscribe(EventType.AI_QUERY_HIGHLIGHT, handler)
@@ -1943,7 +1945,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       if (editorRef.current) {
         clearGlyphWidgets(editorRef.current, glyphWidgetsRef)
-        glyphLineNumbersRef.current.clear()
       }
 
       editorRef.current?.getModel()?.dispose()

@@ -813,7 +813,7 @@ const AIChatWindow: React.FC = () => {
                   <InitialQueryEditor
                     style={{
                       height: Math.min(
-                        Math.max(currentSQL.split("\n").length * 20, 60),
+                        currentSQL.trim().split("\n").length * 20 + 16,
                         200,
                       ),
                     }}
