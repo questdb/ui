@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { lazy, Suspense, useEffect, useState } from "react"
 import { useDispatch } from "react-redux"
 import styled from "styled-components"
 import { PopperHover } from "../../components"
@@ -25,9 +25,20 @@ import { Import as ImportIcon } from "../../components/icons/import"
 import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
-import { AIChatWindow } from "../Editor/AIChatWindow"
 import { color } from "../../utils/styled"
 import { AIStatusIndicator } from "../../components/AIStatusIndicator"
+import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
+
+const AIChatWindow = lazy(() => import("../Editor/AIChatWindow"))
+
+const LoaderContainer = styled.div`
+  display: flex;
+  align-items: center;
+  background: ${color("chatBackground")};
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+`
 
 const Root = styled.div`
   display: flex;
@@ -331,7 +342,17 @@ const Console = () => {
           visible={!!activeSidebar}
         >
           <Drawer id="side-panel-right" $aiChat={activeSidebar === "aiChat"} />
-          <AIChatWindow />
+          {activeSidebar === "aiChat" && (
+            <Suspense
+              fallback={
+                <LoaderContainer>
+                  <CircleNotchSpinner size={24} />
+                </LoaderContainer>
+              }
+            >
+              <AIChatWindow />
+            </Suspense>
+          )}
         </Allotment.Pane>
       </Allotment>
     </Root>

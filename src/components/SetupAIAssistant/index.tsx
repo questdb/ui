@@ -32,7 +32,6 @@ export const SetupAIAssistant = () => {
         setShowPromo(false)
         setConfigModalOpen(true)
       } else {
-        // First click: show promo
         setShowPromo(true)
       }
     }

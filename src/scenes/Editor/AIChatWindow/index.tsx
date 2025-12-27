@@ -196,7 +196,7 @@ const ChatPanel = styled(Box)`
   gap: 0;
 `
 
-export const AIChatWindow: React.FC = () => {
+const AIChatWindow: React.FC = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const { quest } = useContext(QuestContext)
@@ -863,3 +863,5 @@ export const AIChatWindow: React.FC = () => {
     </Container>
   )
 }
+
+export default AIChatWindow

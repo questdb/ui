@@ -82,7 +82,7 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   `};
 `
 
-const StyledClose = styled(Button).attrs({
+export const StyledClose = styled(Button).attrs({
   "aria-label": "Close",
   skin: "transparent",
 })`
