@@ -841,13 +841,13 @@ const tryWithRetries = async <T>(
 
       return await fn()
     } catch (error) {
-      retries++
       console.error(
         "AI Assistant error: ",
         error instanceof Error ? error.message : String(error),
         "Remaining retries: ",
         MAX_RETRIES - retries,
       )
+      retries++
       if (retries > MAX_RETRIES || isNonRetryableError(error)) {
         setStatus(null)
         return handleAiAssistantError(error)
@@ -1185,12 +1185,14 @@ export const explainTableSchema = async ({
   isMatView,
   settings,
   setStatus,
+  abortSignal,
 }: {
   tableName: string
   schema: string
   isMatView: boolean
   settings: ActiveProviderSettings
   setStatus: StatusCallback
+  abortSignal?: AbortSignal
 }): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
   if (!settings.apiKey || !settings.model) {
     return {
@@ -1208,97 +1210,101 @@ export const explainTableSchema = async ({
   await handleRateLimit()
   setStatus(AIOperationStatus.Processing)
 
-  return tryWithRetries(async () => {
-    const clients = createProviderClients(settings)
+  return tryWithRetries(
+    async () => {
+      const clients = createProviderClients(settings)
 
-    if (clients.provider === "openai") {
-      const prompt = getExplainSchemaPrompt(tableName, schema, isMatView)
+      if (clients.provider === "openai") {
+        const prompt = getExplainSchemaPrompt(tableName, schema, isMatView)
 
-      const formattingOutput = await clients.openai.responses.parse({
-        ...getModelProps(settings.model),
-        instructions: getExplainSchemaPrompt(tableName, schema, isMatView),
-        input: [{ role: "user", content: prompt }],
-        text: ExplainTableSchemaFormat,
-      })
+        const formattingOutput = await clients.openai.responses.parse({
+          ...getModelProps(settings.model),
+          instructions: getExplainSchemaPrompt(tableName, schema, isMatView),
+          input: [{ role: "user", content: prompt }],
+          text: ExplainTableSchemaFormat,
+        })
 
-      const formatted =
-        formattingOutput.output_parsed as TableSchemaExplanation | null
-      setStatus(null)
-      if (!formatted) {
+        const formatted =
+          formattingOutput.output_parsed as TableSchemaExplanation | null
+        setStatus(null)
+        if (!formatted) {
+          return {
+            type: "unknown",
+            message: "Failed to parse assistant response.",
+          } as AiAssistantAPIError
+        }
+        const openAIUsage = formattingOutput.usage
+        return {
+          explanation: formatted.explanation || "",
+          columns: formatted.columns || [],
+          storage_details: formatted.storage_details || [],
+          tokenUsage: openAIUsage
+            ? {
+                inputTokens: openAIUsage.input_tokens,
+                outputTokens: openAIUsage.output_tokens,
+              }
+            : undefined,
+        }
+      }
+
+      const anthropic = clients.anthropic
+      const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
+        model: getModelProps(settings.model).model,
+        messages: [
+          {
+            role: "user" as const,
+            content: getExplainSchemaPrompt(tableName, schema, isMatView),
+          },
+        ],
+        temperature: 0.3,
+      }
+      const schemaFormat = ExplainTableSchemaFormat.format as {
+        type: string
+        schema?: object
+      }
+      // @ts-expect-error - output_format is a new field not yet in the type definitions
+      messageParams.output_format = {
+        type: "json_schema",
+        schema: schemaFormat.schema,
+      }
+
+      const message = await createAnthropicMessage(anthropic, messageParams)
+
+      const textBlock = message.content.find((block) => block.type === "text")
+      if (!textBlock || !("text" in textBlock)) {
+        setStatus(null)
+        return {
+          type: "unknown",
+          message: "No text response received from assistant.",
+        } as AiAssistantAPIError
+      }
+
+      try {
+        const json = JSON.parse(textBlock.text) as TableSchemaExplanation
+        setStatus(null)
+        const anthropicUsage = message.usage
+        return {
+          explanation: json.explanation || "",
+          columns: json.columns || [],
+          storage_details: json.storage_details || [],
+          tokenUsage: anthropicUsage
+            ? {
+                inputTokens: anthropicUsage.input_tokens,
+                outputTokens: anthropicUsage.output_tokens,
+              }
+            : undefined,
+        }
+      } catch (error) {
+        setStatus(null)
         return {
           type: "unknown",
           message: "Failed to parse assistant response.",
         } as AiAssistantAPIError
       }
-      const openAIUsage = formattingOutput.usage
-      return {
-        explanation: formatted.explanation || "",
-        columns: formatted.columns || [],
-        storage_details: formatted.storage_details || [],
-        tokenUsage: openAIUsage
-          ? {
-              inputTokens: openAIUsage.input_tokens,
-              outputTokens: openAIUsage.output_tokens,
-            }
-          : undefined,
-      }
-    }
-
-    const anthropic = clients.anthropic
-    const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
-      model: getModelProps(settings.model).model,
-      messages: [
-        {
-          role: "user" as const,
-          content: getExplainSchemaPrompt(tableName, schema, isMatView),
-        },
-      ],
-      temperature: 0.3,
-    }
-    const schemaFormat = ExplainTableSchemaFormat.format as {
-      type: string
-      schema?: object
-    }
-    // @ts-expect-error - output_format is a new field not yet in the type definitions
-    messageParams.output_format = {
-      type: "json_schema",
-      schema: schemaFormat.schema,
-    }
-
-    const message = await createAnthropicMessage(anthropic, messageParams)
-
-    const textBlock = message.content.find((block) => block.type === "text")
-    if (!textBlock || !("text" in textBlock)) {
-      setStatus(null)
-      return {
-        type: "unknown",
-        message: "No text response received from assistant.",
-      } as AiAssistantAPIError
-    }
-
-    try {
-      const json = JSON.parse(textBlock.text) as TableSchemaExplanation
-      setStatus(null)
-      const anthropicUsage = message.usage
-      return {
-        explanation: json.explanation || "",
-        columns: json.columns || [],
-        storage_details: json.storage_details || [],
-        tokenUsage: anthropicUsage
-          ? {
-              inputTokens: anthropicUsage.input_tokens,
-              outputTokens: anthropicUsage.output_tokens,
-            }
-          : undefined,
-      }
-    } catch (error) {
-      setStatus(null)
-      return {
-        type: "unknown",
-        message: "Failed to parse assistant response.",
-      } as AiAssistantAPIError
-    }
-  }, setStatus)
+    },
+    setStatus,
+    abortSignal,
+  )
 }
 
 class RefusalError extends Error {

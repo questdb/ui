@@ -516,9 +516,6 @@ const AIChatWindow: React.FC = () => {
           error:
             error.type !== "aborted" ? error.message : "Operation cancelled",
         })
-        if (error.type !== "aborted") {
-          toast.error(error.message, { autoClose: 10000 })
-        }
         return
       }
 

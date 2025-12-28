@@ -15,7 +15,6 @@ import {
   MODEL_OPTIONS,
 } from "../../utils/aiAssistantSettings"
 import { AISparkle } from "../AISparkle"
-import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import {
@@ -140,9 +139,6 @@ export const ExplainQueryButton = ({
           error:
             error.type !== "aborted" ? error.message : "Operation cancelled",
         })
-        if (error.type !== "aborted") {
-          toast.error(error.message, { autoClose: 10000 })
-        }
         await persistMessages(conversationId)
         return
       }

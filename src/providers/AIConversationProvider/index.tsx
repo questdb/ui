@@ -363,7 +363,6 @@ export const AIConversationProvider: React.FC<{
       updates: Partial<ConversationMessage>,
     ) => {
       const meta = conversationMetas.get(conversationId)
-      if (!meta) return
 
       setActiveConversationMessages((prev) => {
         let hasSQLChange = false
@@ -375,7 +374,8 @@ export const AIConversationProvider: React.FC<{
           if (
             newSql !== undefined &&
             msg.previousSQL === undefined &&
-            updates.previousSQL === undefined
+            updates.previousSQL === undefined &&
+            meta
           ) {
             const { queryText: acceptedSQL } = getQueryInfoFromKey(
               meta.queryKey,

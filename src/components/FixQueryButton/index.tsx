@@ -17,7 +17,6 @@ import {
   providerForModel,
   MODEL_OPTIONS,
 } from "../../utils/aiAssistantSettings"
-import { toast } from "../Toast"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import {
@@ -134,9 +133,6 @@ export const FixQueryButton = () => {
       updateMessage(conversation.id, assistantMessageId, {
         error: error.type !== "aborted" ? error.message : "Operation cancelled",
       })
-      if (error.type !== "aborted") {
-        toast.error(error.message, { autoClose: 10000 })
-      }
       await persistMessages(conversation.id)
       return
     }

@@ -58,6 +58,7 @@ import {
   isBlockingAIStatus,
   type AIOperationStatus,
   type StatusArgs,
+  type OperationHistory,
 } from "../../../providers/AIStatusProvider"
 import { providerForModel } from "../../../utils/aiAssistantSettings"
 import { AISparkle } from "../../../components/AISparkle"
@@ -181,6 +182,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const {
     status: aiStatus,
     setStatus,
+    abortController,
     canUse,
     hasSchemaAccess,
     currentModel,
@@ -193,6 +195,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     createConversation,
     openChatWindow,
     addMessage,
+    updateMessage,
     updateConversationName,
     persistMessages,
   } = useAIConversation()
@@ -339,6 +342,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       },
     })
 
+    const assistantMessageId = crypto.randomUUID()
+    addMessage({
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      operationHistory: [],
+    })
+
     const provider = providerForModel(currentModel)
 
     const settings: ActiveProviderSettings = {
@@ -347,22 +359,31 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       apiKey,
     }
 
+    const handleStatusUpdate = (history: OperationHistory) => {
+      updateMessage(conversation.id, assistantMessageId, {
+        operationHistory: [...history],
+      })
+    }
+
     const response = await explainTableSchema({
       tableName,
       schema,
       isMatView,
       settings,
       setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
-        setStatus(status, { ...(args ?? {}), conversationId: conversation.id }),
+        setStatus(
+          status,
+          { ...(args ?? {}), conversationId: conversation.id },
+          handleStatusUpdate,
+        ),
+      abortSignal: abortController?.signal,
     })
 
     if (isAiAssistantError(response)) {
       const error = response
-      toast.error(error.message, { autoClose: 10000 })
-      addMessage({
-        role: "assistant",
+      updateMessage(conversation.id, assistantMessageId, {
         content: `Error: ${error.message}`,
-        timestamp: Date.now(),
+        error: error.type !== "aborted" ? error.message : "Operation cancelled",
         explanation: `Error: ${error.message}`,
       })
       await persistMessages(conversation.id)
@@ -378,10 +399,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }
 
     const markdownContent = schemaExplanationToMarkdown(result)
-    addMessage({
-      role: "assistant",
+    updateMessage(conversation.id, assistantMessageId, {
       content: markdownContent,
-      timestamp: Date.now(),
       explanation: markdownContent,
       tokenUsage: result.tokenUsage,
     })
