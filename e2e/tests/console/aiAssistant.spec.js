@@ -935,13 +935,13 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-chat-window").should("be.visible")
 
       // When - Click AI icon again (should close chat)
-      cy.getAIIconInLine(1).click()
+      cy.getAIIconInLine(1, "active").click()
 
       // Then - Chat window should be closed
       cy.getByDataHook("ai-chat-window").should("not.exist")
 
       // When - Click AI icon again (should open chat)
-      cy.getAIIconInLine(1).click()
+      cy.getAIIconInLine(1, "active").click()
 
       // Then - Chat window should be open with previous messages
       cy.getByDataHook("ai-chat-window").should("be.visible")
