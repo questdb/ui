@@ -90,7 +90,7 @@ const ActionButton = styled.button`
 const ContextBadgeContainer = styled.div`
   position: absolute;
   padding: 0.8rem;
-  top: 1px;
+  top: 2px;
   border-radius: 0.6rem;
   left: 1px;
   width: calc(100% - 0.2rem);
@@ -320,7 +320,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     return (
       <InputContainer>
         {showThoughtStream ? (
-          <ThoughtStream $aborted={isAborted}>
+          <ThoughtStream $aborted={isAborted} data-hook="chat-assistant-modes">
             <ThoughtStreamContent $aborted={isAborted}>
               {isAborted ? (
                 <CloseCircleIcon />
@@ -330,7 +330,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <ThoughtText $aborted={isAborted}>{aiStatus}</ThoughtText>
             </ThoughtStreamContent>
             {!isAborted && (
-              <StopButton onClick={handleStop} title="Stop generation">
+              <StopButton
+                onClick={handleStop}
+                title="Stop generation"
+                data-hook="chat-stop-button"
+              >
                 <StopFill size="14px" />
               </StopButton>
             )}
@@ -343,6 +347,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   role="presentation"
                   onClick={handleContextClickInternal}
                   $type={tableData ? "table" : "sql"}
+                  data-hook="chat-context-badge"
                 >
                   <ContextBadgeIcon>
                     {tableData ? (
@@ -369,11 +374,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               disabled={disabled}
               rows={1}
               $hasContext={hasContext}
+              data-hook="chat-input-textarea"
             />
             <SendButton
               onClick={handleSend}
               disabled={!input.trim() || disabled}
               title="Send (Enter) • New line (Shift+Enter)"
+              data-hook="chat-send-button"
             >
               <ArrowUpIcon size={20} weight="bold" />
             </SendButton>

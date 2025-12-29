@@ -334,13 +334,17 @@ export const AIAssistantPromo = ({
               style={styles.arrow}
               data-popper-arrow
             />
-            <Content>
+            <Content data-hook="ai-promo-modal">
               <Header>
                 <AssistantTitle>
                   <AISparkle size={28} variant="filled" />
                   <TitleText>Meet QuestDB Assistant</TitleText>
                 </AssistantTitle>
-                <CloseButton onClick={handleClose} aria-label="Close">
+                <CloseButton
+                  onClick={handleClose}
+                  aria-label="Close"
+                  data-hook="ai-promo-close"
+                >
                   <Close size="2rem" />
                 </CloseButton>
               </Header>
@@ -419,7 +423,10 @@ export const AIAssistantPromo = ({
               </AssistantModes>
 
               <Footer>
-                <SetupButton onClick={handleSetupClick}>
+                <SetupButton
+                  onClick={handleSetupClick}
+                  data-hook="ai-promo-continue"
+                >
                   Setup Assistant
                 </SetupButton>
               </Footer>

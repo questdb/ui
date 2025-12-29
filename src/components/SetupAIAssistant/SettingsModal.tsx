@@ -805,6 +805,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       key={provider}
                       $active={isActive}
                       onClick={() => handleProviderSelect(provider)}
+                      data-hook={`ai-settings-provider-${provider}`}
                     >
                       <ProviderTabTitle>
                         {renderProviderIcon(provider, isActive)}
@@ -814,7 +815,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       </ProviderTabTitle>
                       <StatusBadge $enabled={validatedApiKeys[provider]}>
                         <StatusDot $enabled={validatedApiKeys[provider]} />
-                        <StatusText $enabled={validatedApiKeys[provider]}>
+                        <StatusText
+                          data-hook="ai-settings-provider-status"
+                          $enabled={validatedApiKeys[provider]}
+                        >
                           {validatedApiKeys[provider] ? "Enabled" : "Inactive"}
                         </StatusText>
                       </StatusBadge>
@@ -834,7 +838,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     >
                       <SectionTitle>API Key</SectionTitle>
                       {validatedApiKeys[selectedProvider] && (
-                        <ValidatedBadge icon={<CheckboxCircle size="13px" />}>
+                        <ValidatedBadge
+                          icon={<CheckboxCircle size="13px" />}
+                          data-hook="ai-settings-validated-badge"
+                        >
                           Validated
                         </ValidatedBadge>
                       )}
@@ -895,6 +902,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         style={{
                           cursor: maskInput ? "default" : "text",
                         }}
+                        data-hook="ai-settings-api-key"
                       />
                       {maskInput && (
                         <EditButton
@@ -928,6 +936,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         currentProviderValidationState === "validating" ||
                         (!currentProviderValidated && !currentProviderApiKey)
                       }
+                      data-hook="ai-settings-test-api"
                     >
                       {currentProviderValidationState === "validating" ? (
                         <Box gap="0.8rem" align="center">
@@ -952,7 +961,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                             model.value,
                           )
                           return (
-                            <ModelToggleRow key={model.value}>
+                            <ModelToggleRow
+                              key={model.value}
+                              data-model={model.label}
+                              data-enabled={isEnabled}
+                            >
                               <ModelInfoColumn>
                                 <ModelNameText>{model.label}</ModelNameText>
                                 {model.isSlow && (
@@ -1012,6 +1025,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                               )
                             }
                             disabled={!currentProviderValidated}
+                            data-hook="ai-settings-schema-access"
                           />
                         </SchemaCheckboxWrapper>
                         <SchemaCheckboxContent align="flex-start">
@@ -1039,10 +1053,18 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
             <Separator />
             <FooterSection>
               <FooterButtons>
-                <CancelButton onClick={handleClose} skin="transparent">
+                <CancelButton
+                  onClick={handleClose}
+                  skin="transparent"
+                  data-hook="ai-settings-cancel"
+                >
                   Cancel
                 </CancelButton>
-                <SaveButton onClick={handleSave} skin="primary">
+                <SaveButton
+                  onClick={handleSave}
+                  skin="primary"
+                  data-hook="ai-settings-save"
+                >
                   Save Settings
                 </SaveButton>
               </FooterButtons>

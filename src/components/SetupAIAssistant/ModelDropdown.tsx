@@ -229,7 +229,7 @@ export const ModelDropdown = () => {
         },
       ]}
       trigger={
-        <DropdownTrigger>
+        <DropdownTrigger data-hook="ai-settings-model-dropdown">
           {displayModel.provider === "openai" ? (
             <OpenAIIcon width="16" height="16" />
           ) : (
@@ -249,6 +249,7 @@ export const ModelDropdown = () => {
 
           return (
             <ModelItem
+              data-hook="ai-settings-model-item"
               key={model.value}
               onClick={() => handleModelSelect(model.value)}
               $selected={isSelected}
@@ -259,7 +260,9 @@ export const ModelDropdown = () => {
                 ) : (
                   <AnthropicIcon width="16" height="16" color="#bbb" />
                 )}
-                <ModelLabel>{model.label}</ModelLabel>
+                <ModelLabel data-hook="ai-settings-model-item-label">
+                  {model.label}
+                </ModelLabel>
                 {model.isSlow && <BrainIcon color="#bbb" />}
               </ModelIconTitle>
               {isSelected && <CheckIcon />}

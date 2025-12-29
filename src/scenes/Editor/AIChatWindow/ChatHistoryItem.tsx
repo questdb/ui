@@ -195,7 +195,11 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
   }
 
   return (
-    <Container onClick={handleContainerClick} $disabled={disabled}>
+    <Container
+      onClick={handleContainerClick}
+      $disabled={disabled}
+      data-hook="chat-history-item"
+    >
       <IconWrapper>
         <ChatTextIcon size={18} />
       </IconWrapper>
@@ -208,20 +212,31 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             onClick={(e) => e.stopPropagation()}
+            data-hook="chat-history-rename"
           />
         ) : (
-          <Title>{conversation.conversationName}</Title>
+          <Title data-hook="chat-history-title">
+            {conversation.conversationName}
+          </Title>
         )}
         {subtitle && <Subtitle>{subtitle}</Subtitle>}
       </Content>
       <ActionsContainer>
         {!isEditing && (
           <>
-            <ActionButton onClick={handleEditClick} title="Edit title">
+            <ActionButton
+              onClick={handleEditClick}
+              title="Edit title"
+              data-hook="chat-history-edit"
+            >
               <PencilSimpleLineIcon size={18} />
             </ActionButton>
             {!hasOngoingProcess && (
-              <ActionButton onClick={handleDeleteClick} title="Delete">
+              <ActionButton
+                onClick={handleDeleteClick}
+                title="Delete"
+                data-hook="chat-history-delete"
+              >
                 <TrashSimpleIcon size={18} />
               </ActionButton>
             )}

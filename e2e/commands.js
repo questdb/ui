@@ -212,6 +212,12 @@ Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
   return cy.get(selector).find(".glyph-run-icon").first();
 });
 
+Cypress.Commands.add("getAIIconInLine", (lineNumber) => {
+  const selector = `.glyph-widget-${lineNumber}`;
+  cy.get(selector).should("be.visible");
+  return cy.get(selector).find(".glyph-ai-icon").first();
+});
+
 Cypress.Commands.add("getCancelIconInLine", (lineNumber) => {
   const selector = `.glyph-widget-${lineNumber}`;
   cy.get(selector).should("be.visible");

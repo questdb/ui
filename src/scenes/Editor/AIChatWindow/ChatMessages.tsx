@@ -736,7 +736,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   }
 
   return (
-    <MessagesContainer $scrolled={scrolled}>
+    <MessagesContainer $scrolled={scrolled} data-hook="chat-messages-container">
       {visibleMessages.map(({ message, originalIndex }) => {
         const key = `${message.id}`
         if (message.role === "user") {
@@ -788,7 +788,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             }
 
             return (
-              <UserRequestBox key={key}>
+              <UserRequestBox key={key} data-hook="chat-message-user">
                 <OperationBadge>
                   <BadgeIconContainer>
                     <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
@@ -814,7 +814,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             const editorHeight = Math.min(lineCount * 20 + 16, 200)
 
             return (
-              <UserRequestBox key={key}>
+              <UserRequestBox key={key} data-hook="chat-message-user">
                 <UserRequestHeader>
                   <MessageContent>{userQuestion}</MessageContent>
                 </UserRequestHeader>
@@ -829,7 +829,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
           // Default: plain text message
           return (
-            <MessageBubble key={key}>
+            <MessageBubble key={key} data-hook="chat-message-user">
               <MessageContent>{message.content}</MessageContent>
             </MessageBubble>
           )
@@ -933,6 +933,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             <ExplanationBox
               key={key}
               $hasOperationHistory={hasOperationHistory}
+              data-hook="chat-message-assistant"
             >
               {hasOperationHistory && (
                 <>
@@ -1094,6 +1095,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 }
                               }}
                               title="Run this query"
+                              data-hook="message-action-run-sql"
                             >
                               {getQueryStatusIcon(queryRunStatus)}
                             </IconButton>
@@ -1128,6 +1130,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                       ? "not-allowed"
                                       : "pointer",
                                   }}
+                                  data-hook="message-action-apply"
                                 >
                                   <KeyReturnIcon size={22} color="#BDBDBD" />
                                 </IconButton>
@@ -1174,6 +1177,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 {onRejectChange && message.id && (
                                   <RejectButton
                                     onClick={() => onRejectChange(message.id)}
+                                    data-hook="message-action-reject"
                                   >
                                     Reject
                                   </RejectButton>
@@ -1181,6 +1185,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 {onAcceptChange && message.id && (
                                   <AcceptButton
                                     onClick={() => onAcceptChange(message.id)}
+                                    data-hook="message-action-accept"
                                   >
                                     Accept
                                   </AcceptButton>

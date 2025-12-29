@@ -295,7 +295,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
   }
 
   return (
-    <Container ref={containerRef}>
+    <Container ref={containerRef} data-hook="assistant-modes-container">
       {operationSections.map((section, index) => {
         const isExpandable = getIsExpandableSection(section)
         const isLastSection = index === operationSections.length - 1
@@ -310,6 +310,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
             key={section.id}
             $expanded={isExpanded}
             $abort={section.abort}
+            data-hook={`assistant-mode-${section.type.toLowerCase().replace(/\s+/g, "-")}`}
           >
             <ModeHeaderTop $expanded={isExpanded}>
               <ReasoningIcon>

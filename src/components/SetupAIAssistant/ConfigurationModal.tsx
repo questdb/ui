@@ -468,7 +468,7 @@ const StepOneContent = ({
   const handleClose: () => void = navigation.handleClose
 
   return (
-    <ModalContent>
+    <ModalContent data-hook="ai-settings-modal-step-one">
       <HeaderSection>
         <HeaderTitleRow>
           <HeaderText>
@@ -497,6 +497,7 @@ const StepOneContent = ({
                 $selected={selectedProvider === "openai"}
                 onClick={() => onProviderSelect("openai")}
                 type="button"
+                data-hook="ai-settings-provider-openai"
               >
                 <OpenAIIcon
                   width="40"
@@ -509,6 +510,7 @@ const StepOneContent = ({
                 $selected={selectedProvider === "anthropic"}
                 onClick={() => onProviderSelect("anthropic")}
                 type="button"
+                data-hook="ai-settings-provider-anthropic"
               >
                 <AnthropicIcon
                   width="40"
@@ -541,8 +543,11 @@ const StepOneContent = ({
             placeholder={`Enter${providerName ? ` ${providerName}` : ""} API key`}
             $hasError={!!error}
             disabled={!selectedProvider}
+            data-hook="ai-settings-api-key"
           />
-          {error && <ErrorText>{error}</ErrorText>}
+          {error && (
+            <ErrorText data-hook="ai-settings-api-key-error">{error}</ErrorText>
+          )}
           <SectionDescription>
             Stored locally in your browser and never sent to QuestDB servers.
             This API key is used to authenticate your requests to the model
@@ -573,7 +578,7 @@ const StepTwoContent = ({
   }
 
   return (
-    <ModalContent>
+    <ModalContent data-hook="ai-settings-modal-step-two">
       <HeaderSection>
         <HeaderTitleRow>
           <HeaderText>
@@ -609,7 +614,11 @@ const StepTwoContent = ({
                 {getModelsForProvider(currentProvider).map((model) => {
                   const isEnabled = enabledModels.includes(model.value)
                   return (
-                    <ModelToggleRow key={model.value}>
+                    <ModelToggleRow
+                      key={model.value}
+                      data-model={model.label}
+                      data-model-enabled={isEnabled}
+                    >
                       <ModelInfoColumn>
                         <ModelNameText>{model.label}</ModelNameText>
                         {model.isSlow && (
@@ -626,6 +635,7 @@ const StepTwoContent = ({
                       <Switch
                         checked={isEnabled}
                         onChange={() => onModelToggle(model.value)}
+                        data-checked={isEnabled}
                       />
                     </ModelToggleRow>
                   )
@@ -654,6 +664,7 @@ const StepTwoContent = ({
                     id={`schema-access-${currentProvider}`}
                     checked={grantSchemaAccess}
                     onChange={(e) => onSchemaAccessChange(e.target.checked)}
+                    data-hook="ai-settings-schema-access"
                   />
                 </SchemaCheckboxWrapper>
                 <SchemaCheckboxContent align="flex-start">

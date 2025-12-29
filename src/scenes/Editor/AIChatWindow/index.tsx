@@ -749,17 +749,18 @@ const AIChatWindow: React.FC = () => {
   }
 
   return (
-    <Container>
+    <Container data-hook="ai-chat-window">
       <Header>
         <HeaderLeft>
           <AISparkle size={20} variant="filled" />
-          <HeaderTitle>{headerTitle}</HeaderTitle>
+          <HeaderTitle data-hook="chat-window-title">{headerTitle}</HeaderTitle>
         </HeaderLeft>
         <HeaderRight>
           <HeaderButton
             onClick={openBlankChatWindow}
             title="New chat"
             disabled={addButtonDisabled}
+            data-hook="chat-window-new"
           >
             <PlusIcon size={16} weight="bold" />
           </HeaderButton>
@@ -768,10 +769,15 @@ const AIChatWindow: React.FC = () => {
             onClick={handleHistoryToggle}
             title={isHistoryOpen ? "Back to chat" : "Chat history"}
             disabled={!hasConversations || isBlockingAIStatus(aiStatus)}
+            data-hook="chat-window-history"
           >
             <ClockCounterClockwiseIcon size={16} weight="bold" />
           </HeaderButton>
-          <HeaderButton onClick={closeChatWindow} title="Close">
+          <HeaderButton
+            onClick={closeChatWindow}
+            title="Close"
+            data-hook="chat-window-close"
+          >
             <XIcon size={16} weight="bold" />
           </HeaderButton>
         </HeaderRight>
@@ -808,6 +814,7 @@ const AIChatWindow: React.FC = () => {
               <InitialQueryContainer>
                 <InitialQueryBox>
                   <InitialQueryEditor
+                    data-hook="chat-lite-editor"
                     style={{
                       height: Math.min(
                         currentSQL.trim().split("\n").length * 20 + 16,
@@ -831,7 +838,7 @@ const AIChatWindow: React.FC = () => {
                 )}
               </InitialQueryContainer>
             ) : (
-              <BlankChatContainer>
+              <BlankChatContainer data-hook="chat-blank-state">
                 <BlankChatHeading>
                   Leverage AI directly in your database
                 </BlankChatHeading>

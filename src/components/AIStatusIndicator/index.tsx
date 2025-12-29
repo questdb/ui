@@ -382,7 +382,7 @@ export const AIStatusIndicator: React.FC = () => {
   }
 
   return (
-    <Container>
+    <Container data-hook="ai-status-indicator">
       <ChatStreaming>
         {operationSections.length > 1 && <ChatStreamingOverlay />}
         <ThoughtStreams>
@@ -419,6 +419,7 @@ export const AIStatusIndicator: React.FC = () => {
             <AIStopButton
               title="Cancel current operation"
               onClick={abortOperation}
+              data-hook="ai-status-stop"
             >
               <StopFill size="14px" color="#da1e28" />
             </AIStopButton>
@@ -428,6 +429,7 @@ export const AIStatusIndicator: React.FC = () => {
               onClick={() =>
                 openChatWindow(chatWindowState.activeConversationId!)
               }
+              data-hook="ai-status-view-chat"
             >
               View chat
               <SidebarSimpleIcon size={14} weight="fill" />

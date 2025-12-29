@@ -239,7 +239,9 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
   if (conversationList.length === 0) {
     return (
       <Container>
-        <EmptyState>No conversations yet</EmptyState>
+        <EmptyState data-hook="chat-history-empty">
+          No conversations yet
+        </EmptyState>
       </Container>
     )
   }
@@ -260,6 +262,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
               setSearchQuery("")
             }
           }}
+          data-hook="chat-history-search"
         />
         {searchQuery && (
           <ClearButton onClick={() => setSearchQuery("")} title="Clear search">
@@ -268,7 +271,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
         )}
       </SearchContainer>
 
-      <ListContainer>
+      <ListContainer data-hook="chat-history-list">
         {groupedConversations.map((group, groupIndex) => (
           <React.Fragment key={group.label}>
             {groupIndex > 0 && <DateSeparator label={group.label} />}

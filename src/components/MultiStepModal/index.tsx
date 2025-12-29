@@ -336,6 +336,7 @@ export const MultiStepModal = ({
               )}
               <FooterButtons>
                 <CancelButton
+                  data-hook="multi-step-modal-cancel-button"
                   onClick={isFirstStep ? handleClose : handlePrevious}
                   skin="transparent"
                 >
@@ -344,6 +345,7 @@ export const MultiStepModal = ({
                 </CancelButton>
                 <NextButton
                   skin="primary"
+                  data-hook="multi-step-modal-next-button"
                   disabled={
                     isValidating ||
                     (canProceed ? !(canProceed(currentStep) as boolean) : false)
