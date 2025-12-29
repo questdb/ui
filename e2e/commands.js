@@ -574,3 +574,7 @@ Cypress.Commands.add("createTabWithContent", (content, title) => {
     cy.get(".chrome-tab[active] .chrome-tab-rename").should("not.be.visible");
   }
 });
+
+Cypress.Commands.add("getActiveTabName", () => {
+  return cy.get(".chrome-tab[active]").get(".chrome-tab-title").invoke("text");
+})

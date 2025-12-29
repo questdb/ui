@@ -853,7 +853,7 @@ describe("ai assistant", () => {
       cy.typeQuery("SELECT 1;")
 
       // Then - AI icon should be in noChat state (hollow)
-      cy.getAIIconInLine(1).should("be.visible").and("have.class", "noChat")
+      cy.getAIIconInLine(1, "noChat").should("be.visible")
 
       // When - Click on AI icon to open chat window
       cy.getAIIconInLine(1).click()
@@ -872,11 +872,11 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
 
       // Then - AI icon should transition to highlight state
-      cy.getAIIconInLine(1).should("have.class", "highlight")
+      cy.getAIIconInLine(1, "highlight").should("be.visible")
 
       // Then - After ~1 second, AI icon should transition to active state
       cy.wait("@openaiChatRequest")
-      cy.getAIIconInLine(1).should("have.class", "active")
+      cy.getAIIconInLine(1, "active").should("be.visible")
     })
 
     it("should show active state for queries with existing chats", () => {
@@ -884,8 +884,8 @@ describe("ai assistant", () => {
       cy.typeQuery("SELECT 1;\n\nSELECT 2;")
 
       // Then - Both should be in noChat state initially
-      cy.getAIIconInLine(1).should("have.class", "noChat")
-      cy.getAIIconInLine(3).should("have.class", "noChat")
+      cy.getAIIconInLine(1, "noChat").should("be.visible")
+      cy.getAIIconInLine(3, "noChat").should("be.visible")
 
       // When - Create chat for first query
       cy.getAIIconInLine(1).click()
@@ -899,8 +899,8 @@ describe("ai assistant", () => {
       cy.wait("@chat1")
 
       // Then - First query should have active state, second should still be noChat
-      cy.getAIIconInLine(1).should("have.class", "active")
-      cy.getAIIconInLine(3).should("have.class", "noChat")
+      cy.getAIIconInLine(1, "active").should("be.visible")
+      cy.getAIIconInLine(3, "noChat").should("be.visible")
 
       // When - Create chat for second query
       cy.getAIIconInLine(3).click()
@@ -914,8 +914,8 @@ describe("ai assistant", () => {
       cy.wait(2000) // Wait for highlight -> active transition
 
       // Then - Both queries should have active state
-      cy.getAIIconInLine(1).should("have.class", "active")
-      cy.getAIIconInLine(3).should("have.class", "active")
+      cy.getAIIconInLine(1, "active").should("be.visible")
+      cy.getAIIconInLine(3, "active").should("be.visible")
     })
 
     it("should toggle chat window when clicking AI icon for current query", () => {
@@ -954,13 +954,13 @@ describe("ai assistant", () => {
       cy.typeQuery("SELECT 1;")
 
       // Then - AI icon should be on line 1
-      cy.getAIIconInLine(1).should("be.visible").and("have.class", "noChat")
+      cy.getAIIconInLine(1, "noChat").should("be.visible")
 
       // When - Add empty lines before the query (press Home, then Enter twice)
       cy.get(".monaco-editor textarea").type("{home}{enter}{enter}")
 
       // Then - AI icon should move to line 3
-      cy.getAIIconInLine(3).should("be.visible").and("have.class", "noChat")
+      cy.getAIIconInLine(3, "noChat").should("be.visible")
 
       // And - Line 1 should not have an AI icon
       cy.get(".glyph-widget-1 .glyph-ai-icon").should("not.exist")
@@ -1024,6 +1024,7 @@ describe("ai assistant", () => {
 
       // Then - Query should be highlighted in the editor
       cy.get(".aiQueryHighlight").should("exist")
+      cy.getActiveTabName().should("contain", "SQL")
 
       // When - Navigate to Tab 2 Chat via history
       cy.getByDataHook("chat-window-history").click()
@@ -1039,6 +1040,7 @@ describe("ai assistant", () => {
 
       // Then - Query should be highlighted in the editor
       cy.get(".aiQueryHighlight").should("exist")
+      cy.getActiveTabName().should("contain", "SQL 1")
     })
   })
 })
