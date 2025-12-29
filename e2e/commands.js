@@ -208,12 +208,12 @@ Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".glyph-widget-containe
 
 Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
   cy.getCursorQueryGlyph().should("be.visible");
-  const selector = `[widgetid="glyph-widget-${lineNumber}"]`;
+  const selector = `.glyph-widget-${lineNumber}`;
   return cy.get(selector).find(".glyph-run-icon").first();
 });
 
 Cypress.Commands.add("getCancelIconInLine", (lineNumber) => {
-  const selector = `[widgetid="glyph-widget-${lineNumber}"]`;
+  const selector = `.glyph-widget-${lineNumber}`;
   cy.get(selector).should("be.visible");
   return cy.get(selector).find(".glyph-run-icon.cancel");
 });

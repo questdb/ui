@@ -2,23 +2,44 @@ import type { editor } from "monaco-editor"
 import {
   createSvgElement,
   createAIGutterIcon,
-  applyGutterIconState,
-  getHoverState,
   type GutterIconState,
 } from "./icons"
 
 export type GlyphWidgetOptions = {
-  isCancel?: boolean
-  hasError?: boolean
-  isSuccessful?: boolean
-  isLoading?: boolean
+  isCancel: boolean
+  hasError: boolean
+  isSuccessful: boolean
   showAI?: boolean
-  hasConversation?: boolean
-  isHighlighted?: boolean // For temporary highlight when conversation is first created
-  aiButtonDisabled?: boolean
+  hasConversation: boolean
+  isHighlighted: boolean
   onRunClick: () => void
-  onRunContextMenu?: () => void
-  onAIClick?: () => void
+  onRunContextMenu: () => void
+  onAIClick: () => void
+}
+
+export const createGlyphWidgetId = (
+  lineNumber: number,
+  options: GlyphWidgetOptions,
+): string => {
+  const {
+    isCancel,
+    hasError,
+    isSuccessful,
+    showAI,
+    hasConversation,
+    isHighlighted,
+  } = options
+  const optionsId = [
+    isCancel,
+    hasError,
+    isSuccessful,
+    showAI,
+    hasConversation,
+    isHighlighted,
+  ]
+    .map((val) => (val ? "1" : "0"))
+    .join("")
+  return `glyph-widget-${lineNumber}-${optionsId}`
 }
 
 /**
@@ -32,16 +53,9 @@ export const createGlyphWidget = (
 ): editor.IGlyphMarginWidget => {
   const domNode = document.createElement("div")
   domNode.className = "glyph-widget-container"
-  domNode.style.display = "flex"
-  domNode.style.alignItems = "center"
-  domNode.style.gap = "5px"
-  domNode.style.marginLeft = "1rem"
-  domNode.style.width = "53px"
-  domNode.style.height = "100%"
+  domNode.classList.add(`glyph-widget-${lineNumber}`)
 
-  // AI sparkle icon (if enabled)
   if (options.showAI) {
-    // Determine initial state based on conversation status and highlight flag
     let baseState: GutterIconState = options.hasConversation
       ? "active"
       : "noChat"
@@ -51,40 +65,18 @@ export const createGlyphWidget = (
 
     const aiIconWrapper = createAIGutterIcon(baseState, 16)
     aiIconWrapper.classList.add("glyph-ai-icon")
-    aiIconWrapper.style.position = "absolute"
-    aiIconWrapper.style.top = "50%"
-    aiIconWrapper.style.left = "0"
-    aiIconWrapper.style.transform = "translateY(-50%)"
-    aiIconWrapper.style.cursor = options.aiButtonDisabled
-      ? "not-allowed"
-      : "pointer"
 
-    // Track current state for hover transitions
-    let currentBaseState = baseState
-
-    // Handle highlight -> active transition after delay
     if (options.isHighlighted) {
       setTimeout(() => {
-        currentBaseState = "active"
-        applyGutterIconState(aiIconWrapper, "active", 16)
+        aiIconWrapper.classList.remove("highlight")
+        aiIconWrapper.classList.add("active")
       }, 1000)
     }
 
-    if (!options.aiButtonDisabled) {
-      aiIconWrapper.addEventListener("mouseenter", () => {
-        const hoverState = getHoverState(currentBaseState)
-        applyGutterIconState(aiIconWrapper, hoverState, 16)
-      })
-
-      aiIconWrapper.addEventListener("mouseleave", () => {
-        applyGutterIconState(aiIconWrapper, currentBaseState, 16)
-      })
-
-      aiIconWrapper.addEventListener("click", (e) => {
-        e.stopPropagation()
-        options.onAIClick?.()
-      })
-    }
+    aiIconWrapper.addEventListener("click", (e) => {
+      e.stopPropagation()
+      options.onAIClick?.()
+    })
 
     domNode.appendChild(aiIconWrapper)
   }
@@ -105,8 +97,6 @@ export const createGlyphWidget = (
   let iconType: "play" | "cancel" | "loading" | "error" | "success" = "play"
   if (options.isCancel) {
     iconType = "cancel"
-  } else if (options.isLoading) {
-    iconType = "loading"
   } else if (options.hasError) {
     iconType = "error"
   } else if (options.isSuccessful) {
@@ -118,11 +108,6 @@ export const createGlyphWidget = (
 
   const runSvg = createSvgElement(iconType, 22)
   runIconWrapper.appendChild(runSvg)
-
-  // Add spin animation for loading state
-  if (options.isLoading) {
-    runIconWrapper.style.animation = "glyph-spin 3s linear infinite"
-  }
 
   runIconWrapper.addEventListener("mouseenter", () => {
     runIconWrapper.style.filter = "brightness(1.3)"
@@ -143,7 +128,7 @@ export const createGlyphWidget = (
   domNode.appendChild(runIconWrapper)
 
   return {
-    getId: () => `glyph-widget-${lineNumber}`,
+    getId: () => createGlyphWidgetId(lineNumber, options),
     getDomNode: () => domNode,
     getPosition: () => ({
       lane: 1, // monaco.editor.GlyphMarginLane.Left
@@ -158,19 +143,6 @@ export const createGlyphWidget = (
   }
 }
 
-/**
- * Removes all glyph widgets from the editor and clears the widgets array.
- */
-export const clearGlyphWidgets = (
-  editor: editor.IStandaloneCodeEditor,
-  widgetsRef: React.MutableRefObject<editor.IGlyphMarginWidget[]>,
-): void => {
-  widgetsRef.current.forEach((widget) => {
-    editor.removeGlyphMarginWidget(widget)
-  })
-  widgetsRef.current = []
-}
-
 type IconType = "play" | "cancel" | "loading" | "error" | "success"
 
 /**
@@ -178,16 +150,11 @@ type IconType = "play" | "cancel" | "loading" | "error" | "success"
  * Reads the current icon type from CSS classes on the runIconWrapper element.
  */
 export const toggleGlyphWidgetLoading = (
-  widgetsRef: React.MutableRefObject<editor.IGlyphMarginWidget[]>,
   lineNumber: number,
   isLoading: boolean,
 ): void => {
-  const widgetId = `glyph-widget-${lineNumber}`
-  const widget = widgetsRef.current.find((w) => w.getId() === widgetId)
-  if (!widget) return
-
-  const domNode = widget.getDomNode()
-  if (!domNode) return
+  const domNode = document.querySelector(`.glyph-widget-${lineNumber}`)
+  if (!(domNode instanceof HTMLElement)) return
 
   const runIconWrapper = domNode.querySelector(".glyph-run-icon")
   if (!(runIconWrapper instanceof HTMLElement)) return

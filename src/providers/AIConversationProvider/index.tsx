@@ -64,15 +64,15 @@ type AIConversationContextType = {
     queryKey?: QueryKey
     tableId?: number
   }) => Promise<AIConversation>
-  getOrCreateConversationForQuery: (options: {
+  handleGlyphClick: (options: {
     bufferId: number
     queryKey: QueryKey
-  }) => Promise<AIConversation>
+  }) => Promise<void>
   shiftQueryKeysForBuffer: (
     bufferId: string | number,
     changeOffset: number,
     delta: number,
-  ) => void
+  ) => boolean
 
   openChatWindow: (conversationId: ConversationId) => Promise<void>
   openOrCreateBlankChatWindow: () => Promise<void>
@@ -143,11 +143,11 @@ export const AIConversationProvider: React.FC<{
       return metasWithStatus
     },
     [],
-    [],
+    null,
   )
 
   const conversationMetas = useMemo(
-    () => new Map(conversationMetasArray.map((m) => [m.id, m])),
+    () => new Map(conversationMetasArray?.map((m) => [m.id, m]) ?? []),
     [conversationMetasArray],
   )
 
@@ -249,7 +249,7 @@ export const AIConversationProvider: React.FC<{
           activeConversationMessagesRef.current.length > 0)
       )
     },
-    [findConversationByQuery, chatWindowState.activeConversationId],
+    [findConversationByQuery, activeConversationId],
   )
 
   const createConversation = useCallback(
@@ -277,35 +277,6 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const getOrCreateConversationForQuery = useCallback(
-    async (options: {
-      bufferId: number
-      queryKey: QueryKey
-    }): Promise<AIConversation> => {
-      const existing = findConversationByQuery(
-        options.bufferId,
-        options.queryKey,
-      )
-      if (existing) {
-        if (activeConversationId === existing.id) {
-          return { ...existing, messages: activeConversationMessages }
-        }
-        const messages = await aiConversationStore.getMessages(existing.id)
-        return { ...existing, messages }
-      }
-      return createConversation({
-        bufferId: options.bufferId,
-        queryKey: options.queryKey,
-      })
-    },
-    [
-      findConversationByQuery,
-      createConversation,
-      activeConversationId,
-      activeConversationMessages,
-    ],
-  )
-
   const updateConversationAssociations = useCallback(
     async (
       conversationId: ConversationId,
@@ -324,7 +295,12 @@ export const AIConversationProvider: React.FC<{
   )
 
   const shiftQueryKeysForBuffer = useCallback(
-    (bufferId: string | number, changeOffset: number, delta: number): void => {
+    (
+      bufferId: string | number,
+      changeOffset: number,
+      delta: number,
+    ): boolean => {
+      let shiftedQueryKeys = false
       for (const [id, meta] of conversationMetas) {
         if (meta.bufferId === bufferId && meta.queryKey) {
           const { startOffset } = getQueryInfoFromKey(meta.queryKey)
@@ -338,9 +314,11 @@ export const AIConversationProvider: React.FC<{
               queryKey: newQueryKey,
               updatedAt: Date.now(),
             })
+            shiftedQueryKeys = true
           }
         }
       }
+      return shiftedQueryKeys
     },
     [conversationMetas],
   )
@@ -601,6 +579,40 @@ export const AIConversationProvider: React.FC<{
     }
   }, [chatWindowState.activeConversationId, activeConversationMessages])
 
+  const handleGlyphClick = useCallback(
+    async (options: {
+      bufferId: number
+      queryKey: QueryKey
+    }): Promise<void> => {
+      const existing = findConversationByQuery(
+        options.bufferId,
+        options.queryKey,
+      )
+      if (existing) {
+        if (activeConversationId === existing.id) {
+          if (activeSidebar === "aiChat") {
+            closeChatWindow()
+            return
+          }
+        }
+        await openChatWindow(existing.id)
+        return
+      }
+      const newConversation = await createConversation({
+        bufferId: options.bufferId,
+        queryKey: options.queryKey,
+      })
+      await openChatWindow(newConversation.id)
+    },
+    [
+      closeChatWindow,
+      findConversationByQuery,
+      createConversation,
+      activeConversationId,
+      activeSidebar,
+    ],
+  )
+
   const openOrCreateBlankChatWindow = useCallback(async () => {
     if (chatWindowState.activeConversationId) {
       const existingMeta = conversationMetas.get(
@@ -612,9 +624,9 @@ export const AIConversationProvider: React.FC<{
       }
     }
 
-    if (conversationMetasArray.length > 0) {
-      const latestMeta = conversationMetasArray.reduce((latest, meta) =>
-        meta.updatedAt > latest.updatedAt ? meta : latest,
+    if (conversationMetas.size > 0) {
+      const latestMeta = Array.from(conversationMetas.values()).reduce(
+        (latest, meta) => (meta.updatedAt > latest.updatedAt ? meta : latest),
       )
       await openChatWindow(latestMeta.id)
       return
@@ -625,7 +637,6 @@ export const AIConversationProvider: React.FC<{
   }, [
     chatWindowState.activeConversationId,
     conversationMetas,
-    conversationMetasArray,
     openChatWindow,
     createConversation,
   ])
@@ -947,7 +958,7 @@ export const AIConversationProvider: React.FC<{
         hasConversationForQuery,
         findQueryByConversationId,
         createConversation,
-        getOrCreateConversationForQuery,
+        handleGlyphClick,
         shiftQueryKeysForBuffer,
         openChatWindow,
         openOrCreateBlankChatWindow,

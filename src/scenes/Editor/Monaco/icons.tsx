@@ -2,13 +2,7 @@ import { spinAnimation } from "../../../components/Animation"
 import React from "react"
 import styled from "styled-components"
 
-// Gutter icon state types
-export type GutterIconState =
-  | "noChat"
-  | "noChatHover"
-  | "active"
-  | "activeHover"
-  | "highlight"
+export type GutterIconState = "noChat" | "active" | "highlight"
 
 // Play icon - green play button
 export const PlayIcon = () => (
@@ -228,12 +222,7 @@ export const createSvgElement = (
       svg.setAttribute("width", `${size}px`)
       svg.setAttribute("fill", "none")
       svg.innerHTML = `
-        <defs>
-          <clipPath id="errorClip${Date.now()}">
-            <rect width="24" height="24"/>
-          </clipPath>
-        </defs>
-        <g clip-path="url(#errorClip${Date.now()})">
+        <g>
           <path d="M8 4.934v14.132c0 .433.466.702.812.484l10.563-7.066a.5.5 0 0 0 0-.832L8.812 4.616A.5.5 0 0 0 8 4.934Z" fill="#50fa7b"/>
           <circle cx="18" cy="8" r="6" fill="#ff5555"/>
           <rect x="17" y="4" width="2" height="5" fill="white" rx="0.5"/>
@@ -248,12 +237,7 @@ export const createSvgElement = (
       svg.setAttribute("width", `${size}px`)
       svg.setAttribute("fill", "none")
       svg.innerHTML = `
-        <defs>
-          <clipPath id="successClip${Date.now()}">
-            <rect width="24" height="24"/>
-          </clipPath>
-        </defs>
-        <g clip-path="url(#successClip${Date.now()})">
+        <g>
           <path d="M8 4.934v14.132c0 .433.466.702.812.484l10.563-7.066a.5.5 0 0 0 0-.832L8.812 4.616A.5.5 0 0 0 8 4.934Z" fill="#50fa7b"/>
           <circle cx="18" cy="8" r="6" fill="#00aa3b"/>
           <path d="m15 8.5 2 2 4-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
@@ -263,6 +247,7 @@ export const createSvgElement = (
     }
     case "aiSparkleHollow": {
       svg.setAttribute("viewBox", "0 0 15 15")
+      svg.classList.add("ai-sparkle-hollow")
       svg.setAttribute("height", `${size}px`)
       svg.setAttribute("width", `${size}px`)
       svg.setAttribute("fill", "none")
@@ -272,19 +257,21 @@ export const createSvgElement = (
       break
     }
     case "aiSparkleFilled": {
-      const gradientId = `aiSparkleGradient${Date.now()}`
+      const gradientId = `aiSparkleGradient-${Math.random()}`
+      svg.classList.add("ai-sparkle-filled")
       svg.setAttribute("viewBox", "0 0 24 24")
       svg.setAttribute("height", `${size}px`)
       svg.setAttribute("width", `${size}px`)
       svg.setAttribute("fill", "none")
       svg.innerHTML = `
-        <path fill="url(#${gradientId})" d="M19.5 13.5a1.48 1.48 0 0 1-.977 1.4l-4.836 1.787-1.78 4.84a1.493 1.493 0 0 1-2.802 0l-1.793-4.84-4.839-1.78a1.492 1.492 0 0 1 0-2.802l4.84-1.793 1.78-4.839a1.492 1.492 0 0 1 2.802 0l1.792 4.84 4.84 1.78A1.48 1.48 0 0 1 19.5 13.5m-5.25-9h1.5V6a.75.75 0 1 0 1.5 0V4.5h1.5a.75.75 0 1 0 0-1.5h-1.5V1.5a.75.75 0 1 0-1.5 0V3h-1.5a.75.75 0 1 0 0 1.5m8.25 3h-.75v-.75a.75.75 0 1 0-1.5 0v.75h-.75a.75.75 0 1 0 0 1.5h.75v.75a.75.75 0 1 0 1.5 0V9h.75a.75.75 0 1 0 0-1.5"/>
-        <defs>
+      <defs>
           <linearGradient id="${gradientId}" x1="12.37" x2="12.37" y1=".75" y2="22.5" gradientUnits="userSpaceOnUse">
             <stop stop-color="#d14671"/>
             <stop offset="1" stop-color="#892c6c"/>
           </linearGradient>
         </defs>
+        <path fill="url(#${gradientId})" d="M19.5 13.5a1.48 1.48 0 0 1-.977 1.4l-4.836 1.787-1.78 4.84a1.493 1.493 0 0 1-2.802 0l-1.793-4.84-4.839-1.78a1.492 1.492 0 0 1 0-2.802l4.84-1.793 1.78-4.839a1.492 1.492 0 0 1 2.802 0l1.792 4.84 4.84 1.78A1.48 1.48 0 0 1 19.5 13.5m-5.25-9h1.5V6a.75.75 0 1 0 1.5 0V4.5h1.5a.75.75 0 1 0 0-1.5h-1.5V1.5a.75.75 0 1 0-1.5 0V3h-1.5a.75.75 0 1 0 0 1.5m8.25 3h-.75v-.75a.75.75 0 1 0-1.5 0v.75h-.75a.75.75 0 1 0 0 1.5h.75v.75a.75.75 0 1 0 1.5 0V9h.75a.75.75 0 1 0 0-1.5"/>
+        
       `
       break
     }
@@ -299,89 +286,12 @@ export const createAIGutterIcon = (
 ): HTMLElement => {
   const wrapper = document.createElement("span")
   wrapper.className = "glyph-ai-icon"
+  wrapper.classList.add(state)
 
-  const wrapperSize = size + 8 // 4px padding on each side
-  wrapper.style.display = "inline-flex"
-  wrapper.style.alignItems = "center"
-  wrapper.style.justifyContent = "center"
-  wrapper.style.width = `${wrapperSize}px`
-  wrapper.style.height = `${wrapperSize}px`
-  wrapper.style.borderRadius = "4px"
-  wrapper.style.transition = "all 0.15s ease"
-  wrapper.style.boxSizing = "border-box"
-
-  // Apply styles based on state
-  applyGutterIconState(wrapper, state, size)
+  const hollowSvg = createSvgElement("aiSparkleHollow", size)
+  const filledSvg = createSvgElement("aiSparkleFilled", size)
+  wrapper.appendChild(hollowSvg)
+  wrapper.appendChild(filledSvg)
 
   return wrapper
-}
-
-export const applyGutterIconState = (
-  wrapper: HTMLElement,
-  state: GutterIconState,
-  size = 16,
-): void => {
-  // Determine if we need filled or hollow icon
-  const isFilled =
-    state === "noChatHover" || state === "activeHover" || state === "highlight"
-
-  // Determine if we need the gradient border
-  const hasBorder =
-    state === "active" || state === "activeHover" || state === "highlight"
-
-  // Determine if we need the glow effect
-  const hasGlow = state === "highlight"
-
-  // Clear existing SVG
-  wrapper.innerHTML = ""
-
-  // Create the appropriate SVG
-  const svg = createSvgElement(
-    isFilled ? "aiSparkleFilled" : "aiSparkleHollow",
-    size,
-  )
-  wrapper.appendChild(svg)
-
-  // Apply border and background styles
-  if (hasGlow) {
-    // Highlight state: gradient background fill + solid border
-    wrapper.style.border = "1px solid #d14671"
-    wrapper.style.background =
-      "linear-gradient(90deg, rgba(209, 70, 113, 0.24) 0%, rgba(137, 44, 108, 0.24) 100%)"
-    wrapper.style.boxShadow = "none"
-  } else if (hasBorder) {
-    // Active/ActiveHover state: transparent background with gradient border
-    wrapper.style.border = "1px solid transparent"
-    wrapper.style.background = `
-      linear-gradient(#2c2e3d, #2c2e3d) padding-box,
-      linear-gradient(90deg, #D14671 0%, #892C6C 100%) border-box
-    `
-    wrapper.style.boxShadow = "none"
-  } else {
-    // NoChat/NoChatHover state: no border, no background
-    wrapper.style.border = "1px solid transparent"
-    wrapper.style.background = "transparent"
-    wrapper.style.boxShadow = "none"
-  }
-}
-
-export const getHoverState = (baseState: GutterIconState): GutterIconState => {
-  switch (baseState) {
-    case "noChat":
-      return "noChatHover"
-    case "active":
-    case "highlight":
-      return "activeHover"
-    default:
-      return baseState
-  }
-}
-
-export const getBaseState = (
-  hoverState: GutterIconState,
-  hasConversation: boolean,
-): GutterIconState => {
-  if (hoverState === "noChatHover") return "noChat"
-  if (hoverState === "activeHover") return hasConversation ? "active" : "noChat"
-  return hoverState
 }

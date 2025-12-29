@@ -76,8 +76,9 @@ import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import {
   createGlyphWidget,
-  clearGlyphWidgets,
+  createGlyphWidgetId,
   toggleGlyphWidgetLoading,
+  GlyphWidgetOptions,
 } from "./glyphUtils"
 import type { ConversationId } from "../../../providers/AIConversationProvider/types"
 
@@ -129,9 +130,69 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   }
 
   .glyph-widget-container {
-    position: relative;
     align-items: center;
     width: 50px !important;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: 1rem;
+    width: 53px;
+    height: 100%;
+  }
+
+  .glyph-ai-icon {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+
+    .ai-sparkle-hollow,
+    .ai-sparkle-filled {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .ai-sparkle-hollow {
+      visibility: visible;
+    }
+    .ai-sparkle-filled {
+      visibility: hidden;
+    }
+    &:hover,
+    &.highlight {
+      .ai-sparkle-hollow {
+        visibility: hidden;
+      }
+      .ai-sparkle-filled {
+        visibility: visible;
+      }
+    }
+    &.active {
+      border: 1px solid transparent;
+      box-shadow: none;
+      background:
+        linear-gradient(#2c2e3d, #2c2e3d) padding-box,
+        linear-gradient(90deg, #d14671 0%, #892c6c 100%) border-box;
+    }
+
+    &.highlight {
+      border: 1px solid #d14671;
+      background: linear-gradient(
+        90deg,
+        rgba(209, 70, 113, 0.24) 0%,
+        rgba(137, 44, 108, 0.24) 100%
+      );
+      box-shadow: none;
+    }
   }
 
   .selectionErrorHighlight {
@@ -210,8 +271,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const { quest } = useContext(QuestContext)
   const { canUse: canUseAI, status: aiStatus } = useAIStatus()
   const {
-    getOrCreateConversationForQuery,
-    openChatWindow,
+    handleGlyphClick,
     hasConversationForQuery,
     shiftQueryKeysForBuffer,
     findQueryByConversationId,
@@ -273,7 +333,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const cursorChangeTimeoutRef = useRef<number | null>(null)
   const decorationCollectionRef =
     useRef<editor.IEditorDecorationsCollection | null>(null)
-  const glyphWidgetsRef = useRef<editor.IGlyphMarginWidget[]>([])
+  const glyphWidgetsRef = useRef<Map<string, editor.IGlyphMarginWidget>>(
+    new Map(),
+  )
   const highlightedLineNumberRef = useRef<number | null>(null)
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
@@ -494,12 +556,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
 
-    const conversation = await getOrCreateConversationForQuery({
+    await handleGlyphClick({
       queryKey,
       bufferId: activeBufferRef.current.id!,
     })
-
-    await openChatWindow(conversation.id)
   }
   const handleAskAIRef = useRef(handleAskAI)
   useEffect(() => {
@@ -631,9 +691,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const activeBufferId = activeBufferRef.current.id as number
 
     const allQueryOffsets: { startOffset: number; endOffset: number }[] = []
-
-    clearGlyphWidgets(editor, glyphWidgetsRef)
-    const newGlyphLineNumbers = new Set<number>()
+    const newGlyphWidgetIds = new Map<string, editor.IGlyphMarginWidget>()
+    const newGlyphWidgetLineNumbers = new Set<number>()
 
     if (queries.length > 0) {
       queries.forEach((query) => {
@@ -691,6 +750,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const handleAIClick = () => {
+          if (isBlockingAIStatusRef.current) return
           const dropdownQueries = getDropdownQueries(startLineNumber)
           if (dropdownQueries.length > 1) {
             dropdownQueriesRef.current = dropdownQueries
@@ -707,6 +767,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const handleRunContextMenu = () => {
+          if (isBlockingAIStatusRef.current) return
           const dropdownQueries = getDropdownQueries(startLineNumber)
           if (dropdownQueries.length > 0) {
             dropdownQueriesRef.current = dropdownQueries
@@ -723,28 +784,44 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         const isHighlighted =
           highlightedLineNumberRef.current === startLineNumber
 
-        if (!newGlyphLineNumbers.has(startLineNumber) || isHighlighted) {
-          const widget = createGlyphWidget(startLineNumber, {
-            isHighlighted,
-            isCancel: isRunningQuery,
-            hasError,
-            isSuccessful,
-            showAI: canUseAIRef.current,
-            hasConversation,
-            aiButtonDisabled: isBlockingAIStatusRef.current,
-            onRunClick: handleRunClick,
-            onRunContextMenu: handleRunContextMenu,
-            onAIClick: handleAIClick,
-          })
+        const widgetOptions: GlyphWidgetOptions = {
+          isHighlighted,
+          isCancel: isRunningQuery,
+          hasError,
+          isSuccessful,
+          showAI: canUseAIRef.current,
+          hasConversation,
+          onRunClick: handleRunClick,
+          onRunContextMenu: handleRunContextMenu,
+          onAIClick: handleAIClick,
+        }
+
+        const widgetId = createGlyphWidgetId(startLineNumber, widgetOptions)
+        const isNewWidget = !glyphWidgetsRef.current.has(widgetId)
+
+        if (isNewWidget && !newGlyphWidgetLineNumbers.has(startLineNumber)) {
+          const widget = createGlyphWidget(startLineNumber, widgetOptions)
           editor.addGlyphMarginWidget(widget)
-          newGlyphLineNumbers.add(startLineNumber)
-          glyphWidgetsRef.current.push(widget)
+          newGlyphWidgetIds.set(widgetId, widget)
+          newGlyphWidgetLineNumbers.add(startLineNumber)
+        } else if (!isNewWidget) {
+          newGlyphWidgetIds.set(
+            widgetId,
+            glyphWidgetsRef.current.get(widgetId)!,
+          )
+          newGlyphWidgetLineNumbers.add(startLineNumber)
         }
         if (isHighlighted) {
           highlightedLineNumberRef.current = null
         }
       })
+      glyphWidgetsRef.current.forEach((widget, widgetId) => {
+        if (!newGlyphWidgetIds.has(widgetId)) {
+          editor.removeGlyphMarginWidget(widget)
+        }
+      })
     }
+    glyphWidgetsRef.current = newGlyphWidgetIds
 
     if (decorationCollectionRef.current) {
       decorationCollectionRef.current.clear()
@@ -971,7 +1048,27 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
       executionRefs.current[activeBufferId.toString()] = bufferExecutions
 
-      applyGlyphsAndLineMarkings(monaco, editor)
+      let shiftedQueryKeys = false
+      if (e.changes.length > 0) {
+        const earliestChangeOffset = Math.min(
+          ...e.changes.map((c) => c.rangeOffset),
+        )
+        const totalDelta = e.changes.reduce(
+          (acc, c) => acc + c.text.length - c.rangeLength,
+          0,
+        )
+        if (totalDelta !== 0) {
+          shiftedQueryKeys = shiftQueryKeysForBufferRef.current(
+            activeBufferId,
+            earliestChangeOffset,
+            totalDelta,
+          )
+        }
+      }
+
+      if (!shiftedQueryKeys) {
+        applyGlyphsAndLineMarkings(monaco, editor)
+      }
 
       const queriesToRun = getQueriesToRun(
         editor,
@@ -982,26 +1079,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       contentJustChangedRef.current = false
       notificationUpdates.forEach((update) => update())
-
-      if (e.changes.length > 0) {
-        const earliestChangeOffset = Math.min(
-          ...e.changes.map((c) => c.rangeOffset),
-        )
-        const totalDelta = e.changes.reduce(
-          (acc, c) => acc + c.text.length - c.rangeLength,
-          0,
-        )
-        if (totalDelta !== 0) {
-          shiftQueryKeysForBufferRef.current(
-            activeBufferId,
-            earliestChangeOffset,
-            totalDelta,
-          )
-        }
-      }
     })
 
     editor.onDidChangeModel(() => {
+      glyphWidgetsRef.current.forEach((widget) => {
+        editor.removeGlyphMarginWidget(widget)
+      })
+      glyphWidgetsRef.current.clear()
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
           applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -1352,11 +1436,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         column: query.column,
       })
 
-      toggleGlyphWidgetLoading(glyphWidgetsRef, lineNumber, true)
+      toggleGlyphWidgetLoading(lineNumber, true)
 
       const result = await runIndividualQuery(query, i === queries.length - 1)
 
-      toggleGlyphWidgetLoading(glyphWidgetsRef, lineNumber, false)
+      toggleGlyphWidgetLoading(lineNumber, false)
 
       individualQueryResults.push(result)
       if (result.success) {
@@ -1870,6 +1954,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [activeBuffer])
 
   useEffect(() => {
+    findQueryByConversationIdRef.current = findQueryByConversationId
+    shiftQueryKeysForBufferRef.current = shiftQueryKeysForBuffer
+  }, [findQueryByConversationId, shiftQueryKeysForBuffer])
+
+  useEffect(() => {
     hasConversationForQueryRef.current = hasConversationForQuery
     if (monacoRef.current && editorRef.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -1877,20 +1966,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [hasConversationForQuery])
 
   useEffect(() => {
-    findQueryByConversationIdRef.current = findQueryByConversationId
-    shiftQueryKeysForBufferRef.current = shiftQueryKeysForBuffer
-  }, [findQueryByConversationId, shiftQueryKeysForBuffer])
-
-  useEffect(() => {
+    const oldIsBlocking = isBlockingAIStatusRef.current
     const newIsBlocking = isBlockingAIStatus(aiStatus) ?? false
+    isBlockingAIStatusRef.current = newIsBlocking
     if (
       monacoRef.current &&
       editorRef.current &&
-      newIsBlocking !== isBlockingAIStatusRef.current
+      newIsBlocking !== oldIsBlocking
     ) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
-    isBlockingAIStatusRef.current = newIsBlocking
   }, [aiStatus])
 
   useEffect(() => {
@@ -1943,9 +2028,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         decorationCollectionRef.current.clear()
       }
 
-      if (editorRef.current) {
-        clearGlyphWidgets(editorRef.current, glyphWidgetsRef)
-      }
+      glyphWidgetsRef.current.forEach((widget) => {
+        editorRef.current?.removeGlyphMarginWidget(widget)
+      })
+      glyphWidgetsRef.current.clear()
 
       editorRef.current?.getModel()?.dispose()
       editorRef.current?.dispose()
