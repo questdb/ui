@@ -812,7 +812,7 @@ const AIChatWindow: React.FC = () => {
               />
             ) : currentSQL && currentSQL.trim() ? (
               <InitialQueryContainer>
-                <InitialQueryBox>
+                <InitialQueryBox data-hook="chat-initial-query-box">
                   <InitialQueryEditor
                     data-hook="chat-lite-editor"
                     style={{

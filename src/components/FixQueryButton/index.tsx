@@ -177,7 +177,7 @@ export const FixQueryButton = () => {
       gradientWeight="thin"
       onClick={handleFixQuery}
       title="Fix query with AI Assistant"
-      data-hook="button-inline-fix-query"
+      data-hook="button-fix-query"
     >
       <AISparkle size={12} variant="hollow" />
       Fix query

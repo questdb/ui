@@ -848,6 +848,29 @@ describe("ai assistant", () => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
 
+    it("should show initial query box with quick actions when glyph icon is clicked", () => {
+      // Given - Type a query
+      cy.typeQuery("SELECT a;")
+      cy.clickRunIconInLine(1)
+      cy.getByDataHook("error-notification").should("be.visible")
+
+      // Then - AI icon should be in noChat state (hollow)
+      cy.getAIIconInLine(1, "noChat").should("be.visible")
+
+      // When - Click on AI icon to open chat window
+      cy.getAIIconInLine(1).click()
+
+      // Then - Chat window should open and finish loading
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading to complete
+      cy.getByDataHook("chat-context-badge")
+        .should("be.visible")
+        .should("contain", "SELECT a")
+      cy.getByDataHook("chat-initial-query-box").should("be.visible")
+      cy.getByDataHook("button-explain-query").should("be.visible")
+      cy.getByDataHook("button-fix-query").should("be.visible")
+    })
+
     it("should transition AI glyph icon from noChat to highlight to active", () => {
       // Given - Type a query
       cy.typeQuery("SELECT 1;")
@@ -924,6 +947,7 @@ describe("ai assistant", () => {
       cy.getAIIconInLine(1).click()
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
+      cy.getByDataHook("chat-initial-query-box").should("be.visible")
       interceptAIChatRequest("openai")
       cy.getByDataHook("chat-input-textarea").type("Test message", {
         force: true,
