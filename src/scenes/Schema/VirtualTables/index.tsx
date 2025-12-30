@@ -382,9 +382,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     if (isAiAssistantError(response)) {
       const error = response
       updateMessage(conversation.id, assistantMessageId, {
-        content: `Error: ${error.message}`,
-        error: error.type !== "aborted" ? error.message : "Operation cancelled",
-        explanation: `Error: ${error.message}`,
+        error:
+          error.type !== "aborted"
+            ? error.message
+            : "Operation has been cancelled",
       })
       await persistMessages(conversation.id)
       return

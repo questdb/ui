@@ -1,11 +1,100 @@
 /// <reference types="cypress" />
-function interceptAIChatRequest(provider, alias) {
-  const aliasName = alias || `${provider}ChatRequest`
+
+/**
+ * Intercepts AI requests with a custom response body.
+ * Use this when you need to control the exact response content.
+ *
+ * @param {"anthropic" | "openai"} provider - The AI provider to intercept
+ * @param {Object} responseBody - The response body to return
+ * @param {string} [alias] - Optional custom alias for the intercept
+ */
+function interceptAIRequestWithResponse(provider, responseBody, alias) {
+  const aliasName = alias || `${provider}CustomResponse`
 
   if (provider === "openai") {
     cy.intercept("POST", "https://api.openai.com/v1/responses", {
       statusCode: 200,
       delay: 200,
+      body: responseBody,
+    }).as(aliasName)
+  } else if (provider === "anthropic") {
+    cy.intercept("POST", "https://api.anthropic.com/v1/messages", {
+      statusCode: 200,
+      delay: 200,
+      body: responseBody,
+    }).as(aliasName)
+  }
+}
+
+/**
+ * Creates a valid OpenAI response for explain schema requests.
+ * @param {Object} schemaData - The schema explanation data
+ * @returns {Object} OpenAI response body
+ */
+function createOpenAIExplainSchemaResponse(schemaData) {
+  return {
+    id: "resp_mock_schema",
+    object: "response",
+    created_at: Date.now(),
+    status: "completed",
+    output: [
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify(schemaData),
+          },
+        ],
+      },
+    ],
+    output_parsed: schemaData,
+    usage: {
+      input_tokens: 150,
+      output_tokens: 200,
+    },
+  }
+}
+
+/**
+ * Creates an OpenAI response where output_parsed is null, triggering parse error.
+ * This happens when OpenAI cannot parse the response into the expected schema format.
+ * @returns {Object} OpenAI response body with null output_parsed
+ */
+function createOpenAIParseFailureResponse() {
+  return {
+    id: "resp_mock_parse_fail",
+    object: "response",
+    created_at: Date.now(),
+    status: "completed",
+    output: [
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: "",
+          },
+        ],
+      },
+    ],
+    output_parsed: null,
+    usage: {
+      input_tokens: 150,
+      output_tokens: 50,
+    },
+  }
+}
+
+function interceptAIChatRequest(provider, alias, delay = 200) {
+  const aliasName = alias || `${provider}ChatRequest`
+
+  if (provider === "openai") {
+    cy.intercept("POST", "https://api.openai.com/v1/responses", {
+      statusCode: 200,
+      delay,
       body: {
         id: "resp_mock_chat",
         object: "response",
@@ -23,7 +112,7 @@ function interceptAIChatRequest(provider, alias) {
   } else if (provider === "anthropic") {
     cy.intercept("POST", "https://api.anthropic.com/v1/messages", {
       statusCode: 200,
-      delay: 200,
+      delay,
       body: {
         id: "msg_mock_chat",
         type: "message",
@@ -843,6 +932,117 @@ describe("ai assistant", () => {
     })
   })
 
+  describe("ai status indicator", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+    })
+
+    it("should show status indicator only when chat window is closed during AI operation", () => {
+      // Given - Set up intercept with latency
+      interceptAIChatRequest("openai", "slowRequest")
+
+      // When - Open chat window and send a message
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Test question for status")
+      cy.getByDataHook("chat-send-button").click()
+
+      // Then - Status indicator should NOT be visible while chat is open
+      cy.getByDataHook("ai-status-indicator").should("not.exist")
+
+      // When - Close chat window
+      cy.getByDataHook("chat-window-close").click()
+
+      // Then - Status indicator should be visible
+      cy.getByDataHook("ai-status-indicator").should("be.visible")
+      cy.getByDataHook("ai-status-text").should("contain", "Working...")
+
+      // When - Open chat panel again
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+
+      // Then - Status indicator should NOT be visible
+      cy.getByDataHook("ai-status-indicator").should("not.exist")
+
+      // Cleanup - Wait for request to complete
+      cy.wait("@slowRequest")
+    })
+
+    it("should open chat window with previous message when clicking View chat button", () => {
+      // Given - Set up intercept with latency
+      interceptAIChatRequest("openai", "slowRequest")
+
+      // When - Open chat window and send a message
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("My specific test question")
+      cy.getByDataHook("chat-send-button").click()
+
+      // When - Close chat window
+      cy.getByDataHook("chat-window-close").click()
+
+      // Then - Status indicator should be visible with View chat button
+      cy.getByDataHook("ai-status-indicator").should("be.visible")
+      cy.getByDataHook("ai-status-view-chat").should("be.visible")
+
+      // When - Click View chat button
+      cy.getByDataHook("ai-status-view-chat").click()
+
+      // Then - Chat window should open and contain the previous message
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("chat-message-user").should(
+        "contain",
+        "My specific test question",
+      )
+
+      // And - Status indicator should be gone
+      cy.getByDataHook("ai-status-indicator").should("not.exist")
+
+      // Cleanup - Wait for request to complete
+      cy.wait("@slowRequest")
+    })
+
+    it("should show aborted status and display cancellation message in chat when aborting", () => {
+      // Given - Set up intercept with latency
+      interceptAIChatRequest("openai", "slowRequest", 2000)
+
+      // When - Open chat window and send a message
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Question to abort")
+      cy.getByDataHook("chat-send-button").click()
+
+      // When - Close chat window
+      cy.getByDataHook("chat-window-close").click()
+
+      // Then - Status indicator should be visible with Abort button
+      cy.getByDataHook("ai-status-indicator").should("be.visible")
+      cy.getByDataHook("ai-status-stop").should("be.visible")
+
+      // When - Click Abort button
+      cy.getByDataHook("ai-status-stop").click()
+
+      // Then - Status indicator should show Cancelled status
+      cy.getByDataHook("ai-status-text").should("contain", "Cancelled")
+      cy.getByDataHook("assistant-mode-operation-has-been-cancelled").should(
+        "be.visible",
+      )
+
+      // Then - After a few seconds, status indicator should disappear
+      cy.wait(2000)
+      cy.getByDataHook("ai-status-indicator").should("not.exist")
+
+      // When - Open chat window
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+
+      // Then - Chat should show cancellation error message
+      cy.getByDataHook("chat-message-error")
+        .should("be.visible")
+        .should("contain", "Operation has been cancelled")
+    })
+  })
+
   describe("query - chat integration", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
@@ -1065,6 +1265,149 @@ describe("ai assistant", () => {
       // Then - Query should be highlighted in the editor
       cy.get(".aiQueryHighlight").should("exist")
       cy.getActiveTabName().should("contain", "SQL 1")
+    })
+  })
+
+  describe("explain schema", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+      cy.typeQuery(
+        "CREATE TABLE IF NOT EXISTS test_trades (symbol SYMBOL, price DOUBLE, ts TIMESTAMP) TIMESTAMP(ts) PARTITION BY DAY WAL;",
+      )
+      cy.clickRunQuery()
+    })
+
+    afterEach(() => {
+      cy.typeQuery("DROP TABLE IF EXISTS test_trades;")
+      cy.clickRunQuery()
+    })
+
+    it("should show processing status and display valid schema explanation", () => {
+      // Given - Set up intercept with valid schema response
+      const validSchemaResponse = createOpenAIExplainSchemaResponse({
+        explanation:
+          "The test_trades table stores trading data with symbol identification, price values, and timestamps.",
+        columns: [
+          {
+            name: "symbol",
+            description: "Stock ticker symbol identifier",
+            data_type: "SYMBOL",
+          },
+          {
+            name: "price",
+            description: "Trade execution price",
+            data_type: "DOUBLE",
+          },
+          {
+            name: "ts",
+            description: "Timestamp of the trade",
+            data_type: "TIMESTAMP",
+          },
+        ],
+        storage_details: [
+          "WAL enabled for durability",
+          "Partitioned by DAY",
+          "Designated timestamp: ts",
+        ],
+      })
+      interceptAIRequestWithResponse(
+        "openai",
+        validSchemaResponse,
+        "explainSchema",
+      )
+
+      cy.refreshSchema()
+      // When - Right-click on table and select explain schema
+      cy.getByDataHook("schema-table-title")
+        .contains("test_trades")
+        .rightclick()
+      cy.getByDataHook("table-context-menu-explain-schema").click()
+
+      // Then - Chat window should open with processing status
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("assistant-modes-container").should("be.visible")
+      cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
+
+      // When - Wait for response
+      cy.wait("@explainSchema")
+
+      // Then - Should display the schema explanation content
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
+
+      // Verify explanation summary
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "The test_trades table stores trading data",
+      )
+
+      // Verify Columns section header and table content
+      cy.getByDataHook("chat-message-assistant").should("contain", "Columns")
+      cy.getByDataHook("chat-message-assistant").should("contain", "symbol")
+      cy.getByDataHook("chat-message-assistant").should("contain", "SYMBOL")
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Stock ticker symbol identifier",
+      )
+      cy.getByDataHook("chat-message-assistant").should("contain", "price")
+      cy.getByDataHook("chat-message-assistant").should("contain", "DOUBLE")
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Trade execution price",
+      )
+      cy.getByDataHook("chat-message-assistant").should("contain", "ts")
+      cy.getByDataHook("chat-message-assistant").should("contain", "TIMESTAMP")
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Timestamp of the trade",
+      )
+
+      // Verify Storage Details section
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Storage Details",
+      )
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "WAL enabled for durability",
+      )
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Partitioned by DAY",
+      )
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Designated timestamp: ts",
+      )
+    })
+
+    it("should show error when schema explanation fails to parse", () => {
+      // Given - Set up intercept with parse failure response (output_parsed: null)
+      const parseFailureResponse = createOpenAIParseFailureResponse()
+      interceptAIRequestWithResponse(
+        "openai",
+        parseFailureResponse,
+        "explainSchemaFail",
+      )
+
+      cy.refreshSchema()
+      // When - Right-click on table and select explain schema
+      cy.getByDataHook("schema-table-title")
+        .contains("test_trades")
+        .rightclick()
+      cy.getByDataHook("table-context-menu-explain-schema").click()
+
+      // Then - Chat window should open with processing status
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("assistant-modes-container").should("be.visible")
+      cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
+
+      // When - Wait for response
+      cy.wait("@explainSchemaFail")
+
+      // Then - Should display error message
+      cy.getByDataHook("chat-message-error")
+        .should("be.visible")
+        .should("contain", "An unexpected error occurred. Please try again.")
     })
   })
 })

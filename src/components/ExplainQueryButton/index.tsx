@@ -137,7 +137,9 @@ export const ExplainQueryButton = ({
         const error = response
         updateMessage(conversationId, assistantMessageId, {
           error:
-            error.type !== "aborted" ? error.message : "Operation cancelled",
+            error.type !== "aborted"
+              ? error.message
+              : "Operation has been cancelled",
         })
         await persistMessages(conversationId)
         return

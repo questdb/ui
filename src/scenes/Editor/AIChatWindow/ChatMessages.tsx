@@ -951,7 +951,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 </>
               )}
               {hasError && (
-                <ErrorContainer>
+                <ErrorContainer data-hook="chat-message-error">
                   <CloseCircle
                     size={16}
                     color={theme.color.red}

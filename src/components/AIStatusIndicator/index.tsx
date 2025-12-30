@@ -412,7 +412,7 @@ export const AIStatusIndicator: React.FC = () => {
       <Header>
         <HeaderLeft>
           <AISparkle size={24} variant="filled" />
-          <WorkingText>
+          <WorkingText data-hook="ai-status-text">
             {isAborted ? "Cancelled" : isCompleted ? "Completed" : "Working..."}
           </WorkingText>
           {isBlockingAIStatus(status) && (

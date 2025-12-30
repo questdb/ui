@@ -131,7 +131,10 @@ export const FixQueryButton = () => {
     if (isAiAssistantError(response)) {
       const error = response
       updateMessage(conversation.id, assistantMessageId, {
-        error: error.type !== "aborted" ? error.message : "Operation cancelled",
+        error:
+          error.type !== "aborted"
+            ? error.message
+            : "Operation has been cancelled",
       })
       await persistMessages(conversation.id)
       return

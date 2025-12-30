@@ -514,7 +514,9 @@ const AIChatWindow: React.FC = () => {
         const error = response
         updateMessage(conversationId, assistantMessageId, {
           error:
-            error.type !== "aborted" ? error.message : "Operation cancelled",
+            error.type !== "aborted"
+              ? error.message
+              : "Operation has been cancelled",
         })
         return
       }
