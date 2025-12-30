@@ -331,8 +331,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const isBlockingAIStatusRef = useRef(isBlockingAIStatus(aiStatus) ?? false)
   const contentJustChangedRef = useRef(false)
   const cursorChangeTimeoutRef = useRef<number | null>(null)
-  const decorationCollectionRef =
-    useRef<editor.IEditorDecorationsCollection | null>(null)
   const glyphWidgetsRef = useRef<Map<string, editor.IGlyphMarginWidget>>(
     new Map(),
   )
@@ -815,19 +813,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           highlightedLineNumberRef.current = null
         }
       })
-      glyphWidgetsRef.current.forEach((widget, widgetId) => {
-        if (!newGlyphWidgetIds.has(widgetId)) {
-          editor.removeGlyphMarginWidget(widget)
-        }
-      })
     }
+    glyphWidgetsRef.current.forEach((widget, widgetId) => {
+      if (!newGlyphWidgetIds.has(widgetId)) {
+        editor.removeGlyphMarginWidget(widget)
+      }
+    })
     glyphWidgetsRef.current = newGlyphWidgetIds
 
-    if (decorationCollectionRef.current) {
-      decorationCollectionRef.current.clear()
-    }
-
-    decorationCollectionRef.current = editor.createDecorationsCollection([])
     queryOffsetsRef.current = allQueryOffsets
 
     applyLineMarkings(monaco, editor, source)
@@ -2022,10 +2015,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       if (notificationTimeoutRef.current) {
         window.clearTimeout(notificationTimeoutRef.current)
-      }
-
-      if (decorationCollectionRef.current) {
-        decorationCollectionRef.current.clear()
       }
 
       glyphWidgetsRef.current.forEach((widget) => {

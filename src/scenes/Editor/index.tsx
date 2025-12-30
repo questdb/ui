@@ -288,7 +288,7 @@ const Editor = ({
             {activeBuffer.editorViewState && <Monaco hidden={isMonacoHidden} />}
             {activeBuffer.isDiffBuffer && activeBuffer.diffContent && (
               <DiffViewWrapper>
-                <DiffEditorContainer>
+                <DiffEditorContainer data-hook="diff-editor-container">
                   <DiffEditor
                     key={
                       activeBuffer.diffContent.original +
@@ -331,7 +331,10 @@ const Editor = ({
                 </DiffEditorContainer>
                 {pendingDiffInfo && (
                   <ButtonBar align="center" justifyContent="center">
-                    <RejectButton onClick={handleRejectFromDiffEditor}>
+                    <RejectButton
+                      onClick={handleRejectFromDiffEditor}
+                      data-hook="diff-reject-button"
+                    >
                       Reject
                       <KeyContainer>
                         <Key
@@ -341,7 +344,10 @@ const Editor = ({
                         />
                       </KeyContainer>
                     </RejectButton>
-                    <AcceptButton onClick={handleAcceptFromDiffEditor}>
+                    <AcceptButton
+                      onClick={handleAcceptFromDiffEditor}
+                      data-hook="diff-accept-button"
+                    >
                       Accept
                       <KeyContainer>
                         <Key

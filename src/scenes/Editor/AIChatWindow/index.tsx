@@ -694,7 +694,7 @@ const AIChatWindow: React.FC = () => {
 
         addMessage({
           role: "user" as const,
-          content: `User replaced query with one of your previous suggestions. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+          content: `User replaced query with one of your previous suggestions. Now the query is:\n\n\`\`\`sql\n${normalizedSQL.replaceAll(/\s+/g, " ").trim()}\n\`\`\``,
           timestamp: Date.now(),
           hideFromUI: true,
         })

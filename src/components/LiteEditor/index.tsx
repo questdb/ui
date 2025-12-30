@@ -152,6 +152,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
                 className="open-in-editor-btn"
                 onClick={props.onExpandDiff}
                 title="Open in editor"
+                data-hook="diff-open-in-editor-button"
               >
                 Open in editor
                 <SquareSplitHorizontalIcon

@@ -13,8 +13,8 @@ module.exports = defineConfig({
     video: false,
     baseUrl: baseUrl,
     chromeWebSecurity: false, //if it is true, cypress does not allow redirects
-    viewportWidth: 1280,
-    viewportHeight: 720,
+    viewportWidth: 1920,
+    viewportHeight: 1080,
     specPattern: "e2e/tests/**/*.spec.js",
     supportFile: "e2e/commands.js",
     setupNodeEvents(on) {

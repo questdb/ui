@@ -780,7 +780,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               const editorHeight = Math.min(lineCount * 20 + 16, 200)
               content = (
                 <UserRequestContent>
-                  <InlineSQLEditor style={{ height: editorHeight }}>
+                  <InlineSQLEditor
+                    style={{ height: editorHeight }}
+                    data-hook="user-request-sql-editor"
+                  >
                     <LiteEditor value={sql} />
                   </InlineSQLEditor>
                 </UserRequestContent>
@@ -819,7 +822,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   <MessageContent>{userQuestion}</MessageContent>
                 </UserRequestHeader>
                 <UserRequestContent>
-                  <InlineSQLEditor style={{ height: editorHeight }}>
+                  <InlineSQLEditor
+                    style={{ height: editorHeight }}
+                    data-hook="user-request-sql-editor"
+                  >
                     <LiteEditor value={sql} />
                   </InlineSQLEditor>
                 </UserRequestContent>
@@ -963,7 +969,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
               {message.content && (
                 <>
-                  <AssistantHeader>
+                  <AssistantHeader data-hook="assistant-header">
                     <AISparkle size={20} variant="filled" />
                     <AssistantLabel>Assistant</AssistantLabel>
                     {tokenDisplay && (
@@ -1038,6 +1044,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 <CodeBlockWrapper
                                   key={`${message.id}-${codeContent}`}
                                   style={{ height: editorHeight }}
+                                  data-hook="chat-message-code-block"
                                 >
                                   <LiteEditor value={codeContent} />
                                 </CodeBlockWrapper>
@@ -1052,7 +1059,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       </ReactMarkdown>
                     </MarkdownContent>
                     {hasSQLChange && (
-                      <DiffContainer>
+                      <DiffContainer data-hook="inline-diff-container">
                         <DiffHeader $isExpanded={isExpanded}>
                           <DiffHeaderLeft>
                             <CodeIcon size={22} color="#BDBDBD" />
@@ -1065,6 +1072,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                               $isAccepted={isAccepted}
                               $isRejected={isRejected}
                               $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                              data-hook={
+                                isRejected
+                                  ? "diff-status-rejected"
+                                  : isRejectedWithFollowUp
+                                    ? "diff-status-followed-up"
+                                    : "diff-status-accepted"
+                              }
                             >
                               <StatusIcon
                                 $isAccepted={isAccepted}
@@ -1137,6 +1151,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                               )}
                             <ExpandButton
                               title="Expand diff view"
+                              data-hook="diff-expand-button"
                               onClick={() => {
                                 setExpandedDiffs((prev) => {
                                   const next = new Set(prev)

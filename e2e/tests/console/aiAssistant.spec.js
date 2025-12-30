@@ -1,5 +1,7 @@
 /// <reference types="cypress" />
 
+const { createToolCallFlow, createMultiTurnFlow } = require("../../utils")
+
 /**
  * Intercepts AI requests with a custom response body.
  * Use this when you need to control the exact response content.
@@ -1408,6 +1410,749 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-message-error")
         .should("be.visible")
         .should("contain", "An unexpected error occurred. Please try again.")
+    })
+  })
+
+  describe("tool calls", () => {
+    const testTables = ["btc_trades", "ecommerce_stats"]
+
+    before(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+      testTables.forEach((table) => {
+        cy.createTable(table)
+      })
+      cy.refreshSchema()
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      testTables.forEach((table) => {
+        cy.dropTableIfExists(table)
+      })
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+    })
+
+    it("should provide correct table list when model calls get_tables tool", () => {
+      const assistantResponse =
+        "I found the following tables in your database: btc_trades and ecommerce_stats."
+      const flow = createToolCallFlow({
+        question: "What tables are in the database?",
+        steps: [
+          { toolCall: { name: "get_tables", args: {} } },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: null,
+            },
+            expectToolResult: { includes: ["btc_trades", "ecommerce_stats"] },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", "btc_trades")
+        .should("contain", "ecommerce_stats")
+
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+      cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        assistantResponse,
+      )
+    })
+
+    it("should provide correct schema when model calls get_table_schema tool", () => {
+      const flow = createToolCallFlow({
+        question: "What is the schema of btc_trades table?",
+        steps: [
+          {
+            toolCall: {
+              name: "get_table_schema",
+              args: { table_name: "btc_trades" },
+            },
+          },
+          {
+            finalResponse: {
+              explanation:
+                "The btc_trades table has columns: symbol (SYMBOL), side (SYMBOL), price (DOUBLE), amount (DOUBLE), and timestamp (TIMESTAMP).",
+              sql: null,
+            },
+            expectToolResult: {
+              includes: [
+                "CREATE TABLE",
+                "btc_trades",
+                "symbol SYMBOL",
+                "price DOUBLE",
+                "timestamp TIMESTAMP",
+              ],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", "symbol")
+        .should("contain", "price")
+        .should("contain", "timestamp")
+    })
+
+    it("should handle sequential tool calls (get_tables then get_table_schema)", () => {
+      const assistantResponse =
+        "The ecommerce_stats table tracks sales data by country and category, including visits, unique visitors, sales amount, and number of products."
+      const flow = createToolCallFlow({
+        question: "Describe the ecommerce_stats table",
+        steps: [
+          { toolCall: { name: "get_tables", args: {} } },
+          {
+            toolCall: {
+              name: "get_table_schema",
+              args: { table_name: "ecommerce_stats" },
+            },
+            expectToolResult: { includes: ["btc_trades", "ecommerce_stats"] },
+          },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: null,
+            },
+            expectToolResult: {
+              includes: [
+                "CREATE TABLE",
+                "ecommerce_stats",
+                "country SYMBOL",
+                "sales DOUBLE",
+              ],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", "ecommerce_stats")
+        .should("contain", "sales")
+
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+      cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
+      cy.getByDataHook("assistant-mode-investigating-table-schema").should(
+        "be.visible",
+      )
+
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        assistantResponse,
+      )
+    })
+
+    it("should retrieve QuestDB table of contents when model calls get_questdb_toc tool", () => {
+      // Mock the QuestDB docs TOC endpoint
+      cy.intercept("GET", "**/questdb.com/docs/web-console/toc-list.json", {
+        statusCode: 200,
+        body: {
+          functions: ["sum", "avg", "count", "first", "last"],
+          operators: ["AND", "OR", "NOT", "IN", "BETWEEN"],
+          sql: ["SELECT", "INSERT", "UPDATE", "CREATE TABLE"],
+          concepts: ["Partitions", "WAL", "Designated Timestamp"],
+          schema: ["Tables", "Columns", "Indexes"],
+        },
+      }).as("tocRequest")
+
+      const assistantResponse =
+        "QuestDB supports various aggregate functions including sum, avg, count, first, and last for data aggregation operations."
+      const flow = createToolCallFlow({
+        question: "What aggregate functions does QuestDB support?",
+        steps: [
+          { toolCall: { name: "get_questdb_toc", args: {} } },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: null,
+            },
+            expectToolResult: {
+              includes: ["sum", "avg", "count", "Functions"],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+      cy.getByDataHook("assistant-mode-reviewing-docs").should("exist")
+
+      // Verify final response text
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", assistantResponse)
+
+      // Hover on assistant header to reveal token display
+      cy.getByDataHook("assistant-header").realHover()
+
+      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      cy.get(".token-display")
+        .should("be.visible")
+        .should("contain", "300")
+        .should("contain", "150")
+        .should("contain", "input")
+        .should("contain", "output")
+    })
+
+    it("should retrieve specific documentation when model calls get_questdb_documentation tool", () => {
+      // Mock the QuestDB docs metadata endpoint
+      cy.intercept(
+        "GET",
+        "**/questdb.com/docs/web-console/functions-docs.json",
+        {
+          statusCode: 200,
+          body: [
+            {
+              path: "reference/function/aggregation.md",
+              title: "Aggregation Functions",
+              headers: ["sum", "avg", "count"],
+              url: "https://questdb.com/docs/reference/function/aggregation.md",
+            },
+          ],
+        },
+      ).as("functionsMetadata")
+
+      // Mock the actual documentation content
+      cy.intercept(
+        "GET",
+        "**/questdb.com/docs/reference/function/aggregation.md",
+        {
+          statusCode: 200,
+          body: `# Aggregation Functions
+
+## sum
+Returns the sum of all values in a column.
+
+Syntax: \`sum(column)\`
+
+## avg
+Returns the average of all values in a column.
+
+Syntax: \`avg(column)\`
+`,
+        },
+      ).as("aggregationDocs")
+
+      const assistantResponse =
+        "The sum function returns the sum of all values in a column. Syntax: sum(column)"
+
+      const flow = createToolCallFlow({
+        question: "How do I use the sum function in QuestDB?",
+        steps: [
+          {
+            toolCall: {
+              name: "get_questdb_documentation",
+              args: { category: "functions", items: ["sum"] },
+            },
+          },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: "SELECT sum(price) FROM btc_trades;",
+            },
+            expectToolResult: {
+              includes: ["sum", "Returns the sum"],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+      cy.getByDataHook("assistant-mode-investigating-docs").should("exist")
+
+      // Verify final response text
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", assistantResponse)
+
+      // Hover on assistant header to reveal token display
+      cy.getByDataHook("assistant-header").realHover()
+
+      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      cy.get(".token-display")
+        .should("be.visible")
+        .should("contain", "300")
+        .should("contain", "150")
+        .should("contain", "input")
+        .should("contain", "output")
+    })
+
+    it("should validate SQL query syntax using validate_query tool against real QuestDB", () => {
+      const assistantResponse =
+        "The query is syntactically valid. It will select all columns from the btc_trades table."
+      const flow = createToolCallFlow({
+        question: "Is this query valid: SELECT * FROM btc_trades",
+        steps: [
+          {
+            toolCall: {
+              name: "validate_query",
+              args: { query: "SELECT * FROM btc_trades" },
+            },
+          },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: "SELECT * FROM btc_trades;",
+            },
+            expectToolResult: {
+              includes: ['"valid": true'],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+      cy.getByDataHook("assistant-mode-validating-generated-query").should(
+        "exist",
+      )
+
+      // Verify final response text
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", assistantResponse)
+
+      // Hover on assistant header to reveal token display
+      cy.getByDataHook("assistant-header").realHover()
+
+      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      cy.get(".token-display")
+        .should("be.visible")
+        .should("contain", "300")
+        .should("contain", "150")
+        .should("contain", "input")
+        .should("contain", "output")
+    })
+
+    it("should detect invalid SQL syntax using validate_query tool", () => {
+      const assistantResponse =
+        "The query has syntax errors. 'SELEC' should be 'SELECT' and 'FORM' should be 'FROM'."
+      const flow = createToolCallFlow({
+        question: "Is this query valid: SELEC * FORM btc_trades",
+        steps: [
+          {
+            toolCall: {
+              name: "validate_query",
+              args: { query: "SELEC * FORM btc_trades" },
+            },
+          },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: "SELECT * FROM btc_trades;",
+            },
+            expectToolResult: {
+              includes: ['"valid": false'],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+      cy.getByDataHook("assistant-mode-validating-generated-query").should(
+        "exist",
+      )
+
+      // Verify final response text
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", assistantResponse)
+
+      // Hover on assistant header to reveal token display
+      cy.getByDataHook("assistant-header").realHover()
+
+      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      cy.get(".token-display")
+        .should("be.visible")
+        .should("contain", "300")
+        .should("contain", "150")
+        .should("contain", "input")
+        .should("contain", "output")
+    })
+  })
+
+  describe("accept and reject suggestions", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+    })
+
+    it("should accept suggestion and update editor", () => {
+      // Setup: Use flow to generate SQL suggestion
+      const flow = createToolCallFlow({
+        question: "Show all data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here's a query to show data.",
+              sql: "SELECT * FROM btc_trades LIMIT 10;",
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("message-action-accept").should("be.visible")
+      cy.getByDataHook("message-action-accept").click()
+
+      cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
+      cy.getByDataHook("chat-context-badge").should(
+        "contain",
+        "SELECT * FROM btc_trades",
+      )
+
+      cy.getByDataHook("chat-context-badge").click()
+      cy.get(".aiQueryHighlight").should("exist")
+    })
+
+    it("should reject suggestion and show Rejected status", () => {
+      const flow = createToolCallFlow({
+        question: "Count rows",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here's a count query.",
+              sql: "SELECT count() FROM btc_trades;",
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("message-action-reject").should("be.visible")
+      cy.getByDataHook("message-action-reject").click()
+
+      cy.getByDataHook("diff-status-rejected").should("contain", "Rejected")
+      cy.getByDataHook("message-action-accept").should("not.exist")
+      cy.getByDataHook("message-action-reject").should("not.exist")
+      cy.getByDataHook("chat-context-badge").should("not.exist")
+    })
+
+    it("should apply previous suggestion to editor using Apply button", () => {
+      const flow = createToolCallFlow({
+        question: "Get latest price",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here's a query for latest price.",
+              sql: "SELECT price FROM btc_trades LIMIT 1;",
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("message-action-reject").click()
+
+      cy.getByDataHook("message-action-apply").should("be.visible")
+      cy.getByDataHook("message-action-apply").click()
+
+      cy.getByDataHook("chat-context-badge").should(
+        "contain",
+        "SELECT price FROM btc_trades",
+      )
+
+      cy.getByDataHook("chat-context-badge").click()
+      cy.get(".aiQueryHighlight").should("exist")
+    })
+
+    it("should show Followed up status when user sends follow-up without accepting/rejecting", () => {
+      const flow = createMultiTurnFlow({
+        turns: [
+          {
+            explanation: "Query for symbols.",
+            sql: "SELECT symbol FROM btc_trades;",
+          },
+          {
+            explanation: "Query for unique symbols.",
+            sql: "SELECT DISTINCT symbol FROM btc_trades;",
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Show symbols")
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(0)
+
+      cy.getByDataHook("message-action-accept").should("be.visible")
+
+      cy.getByDataHook("chat-input-textarea").type("Make it unique")
+      cy.getByDataHook("chat-send-button").click()
+
+      cy.getByDataHook("inline-diff-container").should("contain", "Followed up")
+      cy.getByDataHook("inline-diff-container")
+        .getByDataHook("message-action-reject")
+        .should("not.exist")
+      cy.getByDataHook("inline-diff-container")
+        .getByDataHook("message-action-accept")
+        .should("not.exist")
+
+      flow.waitForTurn(1)
+
+      // Second suggestion is now the last one - expanded with Accept/Reject buttons
+      cy.getByDataHook("chat-message-assistant")
+        .eq(1)
+        .getByDataHook("inline-diff-container")
+        .getByDataHook("message-action-reject")
+        .should("be.visible")
+      cy.getByDataHook("chat-message-assistant")
+        .eq(1)
+        .contains("Query for unique symbols.")
+        .getByDataHook("message-action-accept")
+        .should("be.visible")
+    })
+
+    it("should toggle diff view expansion for older suggestions", () => {
+      const flow = createMultiTurnFlow({
+        turns: [
+          { explanation: "First simple query.", sql: "SELECT 1;" },
+          { explanation: "Second simple query.", sql: "SELECT 2;" },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("First query")
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(0)
+
+      // Send second suggestion to make first one collapse
+      cy.getByDataHook("chat-input-textarea").type("Second query")
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(1)
+
+      cy.getByDataHook("message-action-accept").should("have.length", 1)
+
+      cy.getByDataHook("diff-open-in-editor-button")
+        .first()
+        .click({ force: true })
+      cy.getByDataHook("diff-editor-container").should("be.visible")
+      cy.getByDataHook("diff-reject-button").should("not.exist")
+      cy.getByDataHook("diff-accept-button").should("not.exist")
+
+      cy.getByDataHook("diff-open-in-editor-button")
+        .eq(1)
+        .click({ force: true })
+      cy.getByDataHook("diff-editor-container").should("be.visible")
+      cy.getByDataHook("diff-reject-button").should("be.visible")
+      cy.getByDataHook("diff-accept-button").should("be.visible")
+    })
+
+    it("should correctly maintain the history for multi-turn actions", () => {
+      const flow = createMultiTurnFlow({
+        turns: [
+          { explanation: "This is 1", sql: "SELECT 1;" },
+          { explanation: "This is 2", sql: "SELECT 2;" },
+          { explanation: "This is 3", sql: "SELECT 3;" },
+          { explanation: "This is 4", sql: "SELECT 4;" },
+          { explanation: "This is 5", sql: "SELECT 5;" },
+          { explanation: "This is 6", sql: "SELECT 6;" },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-context-badge").should("not.exist")
+
+      // Turn 0: User sends "select 1"
+      cy.getByDataHook("chat-input-textarea").type("select 1")
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(0).then(() => {
+        const body = flow.getRequestBody(0)
+        expect(body.input).to.have.length(1)
+        expect(body.input[0].content).to.include("select 1")
+      })
+
+      cy.getByDataHook("message-action-accept").should("be.visible")
+      cy.getByDataHook("chat-context-badge").should("not.exist")
+
+      // Turn 1: User sends "select 2" without accepting/rejecting turn 0
+      cy.getByDataHook("chat-input-textarea").type("select 2")
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(1).then(() => {
+        const body = flow.getRequestBody(1)
+        expect(body.input).to.have.length(3)
+        expect(body.input[2].content).to.include("select 2")
+      })
+
+      // Accept turn 1's suggestion (SELECT 2)
+      cy.getByDataHook("message-action-accept").click()
+      cy.getByDataHook("chat-context-badge").should("contain", "SELECT 2")
+      cy.getByDataHook("chat-context-badge").click()
+      cy.get(".aiQueryHighlight").should("exist")
+
+      // Turn 2: User sends "select 3" - should see "User accepted" message
+      cy.getByDataHook("chat-input-textarea").type("select 3", { force: true })
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(2).then(() => {
+        const body = flow.getRequestBody(2)
+        expect(body.input).to.have.length(6)
+        expect(body.input[4].content).to.include("User accepted")
+        expect(body.input[4].content).to.include("SELECT 2")
+        expect(body.input[5].content).to.include("select 3")
+      })
+
+      cy.getByDataHook("chat-message-assistant")
+        .contains("This is 3")
+        .getByDataHook("message-action-accept")
+        .should("be.visible")
+      cy.getByDataHook("chat-messages-container").scrollTo("top")
+      cy.getByDataHook("chat-message-assistant")
+        .contains("This is 1")
+        .should("be.visible")
+      cy.getByDataHook("message-action-apply").first().click({ force: true })
+      cy.getByDataHook("chat-context-badge").should("contain", "SELECT 1")
+
+      // Turn 3: User sends "select 4" - should see "User replaced" message
+      cy.getByDataHook("chat-input-textarea").type("select 4", { force: true })
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(3).then(() => {
+        const body = flow.getRequestBody(3)
+        expect(body.input).to.have.length(9)
+        expect(body.input[7].content).to.include("User replaced")
+        expect(body.input[7].content).to.include("SELECT 1")
+        expect(body.input[8].content).to.include("select 4")
+      })
+
+      // Reject turn 3's suggestion (SELECT 4)
+      cy.getByDataHook("message-action-reject").click()
+      cy.getByDataHook("diff-status-rejected").should("contain", "Rejected")
+
+      // Turn 4: User sends "select 5" - should see "User rejected" message
+      cy.getByDataHook("chat-input-textarea").type("select 5", { force: true })
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(4).then(() => {
+        const body = flow.getRequestBody(4)
+        expect(body.input).to.have.length(12)
+        expect(body.input[10].content).to.include("User rejected")
+        expect(body.input[11].content).to.include("select 5")
+      })
+
+      // Accept turn 4's suggestion (SELECT 5)
+      cy.getByDataHook("message-action-accept").click()
+      cy.getByDataHook("chat-context-badge").should("contain", "SELECT 5")
+
+      // Turn 5: Final turn - should see "User accepted" for SELECT 5
+      cy.getByDataHook("chat-input-textarea").type("select 6", { force: true })
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(5).then(() => {
+        const body = flow.getRequestBody(5)
+        expect(body.input).to.have.length(15)
+        expect(body.input[13].content).to.include("User accepted")
+        expect(body.input[14].content).to.include("select 6")
+      })
     })
   })
 })

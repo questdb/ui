@@ -883,7 +883,7 @@ export const AIConversationProvider: React.FC<{
           addMessage({
             id: crypto.randomUUID(),
             role: "user" as const,
-            content: `User accepted your SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL}\n\`\`\``,
+            content: `User accepted your SQL change. Now the query is:\n\n\`\`\`sql\n${normalizedSQL.replaceAll(/\s+/g, " ").trim()}\n\`\`\``,
             timestamp: Date.now(),
             hideFromUI: true,
           })
