@@ -28,6 +28,10 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
     display: none !important;
   }
 
+  .editor-scrollable {
+    width: 100% !important;
+  }
+
   .view-lines {
     width: 100% !important;
     pointer-events: none;
@@ -63,6 +67,9 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
 const OpenInEditorButton = styled(Button).attrs({ skin: "transparent" })`
   gap: 1rem;
   font-size: 1.2rem;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+  border: 0;
+  color: ${({ theme }) => theme.color.offWhite};
 `
 
 const SuccessIcon = styled(CheckboxCircle)`
@@ -74,7 +81,7 @@ const SuccessIcon = styled(CheckboxCircle)`
 const ButtonsContainer = styled.div`
   position: absolute;
   top: 0.8rem;
-  right: 0.8rem;
+  right: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -82,11 +89,16 @@ const ButtonsContainer = styled.div`
   z-index: 10;
 `
 
-const CopyButton = styled(Button)`
+const CopyButtonBase = styled(Button)`
+  color: #e5e7eb;
+  padding: 0 0.6rem;
+  background: ${({ theme }) => theme.color.backgroundDarker};
+`
+
+const CopyButtonFloating = styled(CopyButtonBase)`
   position: absolute;
   top: 0.2rem;
   right: 0.8rem;
-  color: #e5e7eb;
   z-index: 10;
 `
 
@@ -161,14 +173,14 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
                 />
               </OpenInEditorButton>
             )}
-            <Button
+            <CopyButtonBase
               skin="transparent"
               onClick={() => handleCopy(props.modified)}
               title="Copy to clipboard"
             >
               {copied && <SuccessIcon size="1rem" />}
               <FileCopy size="1.8rem" />
-            </Button>
+            </CopyButtonBase>
           </ButtonsContainer>
           <DiffEditor
             height={height}
@@ -218,14 +230,14 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
 
     return (
       <EditorWrapper $noBorder={noBorder} style={{ height }}>
-        <CopyButton
+        <CopyButtonFloating
           skin="transparent"
           onClick={() => handleCopy(props.value ?? "")}
           title="Copy to clipboard"
         >
           {copied && <SuccessIcon size="1rem" />}
           <FileCopy size="1.8rem" />
-        </CopyButton>
+        </CopyButtonFloating>
         <Editor
           height={height}
           language={language}
