@@ -637,16 +637,35 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { status } = useAIStatus()
   const [scrolled, setScrolled] = useState(false)
+  const userScrolledRef = useRef(false)
 
   const handleScrollNeeded = useCallback(() => {
+    if (scrolled && userScrolledRef.current) return
     const behavior = scrolled ? "smooth" : "instant"
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior })
       setScrolled(true)
     })
   }, [scrolled])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const handleWheel = () => {
+      userScrolledRef.current = true
+    }
+
+    container.addEventListener("wheel", handleWheel)
+    return () => container.removeEventListener("wheel", handleWheel)
+  }, [])
+
+  useEffect(() => {
+    userScrolledRef.current = false
+  }, [messages.length])
 
   const latestDiffIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -736,7 +755,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   }
 
   return (
-    <MessagesContainer $scrolled={scrolled} data-hook="chat-messages-container">
+    <MessagesContainer
+      ref={messagesContainerRef}
+      $scrolled={scrolled}
+      data-hook="chat-messages-container"
+    >
       {visibleMessages.map(({ message, originalIndex }) => {
         const key = `${message.id}`
         if (message.role === "user") {
