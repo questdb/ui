@@ -2101,6 +2101,10 @@ Syntax: \`avg(column)\`
         expect(body.input[5].content).to.include("select 3")
       })
 
+      cy.getByDataHook("chat-messages-container").scrollTo("bottom")
+      cy.getByDataHook("chat-message-assistant")
+        .contains("This is 3")
+        .should("be.visible")
       cy.getByDataHook("chat-message-assistant")
         .contains("This is 3")
         .getByDataHook("message-action-accept")
