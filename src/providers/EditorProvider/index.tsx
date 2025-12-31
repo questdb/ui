@@ -40,13 +40,6 @@ import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
-export type DiffModeState = {
-  bufferId: number | string
-  queryKey: QueryKey
-  original: string
-  modified: string
-} | null
-
 export type DiffBufferContent = {
   original: string
   modified: string
@@ -83,7 +76,6 @@ export type EditorContext = {
   ) => Promise<Buffer>
   deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
-  deleteAllBuffers: () => Promise<void>
   updateBuffer: (
     id: number,
     buffer?: Partial<Buffer>,
@@ -97,16 +89,6 @@ export type EditorContext = {
   temporaryBufferId: number | null
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
-  // Diff mode for AI chat integration
-  diffModeState: DiffModeState
-  enterDiffMode: (
-    bufferId: number | string,
-    queryKey: QueryKey,
-    original: string,
-    modified: string,
-  ) => void
-  exitDiffMode: () => void
-  updateDiffMode: (original: string, modified: string) => void
   // Global diff buffer management
   showDiffBuffer: (content: DiffBufferContent) => Promise<void>
   closeDiffBufferForConversation: (
@@ -116,7 +98,6 @@ export type EditorContext = {
   applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
   executionRefs: MutableRefObject<ExecutionRefs>
   cleanupExecutionRefs: (bufferId: number) => void
-  cleanupAllExecutionRefs: () => void
 }
 
 const defaultValues = {
@@ -132,7 +113,6 @@ const defaultValues = {
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
   archiveBuffer: () => Promise.resolve(),
-  deleteAllBuffers: () => Promise.resolve(),
   updateBuffer: () => Promise.resolve(),
   updateBuffersPositions: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
@@ -140,16 +120,11 @@ const defaultValues = {
   temporaryBufferId: null,
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
-  diffModeState: null,
-  enterDiffMode: () => undefined,
-  exitDiffMode: () => undefined,
-  updateDiffMode: () => undefined,
   showDiffBuffer: () => Promise.resolve(),
   closeDiffBufferForConversation: () => Promise.resolve(),
   applyAISQLChange: () => ({ success: false }),
   executionRefs: { current: {} },
   cleanupExecutionRefs: () => undefined,
-  cleanupAllExecutionRefs: () => undefined,
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -161,27 +136,6 @@ export const EditorProvider: React.FC = ({ children }) => {
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
-  const [diffModeState, setDiffModeState] = useState<DiffModeState>(null)
-
-  const enterDiffMode = useCallback(
-    (
-      bufferId: number | string,
-      queryKey: QueryKey,
-      original: string,
-      modified: string,
-    ) => {
-      setDiffModeState({ bufferId, queryKey, original, modified })
-    },
-    [],
-  )
-
-  const exitDiffMode = useCallback(() => {
-    setDiffModeState(null)
-  }, [])
-
-  const updateDiffMode = useCallback((original: string, modified: string) => {
-    setDiffModeState((prev) => (prev ? { ...prev, original, modified } : null))
-  }, [])
   const [tabsDisabled, setTabsDisabled] = useState(false)
   const rawBuffers = useLiveQuery(bufferStore.getAll, [])
   const buffers = useMemo(() => {
@@ -212,10 +166,6 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const cleanupExecutionRefs = useCallback((bufferId: number) => {
     delete executionRefs.current[bufferId.toString()]
-  }, [])
-
-  const cleanupAllExecutionRefs = useCallback(() => {
-    executionRefs.current = {}
   }, [])
 
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
@@ -336,12 +286,6 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
 
     return { id, ...buffer }
-  }
-
-  const deleteAllBuffers = async () => {
-    await bufferStore.deleteAll()
-    cleanupAllExecutionRefs()
-    eventBus.publish(EventType.BUFFERS_UPDATED, { type: "deleteAll" })
   }
 
   const updateBuffer: EditorContext["updateBuffer"] = async (
@@ -699,23 +643,17 @@ export const EditorProvider: React.FC = ({ children }) => {
         addBuffer,
         deleteBuffer,
         archiveBuffer,
-        deleteAllBuffers,
         updateBuffer,
         updateBuffersPositions,
         setTemporaryBuffer,
         temporaryBufferId,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
-        diffModeState,
-        enterDiffMode,
-        exitDiffMode,
-        updateDiffMode,
         showDiffBuffer,
         closeDiffBufferForConversation,
         applyAISQLChange,
         executionRefs,
         cleanupExecutionRefs,
-        cleanupAllExecutionRefs,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()
