@@ -1644,6 +1644,10 @@ export const continueConversation = async ({
 
         if ("error" in compactionResult) {
           setStatus(null)
+          console.error(
+            "Failed to compact conversation:",
+            compactionResult.error,
+          )
           return {
             type: "unknown" as const,
             message: compactionResult.error,

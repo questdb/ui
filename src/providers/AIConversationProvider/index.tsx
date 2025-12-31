@@ -175,6 +175,8 @@ export const AIConversationProvider: React.FC<{
     activeConversationIdRef.current = activeConversationId
   }, [activeConversationId])
 
+  const isOpeningChatWindowRef = useRef(false)
+
   const persistMessages = useCallback(
     async (conversationId: ConversationId, updateTimstamp: boolean = true) => {
       if (conversationId !== activeConversationIdRef.current) {
@@ -521,43 +523,50 @@ export const AIConversationProvider: React.FC<{
 
   const openChatWindow = useCallback(
     async (conversationId: ConversationId, loadMessages: boolean = true) => {
-      const prevId = chatWindowState.activeConversationId
+      if (isOpeningChatWindowRef.current) return
+      isOpeningChatWindowRef.current = true
 
-      if (prevId && prevId !== conversationId) {
-        const prevMeta = conversationMetas.get(prevId)
-        if (prevMeta && activeConversationMessages.length === 0) {
-          await aiConversationStore.deleteConversation(prevId)
-        } else {
-          await persistMessages(prevId, false)
+      try {
+        const prevId = chatWindowState.activeConversationId
+
+        if (prevId && prevId !== conversationId) {
+          const prevMeta = conversationMetas.get(prevId)
+          if (prevMeta && activeConversationMessages.length === 0) {
+            await aiConversationStore.deleteConversation(prevId)
+          } else {
+            await persistMessages(prevId, false)
+          }
+        } else if (
+          prevId === conversationId &&
+          !chatWindowState.isHistoryOpen &&
+          activeSidebar === "aiChat"
+        ) {
+          return
         }
-      } else if (
-        prevId === conversationId &&
-        !chatWindowState.isHistoryOpen &&
-        activeSidebar === "aiChat"
-      ) {
-        return
-      }
 
-      if (!activeConversationId) {
-        setActiveConversationMessages([])
-      }
+        if (!activeConversationId) {
+          setActiveConversationMessages([])
+        }
 
-      if (loadMessages && conversationId !== prevId) {
-        setIsLoadingMessages(true)
-        const msgs = await aiConversationStore.getMessages(conversationId)
-        setActiveConversationMessages(msgs)
-        setIsLoadingMessages(false)
-      } else if (!loadMessages) {
-        setActiveConversationMessages([])
-      }
+        if (loadMessages && conversationId !== prevId) {
+          setIsLoadingMessages(true)
+          const msgs = await aiConversationStore.getMessages(conversationId)
+          setActiveConversationMessages(msgs)
+          setIsLoadingMessages(false)
+        } else if (!loadMessages) {
+          setActiveConversationMessages([])
+        }
 
-      setChatWindowState((prev) => ({
-        ...prev,
-        isHistoryOpen: false,
-        previousConversationId: null,
-        activeConversationId: conversationId,
-      }))
-      dispatch(actions.console.setActiveSidebar("aiChat"))
+        setChatWindowState((prev) => ({
+          ...prev,
+          isHistoryOpen: false,
+          previousConversationId: null,
+          activeConversationId: conversationId,
+        }))
+        dispatch(actions.console.setActiveSidebar("aiChat"))
+      } finally {
+        isOpeningChatWindowRef.current = false
+      }
     },
     [
       activeSidebar,
