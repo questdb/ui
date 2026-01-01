@@ -1,0 +1,184 @@
+name: Release Web Console
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.head_commit.message, 'release: ')
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      changelog: ${{ steps.extract-changelog.outputs.changelog }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Get package version
+        id: get-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Extract changelog for version
+        id: extract-changelog
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}
+        run: |
+          node << 'SCRIPT'
+          const fs = require('fs');
+          const version = process.env.VERSION;
+
+          const content = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const lines = content.split('\n');
+
+          let capturing = false;
+          let result = [];
+
+          for (const line of lines) {
+            if (line.trim().startsWith('## ')) {
+              if (capturing) {
+                break;
+              }
+              if (line.trim().startsWith(`## ${version} - `)) {
+                capturing = true;
+                continue;
+              }
+            } else if (capturing) {
+              result.push(line);
+            }
+          }
+
+          const changelog = result.join('\n').trim();
+
+          if (!changelog) {
+            console.log(`Warning: No changelog found for version ${version}`);
+          } else {
+            console.log('Extracted changelog:');
+            console.log(changelog);
+          }
+
+          const outputFile = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(outputFile, `changelog<<EOF\n${changelog}\nEOF\n`);
+          SCRIPT
+
+      - name: Publish to npm
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
+          check-version: true
+          package: ./package.json
+
+  update-questdb:
+    name: Update QuestDB Web Console Version
+    runs-on: ubuntu-latest
+    needs: publish
+    if: ${{ needs.publish.result == 'success' }}
+
+    steps:
+      - name: Checkout QuestDB repository
+        uses: actions/checkout@v4
+        with:
+          repository: questdb/questdb
+          token: ${{ secrets.QUESTDB_REPO_TOKEN }}
+          ref: master
+
+      - name: Create release branch
+        run: |
+          VERSION="${{ needs.publish.outputs.version }}"
+          BRANCH_NAME="release/web-console-${VERSION}"
+          git checkout -b "$BRANCH_NAME"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Update web console version in pom.xml
+        run: |
+          VERSION="${{ needs.publish.outputs.version }}"
+
+          if ! grep -q "<web.console.version>" core/pom.xml; then
+            echo "Error: <web.console.version> tag not found in core/pom.xml"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(sed -n '/<properties>/,/<\/properties>/p' core/pom.xml | grep -oP '(?<=<web.console.version>).*(?=</web.console.version>)')
+          echo "Current version: ${CURRENT_VERSION}"
+
+          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+            echo "Error: pom.xml already has version ${VERSION}"
+            exit 1
+          fi
+
+          sed -i "/<properties>/,/<\/properties>/s|<web.console.version>.*</web.console.version>|<web.console.version>${VERSION}</web.console.version>|" core/pom.xml
+
+          echo "Updated web.console.version to: ${VERSION}"
+          sed -n '/<properties>/,/<\/properties>/p' core/pom.xml | grep "<web.console.version>"
+
+      - name: Commit changes
+        run: |
+          VERSION="${{ needs.publish.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add core/pom.xml
+          git commit -m "chore(ui): upgrade web console to ${VERSION}"
+
+      - name: Push branch
+        run: |
+          git push origin "${{ env.branch_name }}"
+
+      - name: Create Pull Request
+        env:
+          CHANGELOG: ${{ needs.publish.outputs.changelog }}
+          VERSION: ${{ needs.publish.outputs.version }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.QUESTDB_REPO_TOKEN }}
+          script: |
+            const version = process.env.VERSION;
+            const changelog = process.env.CHANGELOG || '';
+
+            const prBody = [
+              `## Web Console ${version}`,
+              '',
+              `This PR upgrades the web console to version ${version}.`,
+              '',
+              '### Changes',
+              '',
+              changelog || '_No changelog found for this release._',
+              '',
+              '---',
+              '*This PR was automatically created by the [Release Web Console](https://github.com/questdb/ui/actions/workflows/release_web_console.yml) workflow.*'
+            ].join('\n');
+
+            const { data: pr } = await github.rest.pulls.create({
+              owner: 'questdb',
+              repo: 'questdb',
+              title: `chore(ui): upgrade web console to ${version}`,
+              head: `release/web-console-${version}`,
+              base: 'master',
+              body: prBody
+            });
+
+            console.log(`Created PR #${pr.number}: ${pr.html_url}`);
+
+            core.setOutput('pr_url', pr.html_url);
+            core.setOutput('pr_number', pr.number);
