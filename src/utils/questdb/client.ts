@@ -24,6 +24,7 @@ import {
   Preferences,
   Permission,
   SymbolColumnDetails,
+  View,
   ValidateQueryResult,
   ValidateQuerySuccessResult,
   ValidateQueryErrorResult,
@@ -411,6 +412,14 @@ export class Client {
     return await this.query<{ ddl: string }>(
       `SHOW CREATE MATERIALIZED VIEW '${table}';`,
     )
+  }
+
+  async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
+    return await this.query<{ ddl: string }>(`SHOW CREATE VIEW '${viewName}';`)
+  }
+
+  async showViews(): Promise<QueryResult<View>> {
+    return await this.query<View>("views();")
   }
 
   async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {

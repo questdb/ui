@@ -31,6 +31,11 @@ const materializedViewSchemas = {
     "SELECT timestamp, avg(amount) avg FROM btc_trades SAMPLE BY 1m) PARTITION BY week;",
 };
 
+const viewSchemas = {
+  btc_trades_view:
+    "CREATE VIEW IF NOT EXISTS btc_trades_view AS SELECT * FROM btc_trades;",
+};
+
 before(() => {
   Cypress.on("uncaught:exception", (err) => {
     // this error can be safely ignored
@@ -347,6 +352,10 @@ Cypress.Commands.add("createMaterializedView", (name) => {
   cy.execQuery(materializedViewSchemas[name]);
 });
 
+Cypress.Commands.add("createView", (name) => {
+  cy.execQuery(viewSchemas[name]);
+});
+
 Cypress.Commands.add("dropTable", (name) => {
   cy.execQuery(`DROP TABLE ${name};`);
 });
@@ -357,6 +366,10 @@ Cypress.Commands.add("dropTableIfExists", (name) => {
 
 Cypress.Commands.add("dropMaterializedView", (name) => {
   cy.execQuery(`DROP MATERIALIZED VIEW ${name};`);
+});
+
+Cypress.Commands.add("dropViewIfExists", (name) => {
+  cy.execQuery(`DROP VIEW IF EXISTS ${name};`);
 });
 
 Cypress.Commands.add("interceptQuery", (query, alias, response) => {
@@ -497,6 +510,14 @@ Cypress.Commands.add("collapseMatViews", () => {
       cy.get('[data-hook="collapse-materialized-views"]').dblclick({
         force: true,
       });
+    }
+  });
+});
+
+Cypress.Commands.add("expandViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="expand-views"]').length > 0) {
+      cy.get('[data-hook="expand-views"]').dblclick({ force: true });
     }
   });
 });

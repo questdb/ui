@@ -353,7 +353,7 @@ export function isAiAssistantError(
 
 export function createModelToolsClient(
   questClient: Client,
-  tables?: Array<{ table_name: string; matView: boolean }>,
+  tables?: Array<{ table_name: string; matView?: boolean }>,
 ): ModelToolsClient {
   return {
     async validateQuery(

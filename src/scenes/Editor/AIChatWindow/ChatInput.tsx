@@ -352,7 +352,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   <ContextBadgeIcon>
                     {tableData ? (
                       <TableIcon
-                        isMaterializedView={tableData.matView}
+                        kind={tableData.matView ? "matview" : "table"}
                         partitionBy={tableData.partitionBy}
                         walEnabled={tableData.walEnabled}
                         designatedTimestamp={tableData.designatedTimestamp}
