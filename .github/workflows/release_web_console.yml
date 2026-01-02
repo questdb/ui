@@ -10,6 +10,9 @@ jobs:
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: |
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.event.head_commit.message, 'release: ')
@@ -105,9 +108,7 @@ jobs:
 
       - name: Publish to npm
         if: steps.check-version.outputs.exists == 'false'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
 
   update-questdb:
     name: Update QuestDB Web Console Version
