@@ -26,6 +26,7 @@ jobs:
         with:
           node-version: "20"
           cache: "yarn"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: yarn install --immutable
@@ -82,13 +83,23 @@ jobs:
           fs.appendFileSync(outputFile, `changelog<<EOF\n${changelog}\nEOF\n`);
           SCRIPT
 
+      - name: Check if version exists on npm
+        id: check-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view @questdb/web-console@$VERSION version 2>/dev/null; then
+            echo "Version $VERSION already exists on npm"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION does not exist on npm"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to npm
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
-          check-version: true
-          package: ./package.json
+        if: steps.check-version.outputs.exists == 'false'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   update-questdb:
     name: Update QuestDB Web Console Version
