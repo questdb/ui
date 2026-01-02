@@ -22,14 +22,6 @@ jobs:
       changelog: ${{ steps.extract-changelog.outputs.changelog }}
 
     steps:
-      - name: Debug workflow info
-        run: |
-          echo "=== Workflow Debug Info ==="
-          echo "Branch: ${{ github.ref_name }}"
-          echo "SHA: ${{ github.sha }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Using native npm publish (not JS-DevTools)"
-
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
@@ -106,17 +98,6 @@ jobs:
             echo "Version $VERSION does not exist on npm"
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Debug npm config
-        run: |
-          echo "=== ~/.npmrc ==="
-          cat ~/.npmrc || echo "No ~/.npmrc"
-          echo "=== repo .npmrc ==="
-          cat .npmrc || echo "No local .npmrc"
-          echo "=== npm config list ==="
-          npm config list
-          echo "=== NODE_AUTH_TOKEN set? ==="
-          if [ -n "$NODE_AUTH_TOKEN" ]; then echo "Yes (hidden)"; else echo "No"; fi
 
       - name: Publish to npm
         if: steps.check-version.outputs.exists == 'false'
