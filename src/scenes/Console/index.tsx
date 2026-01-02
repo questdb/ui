@@ -30,6 +30,7 @@ import { AIStatusIndicator } from "../../components/AIStatusIndicator"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 
 const AIChatWindow = lazy(() => import("../Editor/AIChatWindow"))
+import { AIChatErrorBoundary } from "../Editor/AIChatWindow/AIChatErrorBoundary"
 
 const LoaderContainer = styled.div`
   display: flex;
@@ -343,15 +344,17 @@ const Console = () => {
         >
           <Drawer id="side-panel-right" $aiChat={activeSidebar === "aiChat"} />
           {activeSidebar === "aiChat" && (
-            <Suspense
-              fallback={
-                <LoaderContainer>
-                  <CircleNotchSpinner size={24} />
-                </LoaderContainer>
-              }
-            >
-              <AIChatWindow />
-            </Suspense>
+            <AIChatErrorBoundary>
+              <Suspense
+                fallback={
+                  <LoaderContainer>
+                    <CircleNotchSpinner size={24} />
+                  </LoaderContainer>
+                }
+              >
+                <AIChatWindow />
+              </Suspense>
+            </AIChatErrorBoundary>
           )}
         </Allotment.Pane>
       </Allotment>

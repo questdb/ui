@@ -178,7 +178,7 @@ export const AIConversationProvider: React.FC<{
   const isOpeningChatWindowRef = useRef(false)
 
   const persistMessages = useCallback(
-    async (conversationId: ConversationId, updateTimstamp: boolean = true) => {
+    async (conversationId: ConversationId, updateTimestamp: boolean = true) => {
       if (conversationId !== activeConversationIdRef.current) {
         return
       }
@@ -186,7 +186,7 @@ export const AIConversationProvider: React.FC<{
         conversationId,
         activeConversationMessagesRef.current,
       )
-      if (updateTimstamp) {
+      if (updateTimestamp) {
         await aiConversationStore.updateMeta(conversationId, {
           updatedAt: Date.now(),
         })
