@@ -176,7 +176,11 @@ const Schema = ({
           )
         }
         void fetchMaterializedViews()
-        void fetchViews()
+        // we only need views() to get view state: invalid/valid + invalidation reason
+        // so only fetch if there are views present - this avoids unnecessary errors on older servers
+        if (data.some((t) => t.table_type === "V")) {
+          void fetchViews()
+        }
         dispatchState({ view: View.ready })
       } else {
         dispatchState({ view: View.error })
@@ -323,7 +327,6 @@ const Schema = ({
       eventBus.subscribe(EventType.MSG_QUERY_SCHEMA, () => {
         void fetchTables()
         void fetchColumns()
-        void fetchViews()
       })
 
       window.addEventListener("focus", focusListener)
