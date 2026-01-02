@@ -48,7 +48,7 @@ jobs:
       - name: Get package version
         id: get-version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node -p "require('./packages/web-console/package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing version: $VERSION"
 
@@ -97,7 +97,7 @@ jobs:
       - name: Check if version exists on npm
         id: check-version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node -p "require('./packages/web-console/package.json').version")
           if npm view @questdb/web-console@$VERSION version 2>/dev/null; then
             echo "Version $VERSION already exists on npm"
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -109,6 +109,7 @@ jobs:
       - name: Publish to npm
         if: steps.check-version.outputs.exists == 'false'
         run: npm publish --provenance --access public
+        working-directory: packages/web-console
 
   update-questdb:
     name: Update QuestDB Web Console Version
