@@ -14,6 +14,7 @@ type Props = {
   pulsate?: boolean
   children?: React.ReactNode
   className?: string
+  "data-hook"?: string
 }
 
 const pulsate = keyframes`
@@ -117,8 +118,14 @@ export const Badge: React.FunctionComponent<Props> = ({
   pulsate,
   children,
   className,
+  "data-hook": dataHook,
 }) => (
-  <Root className={className} type={type} pulsate={pulsate}>
+  <Root
+    className={className}
+    type={type}
+    pulsate={pulsate}
+    data-hook={dataHook}
+  >
     {icon && <Icon hasGap={React.Children.count(children) > 0}>{icon}</Icon>}
     {children}
   </Root>

@@ -112,6 +112,12 @@ export const Dialog = ({
     })
   }
 
+  const handleDismiss = () => {
+    resetToDefaults()
+    onOpenChange(undefined)
+    dispatch(actions.console.setActiveSidebar(undefined))
+  }
+
   const validationSchema = Joi.object({
     name: Joi.string()
       .required()
@@ -203,10 +209,7 @@ export const Dialog = ({
           </Button>
         )
       }
-      onDismiss={() => {
-        resetToDefaults()
-        onOpenChange(undefined)
-      }}
+      onDismiss={handleDismiss}
       onOpenChange={(isOpen) => {
         if (isOpen && action === "add") {
           dispatch(
@@ -225,6 +228,7 @@ export const Dialog = ({
           onSubmit={(values) => {
             onSchemaChange(values)
             onOpenChange(undefined)
+            dispatch(actions.console.setActiveSidebar(undefined))
           }}
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}
           validationSchema={validationSchema}
@@ -238,6 +242,7 @@ export const Dialog = ({
                 isEditLocked={isEditLocked}
                 lastFocusedIndex={lastFocusedIndex}
                 onAdded={setLastFocusedIndex}
+                onDismiss={handleDismiss}
               />
             }
           />

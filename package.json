@@ -31,11 +31,13 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@date-fns/tz": "^1.2.0",
     "@docsearch/css": "^3.5.2",
     "@docsearch/react": "^3.5.2",
-    "@hookform/resolvers": "2.8.5",
+    "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.6.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@popperjs/core": "2.4.2",
     "@questdb/sql-grammar": "1.4.1",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -68,21 +70,24 @@
     "draggabilly": "^3.0.0",
     "echarts": "^5.2.2",
     "eventemitter3": "^5.0.1",
+    "fflate": "^0.8.2",
     "intersection-observer": "^0.12.2",
     "joi": "17.5.0",
     "jquery": "3.5.1",
     "js-base64": "^3.7.7",
     "js-sha256": "^0.11.0",
+    "js-tiktoken": "^1.0.21",
     "lodash.isequal": "^4.5.0",
     "lodash.merge": "^4.6.2",
     "monaco-editor": "^0.44.0",
+    "openai": "^5.21.0",
     "posthog-js": "1.298.1",
     "ramda": "0.27.1",
     "react": "17.0.2",
     "react-calendar": "^4.0.0",
     "react-dom": "17.0.2",
     "react-highlight-words": "^0.20.0",
-    "react-hook-form": "7.22.3",
+    "react-hook-form": "^7.56.0",
     "react-is": "^18.1.0",
     "react-markdown": "^8.0.7",
     "react-popper": "2.2.3",
@@ -92,6 +97,7 @@
     "react-virtuoso": "^2.2.6",
     "redux": "4.0.5",
     "redux-observable": "1.2.0",
+    "remark-gfm": "^3.0.1",
     "resize-observer-polyfill": "1.5.1",
     "rxjs": "6.5.5",
     "slim-select": "1.26.0",
@@ -99,7 +105,9 @@
     "styled-components": "5.3.5",
     "throttle-debounce": "2.2.1",
     "uplot": "^1.6.31",
-    "uplot-react": "^1.2.2"
+    "uplot-react": "^1.2.2",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
   },
   "devDependencies": {
     "@4tw/cypress-drag-drop": "^2.2.5",
@@ -164,7 +172,7 @@
     "files": [
       {
         "path": "dist/assets/vendor-*.js",
-        "maxSize": "500KB",
+        "maxSize": "1MB",
         "compression": "none"
       },
       {

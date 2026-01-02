@@ -49,6 +49,7 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
   overflow: auto;
   max-height: 35rem;
+  min-height: ${(props) => (props.minimized ? "auto" : "10rem")};
   background: ${({ theme }) => theme.color.backgroundLighter};
 `
 
@@ -113,18 +114,36 @@ const Notifications = ({
 }) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
+  // Use the active buffer's ID for notifications
+  const targetBufferId = activeBuffer.id as number
   const queryNotifications =
     useSelector(
-      selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number),
+      selectors.query.getQueryNotificationsForBuffer(targetBufferId),
     ) || {}
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
 
-  const bufferNotifications = notifications.filter(
-    (notification) => queryNotifications[notification.query],
-  )
+  // Show notifications that either:
+  // 1. Have a matching queryKey in queryNotifications (regular queries from editor)
+  // 2. Match the activeNotification (for AI_SUGGESTION and other special cases)
+  const bufferNotifications = notifications.filter((notification) => {
+    // If queryKey exists in queryNotifications for this buffer, show it
+    if (queryNotifications[notification.query]) {
+      return true
+    }
+    // Also show if this is the active notification (covers AI_SUGGESTION queries)
+    if (
+      activeNotification &&
+      notification.query === activeNotification.query &&
+      notification.createdAt?.getTime() ===
+        activeNotification.createdAt?.getTime()
+    ) {
+      return true
+    }
+    return false
+  })
 
   const scrollToBottom = () => {
     contentRef.current?.scrollTo({
@@ -198,7 +217,7 @@ const Notifications = ({
               <Button
                 skin="secondary"
                 disabled={bufferNotifications.length === 0}
-                onClick={() => onClearNotifications(activeBuffer.id as number)}
+                onClick={() => onClearNotifications(targetBufferId)}
               >
                 Clear query log
               </Button>

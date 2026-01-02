@@ -1,13 +1,12 @@
 import React from "react"
 import ReactCalendar from "react-calendar"
 import type { CalendarProps } from "react-calendar"
-import { LooseValue } from "react-calendar/dist/cjs/shared/types"
 
 type Props = {
   className?: string
   min: Date
   max: Date
-  value: LooseValue | undefined
+  value: CalendarProps["value"]
   selectRange: boolean
   onChange: (value: CalendarProps["value"]) => void
 }

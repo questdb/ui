@@ -3,6 +3,8 @@ import { loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { checker } from 'vite-plugin-checker'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import wasm from 'vite-plugin-wasm'
+import topLevelAwait from 'vite-plugin-top-level-await'
 import path from 'path'
 
 export default defineConfig(({ mode }) => {
@@ -54,7 +56,12 @@ export default defineConfig(({ mode }) => {
           groups: ["group1", "group2"]
         }))
       }
-    }
+    },
+    "/api": {
+      target: 'http://127.0.0.1:9000',
+      changeOrigin: true,
+      rewrite: (path: string) => `${contextPath}${path}`,
+    },
   }
 
   return {
@@ -79,6 +86,8 @@ export default defineConfig(({ mode }) => {
         typescript: true,
         overlay: false,
       }),
+      wasm(),
+      topLevelAwait(),
       viteStaticCopy({
         targets: [
           {
@@ -154,6 +163,8 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: !isProduction,
+      ssr: false,
+      minify: 'esbuild',
       rollupOptions: {
         output: {
           manualChunks: {
@@ -165,7 +176,9 @@ export default defineConfig(({ mode }) => {
               'redux-observable',
               'rxjs',
               'styled-components',
+              'echarts',
             ],
+            'tiktoken': ['js-tiktoken/lite', 'js-tiktoken/ranks/o200k_base'],
           },
         },
       },

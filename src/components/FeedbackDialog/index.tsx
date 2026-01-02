@@ -232,7 +232,9 @@ export const FeedbackDialog = ({
             <Card>
               <Card.Header
                 title={
-                  <Text color="foreground">{title ?? "Get In Touch"}</Text>
+                  <AlertDialog.Title color="foreground">
+                    {title ?? "Get In Touch"}
+                  </AlertDialog.Title>
                 }
                 subtitle={
                   <Text color="foreground">

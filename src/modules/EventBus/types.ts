@@ -21,4 +21,6 @@ export enum EventType {
   TAB_BLUR = "tab.blur",
   METRICS_REFRESH_DATA = "metrics.refresh.data",
   BUFFERS_UPDATED = "buffers.updated",
+  EXPLAIN_QUERY_EXEC = "ai.explain.query.exec",
+  AI_QUERY_HIGHLIGHT = "ai.query.highlight",
 }

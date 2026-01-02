@@ -29,19 +29,23 @@ import Console from "../Console"
 import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
-import { useSelector } from "react-redux"
-import { selectors } from "../../store"
 import News from "../../scenes/News"
 import { CreateTableDialog } from "../../components/CreateTableDialog"
-import { EditorProvider, SearchProvider } from "../../providers"
+import {
+  EditorProvider,
+  SearchProvider,
+  AIConversationProvider,
+} from "../../providers"
 import { Help } from "./help"
 import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
+import { AIChatButton } from "./AIChatButton"
 
 import "allotment/dist/style.css"
 
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { AIStatusProvider } from "../../providers/AIStatusProvider"
 
 const Page = styled.div`
   display: flex;
@@ -65,21 +69,14 @@ const Root = styled.div`
   overflow-y: auto;
 `
 
-const Main = styled.div<{ sideOpened: boolean }>`
+const Main = styled.div`
   position: relative;
   flex: 1;
   display: flex;
-  width: ${({ sideOpened }) =>
-    sideOpened ? "calc(100% - 50rem - 4.5rem)" : "calc(100% - 4.5rem)"};
-`
-
-const Drawer = styled.div`
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  width: calc(100% - 4.5rem);
 `
 
 const Layout = () => {
-  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-
   const focusListener = useCallback(() => {
     eventBus.publish(EventType.TAB_FOCUS)
   }, [])
@@ -101,30 +98,31 @@ const Layout = () => {
   return (
     <SearchProvider>
       <EditorProvider>
-        <TopBar />
-        <Warnings />
-        <Root>
-          <Main sideOpened={activeSidebar !== undefined}>
-            <ImageZoom />
-            <Page>
-              <Console />
-            </Page>
-          </Main>
+        <AIConversationProvider>
+          <AIStatusProvider>
+            <TopBar />
+            <Warnings />
+            <Root>
+              <Main>
+                <ImageZoom />
+                <Page>
+                  <Console />
+                </Page>
+              </Main>
 
-          <Drawer id="side-panel-right" />
+              <Sidebar align="top">
+                <Help />
+                <AIChatButton />
+                <News />
+                <CreateTableDialog />
+              </Sidebar>
+            </Root>
 
-          <Sidebar align="top">
-            <Help />
+            <SideMenu />
 
-            <News />
-
-            <CreateTableDialog />
-          </Sidebar>
-        </Root>
-
-        <SideMenu />
-
-        <Footer />
+            <Footer />
+          </AIStatusProvider>
+        </AIConversationProvider>
       </EditorProvider>
     </SearchProvider>
   )

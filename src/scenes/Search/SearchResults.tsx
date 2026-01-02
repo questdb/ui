@@ -615,7 +615,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
         if (temporaryBufferId !== null) {
           const target = event.target as HTMLElement | null
           if (
-            target?.closest(".monaco-content") ||
+            target?.closest(".monaco-editor") ||
             target?.closest(".metrics-root")
           ) {
             await convertTemporaryToPermanent()

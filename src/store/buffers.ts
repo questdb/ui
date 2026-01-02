@@ -64,6 +64,13 @@ export type Buffer = {
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
   isTemporary?: boolean
+  isDiffBuffer?: boolean
+  diffContent?: {
+    original: string
+    modified: string
+    queryStartOffset: number
+    conversationId?: string
+  }
 }
 
 const defaultEditorViewState: editor.ICodeEditorViewState = {
@@ -109,6 +116,8 @@ export const makeBuffer = ({
   archived,
   archivedAt,
   isTemporary,
+  isDiffBuffer,
+  diffContent,
 }: {
   label: string
   value?: string
@@ -118,6 +127,13 @@ export const makeBuffer = ({
   archived?: boolean
   archivedAt?: number
   isTemporary?: boolean
+  isDiffBuffer?: boolean
+  diffContent?: {
+    original: string
+    modified: string
+    queryStartOffset: number
+    conversationId?: string
+  }
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
@@ -127,6 +143,8 @@ export const makeBuffer = ({
   archived,
   archivedAt,
   isTemporary,
+  isDiffBuffer,
+  diffContent,
 })
 
 export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {

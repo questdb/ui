@@ -8,6 +8,8 @@ import { Tooltip } from "../Tooltip"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import type { Action, SchemaColumn } from "./types"
 import { InsertRowBottom, InsertRowTop } from "@styled-icons/remix-editor"
+import { XIcon } from "@phosphor-icons/react"
+import { StyledClose } from "../Drawer"
 
 export const Actions = ({
   action,
@@ -15,12 +17,14 @@ export const Actions = ({
   lastFocusedIndex,
   onAdded,
   isEditLocked,
+  onDismiss,
 }: {
   action: Action
   ctaText: string
   lastFocusedIndex?: number
   onAdded: (index?: number) => void
   isEditLocked?: boolean
+  onDismiss?: () => void
 }) => {
   const newEntry = {
     name: "",
@@ -128,6 +132,9 @@ export const Actions = ({
       <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
         {ctaText}
       </Form.Submit>
+      <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+        <XIcon size={16} weight="bold" />
+      </StyledClose>
     </Box>
   )
 }

@@ -24,6 +24,9 @@ import {
   Preferences,
   Permission,
   SymbolColumnDetails,
+  ValidateQueryResult,
+  ValidateQuerySuccessResult,
+  ValidateQueryErrorResult,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
@@ -333,6 +336,27 @@ export class Client {
       this.removeController(controller)
       Client.numOfPendingQueries--
     }
+  }
+
+  async validateQuery(query: string): Promise<ValidateQueryResult> {
+    const response = await fetch(
+      `api/v1/sql/validate?${Client.encodeParams({ query })}`,
+      {
+        headers: this.commonHeaders,
+      },
+    )
+    if (response.ok) {
+      return (await response.json()) as ValidateQuerySuccessResult
+    }
+
+    if (response.status === 400 || response.status === 403) {
+      return (await response.json()) as ValidateQueryErrorResult
+    }
+
+    return Promise.reject({
+      status: response.status,
+      statusText: response.statusText,
+    })
   }
 
   async showTables(): Promise<QueryResult<Table>> {

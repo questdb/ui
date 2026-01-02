@@ -15,6 +15,7 @@ export const skins = [
   "error",
   "warning",
   "transparent",
+  "gradient",
 ] as const
 
 export type Skin = (typeof skins)[number]
@@ -30,13 +31,13 @@ const themes: {
 } = {
   primary: {
     normal: {
-      background: "pink",
-      border: "pink",
+      background: "pinkDarker",
+      border: "pinkDarker",
       color: "foreground",
     },
     hover: {
-      background: "pinkDarker",
-      border: "pinkDarker",
+      background: "pink",
+      border: "pink",
       color: "foreground",
     },
     disabled: {
@@ -123,6 +124,23 @@ const themes: {
       background: "comment",
       border: "selection",
       color: "orange",
+    },
+    disabled: {
+      background: "selection",
+      border: "gray1",
+      color: "gray1",
+    },
+  },
+  gradient: {
+    normal: {
+      background: "backgroundDarker",
+      border: "transparent",
+      color: "white",
+    },
+    hover: {
+      background: "backgroundDarker",
+      border: "transparent",
+      color: "white",
     },
     disabled: {
       background: "selection",

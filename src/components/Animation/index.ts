@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 import { css, keyframes } from "styled-components"
+import { color } from "../../utils/styled"
 
 const spin = keyframes`
   from {
@@ -36,4 +37,30 @@ const spin = keyframes`
 
 export const spinAnimation = css`
   animation: ${spin} 1.5s cubic-bezier(0.62, 0.28, 0.23, 0.99) infinite;
+`
+
+export const slideAnimation = css`
+  @keyframes slide {
+    0% {
+      background-position: 200% center;
+    }
+    100% {
+      background-position: -200% center;
+    }
+  }
+
+  background: linear-gradient(
+    90deg,
+    ${color("gray2")} 0%,
+    ${color("gray2")} 40%,
+    ${color("white")} 50%,
+    ${color("gray2")} 60%,
+    ${color("gray2")} 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-fill-color: transparent;
+  animation: slide 3s linear infinite;
 `

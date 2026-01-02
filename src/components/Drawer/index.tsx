@@ -1,13 +1,14 @@
 import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
-import { Close } from "@styled-icons/remix-line"
 import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
 import { ForwardRef, Overlay } from "../../components"
+import { Button } from "../Button"
 import { ContentWrapper } from "./content-wrapper"
 import { Panel } from "../../components/Panel"
+import { XIcon } from "@phosphor-icons/react"
 
 type DrawerProps = {
   mode?: "modal" | "side"
@@ -50,13 +51,13 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width?: string
   mode: DrawerProps["mode"]
 }>`
-  background-color: ${({ theme }) => theme.color.backgroundLighter};
+  background-color: ${({ theme }) => theme.color.chatBackground};
   border-left: 0.2rem ${({ theme }) => theme.color.background} solid;
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
-  width: ${({ width }) => width ?? "50rem"};
   max-width: 100%;
+  width: ${({ mode, width }) => width ?? (mode === "side" ? "100%" : "52rem")};
   height: 100%;
   overflow: auto;
   z-index: 101;
@@ -81,14 +82,15 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   `};
 `
 
-const StyledClose = styled(RadixDialog.Close).attrs({
+export const StyledClose = styled(Button).attrs({
   "aria-label": "Close",
-  asChild: true,
+  skin: "transparent",
 })`
-  appearance: initial;
   margin-left: auto;
+  margin-right: 0.5rem;
   cursor: pointer;
   color: ${({ theme }) => theme.color.foreground};
+  padding: 0.6rem;
 `
 
 export const Drawer = ({
@@ -144,7 +146,7 @@ export const Drawer = ({
               {...(withCloseButton && {
                 afterTitle: (
                   <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
-                    <Close size="18px" />
+                    <XIcon size={16} weight="bold" />
                   </StyledClose>
                 ),
               })}

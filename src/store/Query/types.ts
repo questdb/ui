@@ -1,27 +1,3 @@
-/*******************************************************************************
- *     ___                  _   ____  ____
- *    / _ \ _   _  ___  ___| |_|  _ \| __ )
- *   | | | | | | |/ _ \/ __| __| | | |  _ \
- *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
- *    \__\_\\__,_|\___||___/\__|____/|____/
- *
- *  Copyright (c) 2014-2019 Appsicle
- *  Copyright (c) 2019-2022 QuestDB
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
-
 import type { ReactNode } from "react"
 
 import type {
@@ -46,6 +22,7 @@ export enum RunningType {
   EXPLAIN = "explain",
   REFRESH = "refresh",
   QUERY = "query",
+  AI_SUGGESTION = "ai_suggestion",
   NONE = "none",
 }
 
@@ -70,6 +47,11 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
+export type AISuggestionRequest = Readonly<{
+  query: string
+  startOffset: number
+}>
+
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
@@ -79,6 +61,7 @@ export type QueryStateShape = Readonly<{
   queryNotifications: Record<number, Record<QueryKey, QueryNotifications>>
   activeNotification: NotificationShape | null
   queriesToRun: QueriesToRun
+  aiSuggestionRequest: AISuggestionRequest | null
 }>
 
 export enum QueryAT {
@@ -94,6 +77,7 @@ export enum QueryAT {
   SET_COLUMNS = "QUERY/SET_COLUMNS",
   SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
   SET_QUERIES_TO_RUN = "QUERY/SET_QUERIES_TO_RUN",
+  SET_AI_SUGGESTION_REQUEST = "QUERY/SET_AI_SUGGESTION_REQUEST",
 }
 
 type AddNotificationAction = Readonly<{
@@ -165,6 +149,11 @@ type SetQueriesToRunAction = Readonly<{
   payload: QueriesToRun
 }>
 
+type SetAISuggestionRequestAction = Readonly<{
+  type: QueryAT.SET_AI_SUGGESTION_REQUEST
+  payload: AISuggestionRequest | null
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -178,3 +167,4 @@ export type QueryAction =
   | SetColumnsActions
   | SetActiveNotificationAction
   | SetQueriesToRunAction
+  | SetAISuggestionRequestAction

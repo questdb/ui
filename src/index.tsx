@@ -24,6 +24,7 @@
 
 import "core-js/features/promise"
 import "./js/console"
+import "./utils/monacoInit"
 import "./js/console/cryptoPolyfill"
 
 import React from "react"
@@ -60,9 +61,7 @@ const epicMiddleware = createEpicMiddleware<
 
 const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
 
-if (import.meta.env.MODE !== "development") {
-  epicMiddleware.run(rootEpic)
-}
+epicMiddleware.run(rootEpic)
 
 const FadeReg = createGlobalFadeTransition("fade-reg", TransitionDuration.REG)
 

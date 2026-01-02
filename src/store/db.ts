@@ -28,16 +28,30 @@ import type { Buffer } from "./buffers"
 import { makeBuffer, fallbackBuffer } from "./buffers"
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
+import type { AIConversation } from "../providers/AIConversationProvider/types"
 
 type EditorSettings = {
   key: string
   value: string | number
 }
 
+export type ConversationMeta = Omit<AIConversation, "messages">
+
+export type ConversationMetaWithStatus = ConversationMeta & {
+  hasMessages: boolean
+}
+
+export type PersistedMessages = {
+  conversationId: string
+  data: Uint8Array
+}
+
 export class Storage extends Dexie {
   buffers!: Table<Buffer, number>
   editor_settings!: Table<EditorSettings, number>
   read_notifications!: Table<{ newsId: string }, number>
+  ai_conversations!: Table<ConversationMeta, string>
+  ai_conversation_messages!: Table<PersistedMessages, string>
   ready: boolean = false
 
   constructor() {
@@ -63,6 +77,10 @@ export class Storage extends Dexie {
             counter++
           })
       })
+    this.version(4).stores({
+      ai_conversations: "id, bufferId, tableId, updatedAt, queryKey",
+      ai_conversation_messages: "conversationId",
+    })
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", async () => {

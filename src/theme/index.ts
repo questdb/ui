@@ -30,18 +30,22 @@ const color: ColorShape = {
   black70: "rgba(25, 26, 33, 0.7)",
   black40: "rgba(25, 26, 33, 0.4)",
   black20: "rgba(25, 26, 33, 0.2)",
+  overlayBackground: "rgba(44, 46, 61, 0.48)",
   gray1: "#585858",
   gray2: "#bbbbbb",
   backgroundDarker: "#21222c",
+  chatBackground: "#1D1E25",
   backgroundLighter: "#282a36",
-  background: "#21222c",
+  background: "#2d303e",
   foreground: "#f8f8f2",
   selection: "#44475a",
   selectionDarker: "#333544",
+  midnight: "#141725",
   comment: "#6272a4",
   red: "#ff5555",
   redDark: "#5a1d1d",
   loginBackground: "#1D070E",
+  orangeDark: "#ff7f2a",
   orange: "#ffb86c",
   yellow: "#f1fa8c",
   green: "#50fa7b",
@@ -84,5 +88,10 @@ export const theme: DefaultThemeShape = {
   fontSize,
   borderRadius: "0.8rem",
 }
+
+export const pinkLinearGradientHorizontal =
+  "linear-gradient(90deg, #D14671 0%, #892C6C 100%)"
+export const pinkLinearGradientVertical =
+  "linear-gradient(180deg, #D14671 0%, #892C6C 100%)"
 
 export type ThemeShape = typeof theme
