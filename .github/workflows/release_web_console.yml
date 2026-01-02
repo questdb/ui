@@ -18,6 +18,14 @@ jobs:
       changelog: ${{ steps.extract-changelog.outputs.changelog }}
 
     steps:
+      - name: Debug workflow info
+        run: |
+          echo "=== Workflow Debug Info ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Using native npm publish (not JS-DevTools)"
+
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
