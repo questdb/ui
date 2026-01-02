@@ -95,12 +95,3 @@ jobs:
       - name: Stop QuestDB
         if: success() || failure()
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
-
-      - name: Publish to npm
-        if: success() && github.ref == 'refs/heads/main'
-        uses: JS-DevTools/npm-publish@v3
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
-          strategy: upgrade
-          package: ./package.json

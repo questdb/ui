@@ -54,6 +54,9 @@ const mapTabIconToType = (buffer: Buffer) => {
   if (buffer.metricsViewState) {
     return "assets/icon-chart.svg"
   }
+  if (buffer.isDiffBuffer) {
+    return "assets/icon-compare.svg"
+  }
   return "assets/icon-file.svg"
 }
 
@@ -117,6 +120,12 @@ export const Tabs = () => {
       buffers.filter((buffer) => !buffer.archived || buffer.isTemporary)
         .length === 1
     ) {
+      return
+    }
+
+    if (buffer.isDiffBuffer) {
+      await deleteBuffer(parseInt(id), true)
+      await repositionActiveBuffers(id)
       return
     }
 
@@ -225,6 +234,9 @@ export const Tabs = () => {
             }
             if (buffer.isTemporary) {
               classNames.push("temporary-tab")
+            }
+            if (buffer.isDiffBuffer) {
+              classNames.push("diff-tab")
             }
 
             const className =

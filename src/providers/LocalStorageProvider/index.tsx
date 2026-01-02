@@ -27,11 +27,16 @@ import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { parseInteger } from "./utils"
 import {
+  AiAssistantSettings,
   LocalConfig,
   SettingsType,
   LeftPanelState,
   LeftPanelType,
 } from "./types"
+
+export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
+  providers: {},
+}
 
 const defaultConfig: LocalConfig = {
   editorCol: 10,
@@ -40,10 +45,12 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
     type: LeftPanelType.DATASOURCES,
     width: 350,
   },
+  aiChatPanelWidth: 500,
 }
 
 type ContextProps = {
@@ -56,6 +63,9 @@ type ContextProps = {
   autoRefreshTables: boolean
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
+  aiAssistantSettings: AiAssistantSettings
+  aiChatPanelWidth: number
+  updateAiChatPanelWidth: (width: number) => void
 }
 
 const defaultValues: ContextProps = {
@@ -68,6 +78,9 @@ const defaultValues: ContextProps = {
   autoRefreshTables: true,
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (_state: LeftPanelState) => undefined,
+  aiAssistantSettings: defaultConfig.aiAssistantSettings,
+  aiChatPanelWidth: defaultConfig.aiChatPanelWidth,
+  updateAiChatPanelWidth: (_width: number) => undefined,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -121,8 +134,44 @@ export const LocalStorageProvider = ({
   const [leftPanelState, setLeftPanelState] =
     useState<LeftPanelState>(getLeftPanelState())
 
+  const getAiAssistantSettings = (): AiAssistantSettings => {
+    const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as AiAssistantSettings
+        return {
+          selectedModel: parsed.selectedModel,
+          providers: parsed.providers || {},
+        }
+      } catch (e) {
+        return defaultConfig.aiAssistantSettings
+      }
+    }
+    return defaultConfig.aiAssistantSettings
+  }
+
+  const [aiAssistantSettings, setAiAssistantSettings] =
+    useState<AiAssistantSettings>(getAiAssistantSettings())
+
+  const [aiChatPanelWidth, setAiChatPanelWidth] = useState<number>(
+    parseInteger(
+      getValue(StoreKey.AI_CHAT_PANEL_WIDTH),
+      defaultConfig.aiChatPanelWidth,
+    ),
+  )
+
+  const updateAiChatPanelWidth = useCallback((width: number) => {
+    setValue(StoreKey.AI_CHAT_PANEL_WIDTH, width.toString())
+    setAiChatPanelWidth(width)
+  }, [])
+
   const updateSettings = (key: StoreKey, value: SettingsType) => {
-    setValue(key, value.toString())
+    if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
+      setValue(key, JSON.stringify(value))
+    } else {
+      const typedValue = value as string | boolean | number
+      setValue(key, typedValue as string)
+    }
     refreshSettings(key)
   }
 
@@ -156,6 +205,9 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_TABLES:
         setAutoRefreshTables(value === "true")
         break
+      case StoreKey.AI_ASSISTANT_SETTINGS:
+        setAiAssistantSettings(getAiAssistantSettings())
+        break
     }
   }
 
@@ -171,6 +223,9 @@ export const LocalStorageProvider = ({
         autoRefreshTables,
         leftPanelState,
         updateLeftPanelState,
+        aiAssistantSettings,
+        aiChatPanelWidth,
+        updateAiChatPanelWidth,
       }}
     >
       {children}

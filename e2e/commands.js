@@ -94,8 +94,7 @@ beforeEach(() => {
 });
 
 Cypress.Commands.add("clearSimulatedWarnings", () => {
-  cy.typeQuery("select simulate_warnings('', '');");
-  cy.clickRunIconInLine(1);
+  cy.execQuery("select simulate_warnings('', '');");
 });
 
 Cypress.Commands.add("getByDataHook", (name) =>
@@ -210,26 +209,39 @@ Cypress.Commands.add("getCursorQueryDecoration", () =>
   cy.get(".cursorQueryDecoration")
 );
 
-Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".cursorQueryGlyph"));
+Cypress.Commands.add("getCursorQueryGlyph", () => cy.get(".glyph-widget-container"));
 
 Cypress.Commands.add("getRunIconInLine", (lineNumber) => {
   cy.getCursorQueryGlyph().should("be.visible");
-  const selector = `.cursorQueryGlyph-line-${lineNumber}`;
-  return cy.get(selector).first();
+  const selector = `.glyph-widget-${lineNumber}`;
+  return cy.get(selector).find(".glyph-run-icon").first();
+});
+
+Cypress.Commands.add("getAIIconInLine", (lineNumber, expectedClass) => {
+  const selector = `.glyph-widget-${lineNumber}`;
+  cy.get(selector).should("be.visible");
+  if (expectedClass) {
+    return cy.get(`${selector} .glyph-ai-icon.${expectedClass}`);
+  }
+  return cy.get(selector).find(".glyph-ai-icon");
 });
 
 Cypress.Commands.add("getCancelIconInLine", (lineNumber) => {
-  cy.get(".cancelQueryGlyph").should("be.visible");
-  const selector = `.cancelQueryGlyph-line-${lineNumber}`;
-  return cy.get(selector).first();
+  const selector = `.glyph-widget-${lineNumber}`;
+  cy.get(selector).should("be.visible");
+  return cy.get(selector).find(".glyph-run-icon.cancel");
 });
 
+Cypress.Commands.add("getSuccessIcons", () => cy.get(".glyph-run-icon.success"));
+
+Cypress.Commands.add("getErrorIcons", () => cy.get(".glyph-run-icon.error"));
+
 Cypress.Commands.add("openRunDropdownInLine", (lineNumber) => {
-  cy.getRunIconInLine(lineNumber).rightclick();
+  cy.getRunIconInLine(lineNumber).rightclick({ force: true });
 });
 
 Cypress.Commands.add("clickRunIconInLine", (lineNumber) => {
-  cy.getRunIconInLine(lineNumber).click();
+  cy.getRunIconInLine(lineNumber).click({ force: true });
 });
 
 Cypress.Commands.add("clickDropdownRunQuery", () => {
@@ -583,3 +595,7 @@ Cypress.Commands.add("createTabWithContent", (content, title) => {
     cy.get(".chrome-tab[active] .chrome-tab-rename").should("not.be.visible");
   }
 });
+
+Cypress.Commands.add("getActiveTabName", () => {
+  return cy.get(".chrome-tab[active]").get(".chrome-tab-title").invoke("text");
+})

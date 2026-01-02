@@ -13,7 +13,7 @@ const errorStyle = css`
 `
 
 export const Input = styled.input.attrs((props) => ({
-  "data-lpignore": !!props.autoComplete,
+  "data-lpignore": props.autoComplete === "off",
 }))<InputProps>`
   background: ${({ theme }) => theme.color.selection};
   border: 1px transparent solid;

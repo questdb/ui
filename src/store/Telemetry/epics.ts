@@ -264,4 +264,9 @@ export const startTelemetry: Epic<StoreAction, TelemetryAction, StoreShape> = (
     }),
   )
 
-export default [getServerInfo, getLatestTelemetryTimestamp, startTelemetry]
+export default [
+  getServerInfo,
+  ...(import.meta.env.MODE === "development"
+    ? []
+    : [getLatestTelemetryTimestamp, startTelemetry]),
+]

@@ -46,6 +46,23 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
+import {
+  explainTableSchema,
+  isAiAssistantError,
+  schemaExplanationToMarkdown,
+  type ActiveProviderSettings,
+  getExplainSchemaPrompt,
+} from "../../../utils/aiAssistant"
+import { useAIConversation } from "../../../providers/AIConversationProvider"
+import {
+  useAIStatus,
+  isBlockingAIStatus,
+  type AIOperationStatus,
+  type StatusArgs,
+  type OperationHistory,
+} from "../../../providers/AIStatusProvider"
+import { providerForModel } from "../../../utils/aiAssistantSettings"
+import { AISparkle } from "../../../components/AISparkle"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -166,6 +183,26 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
   const allColumns = useSelector(selectors.query.getColumns)
+  const {
+    status: aiStatus,
+    setStatus,
+    abortController,
+    canUse,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+    isConfigured,
+  } = useAIStatus()
+
+  const {
+    findConversationByTableId,
+    createConversation,
+    openChatWindow,
+    addMessage,
+    updateMessage,
+    updateConversationName,
+    persistMessages,
+  } = useAIConversation()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -233,10 +270,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     }, [] as FlattenedTreeItem[])
   }, [schemaTree])
 
-  const handleCopyQuery = async (
+  const getTableSchema = async (
     tableName: string,
     kind: "table" | "matview" | "view",
-  ) => {
+  ): Promise<string | null> => {
     try {
       const response =
         kind === "matview"
@@ -246,18 +283,150 @@ const VirtualTables: FC<VirtualTablesProps> = ({
             : await quest.showTableDDL(tableName)
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
-        await copyToClipboard(response.data[0].ddl)
-        toast.success("Schema copied to clipboard")
+        return response.data[0].ddl
       }
-    } catch (error) {
+    } catch (_error) {
       const kindLabel =
         kind === "matview"
           ? "materialized view"
           : kind === "view"
             ? "view"
             : "table"
-      toast.error(`Cannot copy schema for ${kindLabel} '${tableName}'`)
+      toast.error(`Cannot fetch schema for ${kindLabel} '${tableName}'`)
     }
+    return null
+  }
+
+  const handleCopyQuery = async (
+    tableName: string,
+    kind: "table" | "matview" | "view",
+  ) => {
+    const schema = await getTableSchema(tableName, kind)
+    if (schema) {
+      await copyToClipboard(schema)
+      toast.success("Schema copied to clipboard")
+    }
+  }
+
+  const handleExplainSchema = async (item: FlattenedTreeItem) => {
+    const tableName = item.name
+    const kind = item.kind as "table" | "matview" | "view"
+    const isMatView = kind === "matview"
+    const tableId = item.table?.id
+
+    if (!canUse) {
+      toast.error(
+        "AI Assistant is not enabled. Please configure your API key in settings.",
+      )
+      return
+    }
+
+    if (tableId == null) {
+      toast.error("Cannot find table ID")
+      return
+    }
+
+    const schema = await getTableSchema(tableName, kind)
+    if (!schema) {
+      return
+    }
+
+    const existingConversation = findConversationByTableId(tableId)
+    if (existingConversation) {
+      void openChatWindow(existingConversation.id)
+      return
+    }
+
+    const conversation = await createConversation({
+      tableId,
+    })
+
+    void updateConversationName(
+      conversation.id,
+      `${tableName} schema explanation`,
+    )
+    const userMessage = getExplainSchemaPrompt(tableName, schema, isMatView)
+    await openChatWindow(conversation.id)
+
+    addMessage({
+      role: "user",
+      content: userMessage,
+      timestamp: Date.now(),
+      displayType: "schema_explain_request",
+      displaySchemaData: {
+        tableName,
+        isMatView,
+        partitionBy: item.partitionBy,
+        walEnabled: item.walEnabled,
+        designatedTimestamp: item.designatedTimestamp,
+      },
+    })
+
+    const assistantMessageId = crypto.randomUUID()
+    addMessage({
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      operationHistory: [],
+    })
+
+    const provider = providerForModel(currentModel)
+
+    const settings: ActiveProviderSettings = {
+      model: currentModel,
+      provider,
+      apiKey,
+    }
+
+    const handleStatusUpdate = (history: OperationHistory) => {
+      updateMessage(conversation.id, assistantMessageId, {
+        operationHistory: [...history],
+      })
+    }
+
+    const response = await explainTableSchema({
+      tableName,
+      schema,
+      isMatView,
+      settings,
+      setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
+        setStatus(
+          status,
+          { ...(args ?? {}), conversationId: conversation.id },
+          handleStatusUpdate,
+        ),
+      abortSignal: abortController?.signal,
+    })
+
+    if (isAiAssistantError(response)) {
+      const error = response
+      updateMessage(conversation.id, assistantMessageId, {
+        error:
+          error.type !== "aborted"
+            ? error.message
+            : "Operation has been cancelled",
+      })
+      await persistMessages(conversation.id)
+      return
+    }
+
+    const result = response
+    if (!result.explanation) {
+      toast.error("No explanation received from AI Assistant", {
+        autoClose: 10000,
+      })
+      return
+    }
+
+    const markdownContent = schemaExplanationToMarkdown(result)
+    updateMessage(conversation.id, assistantMessageId, {
+      content: markdownContent,
+      explanation: markdownContent,
+      tokenUsage: result.tokenUsage,
+    })
+
+    await persistMessages(conversation.id)
   }
 
   const fetchSymbolColumnDetails = useCallback(
@@ -602,6 +771,20 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 >
                   Copy schema
                 </MenuItem>
+                {isConfigured && (
+                  <MenuItem
+                    data-hook="table-context-menu-explain-schema"
+                    onClick={async () => await handleExplainSchema(item)}
+                    icon={<AISparkle size={16} variant="filled" inverted />}
+                    disabled={
+                      !canUse ||
+                      !hasSchemaAccess ||
+                      isBlockingAIStatus(aiStatus)
+                    }
+                  >
+                    Explain schema with AI
+                  </MenuItem>
+                )}
                 {canSuspend && (
                   <MenuItem
                     data-hook="table-context-menu-resume-wal"
@@ -784,19 +967,21 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }
 
   return (
-    <div ref={wrapperRef} style={{ height: "100%" }}>
-      <Virtuoso
-        totalCount={flattenedItems.length}
-        ref={virtuosoRef}
-        data-hook="schema-tree"
-        rangeChanged={(newRange) => {
-          rangeRef.current = newRange
-        }}
-        data={flattenedItems}
-        itemContent={(index) => renderRow(index)}
-        style={{ height: "100%" }}
-      />
-    </div>
+    <>
+      <div ref={wrapperRef} style={{ height: "100%" }}>
+        <Virtuoso
+          totalCount={flattenedItems.length}
+          ref={virtuosoRef}
+          data-hook="schema-tree"
+          rangeChanged={(newRange) => {
+            rangeRef.current = newRange
+          }}
+          data={flattenedItems}
+          itemContent={(index) => renderRow(index)}
+          style={{ height: "100%" }}
+        />
+      </div>
+    </>
   )
 }
 

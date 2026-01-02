@@ -14,22 +14,24 @@ const Root = styled(SwitchPrimitive.Root)`
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  padding: 0 3px;
-  width: 38px;
-  height: 21px;
-  border-radius: 10px;
-  border: 1px solid #c4c4c9;
+  padding: 1px;
+  width: 36px;
+  height: 18px;
+  border-radius: 20px;
+  border: 0;
   background: transparent;
   appearance: none;
   position: relative;
   transition: 0.2s ease-out;
+  cursor: pointer;
+  background: ${({ theme }) => theme.color.selection};
 
   &:focus {
     border-color: #878eb6;
   }
 
   &[data-state="checked"] {
-    background: #44475a;
+    background: ${({ theme }) => theme.color.greenDarker};
   }
 
   &[data-disabled],
@@ -40,16 +42,16 @@ const Root = styled(SwitchPrimitive.Root)`
 
 const StyledThumb = styled(SwitchPrimitive.Thumb)`
   display: block;
-  width: 14px;
-  height: 14px;
-  background-color: #d8d8d8;
-  border-radius: 50%;
-  transition: linear transform 100ms;
+  width: 16px;
+  height: 16px;
+  background-color: ${({ theme }) => theme.color.foreground};
+  border-radius: 100%;
+  transition: transform 100ms linear;
   transform: translateX(0);
   will-change: transform;
 
   &[data-state="checked"] {
-    transform: translateX(17px);
+    transform: translateX(18px);
   }
 
   &[data-disabled] {
