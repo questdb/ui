@@ -37,7 +37,6 @@ jobs:
         with:
           node-version: "20"
           cache: "yarn"
-          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: yarn install --immutable
