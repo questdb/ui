@@ -17,6 +17,15 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.9 - 2026.01.02
+### Added
+- AI assistant with chat window [#507](https://github.com/questdb/ui/pull/507)
+
+### Fixed
+- handle running new queries when there is an operation in progress [#511](https://github.com/questdb/ui/pull/511)
+- make telemetry resilient to fara.questdb.io failures [#510](https://github.com/questdb/ui/pull/510)
+
+
 ## 1.1.8 - 2025.12.18
 ### Fixed
 - add polyfill for crypto.randomUUID to be used in insecure contexts [#508](https://github.com/questdb/ui/pull/508)
