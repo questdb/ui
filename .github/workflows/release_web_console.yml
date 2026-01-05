@@ -10,6 +10,9 @@ jobs:
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: |
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.event.head_commit.message, 'release: ')
@@ -18,6 +21,14 @@ jobs:
       changelog: ${{ steps.extract-changelog.outputs.changelog }}
 
     steps:
+      - name: Debug workflow info
+        run: |
+          echo "=== Workflow Debug Info ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Using native npm publish (not JS-DevTools)"
+
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
@@ -82,13 +93,21 @@ jobs:
           fs.appendFileSync(outputFile, `changelog<<EOF\n${changelog}\nEOF\n`);
           SCRIPT
 
+      - name: Check if version exists on npm
+        id: check-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view @questdb/web-console@$VERSION version 2>/dev/null; then
+            echo "Version $VERSION already exists on npm"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION does not exist on npm"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to npm
-        uses: JS-DevTools/npm-publish@v1
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
-          check-version: true
-          package: ./package.json
+        if: steps.check-version.outputs.exists == 'false'
+        run: npm publish --provenance --access public
 
   update-questdb:
     name: Update QuestDB Web Console Version
