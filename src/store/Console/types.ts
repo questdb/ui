@@ -22,7 +22,12 @@
  *
  ******************************************************************************/
 
-export type Sidebar = "news" | "create" | "aiChat" | undefined
+export type Sidebar = "news" | "create" | "aiChat" | "tableDetails" | undefined
+
+export type TableDetailsTarget = {
+  tableName: string
+  isMatView: boolean
+} | null
 
 export type BottomPanel = "result" | "zeroState" | "import"
 
@@ -38,6 +43,7 @@ export type ConsoleStateShape = Readonly<{
   activeSidebar: Sidebar
   activeBottomPanel: BottomPanel
   imageToZoom: ImageToZoom | undefined
+  tableDetailsTarget: TableDetailsTarget
 }>
 
 export enum ConsoleAT {
@@ -45,6 +51,7 @@ export enum ConsoleAT {
   SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
   SET_IMAGE_TO_ZOOM = "CONSOLE/SET_IMAGE_TO_ZOOM",
+  SET_TABLE_DETAILS_TARGET = "CONSOLE/SET_TABLE_DETAILS_TARGET",
 }
 
 type ToggleSideMenuAction = Readonly<{
@@ -66,8 +73,14 @@ type setImageToZoomAction = Readonly<{
   type: ConsoleAT.SET_IMAGE_TO_ZOOM
 }>
 
+type setTableDetailsTargetAction = Readonly<{
+  payload: TableDetailsTarget
+  type: ConsoleAT.SET_TABLE_DETAILS_TARGET
+}>
+
 export type ConsoleAction =
   | ToggleSideMenuAction
   | setActiveSidebarAction
   | setActiveBottomPanelAction
   | setImageToZoomAction
+  | setTableDetailsTargetAction

@@ -1,7 +1,8 @@
 import React, { useContext, useEffect, useState, useCallback } from "react"
+import { useSelector, useDispatch } from "react-redux"
 import styled, { useTheme } from "styled-components"
+import { selectors, actions } from "../../../store"
 import {
-  XIcon,
   CaretRightIcon,
   CheckCircleIcon,
   PauseCircleIcon,
@@ -13,7 +14,7 @@ import {
   TextColumnsIcon,
   ChartBarIcon,
 } from "@phosphor-icons/react"
-import { Drawer, Box, Text, Button } from "../../../components"
+import { Drawer, Box, Text } from "../../../components"
 import { Badge, BadgeType } from "../../../components/Badge"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
@@ -38,28 +39,6 @@ import { Select } from "../../../components/Select"
 import { TableIcon } from "../table-icon"
 import { ColumnIcon } from "../Row"
 
-type Props = {
-  tableName: string
-  isMatView: boolean
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
-
-const DrawerContent = styled.div`
-  overflow-y: auto;
-  height: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-`
-
-const Header = styled(Box).attrs({
-  gap: "1rem",
-  align: "center",
-})`
-  padding: 1.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.backgroundLighter};
-`
-
 const TableName = styled(Text).attrs({
   color: "foreground",
   weight: 600,
@@ -72,7 +51,7 @@ const TableName = styled(Text).attrs({
 `
 
 const TypeBadge = styled.span`
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.selection};
   color: ${({ theme }) => theme.color.foreground};
   padding: 0.3rem 0.8rem;
   border-radius: 4px;
@@ -80,14 +59,6 @@ const TypeBadge = styled.span`
   font-weight: 500;
   flex-shrink: 0;
   text-wrap: nowrap;
-`
-
-const CloseButton = styled(Button).attrs({
-  skin: "transparent",
-})`
-  margin-left: auto;
-  padding: 0.5rem;
-  color: ${({ theme }) => theme.color.foreground};
 `
 
 const Section = styled(Box).attrs({
@@ -259,12 +230,19 @@ const LoadingContainer = styled(Box).attrs({
   height: 100%;
 `
 
-export const TableDetailsDrawer = ({
-  tableName,
-  isMatView,
-  open,
-  onOpenChange,
-}: Props) => {
+export const TableDetailsDrawer = () => {
+  const dispatch = useDispatch()
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const target = useSelector(selectors.console.getTableDetailsTarget)
+
+  const tableName = target?.tableName ?? ""
+  const isMatView = target?.isMatView ?? false
+  const isOpen = activeSidebar === "tableDetails" && target !== null
+
+  const handleClose = () => {
+    dispatch(actions.console.setActiveSidebar(undefined))
+  }
+
   const { quest } = useContext(QuestContext)
   const theme = useTheme()
   const [tableData, setTableData] = useState<Table | null>(null)
@@ -341,17 +319,17 @@ export const TableDetailsDrawer = ({
   }, [fetchTableData, fetchMatViewData, fetchColumns, fetchDDL])
 
   useEffect(() => {
-    if (open) {
+    if (isOpen) {
       void fetchAllData()
     } else {
       setColumnsExpanded(false)
       setStatisticsExpanded(false)
       setMetricType("p50")
     }
-  }, [open, fetchAllData])
+  }, [isOpen, fetchAllData])
 
   useEffect(() => {
-    if (!open) return
+    if (!isOpen) return
 
     const interval = setInterval(() => {
       void fetchTableData()
@@ -359,19 +337,20 @@ export const TableDetailsDrawer = ({
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [open, fetchTableData, fetchMatViewData])
+  }, [isOpen, fetchTableData, fetchMatViewData])
+
+  if (!target) return null
 
   return (
     <Drawer
-      mode="modal"
-      open={open}
-      onOpenChange={onOpenChange}
-      onDismiss={() => onOpenChange(false)}
-      trigger={<span />}
-      width="50rem"
-    >
-      <DrawerContent>
-        <Header>
+      mode="side"
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+      withCloseButton
+      title={
+        <Box gap="1rem" align="center">
           {tableData && (
             <TableIcon
               walEnabled={tableData.walEnabled}
@@ -383,11 +362,12 @@ export const TableDetailsDrawer = ({
           )}
           <TableName>{tableName}</TableName>
           <TypeBadge>{isMatView ? "Materialized View" : "Table"}</TypeBadge>
-          <CloseButton onClick={() => onOpenChange(false)}>
-            <XIcon size={18} weight="bold" />
-          </CloseButton>
-        </Header>
-
+        </Box>
+      }
+      onDismiss={handleClose}
+      trigger={<span />}
+    >
+      <Drawer.ContentWrapper mode="side">
         {loading ? (
           <LoadingContainer>
             <CircleNotchSpinner size={24} />
@@ -805,7 +785,7 @@ export const TableDetailsDrawer = ({
             <Text color="gray2">Table not found</Text>
           </LoadingContainer>
         )}
-      </DrawerContent>
+      </Drawer.ContentWrapper>
     </Drawer>
   )
 }

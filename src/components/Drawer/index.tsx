@@ -51,6 +51,8 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width?: string
   mode: DrawerProps["mode"]
 }>`
+  display: flex;
+  flex-direction: column;
   background-color: ${({ theme }) => theme.color.chatBackground};
   border-left: 0.2rem ${({ theme }) => theme.color.background} solid;
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
@@ -59,7 +61,6 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   max-width: 100%;
   width: ${({ mode, width }) => width ?? (mode === "side" ? "100%" : "52rem")};
   height: 100%;
-  overflow: auto;
   z-index: 101;
 
   ${animateShow}

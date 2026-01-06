@@ -36,8 +36,8 @@ import {
 import { useSchema } from "../SchemaContext"
 import { QuestContext } from "../../../providers"
 import { PartitionBy, SymbolColumnDetails } from "../../../utils/questdb/types"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
+import { useSelector, useDispatch } from "react-redux"
+import { selectors, actions } from "../../../store"
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -46,7 +46,6 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { TableDetailsDrawer } from "../TableDetailsDrawer"
 import {
   explainTableSchema,
   isAiAssistantError,
@@ -210,11 +209,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<
     string | null
   >(null)
-  const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false)
-  const [detailsDrawerTable, setDetailsDrawerTable] = useState<{
-    tableName: string
-    isMatView: boolean
-  } | null>(null)
+  const dispatch = useDispatch()
 
   const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(
     new Map(),
@@ -682,11 +677,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
       if (item.kind === "table" || item.kind === "matview") {
         const handleOpenDetailsDrawer = () => {
-          setDetailsDrawerTable({
-            tableName: item.name,
-            isMatView: item.kind === "matview",
-          })
-          setDetailsDrawerOpen(true)
+          dispatch(
+            actions.console.setTableDetailsTarget({
+              tableName: item.name,
+              isMatView: item.kind === "matview",
+            }),
+          )
+          dispatch(actions.console.setActiveSidebar("tableDetails"))
         }
         return (
           <>
@@ -904,29 +901,19 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }
 
   return (
-    <>
-      <div ref={wrapperRef} style={{ height: "100%" }}>
-        <Virtuoso
-          totalCount={flattenedItems.length}
-          ref={virtuosoRef}
-          data-hook="schema-tree"
-          rangeChanged={(newRange) => {
-            rangeRef.current = newRange
-          }}
-          data={flattenedItems}
-          itemContent={(index) => renderRow(index)}
-          style={{ height: "100%" }}
-        />
-      </div>
-      {detailsDrawerTable && (
-        <TableDetailsDrawer
-          tableName={detailsDrawerTable.tableName}
-          isMatView={detailsDrawerTable.isMatView}
-          open={detailsDrawerOpen}
-          onOpenChange={setDetailsDrawerOpen}
-        />
-      )}
-    </>
+    <div ref={wrapperRef} style={{ height: "100%" }}>
+      <Virtuoso
+        totalCount={flattenedItems.length}
+        ref={virtuosoRef}
+        data-hook="schema-tree"
+        rangeChanged={(newRange) => {
+          rangeRef.current = newRange
+        }}
+        data={flattenedItems}
+        itemContent={(index) => renderRow(index)}
+        style={{ height: "100%" }}
+      />
+    </div>
   )
 }
 
