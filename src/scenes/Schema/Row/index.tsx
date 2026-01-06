@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
 import { SortDown, Bracket, InfoCircle } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
@@ -40,7 +40,13 @@ import {
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
-import { Box, Text, IconWithTooltip, spinAnimation } from "../../../components"
+import {
+  Box,
+  Text,
+  IconWithTooltip,
+  spinAnimation,
+  Button,
+} from "../../../components"
 import { color } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
@@ -49,6 +55,7 @@ import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
 import { MATVIEWS_GROUP_KEY, TABLES_GROUP_KEY } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
+import { InfoIcon } from "@phosphor-icons/react"
 
 export type TreeNodeKind = "column" | "table" | "matview" | "folder" | "detail"
 
@@ -61,6 +68,7 @@ type Props = Readonly<{
   designatedTimestamp?: string
   expanded?: boolean
   onExpandCollapse: () => void | Promise<void>
+  onOpenDetailsDrawer?: () => void
   navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
@@ -84,6 +92,7 @@ const Title = styled(Text)`
 `
 
 const Wrapper = styled.div<{
+  $viewDetailsButton?: boolean
   $level?: number
   $selectOpen?: boolean
   $focused?: boolean
@@ -114,6 +123,34 @@ const Wrapper = styled.div<{
     background: ${theme.color.tableSelection};
     border: 1px solid ${theme.color.cyan};
   `}
+
+  ${({ $viewDetailsButton }) =>
+    $viewDetailsButton &&
+    `
+    padding-right: 3rem;
+  `}
+`
+
+const DetailsDrawerButton = styled(Button)`
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  padding: 0.5rem;
+  background: transparent;
+  border: 0;
+
+  ${Wrapper}:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: transparent !important;
+    svg {
+      filter: brightness(1.2);
+    }
+  }
 `
 
 const StyledTitle = styled(Title)`
@@ -313,6 +350,7 @@ const Row = ({
   partitionBy,
   walEnabled,
   onExpandCollapse,
+  onOpenDetailsDrawer,
   navigateInTree,
   "data-hook": dataHook,
   isLoading,
@@ -322,6 +360,7 @@ const Row = ({
   id,
   index,
 }: Props) => {
+  const theme = useTheme()
   const {
     query,
     selectOpen,
@@ -395,6 +434,7 @@ const Row = ({
 
   return (
     <Wrapper
+      $viewDetailsButton={!!onOpenDetailsDrawer}
       $level={id ? id.split(":").length - 2 : 0}
       $selectOpen={selectOpen}
       $focused={focusedIndex === index}
@@ -557,6 +597,16 @@ const Row = ({
           )}
         </FlexRow>
       </Box>
+      {onOpenDetailsDrawer && (
+        <DetailsDrawerButton
+          skin="secondary"
+          size="sm"
+          data-hook="table-menu-button"
+          onClick={onOpenDetailsDrawer}
+        >
+          <InfoIcon size={18} color={theme.color.cyan} />
+        </DetailsDrawerButton>
+      )}
     </Wrapper>
   )
 }
