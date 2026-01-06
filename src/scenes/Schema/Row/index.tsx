@@ -280,7 +280,7 @@ const getIcon = (type: string) => {
   return <IconWrapper icon={iconConfig?.icon ?? DotIcon} type={type} />
 }
 
-const ColumnIcon = ({
+export const ColumnIcon = ({
   isDesignatedTimestamp,
   type,
 }: {

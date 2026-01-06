@@ -15,6 +15,7 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   border: ${({ $noBorder, theme }) =>
     $noBorder ? "none" : `1px solid ${theme.color.selection}`};
   background: ${({ theme }) => theme.color.backgroundDarker};
+  overflow: hidden;
 
   .monaco-editor-background {
     background: ${({ theme }) => theme.color.backgroundDarker};

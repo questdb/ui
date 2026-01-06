@@ -10,7 +10,8 @@ import React, {
 import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
 import { Loader3, FileCopy, Restart } from "@styled-icons/remix-line"
-import { spinAnimation, toast } from "../../../components"
+import { InfoIcon, DotsThreeVerticalIcon } from "@phosphor-icons/react"
+import { spinAnimation, toast, Button } from "../../../components"
 import { color, ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { State, View } from "../../Schema"
@@ -45,6 +46,7 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
+import { TableDetailsDrawer } from "../TableDetailsDrawer"
 import {
   explainTableSchema,
   isAiAssistantError,
@@ -126,6 +128,19 @@ export type SchemaTree = {
   [key: string]: TreeNode
 }
 
+const Wrapper = styled.div`
+  height: 100%;
+  width: 100%;
+
+  [data-known-size] {
+    min-width: max-content;
+  }
+
+  [data-test-id="virtuoso-item-list"] {
+    min-width: max-content;
+  }
+`
+
 const SectionHeader = styled(Row)<{ $disabled: boolean }>`
   cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "default")};
   pointer-events: ${({ $disabled }) => ($disabled ? "none" : "auto")};
@@ -137,13 +152,43 @@ const SectionHeader = styled(Row)<{ $disabled: boolean }>`
   `}
 `
 
+const TableRowWrapper = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+`
+
 const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
+  flex: 1;
+
   ${({ $contextMenuOpen, theme }) =>
     $contextMenuOpen &&
     `
     background: ${theme.color.tableSelection};
     border: 1px solid ${theme.color.cyan};
   `}
+`
+
+const MenuButtonWrapper = styled.div<{ $visible?: boolean }>`
+  position: absolute;
+  left: 0.4rem;
+  overflow: visible;
+  opacity: ${({ $visible }) => ($visible ? 1 : 0)};
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  ${TableRowWrapper}:hover & {
+    opacity: 1;
+  }
+`
+
+const ThreeDotsButton = styled(Button)`
+  background: ${({ theme }) => theme.color.backgroundLighter};
+  border: 0;
+  padding: 0;
 `
 
 const FlexSpacer = styled.div`
@@ -207,6 +252,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<
     string | null
   >(null)
+  const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false)
+  const [detailsDrawerTable, setDetailsDrawerTable] = useState<{
+    tableName: string
+    isMatView: boolean
+  } | null>(null)
 
   const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(
     new Map(),
@@ -673,6 +723,22 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       }
 
       if (item.kind === "table" || item.kind === "matview") {
+        const handleMenuButtonClick = (e: React.MouseEvent) => {
+          e.preventDefault()
+          e.stopPropagation()
+          const wrapper = (e.currentTarget as HTMLElement).parentElement
+          const trigger = wrapper?.previousElementSibling
+          if (trigger) {
+            const contextMenuEvent = new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            })
+            trigger.dispatchEvent(contextMenuEvent)
+          }
+        }
+
         return (
           <>
             <ContextMenu
@@ -680,42 +746,67 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 setOpenedContextMenu(open ? item.id : null)
               }
             >
-              <ContextMenuTrigger>
-                <>
-                  <TableRow
-                    $contextMenuOpen={openedContextMenu === item.id}
-                    kind={item.kind}
-                    name={item.name}
-                    index={index}
-                    expanded={item.isExpanded}
-                    onExpandCollapse={() => toggleNodeExpansion(item.id)}
-                    navigateInTree={navigateInTree}
-                    partitionBy={item.partitionBy}
-                    walEnabled={item.walEnabled}
-                    designatedTimestamp={item.designatedTimestamp}
-                    id={item.id}
-                    errors={[
-                      ...(item.matViewData?.view_status === "invalid"
-                        ? [
-                            `Materialized view is invalid${item.matViewData?.invalidation_reason && `: ${item.matViewData?.invalidation_reason}`}`,
-                          ]
-                        : []),
-                      ...(item.walTableData?.suspended ? [`Suspended`] : []),
-                    ]}
-                  />
-                  {item.walTableData?.suspended && (
-                    <SuspensionDialog
-                      walTableData={item.walTableData}
+              <TableRowWrapper>
+                <ContextMenuTrigger style={{ flex: 1 }}>
+                  <>
+                    <TableRow
+                      $contextMenuOpen={openedContextMenu === item.id}
                       kind={item.kind}
-                      open={openedSuspensionDialog === item.id}
-                      onOpenChange={(isOpen) => {
-                        setOpenedSuspensionDialog(isOpen ? item.id : null)
-                      }}
+                      name={item.name}
+                      index={index}
+                      expanded={item.isExpanded}
+                      onExpandCollapse={() => toggleNodeExpansion(item.id)}
+                      navigateInTree={navigateInTree}
+                      partitionBy={item.partitionBy}
+                      walEnabled={item.walEnabled}
+                      designatedTimestamp={item.designatedTimestamp}
+                      id={item.id}
+                      errors={[
+                        ...(item.matViewData?.view_status === "invalid"
+                          ? [
+                              `Materialized view is invalid${item.matViewData?.invalidation_reason && `: ${item.matViewData?.invalidation_reason}`}`,
+                            ]
+                          : []),
+                        ...(item.walTableData?.suspended ? [`Suspended`] : []),
+                      ]}
                     />
-                  )}
-                </>
-              </ContextMenuTrigger>
+                    {item.walTableData?.suspended && (
+                      <SuspensionDialog
+                        walTableData={item.walTableData}
+                        kind={item.kind}
+                        open={openedSuspensionDialog === item.id}
+                        onOpenChange={(isOpen) => {
+                          setOpenedSuspensionDialog(isOpen ? item.id : null)
+                        }}
+                      />
+                    )}
+                  </>
+                </ContextMenuTrigger>
+                <MenuButtonWrapper $visible={openedContextMenu === item.id}>
+                  <ThreeDotsButton
+                    skin="secondary"
+                    size="sm"
+                    dataHook="table-menu-button"
+                    onClick={handleMenuButtonClick}
+                  >
+                    <DotsThreeVerticalIcon size={14} weight="bold" />
+                  </ThreeDotsButton>
+                </MenuButtonWrapper>
+              </TableRowWrapper>
               <ContextMenuContent>
+                <MenuItem
+                  data-hook="table-context-menu-view-details"
+                  onClick={() => {
+                    setDetailsDrawerTable({
+                      tableName: item.name,
+                      isMatView: item.kind === "matview",
+                    })
+                    setDetailsDrawerOpen(true)
+                  }}
+                  icon={<InfoIcon size={16} />}
+                >
+                  View details
+                </MenuItem>
                 <MenuItem
                   data-hook="table-context-menu-copy-schema"
                   onClick={async () =>
@@ -882,7 +973,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   return (
     <>
-      <div ref={wrapperRef} style={{ height: "100%" }}>
+      <Wrapper ref={wrapperRef}>
         <Virtuoso
           totalCount={flattenedItems.length}
           ref={virtuosoRef}
@@ -894,7 +985,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           itemContent={(index) => renderRow(index)}
           style={{ height: "100%" }}
         />
-      </div>
+      </Wrapper>
+      {detailsDrawerTable && (
+        <TableDetailsDrawer
+          tableName={detailsDrawerTable.tableName}
+          isMatView={detailsDrawerTable.isMatView}
+          open={detailsDrawerOpen}
+          onOpenChange={setDetailsDrawerOpen}
+        />
+      )}
     </>
   )
 }
