@@ -190,6 +190,33 @@ export type Table = {
   ttlValue: number
   ttlUnit: string
   matView: boolean
+  directoryName: string
+  maxUncommittedRows: number
+  o3MaxLag: number
+  table_suspended: boolean
+  table_row_count: number | null
+  table_max_timestamp: string | null
+  table_txn: number | null
+  table_memory_pressure_level: number | null
+  wal_pending_row_count: number | null
+  wal_txn: number | null
+  wal_tx_count: number | null
+  wal_max_timestamp: string | null
+  dedup_row_count_since_start: number | null
+  table_write_amp_count: number | null
+  table_write_amp_p50: number | null
+  table_write_amp_p90: number | null
+  table_write_amp_p99: number | null
+  table_write_amp_max: number | null
+  table_merge_rate_count: number | null
+  table_merge_rate_p50: number | null
+  table_merge_rate_p90: number | null
+  table_merge_rate_p99: number | null
+  table_merge_rate_max: number | null
+  wal_tx_size_p50: number | null
+  wal_tx_size_p90: number | null
+  wal_tx_size_p99: number | null
+  wal_tx_size_max: number | null
 }
 
 export type Partition = {
@@ -230,13 +257,25 @@ export type MaterializedView = {
   view_name: string
   refresh_type: string
   base_table_name: string
-  last_refresh_timestamp: string
+  last_refresh_start_timestamp: string | null
+  last_refresh_finish_timestamp: string | null
   view_sql: string
   view_table_dir_name: string
-  invalidation_reason: string
-  view_status: "valid" | "invalid"
+  invalidation_reason: string | null
+  view_status: "valid" | "refreshing" | "invalid"
+  refresh_period_hi: string | null
+  refresh_base_table_txn: number
   base_table_txn: number
-  applied_base_table_txn: number
+  refresh_limit: number
+  refresh_limit_unit: string | null
+  timer_time_zone: string | null
+  timer_start: string | null
+  timer_interval: number
+  timer_interval_unit: string | null
+  period_length: number
+  period_length_unit: string | null
+  period_delay: number
+  period_delay_unit: string | null
 }
 
 export type Column = {

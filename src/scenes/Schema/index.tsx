@@ -139,7 +139,6 @@ const Schema = ({
   const [loadingError, setLoadingError] = useState<ErrorResult | null>(null)
   const errorRef = useRef<ErrorResult | null>(null)
   const [tables, setTables] = useState<QuestDB.Table[]>()
-  const [walTables, setWalTables] = useState<QuestDB.WalTable[]>()
   const [materializedViews, setMaterializedViews] =
     useState<QuestDB.MaterializedView[]>()
   const dispatch = useDispatch()
@@ -159,17 +158,6 @@ const Schema = ({
         errorRef.current = null
         setTables(response.data)
         dispatch(actions.query.setTables(response.data))
-        // Fetch WAL info about the tables
-        const walTablesResponse =
-          await quest.query<QuestDB.WalTable>("wal_tables()")
-        if (walTablesResponse && walTablesResponse.type === QuestDB.Type.DQL) {
-          // Filter out the system tables
-          setWalTables(
-            walTablesResponse.data.filter((wt) =>
-              response.data.map((t) => t.table_name).includes(wt.name),
-            ),
-          )
-        }
         void fetchMaterializedViews()
         dispatchState({ view: View.ready })
       } else {
@@ -334,8 +322,8 @@ const Schema = ({
   }, [tables, materializedViews])
 
   const suspendedTablesCount = useMemo(
-    () => walTables?.filter((t) => t.suspended).length ?? 0,
-    [walTables],
+    () => tables?.filter((t) => t.table_suspended).length ?? 0,
+    [tables],
   )
 
   useEffect(() => {
@@ -516,7 +504,6 @@ const Schema = ({
       <Content _loading={state.view === View.loading}>
         <VirtualTables
           tables={tables ?? []}
-          walTables={walTables}
           materializedViews={materializedViews}
           filterSuspendedOnly={filterSuspendedOnly}
           state={state}

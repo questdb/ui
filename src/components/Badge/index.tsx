@@ -6,6 +6,7 @@ export enum BadgeType {
   INFO = "info",
   WARNING = "warning",
   ERROR = "error",
+  DISABLED = "disabled",
 }
 
 type Props = {
@@ -38,7 +39,7 @@ const Root = styled.span<Pick<Props, "type" | "pulsate">>`
   position: relative;
   padding: 0 1rem;
   border: 1px solid transparent;
-  border-radius: ${({ theme }) => theme.borderRadius};
+  border-radius: 0.8rem;
   line-height: 1.15;
   height: 3rem;
   color: ${({ theme }) => theme.color.white};
@@ -52,13 +53,13 @@ const Root = styled.span<Pick<Props, "type" | "pulsate">>`
     left: 0;
     top: 0;
     opacity: 0.075;
-    border-radius: ${({ theme }) => theme.borderRadius};
+    border-radius: 0.7rem;
   }
 
   ${({ type, theme }) =>
     type === BadgeType.INFO &&
     css`
-      color: ${theme.color.foreground};
+      color: ${theme.color.cyan};
     `}
 
   ${({ type, theme }) =>
@@ -91,6 +92,16 @@ const Root = styled.span<Pick<Props, "type" | "pulsate">>`
       }
     `}
 
+  ${({ type, theme }) =>
+    type === BadgeType.DISABLED &&
+    css`
+      color: ${theme.color.gray2};
+
+      &:after {
+        background: transparent;
+      }
+    `}
+
   ${(props) =>
     props.pulsate &&
     css`
@@ -108,7 +119,7 @@ const Icon = styled.div<{ hasGap: boolean }>`
   ${({ hasGap }) =>
     hasGap &&
     css`
-      margin-right: 0.75rem;
+      margin-right: 0.5rem;
     `}
 `
 

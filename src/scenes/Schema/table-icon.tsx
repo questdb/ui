@@ -11,16 +11,16 @@ type TableIconProps = {
   partitionBy?: QuestDB.PartitionBy
   designatedTimestamp?: string
   isMaterializedView?: boolean
+  size?: string
 }
 
-const WIDTH = "1.4rem"
-const HEIGHT = "1.4rem"
+const DEFAULT_SIZE = "14px"
 
-const Root = styled.div`
+const Root = styled.div<{ $size: string }>`
   display: flex;
   align-items: center;
-  width: ${WIDTH};
-  height: ${HEIGHT};
+  width: ${({ $size }) => $size};
+  height: ${({ $size }) => $size};
   position: relative;
   flex-shrink: 0;
   svg {
@@ -37,11 +37,15 @@ const Asterisk = styled.span`
   color: ${color("orange")};
 `
 
-const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
+const NonPartitionedTableIcon = ({
+  size = DEFAULT_SIZE,
+}: {
+  size?: string
+}) => (
   <svg
     viewBox="0 0 24 24"
-    height={height}
-    width={width}
+    height={size}
+    width={size}
     fill="currentColor"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -53,11 +57,15 @@ const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
+export const MaterializedViewIcon = ({
+  size = DEFAULT_SIZE,
+}: {
+  size?: string
+}) => (
   <svg
     viewBox="0 0 28 28"
-    height={height}
-    width={width}
+    height={size}
+    width={size}
     xmlns="http://www.w3.org/2000/svg"
   >
     <g
@@ -83,6 +91,7 @@ export const TableIcon: FC<TableIconProps> = ({
   partitionBy,
   designatedTimestamp,
   isMaterializedView,
+  size = DEFAULT_SIZE,
 }) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
   const partitionText = isPartitioned
@@ -101,8 +110,8 @@ export const TableIcon: FC<TableIconProps> = ({
     return (
       <PopperHover
         trigger={
-          <Root data-hook="table-icon">
-            <MaterializedViewIcon height="14px" width="14px" />
+          <Root $size={size} data-hook="table-icon">
+            <MaterializedViewIcon size={size} />
           </Root>
         }
         delay={1000}
@@ -118,12 +127,12 @@ export const TableIcon: FC<TableIconProps> = ({
   return (
     <PopperHover
       trigger={
-        <Root data-hook="table-icon">
+        <Root $size={size} data-hook="table-icon">
           {!walEnabled && <Asterisk>*</Asterisk>}
           {isPartitioned ? (
-            <Table size="14px" />
+            <Table size={size} />
           ) : (
-            <NonPartitionedTableIcon height="14px" />
+            <NonPartitionedTableIcon size={size} />
           )}
         </Root>
       }

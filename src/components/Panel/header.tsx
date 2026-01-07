@@ -28,14 +28,14 @@ import styled from "styled-components"
 import { color } from "../../utils"
 import { Text } from "../../components/Text"
 
-export const Root = styled.div<{ shadow?: boolean }>`
+export const Root = styled.div<{ shadow?: boolean; $titleColor?: string }>`
   position: relative;
   display: flex;
   justify-content: space-between;
-  height: 4.5rem;
+  height: 4.6rem;
   padding: 0 1rem;
   align-items: center;
-  background: ${color("backgroundLighter")};
+  background: ${({ $titleColor }) => $titleColor ?? color("backgroundLighter")};
   border-top: 1px solid transparent;
   z-index: 5;
 
@@ -57,13 +57,21 @@ export const Header = ({
   title,
   afterTitle,
   shadow,
+  titleColor,
 }: {
   title?: React.ReactNode
   afterTitle?: React.ReactNode
   shadow?: boolean
+  titleColor?: string
 }) => (
-  <Root shadow={shadow}>
-    {title && <Title color="foreground">{title}</Title>}
+  <Root shadow={shadow} $titleColor={titleColor}>
+    {title && typeof title === "string" ? (
+      <Title color="foreground" ellipsis>
+        {title}
+      </Title>
+    ) : (
+      title
+    )}
     {afterTitle}
   </Root>
 )

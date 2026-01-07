@@ -14,6 +14,7 @@ type DrawerProps = {
   mode?: "modal" | "side"
   children: React.ReactNode
   title?: React.ReactNode
+  titleColor?: string
   afterTitle?: React.ReactNode
   trigger: React.ReactNode
   width?: string
@@ -51,6 +52,8 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   width?: string
   mode: DrawerProps["mode"]
 }>`
+  display: flex;
+  flex-direction: column;
   background-color: ${({ theme }) => theme.color.chatBackground};
   border-left: 0.2rem ${({ theme }) => theme.color.background} solid;
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
@@ -59,7 +62,6 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   max-width: 100%;
   width: ${({ mode, width }) => width ?? (mode === "side" ? "100%" : "52rem")};
   height: 100%;
-  overflow: auto;
   z-index: 101;
 
   ${animateShow}
@@ -86,11 +88,17 @@ export const StyledClose = styled(Button).attrs({
   "aria-label": "Close",
   skin: "transparent",
 })`
-  margin-left: auto;
   margin-right: 0.5rem;
   cursor: pointer;
   color: ${({ theme }) => theme.color.foreground};
   padding: 0.6rem;
+`
+
+export const AfterTitleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
 `
 
 export const Drawer = ({
@@ -98,6 +106,7 @@ export const Drawer = ({
   children,
   trigger,
   title,
+  titleColor,
   afterTitle,
   width,
   open,
@@ -143,11 +152,15 @@ export const Drawer = ({
             <Panel.Header
               title={title}
               afterTitle={afterTitle}
+              titleColor={titleColor}
               {...(withCloseButton && {
                 afterTitle: (
-                  <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
-                    <XIcon size={16} weight="bold" />
-                  </StyledClose>
+                  <AfterTitleContainer>
+                    {afterTitle}
+                    <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+                      <XIcon size={16} weight="bold" />
+                    </StyledClose>
+                  </AfterTitleContainer>
                 ),
               })}
             />

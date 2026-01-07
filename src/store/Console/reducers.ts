@@ -29,6 +29,7 @@ export const initialState: ConsoleStateShape = {
   activeSidebar: undefined,
   activeBottomPanel: "zeroState",
   imageToZoom: undefined,
+  tableDetailsTarget: null,
 }
 
 const _console = (
@@ -61,6 +62,13 @@ const _console = (
       return {
         ...state,
         imageToZoom: action.payload,
+      }
+    }
+
+    case ConsoleAT.SET_TABLE_DETAILS_TARGET: {
+      return {
+        ...state,
+        tableDetailsTarget: action.payload,
       }
     }
 

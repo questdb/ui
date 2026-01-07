@@ -27,6 +27,7 @@ import {
   ImageToZoom,
   Sidebar,
   BottomPanel,
+  TableDetailsTarget,
 } from "./types"
 
 const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
@@ -48,9 +49,15 @@ const toggleSideMenu = (): ConsoleAction => ({
   type: ConsoleAT.TOGGLE_SIDE_MENU,
 })
 
+const setTableDetailsTarget = (target: TableDetailsTarget): ConsoleAction => ({
+  payload: target,
+  type: ConsoleAT.SET_TABLE_DETAILS_TARGET,
+})
+
 export default {
   toggleSideMenu,
   setActiveSidebar,
   setActiveBottomPanel,
   setImageToZoom,
+  setTableDetailsTarget,
 }

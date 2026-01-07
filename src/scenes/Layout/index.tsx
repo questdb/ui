@@ -40,6 +40,7 @@ import { Help } from "./help"
 import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
 import { AIChatButton } from "./AIChatButton"
+import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
 
 import "allotment/dist/style.css"
 
@@ -116,6 +117,7 @@ const Layout = () => {
                 <News />
                 <CreateTableDialog />
               </Sidebar>
+              <TableDetailsDrawer />
             </Root>
 
             <SideMenu />
