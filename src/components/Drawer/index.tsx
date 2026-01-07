@@ -14,6 +14,7 @@ type DrawerProps = {
   mode?: "modal" | "side"
   children: React.ReactNode
   title?: React.ReactNode
+  titleColor?: string
   afterTitle?: React.ReactNode
   trigger: React.ReactNode
   width?: string
@@ -87,11 +88,17 @@ export const StyledClose = styled(Button).attrs({
   "aria-label": "Close",
   skin: "transparent",
 })`
-  margin-left: auto;
   margin-right: 0.5rem;
   cursor: pointer;
   color: ${({ theme }) => theme.color.foreground};
   padding: 0.6rem;
+`
+
+export const AfterTitleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
 `
 
 export const Drawer = ({
@@ -99,6 +106,7 @@ export const Drawer = ({
   children,
   trigger,
   title,
+  titleColor,
   afterTitle,
   width,
   open,
@@ -144,11 +152,15 @@ export const Drawer = ({
             <Panel.Header
               title={title}
               afterTitle={afterTitle}
+              titleColor={titleColor}
               {...(withCloseButton && {
                 afterTitle: (
-                  <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
-                    <XIcon size={16} weight="bold" />
-                  </StyledClose>
+                  <AfterTitleContainer>
+                    {afterTitle}
+                    <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+                      <XIcon size={16} weight="bold" />
+                    </StyledClose>
+                  </AfterTitleContainer>
                 ),
               })}
             />

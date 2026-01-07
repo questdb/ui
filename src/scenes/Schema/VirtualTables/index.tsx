@@ -66,7 +66,6 @@ import { AISparkle } from "../../../components/AISparkle"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
-  walTables?: QuestDB.WalTable[]
   materializedViews?: QuestDB.MaterializedView[]
   filterSuspendedOnly: boolean
   state: State
@@ -100,7 +99,6 @@ export type FlattenedTreeItem = {
   table?: QuestDB.Table
   column?: TreeColumn
   matViewData?: QuestDB.MaterializedView
-  walTableData?: QuestDB.WalTable
   parent?: string
   isExpanded?: boolean
   isLoading?: boolean
@@ -172,7 +170,6 @@ const Loading = () => {
 
 const VirtualTables: FC<VirtualTablesProps> = ({
   tables,
-  walTables,
   materializedViews,
   filterSuspendedOnly,
   state,
@@ -234,8 +231,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               col.column_name.toLowerCase().includes(normalizedQuery),
             )
           const shownIfFilteredSuspendedOnly = filterSuspendedOnly
-            ? table.walEnabled &&
-              walTables?.find((t) => t.name === table.table_name)?.suspended
+            ? table.walEnabled && table.table_suspended
             : true
           const shownIfFilteredWithQuery = tableNameMatches || columnMatches
 
@@ -255,7 +251,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()),
         ),
       )
-  }, [tables, query, filterSuspendedOnly, walTables, allColumns])
+  }, [tables, query, filterSuspendedOnly, allColumns])
 
   const flattenedItems = useMemo(() => {
     return Object.values(schemaTree).reduce((acc, node) => {
@@ -713,12 +709,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                             `Materialized view is invalid${item.matViewData?.invalidation_reason && `: ${item.matViewData?.invalidation_reason}`}`,
                           ]
                         : []),
-                      ...(item.walTableData?.suspended ? [`Suspended`] : []),
+                      ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
-                  {item.walTableData?.suspended && (
+                  {item.table?.table_suspended && (
                     <SuspensionDialog
-                      walTableData={item.walTableData}
+                      tableName={item.name}
                       kind={item.kind}
                       open={openedSuspensionDialog === item.id}
                       onOpenChange={(isOpen) => {
@@ -762,11 +758,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 <MenuItem
                   data-hook="table-context-menu-resume-wal"
                   onClick={() =>
-                    item.walTableData?.suspended &&
+                    item.table?.table_suspended &&
                     setTimeout(() => setOpenedSuspensionDialog(item.id))
                   }
                   icon={<Restart size={16} />}
-                  disabled={!item.walTableData?.suspended}
+                  disabled={!item.table?.table_suspended}
                 >
                   Resume WAL
                 </MenuItem>
@@ -824,7 +820,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               TABLES_GROUP_KEY,
               false,
               materializedViews,
-              walTables,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -854,7 +849,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               MATVIEWS_GROUP_KEY,
               true,
               materializedViews,
-              walTables,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -874,14 +868,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       fetchedSymbolsRef.current.clear()
       setSchemaTree(newTree)
     }
-  }, [
-    state.view,
-    regularTables,
-    matViewTables,
-    materializedViews,
-    walTables,
-    allColumns,
-  ])
+  }, [state.view, regularTables, matViewTables, materializedViews, allColumns])
 
   useEffect(() => {
     symbolColumnDetailsRef.current.clear()
