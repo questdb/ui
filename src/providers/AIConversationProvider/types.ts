@@ -13,7 +13,7 @@ export type TokenUsage = {
 
 export type SchemaDisplayData = {
   tableName: string
-  isMatView: boolean
+  kind: "table" | "matview" | "view"
   partitionBy?: PartitionBy
   walEnabled?: boolean
   designatedTimestamp?: string

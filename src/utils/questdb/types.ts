@@ -180,6 +180,8 @@ export type ValidateQueryResult =
 
 export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
+export type TableType = "T" | "M" | "V" // Table | MaterializedView | View
+
 export type Table = {
   id: number
   table_name: string
@@ -189,7 +191,17 @@ export type Table = {
   dedup: boolean
   ttlValue: number
   ttlUnit: string
-  matView: boolean
+  matView?: boolean // Optional for backward compatibility with older servers
+  table_type?: TableType // Optional for backward compatibility with older servers
+}
+
+export type View = {
+  view_name: string
+  view_sql: string
+  view_table_dir_name: string
+  invalidation_reason: string
+  view_status: "valid" | "invalid"
+  view_status_update_time: string
 }
 
 export type Partition = {

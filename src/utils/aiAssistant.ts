@@ -171,7 +171,7 @@ const ExplainTableSchemaFormat: ResponseTextConfig = {
           },
         },
         storage_details: {
-          type: "array",
+          type: ["array", "null"],
           items: { type: "string" },
         },
       },
@@ -353,7 +353,7 @@ export function isAiAssistantError(
 
 export function createModelToolsClient(
   questClient: Client,
-  tables?: Array<{ table_name: string; matView: boolean }>,
+  tables?: Array<{ table_name: string; matView?: boolean }>,
 ): ModelToolsClient {
   return {
     async validateQuery(
@@ -493,25 +493,25 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
 export const getExplainSchemaPrompt = (
   tableName: string,
   schema: string,
-  isMatView: boolean,
+  kindLabel: string,
 ) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
-Briefly explain the following ${isMatView ? "materialized view" : "table"} schema in detail. Include:
-- The purpose of the ${isMatView ? "materialized view" : "table"}
+Briefly explain the following ${kindLabel} schema in detail. Include:
+- The purpose of the ${kindLabel}
 - What each column represents and its data type
 - Any important properties like WAL enablement, partitioning strategy, designated timestamps
 - Any performance or storage considerations
 
-${isMatView ? "Materialized View" : "Table"} Name: ${tableName}
+${kindLabel} Name: ${tableName}
 
 Schema:
 \`\`\`sql
 ${schema}
 \`\`\`
 
-Provide a short explanation that helps developers understand how to use this ${isMatView ? "materialized view" : "table"}.
+Provide a short explanation that helps developers understand how to use this ${kindLabel}.
 
 Return a JSON string with the following structure:
-{ "explanation": "The purpose of the table/materialized view", "columns": [ { "name": "Column Name", "description": "Column Description", "data_type": "Data Type" } ], "storage_details": ["Storage detail 1", "Storage detail 2"] }`
+{ "explanation": "The purpose of the table/materialized view/view", "columns": [ { "name": "Column Name", "description": "Column Description", "data_type": "Data Type" } ], "storage_details": ["Storage detail 1", "Storage detail 2"] | "null" for views }`
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
@@ -1182,14 +1182,14 @@ const executeAnthropicFlow = async <T>({
 export const explainTableSchema = async ({
   tableName,
   schema,
-  isMatView,
+  kindLabel,
   settings,
   setStatus,
   abortSignal,
 }: {
   tableName: string
   schema: string
-  isMatView: boolean
+  kindLabel: string
   settings: ActiveProviderSettings
   setStatus: StatusCallback
   abortSignal?: AbortSignal
@@ -1215,11 +1215,11 @@ export const explainTableSchema = async ({
       const clients = createProviderClients(settings)
 
       if (clients.provider === "openai") {
-        const prompt = getExplainSchemaPrompt(tableName, schema, isMatView)
+        const prompt = getExplainSchemaPrompt(tableName, schema, kindLabel)
 
         const formattingOutput = await clients.openai.responses.parse({
           ...getModelProps(settings.model),
-          instructions: getExplainSchemaPrompt(tableName, schema, isMatView),
+          instructions: getExplainSchemaPrompt(tableName, schema, kindLabel),
           input: [{ role: "user", content: prompt }],
           text: ExplainTableSchemaFormat,
         })
@@ -1253,7 +1253,7 @@ export const explainTableSchema = async ({
         messages: [
           {
             role: "user" as const,
-            content: getExplainSchemaPrompt(tableName, schema, isMatView),
+            content: getExplainSchemaPrompt(tableName, schema, kindLabel),
           },
         ],
         temperature: 0.3,
