@@ -110,7 +110,11 @@ export const TableIcon: FC<TableIconProps> = ({
     : "Legacy table format, without WAL (write-ahead-log). This table format should only be used when table does not have timestamp column and generally not a time series. These tables are not replicated and could be slower to ingress data into."
 
   if (kind === "view") {
-    return <ViewIcon height="14px" width="14px" />
+    return (
+      <Root data-hook="table-icon">
+        <ViewIcon height="14px" width="14px" />
+      </Root>
+    )
   }
 
   if (kind === "matview") {

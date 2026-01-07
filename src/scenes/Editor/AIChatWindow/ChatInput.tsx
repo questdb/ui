@@ -234,6 +234,21 @@ const truncateText = (text: string, maxLength: number = 30): string => {
   return trimmed.slice(0, maxLength) + "..."
 }
 
+const getTableKind = (
+  tableType: "T" | "M" | "V",
+): "table" | "matview" | "view" => {
+  switch (tableType) {
+    case "T":
+      return "table"
+    case "M":
+      return "matview"
+    case "V":
+      return "view"
+    default:
+      return "table"
+  }
+}
+
 export type ChatInputHandle = {
   focus: () => void
 }
@@ -352,7 +367,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   <ContextBadgeIcon>
                     {tableData ? (
                       <TableIcon
-                        kind={tableData.matView ? "matview" : "table"}
+                        kind={getTableKind(tableData.table_type ?? "T")}
                         partitionBy={tableData.partitionBy}
                         walEnabled={tableData.walEnabled}
                         designatedTimestamp={tableData.designatedTimestamp}

@@ -1218,6 +1218,9 @@ describe("ai assistant", () => {
 
       // Then - New tab should be created (2 tabs total now)
       cy.getEditorTabs().should("have.length", 2)
+      cy.focused()
+        .should("have.class", "monaco-mouse-cursor-text")
+        .should("not.be.disabled")
 
       // When - Create a query with chat in Tab 2
       cy.typeQuery("SELECT 'tab2_query';")

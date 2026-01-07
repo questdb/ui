@@ -160,6 +160,19 @@ const Loader = styled(Loader3)`
   ${spinAnimation};
 `
 
+export const getTableKindLabel = (kind: "table" | "matview" | "view") => {
+  switch (kind) {
+    case "table":
+      return "Table"
+    case "matview":
+      return "Materialized view"
+    case "view":
+      return "View"
+    default:
+      return ""
+  }
+}
+
 const Loading = () => {
   const [loaderShown, setLoaderShown] = useState(false)
   // Show the loader only for delayed fetching process
@@ -243,7 +256,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
             // Use table_type to categorize: 'T' = table, 'M' = matview, 'V' = view
             // Default to 'T' (table) for backward compatibility with older servers
-            const tableType = table.table_type ?? "T"
+            const tableType =
+              (table.table_type as "T" | "M" | "V" | undefined) ?? "T"
             const categoryIndex =
               tableType === "M" ? 1 : tableType === "V" ? 2 : 0
             acc[categoryIndex].push({
@@ -311,7 +325,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const handleExplainSchema = async (item: FlattenedTreeItem) => {
     const tableName = item.name
     const kind = item.kind as "table" | "matview" | "view"
-    const isMatView = kind === "matview"
     const tableId = item.table?.id
 
     if (!canUse) {
@@ -345,7 +358,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       conversation.id,
       `${tableName} schema explanation`,
     )
-    const userMessage = getExplainSchemaPrompt(tableName, schema, isMatView)
+    const userMessage = getExplainSchemaPrompt(
+      tableName,
+      schema,
+      getTableKindLabel(kind),
+    )
     await openChatWindow(conversation.id)
 
     addMessage({
@@ -355,7 +372,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       displayType: "schema_explain_request",
       displaySchemaData: {
         tableName,
-        isMatView,
+        kind,
         partitionBy: item.partitionBy,
         walEnabled: item.walEnabled,
         designatedTimestamp: item.designatedTimestamp,
@@ -388,7 +405,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     const response = await explainTableSchema({
       tableName,
       schema,
-      isMatView,
+      kindLabel: getTableKindLabel(kind),
       settings,
       setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
         setStatus(
@@ -749,7 +766,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   {canSuspend && item.walTableData?.suspended && (
                     <SuspensionDialog
                       walTableData={item.walTableData}
-                      kind={item.kind as "table" | "matview"}
+                      kind={item.kind}
                       open={openedSuspensionDialog === item.id}
                       onOpenChange={(isOpen) => {
                         setOpenedSuspensionDialog(isOpen ? item.id : null)

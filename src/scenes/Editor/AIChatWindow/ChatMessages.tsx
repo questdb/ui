@@ -788,7 +788,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <UserRequestContent>
                   <SchemaNameDisplay>
                     <TableIcon
-                      kind={schemaData.isMatView ? "matview" : "table"}
+                      kind={schemaData.kind}
                       partitionBy={schemaData.partitionBy}
                       walEnabled={schemaData.walEnabled}
                       designatedTimestamp={schemaData.designatedTimestamp}
