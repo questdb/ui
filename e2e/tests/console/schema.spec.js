@@ -14,6 +14,8 @@ const searchColumnTables = ["contains_magicword", "contains_simpleword"]
 
 const materializedViews = ["btc_trades_mv"]
 
+const views = ["btc_trades_view"]
+
 describe("questdb schema with working tables", () => {
   before(() => {
     cy.loadConsoleWithAuth()
@@ -185,6 +187,9 @@ describe("keyboard navigation", () => {
     materializedViews.forEach((mv) => {
       cy.createMaterializedView(mv)
     })
+    views.forEach((view) => {
+      cy.createView(view)
+    })
     cy.refreshSchema()
   })
 
@@ -305,8 +310,7 @@ describe("keyboard navigation", () => {
     cy.realPress("Home")
     cy.focused().should("contain", `Tables (${tables.length})`)
     cy.realPress("End")
-    const lastMatView = materializedViews[materializedViews.length - 1]
-    cy.focused().should("contain", lastMatView)
+    cy.focused().should("contain", `Views (${views.length})`)
   })
 
   after(() => {
@@ -471,6 +475,66 @@ describe("questdb schema in read-only mode", () => {
 
     cy.getByDataHook("create-table-panel-button").click()
     cy.getByDataHook("create-table-panel").should("not.exist")
+  })
+})
+
+describe("views", () => {
+  before(() => {
+    cy.loadConsoleWithAuth()
+    tables.forEach((table) => {
+      cy.createTable(table)
+    })
+    views.forEach((view) => {
+      cy.createView(view)
+    })
+  })
+
+  beforeEach(() => {
+    cy.loadConsoleWithAuth()
+  })
+
+  afterEach(() => {
+    cy.collapseTables()
+    cy.collapseMatViews()
+  })
+
+  it("should show the views and columns", () => {
+    cy.getByDataHook("schema-folder-title").should(
+      "contain",
+      `Views (${views.length})`,
+    )
+    cy.getByDataHook("expand-views").click()
+    cy.realPress("ArrowRight")
+    cy.realPress("ArrowDown")
+
+    cy.focused().should("contain", "btc_trades_view")
+    cy.realPress("ArrowRight")
+    cy.realPress("ArrowDown")
+    cy.focused().should("contain", "Columns")
+    cy.realPress("ArrowRight")
+    cy.realPress("ArrowDown")
+    cy.focused().should("contain", "symbol")
+  })
+
+  it("should show the view as invalid if base table is dropped", () => {
+    cy.dropTable("btc_trades")
+    cy.refreshSchema()
+    cy.expandViews()
+    cy.getByDataHook("schema-view-title").should("contain", "btc_trades_view")
+    cy.getByDataHook("schema-row-error-icon").trigger("mouseover")
+    cy.getByDataHook("tooltip")
+      .contains("View is invalid: table does not exist [table=btc_trades]")
+      .should("be.visible")
+  })
+
+  after(() => {
+    cy.loadConsoleWithAuth()
+    tables.forEach((table) => {
+      cy.dropTableIfExists(table)
+    })
+    views.forEach((view) => {
+      cy.dropViewIfExists(view)
+    })
   })
 })
 

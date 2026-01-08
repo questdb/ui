@@ -1218,6 +1218,9 @@ describe("ai assistant", () => {
 
       // Then - New tab should be created (2 tabs total now)
       cy.getEditorTabs().should("have.length", 2)
+      cy.focused()
+        .should("have.class", "monaco-mouse-cursor-text")
+        .should("not.be.disabled")
 
       // When - Create a query with chat in Tab 2
       cy.typeQuery("SELECT 'tab2_query';")
@@ -1271,17 +1274,21 @@ describe("ai assistant", () => {
   })
 
   describe("explain schema", () => {
-    beforeEach(() => {
-      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+    before(() => {
+      cy.loadConsoleWithAuth()
       cy.typeQuery(
         "CREATE TABLE IF NOT EXISTS test_trades (symbol SYMBOL, price DOUBLE, ts TIMESTAMP) TIMESTAMP(ts) PARTITION BY DAY WAL;",
       )
       cy.clickRunQuery()
+      cy.refreshSchema()
+    })
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable("test_trades")
     })
 
-    afterEach(() => {
-      cy.typeQuery("DROP TABLE IF EXISTS test_trades;")
-      cy.clickRunQuery()
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
 
     it("should show processing status and display valid schema explanation", () => {
