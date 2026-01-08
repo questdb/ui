@@ -81,7 +81,3 @@ jobs:
           name: cypress-screenshots
           path: e2e/screenshots
           if-no-files-found: ignore
-
-      - name: Stop QuestDB
-        if: success() || failure()
-        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
