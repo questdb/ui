@@ -2140,8 +2140,8 @@ Syntax: \`avg(column)\`
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 3)
 
-      cy.getByDataHook("chat-message-assistant")
-        .contains("This is 3")
+      cy.getByDataHook("inline-diff-container")
+        .eq(2)
         .getByDataHook("message-action-accept")
         .should("be.visible")
 
