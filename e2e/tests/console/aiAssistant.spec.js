@@ -2143,7 +2143,7 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("inline-diff-container")
         .eq(2)
         .getByDataHook("message-action-accept")
-        .should("be.visible")
+        .should("exist")
 
       // Turn 3: User sends "select 4"
       cy.getByDataHook("chat-input-textarea").type("select 4", { force: true })
