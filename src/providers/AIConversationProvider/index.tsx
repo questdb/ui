@@ -807,7 +807,9 @@ export const AIConversationProvider: React.FC<{
       editorRef.current.revealPositionNearTop(startPosition)
 
       setTimeout(() => {
-        model.deltaDecorations(decorationId, [])
+        if (!model.isDisposed()) {
+          model.deltaDecorations(decorationId, [])
+        }
       }, 2000)
 
       const newQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
