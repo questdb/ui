@@ -33,17 +33,6 @@ const hashString = (str) => {
   return new Uint32Array([hash])[0].toString(36)
 }
 
-const escapeHtml = (text) => {
-  const map = {
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  }
-
-  return text.replace(/[<>"']/g, (m) => map[m])
-}
-
 export function grid(rootElement, _paginationFn, id) {
   const defaults = {
     gridID: "qdb-grid",
@@ -963,9 +952,9 @@ export function grid(rootElement, _paginationFn, id) {
       const hType = document.createElement("span")
       addClass(hType, "qg-header-type")
       if (c.type !== "ARRAY") {
-        hType.innerHTML = c.type.toLowerCase()
+        hType.textContent = c.type.toLowerCase()
       } else if (c.dim > 2) {
-        hType.innerHTML =
+        hType.textContent =
           c.type.toUpperCase() +
           "(" +
           c.elemType.toUpperCase() +
@@ -973,16 +962,16 @@ export function grid(rootElement, _paginationFn, id) {
           c.dim +
           ")"
       } else {
-        let html = c.elemType.toLowerCase() + "[]"
+        let typeText = c.elemType.toLowerCase() + "[]"
         if (c.dim > 1) {
-          html += "[]"
+          typeText += "[]"
         }
-        hType.innerHTML = html
+        hType.textContent = typeText
       }
 
       const hName = document.createElement("span")
       addClass(hName, "qg-header-name")
-      hName.innerHTML = c.name
+      hName.textContent = c.name
 
       const hysteresis = document.createElement("div")
       addClass(hysteresis, "qg-col-resize-hysteresis")
@@ -1106,14 +1095,12 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function getArrayString(cellData) {
-    return escapeHtml(
-      JSON.stringify(cellData, (_, val) => {
-        if (Number.isInteger(val)) {
-          return val.toString() + ".0"
-        }
-        return val
-      }).replace(/"/g, ""),
-    )
+    return JSON.stringify(cellData, (_, val) => {
+      if (Number.isInteger(val)) {
+        return val.toString() + ".0"
+      }
+      return val
+    }).replace(/"/g, "")
   }
 
   function getDisplayedCellValue(column, cellData, columnWidth = null) {
@@ -1126,10 +1113,10 @@ export function grid(rootElement, _paginationFn, id) {
     if (!isArray) {
       if (containsPrecision) {
         return Number.isInteger(cellData)
-          ? escapeHtml(cellData.toString() + ".0")
-          : escapeHtml(cellData.toString())
+          ? cellData.toString() + ".0"
+          : cellData.toString()
       }
-      return escapeHtml(cellData.toString())
+      return cellData.toString()
     }
 
     const arrayString = getArrayString(cellData)
@@ -1166,7 +1153,7 @@ export function grid(rootElement, _paginationFn, id) {
     if (cellData !== null) {
       const layoutEntry = getLayoutEntry()
       const columnWidth = layoutEntry.deviants[column.name] ?? null
-      cell.innerHTML = getDisplayedCellValue(column, cellData, columnWidth)
+      cell.textContent = getDisplayedCellValue(column, cellData, columnWidth)
 
       cell.classList.remove("qg-null")
 
@@ -1174,7 +1161,7 @@ export function grid(rootElement, _paginationFn, id) {
         cell.classList.add("qg-arr")
       }
     } else {
-      cell.innerHTML = "null"
+      cell.textContent = "null"
       cell.classList.add("qg-null")
     }
   }
@@ -1769,7 +1756,7 @@ export function grid(rootElement, _paginationFn, id) {
       }
       addClass(focusedCell, "qg-c-active-pulse")
 
-      let valueToCopy = focusedCell.innerHTML
+      let valueToCopy = focusedCell.textContent
 
       if (focusedCell.classList.contains("qg-arr")) {
         const rowIndex = focusedCell.parentElement.rowIndex

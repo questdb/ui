@@ -38,6 +38,7 @@ import eChartsMacarons from "./utils/macarons"
 import { arrayEquals } from "./array-equals"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { escapeHtml } from "../../utils/escapeHtml"
 import * as QuestDB from "../../utils/questdb"
 import { AnyIfEmpty } from "react-redux"
 import { request } from "http"
@@ -290,12 +291,12 @@ export function quickVis(
     const x = []
     const columns = data.columns
     for (let i = 0; i < columns.length; i++) {
-      x[i] = { text: columns[i].name, value: columns[i].name }
+      x[i] = { text: escapeHtml(columns[i].name), value: columns[i].name }
     }
     xAxisPicker.setData(x)
     yAxisPicker.setData(x)
 
-    yAxisPicker.set(x.slice(1).map((item) => item.text))
+    yAxisPicker.set(x.slice(1).map((item) => item.value))
 
     // stash query text so that we can use this later to server for chart column values
     query = data.query
