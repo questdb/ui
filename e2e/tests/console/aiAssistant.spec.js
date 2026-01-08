@@ -1276,10 +1276,7 @@ describe("ai assistant", () => {
   describe("explain schema", () => {
     before(() => {
       cy.loadConsoleWithAuth()
-      cy.typeQuery(
-        "CREATE TABLE IF NOT EXISTS test_trades (symbol SYMBOL, price DOUBLE, ts TIMESTAMP) TIMESTAMP(ts) PARTITION BY DAY WAL;",
-      )
-      cy.clickRunQuery()
+      cy.createTable("test_trades")
       cy.refreshSchema()
     })
     after(() => {

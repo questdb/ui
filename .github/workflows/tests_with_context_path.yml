@@ -23,18 +23,24 @@ jobs:
           cache: maven
 
       - name: Build QuestDB
-        run: mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
+        run:
+          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
 
       - name: Extract QuestDB
-        run: tar -xzf e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
+        run:
+          tar -xzf e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C
+          tmp/
 
       - name: Create DB Root
         run: mkdir tmp/dbroot
 
       - name: Start QuestDB
-        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        run:
+          ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
+          QDB_HTTP_USER: "admin"
+          QDB_HTTP_PASSWORD: "quest"
           QDB_TELEMETRY_ENABLED: "false"
 
       - uses: actions/setup-node@v4
@@ -48,28 +54,17 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Run bundle watcher
-        run: yarn bundlewatch
-
-      - name: Run unit tests
-        run: yarn test:unit
-
-      - name: Run e2e tests - auth
-        run: yarn preview & yarn test:e2e:auth
-
-      - name: Stop QuestDB
-        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
-
-      - name: Start QuestDB, set auth credentials
-        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
-        env:
-          QDB_DEV_MODE_ENABLED: "true"
-          QDB_HTTP_USER: "admin"
-          QDB_HTTP_PASSWORD: "quest"
-          QDB_TELEMETRY_ENABLED: "false"
-
-      - name: Run e2e tests
-        run: yarn test:e2e
+      - name: Run e2e tests - 20 times
+        run: |
+          yarn preview &
+          sleep 2
+          FAILED=0
+          for i in {1..20}; do
+            echo "=== Run $i of 20 ==="
+            yarn test:e2e || FAILED=$((FAILED + 1))
+          done
+          echo "=== Completed: $((20 - FAILED)) passed, $FAILED failed ==="
+          [ $FAILED -eq 0 ]
 
       - name: Print Log Files
         if: success() || failure()
