@@ -55,13 +55,10 @@ jobs:
         run: |
           yarn preview &
           sleep 2
-          FAILED=0
           for i in {1..20}; do
             echo "=== Run $i of 20 ==="
-            yarn test:e2e || FAILED=$((FAILED + 1))
+            yarn test:e2e
           done
-          echo "=== Completed: $((20 - FAILED)) passed, $FAILED failed ==="
-          [ $FAILED -eq 0 ]
 
       - name: Stop QuestDB
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
