@@ -21,6 +21,9 @@ and this project adheres to
 ### Added
 - views support [#512](https://github.com/questdb/ui/pull/512)
 
+### Fixed
+- XSS security vulnerability [#519](https://github.com/questdb/ui/pull/519)
+
 
 ## 1.1.9 - 2026.01.02
 ### Added
