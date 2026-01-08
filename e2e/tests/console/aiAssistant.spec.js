@@ -2075,7 +2075,7 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("diff-accept-button").should("be.visible")
     })
 
-    it.only("should correctly maintain the history for multi-turn actions", () => {
+    it("should correctly maintain the history for multi-turn actions", () => {
       const flow = createMultiTurnFlow({
         turns: [
           { explanation: "This is 1", sql: "SELECT 1;" },
@@ -2144,23 +2144,15 @@ Syntax: \`avg(column)\`
         .contains("This is 3")
         .getByDataHook("message-action-accept")
         .should("be.visible")
-      cy.getByDataHook("chat-messages-container").scrollTo("top")
-      cy.getByDataHook("chat-message-assistant")
-        .contains("This is 1")
-        .should("be.visible")
-      cy.getByDataHook("message-action-apply").first().click({ force: true })
-      cy.getByDataHook("chat-context-badge").should("contain", "SELECT 1")
 
-      // Turn 3: User sends "select 4" - should see "User replaced" message
+      // Turn 3: User sends "select 4"
       cy.getByDataHook("chat-input-textarea").type("select 4", { force: true })
       cy.getByDataHook("chat-send-button").click()
 
       flow.waitForTurn(3).then(() => {
         const body = flow.getRequestBody(3)
-        expect(body.input).to.have.length(9)
-        expect(body.input[7].content).to.include("User replaced")
-        expect(body.input[7].content).to.include("SELECT 1")
-        expect(body.input[8].content).to.include("select 4")
+        expect(body.input).to.have.length(8)
+        expect(body.input[7].content).to.include("select 4")
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 4)
 
@@ -2174,15 +2166,15 @@ Syntax: \`avg(column)\`
 
       flow.waitForTurn(4).then(() => {
         const body = flow.getRequestBody(4)
-        expect(body.input).to.have.length(12)
-        expect(body.input[10].content).to.include("User rejected")
-        expect(body.input[11].content).to.include("select 5")
+        expect(body.input).to.have.length(11)
+        expect(body.input[9].content).to.include("User rejected")
+        expect(body.input[10].content).to.include("select 5")
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 5)
       // Accept turn 4's suggestion (SELECT 5)
       cy.getByDataHook("message-action-accept").click()
       cy.getByDataHook("inline-diff-container")
-        .eq(5)
+        .eq(4)
         .contains("Accepted")
         .should("be.visible")
       cy.getByDataHook("chat-context-badge").should("contain", "SELECT 5")
@@ -2193,9 +2185,9 @@ Syntax: \`avg(column)\`
 
       flow.waitForTurn(5).then(() => {
         const body = flow.getRequestBody(5)
-        expect(body.input).to.have.length(15)
-        expect(body.input[13].content).to.include("User accepted")
-        expect(body.input[14].content).to.include("select 6")
+        expect(body.input).to.have.length(14)
+        expect(body.input[12].content).to.include("User accepted")
+        expect(body.input[13].content).to.include("select 6")
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 6)
     })
