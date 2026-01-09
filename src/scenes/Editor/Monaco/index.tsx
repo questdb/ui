@@ -444,6 +444,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         endColumn: endPosition.column,
       })
     } else {
+      const queryInCursor = getQueryFromCursor(editor)
+      if (
+        queryInCursor &&
+        createQueryKeyFromRequest(editor, queryInCursor) ===
+          createQueryKeyFromRequest(editor, query)
+      ) {
+        return
+      }
       editor.setPosition({
         lineNumber: query.row + 1,
         column: query.column,

@@ -63,6 +63,40 @@ describe("run query", () => {
     cy.getGridRow(0).should("contain", "100")
   })
 
+  it.only("should not change cursor position when query run succeeds", () => {
+    cy.typeQuery(
+      "with longseq as (\nselect * from long_sequence(100)\n-- comment",
+    )
+    cy.typeQuery(" select count(*) from longseq;select 1;")
+    cy.clickLine(4)
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+    cy.getGridRow(0).should("contain", "1")
+
+    // go through the start of the second query
+    cy.clickLine(4)
+    for (let i = 0; i < 8; i++) {
+      cy.realPress("ArrowLeft")
+      cy.wait(50)
+    }
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+    cy.getGridRow(0).should("contain", "1")
+
+    // go to the end of first query
+    for (let i = 0; i < 2; i++) {
+      cy.realPress("ArrowLeft")
+      cy.wait(50)
+    }
+
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should(
+      "contain",
+      "with longseq as (",
+    )
+    cy.getGridRow(0).should("contain", "100")
+  })
+
   it("should provide query selection dropdown when multiple queries start from the same line", () => {
     cy.typeQuery("select 1;select 2;select 3;")
     cy.clickRunIconInLine(1)
