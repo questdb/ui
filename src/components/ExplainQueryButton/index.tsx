@@ -66,7 +66,7 @@ export const ExplainQueryButton = ({
     const currentModel = currentModelValue!
     const apiKey = apiKeyValue!
     void (async () => {
-      const fullApiMessage = `Explain this SQL query with 2-4 sentences:\n\n\`\`\`sql\n${queryText}\n\`\`\``
+      const fullApiMessage = `Using your tools when necessary, explain this SQL query in detail.:\n\n\`\`\`sql\n${queryText}\n\`\`\``
 
       addMessage({
         role: "user",

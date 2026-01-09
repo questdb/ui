@@ -1206,16 +1206,34 @@ describe("ai assistant", () => {
 
     it("should move glyph icons when query position changes", () => {
       // Given - Type a query starting at line 1
-      cy.typeQuery("SELECT 1;")
+      cy.typeQuery("DECLARE @myVar := 'shift-this' select @myVar;")
 
       // Then - AI icon should be on line 1
-      cy.getAIIconInLine(1, "noChat").should("be.visible")
+      cy.getAIIconInLine(1, "noChat").should("be.visible").click()
+
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-context-badge").should("be.visible")
+
+      interceptAIChatRequest("openai")
+      cy.getByDataHook("chat-input-textarea").type("Explain this query", {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+      cy.getAIIconInLine(1, "highlight").should("be.visible")
+
+      cy.wait("@openaiChatRequest")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
+      cy.getAIIconInLine(1, "active").should("be.visible")
+
+      cy.getByDataHook("chat-window-close").click()
+      cy.getByDataHook("ai-chat-window").should("not.exist")
 
       // When - Add empty lines before the query (press Home, then Enter twice)
-      cy.get(".monaco-editor textarea").type("{home}{enter}{enter}")
+      cy.typeQuery("{home}{enter}{enter}")
 
       // Then - AI icon should move to line 3
-      cy.getAIIconInLine(3, "noChat").should("be.visible")
+      cy.getAIIconInLine(3, "active").should("be.visible")
 
       // And - Line 1 should not have an AI icon
       cy.get(".glyph-widget-1 .glyph-ai-icon").should("not.exist")
