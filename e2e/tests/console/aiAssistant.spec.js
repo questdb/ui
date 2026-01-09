@@ -1223,7 +1223,9 @@ describe("ai assistant", () => {
       cy.getAIIconInLine(1, "highlight").should("be.visible")
 
       cy.wait("@openaiChatRequest")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
       cy.getAIIconInLine(1, "active").should("be.visible")
+
       cy.getByDataHook("chat-window-close").click()
       cy.getByDataHook("ai-chat-window").should("not.exist")
 
