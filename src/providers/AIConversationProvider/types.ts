@@ -39,6 +39,7 @@ export type ConversationMessage = {
   isAccepted?: boolean
   hideFromUI?: boolean // User messages for accept/reject and compaction result are hidden
   isCompacted?: boolean // When converted to true, we include it in the history for UI, but do not send to the model anymore
+  isStreaming?: boolean // True while content is being streamed
   operationHistory?: OperationHistory
   // Predefined actions (Fix and Explain)
   displayType?: UserMessageDisplayType

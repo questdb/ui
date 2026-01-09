@@ -42,6 +42,7 @@ import {
   normalizeSql,
   generateChatTitle,
   type ActiveProviderSettings,
+  type StreamingCallback,
 } from "../../../utils/aiAssistant"
 import {
   providerForModel,
@@ -461,6 +462,29 @@ const AIChatWindow: React.FC = () => {
       })
     }
 
+    // Streaming callback to update message incrementally
+    // Use setTimeout(0) to yield to the event loop and allow React to render
+    let pendingUpdate: string | null = null
+    let updateScheduled = false
+    const streamingCallback: StreamingCallback = {
+      onTextChunk: (_chunk, accumulated) => {
+        pendingUpdate = accumulated
+        if (!updateScheduled) {
+          updateScheduled = true
+          setTimeout(() => {
+            updateScheduled = false
+            if (pendingUpdate !== null) {
+              updateMessage(conversationId, assistantMessageId, {
+                content: pendingUpdate,
+                explanation: pendingUpdate,
+                isStreaming: true,
+              })
+            }
+          }, 0)
+        }
+      },
+    }
+
     const processResponse = async () => {
       const response = await continueConversation({
         userMessage: userMessageContent,
@@ -480,6 +504,7 @@ const AIChatWindow: React.FC = () => {
             handleStatusUpdate,
           ),
         abortSignal: abortController?.signal,
+        streaming: streamingCallback,
       })
 
       if (isAiAssistantError(response)) {
@@ -489,6 +514,7 @@ const AIChatWindow: React.FC = () => {
             error.type !== "aborted"
               ? error.message
               : "Operation has been cancelled",
+          isStreaming: false,
         })
         return
       }
@@ -508,11 +534,13 @@ const AIChatWindow: React.FC = () => {
         )
       }
 
+      // Final update with complete response and isStreaming: false
       updateMessage(conversationId, assistantMessageId, {
         content: assistantContent,
         ...(hasSQLInResult && { sql: result.sql as string }),
         explanation: result.explanation,
         tokenUsage: result.tokenUsage,
+        isStreaming: false,
       })
     }
 
