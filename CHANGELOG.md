@@ -17,6 +17,11 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.11 - 2026.01.09
+### Fixed
+- declare statements breaking query key parsing [#522](https://github.com/questdb/ui/pull/522)
+
+
 ## 1.1.10 - 2026.01.08
 ### Added
 - views support [#512](https://github.com/questdb/ui/pull/512)
