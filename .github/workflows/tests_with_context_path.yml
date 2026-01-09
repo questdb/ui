@@ -23,16 +23,20 @@ jobs:
           cache: maven
 
       - name: Build QuestDB
-        run: mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
+        run:
+          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
 
       - name: Extract QuestDB
-        run: tar -xzf e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C tmp/
+        run:
+          tar -xzf e2e/questdb/core/target/questdb-*-rt-linux-x86-64.tar.gz -C
+          tmp/
 
       - name: Create DB Root
         run: mkdir tmp/dbroot
 
       - name: Start QuestDB
-        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        run:
+          ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
           QDB_TELEMETRY_ENABLED: "false"
@@ -61,7 +65,8 @@ jobs:
         run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh stop
 
       - name: Start QuestDB, set auth credentials
-        run: ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
+        run:
+          ./tmp/questdb-*-rt-linux-x86-64/bin/questdb.sh start -d ./tmp/dbroot
         env:
           QDB_DEV_MODE_ENABLED: "true"
           QDB_HTTP_USER: "admin"

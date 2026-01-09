@@ -604,7 +604,9 @@ export const EditorProvider: React.FC = ({ children }) => {
     editorRef.current.focus()
 
     setTimeout(() => {
-      finalModel.deltaDecorations(decorationId, [])
+      if (!finalModel.isDisposed()) {
+        finalModel.deltaDecorations(decorationId, [])
+      }
     }, 1000)
 
     // Return the final query key for caller to update conversation state
