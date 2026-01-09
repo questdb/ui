@@ -406,6 +406,21 @@ const MarkdownContent = styled.div`
   }
 `
 
+const cursorBlink = keyframes`
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+`
+
+const StreamingCursor = styled.span`
+  display: inline-block;
+  width: 2px;
+  height: 1.4em;
+  background: ${color("foreground")};
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: ${cursorBlink} 1s infinite;
+`
+
 const DiffContainer = styled(Box)`
   display: flex;
   flex-direction: column;
@@ -1080,8 +1095,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       >
                         {explanation}
                       </ReactMarkdown>
+                      {message.isStreaming && <StreamingCursor data-hook="streaming-cursor" />}
                     </MarkdownContent>
-                    {hasSQLChange && (
+                    {hasSQLChange && !message.isStreaming && (
                       <DiffContainer data-hook="inline-diff-container">
                         <DiffHeader $isExpanded={isExpanded}>
                           <DiffHeaderLeft>

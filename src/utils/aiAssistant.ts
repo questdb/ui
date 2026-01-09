@@ -106,6 +106,10 @@ export type StatusCallback = (
   args?: StatusArgs,
 ) => void
 
+export type StreamingCallback = {
+  onTextChunk: (chunk: string, accumulated: string) => void
+}
+
 type ProviderClients =
   | {
       provider: "anthropic"
@@ -672,6 +676,7 @@ async function handleToolCalls(
   responseFormat: ResponseTextConfig,
   abortSignal?: AbortSignal,
   accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
+  streaming?: StreamingCallback,
 ): Promise<AnthropicToolCallResult | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
@@ -741,10 +746,15 @@ async function handleToolCalls(
     }
   }
 
-  const followUpMessage = await createAnthropicMessage(
-    anthropic,
-    followUpParams,
-  )
+  // Use streaming for follow-up calls if callback provided
+  const followUpMessage = streaming
+    ? await createAnthropicMessageStreaming(
+        anthropic,
+        followUpParams,
+        streaming,
+        abortSignal,
+      )
+    : await createAnthropicMessage(anthropic, followUpParams)
 
   // Accumulate tokens from this response
   const newAccumulatedTokens: TokenUsage = {
@@ -767,6 +777,7 @@ async function handleToolCalls(
       responseFormat,
       abortSignal,
       newAccumulatedTokens,
+      streaming,
     )
   }
 
@@ -774,6 +785,48 @@ async function handleToolCalls(
     message: followUpMessage,
     accumulatedTokens: newAccumulatedTokens,
   }
+}
+
+async function createOpenAIResponseStreaming(
+  openai: OpenAI,
+  params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+  streamCallback: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<OpenAI.Responses.Response> {
+  let accumulatedText = ""
+  let lastExplanation = ""
+  let finalResponse: OpenAI.Responses.Response | null = null
+
+  const stream = await openai.responses.create({
+    ...params,
+    stream: true,
+  } as OpenAI.Responses.ResponseCreateParamsStreaming)
+
+  for await (const event of stream) {
+    if (abortSignal?.aborted) {
+      break
+    }
+    // Handle text delta events
+    if (event.type === "response.output_text.delta") {
+      accumulatedText += event.delta
+      const explanation = extractPartialExplanation(accumulatedText)
+      if (explanation !== lastExplanation) {
+        const chunk = explanation.slice(lastExplanation.length)
+        lastExplanation = explanation
+        streamCallback.onTextChunk(chunk, explanation)
+      }
+    }
+    // Capture the complete response when available
+    if (event.type === "response.completed") {
+      finalResponse = event.response
+    }
+  }
+
+  if (!finalResponse) {
+    throw new Error("No response received from stream")
+  }
+
+  return finalResponse
 }
 
 const extractOpenAIToolCalls = (
@@ -822,6 +875,26 @@ const safeJsonParse = <T>(text: string): T | object => {
   } catch {
     return {}
   }
+}
+
+/**
+ * Extracts partial explanation text from incomplete JSON during streaming.
+ * Handles JSON escape sequences and partial content.
+ */
+function extractPartialExplanation(partialJson: string): string {
+  // Match "explanation": "content... where content may be incomplete
+  const explanationMatch = partialJson.match(/"explanation"\s*:\s*"((?:[^"\\]|\\.)*)/)
+  if (!explanationMatch) {
+    return ""
+  }
+
+  // Unescape JSON string escape sequences
+  return explanationMatch[1]
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\")
 }
 
 const tryWithRetries = async <T>(
@@ -887,6 +960,7 @@ interface ExecuteAnthropicFlowParams<T> {
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
+  streaming?: StreamingCallback
 }
 
 interface ExecuteOpenAIFlowParams<T> {
@@ -896,6 +970,7 @@ interface ExecuteOpenAIFlowParams<T> {
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
+  streaming?: StreamingCallback
 }
 
 const executeOpenAIFlow = async <T>({
@@ -905,6 +980,7 @@ const executeOpenAIFlow = async <T>({
   modelToolsClient,
   setStatus,
   abortSignal,
+  streaming,
 }: ExecuteOpenAIFlowParams<T>): Promise<T | AiAssistantAPIError> => {
   let input: OpenAI.Responses.ResponseInput = []
   if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -933,13 +1009,23 @@ const executeOpenAIFlow = async <T>({
   let totalInputTokens = 0
   let totalOutputTokens = 0
 
-  let lastResponse = await openai.responses.create({
+  const requestParams = {
     ...getModelProps(model),
     instructions: config.systemInstructions,
     input,
     tools: openaiTools,
     text: config.responseFormat,
-  } as OpenAI.Responses.ResponseCreateParamsNonStreaming)
+  } as OpenAI.Responses.ResponseCreateParamsNonStreaming
+
+  // Use streaming for the initial call if callback provided
+  let lastResponse = streaming
+    ? await createOpenAIResponseStreaming(
+        openai,
+        requestParams,
+        streaming,
+        abortSignal,
+      )
+    : await openai.responses.create(requestParams)
   input = [...input, ...lastResponse.output]
 
   // Add tokens from first response
@@ -984,13 +1070,23 @@ const executeOpenAIFlow = async <T>({
           "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**",
       })
     }
-    lastResponse = await openai.responses.create({
+    const loopRequestParams = {
       ...getModelProps(model),
       instructions: config.systemInstructions,
       input,
       tools: openaiTools,
       text: config.responseFormat,
-    })
+    } as OpenAI.Responses.ResponseCreateParamsNonStreaming
+
+    // Use streaming for follow-up calls if callback provided
+    lastResponse = streaming
+      ? await createOpenAIResponseStreaming(
+          openai,
+          loopRequestParams,
+          streaming,
+          abortSignal,
+        )
+      : await openai.responses.create(loopRequestParams)
     input = [...input, ...lastResponse.output]
 
     // Accumulate tokens from each iteration
@@ -1054,6 +1150,7 @@ const executeAnthropicFlow = async <T>({
   modelToolsClient,
   setStatus,
   abortSignal,
+  streaming,
 }: ExecuteAnthropicFlowParams<T>): Promise<T | AiAssistantAPIError> => {
   const initialMessages: MessageParam[] = []
   if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -1097,7 +1194,15 @@ const executeAnthropicFlow = async <T>({
     }
   }
 
-  const message = await createAnthropicMessage(anthropic, messageParams)
+  // Use streaming for the initial call if callback provided
+  const message = streaming
+    ? await createAnthropicMessageStreaming(
+        anthropic,
+        messageParams,
+        streaming,
+        abortSignal,
+      )
+    : await createAnthropicMessage(anthropic, messageParams)
 
   let totalInputTokens = message.usage?.input_tokens || 0
   let totalOutputTokens = message.usage?.output_tokens || 0
@@ -1115,6 +1220,7 @@ const executeAnthropicFlow = async <T>({
       config.responseFormat,
       abortSignal,
       { inputTokens: 0, outputTokens: 0 }, // Start fresh, we already counted initial message
+      streaming,
     )
 
     if ("type" in toolCallResult && "message" in toolCallResult) {
@@ -1354,6 +1460,65 @@ async function createAnthropicMessage(
   return message
 }
 
+async function createAnthropicMessageStreaming(
+  anthropic: Anthropic,
+  params: Omit<Anthropic.MessageCreateParams, "max_tokens"> & {
+    max_tokens?: number
+  },
+  streamCallback: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<Anthropic.Messages.Message> {
+  let accumulatedText = ""
+  let lastExplanation = ""
+
+  const stream = anthropic.messages.stream(
+    {
+      ...params,
+      max_tokens: params.max_tokens ?? 8192,
+    },
+    {
+      headers: {
+        "anthropic-beta": "structured-outputs-2025-11-13",
+      },
+      signal: abortSignal,
+    },
+  )
+
+  // Use for-await to process events, yielding to event loop between chunks
+  for await (const event of stream) {
+    if (abortSignal?.aborted) {
+      break
+    }
+    if (
+      event.type === "content_block_delta" &&
+      event.delta.type === "text_delta"
+    ) {
+      accumulatedText += event.delta.text
+      const explanation = extractPartialExplanation(accumulatedText)
+      if (explanation !== lastExplanation) {
+        const chunk = explanation.slice(lastExplanation.length)
+        lastExplanation = explanation
+        streamCallback.onTextChunk(chunk, explanation)
+      }
+    }
+  }
+
+  const finalMessage = await stream.finalMessage()
+
+  if (finalMessage.stop_reason === "refusal") {
+    throw new RefusalError(
+      "The model refused to generate a response for this request.",
+    )
+  }
+  if (finalMessage.stop_reason === "max_tokens") {
+    throw new MaxTokensError(
+      "The response exceeded the maximum token limit. Please try again with a different prompt or model.",
+    )
+  }
+
+  return finalMessage
+}
+
 function handleAiAssistantError(error: unknown): AiAssistantAPIError {
   if (error instanceof RefusalError) {
     return {
@@ -1580,6 +1745,7 @@ export const continueConversation = async ({
   setStatus,
   abortSignal,
   operation = "followup",
+  streaming,
 }: {
   userMessage: string
   conversationHistory: Array<ConversationMessage>
@@ -1590,6 +1756,7 @@ export const continueConversation = async ({
   abortSignal?: AbortSignal
   operation?: AIOperation
   conversationId?: ConversationId
+  streaming?: StreamingCallback
 }): Promise<
   (GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError) & {
     compactedConversationHistory?: Array<ConversationMessage>
@@ -1720,6 +1887,7 @@ export const continueConversation = async ({
           modelToolsClient,
           setStatus,
           abortSignal,
+          streaming,
         })
         if (isAiAssistantError(result)) {
           return result
@@ -1763,6 +1931,7 @@ export const continueConversation = async ({
         modelToolsClient,
         setStatus,
         abortSignal,
+        streaming,
       })
       if (isAiAssistantError(result)) {
         return result
