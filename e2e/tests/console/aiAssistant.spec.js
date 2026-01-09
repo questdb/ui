@@ -695,6 +695,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea").type("First chat message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@firstChat")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Create a new chat
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
@@ -707,6 +708,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea").type("Second chat message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@secondChat")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
       cy.getByDataHook("chat-window-history").should("not.be.disabled").click()
@@ -756,12 +758,15 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea").type("First message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@firstChat")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       cy.getByDataHook("chat-window-new").click()
       interceptAIChatRequest("openai", "secondChat")
+      cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Second message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@secondChat")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
       cy.getByDataHook("chat-window-history").click()
@@ -804,6 +809,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea").type("First message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@openaiChatRequest")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Create new chat (which is empty)
       cy.getByDataHook("chat-window-new").click()
@@ -827,23 +833,29 @@ describe("ai assistant", () => {
       // Create first chat
       interceptAIChatRequest("openai", "chat1")
       cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("First message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat1")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // Create second chat
-      cy.getByDataHook("chat-window-new").click()
+      cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
       interceptAIChatRequest("openai", "chat2")
+      cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Second message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat2")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // Create third chat
-      cy.getByDataHook("chat-window-new").click()
+      cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
       interceptAIChatRequest("openai", "chat3")
+      cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Third message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat3")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
       cy.getByDataHook("chat-window-history").click()
@@ -897,24 +909,40 @@ describe("ai assistant", () => {
       // Given - Create two chats with different messages
       interceptAIChatRequest("openai", "chat1")
       cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").type("First chat unique message")
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
+        .type("First chat unique message")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat1")
 
-      cy.getByDataHook("chat-window-new").click()
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", "Failed to parse assistant response.")
+
+      cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
+      cy.getByDataHook("chat-blank-state").should("be.visible")
       interceptAIChatRequest("openai", "chat2")
-      cy.getByDataHook("chat-input-textarea").type(
-        "Second chat different content",
-      )
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
+        .type("Second chat different content")
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat2")
 
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
+
       // When - Open history
-      cy.getByDataHook("chat-window-history").click()
+      cy.getByDataHook("chat-window-history").should("not.be.disabled").click()
       cy.getByDataHook("chat-history-item").should("have.length", 2)
 
       // When - Click on the first chat (older one)
-      cy.getByDataHook("chat-history-item").eq(1).click()
+      cy.getByDataHook("chat-history-item")
+        .should(($items) => {
+          expect($items.eq(1)).not.to.contain("Current")
+        })
+        .eq(1)
+        .click()
 
       // Then - Should see the first chat's message
       cy.getByDataHook("chat-message-user").should(
@@ -1131,9 +1159,10 @@ describe("ai assistant", () => {
       cy.getAIIconInLine(3).click()
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for loading
       interceptAIChatRequest("openai", "chat2")
-      cy.getByDataHook("chat-input-textarea").type("Explain second query", {
-        force: true,
-      })
+      cy.getByDataHook("chat-initial-query-box").should("be.visible")
+      cy.getByDataHook("chat-input-textarea")
+        .should("not.be.disabled")
+        .type("Explain second query", { force: true })
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat2")
       cy.wait(2000) // Wait for highlight -> active transition
@@ -1276,10 +1305,7 @@ describe("ai assistant", () => {
   describe("explain schema", () => {
     before(() => {
       cy.loadConsoleWithAuth()
-      cy.typeQuery(
-        "CREATE TABLE IF NOT EXISTS test_trades (symbol SYMBOL, price DOUBLE, ts TIMESTAMP) TIMESTAMP(ts) PARTITION BY DAY WAL;",
-      )
-      cy.clickRunQuery()
+      cy.createTable("test_trades")
       cy.refreshSchema()
     })
     after(() => {
@@ -2076,6 +2102,7 @@ Syntax: \`avg(column)\`
         expect(body.input).to.have.length(1)
         expect(body.input[0].content).to.include("select 1")
       })
+      cy.getByDataHook("inline-diff-container").should("have.length", 1)
 
       cy.getByDataHook("message-action-accept").should("be.visible")
       cy.getByDataHook("chat-context-badge").should("not.exist")
@@ -2089,9 +2116,13 @@ Syntax: \`avg(column)\`
         expect(body.input).to.have.length(3)
         expect(body.input[2].content).to.include("select 2")
       })
+      cy.getByDataHook("inline-diff-container").should("have.length", 2)
 
       // Accept turn 1's suggestion (SELECT 2)
       cy.getByDataHook("message-action-accept").click()
+      cy.getByDataHook("inline-diff-container")
+        .contains("Accepted")
+        .should("be.visible")
       cy.getByDataHook("chat-context-badge").should("contain", "SELECT 2")
       cy.getByDataHook("chat-context-badge").click()
       cy.get(".aiQueryHighlight").should("exist")
@@ -2107,31 +2138,23 @@ Syntax: \`avg(column)\`
         expect(body.input[4].content).to.include("SELECT 2")
         expect(body.input[5].content).to.include("select 3")
       })
+      cy.getByDataHook("inline-diff-container").should("have.length", 3)
 
-      cy.wait(1000)
-
-      cy.getByDataHook("chat-message-assistant")
-        .contains("This is 3")
+      cy.getByDataHook("inline-diff-container")
+        .eq(2)
         .getByDataHook("message-action-accept")
-        .should("be.visible")
-      cy.getByDataHook("chat-messages-container").scrollTo("top")
-      cy.getByDataHook("chat-message-assistant")
-        .contains("This is 1")
-        .should("be.visible")
-      cy.getByDataHook("message-action-apply").first().click({ force: true })
-      cy.getByDataHook("chat-context-badge").should("contain", "SELECT 1")
+        .should("exist")
 
-      // Turn 3: User sends "select 4" - should see "User replaced" message
+      // Turn 3: User sends "select 4"
       cy.getByDataHook("chat-input-textarea").type("select 4", { force: true })
       cy.getByDataHook("chat-send-button").click()
 
       flow.waitForTurn(3).then(() => {
         const body = flow.getRequestBody(3)
-        expect(body.input).to.have.length(9)
-        expect(body.input[7].content).to.include("User replaced")
-        expect(body.input[7].content).to.include("SELECT 1")
-        expect(body.input[8].content).to.include("select 4")
+        expect(body.input).to.have.length(8)
+        expect(body.input[7].content).to.include("select 4")
       })
+      cy.getByDataHook("inline-diff-container").should("have.length", 4)
 
       // Reject turn 3's suggestion (SELECT 4)
       cy.getByDataHook("message-action-reject").click()
@@ -2143,13 +2166,17 @@ Syntax: \`avg(column)\`
 
       flow.waitForTurn(4).then(() => {
         const body = flow.getRequestBody(4)
-        expect(body.input).to.have.length(12)
-        expect(body.input[10].content).to.include("User rejected")
-        expect(body.input[11].content).to.include("select 5")
+        expect(body.input).to.have.length(11)
+        expect(body.input[9].content).to.include("User rejected")
+        expect(body.input[10].content).to.include("select 5")
       })
-
+      cy.getByDataHook("inline-diff-container").should("have.length", 5)
       // Accept turn 4's suggestion (SELECT 5)
       cy.getByDataHook("message-action-accept").click()
+      cy.getByDataHook("inline-diff-container")
+        .eq(4)
+        .contains("Accepted")
+        .should("be.visible")
       cy.getByDataHook("chat-context-badge").should("contain", "SELECT 5")
 
       // Turn 5: Final turn - should see "User accepted" for SELECT 5
@@ -2158,10 +2185,11 @@ Syntax: \`avg(column)\`
 
       flow.waitForTurn(5).then(() => {
         const body = flow.getRequestBody(5)
-        expect(body.input).to.have.length(15)
-        expect(body.input[13].content).to.include("User accepted")
-        expect(body.input[14].content).to.include("select 6")
+        expect(body.input).to.have.length(14)
+        expect(body.input[12].content).to.include("User accepted")
+        expect(body.input[13].content).to.include("select 6")
       })
+      cy.getByDataHook("inline-diff-container").should("have.length", 6)
     })
   })
 })

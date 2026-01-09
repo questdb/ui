@@ -672,7 +672,9 @@ const AIChatWindow: React.FC = () => {
       editorRef.current.focus()
 
       setTimeout(() => {
-        model.deltaDecorations(decorationIds, [])
+        if (!model.isDisposed()) {
+          model.deltaDecorations(decorationIds, [])
+        }
       }, 1000)
     } catch (error) {
       console.error("Error highlighting query:", error)
