@@ -1178,6 +1178,7 @@ const executeCustomProviderFlow = async <T>({
     }
 
     const content = response.choices[0]?.message?.content || ""
+    setStatus(null)
 
     // Try to parse as JSON
     let parsed: T
@@ -1188,7 +1189,22 @@ const executeCustomProviderFlow = async <T>({
       if (jsonMatch) {
         jsonStr = jsonMatch[1].trim()
       }
-      parsed = JSON.parse(jsonStr) as T
+      const jsonParsed = JSON.parse(jsonStr)
+
+      // Ensure we have an explanation field - check common variations
+      const explanation = jsonParsed.explanation
+        || jsonParsed.response
+        || jsonParsed.answer
+        || jsonParsed.message
+        || jsonParsed.content
+        || jsonParsed.text
+        || (typeof jsonParsed === 'string' ? jsonParsed : null)
+
+      parsed = {
+        ...jsonParsed,
+        explanation: explanation || content,
+        sql: jsonParsed.sql ?? jsonParsed.query ?? null,
+      } as T
     } catch {
       // If JSON parsing fails, wrap the content as explanation
       parsed = {
