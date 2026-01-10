@@ -10,6 +10,7 @@ import {
   type Provider,
   MODEL_OPTIONS,
   getModelProps,
+  isCustomProvider,
 } from "./aiAssistantSettings"
 
 type CompactionResultSuccess = {
@@ -136,6 +137,12 @@ export async function compactConversationIfNeeded(
     model?: string
   } = {},
 ): Promise<CompactionResult> {
+  // Skip compaction for custom providers - we don't know their context limits
+  // and can't generate summaries without a known test model
+  if (isCustomProvider(provider)) {
+    return { wasCompacted: false }
+  }
+
   const messages = [
     ...conversationHistory,
     {
