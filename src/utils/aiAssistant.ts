@@ -1104,6 +1104,124 @@ const executeOpenAIFlow = async <T>({
   }
 }
 
+/**
+ * Execute flow for custom OpenAI-compatible providers using standard Chat Completions API.
+ * This avoids using the Responses API which is not supported by most providers.
+ */
+const executeCustomProviderFlow = async <T>({
+  openai,
+  model,
+  config,
+  setStatus,
+  abortSignal,
+}: {
+  openai: OpenAI
+  model: string
+  config: OpenAIFlowConfig<T>
+  setStatus: StatusCallback
+  abortSignal?: AbortSignal
+}): Promise<T | AiAssistantAPIError> => {
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = []
+
+  // Add system message
+  messages.push({
+    role: "system",
+    content: config.systemInstructions,
+  })
+
+  // Add conversation history
+  if (config.conversationHistory && config.conversationHistory.length > 0) {
+    for (const msg of config.conversationHistory) {
+      if (msg.content && msg.content.trim() !== "") {
+        messages.push({
+          role: msg.role,
+          content: msg.content,
+        })
+      }
+    }
+  }
+
+  // Build user message with JSON format instructions
+  let userContent = config.initialUserContent
+  if (config.responseFormat?.format) {
+    const format = config.responseFormat.format as {
+      type: string
+      name?: string
+      schema?: { properties?: Record<string, unknown> }
+    }
+    if (format.schema?.properties) {
+      const props = Object.keys(format.schema.properties).join(", ")
+      userContent += `\n\nRespond with a JSON object containing these fields: ${props}. Only output valid JSON, no markdown code blocks.`
+    }
+  }
+
+  messages.push({
+    role: "user",
+    content: userContent,
+  })
+
+  try {
+    const response = await openai.chat.completions.create({
+      model,
+      messages,
+      temperature: 0.3,
+    })
+
+    if (abortSignal?.aborted) {
+      return {
+        type: "aborted",
+        message: "Operation was cancelled",
+      } as AiAssistantAPIError
+    }
+
+    const content = response.choices[0]?.message?.content || ""
+
+    // Try to parse as JSON
+    let parsed: T
+    try {
+      // Try to extract JSON from the response (handle markdown code blocks)
+      let jsonStr = content.trim()
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1].trim()
+      }
+      parsed = JSON.parse(jsonStr) as T
+    } catch {
+      // If JSON parsing fails, wrap the content as explanation
+      parsed = {
+        explanation: content,
+        sql: null,
+      } as unknown as T
+    }
+
+    const tokenUsage: TokenUsage = {
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+    }
+
+    const resultWithTokens = {
+      ...parsed,
+      tokenUsage,
+    } as T & { tokenUsage: TokenUsage }
+
+    if (config.postProcess) {
+      return {
+        ...config.postProcess(resultWithTokens),
+        tokenUsage,
+      } as T & { tokenUsage: TokenUsage }
+    }
+
+    return resultWithTokens
+  } catch (error) {
+    setStatus(null)
+    const message = error instanceof Error ? error.message : "Request failed"
+    return {
+      type: "unknown",
+      message,
+    } as AiAssistantAPIError
+  }
+}
+
 const executeAnthropicFlow = async <T>({
   anthropic,
   model,
@@ -1270,10 +1388,49 @@ export const explainTableSchema = async ({
   return tryWithRetries(
     async () => {
       const clients = createProviderClients(settings)
+      const prompt = getExplainSchemaPrompt(tableName, schema, kindLabel)
+
+      // Use standard Chat Completions API for custom providers
+      if (clients.provider === "openai" && isCustomProvider(settings.provider)) {
+        const jsonPrompt = `${prompt}\n\nRespond with a JSON object containing: explanation, columns (array of {name, description}), storage_details (array of strings). Only output valid JSON.`
+
+        const response = await clients.openai.chat.completions.create({
+          model: getModelProps(settings.model).model,
+          messages: [{ role: "user", content: jsonPrompt }],
+          temperature: 0.3,
+        })
+
+        const content = response.choices[0]?.message?.content || ""
+        setStatus(null)
+
+        try {
+          let jsonStr = content.trim()
+          const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+          if (jsonMatch) {
+            jsonStr = jsonMatch[1].trim()
+          }
+          const formatted = JSON.parse(jsonStr) as TableSchemaExplanation
+          return {
+            explanation: formatted.explanation || "",
+            columns: formatted.columns || [],
+            storage_details: formatted.storage_details || [],
+            tokenUsage: response.usage
+              ? {
+                  inputTokens: response.usage.prompt_tokens,
+                  outputTokens: response.usage.completion_tokens,
+                }
+              : undefined,
+          }
+        } catch {
+          return {
+            explanation: content,
+            columns: [],
+            storage_details: [],
+          }
+        }
+      }
 
       if (clients.provider === "openai") {
-        const prompt = getExplainSchemaPrompt(tableName, schema, kindLabel)
-
         const formattingOutput = await clients.openai.responses.parse({
           ...getModelProps(settings.model),
           instructions: getExplainSchemaPrompt(tableName, schema, kindLabel),
@@ -1573,6 +1730,31 @@ ${firstUserMessage}
 
 Return a JSON object with the following structure: { "title": "Your title here" }`
 
+    // Use standard Chat Completions API for custom providers
+    if (clients.provider === "openai" && isCustomProvider(settings.provider)) {
+      const response = await clients.openai.chat.completions.create({
+        model: getModelProps(settings.model).model,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 100,
+        temperature: 0.3,
+      })
+      const content = response.choices[0]?.message?.content || ""
+      try {
+        // Try to extract JSON from response
+        let jsonStr = content.trim()
+        const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1].trim()
+        }
+        const parsed = JSON.parse(jsonStr) as { title: string }
+        return parsed.title || null
+      } catch {
+        // If JSON parsing fails, use the first line as title
+        const firstLine = content.split("\n")[0].trim()
+        return firstLine.slice(0, 30) || null
+      }
+    }
+
     if (clients.provider === "openai") {
       const response = await clients.openai.responses.create({
         ...getModelProps(settings.model),
@@ -1742,6 +1924,50 @@ export const continueConversation = async ({
           sql,
           explanation: formatted?.explanation || "",
           tokenUsage: formatted.tokenUsage,
+        }
+      }
+
+      // Use custom provider flow for OpenAI-compatible providers (no Responses API)
+      if (clients.provider === "openai" && isCustomProvider(settings.provider)) {
+        const result = await executeCustomProviderFlow<{
+          sql?: string | null
+          explanation: string
+          tokenUsage?: TokenUsage
+        }>({
+          openai: clients.openai,
+          model: settings.model,
+          config: {
+            systemInstructions: getUnifiedPrompt(grantSchemaAccess),
+            initialUserContent: userMessage,
+            conversationHistory: workingConversationHistory.filter(
+              (m) => !m.isCompacted,
+            ),
+            responseFormat,
+            postProcess: (formatted) => {
+              const sql =
+                formatted?.sql === null
+                  ? null
+                  : formatted?.sql
+                    ? normalizeSql(formatted.sql)
+                    : currentSQL || ""
+              return {
+                sql,
+                explanation: formatted?.explanation || "",
+                tokenUsage: formatted.tokenUsage,
+              }
+            },
+          },
+          setStatus,
+          abortSignal,
+        })
+        if (isAiAssistantError(result)) {
+          return result
+        }
+        return {
+          ...postProcess(result),
+          compactedConversationHistory: isCompacted
+            ? workingConversationHistory
+            : undefined,
         }
       }
 
