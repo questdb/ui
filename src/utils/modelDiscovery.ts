@@ -1,5 +1,3 @@
-import OpenAI from "openai"
-
 export type DiscoveredModel = {
   id: string
   name: string
@@ -16,6 +14,19 @@ export type ConnectionTestResult = {
 }
 
 /**
+ * Build headers for API requests
+ */
+const buildHeaders = (apiKey?: string): HeadersInit => {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`
+  }
+  return headers
+}
+
+/**
  * Discover available models from an OpenAI-compatible endpoint
  */
 export const discoverModels = async (
@@ -23,22 +34,30 @@ export const discoverModels = async (
   apiKey?: string,
 ): Promise<ModelDiscoveryResult> => {
   try {
-    const client = new OpenAI({
-      baseURL: normalizeBaseUrl(baseUrl),
-      apiKey: apiKey || "not-required",
-      dangerouslyAllowBrowser: true,
+    const normalizedUrl = normalizeBaseUrl(baseUrl)
+    const response = await fetch(`${normalizedUrl}/models`, {
+      method: "GET",
+      headers: buildHeaders(apiKey),
     })
 
-    const response = await client.models.list()
-    const models: DiscoveredModel[] = []
-
-    for await (const model of response) {
-      models.push({
-        id: model.id,
-        name: model.id,
-        owned_by: model.owned_by,
-      })
+    if (!response.ok) {
+      if (response.status === 401) {
+        return { success: false, error: "Invalid API key" }
+      }
+      if (response.status === 404) {
+        return { success: false, error: "Models endpoint not found. Check the base URL." }
+      }
+      return { success: false, error: `Server returned ${response.status}: ${response.statusText}` }
     }
+
+    const data = await response.json()
+    const modelList = data.data || data.models || []
+
+    const models: DiscoveredModel[] = modelList.map((model: any) => ({
+      id: model.id || model.name,
+      name: model.id || model.name,
+      owned_by: model.owned_by,
+    }))
 
     // Sort models alphabetically by id
     models.sort((a, b) => a.id.localeCompare(b.id))
@@ -46,7 +65,7 @@ export const discoverModels = async (
     return { success: true, models }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to discover models"
-    return { success: false, error: message }
+    return { success: false, error: formatConnectionError(message) }
   }
 }
 
@@ -56,51 +75,45 @@ export const discoverModels = async (
 export const testCustomProviderConnection = async (
   baseUrl: string,
   apiKey?: string,
-  modelId?: string,
 ): Promise<ConnectionTestResult> => {
   try {
-    const client = new OpenAI({
-      baseURL: normalizeBaseUrl(baseUrl),
-      apiKey: apiKey || "not-required",
-      dangerouslyAllowBrowser: true,
+    const normalizedUrl = normalizeBaseUrl(baseUrl)
+    const response = await fetch(`${normalizedUrl}/models`, {
+      method: "GET",
+      headers: buildHeaders(apiKey),
     })
 
-    if (modelId) {
-      // If a model is specified, try a simple completion
-      await client.chat.completions.create({
-        model: modelId,
-        messages: [{ role: "user", content: "ping" }],
-        max_tokens: 5,
-      })
-    } else {
-      // Otherwise just list models to verify connection
-      const response = await client.models.list()
-      // Consume at least one item to verify the connection works
-      for await (const _ of response) {
-        break
+    if (!response.ok) {
+      if (response.status === 401) {
+        return { valid: false, error: "Invalid API key" }
       }
+      if (response.status === 404) {
+        return { valid: false, error: "Endpoint not found. Check the base URL." }
+      }
+      return { valid: false, error: `Server returned ${response.status}: ${response.statusText}` }
     }
 
     return { valid: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Connection failed"
-
-    // Check for common error types
-    if (message.includes("401") || message.toLowerCase().includes("unauthorized")) {
-      return { valid: false, error: "Invalid API key" }
-    }
-    if (message.includes("404") || message.toLowerCase().includes("not found")) {
-      return { valid: false, error: "Endpoint not found. Check the base URL." }
-    }
-    if (message.includes("ECONNREFUSED") || message.toLowerCase().includes("connection refused")) {
-      return { valid: false, error: "Connection refused. Is the server running?" }
-    }
-    if (message.toLowerCase().includes("network") || message.toLowerCase().includes("fetch")) {
-      return { valid: false, error: "Network error. Check the URL and try again." }
-    }
-
-    return { valid: false, error: message }
+    return { valid: false, error: formatConnectionError(message) }
   }
+}
+
+/**
+ * Format connection error messages to be more user-friendly
+ */
+const formatConnectionError = (message: string): string => {
+  if (message.includes("ECONNREFUSED") || message.toLowerCase().includes("connection refused")) {
+    return "Connection refused. Is the server running?"
+  }
+  if (message.toLowerCase().includes("network") || message.toLowerCase().includes("fetch failed")) {
+    return "Network error. Check the URL and try again."
+  }
+  if (message.toLowerCase().includes("cors")) {
+    return "CORS error. The server may need to allow requests from this origin."
+  }
+  return message
 }
 
 /**
