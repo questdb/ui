@@ -17,10 +17,13 @@ import {
   type Provider,
   type BuiltInProvider,
 } from "../../utils/aiAssistantSettings"
+import type { CustomProviderSettings } from "../../providers/LocalStorageProvider/types"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
+import { Database2 } from "@styled-icons/remix-line"
+import { AddCustomProviderModal } from "./AddCustomProviderModal"
 import { theme } from "../../theme"
 
 const ModalContent = styled.div`
@@ -164,6 +167,15 @@ const ProviderName = styled(Text)`
   font-weight: 400;
   color: rgba(249, 250, 251, 0.8);
   text-align: center;
+`
+
+const CustomProviderIconWrapper = styled.div`
+  width: 4rem;
+  height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.color.foreground};
 `
 
 const ComingSoonContainer = styled(Box).attrs({
@@ -424,6 +436,7 @@ type StepOneContentProps = {
   providerName: string
   onProviderSelect: (provider: BuiltInProvider) => void
   onApiKeyChange: (value: string) => void
+  onCustomProviderClick: () => void
 }
 
 type StepTwoContentProps = {
@@ -464,6 +477,7 @@ const StepOneContent = ({
   providerName,
   onProviderSelect,
   onApiKeyChange,
+  onCustomProviderClick,
 }: StepOneContentProps) => {
   const navigation = useModalNavigation()
   const handleClose: () => void = navigation.handleClose
@@ -488,8 +502,8 @@ const StepOneContent = ({
           <Box flexDirection="column" gap="0.8rem" align="flex-start">
             <SectionTitle>Select Provider</SectionTitle>
             <SectionDescription>
-              We currently only support two model providers, with support for
-              more coming soon.
+              Choose a built-in provider or add a custom OpenAI-compatible
+              endpoint (Ollama, Groq, Together AI, etc.)
             </SectionDescription>
           </Box>
           <ProviderSelectionContainer>
@@ -520,16 +534,18 @@ const StepOneContent = ({
                 />
                 <ProviderName>Anthropic</ProviderName>
               </ProviderCard>
+              <ProviderCard
+                $selected={false}
+                onClick={onCustomProviderClick}
+                type="button"
+                data-hook="ai-settings-provider-custom"
+              >
+                <CustomProviderIconWrapper>
+                  <Database2 size="3.2rem" />
+                </CustomProviderIconWrapper>
+                <ProviderName>Custom</ProviderName>
+              </ProviderCard>
             </ProviderCardsContainer>
-            <ComingSoonContainer>
-              <ComingSoonIcons>
-                <ComingSoonIcon
-                  src="/assets/models-group-icon.svg"
-                  alt="Coming soon providers"
-                />
-              </ComingSoonIcons>
-              <ComingSoonText>Coming soon...</ComingSoonText>
-            </ComingSoonContainer>
           </ProviderSelectionContainer>
         </Box>
       </ContentSection>
@@ -714,6 +730,9 @@ export const ConfigurationModal = ({
   const [enabledModels, setEnabledModels] = useState<string[]>([])
   const [grantSchemaAccess, setGrantSchemaAccess] = useState<boolean>(true)
 
+  // Custom provider modal state
+  const [showCustomProviderModal, setShowCustomProviderModal] = useState(false)
+
   const modelsByProvider = useMemo(() => {
     const anthropic: ModelOption[] = []
     const openai: ModelOption[] = []
@@ -750,6 +769,35 @@ export const ConfigurationModal = ({
   const handleSchemaAccessChange = useCallback((checked: boolean) => {
     setGrantSchemaAccess(checked)
   }, [])
+
+  const handleCustomProviderClick = useCallback(() => {
+    setShowCustomProviderModal(true)
+  }, [])
+
+  const handleCustomProviderSave = useCallback(
+    (providerId: string, settings: CustomProviderSettings) => {
+      // Save the custom provider and select its first enabled model
+      const firstEnabledModel = settings.enabledModels[0]
+      const selectedModel = firstEnabledModel
+        ? `${providerId}:${firstEnabledModel}`
+        : undefined
+
+      const newSettings = {
+        ...aiAssistantSettings,
+        selectedModel,
+        customProviders: {
+          ...aiAssistantSettings.customProviders,
+          [providerId]: settings,
+        },
+      }
+
+      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
+      setShowCustomProviderModal(false)
+      toast.success("AI Assistant activated successfully")
+      onOpenChange?.(false)
+    },
+    [aiAssistantSettings, updateSettings, onOpenChange],
+  )
 
   const handleComplete = () => {
     if (!selectedProvider || enabledModels.length === 0) return
@@ -863,6 +911,7 @@ export const ConfigurationModal = ({
             providerName={providerName}
             onProviderSelect={handleProviderSelect}
             onApiKeyChange={handleApiKeyChange}
+            onCustomProviderClick={handleCustomProviderClick}
           />
         ),
         validate: validateStepOne,
@@ -891,6 +940,7 @@ export const ConfigurationModal = ({
       providerName,
       handleProviderSelect,
       handleApiKeyChange,
+      handleCustomProviderClick,
       enabledModels,
       grantSchemaAccess,
       modelsByProvider,
@@ -902,21 +952,28 @@ export const ConfigurationModal = ({
   )
 
   return (
-    <MultiStepModal
-      open={open}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) {
-          handleModalClose()
-        }
-        onOpenChange?.(isOpen)
-      }}
-      onStepChange={handleStepChange}
-      steps={steps}
-      maxWidth="64rem"
-      onComplete={handleComplete}
-      canProceed={canProceed}
-      completeButtonText="Activate Assistant"
-      showValidationError={false}
-    />
+    <>
+      <MultiStepModal
+        open={open}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            handleModalClose()
+          }
+          onOpenChange?.(isOpen)
+        }}
+        onStepChange={handleStepChange}
+        steps={steps}
+        maxWidth="64rem"
+        onComplete={handleComplete}
+        canProceed={canProceed}
+        completeButtonText="Activate Assistant"
+        showValidationError={false}
+      />
+      <AddCustomProviderModal
+        open={showCustomProviderModal}
+        onOpenChange={setShowCustomProviderModal}
+        onSave={handleCustomProviderSave}
+      />
+    </>
   )
 }
