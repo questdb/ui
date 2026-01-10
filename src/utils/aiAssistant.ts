@@ -1161,8 +1161,11 @@ const executeCustomProviderFlow = async <T>({
   })
 
   try {
+    // Extract the actual model ID (not the full "providerId:modelId" format)
+    const actualModelId = getModelProps(model).model
+
     const response = await openai.chat.completions.create({
-      model,
+      model: actualModelId,
       messages,
       temperature: 0.3,
     })
