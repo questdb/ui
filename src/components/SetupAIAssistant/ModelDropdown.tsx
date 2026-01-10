@@ -1,12 +1,18 @@
 import React, { useMemo, useState } from "react"
 import styled, { css } from "styled-components"
-import { Check } from "@styled-icons/remix-line"
+import { Check, Database2 } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { PopperToggle } from "../PopperToggle"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { MODEL_OPTIONS } from "../../utils/aiAssistantSettings"
+import {
+  MODEL_OPTIONS,
+  getAllModelsIncludingCustom,
+  isCustomProvider,
+  parseCustomModelValue,
+  type ModelOption,
+} from "../../utils/aiAssistantSettings"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { OpenAIIcon } from "./OpenAIIcon"
@@ -155,6 +161,56 @@ const CheckIcon = styled(Check)`
   flex-shrink: 0;
 `
 
+const ProviderGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+
+  &:not(:first-child) {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid ${({ theme }) => theme.color.selection};
+  }
+`
+
+const ProviderGroupLabel = styled(Text)`
+  font-size: 1.1rem;
+  color: ${({ theme }) => theme.color.gray2};
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.2rem 0.4rem;
+`
+
+const CustomProviderIcon = styled.div`
+  width: 1.6rem;
+  height: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+`
+
+type ModelGroup = {
+  provider: string
+  label: string
+  models: ModelOption[]
+}
+
+const getProviderIcon = (provider: string) => {
+  if (provider === "openai") {
+    return <OpenAIIcon width="16" height="16" color="#bbb" />
+  }
+  if (provider === "anthropic") {
+    return <AnthropicIcon width="16" height="16" color="#bbb" />
+  }
+  // Custom provider
+  return (
+    <CustomProviderIcon>
+      <Database2 size="1.4rem" />
+    </CustomProviderIcon>
+  )
+}
+
 export const ModelDropdown = () => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const {
@@ -164,11 +220,57 @@ export const ModelDropdown = () => {
   } = useAIStatus()
   const [dropdownActive, setDropdownActive] = useState(false)
 
+  const allModels = useMemo(
+    () => getAllModelsIncludingCustom(aiAssistantSettings),
+    [aiAssistantSettings],
+  )
+
   const enabledModels = useMemo(() => {
-    return MODEL_OPTIONS.filter((model) =>
-      enabledModelValues.includes(model.value),
-    )
-  }, [enabledModelValues])
+    return allModels.filter((model) => enabledModelValues.includes(model.value))
+  }, [allModels, enabledModelValues])
+
+  // Group models by provider
+  const modelGroups = useMemo((): ModelGroup[] => {
+    const groups: Map<string, ModelGroup> = new Map()
+
+    // Define provider order: Anthropic, OpenAI, then custom providers
+    const providerOrder = ["anthropic", "openai"]
+
+    for (const model of enabledModels) {
+      const provider = model.provider
+      if (!groups.has(provider)) {
+        let label: string
+        if (provider === "anthropic") {
+          label = "Anthropic"
+        } else if (provider === "openai") {
+          label = "OpenAI"
+        } else {
+          // Custom provider - get the name from settings
+          const customProvider =
+            aiAssistantSettings.customProviders?.[provider]
+          label = customProvider?.name || provider
+        }
+        groups.set(provider, { provider, label, models: [] })
+      }
+      groups.get(provider)!.models.push(model)
+    }
+
+    // Sort groups: built-in providers first in order, then custom providers
+    const sortedGroups: ModelGroup[] = []
+    for (const p of providerOrder) {
+      const group = groups.get(p)
+      if (group) {
+        sortedGroups.push(group)
+        groups.delete(p)
+      }
+    }
+    // Add remaining custom providers
+    for (const group of groups.values()) {
+      sortedGroups.push(group)
+    }
+
+    return sortedGroups
+  }, [enabledModels, aiAssistantSettings.customProviders])
 
   const handleModelSelect = (modelValue: string) => {
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
@@ -232,8 +334,12 @@ export const ModelDropdown = () => {
         <DropdownTrigger data-hook="ai-settings-model-dropdown">
           {displayModel.provider === "openai" ? (
             <OpenAIIcon width="16" height="16" />
-          ) : (
+          ) : displayModel.provider === "anthropic" ? (
             <AnthropicIcon width="16" height="16" />
+          ) : (
+            <CustomProviderIcon>
+              <Database2 size="1.4rem" />
+            </CustomProviderIcon>
           )}
           <Text size="sm" color="foreground" margin="0 auto 0 0">
             {displayModel.label}
@@ -244,31 +350,34 @@ export const ModelDropdown = () => {
     >
       <DropdownContent>
         <Title>Select Model</Title>
-        {enabledModels.map((model) => {
-          const isSelected = currentModel === model.value
+        {modelGroups.map((group) => (
+          <ProviderGroup key={group.provider}>
+            {modelGroups.length > 1 && (
+              <ProviderGroupLabel>{group.label}</ProviderGroupLabel>
+            )}
+            {group.models.map((model) => {
+              const isSelected = currentModel === model.value
 
-          return (
-            <ModelItem
-              data-hook="ai-settings-model-item"
-              key={model.value}
-              onClick={() => handleModelSelect(model.value)}
-              $selected={isSelected}
-            >
-              <ModelIconTitle>
-                {model.provider === "openai" ? (
-                  <OpenAIIcon width="16" height="16" color="#bbb" />
-                ) : (
-                  <AnthropicIcon width="16" height="16" color="#bbb" />
-                )}
-                <ModelLabel data-hook="ai-settings-model-item-label">
-                  {model.label}
-                </ModelLabel>
-                {model.isSlow && <BrainIcon color="#bbb" />}
-              </ModelIconTitle>
-              {isSelected && <CheckIcon />}
-            </ModelItem>
-          )
-        })}
+              return (
+                <ModelItem
+                  data-hook="ai-settings-model-item"
+                  key={model.value}
+                  onClick={() => handleModelSelect(model.value)}
+                  $selected={isSelected}
+                >
+                  <ModelIconTitle>
+                    {getProviderIcon(model.provider)}
+                    <ModelLabel data-hook="ai-settings-model-item-label">
+                      {model.label}
+                    </ModelLabel>
+                    {model.isSlow && <BrainIcon color="#bbb" />}
+                  </ModelIconTitle>
+                  {isSelected && <CheckIcon />}
+                </ModelItem>
+              )
+            })}
+          </ProviderGroup>
+        ))}
       </DropdownContent>
     </PopperToggle>
   )

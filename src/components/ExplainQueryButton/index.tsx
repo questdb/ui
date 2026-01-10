@@ -58,6 +58,7 @@ export const ExplainQueryButton = ({
     hasSchemaAccess,
     currentModel: currentModelValue,
     apiKey: apiKeyValue,
+    baseUrl: baseUrlValue,
   } = useAIStatus()
   const { addMessage, updateMessage, updateConversationName, persistMessages } =
     useAIConversation()
@@ -65,6 +66,7 @@ export const ExplainQueryButton = ({
   const handleExplainQuery = () => {
     const currentModel = currentModelValue!
     const apiKey = apiKeyValue!
+    const baseUrl = baseUrlValue ?? undefined
     void (async () => {
       const fullApiMessage = `Using your tools when necessary, explain this SQL query in detail.:\n\n\`\`\`sql\n${queryText}\n\`\`\``
 
@@ -92,6 +94,7 @@ export const ExplainQueryButton = ({
         model: currentModel,
         provider,
         apiKey,
+        baseUrl,
       }
 
       const testModel = MODEL_OPTIONS.find(
@@ -100,7 +103,7 @@ export const ExplainQueryButton = ({
       if (testModel) {
         void generateChatTitle({
           firstUserMessage: fullApiMessage,
-          settings: { model: testModel.value, provider, apiKey },
+          settings: { model: testModel.value, provider, apiKey, baseUrl },
         }).then((title) => {
           if (title) {
             void updateConversationName(conversationId, title)

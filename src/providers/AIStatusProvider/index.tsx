@@ -14,6 +14,8 @@ import {
   hasSchemaAccess,
   providerForModel,
   canUseAiAssistant,
+  isCustomProvider,
+  parseCustomModelValue,
 } from "../../utils/aiAssistantSettings"
 
 export const useAIStatus = () => {
@@ -82,12 +84,14 @@ export type AIStatusContextType =
       canUse: boolean
       currentModel: string
       apiKey: string
+      baseUrl: string | null
     })
   | (BaseAIStatusContextType & {
       isConfigured: false
       canUse: false
       currentModel: string | null
       apiKey: string | null
+      baseUrl: string | null
     })
 
 interface AIStatusProviderProps {
@@ -130,16 +134,41 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   const apiKey = useMemo(() => {
     if (!currentModel) return null
     const provider = providerForModel(currentModel)
-    return aiAssistantSettings.providers?.[provider]?.apiKey || null
+    // Handle custom providers
+    if (isCustomProvider(provider)) {
+      return aiAssistantSettings.customProviders?.[provider]?.apiKey || ""
+    }
+    // Handle built-in providers
+    return aiAssistantSettings.providers?.[provider as "anthropic" | "openai"]?.apiKey || null
+  }, [currentModel, aiAssistantSettings])
+
+  const baseUrl = useMemo(() => {
+    if (!currentModel) return null
+    const provider = providerForModel(currentModel)
+    // Only custom providers have a baseUrl
+    if (isCustomProvider(provider)) {
+      return aiAssistantSettings.customProviders?.[provider]?.baseUrl || null
+    }
+    return null
   }, [currentModel, aiAssistantSettings])
 
   const models = useMemo(() => {
     const allModels: string[] = []
+    // Built-in provider models
     const anthropicModels =
       aiAssistantSettings.providers?.anthropic?.enabledModels || []
     const openaiModels =
       aiAssistantSettings.providers?.openai?.enabledModels || []
     allModels.push(...anthropicModels, ...openaiModels)
+    // Custom provider models (format: "providerId:modelId")
+    for (const [providerId, providerSettings] of Object.entries(
+      aiAssistantSettings.customProviders || {},
+    )) {
+      const customModels = providerSettings.enabledModels.map(
+        (modelId) => `${providerId}:${modelId}`,
+      )
+      allModels.push(...customModels)
+    }
     return allModels
   }, [aiAssistantSettings])
 
@@ -230,6 +259,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         hasSchemaAccess: hasSchemaAccessValue,
         currentModel: currentModel!,
         apiKey: apiKey!,
+        baseUrl,
         models,
         currentOperation,
       }
@@ -244,6 +274,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         hasSchemaAccess: hasSchemaAccessValue,
         currentModel,
         apiKey,
+        baseUrl,
         models,
         currentOperation,
       }

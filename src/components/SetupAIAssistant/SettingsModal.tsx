@@ -12,7 +12,7 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
-import { Edit } from "@styled-icons/remix-line"
+import { Edit, Add, DeleteBin } from "@styled-icons/remix-line"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
@@ -23,12 +23,19 @@ import {
   MODEL_OPTIONS,
   type ModelOption,
   type Provider,
+  type BuiltInProvider,
   getNextModel,
+  getCustomProviderIds,
 } from "../../utils/aiAssistantSettings"
-import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
+import type {
+  AiAssistantSettings,
+  CustomProviderSettings,
+} from "../../providers/LocalStorageProvider/types"
 import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { Database2 } from "@styled-icons/remix-line"
+import { AddCustomProviderModal } from "./AddCustomProviderModal"
 
 const ModalContent = styled.div`
   display: flex;
@@ -457,6 +464,70 @@ const SchemaCheckboxDescriptionBold = styled.span`
   color: ${({ theme }) => theme.color.foreground};
 `
 
+const SidebarDivider = styled.div`
+  height: 0.1rem;
+  width: calc(100% - 4.8rem);
+  margin: 1.2rem 2.4rem;
+  background: ${({ theme }) => theme.color.selection};
+`
+
+const SidebarSectionLabel = styled(Text)`
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: ${({ theme }) => theme.color.gray2};
+  padding: 0 2.4rem;
+  margin-bottom: 0.4rem;
+`
+
+const AddProviderButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 2.4rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.color.pinkPrimary};
+  font-size: 1.3rem;
+  font-weight: 500;
+  width: 100%;
+  text-align: left;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.selection};
+  }
+`
+
+const CustomProviderIcon = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4rem;
+  background: ${({ theme }) => theme.color.pinkDarker};
+  color: ${({ theme }) => theme.color.foreground};
+`
+
+const DeleteProviderButton = styled.button`
+  background: transparent;
+  border: none;
+  padding: 0.6rem;
+  cursor: pointer;
+  color: ${({ theme }) => theme.color.gray2};
+  border-radius: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.red};
+    color: ${({ theme }) => theme.color.foreground};
+  }
+`
+
 const FooterSection = styled(Box).attrs({
   flexDirection: "column",
   gap: "2rem",
@@ -500,16 +571,16 @@ type SettingsModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: Provider) => {
+const getProviderName = (provider: BuiltInProvider) => {
   return provider === "openai" ? "OpenAI" : "Anthropic"
 }
 
-const getModelsForProvider = (provider: Provider): ModelOption[] => {
+const getModelsForProvider = (provider: BuiltInProvider): ModelOption[] => {
   return MODEL_OPTIONS.filter((m) => m.provider === provider)
 }
 
-const getProvidersWithApiKeys = (settings: AiAssistantSettings): Provider[] => {
-  const providers: Provider[] = []
+const getProvidersWithApiKeys = (settings: AiAssistantSettings): BuiltInProvider[] => {
+  const providers: BuiltInProvider[] = []
   const allProviders = getAllProviders()
   for (const provider of allProviders) {
     if (settings.providers?.[provider]?.apiKey) {
@@ -523,11 +594,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const initializeProviderState = useCallback(
     <T,>(
-      getValue: (provider: Provider) => T,
+      getValue: (provider: BuiltInProvider) => T,
       defaultValue: T,
-    ): Record<Provider, T> => {
+    ): Record<BuiltInProvider, T> => {
       const allProviders = getAllProviders()
-      const state = {} as Record<Provider, T>
+      const state = {} as Record<BuiltInProvider, T>
       for (const provider of allProviders) {
         state[provider] = getValue(provider) ?? defaultValue
       }
@@ -536,18 +607,18 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [],
   )
 
-  const [selectedProvider, setSelectedProvider] = useState<Provider>(() => {
+  const [selectedProvider, setSelectedProvider] = useState<BuiltInProvider>(() => {
     const providersWithKeys = getProvidersWithApiKeys(aiAssistantSettings)
     return providersWithKeys[0] || getAllProviders()[0]
   })
-  const [apiKeys, setApiKeys] = useState<Record<Provider, string>>(() =>
+  const [apiKeys, setApiKeys] = useState<Record<BuiltInProvider, string>>(() =>
     initializeProviderState(
       (provider) => aiAssistantSettings.providers?.[provider]?.apiKey || "",
       "",
     ),
   )
   const [enabledModels, setEnabledModels] = useState<
-    Record<Provider, string[]>
+    Record<BuiltInProvider, string[]>
   >(() =>
     initializeProviderState(
       (provider) =>
@@ -556,7 +627,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     ),
   )
   const [grantSchemaAccess, setGrantSchemaAccess] = useState<
-    Record<Provider, boolean>
+    Record<BuiltInProvider, boolean>
   >(() =>
     initializeProviderState(
       (provider) =>
@@ -565,7 +636,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     ),
   )
   const [validatedApiKeys, setValidatedApiKeys] = useState<
-    Record<Provider, boolean>
+    Record<BuiltInProvider, boolean>
   >(() =>
     initializeProviderState(
       (provider) => !!aiAssistantSettings.providers?.[provider]?.apiKey,
@@ -573,23 +644,42 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     ),
   )
   const [validationState, setValidationState] = useState<
-    Record<Provider, "idle" | "validating" | "validated" | "error">
+    Record<BuiltInProvider, "idle" | "validating" | "validated" | "error">
   >(() => initializeProviderState(() => "idle" as const, "idle" as const))
   const [validationErrors, setValidationErrors] = useState<
-    Record<Provider, string | null>
+    Record<BuiltInProvider, string | null>
   >(() => initializeProviderState(() => null, null))
   const [isInputFocused, setIsInputFocused] = useState<
-    Record<Provider, boolean>
+    Record<BuiltInProvider, boolean>
   >(() => initializeProviderState(() => false, false))
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleProviderSelect = useCallback((provider: Provider) => {
+  // Custom provider state
+  const [selectedCustomProvider, setSelectedCustomProvider] = useState<string | null>(null)
+  const [customProviders, setCustomProviders] = useState<Record<string, CustomProviderSettings>>(
+    () => aiAssistantSettings.customProviders || {},
+  )
+  const [showAddProviderModal, setShowAddProviderModal] = useState(false)
+  const [editingCustomProvider, setEditingCustomProvider] = useState<{
+    id: string
+    settings: CustomProviderSettings
+  } | null>(null)
+
+  const customProviderIds = useMemo(
+    () => Object.keys(customProviders),
+    [customProviders],
+  )
+
+  const isCustomProviderSelected = selectedCustomProvider !== null
+
+  const handleProviderSelect = useCallback((provider: BuiltInProvider) => {
+    setSelectedCustomProvider(null)
     setSelectedProvider(provider)
     setValidationErrors((prev) => ({ ...prev, [provider]: null }))
   }, [])
 
   const handleApiKeyChange = useCallback(
-    (provider: Provider, value: string) => {
+    (provider: BuiltInProvider, value: string) => {
       setApiKeys((prev) => ({ ...prev, [provider]: value }))
       setValidationErrors((prev) => ({ ...prev, [provider]: null }))
       // If API key changes, mark as not validated
@@ -601,7 +691,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const handleValidateApiKey = useCallback(
-    async (provider: Provider) => {
+    async (provider: BuiltInProvider) => {
       const apiKey = apiKeys[provider]
       if (!apiKey) {
         setValidationErrors((prev) => ({
@@ -656,7 +746,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [apiKeys],
   )
 
-  const handleRemoveApiKey = useCallback((provider: Provider) => {
+  const handleRemoveApiKey = useCallback((provider: BuiltInProvider) => {
     // Remove API key from local state only
     // Settings will be persisted when Save Settings is clicked
     setApiKeys((prev) => ({ ...prev, [provider]: "" }))
@@ -667,7 +757,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   }, [])
 
   const handleModelToggle = useCallback(
-    (provider: Provider, modelValue: string) => {
+    (provider: BuiltInProvider, modelValue: string) => {
       setEnabledModels((prev) => {
         const current = prev[provider]
         const isEnabled = current.includes(modelValue)
@@ -683,11 +773,46 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const handleSchemaAccessChange = useCallback(
-    (provider: Provider, checked: boolean) => {
+    (provider: BuiltInProvider, checked: boolean) => {
       setGrantSchemaAccess((prev) => ({ ...prev, [provider]: checked }))
     },
     [],
   )
+
+  // Custom provider handlers
+  const handleCustomProviderSelect = useCallback((providerId: string) => {
+    setSelectedCustomProvider(providerId)
+  }, [])
+
+  const handleAddCustomProvider = useCallback(
+    (providerId: string, settings: CustomProviderSettings) => {
+      setCustomProviders((prev) => ({
+        ...prev,
+        [providerId]: settings,
+      }))
+      setEditingCustomProvider(null)
+    },
+    [],
+  )
+
+  const handleEditCustomProvider = useCallback((providerId: string) => {
+    const settings = customProviders[providerId]
+    if (settings) {
+      setEditingCustomProvider({ id: providerId, settings })
+      setShowAddProviderModal(true)
+    }
+  }, [customProviders])
+
+  const handleDeleteCustomProvider = useCallback((providerId: string) => {
+    setCustomProviders((prev) => {
+      const updated = { ...prev }
+      delete updated[providerId]
+      return updated
+    })
+    if (selectedCustomProvider === providerId) {
+      setSelectedCustomProvider(null)
+    }
+  }, [selectedCustomProvider])
 
   const handleSave = useCallback(() => {
     const updatedProviders = { ...aiAssistantSettings.providers }
@@ -710,6 +835,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     const updatedSettings: AiAssistantSettings = {
       ...aiAssistantSettings,
       providers: updatedProviders,
+      customProviders: customProviders,
     }
 
     const nextModel = getNextModel(updatedSettings.selectedModel, enabledModels)
@@ -724,6 +850,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     enabledModels,
     grantSchemaAccess,
     validatedApiKeys,
+    customProviders,
     updateSettings,
     onOpenChange,
   ])
@@ -751,7 +878,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const allProviders = useMemo(() => getAllProviders(), [])
 
-  const renderProviderIcon = (provider: Provider, isActive: boolean) => {
+  const renderProviderIcon = (provider: BuiltInProvider, isActive: boolean) => {
     const color = isActive ? "#f8f8f2" : "#9ca3af"
     if (provider === "openai") {
       return <OpenAIIcon width="20" height="20" color={color} />
@@ -760,6 +887,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   }
 
   return (
+    <>
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <ForwardRef>
@@ -799,7 +927,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
             <MainContentArea>
               <Sidebar>
                 {allProviders.map((provider) => {
-                  const isActive = selectedProvider === provider
+                  const isActive = selectedProvider === provider && !isCustomProviderSelected
                   return (
                     <ProviderTab
                       key={provider}
@@ -825,6 +953,51 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     </ProviderTab>
                   )
                 })}
+
+                {customProviderIds.length > 0 && (
+                  <>
+                    <SidebarDivider />
+                    <SidebarSectionLabel>Custom</SidebarSectionLabel>
+                    {customProviderIds.map((providerId) => {
+                      const provider = customProviders[providerId]
+                      const isActive = selectedCustomProvider === providerId
+                      const hasEnabledModels = provider.enabledModels.length > 0
+                      return (
+                        <ProviderTab
+                          key={providerId}
+                          $active={isActive}
+                          onClick={() => handleCustomProviderSelect(providerId)}
+                        >
+                          <ProviderTabTitle>
+                            <CustomProviderIcon>
+                              <Database2 size="1.2rem" />
+                            </CustomProviderIcon>
+                            <ProviderTabName $active={isActive}>
+                              {provider.name}
+                            </ProviderTabName>
+                          </ProviderTabTitle>
+                          <StatusBadge $enabled={hasEnabledModels}>
+                            <StatusDot $enabled={hasEnabledModels} />
+                            <StatusText $enabled={hasEnabledModels}>
+                              {hasEnabledModels ? "Enabled" : "Inactive"}
+                            </StatusText>
+                          </StatusBadge>
+                        </ProviderTab>
+                      )
+                    })}
+                  </>
+                )}
+
+                <SidebarDivider />
+                <AddProviderButton
+                  onClick={() => {
+                    setEditingCustomProvider(null)
+                    setShowAddProviderModal(true)
+                  }}
+                >
+                  <Add size="1.6rem" />
+                  Add Provider
+                </AddProviderButton>
               </Sidebar>
               <VerticalSeparator />
               <ContentPanel>
@@ -1073,5 +1246,13 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         </StyledContent>
       </RadixDialog.Portal>
     </RadixDialog.Root>
+
+      <AddCustomProviderModal
+        open={showAddProviderModal}
+        onOpenChange={setShowAddProviderModal}
+        onSave={handleAddCustomProvider}
+        editProvider={editingCustomProvider}
+      />
+    </>
   )
 }

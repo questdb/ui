@@ -15,6 +15,7 @@ import {
   MODEL_OPTIONS,
   type ModelOption,
   type Provider,
+  type BuiltInProvider,
 } from "../../utils/aiAssistantSettings"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
@@ -411,22 +412,22 @@ type ConfigurationModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: Provider | null) => {
+const getProviderName = (provider: BuiltInProvider | null) => {
   if (!provider) return ""
   return provider === "openai" ? "OpenAI" : "Anthropic"
 }
 
 type StepOneContentProps = {
-  selectedProvider: Provider | null
+  selectedProvider: BuiltInProvider | null
   apiKey: string
   error: string | null
   providerName: string
-  onProviderSelect: (provider: Provider) => void
+  onProviderSelect: (provider: BuiltInProvider) => void
   onApiKeyChange: (value: string) => void
 }
 
 type StepTwoContentProps = {
-  selectedProvider: Provider | null
+  selectedProvider: BuiltInProvider | null
   enabledModels: string[]
   grantSchemaAccess: boolean
   modelsByProvider: { anthropic: ModelOption[]; openai: ModelOption[] }
@@ -571,7 +572,7 @@ const StepTwoContent = ({
   const handleClose: () => void = navigation.handleClose
   const currentProvider = selectedProvider
 
-  const getModelsForProvider = (provider: Provider) => {
+  const getModelsForProvider = (provider: BuiltInProvider) => {
     return provider === "openai"
       ? modelsByProvider.openai
       : modelsByProvider.anthropic
@@ -700,7 +701,7 @@ export const ConfigurationModal = ({
   onOpenChange,
 }: ConfigurationModalProps) => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+  const [selectedProvider, setSelectedProvider] = useState<BuiltInProvider | null>(
     null,
   )
   const providerName = useMemo(
@@ -726,7 +727,7 @@ export const ConfigurationModal = ({
     return { anthropic, openai }
   }, [])
 
-  const handleProviderSelect = useCallback((provider: Provider) => {
+  const handleProviderSelect = useCallback((provider: BuiltInProvider) => {
     setSelectedProvider(provider)
     setError(null)
     setApiKey("")

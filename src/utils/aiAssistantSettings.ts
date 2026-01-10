@@ -1,7 +1,34 @@
 import { ReasoningEffort } from "openai/resources/shared"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 
-export type Provider = "anthropic" | "openai"
+export type BuiltInProvider = "anthropic" | "openai"
+export type Provider = BuiltInProvider | string
+
+export const isCustomProvider = (provider: string): boolean => {
+  return provider.startsWith("custom-")
+}
+
+export const generateCustomProviderId = (name: string): string => {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-")
+  const timestamp = Date.now().toString(36)
+  return `custom-${slug}-${timestamp}`
+}
+
+export const getCustomProviderIds = (settings: AiAssistantSettings): string[] => {
+  return Object.keys(settings.customProviders || {})
+}
+
+export const parseCustomModelValue = (
+  modelValue: string,
+): { providerId: string; modelId: string } | null => {
+  if (!modelValue.startsWith("custom-")) return null
+  const firstColonIndex = modelValue.indexOf(":", 7) // Skip "custom-" prefix
+  if (firstColonIndex === -1) return null
+  return {
+    providerId: modelValue.slice(0, firstColonIndex),
+    modelId: modelValue.slice(firstColonIndex + 1),
+  }
+}
 
 export type ModelOption = {
   label: string
@@ -11,6 +38,7 @@ export type ModelOption = {
   isTestModel?: boolean
   default?: boolean
   defaultEnabled?: boolean
+  isCustom?: boolean
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
@@ -75,7 +103,14 @@ export const MODEL_OPTIONS: ModelOption[] = [
 ]
 
 export const providerForModel = (model: ModelOption["value"]): Provider => {
-  return MODEL_OPTIONS.find((m) => m.value === model)!.provider
+  // Check if it's a custom provider model (format: "custom-xxx:model-id")
+  const customParsed = parseCustomModelValue(model)
+  if (customParsed) {
+    return customParsed.providerId
+  }
+  // Fall back to built-in model lookup
+  const found = MODEL_OPTIONS.find((m) => m.value === model)
+  return found?.provider ?? "openai"
 }
 
 export const getModelProps = (
@@ -84,6 +119,13 @@ export const getModelProps = (
   model: string
   reasoning?: { effort: ReasoningEffort }
 } => {
+  // Handle custom provider models (format: "custom-xxx:model-id")
+  const customParsed = parseCustomModelValue(model)
+  if (customParsed) {
+    return { model: customParsed.modelId }
+  }
+
+  // Handle built-in models
   const modelOption = MODEL_OPTIONS.find((m) => m.value === model)
   if (!modelOption) {
     return { model }
@@ -105,10 +147,12 @@ export const getModelProps = (
   return { model: modelName }
 }
 
-export const getAllProviders = (): Provider[] => {
-  const providers = new Set<Provider>()
+export const getAllProviders = (): BuiltInProvider[] => {
+  const providers = new Set<BuiltInProvider>()
   MODEL_OPTIONS.forEach((model) => {
-    providers.add(model.provider)
+    if (!isCustomProvider(model.provider)) {
+      providers.add(model.provider as BuiltInProvider)
+    }
   })
   return Array.from(providers)
 }
@@ -117,12 +161,19 @@ export const getSelectedModel = (
   settings: AiAssistantSettings,
 ): string | null => {
   const selectedModel = settings.selectedModel
-  if (
-    selectedModel &&
-    typeof selectedModel === "string" &&
-    MODEL_OPTIONS.find((m) => m.value === selectedModel)
-  ) {
-    return selectedModel
+  if (selectedModel && typeof selectedModel === "string") {
+    // Check if it's a valid built-in model
+    if (MODEL_OPTIONS.find((m) => m.value === selectedModel)) {
+      return selectedModel
+    }
+    // Check if it's a valid custom provider model
+    const customParsed = parseCustomModelValue(selectedModel)
+    if (customParsed) {
+      const customProvider = settings.customProviders?.[customParsed.providerId]
+      if (customProvider?.enabledModels.includes(customParsed.modelId)) {
+        return selectedModel
+      }
+    }
   }
 
   return MODEL_OPTIONS.find((m) => m.default)?.value ?? null
@@ -165,9 +216,18 @@ export const getNextModel = (
 export const isAiAssistantConfigured = (
   settings: AiAssistantSettings,
 ): boolean => {
-  return getAllProviders().some(
+  // Check built-in providers
+  const hasBuiltInProvider = getAllProviders().some(
     (provider) => !!settings.providers?.[provider]?.apiKey,
   )
+  if (hasBuiltInProvider) return true
+
+  // Check custom providers (configured if has at least one enabled model)
+  const customProviderIds = getCustomProviderIds(settings)
+  return customProviderIds.some((id) => {
+    const provider = settings.customProviders?.[id]
+    return provider && provider.enabledModels.length > 0
+  })
 }
 
 export const canUseAiAssistant = (settings: AiAssistantSettings): boolean => {
@@ -178,6 +238,14 @@ export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {
   const selectedModel = getSelectedModel(settings)
   if (!selectedModel) return false
 
+  // Check if it's a custom provider model
+  const customParsed = parseCustomModelValue(selectedModel)
+  if (customParsed) {
+    const customProvider = settings.customProviders?.[customParsed.providerId]
+    return customProvider?.grantSchemaAccess === true
+  }
+
+  // Check built-in providers
   const anthropicModels = settings.providers?.anthropic?.enabledModels || []
   const openaiModels = settings.providers?.openai?.enabledModels || []
 
@@ -190,4 +258,44 @@ export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {
   }
 
   return false
+}
+
+export const getAllModelsIncludingCustom = (
+  settings: AiAssistantSettings,
+): ModelOption[] => {
+  const builtInModels = [...MODEL_OPTIONS]
+
+  const customModels: ModelOption[] = []
+  for (const [providerId, providerSettings] of Object.entries(
+    settings.customProviders || {},
+  )) {
+    for (const model of providerSettings.availableModels) {
+      customModels.push({
+        label: model.name,
+        value: `${providerId}:${model.id}`,
+        provider: providerId,
+        isCustom: true,
+      })
+    }
+  }
+
+  return [...builtInModels, ...customModels]
+}
+
+export const getEnabledModelsForCustomProvider = (
+  settings: AiAssistantSettings,
+  providerId: string,
+): ModelOption[] => {
+  const provider = settings.customProviders?.[providerId]
+  if (!provider) return []
+
+  return provider.enabledModels.map((modelId) => {
+    const modelInfo = provider.availableModels.find((m) => m.id === modelId)
+    return {
+      label: modelInfo?.name || modelId,
+      value: `${providerId}:${modelId}`,
+      provider: providerId,
+      isCustom: true,
+    }
+  })
 }

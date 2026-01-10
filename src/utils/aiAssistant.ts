@@ -2,7 +2,12 @@ import Anthropic from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 import { Client } from "./questdb/client"
 import { Type } from "./questdb/types"
-import { getModelProps, MODEL_OPTIONS } from "./aiAssistantSettings"
+import {
+  getModelProps,
+  MODEL_OPTIONS,
+  isCustomProvider,
+  parseCustomModelValue,
+} from "./aiAssistantSettings"
 import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
 import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
@@ -29,6 +34,7 @@ export type ActiveProviderSettings = {
   model: string
   provider: Provider
   apiKey: string
+  baseUrl?: string
 }
 
 export interface AiAssistantAPIError {
@@ -210,6 +216,22 @@ const inferProviderFromModel = (model: string): Provider => {
 const createProviderClients = (
   settings: ActiveProviderSettings,
 ): ProviderClients => {
+  // Handle custom OpenAI-compatible providers
+  if (isCustomProvider(settings.provider)) {
+    if (!settings.baseUrl) {
+      throw new Error(`No base URL found for custom provider ${settings.provider}`)
+    }
+    return {
+      provider: "openai",
+      openai: new OpenAI({
+        baseURL: settings.baseUrl,
+        apiKey: settings.apiKey || "not-required",
+        dangerouslyAllowBrowser: true,
+      }),
+    }
+  }
+
+  // Built-in providers require API keys
   if (!settings.apiKey) {
     throw new Error(`No API key found for ${settings.provider}`)
   }
@@ -224,7 +246,7 @@ const createProviderClients = (
     }
   }
   return {
-    provider: settings.provider,
+    provider: "anthropic",
     anthropic: new Anthropic({
       apiKey: settings.apiKey,
       dangerouslyAllowBrowser: true,

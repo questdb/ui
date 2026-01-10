@@ -36,6 +36,7 @@ import {
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
   providers: {},
+  customProviders: {},
 }
 
 const defaultConfig: LocalConfig = {
@@ -142,6 +143,7 @@ export const LocalStorageProvider = ({
         return {
           selectedModel: parsed.selectedModel,
           providers: parsed.providers || {},
+          customProviders: parsed.customProviders || {},
         }
       } catch (e) {
         return defaultConfig.aiAssistantSettings

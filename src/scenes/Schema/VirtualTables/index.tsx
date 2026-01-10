@@ -204,6 +204,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     hasSchemaAccess,
     currentModel,
     apiKey,
+    baseUrl,
     isConfigured,
   } = useAIStatus()
 
@@ -394,6 +395,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       model: currentModel,
       provider,
       apiKey,
+      baseUrl: baseUrl ?? undefined,
     }
 
     const handleStatusUpdate = (history: OperationHistory) => {

@@ -4,12 +4,28 @@ export type ProviderSettings = {
   grantSchemaAccess: boolean
 }
 
+export type CustomModelInfo = {
+  id: string
+  name: string
+}
+
+export type CustomProviderSettings = {
+  name: string
+  baseUrl: string
+  apiKey: string
+  apiKeyRequired: boolean
+  enabledModels: string[]
+  availableModels: CustomModelInfo[]
+  grantSchemaAccess: boolean
+}
+
 export type AiAssistantSettings = {
   selectedModel?: string
   providers: {
     anthropic?: ProviderSettings
     openai?: ProviderSettings
   }
+  customProviders?: Record<string, CustomProviderSettings>
 }
 
 export type SettingsType = string | boolean | number | AiAssistantSettings

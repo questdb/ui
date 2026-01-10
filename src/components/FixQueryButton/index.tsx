@@ -37,7 +37,7 @@ export const FixQueryButton = () => {
   const { quest } = useContext(QuestContext)
   const { editorRef, executionRefs } = useEditor()
   const tables = useSelector(selectors.query.getTables)
-  const { setStatus, abortController, hasSchemaAccess, currentModel, apiKey } =
+  const { setStatus, abortController, hasSchemaAccess, currentModel, apiKey, baseUrl } =
     useAIStatus()
   const {
     chatWindowState,
@@ -87,6 +87,7 @@ export const FixQueryButton = () => {
       model: currentModel!,
       provider,
       apiKey: apiKey!,
+      baseUrl: baseUrl ?? undefined,
     }
 
     const testModel = MODEL_OPTIONS.find(
@@ -95,7 +96,7 @@ export const FixQueryButton = () => {
     if (testModel) {
       void generateChatTitle({
         firstUserMessage: fullApiMessage,
-        settings: { model: testModel.value, provider, apiKey: apiKey! },
+        settings: { model: testModel.value, provider, apiKey: apiKey!, baseUrl: baseUrl ?? undefined },
       }).then((title) => {
         if (title) {
           void updateConversationName(conversation.id, title)

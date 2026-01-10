@@ -235,6 +235,7 @@ const AIChatWindow: React.FC = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
+    baseUrl,
   } = useAIStatus()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
@@ -464,6 +465,7 @@ const AIChatWindow: React.FC = () => {
       model: currentModel,
       provider,
       apiKey,
+      baseUrl: baseUrl ?? undefined,
     }
 
     // Generate chat title in parallel using test model (only for first message)
@@ -474,7 +476,7 @@ const AIChatWindow: React.FC = () => {
       if (testModel) {
         void generateChatTitle({
           firstUserMessage: userMessageContent,
-          settings: { model: testModel.value, provider, apiKey },
+          settings: { model: testModel.value, provider, apiKey, baseUrl: baseUrl ?? undefined },
         }).then((title) => {
           if (title) {
             void updateConversationName(conversationId, title)
