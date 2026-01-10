@@ -1001,6 +1001,124 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
               </Sidebar>
               <VerticalSeparator />
               <ContentPanel>
+                {isCustomProviderSelected && selectedCustomProvider ? (
+                  /* Custom Provider Content */
+                  (() => {
+                    const provider = customProviders[selectedCustomProvider]
+                    if (!provider) return null
+                    return (
+                      <>
+                        <ContentSection>
+                          <Box flexDirection="column" gap="1.2rem" align="flex-start">
+                            <Box
+                              justifyContent="space-between"
+                              align="center"
+                              gap="1rem"
+                              style={{ width: "100%" }}
+                            >
+                              <SectionTitle>{provider.name}</SectionTitle>
+                              <Box gap="0.8rem">
+                                <ValidateRemoveButton
+                                  onClick={() => handleEditCustomProvider(selectedCustomProvider)}
+                                >
+                                  Edit Provider
+                                </ValidateRemoveButton>
+                                <DeleteProviderButton
+                                  onClick={() => handleDeleteCustomProvider(selectedCustomProvider)}
+                                  title="Delete provider"
+                                >
+                                  <DeleteBin size="1.6rem" />
+                                </DeleteProviderButton>
+                              </Box>
+                            </Box>
+                            <SectionDescription>
+                              Base URL: {provider.baseUrl}
+                            </SectionDescription>
+                            {provider.apiKeyRequired && (
+                              <SectionDescription>
+                                API Key: {provider.apiKey ? "••••••••" : "Not set"}
+                              </SectionDescription>
+                            )}
+                          </Box>
+                        </ContentSection>
+                        <ContentSection>
+                          <Box flexDirection="column" gap="1.6rem" align="flex-start">
+                            <EnableModelsTitle>Enabled Models</EnableModelsTitle>
+                            <ModelList>
+                              {provider.availableModels.map((model) => {
+                                const isEnabled = provider.enabledModels.includes(model.id)
+                                return (
+                                  <ModelToggleRow key={model.id}>
+                                    <ModelInfoColumn>
+                                      <ModelNameText>{model.name}</ModelNameText>
+                                    </ModelInfoColumn>
+                                    <Switch
+                                      checked={isEnabled}
+                                      onChange={() => {
+                                        const newEnabledModels = isEnabled
+                                          ? provider.enabledModels.filter((m) => m !== model.id)
+                                          : [...provider.enabledModels, model.id]
+                                        setCustomProviders((prev) => ({
+                                          ...prev,
+                                          [selectedCustomProvider]: {
+                                            ...provider,
+                                            enabledModels: newEnabledModels,
+                                          },
+                                        }))
+                                      }}
+                                    />
+                                  </ModelToggleRow>
+                                )
+                              })}
+                            </ModelList>
+                            {provider.availableModels.length === 0 && (
+                              <SectionDescription>
+                                No models configured. Click &quot;Edit Provider&quot; to add models.
+                              </SectionDescription>
+                            )}
+                          </Box>
+                        </ContentSection>
+                        <ContentSection>
+                          <SchemaAccessSection>
+                            <SchemaAccessHeader>
+                              <SchemaAccessTitle>Schema Access</SchemaAccessTitle>
+                            </SchemaAccessHeader>
+                            <SchemaCheckboxContainer>
+                              <SchemaCheckboxInner>
+                                <SchemaCheckboxWrapper>
+                                  <Checkbox
+                                    checked={provider.grantSchemaAccess}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                      setCustomProviders((prev) => ({
+                                        ...prev,
+                                        [selectedCustomProvider]: {
+                                          ...provider,
+                                          grantSchemaAccess: e.target.checked,
+                                        },
+                                      }))
+                                    }}
+                                  />
+                                </SchemaCheckboxWrapper>
+                                <SchemaCheckboxContent align="flex-start">
+                                  <SchemaCheckboxLabel>
+                                    Grant schema access to {provider.name}
+                                  </SchemaCheckboxLabel>
+                                  <SchemaCheckboxDescription>
+                                    When enabled, the AI assistant can access your
+                                    database schema information to provide more accurate
+                                    suggestions and explanations.
+                                  </SchemaCheckboxDescription>
+                                </SchemaCheckboxContent>
+                              </SchemaCheckboxInner>
+                            </SchemaCheckboxContainer>
+                          </SchemaAccessSection>
+                        </ContentSection>
+                      </>
+                    )
+                  })()
+                ) : (
+                /* Built-in Provider Content */
+                <>
                 <ContentSection>
                   <Box flexDirection="column" gap="1.2rem" align="flex-start">
                     <Box
@@ -1221,6 +1339,8 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     </SchemaCheckboxContainer>
                   </SchemaAccessSection>
                 </ContentSection>
+                </>
+                )}
               </ContentPanel>
             </MainContentArea>
             <Separator />

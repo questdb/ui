@@ -37,6 +37,20 @@ export type ActiveProviderSettings = {
   baseUrl?: string
 }
 
+/**
+ * Check if provider settings are valid for making API calls.
+ * Custom providers may not require an API key.
+ */
+const isValidProviderSettings = (settings: ActiveProviderSettings): boolean => {
+  if (!settings.model) return false
+  // Custom providers may not require an API key
+  if (isCustomProvider(settings.provider)) {
+    return !!settings.baseUrl
+  }
+  // Built-in providers require an API key
+  return !!settings.apiKey
+}
+
 export interface AiAssistantAPIError {
   type: "rate_limit" | "invalid_key" | "network" | "unknown" | "aborted"
   message: string
@@ -1216,10 +1230,10 @@ export const explainTableSchema = async ({
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
-  if (!settings.apiKey || !settings.model) {
+  if (!isValidProviderSettings(settings)) {
     return {
       type: "invalid_key",
-      message: "API key is missing",
+      message: "Provider settings are incomplete",
     }
   }
   if (!tableName || !schema) {
@@ -1524,7 +1538,7 @@ export const generateChatTitle = async ({
   firstUserMessage: string
   settings: ActiveProviderSettings
 }): Promise<string | null> => {
-  if (!settings.apiKey || !settings.model) {
+  if (!isValidProviderSettings(settings)) {
     return null
   }
 
@@ -1617,10 +1631,10 @@ export const continueConversation = async ({
     compactedConversationHistory?: Array<ConversationMessage>
   }
 > => {
-  if (!settings.apiKey || !settings.model) {
+  if (!isValidProviderSettings(settings)) {
     return {
       type: "invalid_key",
-      message: "API key or model is missing",
+      message: "Provider settings are incomplete",
     }
   }
 
