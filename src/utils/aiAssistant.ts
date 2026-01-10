@@ -227,6 +227,26 @@ const inferProviderFromModel = (model: string): Provider => {
   return model.startsWith("claude") ? "anthropic" : "openai"
 }
 
+/**
+ * Create a minimal fetch wrapper that only sends essential headers.
+ * This avoids CORS issues with custom providers that don't allow
+ * the extra headers the OpenAI SDK sends (X-Stainless-*, etc.)
+ */
+const createMinimalFetch = (apiKey?: string): typeof fetch => {
+  return async (url: RequestInfo | URL, init?: RequestInit) => {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    }
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`
+    }
+    return fetch(url, {
+      ...init,
+      headers,
+    })
+  }
+}
+
 const createProviderClients = (
   settings: ActiveProviderSettings,
 ): ProviderClients => {
@@ -241,6 +261,7 @@ const createProviderClients = (
         baseURL: settings.baseUrl,
         apiKey: settings.apiKey || "not-required",
         dangerouslyAllowBrowser: true,
+        fetch: createMinimalFetch(settings.apiKey),
       }),
     }
   }
