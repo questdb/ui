@@ -386,6 +386,26 @@ const toOpenAIFunctions = (
   })) as OpenAI.Responses.Tool[]
 }
 
+/**
+ * Convert tools to Chat Completions API format (for custom providers)
+ */
+const toChatCompletionsTools = (
+  tools: Array<{
+    name: string
+    description?: string
+    input_schema: AnthropicTool["input_schema"]
+  }>,
+): OpenAI.Chat.Completions.ChatCompletionTool[] => {
+  return tools.map((t) => ({
+    type: "function" as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema as Record<string, unknown>,
+    },
+  }))
+}
+
 export const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
   if (!sql) return ""
   let result = sql.trim()
@@ -1107,21 +1127,26 @@ const executeOpenAIFlow = async <T>({
 /**
  * Execute flow for custom OpenAI-compatible providers using standard Chat Completions API.
  * This avoids using the Responses API which is not supported by most providers.
+ * Supports tool calling for providers that implement the OpenAI tool calling format.
  */
 const executeCustomProviderFlow = async <T>({
   openai,
   model,
   config,
+  modelToolsClient,
   setStatus,
   abortSignal,
 }: {
   openai: OpenAI
   model: string
   config: OpenAIFlowConfig<T>
+  modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
 }): Promise<T | AiAssistantAPIError> => {
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = []
+  type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam
+
+  const messages: ChatMessage[] = []
 
   // Add system message
   messages.push({
@@ -1160,24 +1185,98 @@ const executeCustomProviderFlow = async <T>({
     content: userContent,
   })
 
+  // Determine which tools to provide based on schema access
+  const grantSchemaAccess = !!modelToolsClient.getTables
+  const tools = toChatCompletionsTools(grantSchemaAccess ? ALL_TOOLS : REFERENCE_TOOLS)
+
+  // Accumulate tokens across all iterations
+  let totalInputTokens = 0
+  let totalOutputTokens = 0
+
   try {
     // Extract the actual model ID (not the full "providerId:modelId" format)
     const actualModelId = getModelProps(model).model
 
-    const response = await openai.chat.completions.create({
+    let response = await openai.chat.completions.create({
       model: actualModelId,
       messages,
+      tools: tools.length > 0 ? tools : undefined,
       temperature: 0.3,
     })
 
-    if (abortSignal?.aborted) {
-      return {
-        type: "aborted",
-        message: "Operation was cancelled",
-      } as AiAssistantAPIError
+    totalInputTokens += response.usage?.prompt_tokens ?? 0
+    totalOutputTokens += response.usage?.completion_tokens ?? 0
+
+    // Tool calling loop
+    while (true) {
+      if (abortSignal?.aborted) {
+        return {
+          type: "aborted",
+          message: "Operation was cancelled",
+        } as AiAssistantAPIError
+      }
+
+      const assistantMessage = response.choices[0]?.message
+      if (!assistantMessage) break
+
+      // Check for tool calls
+      const toolCalls = assistantMessage.tool_calls
+      if (!toolCalls || toolCalls.length === 0) break
+
+      // Add assistant message with tool calls to history
+      messages.push({
+        role: "assistant",
+        content: assistantMessage.content || null,
+        tool_calls: toolCalls,
+      })
+
+      // Execute each tool call
+      for (const toolCall of toolCalls) {
+        // Only handle function tool calls (not custom tool calls)
+        if (toolCall.type !== "function") continue
+
+        const toolName = toolCall.function.name
+        let toolArgs: unknown = {}
+        try {
+          toolArgs = JSON.parse(toolCall.function.arguments || "{}")
+        } catch {
+          // Invalid JSON in arguments, use empty object
+        }
+
+        const toolResult = await executeTool(
+          toolName,
+          toolArgs,
+          modelToolsClient,
+          setStatus,
+        )
+
+        // Add tool result to messages
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: toolResult.content,
+        })
+      }
+
+      // Make another request with tool results
+      setStatus(AIOperationStatus.Processing)
+      response = await openai.chat.completions.create({
+        model: actualModelId,
+        messages,
+        tools: tools.length > 0 ? tools : undefined,
+        temperature: 0.3,
+      })
+
+      totalInputTokens += response.usage?.prompt_tokens ?? 0
+      totalOutputTokens += response.usage?.completion_tokens ?? 0
     }
 
-    const content = response.choices[0]?.message?.content || ""
+    const message = response.choices[0]?.message
+    // Some models return content in different fields
+    const content = message?.content
+      || (message as any)?.reasoning_content
+      || (message as any)?.reasoning
+      || ""
     setStatus(null)
 
     // Try to parse as JSON
@@ -1198,6 +1297,8 @@ const executeCustomProviderFlow = async <T>({
         || jsonParsed.message
         || jsonParsed.content
         || jsonParsed.text
+        || jsonParsed.reasoning_content
+        || jsonParsed.reasoning
         || (typeof jsonParsed === 'string' ? jsonParsed : null)
 
       parsed = {
@@ -1214,8 +1315,8 @@ const executeCustomProviderFlow = async <T>({
     }
 
     const tokenUsage: TokenUsage = {
-      inputTokens: response.usage?.prompt_tokens ?? 0,
-      outputTokens: response.usage?.completion_tokens ?? 0,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
     }
 
     const resultWithTokens = {
@@ -1946,7 +2047,8 @@ export const continueConversation = async ({
         }
       }
 
-      // Use custom provider flow for OpenAI-compatible providers (no Responses API)
+      // Use custom provider flow for OpenAI-compatible providers (uses Chat Completions API
+      // instead of Responses API which is not supported by most providers)
       if (clients.provider === "openai" && isCustomProvider(settings.provider)) {
         const result = await executeCustomProviderFlow<{
           sql?: string | null
@@ -1976,6 +2078,7 @@ export const continueConversation = async ({
               }
             },
           },
+          modelToolsClient,
           setStatus,
           abortSignal,
         })
