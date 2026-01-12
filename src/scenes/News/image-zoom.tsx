@@ -26,10 +26,12 @@ const Overlay = styled.div<{ visible: boolean }>`
   opacity: ${({ visible }) => (visible ? 1 : 0)};
   pointer-events: ${({ visible }) => (visible ? "auto" : "none")};
   transition: opacity 0.2s ease-in-out;
+  cursor: pointer;
 `
 
 const Wrapper = styled.div`
   z-index: 1001;
+  cursor: pointer;
 
   img {
     border: 1px solid ${({ theme }) => theme.color.offWhite};
@@ -72,9 +74,12 @@ export const ImageZoom = () => {
 
   return (
     <Root ref={rootRef} visible={imageToZoom !== undefined}>
-      <Overlay visible={imageToZoom !== undefined} />
+      <Overlay
+        visible={imageToZoom !== undefined}
+        onClick={() => dispatch(actions.console.setImageToZoom(undefined))}
+      />
       {imageToZoom && (
-        <Wrapper>
+        <Wrapper onClick={() => dispatch(actions.console.setImageToZoom(undefined))}>
           <Thumbnail
             {...imageToZoom}
             containerWidth={rootWidth ? rootWidth * 0.9 : 460}
