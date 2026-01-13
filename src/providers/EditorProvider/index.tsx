@@ -23,7 +23,7 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/aiAssistant"
-import type { Buffer } from "../../store/buffers"
+import type { Buffer, PreviewContent } from "../../store/buffers"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
@@ -40,11 +40,21 @@ import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
-export type DiffBufferContent = {
+export type PreviewBufferContentDiff = {
+  type: "diff"
   original: string
   modified: string
   conversationId?: ConversationId
 }
+
+export type PreviewBufferContentCode = {
+  type: "code"
+  value: string
+}
+
+export type PreviewBufferContent =
+  | PreviewBufferContentDiff
+  | PreviewBufferContentCode
 
 export type ApplyAISQLChangeOptions = {
   newSQL: string
@@ -89,15 +99,13 @@ export type EditorContext = {
   temporaryBufferId: number | null
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
-  // Global diff buffer management
-  showDiffBuffer: (content: DiffBufferContent) => Promise<void>
-  closeDiffBufferForConversation: (
-    conversationId: ConversationId,
-  ) => Promise<void>
+  showPreviewBuffer: (content: PreviewBufferContent) => Promise<void>
+  closePreviewBuffer: () => Promise<void>
   // Apply AI SQL change to editor
   applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
   executionRefs: MutableRefObject<ExecutionRefs>
   cleanupExecutionRefs: (bufferId: number) => void
+  highlightQuery: (queryKey: QueryKey, bufferId: number) => Promise<boolean>
 }
 
 const defaultValues = {
@@ -120,11 +128,12 @@ const defaultValues = {
   temporaryBufferId: null,
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
-  showDiffBuffer: () => Promise.resolve(),
-  closeDiffBufferForConversation: () => Promise.resolve(),
+  showPreviewBuffer: () => Promise.resolve(),
+  closePreviewBuffer: () => Promise.resolve(),
   applyAISQLChange: () => ({ success: false }),
   executionRefs: { current: {} },
   cleanupExecutionRefs: () => undefined,
+  highlightQuery: () => Promise.resolve(false),
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -423,65 +432,63 @@ export const EditorProvider: React.FC = ({ children }) => {
       })
     }
 
-  const showDiffBuffer: EditorContext["showDiffBuffer"] = async (content) => {
-    const existingDiffBuffer = buffers.find(
-      (b) => b.isDiffBuffer && !b.archived,
+  const showPreviewBuffer: EditorContext["showPreviewBuffer"] = async (
+    content,
+  ) => {
+    const existingPreviewBuffer = buffers.find(
+      (b) => b.isPreviewBuffer && !b.archived,
     )
 
-    if (existingDiffBuffer && existingDiffBuffer.id) {
-      // Update existing diff buffer
-      await bufferStore.update(existingDiffBuffer.id, {
-        diffContent: {
-          original: content.original,
-          modified: content.modified,
-          conversationId: content.conversationId,
-          queryStartOffset: 0,
-        },
+    const previewContent: PreviewContent =
+      content.type === "diff"
+        ? {
+            type: "diff",
+            original: content.original,
+            modified: content.modified,
+            conversationId: content.conversationId,
+          }
+        : {
+            type: "code",
+            value: content.value,
+          }
+
+    const label = content.type === "diff" ? "AI Suggestion" : "Preview"
+
+    if (existingPreviewBuffer && existingPreviewBuffer.id) {
+      // Update existing preview buffer
+      await bufferStore.update(existingPreviewBuffer.id, {
+        previewContent,
+        label,
       })
       // Switch to it
       const updatedBuffer = {
-        ...existingDiffBuffer,
-        diffContent: {
-          original: content.original,
-          modified: content.modified,
-          conversationId: content.conversationId,
-          queryStartOffset: 0,
-        },
+        ...existingPreviewBuffer,
+        previewContent,
+        label,
       }
       await setActiveBuffer(updatedBuffer)
     } else {
-      // Create new diff buffer
+      // Create new preview buffer
       const position = buffers.filter(
         (b) => !b.archived && !b.isTemporary,
       ).length
       await addBuffer({
-        label: "AI Suggestion",
+        label,
         value: "",
-        isDiffBuffer: true,
+        isPreviewBuffer: true,
         position,
-        diffContent: {
-          original: content.original,
-          modified: content.modified,
-          conversationId: content.conversationId,
-          queryStartOffset: 0,
-        },
+        previewContent,
       })
       // addBuffer already switches to it
     }
   }
 
-  const closeDiffBufferForConversation: EditorContext["closeDiffBufferForConversation"] =
-    async (conversationId) => {
-      const diffBuffer = buffers.find(
-        (b) =>
-          b.isDiffBuffer &&
-          !b.archived &&
-          b.diffContent?.conversationId === conversationId,
-      )
-      if (diffBuffer && diffBuffer.id) {
-        await deleteBuffer(diffBuffer.id, true)
-      }
+  const closePreviewBuffer: EditorContext["closePreviewBuffer"] = async () => {
+    const previewBuffer = buffers.find((b) => b.isPreviewBuffer && !b.archived)
+    if (previewBuffer && previewBuffer.id) {
+      await deleteBuffer(previewBuffer.id, true)
     }
+  }
 
   const applyAISQLChange: EditorContext["applyAISQLChange"] = (options) => {
     const { newSQL, queryKey } = options
@@ -622,6 +629,70 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
+  const highlightQuery = async (
+    queryKey: QueryKey,
+    bufferId: number,
+  ): Promise<boolean> => {
+    const buffer = await bufferStore.getById(bufferId)
+    if (!buffer || buffer.archived) {
+      return false
+    }
+
+    const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+    const contentAtOffset = buffer.value.slice(startOffset, endOffset)
+    if (normalizeQueryText(contentAtOffset) !== queryText) {
+      return false
+    }
+
+    const targetBuffer = buffers.find((b) => b.id === bufferId)
+    if (targetBuffer && activeBuffer.id !== bufferId) {
+      await setActiveBuffer(targetBuffer)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+
+    if (!editorRef.current) {
+      return false
+    }
+    const model = editorRef.current.getModel()
+    if (!model) {
+      return false
+    }
+
+    const startPosition = model.getPositionAt(startOffset)
+    const endPosition = model.getPositionAt(endOffset)
+
+    editorRef.current.revealPositionNearTop(startPosition)
+    editorRef.current.setPosition(startPosition)
+
+    const decorationIds = model.deltaDecorations(
+      [],
+      [
+        {
+          range: {
+            startLineNumber: startPosition.lineNumber,
+            startColumn: startPosition.column,
+            endLineNumber: endPosition.lineNumber,
+            endColumn: endPosition.column,
+          },
+          options: {
+            isWholeLine: false,
+            className: "aiQueryHighlight",
+          },
+        },
+      ],
+    )
+
+    editorRef.current.focus()
+
+    setTimeout(() => {
+      if (!model.isDisposed()) {
+        model.deltaDecorations(decorationIds, [])
+      }
+    }, 1000)
+
+    return true
+  }
+
   return (
     <EditorContext.Provider
       value={{
@@ -651,11 +722,12 @@ export const EditorProvider: React.FC = ({ children }) => {
         temporaryBufferId,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
-        showDiffBuffer,
-        closeDiffBufferForConversation,
+        showPreviewBuffer,
+        closePreviewBuffer,
         applyAISQLChange,
         executionRefs,
         cleanupExecutionRefs,
+        highlightQuery,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()

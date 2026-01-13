@@ -31,7 +31,7 @@ import React, {
   useCallback,
 } from "react"
 import styled from "styled-components"
-import { DiffEditor } from "@monaco-editor/react"
+import { DiffEditor, Editor as MonacoEditor } from "@monaco-editor/react"
 
 import { PaneWrapper, Box, Button, Key } from "../../components"
 import { useKeyPress } from "../../hooks"
@@ -198,17 +198,25 @@ const Editor = ({
   }, [])
 
   const isMonacoHidden =
-    !!activeBuffer.isDiffBuffer || !!activeBuffer.metricsViewState
+    !!activeBuffer.isPreviewBuffer || !!activeBuffer.metricsViewState
+
+  const isDiffPreview =
+    activeBuffer.isPreviewBuffer && activeBuffer.previewContent?.type === "diff"
+
+  const isCodePreview =
+    activeBuffer.isPreviewBuffer && activeBuffer.previewContent?.type === "code"
 
   const pendingDiffInfo = useMemo(() => {
     if (
-      !activeBuffer.isDiffBuffer ||
-      !activeBuffer.diffContent?.conversationId
+      !isDiffPreview ||
+      !activeBuffer.previewContent ||
+      activeBuffer.previewContent.type !== "diff" ||
+      !activeBuffer.previewContent.conversationId
     ) {
       return null
     }
 
-    const conversationId = activeBuffer.diffContent.conversationId
+    const conversationId = activeBuffer.previewContent.conversationId
     const meta = getConversationMeta(conversationId)
 
     if (!meta) {
@@ -221,7 +229,7 @@ const Editor = ({
     }
 
     const normalizedDiffModified = normalizeQueryText(
-      activeBuffer.diffContent.modified || "",
+      activeBuffer.previewContent.modified || "",
     )
     const normalizedCurrentSQL = normalizeQueryText(meta.currentSQL || "")
 
@@ -233,11 +241,20 @@ const Editor = ({
       conversationId,
       messageId: lastUnactionedDiff.id,
     }
-  }, [activeBuffer, getConversationMeta, activeConversationMessages])
+  }, [
+    activeBuffer,
+    isDiffPreview,
+    getConversationMeta,
+    activeConversationMessages,
+  ])
 
-  // Handle accept button click from diff editor button bar
   const handleAcceptFromDiffEditor = useCallback(async () => {
-    if (!pendingDiffInfo || !activeBuffer.diffContent) return
+    if (
+      !pendingDiffInfo ||
+      !activeBuffer.previewContent ||
+      activeBuffer.previewContent.type !== "diff"
+    )
+      return
 
     const { conversationId } = pendingDiffInfo
 
@@ -246,9 +263,8 @@ const Editor = ({
       conversationId,
       messageId: pendingDiffInfo.messageId,
     })
-  }, [pendingDiffInfo, activeBuffer.diffContent, acceptSuggestion])
+  }, [pendingDiffInfo, activeBuffer.previewContent, acceptSuggestion])
 
-  // Handle reject button click from diff editor button bar
   const handleRejectFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo) return
 
@@ -286,13 +302,24 @@ const Editor = ({
         <EditorContent>
           <EditorPane>
             {activeBuffer.editorViewState && <Monaco hidden={isMonacoHidden} />}
-            {activeBuffer.isDiffBuffer && activeBuffer.diffContent && (
+            {/* Diff preview mode */}
+            {isDiffPreview && (
               <DiffViewWrapper>
                 <DiffEditorContainer data-hook="diff-editor-container">
                   <DiffEditor
                     key={
-                      activeBuffer.diffContent.original +
-                      activeBuffer.diffContent.modified
+                      (
+                        activeBuffer.previewContent as {
+                          original: string
+                          modified: string
+                        }
+                      ).original +
+                      (
+                        activeBuffer.previewContent as {
+                          original: string
+                          modified: string
+                        }
+                      ).modified
                     }
                     onMount={(editor) => {
                       editor.onDidUpdateDiff(() => {
@@ -306,8 +333,14 @@ const Editor = ({
                         }
                       })
                     }}
-                    original={activeBuffer.diffContent.original}
-                    modified={activeBuffer.diffContent.modified}
+                    original={
+                      (activeBuffer.previewContent as { original: string })
+                        .original
+                    }
+                    modified={
+                      (activeBuffer.previewContent as { modified: string })
+                        .modified
+                    }
                     language={QuestDBLanguageName}
                     theme="dracula"
                     options={{
@@ -364,6 +397,32 @@ const Editor = ({
                     </AcceptButton>
                   </ButtonBar>
                 )}
+              </DiffViewWrapper>
+            )}
+            {/* Code preview mode */}
+            {isCodePreview && (
+              <DiffViewWrapper>
+                <DiffEditorContainer data-hook="code-preview-container">
+                  <MonacoEditor
+                    value={
+                      (activeBuffer.previewContent as { value: string }).value
+                    }
+                    language={QuestDBLanguageName}
+                    theme="dracula"
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      lineNumbers: "off",
+                      hideCursorInOverviewRuler: true,
+                      automaticLayout: true,
+                      fontSize: 14,
+                      lineHeight: 24,
+                      folding: false,
+                      wordWrap: "on",
+                    }}
+                  />
+                </DiffEditorContainer>
               </DiffViewWrapper>
             )}
             {/* Metrics view */}

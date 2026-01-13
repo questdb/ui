@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { AssistantModes } from "../../../components/AIStatusIndicator/AssistantModes"
@@ -29,6 +27,7 @@ import {
 import { CloseCircle } from "@styled-icons/remix-fill"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { TableIcon } from "../../Schema/table-icon"
+import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
@@ -293,119 +292,6 @@ const ErrorContainer = styled.div`
   width: 100%;
 `
 
-const MarkdownContent = styled.div`
-  margin: 0;
-  width: 100%;
-  font-family: ${({ theme }) => theme.font};
-  font-size: 1.4rem;
-  line-height: 2.1rem;
-  color: ${color("foreground")};
-  overflow: visible;
-  word-break: break-word;
-
-  p {
-    margin: 0 0 1rem 0;
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-
-  code {
-    background: ${color("background")};
-    border: 1px solid ${color("selection")};
-    border-radius: 0.4rem;
-    padding: 0.1rem 0.4rem;
-    font-family: ${({ theme }) => theme.fontMonospace};
-    font-size: 1.3rem;
-    color: ${color("purple")};
-    white-space: pre-wrap;
-  }
-
-  strong {
-    font-weight: 600;
-    color: ${color("foreground")};
-  }
-
-  em {
-    font-style: italic;
-  }
-
-  ul,
-  ol {
-    margin: 0.5rem 0;
-    padding-left: 2rem;
-  }
-
-  li {
-    margin-bottom: 0.3rem;
-  }
-
-  a {
-    color: ${({ theme }) => theme.color.cyan};
-    text-decoration: none;
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-
-  h1,
-  h2,
-  h3,
-  h4 {
-    margin: 1rem 0 0.5rem 0;
-    font-weight: 600;
-  }
-
-  h1 {
-    font-size: 1.8rem;
-  }
-  h2 {
-    font-size: 1.6rem;
-  }
-  h3 {
-    font-size: 1.5rem;
-  }
-  h4 {
-    font-size: 1.4rem;
-  }
-
-  blockquote {
-    border-left: 3px solid ${color("selection")};
-    margin: 1rem 0;
-    padding-left: 1rem;
-    color: ${color("gray2")};
-  }
-
-  .table-wrapper {
-    overflow-x: auto;
-    margin: 1rem 0;
-  }
-
-  table {
-    border-collapse: collapse;
-    min-width: max-content;
-    border-radius: 0.8rem;
-  }
-
-  th,
-  td {
-    padding: 0.6rem 0.8rem;
-    border: 1px solid ${color("selection")};
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  th {
-    background: ${color("backgroundDarker")};
-    font-weight: 600;
-  }
-
-  td:last-child {
-    white-space: normal;
-    min-width: 200px;
-  }
-`
-
 const DiffContainer = styled(Box)`
   display: flex;
   flex-direction: column;
@@ -526,11 +412,6 @@ const ButtonBar = styled(Box)`
   border-radius: 0.4rem;
 `
 
-const CodeBlockWrapper = styled.div`
-  margin: 1rem 0;
-  width: 100%;
-`
-
 const AcceptButton = styled(Button)`
   background: ${({ theme }) => theme.color.pinkDarker};
   color: ${color("foreground")};
@@ -556,12 +437,19 @@ const RejectButton = styled(Button)`
   }
 `
 
+export type OpenInEditorContent =
+  | { type: "diff"; original: string; modified: string }
+  | { type: "code"; value: string }
+
 type ChatMessagesProps = {
   messages: ConversationMessage[]
   onAcceptChange?: (messageId: string) => void
   onRejectChange?: (messageId: string) => void
   onRunQuery?: (sql: string) => void
-  onExpandDiff?: (original: string, modified: string) => void
+  onOpenInEditor?: (
+    content: OpenInEditorContent,
+    existingQuery?: boolean,
+  ) => Promise<void>
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
   // Query execution status
@@ -626,7 +514,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onAcceptChange,
   onRejectChange,
   onRunQuery,
-  onExpandDiff,
+  onOpenInEditor,
   onApplyToEditor,
   running,
   aiSuggestionRequest,
@@ -762,6 +650,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     >
       {visibleMessages.map(({ message, originalIndex }) => {
         const key = `${message.id}`
+        const isCurrentQuery =
+          normalizeQueryText(message.sql || "") ===
+          normalizeQueryText(editorSQL || "")
+
         if (message.role === "user") {
           // Check if this is a special request type with inline SQL display
           const displayType = message.displayType
@@ -800,14 +692,28 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             } else if (sql) {
               // fix_request and explain_request show SQL editor
               const lineCount = sql.split("\n").length
-              const editorHeight = Math.min(lineCount * 20 + 16, 200)
+              const maxHeight = 200
+              const naturalHeight = lineCount * 20 + 16
+              const editorHeight = Math.min(naturalHeight, maxHeight)
+              const shouldShowOpenInEditor = naturalHeight > maxHeight
               content = (
                 <UserRequestContent>
                   <InlineSQLEditor
                     style={{ height: editorHeight }}
                     data-hook="user-request-sql-editor"
                   >
-                    <LiteEditor value={sql} />
+                    <LiteEditor
+                      value={sql}
+                      onOpenInEditor={
+                        shouldShowOpenInEditor && onOpenInEditor
+                          ? () =>
+                              onOpenInEditor(
+                                { type: "code", value: sql },
+                                isCurrentQuery,
+                              )
+                          : undefined
+                      }
+                    />
                   </InlineSQLEditor>
                 </UserRequestContent>
               )
@@ -837,7 +743,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           if (displayType === "ask_request" && sql) {
             const userQuestion = message.displayUserMessage || message.content
             const lineCount = sql.split("\n").length
-            const editorHeight = Math.min(lineCount * 20 + 16, 200)
+            const maxHeight = 200
+            const naturalHeight = lineCount * 20 + 16
+            const editorHeight = Math.min(naturalHeight, maxHeight)
+            const shouldShowOpenInEditor = naturalHeight > maxHeight
 
             return (
               <UserRequestBox key={key} data-hook="chat-message-user">
@@ -849,7 +758,18 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     style={{ height: editorHeight }}
                     data-hook="user-request-sql-editor"
                   >
-                    <LiteEditor value={sql} />
+                    <LiteEditor
+                      value={sql}
+                      onOpenInEditor={
+                        shouldShowOpenInEditor && onOpenInEditor
+                          ? () =>
+                              onOpenInEditor(
+                                { type: "code", value: sql },
+                                isCurrentQuery,
+                              )
+                          : undefined
+                      }
+                    />
                   </InlineSQLEditor>
                 </UserRequestContent>
               </UserRequestBox>
@@ -1005,82 +925,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     )}
                   </AssistantHeader>
                   <ExplanationContent>
-                    <MarkdownContent>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({
-                            children,
-                            href,
-                            ...props
-                          }: React.ComponentProps<"a">) => (
-                            <a
-                              {...(typeof href === "string" &&
-                              href.startsWith("http")
-                                ? {
-                                    target: "_blank",
-                                    rel: "noopener noreferrer",
-                                  }
-                                : {})}
-                              href={href}
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
-                          table: ({
-                            children,
-                            ...props
-                          }: React.ComponentProps<"table">) => (
-                            <div className="table-wrapper">
-                              <table {...props}>{children}</table>
-                            </div>
-                          ),
-                          // Render pre as fragment since code blocks are handled by code component
-                          pre: ({ children }: React.ComponentProps<"pre">) => (
-                            <>{children}</>
-                          ),
-                          code: ({
-                            children,
-                            className,
-                          }: React.ComponentProps<"code">) => {
-                            // Check if this is a code block (has language class) or inline code
-                            const isCodeBlock =
-                              typeof className === "string" &&
-                              className.includes("language-")
-                            if (isCodeBlock) {
-                              // Extract text content from children (can be string or array)
-                              const codeContent = (
-                                Array.isArray(children)
-                                  ? children.join("")
-                                  : typeof children === "string"
-                                    ? children
-                                    : ""
-                              ).replace(/\n$/, "")
-                              const lineCount = codeContent.split("\n").length
-                              // LiteEditor has 8px padding top and bottom (16px total)
-                              const editorHeight = Math.min(
-                                lineCount * 20 + 16,
-                                316,
-                              )
-                              return (
-                                <CodeBlockWrapper
-                                  key={`${message.id}-${codeContent}`}
-                                  style={{ height: editorHeight }}
-                                  data-hook="chat-message-code-block"
-                                >
-                                  <LiteEditor value={codeContent} />
-                                </CodeBlockWrapper>
-                              )
-                            }
-                            // Inline code - render as default
-                            return <code>{children}</code>
-                          },
-                        }}
-                      >
-                        {explanation}
-                      </ReactMarkdown>
-                    </MarkdownContent>
+                    <AssistantMarkdown
+                      content={explanation}
+                      messageId={message.id}
+                      onOpenInEditor={onOpenInEditor}
+                    />
                     {hasSQLChange && (
                       <DiffContainer data-hook="inline-diff-container">
                         <DiffHeader $isExpanded={isExpanded}>
@@ -1146,8 +995,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                               !(
                                 originalIndex === latestDiffIndex && isAccepted
                               ) &&
-                              normalizeQueryText(message.sql || "") !==
-                                normalizeQueryText(editorSQL || "") && (
+                              !isCurrentQuery && (
                                 <IconButton
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -1199,13 +1047,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 original={previousSQLForDiff}
                                 modified={currentSQLForDiff}
                                 noBorder
-                                onExpandDiff={
-                                  onExpandDiff
+                                onOpenInEditor={
+                                  onOpenInEditor
                                     ? () =>
-                                        onExpandDiff(
-                                          message.previousSQL || "",
-                                          message.sql || "",
-                                        )
+                                        onOpenInEditor({
+                                          type: "diff",
+                                          original: message.previousSQL || "",
+                                          modified: message.sql || "",
+                                        })
                                     : undefined
                                 }
                               />

@@ -117,6 +117,7 @@ type RegularEditorProps = BaseLiteEditorProps & {
   value: string
   original?: never
   modified?: never
+  onOpenInEditor?: () => void
 }
 
 type DiffEditorProps = BaseLiteEditorProps & {
@@ -124,7 +125,7 @@ type DiffEditorProps = BaseLiteEditorProps & {
   original: string
   modified: string
   value?: never
-  onExpandDiff?: () => void
+  onOpenInEditor?: () => void
 }
 
 type LiteEditorProps = RegularEditorProps | DiffEditorProps
@@ -159,10 +160,10 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
           }}
         >
           <ButtonsContainer>
-            {props.onExpandDiff && (
+            {props.onOpenInEditor && (
               <OpenInEditorButton
                 className="open-in-editor-btn"
-                onClick={props.onExpandDiff}
+                onClick={props.onOpenInEditor}
                 title="Open in editor"
                 data-hook="diff-open-in-editor-button"
               >
@@ -208,6 +209,8 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
               scrollbar: {
                 vertical: "hidden",
                 horizontal: "hidden",
+                alwaysConsumeMouseWheel: false,
+                handleMouseWheel: false,
               },
               automaticLayout: true,
               folding: false,
@@ -230,14 +233,39 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
 
     return (
       <EditorWrapper $noBorder={noBorder} style={{ height }}>
-        <CopyButtonFloating
-          skin="transparent"
-          onClick={() => handleCopy(props.value ?? "")}
-          title="Copy to clipboard"
-        >
-          {copied && <SuccessIcon size="1rem" />}
-          <FileCopy size="1.8rem" />
-        </CopyButtonFloating>
+        {props.onOpenInEditor ? (
+          <ButtonsContainer>
+            <OpenInEditorButton
+              className="open-in-editor-btn"
+              onClick={props.onOpenInEditor}
+              title="Open in editor"
+              data-hook="code-open-in-editor-button"
+            >
+              Open in editor
+              <SquareSplitHorizontalIcon
+                size="1.8rem"
+                color={appTheme.color.offWhite}
+              />
+            </OpenInEditorButton>
+            <CopyButtonBase
+              skin="transparent"
+              onClick={() => handleCopy(props.value ?? "")}
+              title="Copy to clipboard"
+            >
+              {copied && <SuccessIcon size="1rem" />}
+              <FileCopy size="1.8rem" />
+            </CopyButtonBase>
+          </ButtonsContainer>
+        ) : (
+          <CopyButtonFloating
+            skin="transparent"
+            onClick={() => handleCopy(props.value ?? "")}
+            title="Copy to clipboard"
+          >
+            {copied && <SuccessIcon size="1rem" />}
+            <FileCopy size="1.8rem" />
+          </CopyButtonFloating>
+        )}
         <Editor
           height={height}
           language={language}
@@ -259,9 +287,12 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
             scrollbar: {
               vertical: "hidden",
               horizontal: "hidden",
+              alwaysConsumeMouseWheel: false,
+              handleMouseWheel: false,
             },
             fontSize,
             padding,
+            lineHeight,
           }}
         />
       </EditorWrapper>
@@ -272,7 +303,8 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
       prevProps.value === nextProps.value &&
       prevProps.diffEditor === nextProps.diffEditor &&
       prevProps.original === nextProps.original &&
-      prevProps.modified === nextProps.modified
+      prevProps.modified === nextProps.modified &&
+      prevProps.onOpenInEditor === nextProps.onOpenInEditor
     )
   },
 )

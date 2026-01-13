@@ -202,12 +202,10 @@ const AIChatWindow: React.FC = () => {
   const { quest } = useContext(QuestContext)
   const {
     editorRef,
-    buffers,
-    activeBuffer,
-    setActiveBuffer,
-    showDiffBuffer,
-    closeDiffBufferForConversation,
+    showPreviewBuffer,
+    closePreviewBuffer,
     executionRefs,
+    highlightQuery,
   } = useEditor()
   const {
     conversationMetas,
@@ -274,32 +272,6 @@ const AIChatWindow: React.FC = () => {
   const hasUnactionedDiff = useMemo(() => {
     return checkHasUnactionedDiff(messages)
   }, [messages])
-
-  // Determine the buffer/tab status for this conversation
-  const bufferStatus = useMemo(() => {
-    if (!conversation) return { type: "none" as const }
-
-    const conversationBufferId = conversation.bufferId
-    const buffer = buffers.find((b) => b.id === conversationBufferId)
-
-    if (!buffer) {
-      // Buffer doesn't exist (deleted)
-      return { type: "deleted" as const }
-    }
-
-    if (buffer.archived) {
-      // Buffer is archived
-      return { type: "archived" as const, buffer }
-    }
-
-    if (buffer.id === activeBuffer.id) {
-      // Buffer is the current active tab
-      return { type: "active" as const, buffer }
-    }
-
-    // Buffer exists but is not active
-    return { type: "inactive" as const, buffer }
-  }, [conversation, buffers, activeBuffer])
 
   const shouldShowMessages = useMemo(() => {
     return messages.length > 0 && !isLoadingMessages
@@ -413,7 +385,7 @@ const AIChatWindow: React.FC = () => {
     const conversationId = chatWindowState.activeConversationId
 
     if (hasUnactionedDiffParam) {
-      void closeDiffBufferForConversation(conversationId)
+      void closePreviewBuffer()
     }
 
     const hasAssistantMessages = conversation.messages.some(
@@ -549,18 +521,6 @@ const AIChatWindow: React.FC = () => {
     })
   }
 
-  const handleExpandDiff = useCallback(
-    (original: string, modified: string) => {
-      if (!chatWindowState.activeConversationId) return
-      void showDiffBuffer({
-        original,
-        modified,
-        conversationId: chatWindowState.activeConversationId,
-      })
-    },
-    [showDiffBuffer, chatWindowState.activeConversationId],
-  )
-
   const handleAcceptChange = useCallback(
     async (messageId: string) => {
       if (!chatWindowState.activeConversationId) return
@@ -605,81 +565,44 @@ const AIChatWindow: React.FC = () => {
     [queryInfo.startOffset],
   )
 
-  const navigateToBuffer = useCallback(async (): Promise<boolean> => {
-    if (
-      bufferStatus.type === "deleted" ||
-      bufferStatus.type === "archived" ||
-      bufferStatus.type === "none"
-    ) {
+  const handleContextClick = useCallback(async () => {
+    if (!conversation?.queryKey || !conversation?.bufferId) {
       return false
     }
+    return await highlightQuery(conversation.queryKey, conversation.bufferId)
+  }, [conversation, highlightQuery])
 
-    try {
-      // Switch to the buffer if it's inactive
-      if (bufferStatus.type === "inactive" && bufferStatus.buffer) {
-        await setActiveBuffer(bufferStatus.buffer)
-        // Wait for the buffer to be set
-        await new Promise((resolve) => setTimeout(resolve, 100))
+  const handleOpenInEditor = useCallback(
+    async (
+      content:
+        | { type: "diff"; original: string; modified: string }
+        | { type: "code"; value: string },
+      existingQuery: boolean = false,
+    ) => {
+      if (existingQuery) {
+        const highlighted = await handleContextClick()
+        if (highlighted) {
+          return
+        }
       }
 
-      return true
-    } catch (error) {
-      console.error("Error navigating to buffer:", error)
-      return false
-    }
-  }, [bufferStatus, setActiveBuffer])
-
-  // Handle context badge click - navigate to query and highlight it
-  const handleContextClick = useCallback(async () => {
-    if (!conversation || !editorRef.current || !conversation.queryKey) {
-      return
-    }
-
-    // Navigate to the buffer first
-    const success = await navigateToBuffer()
-    if (!success) return
-
-    try {
-      const model = editorRef.current.getModel()
-      if (!model) return
-
-      const startPosition = model.getPositionAt(queryInfo.startOffset)
-      const endPosition = model.getPositionAt(queryInfo.endOffset)
-
-      // Reveal the position in the center of the viewport
-      editorRef.current.revealPositionNearTop(startPosition)
-      editorRef.current.setPosition(startPosition)
-
-      // Apply highlighting decoration
-      const decorationIds = model.deltaDecorations(
-        [],
-        [
-          {
-            range: {
-              startLineNumber: startPosition.lineNumber,
-              startColumn: startPosition.column,
-              endLineNumber: endPosition.lineNumber,
-              endColumn: endPosition.column,
-            },
-            options: {
-              isWholeLine: false,
-              className: "aiQueryHighlight",
-            },
-          },
-        ],
-      )
-
-      editorRef.current.focus()
-
-      setTimeout(() => {
-        if (!model.isDisposed()) {
-          model.deltaDecorations(decorationIds, [])
-        }
-      }, 1000)
-    } catch (error) {
-      console.error("Error highlighting query:", error)
-    }
-  }, [conversation, editorRef, navigateToBuffer, queryInfo])
+      if (content.type === "diff") {
+        if (!chatWindowState.activeConversationId) return
+        void showPreviewBuffer({
+          type: "diff",
+          original: content.original,
+          modified: content.modified,
+          conversationId: chatWindowState.activeConversationId,
+        })
+      } else {
+        void showPreviewBuffer({
+          type: "code",
+          value: content.value,
+        })
+      }
+    },
+    [showPreviewBuffer, chatWindowState.activeConversationId],
+  )
 
   const handleApplyToEditor = useCallback(
     async (messageId: string, sql: string) => {
@@ -805,7 +728,7 @@ const AIChatWindow: React.FC = () => {
                 onAcceptChange={handleAcceptChange}
                 onRejectChange={handleRejectChange}
                 onRunQuery={handleRunQuery}
-                onExpandDiff={handleExpandDiff}
+                onOpenInEditor={handleOpenInEditor}
                 onApplyToEditor={handleApplyToEditor}
                 running={running}
                 aiSuggestionRequest={aiSuggestionRequest}
@@ -826,7 +749,21 @@ const AIChatWindow: React.FC = () => {
                       ),
                     }}
                   >
-                    <LiteEditor value={currentSQL.trim()} />
+                    <LiteEditor
+                      value={currentSQL.trim()}
+                      onOpenInEditor={
+                        currentSQL.trim().split("\n").length * 20 + 16 > 200
+                          ? () =>
+                              handleOpenInEditor(
+                                {
+                                  type: "code",
+                                  value: currentSQL.trim(),
+                                },
+                                true,
+                              )
+                          : undefined
+                      }
+                    />
                   </InitialQueryEditor>
                 </InitialQueryBox>
                 {(shouldShowExplainButton || shouldShowFixButton) && (

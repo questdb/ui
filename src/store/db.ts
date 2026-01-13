@@ -81,6 +81,12 @@ export class Storage extends Dexie {
       ai_conversations: "id, bufferId, tableId, updatedAt, queryKey",
       ai_conversation_messages: "conversationId",
     })
+    this.version(5).upgrade((tx) =>
+      tx
+        .table<Buffer & { isDiffBuffer?: boolean }, number>("buffers")
+        .filter((buffer) => buffer.isDiffBuffer === true)
+        .delete(),
+    )
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", async () => {
