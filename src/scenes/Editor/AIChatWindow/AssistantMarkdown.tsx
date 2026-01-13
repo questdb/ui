@@ -132,7 +132,7 @@ export const AssistantMarkdown = memo(
   }: {
     content: string
     messageId: string
-    onOpenInEditor?: (content: OpenInEditorContent) => void
+    onOpenInEditor: (content: OpenInEditorContent) => void
   }) => {
     const components = useMemo(
       () => ({
@@ -169,29 +169,16 @@ export const AssistantMarkdown = memo(
                   ? children
                   : ""
             ).replace(/\n$/, "")
-            const lineCount = codeContent.split("\n").length
-            // LiteEditor has 8px padding top and bottom (16px total)
-            const maxHeight = 216
-            const originalHeight = lineCount * 20 + 16
-            const editorHeight = Math.min(originalHeight, maxHeight)
-            // Show "Open in editor" button when content exceeds max height
-            const shouldShowOpenInEditor = originalHeight > maxHeight
             return (
               <CodeBlockWrapper
-                key={`${messageId}-${codeContent.slice(0, 50)}`}
-                style={{ height: editorHeight }}
+                key={messageId}
                 data-hook="chat-message-code-block"
               >
                 <LiteEditor
                   value={codeContent}
-                  onOpenInEditor={
-                    shouldShowOpenInEditor && onOpenInEditor
-                      ? () =>
-                          onOpenInEditor({
-                            type: "code",
-                            value: codeContent,
-                          })
-                      : undefined
+                  maxHeight={216}
+                  onOpenInEditor={(value: string) =>
+                    onOpenInEditor({ type: "code", value })
                   }
                 />
               </CodeBlockWrapper>

@@ -446,7 +446,7 @@ type ChatMessagesProps = {
   onAcceptChange?: (messageId: string) => void
   onRejectChange?: (messageId: string) => void
   onRunQuery?: (sql: string) => void
-  onOpenInEditor?: (
+  onOpenInEditor: (
     content: OpenInEditorContent,
     existingQuery?: boolean,
   ) => Promise<void>
@@ -691,27 +691,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               )
             } else if (sql) {
               // fix_request and explain_request show SQL editor
-              const lineCount = sql.split("\n").length
-              const maxHeight = 200
-              const naturalHeight = lineCount * 20 + 16
-              const editorHeight = Math.min(naturalHeight, maxHeight)
-              const shouldShowOpenInEditor = naturalHeight > maxHeight
               content = (
                 <UserRequestContent>
-                  <InlineSQLEditor
-                    style={{ height: editorHeight }}
-                    data-hook="user-request-sql-editor"
-                  >
+                  <InlineSQLEditor data-hook="user-request-sql-editor">
                     <LiteEditor
                       value={sql}
-                      onOpenInEditor={
-                        shouldShowOpenInEditor && onOpenInEditor
-                          ? () =>
-                              onOpenInEditor(
-                                { type: "code", value: sql },
-                                isCurrentQuery,
-                              )
-                          : undefined
+                      maxHeight={216}
+                      onOpenInEditor={(value: string) =>
+                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
                       }
                     />
                   </InlineSQLEditor>
@@ -742,11 +729,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           // Special handling for ask_request: show user's question above SQL
           if (displayType === "ask_request" && sql) {
             const userQuestion = message.displayUserMessage || message.content
-            const lineCount = sql.split("\n").length
-            const maxHeight = 200
-            const naturalHeight = lineCount * 20 + 16
-            const editorHeight = Math.min(naturalHeight, maxHeight)
-            const shouldShowOpenInEditor = naturalHeight > maxHeight
 
             return (
               <UserRequestBox key={key} data-hook="chat-message-user">
@@ -754,20 +736,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   <MessageContent>{userQuestion}</MessageContent>
                 </UserRequestHeader>
                 <UserRequestContent>
-                  <InlineSQLEditor
-                    style={{ height: editorHeight }}
-                    data-hook="user-request-sql-editor"
-                  >
+                  <InlineSQLEditor data-hook="user-request-sql-editor">
                     <LiteEditor
                       value={sql}
-                      onOpenInEditor={
-                        shouldShowOpenInEditor && onOpenInEditor
-                          ? () =>
-                              onOpenInEditor(
-                                { type: "code", value: sql },
-                                isCurrentQuery,
-                              )
-                          : undefined
+                      maxHeight={216}
+                      onOpenInEditor={(value: string) =>
+                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
                       }
                     />
                   </InlineSQLEditor>
@@ -1046,16 +1020,16 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 diffEditor
                                 original={previousSQLForDiff}
                                 modified={currentSQLForDiff}
-                                noBorder
-                                onOpenInEditor={
-                                  onOpenInEditor
-                                    ? () =>
-                                        onOpenInEditor({
-                                          type: "diff",
-                                          original: message.previousSQL || "",
-                                          modified: message.sql || "",
-                                        })
-                                    : undefined
+                                maxHeight={300}
+                                onOpenInEditor={(
+                                  original: string,
+                                  modified: string,
+                                ) =>
+                                  onOpenInEditor({
+                                    type: "diff",
+                                    original,
+                                    modified,
+                                  })
                                 }
                               />
                             </DiffEditorWrapper>

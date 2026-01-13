@@ -601,7 +601,11 @@ const AIChatWindow: React.FC = () => {
         })
       }
     },
-    [showPreviewBuffer, chatWindowState.activeConversationId],
+    [
+      showPreviewBuffer,
+      chatWindowState.activeConversationId,
+      handleContextClick,
+    ],
   )
 
   const handleApplyToEditor = useCallback(
@@ -740,28 +744,12 @@ const AIChatWindow: React.FC = () => {
             ) : currentSQL && currentSQL.trim() ? (
               <InitialQueryContainer>
                 <InitialQueryBox data-hook="chat-initial-query-box">
-                  <InitialQueryEditor
-                    data-hook="chat-lite-editor"
-                    style={{
-                      height: Math.min(
-                        currentSQL.trim().split("\n").length * 20 + 16,
-                        200,
-                      ),
-                    }}
-                  >
+                  <InitialQueryEditor data-hook="chat-lite-editor">
                     <LiteEditor
                       value={currentSQL.trim()}
-                      onOpenInEditor={
-                        currentSQL.trim().split("\n").length * 20 + 16 > 200
-                          ? () =>
-                              handleOpenInEditor(
-                                {
-                                  type: "code",
-                                  value: currentSQL.trim(),
-                                },
-                                true,
-                              )
-                          : undefined
+                      maxHeight={216}
+                      onOpenInEditor={(value: string) =>
+                        handleOpenInEditor({ type: "code", value }, true)
                       }
                     />
                   </InitialQueryEditor>
