@@ -15,6 +15,7 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   border: ${({ $noBorder, theme }) =>
     $noBorder ? "none" : `1px solid ${theme.color.selection}`};
   background: ${({ theme }) => theme.color.backgroundDarker};
+  overflow: hidden;
 
   .monaco-editor-background {
     background: ${({ theme }) => theme.color.backgroundDarker};
@@ -103,13 +104,12 @@ const CopyButtonFloating = styled(CopyButtonBase)`
 `
 
 type BaseLiteEditorProps = {
-  height?: string | number
   language?: string
   theme?: string
   fontSize?: number
   padding?: { top?: number; bottom?: number }
   lineHeight?: number
-  noBorder?: boolean
+  maxHeight: number
 }
 
 type RegularEditorProps = BaseLiteEditorProps & {
@@ -117,6 +117,7 @@ type RegularEditorProps = BaseLiteEditorProps & {
   value: string
   original?: never
   modified?: never
+  onOpenInEditor: (value: string) => void
 }
 
 type DiffEditorProps = BaseLiteEditorProps & {
@@ -124,20 +125,19 @@ type DiffEditorProps = BaseLiteEditorProps & {
   original: string
   modified: string
   value?: never
-  onExpandDiff?: () => void
+  onOpenInEditor: (original: string, modified: string) => void
 }
 
 type LiteEditorProps = RegularEditorProps | DiffEditorProps
 
 export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
   ({
-    height = "100%",
     language = QuestDBLanguageName,
     theme = "dracula",
     fontSize = 12,
     padding = { top: 8, bottom: 8 },
     lineHeight = 20,
-    noBorder,
+    maxHeight,
     ...props
   }) => {
     const appTheme = useTheme()
@@ -149,30 +149,36 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
       setTimeout(() => setCopied(false), 2000)
     }
 
+    const getContentHeight = (content: string) => {
+      const lineCount = content.split("\n").length
+      return lineCount * lineHeight + (props.diffEditor ? 0 : 16)
+    }
+
     if (props.diffEditor) {
       return (
         <EditorWrapper
-          $noBorder={noBorder}
+          $noBorder
           style={{
-            height,
-            ...(!noBorder ? { paddingTop: 8, paddingBottom: 8 } : undefined),
+            height: maxHeight,
+            paddingTop: 8,
+            paddingBottom: 8,
           }}
         >
           <ButtonsContainer>
-            {props.onExpandDiff && (
-              <OpenInEditorButton
-                className="open-in-editor-btn"
-                onClick={props.onExpandDiff}
-                title="Open in editor"
-                data-hook="diff-open-in-editor-button"
-              >
-                Open in editor
-                <SquareSplitHorizontalIcon
-                  size="1.8rem"
-                  color={appTheme.color.offWhite}
-                />
-              </OpenInEditorButton>
-            )}
+            <OpenInEditorButton
+              className="open-in-editor-btn"
+              onClick={() =>
+                props.onOpenInEditor(props.original, props.modified)
+              }
+              title="Open in editor"
+              data-hook="diff-open-in-editor-button"
+            >
+              Open in editor
+              <SquareSplitHorizontalIcon
+                size="1.8rem"
+                color={appTheme.color.offWhite}
+              />
+            </OpenInEditorButton>
             <CopyButtonBase
               skin="transparent"
               onClick={() => handleCopy(props.modified)}
@@ -183,7 +189,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
             </CopyButtonBase>
           </ButtonsContainer>
           <DiffEditor
-            height={height}
+            height={maxHeight}
             language={language}
             original={props.original}
             modified={props.modified}
@@ -208,6 +214,8 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
               scrollbar: {
                 vertical: "hidden",
                 horizontal: "hidden",
+                alwaysConsumeMouseWheel: false,
+                handleMouseWheel: false,
               },
               automaticLayout: true,
               folding: false,
@@ -228,18 +236,49 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
       )
     }
 
+    const contentHeight = getContentHeight(props.value)
+    const effectiveHeight = maxHeight
+      ? Math.min(contentHeight, maxHeight)
+      : contentHeight
+    const showOpenInEditor = contentHeight > maxHeight
+
     return (
-      <EditorWrapper $noBorder={noBorder} style={{ height }}>
-        <CopyButtonFloating
-          skin="transparent"
-          onClick={() => handleCopy(props.value ?? "")}
-          title="Copy to clipboard"
-        >
-          {copied && <SuccessIcon size="1rem" />}
-          <FileCopy size="1.8rem" />
-        </CopyButtonFloating>
+      <EditorWrapper style={{ height: effectiveHeight }}>
+        {showOpenInEditor ? (
+          <ButtonsContainer>
+            <OpenInEditorButton
+              className="open-in-editor-btn"
+              onClick={() => props.onOpenInEditor(props.value)}
+              title="Open in editor"
+              data-hook="code-open-in-editor-button"
+            >
+              Open in editor
+              <SquareSplitHorizontalIcon
+                size="1.8rem"
+                color={appTheme.color.offWhite}
+              />
+            </OpenInEditorButton>
+            <CopyButtonBase
+              skin="transparent"
+              onClick={() => handleCopy(props.value ?? "")}
+              title="Copy to clipboard"
+            >
+              {copied && <SuccessIcon size="1rem" />}
+              <FileCopy size="1.8rem" />
+            </CopyButtonBase>
+          </ButtonsContainer>
+        ) : (
+          <CopyButtonFloating
+            skin="transparent"
+            onClick={() => handleCopy(props.value ?? "")}
+            title="Copy to clipboard"
+          >
+            {copied && <SuccessIcon size="1rem" />}
+            <FileCopy size="1.8rem" />
+          </CopyButtonFloating>
+        )}
         <Editor
-          height={height}
+          height={effectiveHeight}
           language={language}
           value={props.value}
           theme={theme}
@@ -259,9 +298,12 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
             scrollbar: {
               vertical: "hidden",
               horizontal: "hidden",
+              alwaysConsumeMouseWheel: false,
+              handleMouseWheel: false,
             },
             fontSize,
             padding,
+            lineHeight,
           }}
         />
       </EditorWrapper>
@@ -272,7 +314,9 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
       prevProps.value === nextProps.value &&
       prevProps.diffEditor === nextProps.diffEditor &&
       prevProps.original === nextProps.original &&
-      prevProps.modified === nextProps.modified
+      prevProps.modified === nextProps.modified &&
+      prevProps.maxHeight === nextProps.maxHeight &&
+      prevProps.onOpenInEditor === nextProps.onOpenInEditor
     )
   },
 )

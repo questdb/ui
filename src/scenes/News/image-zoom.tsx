@@ -79,7 +79,9 @@ export const ImageZoom = () => {
         onClick={() => dispatch(actions.console.setImageToZoom(undefined))}
       />
       {imageToZoom && (
-        <Wrapper onClick={() => dispatch(actions.console.setImageToZoom(undefined))}>
+        <Wrapper
+          onClick={() => dispatch(actions.console.setImageToZoom(undefined))}
+        >
           <Thumbnail
             {...imageToZoom}
             containerWidth={rootWidth ? rootWidth * 0.9 : 460}

@@ -714,7 +714,7 @@ export const AIConversationProvider: React.FC<{
     activeBuffer,
     setActiveBuffer,
     addBuffer,
-    closeDiffBufferForConversation,
+    closePreviewBuffer,
     applyAISQLChange,
   } = useEditor()
 
@@ -851,7 +851,7 @@ export const AIConversationProvider: React.FC<{
 
       const normalizedSQL = normalizeSql(message.sql, false)
 
-      await closeDiffBufferForConversation(conversationId)
+      await closePreviewBuffer()
 
       const conversationBufferId = meta.bufferId
       const buffer = buffers.find((b) => b.id === conversationBufferId)
@@ -912,7 +912,7 @@ export const AIConversationProvider: React.FC<{
       buffers,
       activeBuffer.id,
       setActiveBuffer,
-      closeDiffBufferForConversation,
+      closePreviewBuffer,
       applyChangesToActiveTab,
       applyChangesToNewTab,
       addMessage,
@@ -931,9 +931,9 @@ export const AIConversationProvider: React.FC<{
       if (!meta) return
 
       await rejectLatestChange(conversationId, messageId)
-      await closeDiffBufferForConversation(conversationId)
+      await closePreviewBuffer()
 
-      if (activeBuffer.isDiffBuffer) {
+      if (activeBuffer.isPreviewBuffer) {
         const originalBuffer = buffers.find(
           (b) => b.id === meta.bufferId && !b.archived,
         )
@@ -948,7 +948,7 @@ export const AIConversationProvider: React.FC<{
       activeConversationId,
       conversationMetas,
       rejectLatestChange,
-      closeDiffBufferForConversation,
+      closePreviewBuffer,
       activeBuffer,
       buffers,
       setActiveBuffer,
