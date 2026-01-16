@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react"
+import React, { memo, useEffect, useMemo, useRef } from "react"
 import styled from "styled-components"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -124,82 +124,85 @@ const MarkdownContent = styled.div`
   }
 `
 
-export const AssistantMarkdown = memo(
-  ({
-    content,
-    messageId,
-    onOpenInEditor,
-  }: {
-    content: string
-    messageId: string
-    onOpenInEditor: (content: OpenInEditorContent) => void
-  }) => {
-    const components = useMemo(
-      () => ({
-        a: ({ children, href, ...props }: React.ComponentProps<"a">) => (
-          <a
-            {...(typeof href === "string" && href.startsWith("http")
-              ? {
-                  target: "_blank",
-                  rel: "noopener noreferrer",
-                }
-              : {})}
-            href={href}
-            {...props}
-          >
-            {children}
-          </a>
-        ),
-        table: ({ children, ...props }: React.ComponentProps<"table">) => (
-          <div className="table-wrapper">
-            <table {...props}>{children}</table>
-          </div>
-        ),
-        // Render pre as fragment since code blocks are handled by code component
-        pre: ({ children }: React.ComponentProps<"pre">) => <>{children}</>,
-        code: ({ children, className }: React.ComponentProps<"code">) => {
-          // Check if this is a code block (has language class) or inline code
-          const isCodeBlock =
-            typeof className === "string" && className.includes("language-")
-          if (isCodeBlock) {
-            const codeContent = (
-              Array.isArray(children)
-                ? children.join("")
-                : typeof children === "string"
-                  ? children
-                  : ""
-            ).replace(/\n$/, "")
-            return (
-              <CodeBlockWrapper
-                key={messageId}
-                data-hook="chat-message-code-block"
-              >
-                <LiteEditor
-                  value={codeContent}
-                  maxHeight={216}
-                  onOpenInEditor={(value: string) =>
-                    onOpenInEditor({ type: "code", value })
-                  }
-                />
-              </CodeBlockWrapper>
-            )
+const createComponents = (
+  onOpenInEditor: React.RefObject<(content: OpenInEditorContent) => void>,
+) => ({
+  a: ({ children, href, ...props }: React.ComponentProps<"a">) => (
+    <a
+      {...(typeof href === "string" && href.startsWith("http")
+        ? {
+            target: "_blank",
+            rel: "noopener noreferrer",
           }
-          // Inline code - render as default
-          return <code>{children}</code>
-        },
-      }),
-      [messageId, onOpenInEditor],
-    )
+        : {})}
+      href={href}
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  table: ({ children, ...props }: React.ComponentProps<"table">) => (
+    <div className="table-wrapper">
+      <table {...props}>{children}</table>
+    </div>
+  ),
+  // Render pre as fragment since code blocks are handled by code component
+  pre: ({ children }: React.ComponentProps<"pre">) => <>{children}</>,
+  code: memo(
+    ({ children, className }: React.ComponentProps<"code">) => {
+      const isCodeBlock =
+        typeof className === "string" && className.includes("language-")
+      if (isCodeBlock) {
+        const codeContent = (
+          Array.isArray(children)
+            ? children.join("")
+            : typeof children === "string"
+              ? children
+              : ""
+        ).replace(/\n$/, "")
+        return (
+          <CodeBlockWrapper
+            key={codeContent}
+            data-hook="chat-message-code-block"
+          >
+            <LiteEditor
+              value={codeContent}
+              maxHeight={216}
+              onOpenInEditor={() => {
+                onOpenInEditor.current?.({ type: "code", value: codeContent })
+              }}
+            />
+          </CodeBlockWrapper>
+        )
+      }
+      return <code>{children}</code>
+    },
+    (prevProps, nextProps) =>
+      prevProps.children === nextProps.children &&
+      prevProps.className === nextProps.className,
+  ),
+})
 
-    return (
-      <MarkdownContent>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-          {content}
-        </ReactMarkdown>
-      </MarkdownContent>
-    )
-  },
-  (prevProps, nextProps) =>
-    prevProps.content === nextProps.content &&
-    prevProps.messageId === nextProps.messageId,
-)
+export const AssistantMarkdown = ({
+  content,
+  messageId,
+  onOpenInEditor,
+}: {
+  content: string
+  messageId: string
+  onOpenInEditor: (content: OpenInEditorContent) => void
+}) => {
+  const onOpenInEditorRef = useRef(onOpenInEditor)
+  useEffect(() => {
+    onOpenInEditorRef.current = onOpenInEditor
+  }, [onOpenInEditor])
+  const components = useMemo(() => createComponents(onOpenInEditorRef), [])
+
+  return (
+    <MarkdownContent key={messageId}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {content}
+      </ReactMarkdown>
+    </MarkdownContent>
+  )
+}

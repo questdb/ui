@@ -2078,16 +2078,14 @@ Syntax: \`avg(column)\`
 
       cy.getByDataHook("message-action-accept").should("have.length", 1)
 
-      cy.getByDataHook("diff-open-in-editor-button")
+      cy.getByDataHook("ai-open-in-editor-button")
         .first()
         .click({ force: true })
       cy.getByDataHook("diff-editor-container").should("be.visible")
       cy.getByDataHook("diff-reject-button").should("not.exist")
       cy.getByDataHook("diff-accept-button").should("not.exist")
 
-      cy.getByDataHook("diff-open-in-editor-button")
-        .eq(1)
-        .click({ force: true })
+      cy.getByDataHook("ai-open-in-editor-button").eq(1).click({ force: true })
       cy.getByDataHook("diff-editor-container").should("be.visible")
       cy.getByDataHook("diff-reject-button").should("be.visible")
       cy.getByDataHook("diff-accept-button").should("be.visible")

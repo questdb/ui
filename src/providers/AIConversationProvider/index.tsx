@@ -43,6 +43,8 @@ type AIConversationContextType = {
   activeConversationMessages: ConversationMessage[]
   chatWindowState: ChatWindowState
   isLoadingMessages: boolean
+  isStreaming: boolean
+  setIsStreaming: (streaming: boolean) => void
 
   getConversationMeta: (
     id: ConversationId,
@@ -105,6 +107,10 @@ type AIConversationContextType = {
     messageId: string,
   ) => Promise<void>
   persistMessages: (conversationId: ConversationId) => Promise<void>
+  removeMessages: (
+    conversationId: ConversationId,
+    messageIds: string[],
+  ) => Promise<void>
 }
 
 const AIConversationContext = createContext<
@@ -161,6 +167,7 @@ export const AIConversationProvider: React.FC<{
   }, [activeConversationMessages])
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
 
   const [chatWindowState, setChatWindowState] = useState<ChatWindowState>({
     activeConversationId: null,
@@ -417,6 +424,19 @@ export const AIConversationProvider: React.FC<{
       })
     },
     [],
+  )
+
+  const removeMessages = useCallback(
+    async (conversationId: ConversationId, messageIds: string[]) => {
+      if (conversationId !== activeConversationIdRef.current) return
+
+      const filteredMessages = activeConversationMessagesRef.current.filter(
+        (msg) => !messageIds.includes(msg.id),
+      )
+      setActiveConversationMessages(filteredMessages)
+      await persistMessages(conversationId)
+    },
+    [persistMessages],
   )
 
   const updateConversationSQL = useCallback(
@@ -963,6 +983,8 @@ export const AIConversationProvider: React.FC<{
         activeConversationMessages,
         chatWindowState,
         isLoadingMessages,
+        isStreaming,
+        setIsStreaming,
         getConversationMeta,
         findConversationByQuery,
         findConversationByTableId,
@@ -985,6 +1007,7 @@ export const AIConversationProvider: React.FC<{
         acceptSuggestion,
         rejectSuggestion,
         persistMessages,
+        removeMessages,
       }}
     >
       {children}

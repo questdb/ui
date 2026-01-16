@@ -188,13 +188,9 @@ const formatDetailedStatusMessage = (
 }
 
 const getIsExpandableSection = (section: OperationSection) => {
-  return ![
-    AIOperationStatus.RetrievingTables,
-    AIOperationStatus.RetrievingDocumentation,
-    AIOperationStatus.Aborted,
-    AIOperationStatus.ValidatingQuery,
-    AIOperationStatus.Processing,
-    AIOperationStatus.Compacting,
+  return [
+    AIOperationStatus.InvestigatingTableSchema,
+    AIOperationStatus.InvestigatingDocs,
   ].includes(section.type)
 }
 
