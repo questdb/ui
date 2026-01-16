@@ -23,6 +23,7 @@ import {
   CodeIcon,
   KeyReturnIcon,
   ChatDotsIcon,
+  ArrowCounterClockwiseIcon,
 } from "@phosphor-icons/react"
 import { CloseCircle } from "@styled-icons/remix-fill"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
@@ -31,7 +32,10 @@ import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  AIOperationStatus,
+  useAIStatus,
+} from "../../../providers/AIStatusProvider"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -283,13 +287,36 @@ const ErrorContainer = styled.div`
   align-items: center;
   flex-shrink: 0;
   gap: 1rem;
-  padding: 1rem 1.2rem;
+  padding: 0.6rem 1.2rem;
   border-radius: 0.6rem;
   border: 1px solid ${color("red")};
   color: ${color("foreground")};
   font-size: 1.4rem;
   line-height: 2rem;
   width: 100%;
+`
+
+const RetryButton = styled(Button)`
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.5rem 0.8rem;
+  height: auto;
+`
+
+const cursorBlink = keyframes`
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+`
+
+const StreamingCursor = styled.span`
+  display: inline-block;
+  width: 2px;
+  height: 1.4em;
+  background: ${color("foreground")};
+  margin-left: 2px;
+  margin-right: auto;
+  vertical-align: text-bottom;
+  animation: ${cursorBlink} 1s infinite;
 `
 
 const DiffContainer = styled(Box)`
@@ -452,6 +479,7 @@ type ChatMessagesProps = {
   ) => Promise<void>
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
+  onRetry?: (userMessageId: string, assistantMessageId: string) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -463,6 +491,7 @@ type ChatMessagesProps = {
   isOperationInProgress?: boolean
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
   editorSQL?: string
+  isStreaming: boolean
 }
 
 const getOperationBadgeInfo = (
@@ -516,12 +545,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onRunQuery,
   onOpenInEditor,
   onApplyToEditor,
+  onRetry,
   running,
   aiSuggestionRequest,
   queryNotifications,
   queryStartOffset = 0,
   isOperationInProgress,
   editorSQL,
+  isStreaming,
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -605,9 +636,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     [messages],
   )
 
+  const streamingContentLength = useMemo(() => {
+    if (!isStreaming) return 0
+    const lastMessage = messages[messages.length - 1]
+    return lastMessage?.content?.length ?? 0
+  }, [messages, isStreaming])
+
   useEffect(() => {
     handleScrollNeeded()
-  }, [visibleMessagesCount])
+  }, [visibleMessagesCount, streamingContentLength])
 
   const visibleMessages: Array<{
     message: ConversationMessage
@@ -697,8 +734,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <LiteEditor
                       value={sql}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
                       }
                     />
                   </InlineSQLEditor>
@@ -740,8 +780,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <LiteEditor
                       value={sql}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
                       }
                     />
                   </InlineSQLEditor>
@@ -796,6 +839,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             hasVisibleUserMessageAfter(originalIndex)
 
           const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
+          const isMessageStreaming = isStreaming && isLastVisibleMessage
           const showButtons =
             hasSQLChange &&
             !isAccepted &&
@@ -842,8 +886,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           )
           const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
 
-          const operationHistory = message.operationHistory
+          const operationHistory = message.operationHistory?.filter(
+            (op) => op.type !== AIOperationStatus.Aborted,
+          )
           const hasError = !!message.error
+          const showRetry =
+            hasError &&
+            !isStreaming &&
+            !isOperationInProgress &&
+            isLastVisibleMessage
 
           const isLiveOperation =
             originalIndex === lastAssistantMessageIndex &&
@@ -861,9 +912,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               {hasOperationHistory && (
                 <>
                   <Divider />
-                  <OperationHistoryContainer
-                    $trimBottom={hasError || !message.content}
-                  >
+                  <OperationHistoryContainer $trimBottom={!message.content}>
                     <AssistantModes
                       operationHistory={operationHistory}
                       status={status}
@@ -872,16 +921,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     />
                   </OperationHistoryContainer>
                 </>
-              )}
-              {hasError && (
-                <ErrorContainer data-hook="chat-message-error">
-                  <CloseCircle
-                    size={16}
-                    color={theme.color.red}
-                    style={{ flexShrink: 0 }}
-                  />
-                  {message.error}
-                </ErrorContainer>
               )}
 
               {message.content && (
@@ -904,7 +943,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       messageId={message.id}
                       onOpenInEditor={onOpenInEditor}
                     />
-                    {hasSQLChange && (
+                    {isMessageStreaming && (
+                      <StreamingCursor data-hook="streaming-cursor" />
+                    )}
+                    {hasSQLChange && !isMessageStreaming && (
                       <DiffContainer data-hook="inline-diff-container">
                         <DiffHeader $isExpanded={isExpanded}>
                           <DiffHeaderLeft>
@@ -1021,14 +1063,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 original={previousSQLForDiff}
                                 modified={currentSQLForDiff}
                                 maxHeight={300}
-                                onOpenInEditor={(
-                                  original: string,
-                                  modified: string,
-                                ) =>
+                                onOpenInEditor={() =>
                                   onOpenInEditor({
                                     type: "diff",
-                                    original,
-                                    modified,
+                                    original: previousSQLForDiff,
+                                    modified: currentSQLForDiff,
                                   })
                                 }
                               />
@@ -1059,6 +1098,34 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     )}
                   </ExplanationContent>
                 </>
+              )}
+              {hasError && (
+                <ErrorContainer data-hook="chat-message-error">
+                  <CloseCircle
+                    size={16}
+                    color={theme.color.red}
+                    style={{ flexShrink: 0 }}
+                  />
+                  {message.error}
+                  {showRetry && onRetry && (
+                    <RetryButton
+                      size="sm"
+                      skin="secondary"
+                      prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
+                      onClick={() => {
+                        const userMessageIndex = messages
+                          .slice(0, originalIndex)
+                          .findLastIndex((m) => m.role === "user")
+                        if (userMessageIndex >= 0) {
+                          onRetry(messages[userMessageIndex].id, message.id)
+                        }
+                      }}
+                      data-hook="retry-button"
+                    >
+                      Retry
+                    </RetryButton>
+                  )}
+                </ErrorContainer>
               )}
             </ExplanationBox>
           )

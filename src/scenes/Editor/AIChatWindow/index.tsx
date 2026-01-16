@@ -28,7 +28,6 @@ import {
 import {
   isBlockingAIStatus,
   useAIStatus,
-  type OperationHistory,
 } from "../../../providers/AIStatusProvider"
 import { toast } from "../../../components/Toast"
 import { color } from "../../../utils"
@@ -36,18 +35,16 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
 import { ChatHistoryView } from "./ChatHistoryView"
+import { normalizeSql } from "../../../utils/aiAssistant"
 import {
-  continueConversation,
-  isAiAssistantError,
-  normalizeSql,
-  generateChatTitle,
-  type ActiveProviderSettings,
-} from "../../../utils/aiAssistant"
-import {
-  providerForModel,
-  MODEL_OPTIONS,
-} from "../../../utils/aiAssistantSettings"
-import { createModelToolsClient } from "../../../utils/aiAssistant"
+  executeAIFlow,
+  createChatFlowConfig,
+  createExplainFlowConfig,
+  createFixFlowConfig,
+  createSchemaExplainFlowConfig,
+} from "../../../utils/executeAIFlow"
+import { getTableKindLabel } from "../../Schema/VirtualTables"
+import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
@@ -212,6 +209,8 @@ const AIChatWindow: React.FC = () => {
     activeConversationMessages,
     chatWindowState,
     isLoadingMessages,
+    isStreaming,
+    setIsStreaming,
     closeChatWindow,
     openBlankChatWindow,
     openHistoryView,
@@ -224,6 +223,7 @@ const AIChatWindow: React.FC = () => {
     acceptSuggestion,
     rejectSuggestion,
     persistMessages,
+    removeMessages,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -392,133 +392,29 @@ const AIChatWindow: React.FC = () => {
       (msg) => msg.role === "assistant",
     )
 
-    let userMessageContent = userMessage
-    let displayType: "ask_request" | undefined = undefined
-    let sql: string | undefined = undefined
-    let displayUserMessage: string | undefined = undefined
-
-    if (!hasAssistantMessages && currentSQL && currentSQL.trim()) {
-      // First message with SQL context (like "Ask AI" flow)
-      // Store the enriched message so it's preserved in conversation history for API
-      userMessageContent = `Current SQL query:\n\`\`\`sql\n${currentSQL}\n\`\`\`\n\nUser request: ${userMessage}`
-      // Set display type for proper UI rendering (shows user message + SQL editor)
-      displayType = "ask_request"
-      sql = currentSQL.trim()
-      displayUserMessage = userMessage // Store the original user message for display
-    }
-
-    if (!hasAssistantMessages) {
-      eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
-    }
-
-    const userMessageEntry = {
-      role: "user" as const,
-      content: userMessageContent,
-      timestamp: Date.now(),
-      ...(displayType && { displayType }),
-      ...(sql && { sql }),
-      ...(displayUserMessage && { displayUserMessage }),
-    }
-
-    addMessage(userMessageEntry)
-
-    const assistantMessageId = crypto.randomUUID()
-    addMessage({
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: Date.now(),
-      operationHistory: [],
-    })
-
-    const provider = providerForModel(currentModel)
-    const settings: ActiveProviderSettings = {
-      model: currentModel,
-      provider,
-      apiKey,
-    }
-
-    // Generate chat title in parallel using test model (only for first message)
-    if (!hasAssistantMessages) {
-      const testModel = MODEL_OPTIONS.find(
-        (m) => m.isTestModel && m.provider === provider,
-      )
-      if (testModel) {
-        void generateChatTitle({
-          firstUserMessage: userMessageContent,
-          settings: { model: testModel.value, provider, apiKey },
-        }).then((title) => {
-          if (title) {
-            void updateConversationName(conversationId, title)
-          }
-        })
-      }
-    }
-
-    const handleStatusUpdate = (history: OperationHistory) => {
-      updateMessage(conversationId, assistantMessageId, {
-        operationHistory: [...history],
-      })
-    }
-
-    const processResponse = async () => {
-      const response = await continueConversation({
-        userMessage: userMessageContent,
-        conversationHistory: conversation.messages.filter(
-          (m) => !m.isCompacted,
-        ),
+    void executeAIFlow(
+      createChatFlowConfig({
+        conversationId,
+        userMessage,
         currentSQL,
-        settings,
-        modelToolsClient: createModelToolsClient(
-          quest,
-          hasSchemaAccess ? tables : undefined,
-        ),
-        setStatus: (status, args) =>
-          setStatus(
-            status,
-            { ...(args ?? {}), conversationId },
-            handleStatusUpdate,
-          ),
+        conversationHistory: conversation.messages,
+        isFirstMessage: !hasAssistantMessages,
+        settings: { model: currentModel, apiKey },
+        questClient: quest,
+        tables,
+        hasSchemaAccess,
         abortSignal: abortController?.signal,
-      })
-
-      if (isAiAssistantError(response)) {
-        const error = response
-        updateMessage(conversationId, assistantMessageId, {
-          error:
-            error.type !== "aborted"
-              ? error.message
-              : "Operation has been cancelled",
-        })
-        return
-      }
-
-      const result = response
-      let assistantContent = result.explanation || "Response received"
-      const hasSQLInResult =
-        "sql" in result && result.sql && result.sql.trim() !== ""
-      if (hasSQLInResult) {
-        assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
-      }
-
-      if (result.compactedConversationHistory) {
-        replaceConversationMessages(
-          conversationId,
-          result.compactedConversationHistory,
-        )
-      }
-
-      updateMessage(conversationId, assistantMessageId, {
-        content: assistantContent,
-        ...(hasSQLInResult && { sql: result.sql as string }),
-        explanation: result.explanation,
-        tokenUsage: result.tokenUsage,
-      })
-    }
-
-    void processResponse().then(async () => {
-      await persistMessages(conversationId)
-    })
+      }),
+      {
+        addMessage,
+        updateMessage,
+        setStatus,
+        setIsStreaming,
+        persistMessages,
+        updateConversationName,
+        replaceConversationMessages,
+      },
+    )
   }
 
   const handleAcceptChange = useCallback(
@@ -570,7 +466,7 @@ const AIChatWindow: React.FC = () => {
       return false
     }
     return await highlightQuery(conversation.queryKey, conversation.bufferId)
-  }, [conversation, highlightQuery])
+  }, [conversation?.queryKey, conversation?.bufferId, highlightQuery])
 
   const handleOpenInEditor = useCallback(
     async (
@@ -641,6 +537,138 @@ const AIChatWindow: React.FC = () => {
       persistMessages,
     ],
   )
+
+  const handleRetry = async (
+    userMessageId: string,
+    assistantMessageId: string,
+  ) => {
+    if (!chatWindowState.activeConversationId || !canUse) return
+
+    const conversationId = chatWindowState.activeConversationId
+    const userMessage = messages.find((m) => m.id === userMessageId)
+    if (!userMessage) return
+
+    await removeMessages(conversationId, [userMessageId, assistantMessageId])
+
+    const settings = { model: currentModel, apiKey }
+    const commonConfig = {
+      settings,
+      questClient: quest,
+      tables,
+      hasSchemaAccess,
+      abortSignal: abortController?.signal,
+    }
+
+    const callbacks = {
+      addMessage,
+      updateMessage,
+      setStatus,
+      setIsStreaming,
+      persistMessages,
+      updateConversationName,
+      replaceConversationMessages,
+    }
+
+    switch (userMessage.displayType) {
+      case "explain_request": {
+        if (!userMessage.sql) return
+        void executeAIFlow(
+          createExplainFlowConfig({
+            conversationId,
+            queryText: userMessage.sql,
+            ...commonConfig,
+          }),
+          callbacks,
+        )
+        break
+      }
+
+      case "fix_request": {
+        if (!userMessage.sql) return
+
+        void executeAIFlow(
+          createFixFlowConfig({
+            conversationId,
+            queryText: userMessage.sql,
+            ...commonConfig,
+          }),
+          callbacks,
+        )
+        break
+      }
+
+      case "schema_explain_request": {
+        if (!userMessage.displaySchemaData) return
+        const schemaData = userMessage.displaySchemaData
+
+        try {
+          const ddlResult =
+            schemaData.kind === "matview"
+              ? await quest.showMatViewDDL(schemaData.tableName)
+              : schemaData.kind === "view"
+                ? await quest.showViewDDL(schemaData.tableName)
+                : await quest.showTableDDL(schemaData.tableName)
+
+          if (
+            ddlResult?.type !== QuestDB.Type.DQL ||
+            !ddlResult.data ||
+            ddlResult.data.length === 0
+          ) {
+            toast.error("Failed to fetch table schema for retry")
+            return
+          }
+
+          const ddlRow = ddlResult.data[0] as { ddl?: string }
+          if (!ddlRow.ddl) {
+            toast.error("Failed to fetch table schema for retry")
+            return
+          }
+
+          void executeAIFlow(
+            createSchemaExplainFlowConfig({
+              conversationId,
+              tableName: schemaData.tableName,
+              schema: ddlRow.ddl,
+              kindLabel: getTableKindLabel(schemaData.kind),
+              schemaDisplayData: schemaData,
+              ...commonConfig,
+            }),
+            callbacks,
+          )
+        } catch (error) {
+          console.error("Error fetching DDL for retry:", error)
+          toast.error("Failed to fetch table schema for retry")
+        }
+        break
+      }
+
+      case "ask_request":
+      default: {
+        const userText = userMessage.displayUserMessage || userMessage.content
+
+        const historyUpToFailed = messages.filter(
+          (m) => m.id !== userMessageId && m.id !== assistantMessageId,
+        )
+
+        const hasAssistantMessages = historyUpToFailed.some(
+          (msg) => msg.role === "assistant",
+        )
+
+        void executeAIFlow(
+          createChatFlowConfig({
+            conversationId,
+            userMessage: userText,
+            currentSQL: userMessage.sql || currentSQL,
+            conversationHistory: historyUpToFailed,
+            isFirstMessage: !hasAssistantMessages,
+            ...commonConfig,
+          }),
+          callbacks,
+        )
+        break
+      }
+    }
+  }
 
   const explainButtonRef = useRef<HTMLDivElement | null>(null)
 
@@ -734,12 +762,14 @@ const AIChatWindow: React.FC = () => {
                 onRunQuery={handleRunQuery}
                 onOpenInEditor={handleOpenInEditor}
                 onApplyToEditor={handleApplyToEditor}
+                onRetry={handleRetry}
                 running={running}
                 aiSuggestionRequest={aiSuggestionRequest}
                 queryNotifications={queryNotifications}
                 queryStartOffset={queryInfo.startOffset}
                 isOperationInProgress={isBlockingAIStatus(aiStatus)}
                 editorSQL={queryInfo.queryText}
+                isStreaming={isStreaming}
               />
             ) : currentSQL && currentSQL.trim() ? (
               <InitialQueryContainer>
@@ -748,8 +778,11 @@ const AIChatWindow: React.FC = () => {
                     <LiteEditor
                       value={currentSQL.trim()}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        handleOpenInEditor({ type: "code", value }, true)
+                      onOpenInEditor={() =>
+                        handleOpenInEditor(
+                          { type: "code", value: currentSQL.trim() },
+                          true,
+                        )
                       }
                     />
                   </InitialQueryEditor>

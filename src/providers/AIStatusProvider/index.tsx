@@ -15,6 +15,7 @@ import {
   providerForModel,
   canUseAiAssistant,
 } from "../../utils/aiAssistantSettings"
+import { useAIConversation } from "../AIConversationProvider"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
@@ -43,6 +44,7 @@ export enum AIOperationStatus {
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
   ValidatingQuery = "Validating generated query",
+  GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
 }
@@ -97,12 +99,14 @@ interface AIStatusProviderProps {
 export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   children,
 }) => {
+  const { isStreaming } = useAIConversation()
   const { aiAssistantSettings } = useLocalStorage()
   const [status, setStatusState] = useState<AIOperationStatus | null>(null)
   const [currentOperation, setCurrentOperation] = useState<OperationHistory>([])
   const [abortController, setAbortController] = useState<AbortController>(
     new AbortController(),
   )
+  const isStreamingRef = useRef(isStreaming)
   const abortControllerRef = useRef<AbortController | null>(null)
   const statusRef = useRef<AIOperationStatus | null>(null)
   const currentOperationRef = useRef<OperationHistory>([])
@@ -154,10 +158,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           type: newStatus,
           args: args || undefined,
         }
-        if (
-          statusRef.current === null ||
-          statusRef.current === AIOperationStatus.Aborted
-        ) {
+        if (statusRef.current === null) {
           currentOperationRef.current = [statusPayload]
         } else {
           currentOperationRef.current.push(statusPayload)
@@ -209,6 +210,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   useEffect(() => {
     abortControllerRef.current = abortController
   }, [abortController])
+
+  useEffect(() => {
+    if (!isStreamingRef.current && isStreaming) {
+      setStatus(AIOperationStatus.GeneratingResponse)
+    } else if (isStreamingRef.current && !isStreaming) {
+      setStatus(null)
+    }
+    isStreamingRef.current = isStreaming
+  }, [isStreaming])
 
   useEffect(() => {
     return () => {

@@ -46,22 +46,15 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
-import {
-  explainTableSchema,
-  isAiAssistantError,
-  schemaExplanationToMarkdown,
-  type ActiveProviderSettings,
-  getExplainSchemaPrompt,
-} from "../../../utils/aiAssistant"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
   useAIStatus,
   isBlockingAIStatus,
-  type AIOperationStatus,
-  type StatusArgs,
-  type OperationHistory,
 } from "../../../providers/AIStatusProvider"
-import { providerForModel } from "../../../utils/aiAssistantSettings"
+import {
+  executeAIFlow,
+  createSchemaExplainFlowConfig,
+} from "../../../utils/executeAIFlow"
 import { AISparkle } from "../../../components/AISparkle"
 
 type VirtualTablesProps = {
@@ -215,6 +208,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     updateMessage,
     updateConversationName,
     persistMessages,
+    setIsStreaming,
   } = useAIConversation()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
@@ -358,92 +352,35 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       conversation.id,
       `${tableName} schema explanation`,
     )
-    const userMessage = getExplainSchemaPrompt(
-      tableName,
-      schema,
-      getTableKindLabel(kind),
-    )
     await openChatWindow(conversation.id)
 
-    addMessage({
-      role: "user",
-      content: userMessage,
-      timestamp: Date.now(),
-      displayType: "schema_explain_request",
-      displaySchemaData: {
+    void executeAIFlow(
+      createSchemaExplainFlowConfig({
+        conversationId: conversation.id,
         tableName,
-        kind,
-        partitionBy: item.partitionBy,
-        walEnabled: item.walEnabled,
-        designatedTimestamp: item.designatedTimestamp,
+        schema,
+        kindLabel: getTableKindLabel(kind),
+        schemaDisplayData: {
+          tableName,
+          kind,
+          partitionBy: item.partitionBy,
+          walEnabled: item.walEnabled,
+          designatedTimestamp: item.designatedTimestamp,
+        },
+        settings: { model: currentModel, apiKey },
+        questClient: quest,
+        tables,
+        hasSchemaAccess,
+        abortSignal: abortController?.signal,
+      }),
+      {
+        addMessage,
+        updateMessage,
+        setStatus,
+        setIsStreaming,
+        persistMessages,
       },
-    })
-
-    const assistantMessageId = crypto.randomUUID()
-    addMessage({
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: Date.now(),
-      operationHistory: [],
-    })
-
-    const provider = providerForModel(currentModel)
-
-    const settings: ActiveProviderSettings = {
-      model: currentModel,
-      provider,
-      apiKey,
-    }
-
-    const handleStatusUpdate = (history: OperationHistory) => {
-      updateMessage(conversation.id, assistantMessageId, {
-        operationHistory: [...history],
-      })
-    }
-
-    const response = await explainTableSchema({
-      tableName,
-      schema,
-      kindLabel: getTableKindLabel(kind),
-      settings,
-      setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
-        setStatus(
-          status,
-          { ...(args ?? {}), conversationId: conversation.id },
-          handleStatusUpdate,
-        ),
-      abortSignal: abortController?.signal,
-    })
-
-    if (isAiAssistantError(response)) {
-      const error = response
-      updateMessage(conversation.id, assistantMessageId, {
-        error:
-          error.type !== "aborted"
-            ? error.message
-            : "Operation has been cancelled",
-      })
-      await persistMessages(conversation.id)
-      return
-    }
-
-    const result = response
-    if (!result.explanation) {
-      toast.error("No explanation received from AI Assistant", {
-        autoClose: 10000,
-      })
-      return
-    }
-
-    const markdownContent = schemaExplanationToMarkdown(result)
-    updateMessage(conversation.id, assistantMessageId, {
-      content: markdownContent,
-      explanation: markdownContent,
-      tokenUsage: result.tokenUsage,
-    })
-
-    await persistMessages(conversation.id)
+    )
   }
 
   const fetchSymbolColumnDetails = useCallback(

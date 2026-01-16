@@ -5,8 +5,8 @@ import styled, { useTheme } from "styled-components"
 import { Button } from "../Button"
 import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
-import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
 import { copyToClipboard } from "../../utils/copyToClipboard"
+import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   position: relative;
@@ -15,7 +15,7 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   border: ${({ $noBorder, theme }) =>
     $noBorder ? "none" : `1px solid ${theme.color.selection}`};
   background: ${({ theme }) => theme.color.backgroundDarker};
-  overflow: hidden;
+  overflow-y: hidden;
 
   .monaco-editor-background {
     background: ${({ theme }) => theme.color.backgroundDarker};
@@ -23,6 +23,10 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
 
   .monaco-editor {
     background: ${({ theme }) => theme.color.backgroundDarker};
+  }
+
+  .lines-content {
+    top: 0 !important;
   }
 
   .editor.original {
@@ -107,7 +111,6 @@ type BaseLiteEditorProps = {
   language?: string
   theme?: string
   fontSize?: number
-  padding?: { top?: number; bottom?: number }
   lineHeight?: number
   maxHeight: number
 }
@@ -117,7 +120,6 @@ type RegularEditorProps = BaseLiteEditorProps & {
   value: string
   original?: never
   modified?: never
-  onOpenInEditor: (value: string) => void
 }
 
 type DiffEditorProps = BaseLiteEditorProps & {
@@ -125,188 +127,158 @@ type DiffEditorProps = BaseLiteEditorProps & {
   original: string
   modified: string
   value?: never
-  onOpenInEditor: (original: string, modified: string) => void
 }
 
-type LiteEditorProps = RegularEditorProps | DiffEditorProps
+type LiteEditorProps = (RegularEditorProps | DiffEditorProps) & {
+  onOpenInEditor: () => void
+}
 
-export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
-  ({
-    language = QuestDBLanguageName,
-    theme = "dracula",
-    fontSize = 12,
-    padding = { top: 8, bottom: 8 },
-    lineHeight = 20,
-    maxHeight,
-    ...props
-  }) => {
-    const appTheme = useTheme()
+const LiteEditorToolbar = ({
+  onOpenInEditor,
+  onCopy,
+  copied,
+}: {
+  onOpenInEditor: () => void
+  onCopy: () => void
+  copied: boolean
+}) => {
+  const appTheme = useTheme()
+  return (
+    <ButtonsContainer>
+      <OpenInEditorButton
+        className="open-in-editor-btn"
+        onClick={onOpenInEditor}
+        title="Open in editor"
+        data-hook="ai-open-in-editor-button"
+      >
+        Open in editor
+        <SquareSplitHorizontalIcon
+          size="1.8rem"
+          color={appTheme.color.offWhite}
+        />
+      </OpenInEditorButton>
+      <CopyButtonBase
+        skin="transparent"
+        onClick={onCopy}
+        title="Copy to clipboard"
+      >
+        {copied && <SuccessIcon size="1rem" />}
+        <FileCopy size="1.8rem" />
+      </CopyButtonBase>
+    </ButtonsContainer>
+  )
+}
+
+type LiteEditorContentProps = BaseLiteEditorProps &
+  (
+    | {
+        diffEditor: true
+        original: string
+        modified: string
+        value?: never
+        effectiveHeight?: never
+      }
+    | {
+        diffEditor: false
+        value: string
+        effectiveHeight: number
+        original?: never
+        modified?: never
+      }
+  )
+
+const LiteEditorContent = React.memo(
+  (props: LiteEditorContentProps) => {
+    const {
+      diffEditor,
+      value,
+      maxHeight,
+      language,
+      theme,
+      fontSize,
+      lineHeight,
+    } = props
+
     const scrolledRef = useRef<boolean>(false)
-    const [copied, setCopied] = useState(false)
-    const handleCopy = (value: string) => {
-      void copyToClipboard(value)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
 
-    const getContentHeight = (content: string) => {
-      const lineCount = content.split("\n").length
-      return lineCount * lineHeight + (props.diffEditor ? 0 : 16)
-    }
-
-    if (props.diffEditor) {
+    if (diffEditor) {
       return (
-        <EditorWrapper
-          $noBorder
-          style={{
-            height: maxHeight,
-            paddingTop: 8,
-            paddingBottom: 8,
-          }}
-        >
-          <ButtonsContainer>
-            <OpenInEditorButton
-              className="open-in-editor-btn"
-              onClick={() =>
-                props.onOpenInEditor(props.original, props.modified)
-              }
-              title="Open in editor"
-              data-hook="diff-open-in-editor-button"
-            >
-              Open in editor
-              <SquareSplitHorizontalIcon
-                size="1.8rem"
-                color={appTheme.color.offWhite}
-              />
-            </OpenInEditorButton>
-            <CopyButtonBase
-              skin="transparent"
-              onClick={() => handleCopy(props.modified)}
-              title="Copy to clipboard"
-            >
-              {copied && <SuccessIcon size="1rem" />}
-              <FileCopy size="1.8rem" />
-            </CopyButtonBase>
-          </ButtonsContainer>
-          <DiffEditor
-            height={maxHeight}
-            language={language}
-            original={props.original}
-            modified={props.modified}
-            theme={theme}
-            onMount={(editor) => {
-              editor.onDidUpdateDiff(() => {
-                if (scrolledRef.current) return
-                const lineChange = editor.getLineChanges()?.[0]
-                if (lineChange) {
-                  scrolledRef.current = true
-                  editor
-                    .getModifiedEditor()
-                    .revealLineInCenter(lineChange.modifiedStartLineNumber)
-                }
-              })
-            }}
-            options={{
-              readOnly: true,
-              lineNumbers: "off",
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              scrollbar: {
-                vertical: "hidden",
-                horizontal: "hidden",
-                alwaysConsumeMouseWheel: false,
-                handleMouseWheel: false,
-              },
-              automaticLayout: true,
-              folding: false,
-              wordWrap: "on",
-              glyphMargin: false,
-              renderSideBySide: false,
-              enableSplitViewResizing: false,
-              renderIndicators: false,
-              renderOverviewRuler: false,
-              hideCursorInOverviewRuler: true,
-              originalEditable: false,
-              overviewRulerBorder: false,
-              fontSize,
-              lineHeight,
-            }}
-          />
-        </EditorWrapper>
-      )
-    }
-
-    const contentHeight = getContentHeight(props.value)
-    const effectiveHeight = maxHeight
-      ? Math.min(contentHeight, maxHeight)
-      : contentHeight
-    const showOpenInEditor = contentHeight > maxHeight
-
-    return (
-      <EditorWrapper style={{ height: effectiveHeight }}>
-        {showOpenInEditor ? (
-          <ButtonsContainer>
-            <OpenInEditorButton
-              className="open-in-editor-btn"
-              onClick={() => props.onOpenInEditor(props.value)}
-              title="Open in editor"
-              data-hook="code-open-in-editor-button"
-            >
-              Open in editor
-              <SquareSplitHorizontalIcon
-                size="1.8rem"
-                color={appTheme.color.offWhite}
-              />
-            </OpenInEditorButton>
-            <CopyButtonBase
-              skin="transparent"
-              onClick={() => handleCopy(props.value ?? "")}
-              title="Copy to clipboard"
-            >
-              {copied && <SuccessIcon size="1rem" />}
-              <FileCopy size="1.8rem" />
-            </CopyButtonBase>
-          </ButtonsContainer>
-        ) : (
-          <CopyButtonFloating
-            skin="transparent"
-            onClick={() => handleCopy(props.value ?? "")}
-            title="Copy to clipboard"
-          >
-            {copied && <SuccessIcon size="1rem" />}
-            <FileCopy size="1.8rem" />
-          </CopyButtonFloating>
-        )}
-        <Editor
-          height={effectiveHeight}
+        <DiffEditor
+          height={maxHeight}
           language={language}
-          value={props.value}
+          original={props.original}
+          modified={props.modified}
           theme={theme}
+          onMount={(editor) => {
+            editor.onDidUpdateDiff(() => {
+              if (scrolledRef.current) return
+              const lineChange = editor.getLineChanges()?.[0]
+              if (lineChange) {
+                scrolledRef.current = true
+                editor
+                  .getModifiedEditor()
+                  .revealLineInCenter(lineChange.modifiedStartLineNumber)
+              }
+            })
+          }}
           options={{
             readOnly: true,
             lineNumbers: "off",
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
-            folding: false,
-            glyphMargin: false,
-            lineDecorationsWidth: 0,
-            lineNumbersMinChars: 0,
-            renderLineHighlight: "none",
-            overviewRulerLanes: 0,
-            hideCursorInOverviewRuler: true,
-            overviewRulerBorder: false,
             scrollbar: {
+              useShadows: false,
               vertical: "hidden",
               horizontal: "hidden",
               alwaysConsumeMouseWheel: false,
-              handleMouseWheel: false,
             },
+            automaticLayout: true,
+            folding: false,
+            wordWrap: "on",
+            glyphMargin: false,
+            renderSideBySide: false,
+            enableSplitViewResizing: false,
+            renderIndicators: false,
+            renderOverviewRuler: false,
+            hideCursorInOverviewRuler: true,
+            originalEditable: false,
+            overviewRulerBorder: false,
             fontSize,
-            padding,
             lineHeight,
           }}
         />
-      </EditorWrapper>
+      )
+    }
+    return (
+      <Editor
+        height={props.effectiveHeight}
+        language={language}
+        value={value}
+        theme={theme}
+        options={{
+          readOnly: true,
+          lineNumbers: "off",
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          folding: false,
+          glyphMargin: false,
+          lineDecorationsWidth: 0,
+          lineNumbersMinChars: 0,
+          renderLineHighlight: "none",
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          overviewRulerBorder: false,
+          scrollbar: {
+            useShadows: false,
+            vertical: "hidden",
+            horizontal: "hidden",
+            alwaysConsumeMouseWheel: false,
+          },
+          fontSize,
+          padding: { top: 8, bottom: 8 },
+          lineHeight,
+        }}
+      />
     )
   },
   (prevProps, nextProps) => {
@@ -315,8 +287,94 @@ export const LiteEditor: React.FC<LiteEditorProps> = React.memo(
       prevProps.diffEditor === nextProps.diffEditor &&
       prevProps.original === nextProps.original &&
       prevProps.modified === nextProps.modified &&
-      prevProps.maxHeight === nextProps.maxHeight &&
-      prevProps.onOpenInEditor === nextProps.onOpenInEditor
+      prevProps.maxHeight === nextProps.maxHeight
     )
   },
 )
+
+export const LiteEditor: React.FC<LiteEditorProps> = ({
+  language = QuestDBLanguageName,
+  theme = "dracula",
+  fontSize = 12,
+  lineHeight = 20,
+  maxHeight,
+  ...props
+}) => {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = (value: string) => {
+    void copyToClipboard(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const getContentHeight = (content: string) => {
+    const lineCount = content.split("\n").length
+    return lineCount * lineHeight + (props.diffEditor ? 0 : 16)
+  }
+
+  if (props.diffEditor) {
+    return (
+      <EditorWrapper
+        $noBorder
+        style={{
+          height: maxHeight,
+          paddingTop: 8,
+          paddingBottom: 8,
+        }}
+      >
+        <LiteEditorToolbar
+          onOpenInEditor={props.onOpenInEditor}
+          onCopy={() => handleCopy(props.modified)}
+          copied={copied}
+        />
+        <LiteEditorContent
+          diffEditor
+          original={props.original}
+          modified={props.modified}
+          maxHeight={maxHeight}
+          language={language}
+          theme={theme}
+          fontSize={fontSize}
+          lineHeight={lineHeight}
+        />
+      </EditorWrapper>
+    )
+  }
+
+  const contentHeight = getContentHeight(props.value)
+  const effectiveHeight = maxHeight
+    ? Math.min(contentHeight, maxHeight)
+    : contentHeight
+  const showOpenInEditor = contentHeight > maxHeight
+
+  return (
+    <EditorWrapper style={{ height: effectiveHeight }}>
+      {showOpenInEditor ? (
+        <LiteEditorToolbar
+          onOpenInEditor={props.onOpenInEditor}
+          onCopy={() => handleCopy(props.value ?? "")}
+          copied={copied}
+        />
+      ) : (
+        <CopyButtonFloating
+          skin="transparent"
+          onClick={() => handleCopy(props.value ?? "")}
+          title="Copy to clipboard"
+        >
+          {copied && <SuccessIcon size="1rem" />}
+          <FileCopy size="1.8rem" />
+        </CopyButtonFloating>
+      )}
+      <LiteEditorContent
+        diffEditor={false}
+        value={props.value}
+        maxHeight={maxHeight}
+        effectiveHeight={effectiveHeight}
+        language={language}
+        theme={theme}
+        fontSize={fontSize}
+        lineHeight={lineHeight}
+      />
+    </EditorWrapper>
+  )
+}

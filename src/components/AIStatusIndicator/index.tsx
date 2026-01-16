@@ -312,7 +312,7 @@ export const AIStatusIndicator: React.FC = () => {
     clearOperation,
   } = useAIStatus()
   const { chatWindowState, openChatWindow } = useAIConversation()
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const [isClosed, setIsClosed] = useState(false)
   const isCompleted = status === null && currentOperation.length > 0
   const isAborted = status === AIOperationStatus.Aborted
