@@ -742,6 +742,8 @@ module.exports = {
   createFinalResponseData,
   createResponse,
   createFinalResponse,
+  createChatTitleResponse,
   createToolCallFlow,
   createMultiTurnFlow,
+  isTitleRequest,
 }

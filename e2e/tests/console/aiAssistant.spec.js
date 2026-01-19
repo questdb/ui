@@ -6,6 +6,8 @@ const {
   createMultiTurnFlow,
   createResponse,
   createFinalResponseData,
+  createChatTitleResponse,
+  isTitleRequest,
 } = require("../../utils/aiAssistant")
 
 /**
@@ -2457,6 +2459,11 @@ Syntax: \`avg(column)\`
       let errorCount = 0
 
       cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        if (isTitleRequest("openai", req.body)) {
+          req.reply(createChatTitleResponse("openai"))
+          return
+        }
+
         if (errorCount === 0) {
           errorCount++
           req.reply({
@@ -2527,6 +2534,11 @@ Syntax: \`avg(column)\`
       let errorCount = 0
 
       cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+        if (isTitleRequest("anthropic", req.body)) {
+          req.reply(createChatTitleResponse("anthropic"))
+          return
+        }
+
         if (errorCount === 0) {
           errorCount++
           req.reply({
