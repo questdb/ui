@@ -18,7 +18,6 @@ const MarkdownContent = styled.div`
   font-size: 1.4rem;
   line-height: 2.1rem;
   color: ${color("foreground")};
-  overflow: visible;
   word-break: break-word;
 
   p {

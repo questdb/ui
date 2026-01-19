@@ -794,7 +794,7 @@ async function handleToolCalls(
 
   const followUpParams: Parameters<typeof createAnthropicMessage>[1] = {
     model,
-    tools: modelToolsClient ? ALL_TOOLS : REFERENCE_TOOLS,
+    tools: modelToolsClient.getTables ? ALL_TOOLS : REFERENCE_TOOLS,
     messages: updatedHistory,
     temperature: 0.3,
   }

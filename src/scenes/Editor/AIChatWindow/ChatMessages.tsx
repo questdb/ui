@@ -88,7 +88,6 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   background: ${color("loginBackground")};
   border: 1px solid rgba(25, 26, 33, 0.32);
   flex-shrink: 0;
-  overflow: visible;
 `
 
 const UserRequestBox = styled(Box)`
@@ -102,7 +101,6 @@ const UserRequestBox = styled(Box)`
   border: 1px solid rgba(25, 26, 33, 0.32);
   border-radius: 0.6rem;
   flex-shrink: 0;
-  overflow: visible;
 `
 
 const UserRequestHeader = styled(Box).attrs({
@@ -194,7 +192,6 @@ const MessageContent = styled(Text)`
   color: ${color("foreground")};
   white-space: pre-wrap;
   word-wrap: break-word;
-  overflow: visible;
 `
 
 const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
@@ -208,7 +205,6 @@ const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
   padding: 0.4rem;
   border-radius: 0.6rem;
   flex-shrink: 0;
-  overflow: visible;
 
   ${({ $hasOperationHistory }) =>
     $hasOperationHistory &&
@@ -258,7 +254,6 @@ const ExplanationContent = styled(Box)`
   flex-direction: column;
   border-radius: 0.6rem;
   padding: 0.8rem;
-  overflow: visible;
   flex-shrink: 0;
   width: 100%;
 `
@@ -317,6 +312,12 @@ const StreamingCursor = styled.span`
   margin-right: auto;
   vertical-align: text-bottom;
   animation: ${cursorBlink} 1s infinite;
+`
+
+const MessagesEnd = styled.div`
+  min-height: 1px;
+  width: 100%;
+  background: transparent;
 `
 
 const DiffContainer = styled(Box)`
@@ -1131,7 +1132,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           )
         }
       })}
-      <div ref={messagesEndRef} />
+      <MessagesEnd ref={messagesEndRef} data-hook="messages-end" />
     </MessagesContainer>
   )
 }

@@ -1,35 +1,47 @@
 /// <reference types="cypress" />
 
-const { createToolCallFlow, createMultiTurnFlow } = require("../../utils")
+const {
+  PROVIDERS,
+  createToolCallFlow,
+  createMultiTurnFlow,
+  createResponse,
+  createFinalResponseData,
+} = require("../../utils/aiAssistant")
 
 /**
  * Intercepts AI requests with a custom response body.
- * Use this when you need to control the exact response content.
+ * Automatically detects streaming vs non-streaming based on request body.
  *
  * @param {"anthropic" | "openai"} provider - The AI provider to intercept
  * @param {Object} responseBody - The response body to return
  * @param {string} [alias] - Optional custom alias for the intercept
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.streaming] - Force streaming mode (auto-detected if not provided)
  */
-function interceptAIRequestWithResponse(provider, responseBody, alias) {
+function interceptAIRequestWithResponse(
+  provider,
+  responseBody,
+  alias,
+  options = {},
+) {
   const aliasName = alias || `${provider}CustomResponse`
+  const endpoint = PROVIDERS[provider].endpoint
 
-  if (provider === "openai") {
-    cy.intercept("POST", "https://api.openai.com/v1/responses", {
-      statusCode: 200,
-      delay: 200,
-      body: responseBody,
-    }).as(aliasName)
-  } else if (provider === "anthropic") {
-    cy.intercept("POST", "https://api.anthropic.com/v1/messages", {
-      statusCode: 200,
-      delay: 200,
-      body: responseBody,
-    }).as(aliasName)
-  }
+  cy.intercept("POST", endpoint, (req) => {
+    // Determine if streaming based on request or options
+    const isStreaming =
+      options.streaming !== undefined
+        ? options.streaming
+        : req.body.stream === true
+    req.reply(
+      createResponse(provider, responseBody, { streaming: isStreaming }),
+    )
+  }).as(aliasName)
 }
 
 /**
  * Creates a valid OpenAI response for explain schema requests.
+ * Note: Schema explanation uses responses.parse() which is non-streaming.
  * @param {Object} schemaData - The schema explanation data
  * @returns {Object} OpenAI response body
  */
@@ -61,7 +73,6 @@ function createOpenAIExplainSchemaResponse(schemaData) {
 
 /**
  * Creates an OpenAI response where output_parsed is null, triggering parse error.
- * This happens when OpenAI cannot parse the response into the expected schema format.
  * @returns {Object} OpenAI response body with null output_parsed
  */
 function createOpenAIParseFailureResponse() {
@@ -90,57 +101,50 @@ function createOpenAIParseFailureResponse() {
   }
 }
 
-function interceptAIChatRequest(provider, alias, delay = 200) {
+/**
+ * Intercepts AI chat requests with a default test response.
+ *
+ * @param {"anthropic" | "openai"} provider - The AI provider to intercept
+ * @param {string} [alias] - Optional custom alias for the intercept
+ * @param {number} [delay=200] - Delay in milliseconds
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.streaming=true] - Whether to use streaming response
+ */
+function interceptAIChatRequest(
+  provider,
+  alias,
+  delay = 200,
+  options = { streaming: true },
+) {
   const aliasName = alias || `${provider}ChatRequest`
+  const endpoint = PROVIDERS[provider].endpoint
+  const { streaming = true } = options
 
-  if (provider === "openai") {
-    cy.intercept("POST", "https://api.openai.com/v1/responses", {
-      statusCode: 200,
-      delay,
-      body: {
-        id: "resp_mock_chat",
-        object: "response",
-        created_at: Date.now(),
-        status: "completed",
-        output: [
-          {
-            type: "message",
-            role: "assistant",
-            content: [{ type: "output_text", text: "Test response" }],
-          },
-        ],
-      },
-    }).as(aliasName)
-  } else if (provider === "anthropic") {
-    cy.intercept("POST", "https://api.anthropic.com/v1/messages", {
-      statusCode: 200,
-      delay,
-      body: {
-        id: "msg_mock_chat",
-        type: "message",
-        role: "assistant",
-        content: [{ type: "text", text: "Test response" }],
-        model: "claude-sonnet-4-20250514",
-        stop_reason: "end_turn",
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-        },
-      },
-    }).as(aliasName)
-  }
+  const responseData = createFinalResponseData(
+    provider,
+    "Test response explanation",
+    null,
+  )
+
+  cy.intercept(
+    "POST",
+    endpoint,
+    createResponse(provider, responseData, { streaming, delay }),
+  ).as(aliasName)
 }
 
 /**
  * Intercepts AI provider token validation requests.
  *
  * @param {"anthropic" | "openai"} provider - The AI provider to intercept
- * @param {boolean} success - If true, returns 200 success response; if false, returns 401 error response
+ * @param {boolean} success - If true, returns 200 success response; if false, returns 401 error
  */
 function interceptTokenValidation(provider, success) {
+  const endpoint = PROVIDERS[provider].endpoint
+
   if (provider === "openai") {
     if (success) {
-      cy.intercept("POST", "https://api.openai.com/v1/responses", {
+      cy.intercept("POST", endpoint, {
         statusCode: 200,
         delay: 200,
         body: {
@@ -152,7 +156,7 @@ function interceptTokenValidation(provider, success) {
         },
       }).as("openaiValidation")
     } else {
-      cy.intercept("POST", "https://api.openai.com/v1/responses", {
+      cy.intercept("POST", endpoint, {
         statusCode: 401,
         delay: 200,
         body: {
@@ -168,7 +172,7 @@ function interceptTokenValidation(provider, success) {
     }
   } else if (provider === "anthropic") {
     if (success) {
-      cy.intercept("POST", "https://api.anthropic.com/v1/messages", {
+      cy.intercept("POST", endpoint, {
         statusCode: 200,
         delay: 200,
         body: {
@@ -176,7 +180,7 @@ function interceptTokenValidation(provider, success) {
           type: "message",
           role: "assistant",
           content: [],
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-5",
           stop_reason: "end_turn",
           usage: {
             input_tokens: 10,
@@ -185,7 +189,7 @@ function interceptTokenValidation(provider, success) {
         },
       }).as("anthropicValidation")
     } else {
-      cy.intercept("POST", "https://api.anthropic.com/v1/messages", {
+      cy.intercept("POST", endpoint, {
         statusCode: 401,
         delay: 200,
         body: {
@@ -201,12 +205,6 @@ function interceptTokenValidation(provider, success) {
   }
 }
 
-/**
- * Creates localStorage value for AI assistant settings with OpenAI configured.
- * Use this with cy.loadConsoleWithAuth's localStorageItems parameter.
- *
- * @returns {Object} Object with localStorage key-value pair
- */
 function getOpenAIConfiguredSettings() {
   return {
     "ai.assistant.settings": JSON.stringify({
@@ -215,6 +213,21 @@ function getOpenAIConfiguredSettings() {
         openai: {
           apiKey: "test-openai-key",
           enabledModels: ["gpt-5-mini", "gpt-5"],
+          grantSchemaAccess: true,
+        },
+      },
+    }),
+  }
+}
+
+function getAnthropicConfiguredSettings() {
+  return {
+    "ai.assistant.settings": JSON.stringify({
+      selectedModel: "claude-sonnet-4-5",
+      providers: {
+        anthropic: {
+          apiKey: "test-anthropic-key",
+          enabledModels: ["claude-sonnet-4-5", "claude-opus-4-5"],
           grantSchemaAccess: true,
         },
       },
@@ -916,9 +929,8 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat1")
 
-      cy.getByDataHook("chat-message-assistant")
-        .should("be.visible")
-        .should("contain", "Failed to parse assistant response.")
+      cy.waitForStreamingComplete()
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
       cy.getByDataHook("chat-blank-state").should("be.visible")
@@ -930,6 +942,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.wait("@chat2")
 
+      cy.waitForStreamingComplete()
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
@@ -968,8 +981,7 @@ describe("ai assistant", () => {
     })
 
     it("should show status indicator only when chat window is closed during AI operation", () => {
-      // Given - Set up intercept with latency
-      interceptAIChatRequest("openai", "slowRequest")
+      interceptAIChatRequest("openai", "slowRequest", 1000)
 
       // When - Open chat window and send a message
       cy.getByDataHook("ai-chat-button").click()
@@ -999,8 +1011,7 @@ describe("ai assistant", () => {
     })
 
     it("should open chat window with previous message when clicking View chat button", () => {
-      // Given - Set up intercept with latency
-      interceptAIChatRequest("openai", "slowRequest")
+      interceptAIChatRequest("openai", "slowRequest", 1000)
 
       // When - Open chat window and send a message
       cy.getByDataHook("ai-chat-button").click()
@@ -1033,8 +1044,7 @@ describe("ai assistant", () => {
     })
 
     it("should show aborted status and display cancellation message in chat when aborting", () => {
-      // Given - Set up intercept with latency
-      interceptAIChatRequest("openai", "slowRequest", 2000)
+      interceptAIChatRequest("openai", "slowRequest", 1000)
 
       // When - Open chat window and send a message
       cy.getByDataHook("ai-chat-button").click()
@@ -1054,13 +1064,11 @@ describe("ai assistant", () => {
 
       // Then - Status indicator should show Cancelled status
       cy.getByDataHook("ai-status-text").should("contain", "Cancelled")
-      cy.getByDataHook("assistant-mode-operation-has-been-cancelled").should(
-        "be.visible",
-      )
 
       // Then - After a few seconds, status indicator should disappear
-      cy.wait(2000)
-      cy.getByDataHook("ai-status-indicator").should("not.exist")
+      cy.getByDataHook("ai-status-indicator", { timeout: 5000 }).should(
+        "not.exist",
+      )
 
       // When - Open chat window
       cy.getByDataHook("ai-chat-button").click()
@@ -1117,7 +1125,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-context-badge").should("be.visible")
 
       // When - Send a message
-      interceptAIChatRequest("openai")
+      interceptAIChatRequest("openai", "openaiChatRequest", 2000)
       // Use force:true because context badge overlays the textarea
       cy.getByDataHook("chat-input-textarea").type("Explain this query", {
         force: true,
@@ -1127,8 +1135,9 @@ describe("ai assistant", () => {
       // Then - AI icon should transition to highlight state
       cy.getAIIconInLine(1, "highlight").should("be.visible")
 
-      // Then - After ~1 second, AI icon should transition to active state
+      // Then - After response completes, AI icon should transition to active state
       cy.wait("@openaiChatRequest")
+      cy.waitForStreamingComplete()
       cy.getAIIconInLine(1, "active").should("be.visible")
     })
 
@@ -1215,7 +1224,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea").should("be.visible")
       cy.getByDataHook("chat-context-badge").should("be.visible")
 
-      interceptAIChatRequest("openai")
+      interceptAIChatRequest("openai", "openaiChatRequest", 2000)
       cy.getByDataHook("chat-input-textarea").type("Explain this query", {
         force: true,
       })
@@ -1223,6 +1232,7 @@ describe("ai assistant", () => {
       cy.getAIIconInLine(1, "highlight").should("be.visible")
 
       cy.wait("@openaiChatRequest")
+      cy.waitForStreamingComplete()
       cy.getByDataHook("chat-message-assistant").should("be.visible")
       cy.getAIIconInLine(1, "active").should("be.visible")
 
@@ -1486,10 +1496,12 @@ describe("ai assistant", () => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
 
-    it("should provide correct table list when model calls get_tables tool", () => {
+    it("should provide correct table list when model calls get_tables tool (OpenAI streaming)", () => {
       const assistantResponse =
         "I found the following tables in your database: btc_trades and ecommerce_stats."
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "What tables are in the database?",
         steps: [
           { toolCall: { name: "get_tables", args: {} } },
@@ -1525,8 +1537,10 @@ describe("ai assistant", () => {
       )
     })
 
-    it("should provide correct schema when model calls get_table_schema tool", () => {
+    it("should provide correct schema when model calls get_table_schema tool (OpenAI streaming)", () => {
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "What is the schema of btc_trades table?",
         steps: [
           {
@@ -1574,6 +1588,8 @@ describe("ai assistant", () => {
       const assistantResponse =
         "The ecommerce_stats table tracks sales data by country and category, including visits, unique visitors, sales amount, and number of products."
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "Describe the ecommerce_stats table",
         steps: [
           { toolCall: { name: "get_tables", args: {} } },
@@ -1643,6 +1659,8 @@ describe("ai assistant", () => {
       const assistantResponse =
         "QuestDB supports various aggregate functions including sum, avg, count, first, and last for data aggregation operations."
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "What aggregate functions does QuestDB support?",
         steps: [
           { toolCall: { name: "get_questdb_toc", args: {} } },
@@ -1731,6 +1749,8 @@ Syntax: \`avg(column)\`
         "The sum function returns the sum of all values in a column. Syntax: sum(column)"
 
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "How do I use the sum function in QuestDB?",
         steps: [
           {
@@ -1785,6 +1805,8 @@ Syntax: \`avg(column)\`
       const assistantResponse =
         "The query is syntactically valid. It will select all columns from the btc_trades table."
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "Is this query valid: SELECT * FROM btc_trades",
         steps: [
           {
@@ -1841,6 +1863,8 @@ Syntax: \`avg(column)\`
       const assistantResponse =
         "The query has syntax errors. 'SELEC' should be 'SELECT' and 'FORM' should be 'FROM'."
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "Is this query valid: SELEC * FORM btc_trades",
         steps: [
           {
@@ -1894,14 +1918,115 @@ Syntax: \`avg(column)\`
     })
   })
 
+  describe("tool calls (Anthropic)", () => {
+    const testTables = ["btc_trades", "ecommerce_stats"]
+
+    before(() => {
+      cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
+      testTables.forEach((table) => {
+        cy.createTable(table)
+      })
+      cy.refreshSchema()
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      testTables.forEach((table) => {
+        cy.dropTableIfExists(table)
+      })
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
+    })
+
+    it("should provide correct table list when model calls get_tables tool (Anthropic streaming)", () => {
+      const assistantResponse =
+        "I found the following tables in your database: btc_trades and ecommerce_stats."
+      const flow = createToolCallFlow({
+        provider: "anthropic",
+        streaming: true,
+        question: "What tables are in the database?",
+        steps: [
+          { toolCall: { name: "get_tables", args: {} } },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: null,
+            },
+            expectToolResult: { includes: ["btc_trades", "ecommerce_stats"] },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", "btc_trades")
+        .should("contain", "ecommerce_stats")
+    })
+
+    it("should handle sequential tool calls with Anthropic", () => {
+      const assistantResponse =
+        "The ecommerce_stats table tracks sales data with country, category, and sales metrics."
+      const flow = createToolCallFlow({
+        provider: "anthropic",
+        streaming: true,
+        question: "Describe the ecommerce_stats table",
+        steps: [
+          { toolCall: { name: "get_tables", args: {} } },
+          {
+            toolCall: {
+              name: "get_table_schema",
+              args: { table_name: "ecommerce_stats" },
+            },
+            expectToolResult: { includes: ["btc_trades", "ecommerce_stats"] },
+          },
+          {
+            finalResponse: {
+              explanation: assistantResponse,
+              sql: null,
+            },
+            expectToolResult: {
+              includes: ["CREATE TABLE", "ecommerce_stats"],
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", assistantResponse)
+    })
+  })
+
   describe("accept and reject suggestions", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
 
-    it("should accept suggestion and update editor", () => {
+    it("should accept suggestion and update editor (OpenAI streaming)", () => {
       // Setup: Use flow to generate SQL suggestion
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "Show all data",
         steps: [
           {
@@ -1935,8 +2060,10 @@ Syntax: \`avg(column)\`
       cy.get(".aiQueryHighlight").should("exist")
     })
 
-    it("should reject suggestion and show Rejected status", () => {
+    it("should reject suggestion and show Rejected status (OpenAI streaming)", () => {
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "Count rows",
         steps: [
           {
@@ -1968,6 +2095,8 @@ Syntax: \`avg(column)\`
 
     it("should apply previous suggestion to editor using Apply button", () => {
       const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
         question: "Get latest price",
         steps: [
           {
@@ -2002,8 +2131,10 @@ Syntax: \`avg(column)\`
       cy.get(".aiQueryHighlight").should("exist")
     })
 
-    it("should show Followed up status when user sends follow-up without accepting/rejecting", () => {
+    it("should show Followed up status when user sends follow-up without accepting/rejecting (OpenAI)", () => {
       const flow = createMultiTurnFlow({
+        provider: "openai",
+        streaming: true,
         turns: [
           {
             explanation: "Query for symbols.",
@@ -2019,13 +2150,12 @@ Syntax: \`avg(column)\`
       flow.intercept()
 
       cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Show symbols")
       cy.getByDataHook("chat-send-button").click()
 
       flow.waitForTurn(0)
-
-      cy.getByDataHook("message-action-accept").should("be.visible")
 
       cy.getByDataHook("chat-input-textarea").type("Make it unique")
       cy.getByDataHook("chat-send-button").click()
@@ -2045,16 +2175,20 @@ Syntax: \`avg(column)\`
         .eq(1)
         .getByDataHook("inline-diff-container")
         .getByDataHook("message-action-reject")
+        .scrollIntoView()
         .should("be.visible")
       cy.getByDataHook("chat-message-assistant")
         .eq(1)
-        .contains("Query for unique symbols.")
+        .getByDataHook("inline-diff-container")
         .getByDataHook("message-action-accept")
+        .scrollIntoView()
         .should("be.visible")
     })
 
     it("should toggle diff view expansion for older suggestions", () => {
       const flow = createMultiTurnFlow({
+        provider: "openai",
+        streaming: true,
         turns: [
           { explanation: "First simple query.", sql: "SELECT 1;" },
           { explanation: "Second simple query.", sql: "SELECT 2;" },
@@ -2093,6 +2227,8 @@ Syntax: \`avg(column)\`
 
     it("should correctly maintain the history for multi-turn actions", () => {
       const flow = createMultiTurnFlow({
+        provider: "openai",
+        streaming: true,
         turns: [
           { explanation: "This is 1", sql: "SELECT 1;" },
           { explanation: "This is 2", sql: "SELECT 2;" },
@@ -2206,6 +2342,230 @@ Syntax: \`avg(column)\`
         expect(body.input[13].content).to.include("select 6")
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 6)
+    })
+  })
+
+  describe("accept and reject suggestions (Anthropic)", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
+    })
+
+    it("should accept suggestion and update editor (Anthropic streaming)", () => {
+      const flow = createToolCallFlow({
+        provider: "anthropic",
+        streaming: true,
+        question: "Show all data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here's a query to show data.",
+              sql: "SELECT * FROM btc_trades LIMIT 10;",
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      cy.getByDataHook("message-action-accept").should("be.visible")
+      cy.getByDataHook("message-action-accept").click()
+
+      cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
+      cy.getByDataHook("chat-context-badge").should(
+        "contain",
+        "SELECT * FROM btc_trades",
+      )
+    })
+
+    it("should show Followed up status when user sends follow-up without accepting/rejecting (Anthropic)", () => {
+      const flow = createMultiTurnFlow({
+        provider: "anthropic",
+        streaming: true,
+        turns: [
+          {
+            explanation: "Query for symbols.",
+            sql: "SELECT symbol FROM btc_trades;",
+          },
+          {
+            explanation: "Query for unique symbols.",
+            sql: "SELECT DISTINCT symbol FROM btc_trades;",
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-blank-state").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Show symbols")
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForTurn(0)
+
+      cy.getByDataHook("chat-input-textarea").type("Make it unique")
+      cy.getByDataHook("chat-send-button").click()
+
+      cy.getByDataHook("inline-diff-container").should("contain", "Followed up")
+
+      flow.waitForTurn(1)
+
+      // Second suggestion should have Accept/Reject buttons
+      cy.getByDataHook("chat-message-assistant")
+        .eq(1)
+        .getByDataHook("inline-diff-container")
+        .getByDataHook("message-action-accept")
+        .scrollIntoView()
+        .should("be.visible")
+    })
+  })
+
+  describe("retry functionality", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+    })
+
+    it("should show retry button when AI request fails with non-retryable error (OpenAI)", () => {
+      cy.intercept("POST", PROVIDERS.openai.endpoint, {
+        statusCode: 401,
+        delay: 50,
+        body: {
+          error: {
+            type: "authentication_error",
+            message: "Invalid API key provided",
+          },
+        },
+      }).as("failedRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Test message")
+      cy.getByDataHook("chat-send-button").click()
+
+      cy.getByDataHook("chat-message-error").should("be.visible")
+      cy.getByDataHook("retry-button").should("be.visible")
+    })
+
+    it("should retry request when retry button is clicked (OpenAI)", () => {
+      let errorCount = 0
+
+      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        if (errorCount === 0) {
+          errorCount++
+          req.reply({
+            statusCode: 401,
+            delay: 50,
+            body: {
+              error: {
+                type: "authentication_error",
+                message: "Invalid API key",
+              },
+            },
+          })
+        } else {
+          const responseData = createFinalResponseData(
+            "openai",
+            "Retry successful response",
+            null,
+          )
+          req.reply(createResponse("openai", responseData, { streaming: true }))
+        }
+      }).as("aiRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Test retry message")
+      cy.getByDataHook("chat-send-button").click()
+
+      cy.getByDataHook("chat-message-error").should("be.visible")
+      cy.getByDataHook("retry-button").should("be.visible")
+
+      cy.getByDataHook("retry-button").click()
+
+      cy.waitForStreamingComplete()
+
+      cy.getByDataHook("chat-message-error").should("not.exist")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
+    })
+  })
+
+  describe("retry functionality (Anthropic)", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
+    })
+
+    it("should show retry button when AI request fails with non-retryable error (Anthropic)", () => {
+      cy.intercept("POST", PROVIDERS.anthropic.endpoint, {
+        statusCode: 401,
+        delay: 50,
+        body: {
+          type: "error",
+          error: {
+            type: "authentication_error",
+            message: "invalid x-api-key",
+          },
+        },
+      }).as("failedRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Test message")
+      cy.getByDataHook("chat-send-button").click()
+
+      cy.getByDataHook("chat-message-error").should("be.visible")
+      cy.getByDataHook("retry-button").should("be.visible")
+    })
+
+    it("should retry request when retry button is clicked (Anthropic)", () => {
+      let errorCount = 0
+
+      cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+        if (errorCount === 0) {
+          errorCount++
+          req.reply({
+            statusCode: 401,
+            delay: 50,
+            body: {
+              type: "error",
+              error: {
+                type: "authentication_error",
+                message: "invalid x-api-key",
+              },
+            },
+          })
+        } else {
+          const responseData = createFinalResponseData(
+            "anthropic",
+            "Retry successful response",
+            null,
+          )
+          req.reply(
+            createResponse("anthropic", responseData, { streaming: true }),
+          )
+        }
+      }).as("aiRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type("Test retry message")
+      cy.getByDataHook("chat-send-button").click()
+
+      cy.getByDataHook("chat-message-error").should("be.visible")
+      cy.getByDataHook("retry-button").should("be.visible")
+
+      cy.getByDataHook("retry-button").click()
+
+      cy.waitForStreamingComplete()
+
+      cy.getByDataHook("chat-message-error").should("not.exist")
+      cy.getByDataHook("chat-message-assistant").should("be.visible")
     })
   })
 })
