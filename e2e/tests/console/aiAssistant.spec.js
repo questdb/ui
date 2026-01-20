@@ -760,7 +760,10 @@ describe("ai assistant", () => {
         .should("contain", "Renamed Chat")
 
       // When - Navigate to that chat
-      cy.getByDataHook("chat-history-item").first().click()
+      cy.getByDataHook("chat-history-item")
+        .first()
+        .should("not.be.disabled")
+        .click()
 
       // Then - Chat window title should show the new name
       cy.getByDataHook("chat-window-title").should("contain", "Renamed Chat")
@@ -788,7 +791,10 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").should("have.length", 2)
 
       // When - Delete the first chat
-      cy.getByDataHook("chat-history-item").first().trigger("mouseover")
+      cy.getByDataHook("chat-history-item")
+        .first()
+        .should("not.be.disabled")
+        .trigger("mouseover")
       cy.getByDataHook("chat-history-delete").first().click()
 
       // Then - Confirm deletion dialog
@@ -862,6 +868,9 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.waitForAIResponse("@chat2")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
 
       // Create third chat
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
@@ -871,6 +880,9 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.waitForAIResponse("@chat3")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
 
       // When - Open history
       cy.getByDataHook("chat-window-history").click()
@@ -878,7 +890,10 @@ describe("ai assistant", () => {
 
       // When - Rename each chat
       chatNames.forEach((name, index) => {
-        cy.getByDataHook("chat-history-item").eq(index).trigger("mouseover")
+        cy.getByDataHook("chat-history-item")
+          .eq(index)
+          .should("not.be.disabled")
+          .trigger("mouseover")
         cy.getByDataHook("chat-history-edit").eq(index).click()
         cy.getByDataHook("chat-history-rename").clear().type(`${name}{enter}`)
         cy.getByDataHook("chat-history-title").eq(index).should("contain", name)
@@ -1310,7 +1325,10 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-rename").clear().type("Tab 2 Chat{enter}")
 
       // When - Navigate to Tab 1 Chat via history
-      cy.getByDataHook("chat-history-item").contains("Tab 1 Chat").click()
+      cy.getByDataHook("chat-history-item")
+        .contains("Tab 1 Chat")
+        .should("not.be.disabled")
+        .click()
 
       // Then - Should automatically switch to Tab 1 and show context badge
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for chat to load
@@ -1326,7 +1344,10 @@ describe("ai assistant", () => {
       // When - Navigate to Tab 2 Chat via history
       cy.getByDataHook("chat-window-history").click()
       cy.getByDataHook("chat-history-list").should("be.visible") // Wait for history to load
-      cy.getByDataHook("chat-history-item").contains("Tab 2 Chat").click()
+      cy.getByDataHook("chat-history-item")
+        .contains("Tab 2 Chat")
+        .should("not.be.disabled")
+        .click()
 
       // Then - Should automatically switch to Tab 2 and show context badge
       cy.getByDataHook("chat-input-textarea").should("be.visible") // Wait for chat to load

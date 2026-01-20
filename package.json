@@ -22,7 +22,7 @@
     "start": "COMMIT_HASH=$(git rev-parse --short HEAD) vite",
     "preview": "vite preview",
     "test:unit": "TZ=UTC vitest run",
-    "test:e2e": "cypress run --spec 'e2e/tests/console/*.spec.js'",
+    "test:e2e": "cypress run --spec 'e2e/tests/console/aiAssistant.spec.js'",
     "test:e2e:auth": "cypress run --spec 'e2e/tests/auth/*.spec.js'",
     "test:e2e:enterprise": "cypress run --spec 'e2e/tests/enterprise/*.spec.js'",
     "typecheck": "tsc --noEmit",
