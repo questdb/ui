@@ -948,12 +948,11 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").should("have.length", 2)
 
       // When - Click on the first chat (older one)
-      cy.getByDataHook("chat-history-item")
-        .should(($items) => {
-          expect($items.eq(1)).not.to.contain("Current")
-        })
-        .eq(1)
-        .click()
+      cy.getByDataHook("chat-history-item").should(($items) => {
+        expect($items.eq(1)).not.to.contain("Current")
+      })
+
+      cy.getByDataHook("chat-history-item").eq(1).click()
 
       // Then - Should see the first chat's message
       cy.getByDataHook("chat-history-list").should("not.exist")
@@ -2432,70 +2431,50 @@ Syntax: \`avg(column)\`
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
 
-    it("should show retry button when AI request fails with non-retryable error (OpenAI)", () => {
-      cy.intercept("POST", PROVIDERS.openai.endpoint, {
-        statusCode: 401,
-        delay: 50,
-        body: {
-          error: {
-            type: "authentication_error",
-            message: "Invalid API key provided",
-          },
-        },
-      }).as("failedRequest")
-
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Test message")
-      cy.getByDataHook("chat-send-button").click()
-
-      cy.getByDataHook("chat-message-error").should("be.visible")
-      cy.getByDataHook("retry-button").should("be.visible")
-    })
-
     it("should retry request when retry button is clicked (OpenAI)", () => {
-      let errorCount = 0
-
       cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
         if (isTitleRequest("openai", req.body)) {
-          req.reply(createChatTitleResponse("openai"))
+          req.reply(createChatTitleResponse("openai", "Test Chat"))
           return
         }
-
-        if (errorCount === 0) {
-          errorCount++
-          req.reply({
-            statusCode: 401,
-            delay: 50,
-            body: {
-              error: {
-                type: "authentication_error",
-                message: "Invalid API key",
-              },
+        req.reply({
+          statusCode: 401,
+          body: {
+            error: {
+              type: "authentication_error",
+              message: "Invalid API key",
             },
-          })
-        } else {
-          const responseData = createFinalResponseData(
-            "openai",
-            "Retry successful response",
-            null,
-          )
-          req.reply(createResponse("openai", responseData, { streaming: true }))
-        }
-      }).as("aiRequest")
+          },
+        })
+      }).as("errorRequest")
 
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Test retry message")
       cy.getByDataHook("chat-send-button").click()
 
+      cy.wait("@errorRequest")
       cy.getByDataHook("chat-message-error").should("be.visible")
       cy.getByDataHook("retry-button").should("be.visible")
 
+      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        if (isTitleRequest("openai", req.body)) {
+          req.reply(createChatTitleResponse("openai", "Test Chat"))
+          return
+        }
+        req.reply(
+          createResponse(
+            "openai",
+            createFinalResponseData("openai", "Successful response", null),
+            { streaming: true },
+          ),
+        )
+      }).as("successRequest")
+
       cy.getByDataHook("retry-button").click()
 
+      cy.wait("@successRequest")
       cy.waitForStreamingComplete()
-
       cy.getByDataHook("chat-message-error").should("not.exist")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
     })
@@ -2506,74 +2485,51 @@ Syntax: \`avg(column)\`
       cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
     })
 
-    it("should show retry button when AI request fails with non-retryable error (Anthropic)", () => {
-      cy.intercept("POST", PROVIDERS.anthropic.endpoint, {
-        statusCode: 401,
-        delay: 50,
-        body: {
-          type: "error",
-          error: {
-            type: "authentication_error",
-            message: "invalid x-api-key",
-          },
-        },
-      }).as("failedRequest")
-
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("chat-input-textarea").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Test message")
-      cy.getByDataHook("chat-send-button").click()
-
-      cy.getByDataHook("chat-message-error").should("be.visible")
-      cy.getByDataHook("retry-button").should("be.visible")
-    })
-
     it("should retry request when retry button is clicked (Anthropic)", () => {
-      let errorCount = 0
-
       cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
         if (isTitleRequest("anthropic", req.body)) {
-          req.reply(createChatTitleResponse("anthropic"))
+          req.reply(createChatTitleResponse("anthropic", "Test Chat"))
           return
         }
-
-        if (errorCount === 0) {
-          errorCount++
-          req.reply({
-            statusCode: 401,
-            delay: 50,
-            body: {
-              type: "error",
-              error: {
-                type: "authentication_error",
-                message: "invalid x-api-key",
-              },
+        req.reply({
+          statusCode: 401,
+          body: {
+            type: "error",
+            error: {
+              type: "authentication_error",
+              message: "Invalid API key",
             },
-          })
-        } else {
-          const responseData = createFinalResponseData(
-            "anthropic",
-            "Retry successful response",
-            null,
-          )
-          req.reply(
-            createResponse("anthropic", responseData, { streaming: true }),
-          )
-        }
-      }).as("aiRequest")
+          },
+        })
+      }).as("errorRequest")
 
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Test retry message")
       cy.getByDataHook("chat-send-button").click()
 
+      cy.wait("@errorRequest")
       cy.getByDataHook("chat-message-error").should("be.visible")
       cy.getByDataHook("retry-button").should("be.visible")
 
+      cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+        if (isTitleRequest("anthropic", req.body)) {
+          req.reply(createChatTitleResponse("anthropic", "Test Chat"))
+          return
+        }
+        req.reply(
+          createResponse(
+            "anthropic",
+            createFinalResponseData("anthropic", "Successful response", null),
+            { streaming: true },
+          ),
+        )
+      }).as("successRequest")
+
       cy.getByDataHook("retry-button").click()
 
+      cy.wait("@successRequest")
       cy.waitForStreamingComplete()
-
       cy.getByDataHook("chat-message-error").should("not.exist")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
     })

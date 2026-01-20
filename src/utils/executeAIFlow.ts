@@ -492,8 +492,8 @@ export async function executeAIFlow(
     })
   } finally {
     streamingCallback?.cleanup?.()
-    callbacks.setIsStreaming(false)
     await callbacks.persistMessages(conversationId)
+    callbacks.setIsStreaming(false)
   }
 }
 
