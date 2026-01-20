@@ -104,6 +104,7 @@ export type AIFlowCallbacks = {
   updateConversationName?: (
     conversationId: string,
     name: string,
+    isGeneratedByAI?: boolean,
   ) => Promise<void>
   replaceConversationMessages?: (
     conversationId: string,
@@ -344,7 +345,7 @@ async function generateChatTitleIfNeeded(
     })
 
     if (title) {
-      await callbacks.updateConversationName(config.conversationId, title)
+      await callbacks.updateConversationName(config.conversationId, title, true)
     }
   } catch (_error) {
     // Silently fail - title generation is not critical

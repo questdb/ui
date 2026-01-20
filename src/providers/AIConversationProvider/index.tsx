@@ -100,6 +100,7 @@ type AIConversationContextType = {
   updateConversationName: (
     conversationId: ConversationId,
     name: string,
+    isGeneratedByAI?: boolean,
   ) => Promise<void>
 
   acceptSuggestion: (params: AcceptSuggestionParams) => Promise<void>
@@ -162,6 +163,7 @@ export const AIConversationProvider: React.FC<{
   useEffect(() => {
     activeConversationMessagesRef.current = activeConversationMessages
   }, [activeConversationMessages])
+  const renamedChatsRef = useRef<Set<ConversationId>>(new Set())
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -460,7 +462,15 @@ export const AIConversationProvider: React.FC<{
   )
 
   const updateConversationName = useCallback(
-    async (conversationId: ConversationId, name: string) => {
+    async (
+      conversationId: ConversationId,
+      name: string,
+      isGeneratedByAI?: boolean,
+    ) => {
+      if (isGeneratedByAI && renamedChatsRef.current.has(conversationId)) {
+        return
+      }
+      renamedChatsRef.current.add(conversationId)
       await aiConversationStore.updateMeta(conversationId, {
         conversationName: name,
       })
