@@ -958,7 +958,10 @@ describe("ai assistant", () => {
         expect($items.eq(1)).not.to.contain("Current")
       })
 
-      cy.getByDataHook("chat-history-item").eq(1).click()
+      cy.getByDataHook("chat-history-item")
+        .eq(1)
+        .should("not.be.disabled")
+        .click()
 
       // Then - Should see the first chat's message
       cy.getByDataHook("chat-history-list").should("not.exist")
@@ -969,7 +972,10 @@ describe("ai assistant", () => {
 
       // When - Go back to history and select second chat
       cy.getByDataHook("chat-window-history").click()
-      cy.getByDataHook("chat-history-item").eq(0).click()
+      cy.getByDataHook("chat-history-item")
+        .eq(0)
+        .should("not.be.disabled")
+        .click()
 
       // Then - Should see the second chat's message
       cy.getByDataHook("chat-history-list").should("not.exist")

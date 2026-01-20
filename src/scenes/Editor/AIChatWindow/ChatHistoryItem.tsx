@@ -8,23 +8,26 @@ import {
 import { color } from "../../../utils"
 import type { ConversationMeta } from "../../../store/db"
 
-const Container = styled.div<{ $disabled?: boolean }>`
+const Container = styled.button<{ disabled?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.8rem;
   border-radius: 4px;
-  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
+  cursor: ${({ disabled }) => (disabled ? "not-allowed" : "pointer")};
   background: ${color("transparent")};
-  opacity: ${({ $disabled }) => ($disabled ? 0.5 : 1)};
+  opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
+  border: 0;
+  width: 100%;
+  text-align: left;
 
   &:hover {
-    background: ${({ $disabled }) =>
-      $disabled ? "transparent" : color("selection")};
+    background: ${({ disabled }) =>
+      disabled ? "transparent" : color("selection")};
 
     .chat-title {
-      color: ${({ $disabled }) =>
-        $disabled ? color("offWhite") : color("foreground")};
+      color: ${({ disabled }) =>
+        disabled ? color("offWhite") : color("foreground")};
     }
   }
 `
@@ -130,7 +133,7 @@ type ChatHistoryItemProps = {
   isCurrent: boolean
   hasOngoingProcess?: boolean
   disabled?: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string) => Promise<void>
   onRename: (id: string, newName: string) => void
   onDelete: (id: string) => void
 }
@@ -188,16 +191,16 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
     handleSave()
   }
 
-  const handleContainerClick = () => {
+  const handleContainerClick = async () => {
     if (!isEditing && !disabled) {
-      onSelect(conversation.id)
+      await onSelect(conversation.id)
     }
   }
 
   return (
     <Container
       onClick={handleContainerClick}
-      $disabled={disabled}
+      disabled={disabled}
       data-hook="chat-history-item"
     >
       <IconWrapper>

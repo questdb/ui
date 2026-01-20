@@ -202,8 +202,8 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
     return undefined
   }
 
-  const handleSelect = (id: ConversationId) => {
-    void openChatWindow(id)
+  const handleSelect = async (id: ConversationId) => {
+    await openChatWindow(id)
   }
 
   const handleRename = (id: ConversationId, newName: string) => {
