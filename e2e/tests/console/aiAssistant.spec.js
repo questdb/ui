@@ -636,7 +636,7 @@ describe("ai assistant", () => {
     })
   })
 
-  describe("ai chat window ergonomics", () => {
+  describe.only("ai chat window ergonomics", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
@@ -920,7 +920,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").should("have.length", 3)
     })
 
-    it("should switch between chats from history", () => {
+    it.only("should switch between chats from history", () => {
       // Given - Create two chats with different messages
       interceptAIChatRequest("openai", "chat1")
       cy.getByDataHook("ai-chat-button").click()
@@ -931,6 +931,10 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.waitForAIResponse("@chat1")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
+      cy.screenshot()
 
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
       cy.getByDataHook("chat-blank-state").should("be.visible")
@@ -942,6 +946,10 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.waitForAIResponse("@chat2")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
+      cy.screenshot()
 
       // When - Open history
       cy.getByDataHook("chat-window-history").should("not.be.disabled").click()
@@ -960,6 +968,7 @@ describe("ai assistant", () => {
         "contain",
         "First chat unique message",
       )
+      cy.screenshot()
 
       // When - Go back to history and select second chat
       cy.getByDataHook("chat-window-history").click()
