@@ -408,6 +408,10 @@ export class Client {
     )
   }
 
+  async getTableDetails(table: string): Promise<QueryResult<Table>> {
+    return await this.query<Table>(`tables() where table_name = '${table}';`)
+  }
+
   async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
     return await this.query<{ ddl: string }>(
       `SHOW CREATE MATERIALIZED VIEW '${table}';`,

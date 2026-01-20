@@ -450,9 +450,19 @@ export function createModelToolsClient(
             }
           },
           getTableDetails: async (tableName: string): Promise<Table | null> => {
-            return Promise.resolve(
-              tables.find((t) => t.table_name === tableName) || null,
-            )
+            try {
+              const result = await questClient.getTableDetails(tableName)
+              if (result.type === Type.DQL && result.data.length > 0) {
+                return result.data[0]
+              }
+              return null
+            } catch (error) {
+              console.error(
+                `Failed to fetch details for table ${tableName}:`,
+                error,
+              )
+              return null
+            }
           },
         }
       : {}),
