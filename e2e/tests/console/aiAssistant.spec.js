@@ -934,7 +934,6 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea")
         .should("be.visible")
         .should("not.be.disabled")
-      cy.screenshot()
 
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
       cy.getByDataHook("chat-blank-state").should("be.visible")
@@ -949,7 +948,6 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-input-textarea")
         .should("be.visible")
         .should("not.be.disabled")
-      cy.screenshot()
 
       // When - Open history
       cy.getByDataHook("chat-window-history").should("not.be.disabled").click()
@@ -968,7 +966,6 @@ describe("ai assistant", () => {
         "contain",
         "First chat unique message",
       )
-      cy.screenshot()
 
       // When - Go back to history and select second chat
       cy.getByDataHook("chat-window-history").click()
