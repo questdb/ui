@@ -108,7 +108,7 @@ function createOpenAIParseFailureResponse() {
  *
  * @param {"anthropic" | "openai"} provider - The AI provider to intercept
  * @param {string} [alias] - Optional custom alias for the intercept
- * @param {number} [delay=200] - Delay in milliseconds
+ * @param {number} [delay=0] - Delay in milliseconds
  * @param {Object} [options] - Options
  * @param {boolean} [options.streaming=true] - Whether to use streaming response
  */
@@ -128,11 +128,14 @@ function interceptAIChatRequest(
     null,
   )
 
-  cy.intercept(
-    "POST",
-    endpoint,
-    createResponse(provider, responseData, { streaming, delay }),
-  ).as(aliasName)
+  cy.intercept("POST", endpoint, (req) => {
+    if (isTitleRequest(provider, req.body)) {
+      req.reply(createChatTitleResponse(provider, "Test Chat"))
+      return
+    }
+    req.alias = aliasName
+    req.reply(createResponse(provider, responseData, { streaming, delay }))
+  })
 }
 
 /**
@@ -238,6 +241,20 @@ function getAnthropicConfiguredSettings() {
 }
 
 describe("ai assistant", () => {
+  beforeEach(() => {
+    cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+      throw new Error(
+        `Unhandled OpenAI request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
+      )
+    }).as("unhandledOpenAI")
+
+    cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+      throw new Error(
+        `Unhandled Anthropic request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
+      )
+    }).as("unhandledAnthropic")
+  })
+
   describe("onboarding and settings", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth()
@@ -753,6 +770,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-rename")
         .clear()
         .type("Renamed Chat{enter}")
+      cy.getByDataHook("chat-history-rename").should("not.exist")
 
       // Then - Chat should be renamed
       cy.getByDataHook("chat-history-title")
@@ -859,6 +877,9 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.waitForAIResponse("@chat1")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
+      cy.getByDataHook("chat-input-textarea")
+        .should("be.visible")
+        .should("not.be.disabled")
 
       // Create second chat
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
@@ -896,6 +917,7 @@ describe("ai assistant", () => {
           .trigger("mouseover")
         cy.getByDataHook("chat-history-edit").eq(index).click()
         cy.getByDataHook("chat-history-rename").clear().type(`${name}{enter}`)
+        cy.getByDataHook("chat-history-rename").should("not.exist")
         cy.getByDataHook("chat-history-title").eq(index).should("contain", name)
       })
 
@@ -1160,9 +1182,9 @@ describe("ai assistant", () => {
 
       // Then - AI icon should transition to highlight state
       cy.getAIIconInLine(1, "highlight").should("be.visible")
+      cy.waitForAIResponse("@openaiChatRequest")
 
       // Then - After response completes, AI icon should transition to active state
-      cy.waitForAIResponse("@openaiChatRequest")
       cy.getAIIconInLine(1, "active").should("be.visible")
     })
 
@@ -1294,6 +1316,10 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").first().trigger("mouseover")
       cy.getByDataHook("chat-history-edit").first().click()
       cy.getByDataHook("chat-history-rename").clear().type("Tab 1 Chat{enter}")
+      cy.getByDataHook("chat-history-rename").should("not.exist")
+      cy.getByDataHook("chat-history-title")
+        .should("be.visible")
+        .should("contain", "Tab 1 Chat")
 
       // When - Close chat and create a new tab
       cy.getByDataHook("chat-window-close").click()
@@ -1323,6 +1349,10 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").first().trigger("mouseover")
       cy.getByDataHook("chat-history-edit").first().click()
       cy.getByDataHook("chat-history-rename").clear().type("Tab 2 Chat{enter}")
+      cy.getByDataHook("chat-history-rename").should("not.exist")
+      cy.getByDataHook("chat-history-title")
+        .first()
+        .should("contain", "Tab 2 Chat")
 
       // When - Navigate to Tab 1 Chat via history
       cy.getByDataHook("chat-history-item")

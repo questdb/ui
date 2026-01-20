@@ -134,7 +134,7 @@ type ChatHistoryItemProps = {
   hasOngoingProcess?: boolean
   disabled?: boolean
   onSelect: (id: string) => Promise<void>
-  onRename: (id: string, newName: string) => void
+  onRename: (id: string, newName: string) => Promise<void>
   onDelete: (id: string) => void
 }
 
@@ -170,25 +170,25 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
     onDelete(conversation.id)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmedValue = editValue.trim()
     if (trimmedValue && trimmedValue !== conversation.conversationName) {
-      onRename(conversation.id, trimmedValue)
+      await onRename(conversation.id, trimmedValue)
     }
     setIsEditing(false)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSave()
+      await handleSave()
     } else if (e.key === "Escape") {
       setEditValue(conversation.conversationName)
       setIsEditing(false)
     }
   }
 
-  const handleBlur = () => {
-    handleSave()
+  const handleBlur = async () => {
+    await handleSave()
   }
 
   const handleContainerClick = async () => {

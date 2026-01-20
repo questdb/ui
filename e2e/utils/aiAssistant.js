@@ -342,7 +342,10 @@ function createToolCallResponse(
 function createChatTitleResponse(provider, title = "Test Chat") {
   const responseData = createChatTitleResponseData(provider, title)
   // Title generation is never streamed
-  return createResponse(provider, responseData, { streaming: false })
+  return createResponse(provider, responseData, {
+    streaming: false,
+    delay: 1000,
+  })
 }
 
 function isTitleRequest(provider, body) {
