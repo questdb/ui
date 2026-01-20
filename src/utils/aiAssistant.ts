@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 import { Client } from "./questdb/client"
-import { Type } from "./questdb/types"
+import { Type, Table } from "./questdb/types"
 import { getModelProps, MODEL_OPTIONS } from "./aiAssistantSettings"
 import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
@@ -99,6 +99,7 @@ export interface ModelToolsClient {
   validateQuery: (query: string) => Promise<AiAssistantValidateQueryResult>
   getTables?: () => Promise<Array<{ name: string; type: "table" | "matview" }>>
   getTableSchema?: (tableName: string) => Promise<string | null>
+  getTableDetails?: (tableName: string) => Promise<Table | null>
 }
 
 export type StatusCallback = (
@@ -262,6 +263,21 @@ const SCHEMA_TOOLS: Array<AnthropicTool> = [
       required: ["table_name"],
     },
   },
+  {
+    name: "get_table_details",
+    description: "Get the details of a specific table or materialized view",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        table_name: {
+          type: "string" as const,
+          description:
+            "The name of the table or materialized view to get details for",
+        },
+      },
+      required: ["table_name"],
+    },
+  },
 ]
 
 const REFERENCE_TOOLS = [
@@ -357,7 +373,7 @@ export function isAiAssistantError(
 
 export function createModelToolsClient(
   questClient: Client,
-  tables?: Array<{ table_name: string; matView?: boolean }>,
+  tables?: Array<Table>,
 ): ModelToolsClient {
   return {
     async validateQuery(
@@ -431,6 +447,11 @@ export function createModelToolsClient(
               )
               return null
             }
+          },
+          getTableDetails: async (tableName: string): Promise<Table | null> => {
+            return Promise.resolve(
+              tables.find((t) => t.table_name === tableName) || null,
+            )
           },
         }
       : {}),
@@ -546,6 +567,7 @@ NEVER interleave phases. NEVER use any tool after starting to return a response.
   const schemaAccess = grantSchemaAccess
     ? `- Use the get_tables tool to retrieve all tables and materialized views in the database instance
 - Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
+- Use the get_table_details tool to get detailed information for a specific table or a materialized view. Each property is described in meta functions docs.
 `
     : ""
   return base + schemaAccess + DOCS_INSTRUCTION_ANTHROPIC
@@ -659,13 +681,41 @@ const executeTool = async (
             is_error: true,
           }
         }
-        setStatus(AIOperationStatus.InvestigatingTableSchema, {
+        setStatus(AIOperationStatus.InvestigatingTable, {
           name: tableName,
+          tableOpType: "schema",
         })
         const result = await modelToolsClient.getTableSchema(tableName)
         return {
           content:
             result || `Table '${tableName}' not found or schema unavailable`,
+        }
+      }
+      case "get_table_details": {
+        const tableName = (input as { table_name: string })?.table_name
+        if (!modelToolsClient.getTableDetails) {
+          return {
+            content:
+              "Error: Schema access is not granted. This tool is not available.",
+            is_error: true,
+          }
+        }
+        if (!tableName) {
+          return {
+            content: "Error: table_name parameter is required",
+            is_error: true,
+          }
+        }
+        setStatus(AIOperationStatus.InvestigatingTable, {
+          name: tableName,
+          tableOpType: "details",
+        })
+        const result = await modelToolsClient.getTableDetails(tableName)
+        return {
+          content: result
+            ? JSON.stringify(result, null, 2)
+            : "Table details not found",
+          is_error: !result,
         }
       }
       case "validate_query": {

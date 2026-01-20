@@ -684,7 +684,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
 
       // Then - Message should appear
-      cy.wait("@openaiChatRequest")
+      cy.waitForAIResponse("@openaiChatRequest")
       cy.getByDataHook("chat-message-user").should("be.visible")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
@@ -709,7 +709,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").type("First chat message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@firstChat")
+      cy.waitForAIResponse("@firstChat")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Create a new chat
@@ -722,7 +722,7 @@ describe("ai assistant", () => {
       interceptAIChatRequest("openai", "secondChat")
       cy.getByDataHook("chat-input-textarea").type("Second chat message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@secondChat")
+      cy.waitForAIResponse("@secondChat")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
@@ -739,7 +739,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").type("Test message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@openaiChatRequest")
+      cy.waitForAIResponse("@openaiChatRequest")
 
       // When - Open history and click edit on the chat
       cy.getByDataHook("chat-window-history").click()
@@ -772,7 +772,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").type("First message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@firstChat")
+      cy.waitForAIResponse("@firstChat")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       cy.getByDataHook("chat-window-new").click()
@@ -780,7 +780,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Second message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@secondChat")
+      cy.waitForAIResponse("@secondChat")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
@@ -823,7 +823,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-chat-button").click()
       cy.getByDataHook("chat-input-textarea").type("First message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@openaiChatRequest")
+      cy.waitForAIResponse("@openaiChatRequest")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Create new chat (which is empty)
@@ -851,7 +851,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("First message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat1")
+      cy.waitForAIResponse("@chat1")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // Create second chat
@@ -860,7 +860,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Second message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat2")
+      cy.waitForAIResponse("@chat2")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // Create third chat
@@ -869,7 +869,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-blank-state").should("be.visible")
       cy.getByDataHook("chat-input-textarea").type("Third message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat3")
+      cy.waitForAIResponse("@chat3")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
@@ -929,9 +929,7 @@ describe("ai assistant", () => {
         .should("not.be.disabled")
         .type("First chat unique message")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat1")
-
-      cy.waitForStreamingComplete()
+      cy.waitForAIResponse("@chat1")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       cy.getByDataHook("chat-window-new").should("not.be.disabled").click()
@@ -942,9 +940,7 @@ describe("ai assistant", () => {
         .should("not.be.disabled")
         .type("Second chat different content")
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat2")
-
-      cy.waitForStreamingComplete()
+      cy.waitForAIResponse("@chat2")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
       // When - Open history
@@ -1009,7 +1005,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-status-indicator").should("not.exist")
 
       // Cleanup - Wait for request to complete
-      cy.wait("@slowRequest")
+      cy.waitForAIResponse("@slowRequest")
     })
 
     it("should open chat window with previous message when clicking View chat button", () => {
@@ -1042,7 +1038,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-status-indicator").should("not.exist")
 
       // Cleanup - Wait for request to complete
-      cy.wait("@slowRequest")
+      cy.waitForAIResponse("@slowRequest")
     })
 
     it("should show aborted status and display cancellation message in chat when aborting", () => {
@@ -1138,8 +1134,7 @@ describe("ai assistant", () => {
       cy.getAIIconInLine(1, "highlight").should("be.visible")
 
       // Then - After response completes, AI icon should transition to active state
-      cy.wait("@openaiChatRequest")
-      cy.waitForStreamingComplete()
+      cy.waitForAIResponse("@openaiChatRequest")
       cy.getAIIconInLine(1, "active").should("be.visible")
     })
 
@@ -1160,7 +1155,7 @@ describe("ai assistant", () => {
         force: true,
       })
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat1")
+      cy.waitForAIResponse("@chat1")
 
       // Then - First query should have active state, second should still be noChat
       cy.getAIIconInLine(1, "active").should("be.visible")
@@ -1175,7 +1170,7 @@ describe("ai assistant", () => {
         .should("not.be.disabled")
         .type("Explain second query", { force: true })
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@chat2")
+      cy.waitForAIResponse("@chat2")
       cy.wait(2000) // Wait for highlight -> active transition
 
       // Then - Both queries should have active state
@@ -1195,7 +1190,7 @@ describe("ai assistant", () => {
         force: true,
       })
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@openaiChatRequest")
+      cy.waitForAIResponse("@openaiChatRequest")
 
       // Then - Chat window should be open
       cy.getByDataHook("ai-chat-window").should("be.visible")
@@ -1233,21 +1228,22 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-send-button").click()
       cy.getAIIconInLine(1, "highlight").should("be.visible")
 
-      cy.wait("@openaiChatRequest")
-      cy.waitForStreamingComplete()
+      cy.waitForAIResponse("@openaiChatRequest")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
       cy.getAIIconInLine(1, "active").should("be.visible")
 
       cy.getByDataHook("chat-window-close").click()
       cy.getByDataHook("ai-chat-window").should("not.exist")
-
       // When - Add empty lines before the query (press Home, then Enter twice)
-      cy.typeQuery("{home}{enter}{enter}")
+      cy.getEditor().realClick()
+      ;["{home}", "{enter}", "{enter}"].forEach((key) => {
+        cy.focused().type(key)
+        cy.wait(50)
+      })
 
-      // Then - AI icon should move to line 3
       cy.getAIIconInLine(3, "active").should("be.visible")
 
-      // And - Line 1 should not have an AI icon
+      // And - Line 1 should not have an AI icon (query moved to line 3)
       cy.get(".glyph-widget-1 .glyph-ai-icon").should("not.exist")
     })
 
@@ -1262,7 +1258,7 @@ describe("ai assistant", () => {
         force: true,
       })
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@tab1Chat")
+      cy.waitForAIResponse("@tab1Chat")
 
       // When - Open history and rename this chat
       cy.getByDataHook("chat-window-history").click()
@@ -1291,7 +1287,7 @@ describe("ai assistant", () => {
         force: true,
       })
       cy.getByDataHook("chat-send-button").click()
-      cy.wait("@tab2Chat")
+      cy.waitForAIResponse("@tab2Chat")
 
       // When - Open history and rename this chat
       cy.getByDataHook("chat-window-history").click()
@@ -1394,7 +1390,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
-      cy.wait("@explainSchema")
+      cy.waitForAIResponse("@explainSchema")
 
       // Then - Should display the schema explanation content
       cy.getByDataHook("chat-message-assistant").should("be.visible")
@@ -1635,7 +1631,7 @@ describe("ai assistant", () => {
 
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
       cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
-      cy.getByDataHook("assistant-mode-investigating-table-schema").should(
+      cy.getByDataHook("assistant-mode-investigating-table").should(
         "be.visible",
       )
 

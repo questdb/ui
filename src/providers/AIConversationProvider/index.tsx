@@ -74,7 +74,7 @@ type AIConversationContextType = {
     bufferId: string | number,
     changeOffset: number,
     delta: number,
-  ) => boolean
+  ) => Promise<boolean>
 
   openChatWindow: (conversationId: ConversationId) => Promise<void>
   openOrCreateBlankChatWindow: () => Promise<void>
@@ -304,12 +304,13 @@ export const AIConversationProvider: React.FC<{
   )
 
   const shiftQueryKeysForBuffer = useCallback(
-    (
+    async (
       bufferId: string | number,
       changeOffset: number,
       delta: number,
-    ): boolean => {
+    ): Promise<boolean> => {
       let shiftedQueryKeys = false
+      const conversationsToShift: Record<string, QueryKey> = {}
       for (const [id, meta] of conversationMetas) {
         if (meta.bufferId === bufferId && meta.queryKey) {
           const { startOffset } = getQueryInfoFromKey(meta.queryKey)
@@ -319,14 +320,20 @@ export const AIConversationProvider: React.FC<{
               changeOffset,
               delta,
             )
-            void aiConversationStore.updateMeta(id, {
-              queryKey: newQueryKey,
-              updatedAt: Date.now(),
-            })
+            conversationsToShift[id] = newQueryKey
             shiftedQueryKeys = true
           }
         }
       }
+
+      if (shiftedQueryKeys) {
+        await db.transaction("rw", db.ai_conversations, async () => {
+          for (const [id, queryKey] of Object.entries(conversationsToShift)) {
+            await db.ai_conversations.update(id, { queryKey })
+          }
+        })
+      }
+
       return shiftedQueryKeys
     },
     [conversationMetas],

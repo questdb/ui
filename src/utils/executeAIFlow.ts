@@ -1,4 +1,5 @@
 import type { Client } from "./questdb/client"
+import type { Table } from "./questdb/types"
 import type {
   ConversationId,
   ConversationMessage,
@@ -37,7 +38,7 @@ type BaseFlowConfig = {
     apiKey: string
   }
   questClient: Client
-  tables?: Array<{ table_name: string; matView?: boolean }>
+  tables?: Array<Table>
   hasSchemaAccess: boolean
   abortSignal?: AbortSignal
 }
@@ -487,8 +488,8 @@ export async function executeAIFlow(
       compactedHistory,
     })
   } finally {
-    callbacks.setIsStreaming(false)
     await callbacks.persistMessages(conversationId)
+    callbacks.setIsStreaming(false)
   }
 }
 

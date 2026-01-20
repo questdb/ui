@@ -607,3 +607,8 @@ Cypress.Commands.add("waitForStreamingComplete", (timeout = 10000) => {
     return cy.wait(100)
   })
 })
+
+Cypress.Commands.add("waitForAIResponse", (alias) => {
+  cy.wait(alias)
+  cy.waitForStreamingComplete()
+})

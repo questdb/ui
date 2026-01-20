@@ -40,7 +40,7 @@ const AIStatusContext = createContext<AIStatusContextType | undefined>(
 export enum AIOperationStatus {
   Processing = "Processing request",
   RetrievingTables = "Reviewing tables",
-  InvestigatingTableSchema = "Investigating table schema",
+  InvestigatingTable = "Investigating table",
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
   ValidatingQuery = "Validating generated query",
@@ -53,6 +53,7 @@ export type StatusArgs = {
   conversationId?: string
   name?: string
   section?: string
+  tableOpType?: "schema" | "details"
   items?: Array<{ name: string; section?: string }>
 }
 
