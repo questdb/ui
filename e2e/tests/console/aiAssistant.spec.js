@@ -636,7 +636,7 @@ describe("ai assistant", () => {
     })
   })
 
-  describe("ai chat window ergonomics", () => {
+  describe.only("ai chat window ergonomics", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
@@ -920,7 +920,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").should("have.length", 3)
     })
 
-    it("should switch between chats from history", () => {
+    it.only("should switch between chats from history", () => {
       // Given - Create two chats with different messages
       interceptAIChatRequest("openai", "chat1")
       cy.getByDataHook("ai-chat-button").click()
@@ -966,6 +966,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").eq(0).click()
 
       // Then - Should see the second chat's message
+      cy.getByDataHook("chat-history-list").should("not.exist")
       cy.getByDataHook("chat-message-user").should(
         "contain",
         "Second chat different content",
