@@ -648,7 +648,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     const actualQueryStartOffset = isAppend
       ? finalQueryStartOffset + 1
       : finalQueryStartOffset
-    const normalizedQuery = normalizeQueryText(newSQL)
+    const normalizedQuery = normalizeQueryText(sqlWithSemicolon)
     const actualQueryEndOffset = actualQueryStartOffset + normalizedQuery.length
 
     const finalStartPosition = finalModel.getPositionAt(actualQueryStartOffset)

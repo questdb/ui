@@ -285,19 +285,26 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const updateConversationAssociations = useCallback(
+  const acceptSuggestionChanges = useCallback(
     async (
       conversationId: ConversationId,
+      messageId: string,
       updates: {
         bufferId?: number
-        queryKey?: QueryKey
-        tableId?: number
+        queryKey: QueryKey
+        currentSQL: string
       },
     ): Promise<void> => {
       await aiConversationStore.updateMeta(conversationId, {
         ...updates,
         updatedAt: Date.now(),
       })
+
+      setActiveConversationMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, isAccepted: true } : msg,
+        ),
+      )
     },
     [],
   )
@@ -444,23 +451,6 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const updateConversationSQL = useCallback(
-    async (conversationId: ConversationId, sql: string) => {
-      const meta = conversationMetas.get(conversationId)
-      if (!meta) return
-
-      const { startOffset } = getQueryInfoFromKey(meta.queryKey)
-      const newQueryKey = createQueryKey(sql, startOffset)
-
-      await aiConversationStore.updateMeta(conversationId, {
-        currentSQL: sql,
-        queryKey: newQueryKey,
-        updatedAt: Date.now(),
-      })
-    },
-    [conversationMetas],
-  )
-
   const updateConversationName = useCallback(
     async (
       conversationId: ConversationId,
@@ -476,38 +466,6 @@ export const AIConversationProvider: React.FC<{
       })
     },
     [],
-  )
-
-  const acceptConversationChanges = useCallback(
-    async (conversationId: ConversationId, messageId: string) => {
-      if (activeConversationId !== conversationId) return
-
-      const meta = conversationMetas.get(conversationId)
-      if (!meta) return
-
-      const targetMessage = activeConversationMessages.find(
-        (m) => m.id === messageId,
-      )
-      if (!targetMessage || !targetMessage.sql) return
-
-      const { startOffset } = getQueryInfoFromKey(meta.queryKey)
-      const newQueryKey = createQueryKey(targetMessage.sql, startOffset)
-
-      await aiConversationStore.updateMeta(conversationId, {
-        queryKey: newQueryKey,
-        updatedAt: Date.now(),
-      })
-
-      setActiveConversationMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === messageId) {
-            return { ...msg, isAccepted: true }
-          }
-          return msg
-        }),
-      )
-    },
-    [activeConversationId, conversationMetas, activeConversationMessages],
   )
 
   const rejectLatestChange = useCallback(
@@ -765,14 +723,12 @@ export const AIConversationProvider: React.FC<{
         queryKey: meta.queryKey ?? undefined,
       })
 
-      if (!result.success) return
+      if (!result.success || !result.finalQueryKey) return
 
-      await updateConversationAssociations(conversationId, {
-        queryKey: result.finalQueryKey ?? meta.queryKey,
+      await acceptSuggestionChanges(conversationId, messageId, {
+        queryKey: result.finalQueryKey,
+        currentSQL: normalizedSQL,
       })
-
-      await updateConversationSQL(conversationId, normalizedSQL)
-      await acceptConversationChanges(conversationId, messageId)
 
       if (meta.tableId != null) {
         await aiConversationStore.updateMeta(conversationId, {
@@ -781,12 +737,7 @@ export const AIConversationProvider: React.FC<{
         })
       }
     },
-    [
-      conversationMetas,
-      updateConversationAssociations,
-      updateConversationSQL,
-      acceptConversationChanges,
-    ],
+    [conversationMetas, acceptSuggestionChanges],
   )
 
   const applyChangesToNewTab = useCallback(
@@ -846,13 +797,11 @@ export const AIConversationProvider: React.FC<{
       }, 2000)
 
       const newQueryKey = createQueryKey(normalizedQuery, queryStartOffset)
-      await updateConversationAssociations(conversationId, {
+      await acceptSuggestionChanges(conversationId, messageId, {
         bufferId: newBuffer.id,
         queryKey: newQueryKey,
+        currentSQL: normalizedSQL,
       })
-
-      await updateConversationSQL(conversationId, normalizedSQL)
-      await acceptConversationChanges(conversationId, messageId)
 
       if (meta.tableId != null) {
         await aiConversationStore.updateMeta(conversationId, {
@@ -861,13 +810,7 @@ export const AIConversationProvider: React.FC<{
         })
       }
     },
-    [
-      conversationMetas,
-      addBuffer,
-      updateConversationAssociations,
-      updateConversationSQL,
-      acceptConversationChanges,
-    ],
+    [conversationMetas, addBuffer, acceptSuggestionChanges],
   )
 
   const acceptSuggestion = useCallback(
