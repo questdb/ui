@@ -21,6 +21,7 @@ import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
 import { getQueryInfoFromKey } from "../Monaco/utils"
 import type { ExecutionRefs } from "../index"
+import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
 import {
   trimSemicolonForDisplay,
   hasUnactionedDiff as checkHasUnactionedDiff,
@@ -223,7 +224,6 @@ const AIChatWindow: React.FC = () => {
     acceptSuggestion,
     rejectSuggestion,
     persistMessages,
-    removeMessages,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -548,8 +548,6 @@ const AIChatWindow: React.FC = () => {
     const userMessage = messages.find((m) => m.id === userMessageId)
     if (!userMessage) return
 
-    await removeMessages(conversationId, [userMessageId, assistantMessageId])
-
     const settings = { model: currentModel, apiKey }
     const commonConfig = {
       settings,
@@ -559,8 +557,19 @@ const AIChatWindow: React.FC = () => {
       abortSignal: abortController?.signal,
     }
 
+    let isRemoved = false
     const callbacks = {
-      addMessage,
+      addMessage: (
+        message: Omit<ConversationMessage, "id"> & { id?: string },
+      ) => {
+        addMessage(
+          message,
+          !isRemoved ? [userMessageId, assistantMessageId] : [],
+        )
+        if (!isRemoved) {
+          isRemoved = true
+        }
+      },
       updateMessage,
       setStatus,
       setIsStreaming,

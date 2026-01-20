@@ -109,6 +109,7 @@ export type StatusCallback = (
 
 export type StreamingCallback = {
   onTextChunk: (chunk: string, accumulated: string) => void
+  cleanup?: () => void
 }
 
 type ProviderClients =
@@ -477,9 +478,12 @@ export const createStreamingCallback = (
   let streamingStarted = false
   let pendingUpdate: string | null = null
   let updateScheduled = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let cleaned = false
 
   return {
     onTextChunk: (_chunk: string, accumulated: string) => {
+      if (cleaned) return
       if (!streamingStarted) {
         streamingStarted = true
         setIsStreaming(true)
@@ -487,9 +491,10 @@ export const createStreamingCallback = (
       pendingUpdate = accumulated
       if (!updateScheduled) {
         updateScheduled = true
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
+          timeoutId = null
           updateScheduled = false
-          if (pendingUpdate !== null) {
+          if (pendingUpdate !== null && !cleaned) {
             updateMessage(conversationId, assistantMessageId, {
               content: pendingUpdate,
               explanation: pendingUpdate,
@@ -497,6 +502,14 @@ export const createStreamingCallback = (
           }
         })
       }
+    },
+    cleanup: () => {
+      cleaned = true
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      pendingUpdate = null
     },
   }
 }
@@ -615,7 +628,7 @@ const handleRateLimit = async () => {
 
 const isNonRetryableError = (error: unknown) => {
   if (error instanceof StreamingError) {
-    return true
+    return error.errorType === "interrupted" || error.errorType === "failed"
   }
   return (
     error instanceof RefusalError ||
@@ -958,7 +971,7 @@ async function createOpenAIResponseStreaming(
     if (error instanceof StreamingError) {
       throw error
     }
-    if (abortSignal?.aborted) {
+    if (abortSignal?.aborted || error instanceof OpenAI.APIUserAbortError) {
       throw new StreamingError("Operation aborted", "interrupted")
     }
     throw new StreamingError(
@@ -1718,12 +1731,12 @@ async function createAnthropicMessageStreaming(
   try {
     finalMessage = await stream.finalMessage()
   } catch (error) {
-    if (abortSignal?.aborted) {
+    if (abortSignal?.aborted || error instanceof Anthropic.APIUserAbortError) {
       throw new StreamingError("Operation aborted", "interrupted")
     }
     throw new StreamingError(
       "Failed to get final message from the provider",
-      "interrupted",
+      "network",
       error,
     )
   }

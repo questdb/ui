@@ -86,6 +86,7 @@ type AIConversationContextType = {
 
   addMessage: (
     message: Omit<ConversationMessage, "id"> & { id?: string },
+    messageIdsToRemove?: string[],
   ) => void
   updateMessage: (
     conversationId: ConversationId,
@@ -107,10 +108,6 @@ type AIConversationContextType = {
     messageId: string,
   ) => Promise<void>
   persistMessages: (conversationId: ConversationId) => Promise<void>
-  removeMessages: (
-    conversationId: ConversationId,
-    messageIds: string[],
-  ) => Promise<void>
 }
 
 const AIConversationContext = createContext<
@@ -340,12 +337,24 @@ export const AIConversationProvider: React.FC<{
   )
 
   const addMessage = useCallback(
-    (message: Omit<ConversationMessage, "id"> & { id?: string }) => {
+    (
+      message: Omit<ConversationMessage, "id"> & { id?: string },
+      messageIdsToRemove?: string[],
+    ) => {
       const messageWithId: ConversationMessage = {
         ...message,
         id: message.id || crypto.randomUUID(),
       }
-      setActiveConversationMessages((prev) => [...prev, messageWithId])
+      setActiveConversationMessages((prev) => {
+        let newMessages = [...prev]
+        if (messageIdsToRemove) {
+          newMessages = newMessages.filter(
+            (msg) => !messageIdsToRemove.includes(msg.id),
+          )
+        }
+        newMessages.push(messageWithId)
+        return newMessages
+      })
     },
     [],
   )
@@ -431,19 +440,6 @@ export const AIConversationProvider: React.FC<{
       })
     },
     [],
-  )
-
-  const removeMessages = useCallback(
-    async (conversationId: ConversationId, messageIds: string[]) => {
-      if (conversationId !== activeConversationIdRef.current) return
-
-      const filteredMessages = activeConversationMessagesRef.current.filter(
-        (msg) => !messageIds.includes(msg.id),
-      )
-      setActiveConversationMessages(filteredMessages)
-      await persistMessages(conversationId)
-    },
-    [persistMessages],
   )
 
   const updateConversationSQL = useCallback(
@@ -1014,7 +1010,6 @@ export const AIConversationProvider: React.FC<{
         acceptSuggestion,
         rejectSuggestion,
         persistMessages,
-        removeMessages,
       }}
     >
       {children}

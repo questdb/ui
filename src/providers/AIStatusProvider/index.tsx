@@ -159,7 +159,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           type: newStatus,
           args: args || undefined,
         }
-        if (statusRef.current === null) {
+        if (
+          statusRef.current === null ||
+          (statusRef.current === AIOperationStatus.Aborted &&
+            newStatus !== AIOperationStatus.Aborted)
+        ) {
           currentOperationRef.current = [statusPayload]
         } else {
           currentOperationRef.current.push(statusPayload)
@@ -216,7 +220,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     if (!isStreamingRef.current && isStreaming) {
       setStatus(AIOperationStatus.GeneratingResponse)
     } else if (isStreamingRef.current && !isStreaming) {
-      setStatus(null)
+      if (statusRef.current !== AIOperationStatus.Aborted) {
+        setStatus(null)
+      }
     }
     isStreamingRef.current = isStreaming
   }, [isStreaming])

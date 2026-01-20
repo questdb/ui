@@ -431,6 +431,16 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
+  const streamingCallback =
+    config.type !== "schema_explain"
+      ? createStreamingCallback({
+          conversationId,
+          assistantMessageId,
+          updateMessage: callbacks.updateMessage,
+          setIsStreaming: callbacks.setIsStreaming,
+        })
+      : undefined
+
   try {
     let response:
       | GeneratedSQL
@@ -449,13 +459,6 @@ export async function executeAIFlow(
         abortSignal,
       })
     } else {
-      const streamingCallback = createStreamingCallback({
-        conversationId,
-        assistantMessageId,
-        updateMessage: callbacks.updateMessage,
-        setIsStreaming: callbacks.setIsStreaming,
-      })
-
       const operation: AIOperation =
         config.type === "chat" ? "followup" : config.type
       const conversationHistory =
@@ -488,8 +491,9 @@ export async function executeAIFlow(
       compactedHistory,
     })
   } finally {
-    await callbacks.persistMessages(conversationId)
+    streamingCallback?.cleanup?.()
     callbacks.setIsStreaming(false)
+    await callbacks.persistMessages(conversationId)
   }
 }
 
