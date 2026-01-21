@@ -341,6 +341,8 @@ const Editor = ({
                       (activeBuffer.previewContent as { modified: string })
                         .modified
                     }
+                    keepCurrentOriginalModel
+                    keepCurrentModifiedModel
                     language={QuestDBLanguageName}
                     theme="dracula"
                     options={{

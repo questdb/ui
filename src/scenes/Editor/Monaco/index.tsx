@@ -2065,6 +2065,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               minimap: {
                 enabled: false,
               },
+              stickyScroll: {
+                enabled: false,
+              },
               selectOnLineNumbers: false,
               scrollBeyondLastLine: false,
               tabSize: 2,
