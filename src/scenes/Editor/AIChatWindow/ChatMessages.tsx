@@ -697,8 +697,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <LiteEditor
                       value={sql}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
                       }
                     />
                   </InlineSQLEditor>
@@ -740,8 +743,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <LiteEditor
                       value={sql}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
                       }
                     />
                   </InlineSQLEditor>
@@ -1021,14 +1027,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 original={previousSQLForDiff}
                                 modified={currentSQLForDiff}
                                 maxHeight={300}
-                                onOpenInEditor={(
-                                  original: string,
-                                  modified: string,
-                                ) =>
+                                onOpenInEditor={() =>
                                   onOpenInEditor({
                                     type: "diff",
-                                    original,
-                                    modified,
+                                    original: previousSQLForDiff ?? "",
+                                    modified: currentSQLForDiff ?? "",
                                   })
                                 }
                               />

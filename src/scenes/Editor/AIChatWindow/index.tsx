@@ -748,8 +748,11 @@ const AIChatWindow: React.FC = () => {
                     <LiteEditor
                       value={currentSQL.trim()}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        handleOpenInEditor({ type: "code", value }, true)
+                      onOpenInEditor={() =>
+                        handleOpenInEditor(
+                          { type: "code", value: currentSQL.trim() },
+                          true,
+                        )
                       }
                     />
                   </InitialQueryEditor>

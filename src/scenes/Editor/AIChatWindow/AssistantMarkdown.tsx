@@ -177,8 +177,8 @@ export const AssistantMarkdown = memo(
                 <LiteEditor
                   value={codeContent}
                   maxHeight={216}
-                  onOpenInEditor={(value: string) =>
-                    onOpenInEditor({ type: "code", value })
+                  onOpenInEditor={() =>
+                    onOpenInEditor({ type: "code", value: codeContent })
                   }
                 />
               </CodeBlockWrapper>
