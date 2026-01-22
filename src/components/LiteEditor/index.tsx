@@ -253,6 +253,7 @@ const LiteEditorContent = React.memo(
         value={value}
         theme={theme}
         onMount={(editor) => {
+          props.setContentHeight(editor.getContentHeight())
           editor.onDidContentSizeChange((e) => {
             if (e.contentHeightChanged) {
               props.setContentHeight(e.contentHeight)
