@@ -4,6 +4,7 @@ export type DocCategory =
   | "sql"
   | "concepts"
   | "schema"
+  | "cookbook"
 
 export type ParsedDocItem = {
   name: string
@@ -19,7 +20,9 @@ export function parseDocItem(item: string): ParsedDocItem | null {
     return null
   }
 
-  const parts = item.split(/\s+-\s+/)
+  const itemWithoutDesc = item.split(" :: ")[0].trim()
+
+  const parts = itemWithoutDesc.split(/\s+-\s+/)
   if (parts.length >= 2) {
     return {
       name: parts[0].trim(),
@@ -27,7 +30,7 @@ export function parseDocItem(item: string): ParsedDocItem | null {
     }
   }
 
-  return { name: item.trim() }
+  return { name: itemWithoutDesc }
 }
 
 /**
@@ -104,7 +107,14 @@ export async function getQuestDBTableOfContents(): Promise<string> {
   // Schema
   if (toc.schema) {
     result += "## Schema\n"
-    result += toc.schema.join(", ") + "\n"
+    result += toc.schema.join(", ") + "\n\n"
+  }
+
+  if (toc.cookbook) {
+    result += "## Cookbook SQL Recipes (Complete Working Examples)\n"
+    result +=
+      "These pages provide tested, production-ready SQL. When user's request matches a recipe, use it as the foundation and adapt column/table names and use case to their schema.\n\n"
+    result += toc.cookbook.join("\n") + "\n"
   }
 
   return result
