@@ -25,10 +25,6 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
     background: ${({ theme }) => theme.color.backgroundDarker};
   }
 
-  .lines-content {
-    top: 0 !important;
-  }
-
   .editor.original {
     display: none !important;
   }
