@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 import { Client } from "./questdb/client"
-import { Type } from "./questdb/types"
+import { Type, Table } from "./questdb/types"
 import { getModelProps, MODEL_OPTIONS } from "./aiAssistantSettings"
 import type { ModelOption, Provider } from "./aiAssistantSettings"
 import { formatSql } from "./formatSql"
@@ -99,12 +99,18 @@ export interface ModelToolsClient {
   validateQuery: (query: string) => Promise<AiAssistantValidateQueryResult>
   getTables?: () => Promise<Array<{ name: string; type: "table" | "matview" }>>
   getTableSchema?: (tableName: string) => Promise<string | null>
+  getTableDetails?: (tableName: string) => Promise<Table | null>
 }
 
 export type StatusCallback = (
   status: AIOperationStatus | null,
   args?: StatusArgs,
 ) => void
+
+export type StreamingCallback = {
+  onTextChunk: (chunk: string, accumulated: string) => void
+  cleanup?: () => void
+}
 
 type ProviderClients =
   | {
@@ -192,7 +198,7 @@ const ConversationResponseFormat: ResponseTextConfig = {
         sql: { type: ["string", "null"] },
         explanation: { type: "string" },
       },
-      required: ["explanation", "sql"],
+      required: ["sql", "explanation"],
       additionalProperties: false,
     },
     strict: true,
@@ -258,6 +264,21 @@ const SCHEMA_TOOLS: Array<AnthropicTool> = [
       required: ["table_name"],
     },
   },
+  {
+    name: "get_table_details",
+    description: "Get the details of a specific table or materialized view",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        table_name: {
+          type: "string" as const,
+          description:
+            "The name of the table or materialized view to get details for",
+        },
+      },
+      required: ["table_name"],
+    },
+  },
 ]
 
 const REFERENCE_TOOLS = [
@@ -294,7 +315,14 @@ const REFERENCE_TOOLS = [
       properties: {
         category: {
           type: "string" as const,
-          enum: ["functions", "operators", "sql", "concepts", "schema"],
+          enum: [
+            "functions",
+            "operators",
+            "sql",
+            "concepts",
+            "schema",
+            "cookbook",
+          ],
           description: "The category of documentation to retrieve",
         },
         items: {
@@ -353,7 +381,7 @@ export function isAiAssistantError(
 
 export function createModelToolsClient(
   questClient: Client,
-  tables?: Array<{ table_name: string; matView?: boolean }>,
+  tables?: Array<Table>,
 ): ModelToolsClient {
   return {
     async validateQuery(
@@ -428,22 +456,107 @@ export function createModelToolsClient(
               return null
             }
           },
+          getTableDetails: async (tableName: string): Promise<Table | null> => {
+            try {
+              const result = await questClient.getTableDetails(tableName)
+              if (result.type === Type.DQL && result.data.length > 0) {
+                return result.data[0]
+              }
+              return null
+            } catch (error) {
+              console.error(
+                `Failed to fetch details for table ${tableName}:`,
+                error,
+              )
+              return null
+            }
+          },
         }
       : {}),
   }
 }
 
+type CreateStreamingCallbackParams = {
+  conversationId: string
+  assistantMessageId: string
+  updateMessage: (
+    id: string,
+    msgId: string,
+    updates: Partial<ConversationMessage>,
+  ) => void
+  setIsStreaming: (streaming: boolean) => void
+}
+
+export const createStreamingCallback = (
+  params: CreateStreamingCallbackParams,
+): StreamingCallback => {
+  const { conversationId, assistantMessageId, updateMessage, setIsStreaming } =
+    params
+  let streamingStarted = false
+  let pendingUpdate: string | null = null
+  let updateScheduled = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let cleaned = false
+
+  return {
+    onTextChunk: (_chunk: string, accumulated: string) => {
+      if (cleaned) return
+      if (!streamingStarted) {
+        streamingStarted = true
+        setIsStreaming(true)
+      }
+      pendingUpdate = accumulated
+      if (!updateScheduled) {
+        updateScheduled = true
+        timeoutId = setTimeout(() => {
+          timeoutId = null
+          updateScheduled = false
+          if (pendingUpdate !== null && !cleaned) {
+            updateMessage(conversationId, assistantMessageId, {
+              content: pendingUpdate,
+              explanation: pendingUpdate,
+            })
+          }
+        })
+      }
+    },
+    cleanup: () => {
+      cleaned = true
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      pendingUpdate = null
+    },
+  }
+}
+
 const DOCS_INSTRUCTION_ANTHROPIC = `
-CRITICAL: Always follow this two-phase documentation approach:
-1. Use get_questdb_toc to see available functions/keywords/operators
-2. Use get_questdb_documentation to get details for specific items you'll use`
+CRITICAL: Always follow this documentation approach:
+1. Use get_questdb_toc to see available functions, operators, SQL syntax, AND cookbook recipes
+2. If user's request matches a cookbook recipe description, fetch it FIRST - recipes provide complete, tested SQL patterns
+3. Use get_questdb_documentation for specific function/syntax details
+
+When a cookbook recipe matches the user's intent, ALWAYS use it as the foundation and adapt column/table names and use case to their schema.`
 
 const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
-  const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. You help users with:
+  const base = `You are a SQL expert coding assistant specializing in QuestDB, a high-performance time-series database. You help users with:
 - Generating QuestDB SQL queries from natural language descriptions
 - Explaining what QuestDB SQL queries do
 - Fixing errors in QuestDB SQL queries
 - Refining and modifying existing queries based on user requests
+
+## CRITICAL: Tool and Response Sequencing
+Follow this EXACT sequence for every query generation request:
+
+**PHASE 1 - INFORMATION GATHERING (NO TEXT OUTPUT)**
+1. Call available tools to gather information if you need, including documentation, schema, and validation tools.
+2. Complete ALL information gathering before Phase 2. DO NOT CALL any tool after Phase 2.
+
+**PHASE 2 - FINAL RESPONSE (NO MORE TOOL CALLS)**
+3. Return your JSON response with "sql" and "explanation" fields. Always return sql field first, then explanation field.
+
+NEVER interleave phases. NEVER use any tool after starting to return a response.
 
 ## When Explaining Queries
 - Focus on the business logic and what the query achieves, not the SQL syntax itself
@@ -454,7 +567,8 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
   - Performance optimizations specific to time-series data
 
 ## When Generating SQL
-- Always validate the query using the validate_query tool before returning the generated SQL query
+- DO NOT return any content before completing your tool calls including documentation and validation tools. You should NOT CALL any tool after starting to return a response.
+- Always validate the query in "sql" field using the validate_query tool before returning an explanation or a generated SQL query
 - Generate only valid QuestDB SQL syntax referring to the documentation about functions, operators, and SQL keywords
 - Use appropriate time-series functions (SAMPLE BY, LATEST ON, etc.) and common table expressions when relevant
 - Use \`IN\` with \`today()\`, \`tomorrow()\`, \`yesterday()\` interval functions when relevant
@@ -463,7 +577,8 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
 - Use correct data types and functions specific to QuestDB referring to the documentation. Do not use any word that is not in the documentation.
 
 ## When Fixing Queries
-- Always validate the query using the validate_query tool before returning the fixed SQL query
+- DO NOT return any content before completing your tool calls including documentation and validation tools. You should NOT CALL any tool after starting to return a response.
+- Always validate the query in "sql" field using the validate_query tool before returning an explanation or a fixed SQL query
 - Analyze the error message carefully to understand what went wrong
 - Generate only valid QuestDB SQL syntax by always referring to the documentation about functions, operators, and SQL keywords
 - Preserve the original intent of the query while fixing the error
@@ -475,16 +590,17 @@ const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
   - Incorrect function usage
 
 ## Response Guidelines
+- You are working as a coding assistant inside an IDE. Every time you return a query in "sql" field, you provide a suggestion to the user to accept or reject. When the user accepts the suggestion, you are informed and the query in the editor is updated with your suggestion.
 - Modify a query by returning "sql" field only if the user asks you to generate, fix, or make changes to the query. If the user does not ask for fixing/changing/generating a query, return null in the "sql" field. Every time you provide a SQL query, the current SQL is updated.
-- Always provide the "explanation" field, which should be a 2-4 sentence explanation in markdown format.
+- Provide the "explanation" field if you haven't provided it yet. Explanation should be in GFM (GitHub Flavored Markdown) format. Explanation field is cumulative, every time you provide an explanation, it is added to the previous explanations.
 
 ## Tools
-
+- Use the validate_query tool to validate the query in "sql" field before returning a response only if the user asks you to generate, fix, or make changes to the query.
 `
   const schemaAccess = grantSchemaAccess
-    ? `You have access to schema tools:
-- Use the get_tables tool to retrieve all tables and materialized views in the database instance
+    ? `- Use the get_tables tool to retrieve all tables and materialized views in the database instance
 - Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
+- Use the get_table_details tool to get detailed information for a specific table or a materialized view. Each property is described in meta functions docs.
 `
     : ""
   return base + schemaAccess + DOCS_INSTRUCTION_ANTHROPIC
@@ -531,6 +647,9 @@ const handleRateLimit = async () => {
 }
 
 const isNonRetryableError = (error: unknown) => {
+  if (error instanceof StreamingError) {
+    return error.errorType === "interrupted" || error.errorType === "failed"
+  }
   return (
     error instanceof RefusalError ||
     error instanceof MaxTokensError ||
@@ -538,7 +657,9 @@ const isNonRetryableError = (error: unknown) => {
     (typeof OpenAI !== "undefined" &&
       error instanceof OpenAI.AuthenticationError) ||
     // @ts-expect-error no proper rate limit error type
-    ("status" in error && error.status === 429)
+    ("status" in error && error.status === 429) ||
+    error instanceof OpenAI.APIUserAbortError ||
+    error instanceof Anthropic.APIUserAbortError
   )
 }
 
@@ -593,13 +714,41 @@ const executeTool = async (
             is_error: true,
           }
         }
-        setStatus(AIOperationStatus.InvestigatingTableSchema, {
+        setStatus(AIOperationStatus.InvestigatingTable, {
           name: tableName,
+          tableOpType: "schema",
         })
         const result = await modelToolsClient.getTableSchema(tableName)
         return {
           content:
             result || `Table '${tableName}' not found or schema unavailable`,
+        }
+      }
+      case "get_table_details": {
+        const tableName = (input as { table_name: string })?.table_name
+        if (!modelToolsClient.getTableDetails) {
+          return {
+            content:
+              "Error: Schema access is not granted. This tool is not available.",
+            is_error: true,
+          }
+        }
+        if (!tableName) {
+          return {
+            content: "Error: table_name parameter is required",
+            is_error: true,
+          }
+        }
+        setStatus(AIOperationStatus.InvestigatingTable, {
+          name: tableName,
+          tableOpType: "details",
+        })
+        const result = await modelToolsClient.getTableDetails(tableName)
+        return {
+          content: result
+            ? JSON.stringify(result, null, 2)
+            : "Table details not found",
+          is_error: !result,
         }
       }
       case "validate_query": {
@@ -672,6 +821,7 @@ async function handleToolCalls(
   responseFormat: ResponseTextConfig,
   abortSignal?: AbortSignal,
   accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
+  streaming?: StreamingCallback,
 ): Promise<AnthropicToolCallResult | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
@@ -727,7 +877,7 @@ async function handleToolCalls(
 
   const followUpParams: Parameters<typeof createAnthropicMessage>[1] = {
     model,
-    tools: modelToolsClient ? ALL_TOOLS : REFERENCE_TOOLS,
+    tools: modelToolsClient.getTables ? ALL_TOOLS : REFERENCE_TOOLS,
     messages: updatedHistory,
     temperature: 0.3,
   }
@@ -741,10 +891,14 @@ async function handleToolCalls(
     }
   }
 
-  const followUpMessage = await createAnthropicMessage(
-    anthropic,
-    followUpParams,
-  )
+  const followUpMessage = streaming
+    ? await createAnthropicMessageStreaming(
+        anthropic,
+        followUpParams,
+        streaming,
+        abortSignal,
+      )
+    : await createAnthropicMessage(anthropic, followUpParams, abortSignal)
 
   // Accumulate tokens from this response
   const newAccumulatedTokens: TokenUsage = {
@@ -767,6 +921,7 @@ async function handleToolCalls(
       responseFormat,
       abortSignal,
       newAccumulatedTokens,
+      streaming,
     )
   }
 
@@ -774,6 +929,83 @@ async function handleToolCalls(
     message: followUpMessage,
     accumulatedTokens: newAccumulatedTokens,
   }
+}
+
+async function createOpenAIResponseStreaming(
+  openai: OpenAI,
+  params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+  streamCallback: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<OpenAI.Responses.Response> {
+  let accumulatedText = ""
+  let lastExplanation = ""
+  let finalResponse: OpenAI.Responses.Response | null = null
+
+  try {
+    const stream = await openai.responses.create({
+      ...params,
+      stream: true,
+    } as OpenAI.Responses.ResponseCreateParamsStreaming)
+
+    for await (const event of stream) {
+      if (abortSignal?.aborted) {
+        throw new StreamingError("Operation aborted", "interrupted")
+      }
+
+      if (event.type === "error") {
+        const errorEvent = event as { error?: { message?: string } }
+        throw new StreamingError(
+          errorEvent.error?.message || "Stream error occurred",
+          "failed",
+          event,
+        )
+      }
+
+      if (event.type === "response.failed") {
+        const failedEvent = event as {
+          response?: { error?: { message?: string } }
+        }
+        throw new StreamingError(
+          failedEvent.response?.error?.message ||
+            "Provider failed to return a response",
+          "failed",
+          event,
+        )
+      }
+
+      if (event.type === "response.output_text.delta") {
+        accumulatedText += event.delta
+        const explanation = extractPartialExplanation(accumulatedText)
+        if (explanation !== lastExplanation) {
+          const chunk = explanation.slice(lastExplanation.length)
+          lastExplanation = explanation
+          streamCallback.onTextChunk(chunk, explanation)
+        }
+      }
+
+      if (event.type === "response.completed") {
+        finalResponse = event.response
+      }
+    }
+  } catch (error) {
+    if (error instanceof StreamingError) {
+      throw error
+    }
+    if (abortSignal?.aborted || error instanceof OpenAI.APIUserAbortError) {
+      throw new StreamingError("Operation aborted", "interrupted")
+    }
+    throw new StreamingError(
+      error instanceof Error ? error.message : "Stream interrupted",
+      "network",
+      error,
+    )
+  }
+
+  if (!finalResponse) {
+    throw new StreamingError("Provider failed to return a response", "failed")
+  }
+
+  return finalResponse
 }
 
 const extractOpenAIToolCalls = (
@@ -813,7 +1045,18 @@ const getOpenAIText = (
       message: "The model refused to generate a response for this request.",
     }
   }
-  return { type: "text", message: response.output_text }
+
+  for (const item of out) {
+    if (item.type === "message" && item.content) {
+      for (const content of item.content) {
+        if (content.type === "output_text" && "text" in content) {
+          return { type: "text", message: content.text }
+        }
+      }
+    }
+  }
+
+  return { type: "text", message: "" }
 }
 
 const safeJsonParse = <T>(text: string): T | object => {
@@ -822,6 +1065,28 @@ const safeJsonParse = <T>(text: string): T | object => {
   } catch {
     return {}
   }
+}
+
+/**
+ * Extracts partial explanation text from incomplete JSON during streaming.
+ * Handles JSON escape sequences and partial content.
+ */
+function extractPartialExplanation(partialJson: string): string {
+  // Match "explanation": "content... where content may be incomplete
+  const explanationMatch = partialJson.match(
+    /"explanation"\s*:\s*"((?:[^"\\]|\\.)*)/,
+  )
+  if (!explanationMatch) {
+    return ""
+  }
+
+  // Unescape JSON string escape sequences
+  return explanationMatch[1]
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\")
 }
 
 const tryWithRetries = async <T>(
@@ -842,15 +1107,15 @@ const tryWithRetries = async <T>(
       return await fn()
     } catch (error) {
       console.error(
-        "AI Assistant error: ",
+        "AI Assistant error:",
         error instanceof Error ? error.message : String(error),
-        "Remaining retries: ",
-        MAX_RETRIES - retries,
+        isNonRetryableError(error)
+          ? "Non-retryable error."
+          : "Remaining retries: " + (MAX_RETRIES - retries) + ".",
       )
       retries++
       if (retries > MAX_RETRIES || isNonRetryableError(error)) {
-        setStatus(null)
-        return handleAiAssistantError(error)
+        return handleAiAssistantError(error, setStatus)
       }
 
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY * retries))
@@ -887,6 +1152,7 @@ interface ExecuteAnthropicFlowParams<T> {
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
+  streaming?: StreamingCallback
 }
 
 interface ExecuteOpenAIFlowParams<T> {
@@ -896,6 +1162,7 @@ interface ExecuteOpenAIFlowParams<T> {
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
+  streaming?: StreamingCallback
 }
 
 const executeOpenAIFlow = async <T>({
@@ -905,6 +1172,7 @@ const executeOpenAIFlow = async <T>({
   modelToolsClient,
   setStatus,
   abortSignal,
+  streaming,
 }: ExecuteOpenAIFlowParams<T>): Promise<T | AiAssistantAPIError> => {
   let input: OpenAI.Responses.ResponseInput = []
   if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -933,13 +1201,23 @@ const executeOpenAIFlow = async <T>({
   let totalInputTokens = 0
   let totalOutputTokens = 0
 
-  let lastResponse = await openai.responses.create({
+  const requestParams = {
     ...getModelProps(model),
     instructions: config.systemInstructions,
     input,
     tools: openaiTools,
     text: config.responseFormat,
-  } as OpenAI.Responses.ResponseCreateParamsNonStreaming)
+  } as OpenAI.Responses.ResponseCreateParamsNonStreaming
+
+  // Use streaming for the initial call if callback provided
+  let lastResponse = streaming
+    ? await createOpenAIResponseStreaming(
+        openai,
+        requestParams,
+        streaming,
+        abortSignal,
+      )
+    : await openai.responses.create(requestParams)
   input = [...input, ...lastResponse.output]
 
   // Add tokens from first response
@@ -984,13 +1262,23 @@ const executeOpenAIFlow = async <T>({
           "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**",
       })
     }
-    lastResponse = await openai.responses.create({
+    const loopRequestParams = {
       ...getModelProps(model),
       instructions: config.systemInstructions,
       input,
       tools: openaiTools,
       text: config.responseFormat,
-    })
+    } as OpenAI.Responses.ResponseCreateParamsNonStreaming
+
+    // Use streaming for follow-up calls if callback provided
+    lastResponse = streaming
+      ? await createOpenAIResponseStreaming(
+          openai,
+          loopRequestParams,
+          streaming,
+          abortSignal,
+        )
+      : await openai.responses.create(loopRequestParams)
     input = [...input, ...lastResponse.output]
 
     // Accumulate tokens from each iteration
@@ -1054,6 +1342,7 @@ const executeAnthropicFlow = async <T>({
   modelToolsClient,
   setStatus,
   abortSignal,
+  streaming,
 }: ExecuteAnthropicFlowParams<T>): Promise<T | AiAssistantAPIError> => {
   const initialMessages: MessageParam[] = []
   if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -1097,7 +1386,15 @@ const executeAnthropicFlow = async <T>({
     }
   }
 
-  const message = await createAnthropicMessage(anthropic, messageParams)
+  // Use streaming for the initial call if callback provided
+  const message = streaming
+    ? await createAnthropicMessageStreaming(
+        anthropic,
+        messageParams,
+        streaming,
+        abortSignal,
+      )
+    : await createAnthropicMessage(anthropic, messageParams, abortSignal)
 
   let totalInputTokens = message.usage?.input_tokens || 0
   let totalOutputTokens = message.usage?.output_tokens || 0
@@ -1115,6 +1412,7 @@ const executeAnthropicFlow = async <T>({
       config.responseFormat,
       abortSignal,
       { inputTokens: 0, outputTokens: 0 }, // Start fresh, we already counted initial message
+      streaming,
     )
 
     if ("type" in toolCallResult && "message" in toolCallResult) {
@@ -1217,12 +1515,15 @@ export const explainTableSchema = async ({
       if (clients.provider === "openai") {
         const prompt = getExplainSchemaPrompt(tableName, schema, kindLabel)
 
-        const formattingOutput = await clients.openai.responses.parse({
-          ...getModelProps(settings.model),
-          instructions: getExplainSchemaPrompt(tableName, schema, kindLabel),
-          input: [{ role: "user", content: prompt }],
-          text: ExplainTableSchemaFormat,
-        })
+        const formattingOutput = await clients.openai.responses.parse(
+          {
+            ...getModelProps(settings.model),
+            instructions: getExplainSchemaPrompt(tableName, schema, kindLabel),
+            input: [{ role: "user", content: prompt }],
+            text: ExplainTableSchemaFormat,
+          },
+          { signal: abortSignal },
+        )
 
         const formatted =
           formattingOutput.output_parsed as TableSchemaExplanation | null
@@ -1268,7 +1569,11 @@ export const explainTableSchema = async ({
         schema: schemaFormat.schema,
       }
 
-      const message = await createAnthropicMessage(anthropic, messageParams)
+      const message = await createAnthropicMessage(
+        anthropic,
+        messageParams,
+        abortSignal,
+      )
 
       const textBlock = message.content.find((block) => block.type === "text")
       if (!textBlock || !("text" in textBlock)) {
@@ -1321,11 +1626,23 @@ class MaxTokensError extends Error {
   }
 }
 
+class StreamingError extends Error {
+  constructor(
+    message: string,
+    public readonly errorType: "failed" | "network" | "interrupted" | "unknown",
+    public readonly originalError?: unknown,
+  ) {
+    super(message)
+    this.name = "StreamingError"
+  }
+}
+
 async function createAnthropicMessage(
   anthropic: Anthropic,
   params: Omit<Anthropic.MessageCreateParams, "max_tokens"> & {
     max_tokens?: number
   },
+  signal?: AbortSignal,
 ): Promise<Anthropic.Messages.Message> {
   const message = await anthropic.messages.create(
     {
@@ -1337,6 +1654,7 @@ async function createAnthropicMessage(
       headers: {
         "anthropic-beta": "structured-outputs-2025-11-13",
       },
+      signal,
     },
   )
 
@@ -1354,7 +1672,126 @@ async function createAnthropicMessage(
   return message
 }
 
-function handleAiAssistantError(error: unknown): AiAssistantAPIError {
+async function createAnthropicMessageStreaming(
+  anthropic: Anthropic,
+  params: Omit<Anthropic.MessageCreateParams, "max_tokens"> & {
+    max_tokens?: number
+  },
+  streamCallback: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<Anthropic.Messages.Message> {
+  let accumulatedText = ""
+  let lastExplanation = ""
+
+  const stream = anthropic.messages.stream(
+    {
+      ...params,
+      max_tokens: params.max_tokens ?? 8192,
+    },
+    {
+      headers: {
+        "anthropic-beta": "structured-outputs-2025-11-13",
+      },
+      signal: abortSignal,
+    },
+  )
+
+  try {
+    for await (const event of stream) {
+      if (abortSignal?.aborted) {
+        throw new StreamingError("Operation aborted", "interrupted")
+      }
+
+      const eventWithType = event as { type: string }
+      if (eventWithType.type === "error") {
+        const errorEvent = event as {
+          error?: { type?: string; message?: string }
+        }
+        const errorType = errorEvent.error?.type
+        const errorMessage = errorEvent.error?.message || "Stream error"
+
+        if (errorType === "overloaded_error") {
+          throw new StreamingError(
+            "Service is temporarily overloaded. Please try again.",
+            "failed",
+            event,
+          )
+        }
+        throw new StreamingError(errorMessage, "failed", event)
+      }
+
+      if (
+        event.type === "content_block_delta" &&
+        event.delta.type === "text_delta"
+      ) {
+        accumulatedText += event.delta.text
+        const explanation = extractPartialExplanation(accumulatedText)
+        if (explanation !== lastExplanation) {
+          const chunk = explanation.slice(lastExplanation.length)
+          lastExplanation = explanation
+          streamCallback.onTextChunk(chunk, explanation)
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof StreamingError) {
+      throw error
+    }
+    if (abortSignal?.aborted) {
+      throw new StreamingError("Operation aborted", "interrupted")
+    }
+    throw new StreamingError(
+      error instanceof Error ? error.message : "Stream interrupted",
+      "network",
+      error,
+    )
+  }
+
+  let finalMessage: Anthropic.Messages.Message
+  try {
+    finalMessage = await stream.finalMessage()
+  } catch (error) {
+    if (abortSignal?.aborted || error instanceof Anthropic.APIUserAbortError) {
+      throw new StreamingError("Operation aborted", "interrupted")
+    }
+    throw new StreamingError(
+      "Failed to get final message from the provider",
+      "network",
+      error,
+    )
+  }
+
+  if (finalMessage.stop_reason === "refusal") {
+    throw new RefusalError(
+      "The model refused to generate a response for this request.",
+    )
+  }
+  if (finalMessage.stop_reason === "max_tokens") {
+    throw new MaxTokensError(
+      "The response exceeded the maximum token limit. Please try again with a different prompt or model.",
+    )
+  }
+
+  return finalMessage
+}
+
+function handleAiAssistantError(
+  error: unknown,
+  setStatus: StatusCallback,
+): AiAssistantAPIError {
+  if (
+    error instanceof OpenAI.APIUserAbortError ||
+    error instanceof Anthropic.APIUserAbortError ||
+    (error instanceof StreamingError && error.errorType === "interrupted")
+  ) {
+    setStatus(AIOperationStatus.Aborted)
+    return {
+      type: "aborted",
+      message: "Operation was cancelled",
+    }
+  }
+  setStatus(null)
+
   if (error instanceof RefusalError) {
     return {
       type: "unknown",
@@ -1369,6 +1806,28 @@ function handleAiAssistantError(error: unknown): AiAssistantAPIError {
       message:
         "The response exceeded the maximum token limit for the selected model. Please try again with a different prompt or model.",
       details: error.message,
+    }
+  }
+
+  if (error instanceof StreamingError) {
+    switch (error.errorType) {
+      case "network":
+        return {
+          type: "network",
+          message:
+            "Network error during streaming. Please check your connection.",
+          details: error.message,
+        }
+      case "failed":
+      default:
+        return {
+          type: "unknown",
+          message: error.message || "Stream failed unexpectedly.",
+          details:
+            error.originalError instanceof Error
+              ? error.originalError.message
+              : undefined,
+        }
     }
   }
 
@@ -1509,7 +1968,7 @@ export const generateChatTitle = async ({
   try {
     const clients = createProviderClients(settings)
 
-    const prompt = `Generate a concise chat title (max 30 characters) for this conversation. The title should capture the main topic or intent.
+    const prompt = `Generate a concise chat title (max 30 characters) for this conversation with QuestDB AI Assistant. The title should capture the main topic or intent.
 
 User's message:
 ${firstUserMessage}
@@ -1580,6 +2039,7 @@ export const continueConversation = async ({
   setStatus,
   abortSignal,
   operation = "followup",
+  streaming,
 }: {
   userMessage: string
   conversationHistory: Array<ConversationMessage>
@@ -1590,6 +2050,7 @@ export const continueConversation = async ({
   abortSignal?: AbortSignal
   operation?: AIOperation
   conversationId?: ConversationId
+  streaming?: StreamingCallback
 }): Promise<
   (GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError) & {
     compactedConversationHistory?: Array<ConversationMessage>
@@ -1720,6 +2181,7 @@ export const continueConversation = async ({
           modelToolsClient,
           setStatus,
           abortSignal,
+          streaming,
         })
         if (isAiAssistantError(result)) {
           return result
@@ -1763,6 +2225,7 @@ export const continueConversation = async ({
         modelToolsClient,
         setStatus,
         abortSignal,
+        streaming,
       })
       if (isAiAssistantError(result)) {
         return result

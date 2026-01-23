@@ -202,12 +202,12 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
     return undefined
   }
 
-  const handleSelect = (id: ConversationId) => {
-    void openChatWindow(id)
+  const handleSelect = async (id: ConversationId) => {
+    await openChatWindow(id)
   }
 
-  const handleRename = (id: ConversationId, newName: string) => {
-    void updateConversationName(id, newName)
+  const handleRename = async (id: ConversationId, newName: string) => {
+    await updateConversationName(id, newName)
   }
 
   const handleDeleteClick = (id: ConversationId) => {
@@ -215,9 +215,9 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
     setDeleteDialogOpen(true)
   }
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (conversationToDelete) {
-      void deleteConversation(conversationToDelete)
+      await deleteConversation(conversationToDelete)
     }
     setDeleteDialogOpen(false)
     setConversationToDelete(null)

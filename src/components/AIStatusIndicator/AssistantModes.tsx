@@ -188,13 +188,9 @@ const formatDetailedStatusMessage = (
 }
 
 const getIsExpandableSection = (section: OperationSection) => {
-  return ![
-    AIOperationStatus.RetrievingTables,
-    AIOperationStatus.RetrievingDocumentation,
-    AIOperationStatus.Aborted,
-    AIOperationStatus.ValidatingQuery,
-    AIOperationStatus.Processing,
-    AIOperationStatus.Compacting,
+  return [
+    AIOperationStatus.InvestigatingTable,
+    AIOperationStatus.InvestigatingDocs,
   ].includes(section.type)
 }
 
@@ -358,20 +354,24 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                     )
                   }
 
-                  if (op.type === AIOperationStatus.InvestigatingTableSchema) {
+                  if (op.type === AIOperationStatus.InvestigatingTable) {
                     const tableName =
                       op.args && "name" in op.args ? op.args.name : "table"
+                    const type =
+                      op.args && "tableOpType" in op.args
+                        ? op.args.tableOpType
+                        : "details"
                     return (
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
                           <Table size={16} />
                         </ReasoningIcon>
                         <ReasoningText>
-                          <ReasoningTextPart>Reading</ReasoningTextPart>
+                          <ReasoningTextPart>Investigating</ReasoningTextPart>
                           <CodeBadge>
                             <CodeBadgeText>{tableName}</CodeBadgeText>
                           </CodeBadge>
-                          <ReasoningTextPart>schema</ReasoningTextPart>
+                          <ReasoningTextPart>{type}</ReasoningTextPart>
                         </ReasoningText>
                       </ReasoningItem>
                     )
@@ -412,9 +412,6 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                                           {item.name}
                                         </CodeBadgeText>
                                       </CodeBadge>
-                                      <ReasoningTextPart>
-                                        documentation
-                                      </ReasoningTextPart>
                                     </>
                                   ) : (
                                     <>
@@ -426,9 +423,6 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                                           {item.name}
                                         </CodeBadgeText>
                                       </CodeBadge>
-                                      <ReasoningTextPart>
-                                        documentation
-                                      </ReasoningTextPart>
                                     </>
                                   )}
                                 </ReasoningText>

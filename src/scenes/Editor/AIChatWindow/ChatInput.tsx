@@ -12,11 +12,10 @@ import { Box } from "../../../components"
 import { Text } from "../../../components/Text"
 import { color } from "../../../utils"
 import { ArrowUpIcon, CodeBlockIcon } from "@phosphor-icons/react"
-import { Stop as StopFill, CloseCircle } from "@styled-icons/remix-fill"
+import { Stop as StopFill } from "@styled-icons/remix-fill"
 import {
   useAIStatus,
   isBlockingAIStatus,
-  AIOperationStatus,
 } from "../../../providers/AIStatusProvider"
 import { slideAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
@@ -148,7 +147,7 @@ const SendButton = styled(ActionButton)`
   }
 `
 
-const ThoughtStream = styled.div<{ $aborted?: boolean }>`
+const ThoughtStream = styled.div`
   display: flex;
   position: relative;
   width: 100%;
@@ -160,16 +159,9 @@ const ThoughtStream = styled.div<{ $aborted?: boolean }>`
     ${pinkLinearGradientHorizontal} border-box;
   border-radius: 0.6rem;
   height: 4rem;
-
-  ${({ $aborted }) =>
-    $aborted &&
-    css`
-      background: ${color("backgroundDarker")};
-      border: 1px solid ${color("red")};
-    `}
 `
 
-const ThoughtStreamContent = styled.div<{ $aborted?: boolean }>`
+const ThoughtStreamContent = styled.div`
   display: flex;
   align-items: center;
   background: ${color("backgroundDarker")};
@@ -178,21 +170,14 @@ const ThoughtStreamContent = styled.div<{ $aborted?: boolean }>`
   height: 100%;
   border-radius: 0.6rem;
   padding: 0 1.2rem;
-  padding-right: ${({ $aborted }) => ($aborted ? "1.2rem" : "4.5rem")};
+  padding-right: 4.5rem;
 `
 
-const CloseCircleIcon = styled(CloseCircle)`
-  width: 2rem;
-  height: 2rem;
-  color: ${color("red")};
-  flex-shrink: 0;
-`
-
-const ThoughtText = styled.div<{ $aborted?: boolean }>`
+const ThoughtText = styled.div`
   font-weight: 500;
   font-size: 1.4rem;
   color: ${color("gray2")};
-  ${({ $aborted }) => !$aborted && slideAnimation}
+  ${slideAnimation}
 `
 
 const StopButton = styled.button`
@@ -290,7 +275,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const { status: aiStatus, abortOperation } = useAIStatus()
 
     const isAIInProgress = isBlockingAIStatus(aiStatus)
-    const isAborted = aiStatus === AIOperationStatus.Aborted
 
     useEffect(() => {
       // Auto-resize textarea
@@ -330,29 +314,25 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       abortOperation()
     }
 
-    const showThoughtStream = isAIInProgress || isAborted
+    const showThoughtStream = isAIInProgress
 
     return (
       <InputContainer>
         {showThoughtStream ? (
-          <ThoughtStream $aborted={isAborted} data-hook="chat-assistant-modes">
-            <ThoughtStreamContent $aborted={isAborted}>
-              {isAborted ? (
-                <CloseCircleIcon />
-              ) : (
-                <CircleNotchSpinner size={20} />
-              )}
-              <ThoughtText $aborted={isAborted}>{aiStatus}</ThoughtText>
+          <ThoughtStream data-hook="chat-assistant-modes">
+            <ThoughtStreamContent>
+              <CircleNotchSpinner size={20} />
+
+              <ThoughtText>{aiStatus}</ThoughtText>
             </ThoughtStreamContent>
-            {!isAborted && (
-              <StopButton
-                onClick={handleStop}
-                title="Stop generation"
-                data-hook="chat-stop-button"
-              >
-                <StopFill size="14px" />
-              </StopButton>
-            )}
+
+            <StopButton
+              onClick={handleStop}
+              title="Stop generation"
+              data-hook="chat-stop-button"
+            >
+              <StopFill size="14px" />
+            </StopButton>
           </ThoughtStream>
         ) : (
           <InputWrapper>

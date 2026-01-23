@@ -5,8 +5,8 @@ import styled, { useTheme } from "styled-components"
 import { Button } from "../Button"
 import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
-import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
 import { copyToClipboard } from "../../utils/copyToClipboard"
+import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   position: relative;
@@ -15,7 +15,7 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   border: ${({ $noBorder, theme }) =>
     $noBorder ? "none" : `1px solid ${theme.color.selection}`};
   background: ${({ theme }) => theme.color.backgroundDarker};
-  overflow: hidden;
+  overflow-y: hidden;
 
   .monaco-editor-background {
     background: ${({ theme }) => theme.color.backgroundDarker};

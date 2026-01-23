@@ -903,7 +903,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }, 50)
     })
 
-    editor.onDidChangeModelContent((e) => {
+    editor.onDidChangeModelContent(async (e) => {
       const model = editor.getModel()
       if (!model) return
 
@@ -1059,7 +1059,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           0,
         )
         if (totalDelta !== 0) {
-          shiftedQueryKeys = shiftQueryKeysForBufferRef.current(
+          shiftedQueryKeys = await shiftQueryKeysForBufferRef.current(
             activeBufferId,
             earliestChangeOffset,
             totalDelta,
