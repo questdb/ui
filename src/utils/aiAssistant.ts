@@ -294,7 +294,14 @@ const REFERENCE_TOOLS = [
       properties: {
         category: {
           type: "string" as const,
-          enum: ["functions", "operators", "sql", "concepts", "schema"],
+          enum: [
+            "functions",
+            "operators",
+            "sql",
+            "concepts",
+            "schema",
+            "cookbook",
+          ],
           description: "The category of documentation to retrieve",
         },
         items: {
@@ -434,9 +441,12 @@ export function createModelToolsClient(
 }
 
 const DOCS_INSTRUCTION_ANTHROPIC = `
-CRITICAL: Always follow this two-phase documentation approach:
-1. Use get_questdb_toc to see available functions/keywords/operators
-2. Use get_questdb_documentation to get details for specific items you'll use`
+CRITICAL: Always follow this documentation approach:
+1. Use get_questdb_toc to see available functions, operators, SQL syntax, AND cookbook recipes
+2. If user's request matches a cookbook recipe description, fetch it FIRST - recipes provide complete, tested SQL patterns
+3. Use get_questdb_documentation for specific function/syntax details
+
+When a cookbook recipe matches the user's intent, ALWAYS use it as the foundation and adapt column/table names and use case to their schema.`
 
 const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
   const base = `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database. You help users with:

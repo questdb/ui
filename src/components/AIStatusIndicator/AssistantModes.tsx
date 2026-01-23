@@ -412,9 +412,6 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                                           {item.name}
                                         </CodeBadgeText>
                                       </CodeBadge>
-                                      <ReasoningTextPart>
-                                        documentation
-                                      </ReasoningTextPart>
                                     </>
                                   ) : (
                                     <>
@@ -426,9 +423,6 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                                           {item.name}
                                         </CodeBadgeText>
                                       </CodeBadge>
-                                      <ReasoningTextPart>
-                                        documentation
-                                      </ReasoningTextPart>
                                     </>
                                   )}
                                 </ReasoningText>
