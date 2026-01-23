@@ -99,10 +99,6 @@ export default defineConfig(({ mode }) => {
             dest: 'assets/vs/editor',
           },
           {
-            src: path.join(monacoPath, 'min', 'vs', 'editor', 'editor.main.nls.js'),
-            dest: 'assets/vs/editor',
-          },
-          {
             src: path.join(monacoPath, 'min', 'vs', 'editor', 'editor.main.css'),
             dest: 'assets/vs/editor',
           },

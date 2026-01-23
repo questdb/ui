@@ -1067,8 +1067,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 onOpenInEditor={() =>
                                   onOpenInEditor({
                                     type: "diff",
-                                    original: previousSQLForDiff,
-                                    modified: currentSQLForDiff,
+                                    original: previousSQLForDiff ?? "",
+                                    modified: currentSQLForDiff ?? "",
                                   })
                                 }
                               />

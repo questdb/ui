@@ -25,10 +25,6 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
     background: ${({ theme }) => theme.color.backgroundDarker};
   }
 
-  .lines-content {
-    top: 0 !important;
-  }
-
   .editor.original {
     display: none !important;
   }
@@ -169,19 +165,18 @@ const LiteEditorToolbar = ({
   )
 }
 
-type LiteEditorContentProps = BaseLiteEditorProps &
+type LiteEditorContentProps = Omit<BaseLiteEditorProps, "maxHeight"> &
   (
     | {
         diffEditor: true
         original: string
         modified: string
         value?: never
-        effectiveHeight?: never
       }
     | {
         diffEditor: false
         value: string
-        effectiveHeight: number
+        setContentHeight: (contentHeight: number) => void
         original?: never
         modified?: never
       }
@@ -189,22 +184,14 @@ type LiteEditorContentProps = BaseLiteEditorProps &
 
 const LiteEditorContent = React.memo(
   (props: LiteEditorContentProps) => {
-    const {
-      diffEditor,
-      value,
-      maxHeight,
-      language,
-      theme,
-      fontSize,
-      lineHeight,
-    } = props
+    const { diffEditor, value, language, theme, fontSize, lineHeight } = props
 
     const scrolledRef = useRef<boolean>(false)
 
     if (diffEditor) {
       return (
         <DiffEditor
-          height={maxHeight}
+          height="100%"
           language={language}
           original={props.original}
           modified={props.modified}
@@ -221,6 +208,8 @@ const LiteEditorContent = React.memo(
               }
             })
           }}
+          keepCurrentOriginalModel
+          keepCurrentModifiedModel
           options={{
             readOnly: true,
             lineNumbers: "off",
@@ -231,6 +220,10 @@ const LiteEditorContent = React.memo(
               vertical: "hidden",
               horizontal: "hidden",
               alwaysConsumeMouseWheel: false,
+              handleMouseWheel: false,
+            },
+            stickyScroll: {
+              enabled: false,
             },
             automaticLayout: true,
             folding: false,
@@ -251,11 +244,20 @@ const LiteEditorContent = React.memo(
     }
     return (
       <Editor
-        height={props.effectiveHeight}
+        height="100%"
         language={language}
         value={value}
         theme={theme}
+        onMount={(editor) => {
+          props.setContentHeight(editor.getContentHeight())
+          editor.onDidContentSizeChange((e) => {
+            if (e.contentHeightChanged) {
+              props.setContentHeight(e.contentHeight)
+            }
+          })
+        }}
         options={{
+          automaticLayout: true,
           readOnly: true,
           lineNumbers: "off",
           minimap: { enabled: false },
@@ -268,11 +270,16 @@ const LiteEditorContent = React.memo(
           overviewRulerLanes: 0,
           hideCursorInOverviewRuler: true,
           overviewRulerBorder: false,
+          wordWrap: "on",
           scrollbar: {
             useShadows: false,
             vertical: "hidden",
             horizontal: "hidden",
             alwaysConsumeMouseWheel: false,
+            handleMouseWheel: false,
+          },
+          stickyScroll: {
+            enabled: false,
           },
           fontSize,
           padding: { top: 8, bottom: 8 },
@@ -286,8 +293,7 @@ const LiteEditorContent = React.memo(
       prevProps.value === nextProps.value &&
       prevProps.diffEditor === nextProps.diffEditor &&
       prevProps.original === nextProps.original &&
-      prevProps.modified === nextProps.modified &&
-      prevProps.maxHeight === nextProps.maxHeight
+      prevProps.modified === nextProps.modified
     )
   },
 )
@@ -301,23 +307,24 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   ...props
 }) => {
   const [copied, setCopied] = useState(false)
+  const [contentHeight, setContentHeight] = useState(1)
   const handleCopy = (value: string) => {
     void copyToClipboard(value)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const getContentHeight = (content: string) => {
-    const lineCount = content.split("\n").length
-    return lineCount * lineHeight + (props.diffEditor ? 0 : 16)
-  }
+  const effectiveHeight = props.diffEditor
+    ? maxHeight
+    : Math.min(contentHeight, maxHeight)
+  const showToolbarForRegularEditor = contentHeight > maxHeight
 
   if (props.diffEditor) {
     return (
       <EditorWrapper
         $noBorder
         style={{
-          height: maxHeight,
+          height: effectiveHeight,
           paddingTop: 8,
           paddingBottom: 8,
         }}
@@ -331,7 +338,6 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           diffEditor
           original={props.original}
           modified={props.modified}
-          maxHeight={maxHeight}
           language={language}
           theme={theme}
           fontSize={fontSize}
@@ -340,16 +346,9 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
       </EditorWrapper>
     )
   }
-
-  const contentHeight = getContentHeight(props.value)
-  const effectiveHeight = maxHeight
-    ? Math.min(contentHeight, maxHeight)
-    : contentHeight
-  const showOpenInEditor = contentHeight > maxHeight
-
   return (
     <EditorWrapper style={{ height: effectiveHeight }}>
-      {showOpenInEditor ? (
+      {showToolbarForRegularEditor ? (
         <LiteEditorToolbar
           onOpenInEditor={props.onOpenInEditor}
           onCopy={() => handleCopy(props.value ?? "")}
@@ -368,12 +367,11 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
       <LiteEditorContent
         diffEditor={false}
         value={props.value}
-        maxHeight={maxHeight}
-        effectiveHeight={effectiveHeight}
         language={language}
         theme={theme}
         fontSize={fontSize}
         lineHeight={lineHeight}
+        setContentHeight={setContentHeight}
       />
     </EditorWrapper>
   )
