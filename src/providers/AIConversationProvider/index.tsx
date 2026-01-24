@@ -383,6 +383,17 @@ export const AIConversationProvider: React.FC<{
 
           let finalUpdates = updates
           const newSql = updates.sql
+
+          if (
+            msg.role === "assistant" &&
+            (updates.content || updates.error) &&
+            !msg.content &&
+            !msg.error &&
+            !msg.responseStart
+          ) {
+            finalUpdates = { ...finalUpdates, responseStart: Date.now() }
+          }
+
           if (
             newSql !== undefined &&
             msg.previousSQL === undefined &&
@@ -402,7 +413,7 @@ export const AIConversationProvider: React.FC<{
             }
 
             finalUpdates = {
-              ...updates,
+              ...finalUpdates,
               previousSQL: sqlActuallyChanged ? acceptedSQL : undefined,
             }
           }

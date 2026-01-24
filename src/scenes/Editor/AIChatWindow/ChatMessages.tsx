@@ -3,7 +3,7 @@ import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
-import { AssistantModes } from "../../../components/AIStatusIndicator/AssistantModes"
+import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
 import { color } from "../../../utils"
 import type {
   ConversationMessage,
@@ -64,7 +64,7 @@ const LoadingIcon = () => (
 const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
   padding: 2rem 1rem;
   overflow-y: auto;
   flex: 1 1 auto;
@@ -262,12 +262,11 @@ const Divider = styled.div`
   width: 100%;
   height: 1px;
   background: linear-gradient(90deg, #9c274b 0%, rgba(54, 14, 26, 0) 100%);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 `
 
 const OperationHistoryContainer = styled.div<{ $trimBottom: boolean }>`
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
+  margin-bottom: 0.6rem;
   width: 100%;
   ${({ $trimBottom }) =>
     $trimBottom &&
@@ -281,10 +280,10 @@ const ErrorContainer = styled.div`
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 1rem;
-  padding: 0.6rem 1.2rem;
-  border-radius: 0.6rem;
+  gap: 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.8rem;
   border: 1px solid ${color("red")};
+  border-radius: 0.6rem;
   color: ${color("foreground")};
   font-size: 1.4rem;
   line-height: 2rem;
@@ -424,7 +423,6 @@ const ExpandButton = styled(IconButton)`
 
 const DiffEditorWrapper = styled.div`
   position: relative;
-  height: 300px;
   width: 100%;
 `
 
@@ -914,11 +912,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <>
                   <Divider />
                   <OperationHistoryContainer $trimBottom={!message.content}>
-                    <AssistantModes
+                    <AssistantModesCompact
                       operationHistory={operationHistory}
                       status={status}
                       isLive={isLiveOperation}
                       onScrollNeeded={handleScrollNeeded}
+                      collapsed={!!message.content || !!message.error}
+                      responseStart={message.responseStart}
                     />
                   </OperationHistoryContainer>
                 </>
@@ -1071,6 +1071,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                     modified: currentSQLForDiff ?? "",
                                   })
                                 }
+                                handleScrollNeeded={handleScrollNeeded}
                               />
                             </DiffEditorWrapper>
                             {showButtons && (

@@ -123,6 +123,7 @@ type DiffEditorProps = BaseLiteEditorProps & {
   original: string
   modified: string
   value?: never
+  handleScrollNeeded: () => void
 }
 
 type LiteEditorProps = (RegularEditorProps | DiffEditorProps) & {
@@ -172,19 +173,30 @@ type LiteEditorContentProps = Omit<BaseLiteEditorProps, "maxHeight"> &
         original: string
         modified: string
         value?: never
+        handleScrollNeeded: () => void
       }
     | {
         diffEditor: false
         value: string
-        setContentHeight: (contentHeight: number) => void
         original?: never
         modified?: never
+        handleScrollNeeded?: never
       }
-  )
+  ) & {
+    setContentHeight: (contentHeight: number) => void
+  }
 
 const LiteEditorContent = React.memo(
   (props: LiteEditorContentProps) => {
-    const { diffEditor, value, language, theme, fontSize, lineHeight } = props
+    const {
+      diffEditor,
+      value,
+      language,
+      theme,
+      fontSize,
+      lineHeight,
+      setContentHeight,
+    } = props
 
     const scrolledRef = useRef<boolean>(false)
 
@@ -197,6 +209,13 @@ const LiteEditorContent = React.memo(
           modified={props.modified}
           theme={theme}
           onMount={(editor) => {
+            setContentHeight(editor.getModifiedEditor().getContentHeight())
+            editor.getModifiedEditor().onDidContentSizeChange((e) => {
+              if (e.contentHeightChanged) {
+                setContentHeight(e.contentHeight)
+              }
+              props.handleScrollNeeded()
+            })
             editor.onDidUpdateDiff(() => {
               if (scrolledRef.current) return
               const lineChange = editor.getLineChanges()?.[0]
@@ -204,7 +223,7 @@ const LiteEditorContent = React.memo(
                 scrolledRef.current = true
                 editor
                   .getModifiedEditor()
-                  .revealLineInCenter(lineChange.modifiedStartLineNumber)
+                  .revealLineNearTop(lineChange.modifiedStartLineNumber)
               }
             })
           }}
@@ -249,10 +268,10 @@ const LiteEditorContent = React.memo(
         value={value}
         theme={theme}
         onMount={(editor) => {
-          props.setContentHeight(editor.getContentHeight())
+          setContentHeight(editor.getContentHeight())
           editor.onDidContentSizeChange((e) => {
             if (e.contentHeightChanged) {
-              props.setContentHeight(e.contentHeight)
+              setContentHeight(e.contentHeight)
             }
           })
         }}
@@ -314,9 +333,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const effectiveHeight = props.diffEditor
-    ? maxHeight
-    : Math.min(contentHeight, maxHeight)
+  const effectiveHeight = Math.min(contentHeight, maxHeight)
   const showToolbarForRegularEditor = contentHeight > maxHeight
 
   if (props.diffEditor) {
@@ -342,6 +359,8 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           theme={theme}
           fontSize={fontSize}
           lineHeight={lineHeight}
+          setContentHeight={setContentHeight}
+          handleScrollNeeded={props.handleScrollNeeded}
         />
       </EditorWrapper>
     )

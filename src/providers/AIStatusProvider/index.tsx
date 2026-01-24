@@ -43,7 +43,7 @@ export enum AIOperationStatus {
   InvestigatingTable = "Investigating table",
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
-  ValidatingQuery = "Validating generated query",
+  ValidatingQuery = "Validating query",
   GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
@@ -60,6 +60,7 @@ export type StatusArgs = {
 export type StatusEntry = {
   type: AIOperationStatus
   args?: StatusArgs
+  timestamp: number
 }
 
 export type OperationHistory = StatusEntry[]
@@ -155,9 +156,10 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       onUpdate?: (history: OperationHistory) => void,
     ) => {
       if (newStatus !== null) {
-        const statusPayload = {
+        const statusPayload: StatusEntry = {
           type: newStatus,
           args: args || undefined,
+          timestamp: Date.now(),
         }
         if (
           statusRef.current === null ||

@@ -1451,6 +1451,7 @@ describe("ai assistant", () => {
       // Then - Chat window should open with processing status
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("assistant-modes-container").should("be.visible")
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
@@ -1524,6 +1525,7 @@ describe("ai assistant", () => {
       // Then - Chat window should open with processing status
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("assistant-modes-container").should("be.visible")
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
@@ -1591,6 +1593,7 @@ describe("ai assistant", () => {
         .should("contain", "btc_trades")
         .should("contain", "ecommerce_stats")
 
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
       cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
       cy.getByDataHook("chat-message-assistant").should(
@@ -1693,6 +1696,7 @@ describe("ai assistant", () => {
         .should("contain", "ecommerce_stats")
         .should("contain", "sales")
 
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
       cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
       cy.getByDataHook("assistant-mode-investigating-table").should(
@@ -1748,6 +1752,7 @@ describe("ai assistant", () => {
       flow.waitForCompletion()
 
       // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
       cy.getByDataHook("assistant-mode-reviewing-docs").should("exist")
 
@@ -1843,6 +1848,7 @@ Syntax: \`avg(column)\`
       flow.waitForCompletion()
 
       // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
       cy.getByDataHook("assistant-mode-investigating-docs").should("exist")
 
@@ -1899,10 +1905,9 @@ Syntax: \`avg(column)\`
       flow.waitForCompletion()
 
       // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
-      cy.getByDataHook("assistant-mode-validating-generated-query").should(
-        "exist",
-      )
+      cy.getByDataHook("assistant-mode-validating-query").should("exist")
 
       // Verify final response text
       cy.getByDataHook("chat-message-assistant")
@@ -1957,10 +1962,9 @@ Syntax: \`avg(column)\`
       flow.waitForCompletion()
 
       // Verify inline status indicators
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
       cy.getByDataHook("assistant-mode-processing-request").should("exist")
-      cy.getByDataHook("assistant-mode-validating-generated-query").should(
-        "exist",
-      )
+      cy.getByDataHook("assistant-mode-validating-query").should("exist")
 
       // Verify final response text
       cy.getByDataHook("chat-message-assistant")
