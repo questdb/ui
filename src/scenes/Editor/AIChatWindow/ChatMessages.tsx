@@ -454,12 +454,12 @@ const AcceptButton = styled(Button)`
 const RejectButton = styled(Button)`
   background: ${color("background")};
   color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+  border: 1px solid transparent;
   width: 10rem;
 
   &:hover:not(:disabled) {
     background: ${color("selection")};
-    border-color: ${({ theme }) => theme.color.pinkDarker};
+    border-color: transparent;
   }
 `
 
