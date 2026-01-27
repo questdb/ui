@@ -63,7 +63,7 @@ describe("run query", () => {
     cy.getGridRow(0).should("contain", "100")
   })
 
-  it.only("should not change cursor position when query run succeeds", () => {
+  it("should not change cursor position when query run succeeds", () => {
     cy.typeQuery(
       "with longseq as (\nselect * from long_sequence(100)\n-- comment",
     )

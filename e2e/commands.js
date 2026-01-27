@@ -598,3 +598,17 @@ Cypress.Commands.add("createTabWithContent", (content, title) => {
 Cypress.Commands.add("getActiveTabName", () => {
   return cy.get(".chrome-tab[active]").get(".chrome-tab-title").invoke("text")
 })
+
+Cypress.Commands.add("waitForStreamingComplete", (timeout = 10000) => {
+  return cy.get("body").then(($body) => {
+    if ($body.find('[data-hook="streaming-cursor"]').length > 0) {
+      cy.getByDataHook("streaming-cursor", { timeout }).should("not.exist")
+    }
+    return cy.wait(100)
+  })
+})
+
+Cypress.Commands.add("waitForAIResponse", (alias) => {
+  cy.wait(alias)
+  cy.waitForStreamingComplete()
+})

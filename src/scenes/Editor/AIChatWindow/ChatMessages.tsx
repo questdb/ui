@@ -3,7 +3,7 @@ import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
-import { AssistantModes } from "../../../components/AIStatusIndicator/AssistantModes"
+import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
 import { color } from "../../../utils"
 import type {
   ConversationMessage,
@@ -23,6 +23,7 @@ import {
   CodeIcon,
   KeyReturnIcon,
   ChatDotsIcon,
+  ArrowCounterClockwiseIcon,
 } from "@phosphor-icons/react"
 import { CloseCircle } from "@styled-icons/remix-fill"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
@@ -31,7 +32,10 @@ import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  AIOperationStatus,
+  useAIStatus,
+} from "../../../providers/AIStatusProvider"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -60,7 +64,7 @@ const LoadingIcon = () => (
 const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
   padding: 2rem 1rem;
   overflow-y: auto;
   flex: 1 1 auto;
@@ -84,7 +88,6 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   background: ${color("loginBackground")};
   border: 1px solid rgba(25, 26, 33, 0.32);
   flex-shrink: 0;
-  overflow: visible;
 `
 
 const UserRequestBox = styled(Box)`
@@ -98,7 +101,6 @@ const UserRequestBox = styled(Box)`
   border: 1px solid rgba(25, 26, 33, 0.32);
   border-radius: 0.6rem;
   flex-shrink: 0;
-  overflow: visible;
 `
 
 const UserRequestHeader = styled(Box).attrs({
@@ -190,7 +192,6 @@ const MessageContent = styled(Text)`
   color: ${color("foreground")};
   white-space: pre-wrap;
   word-wrap: break-word;
-  overflow: visible;
 `
 
 const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
@@ -204,7 +205,6 @@ const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
   padding: 0.4rem;
   border-radius: 0.6rem;
   flex-shrink: 0;
-  overflow: visible;
 
   ${({ $hasOperationHistory }) =>
     $hasOperationHistory &&
@@ -254,7 +254,6 @@ const ExplanationContent = styled(Box)`
   flex-direction: column;
   border-radius: 0.6rem;
   padding: 0.8rem;
-  overflow: visible;
   flex-shrink: 0;
   width: 100%;
 `
@@ -263,12 +262,11 @@ const Divider = styled.div`
   width: 100%;
   height: 1px;
   background: linear-gradient(90deg, #9c274b 0%, rgba(54, 14, 26, 0) 100%);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 `
 
 const OperationHistoryContainer = styled.div<{ $trimBottom: boolean }>`
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
+  margin-bottom: 0.6rem;
   width: 100%;
   ${({ $trimBottom }) =>
     $trimBottom &&
@@ -282,14 +280,43 @@ const ErrorContainer = styled.div`
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 1rem;
-  padding: 1rem 1.2rem;
-  border-radius: 0.6rem;
+  gap: 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.8rem;
   border: 1px solid ${color("red")};
+  border-radius: 0.6rem;
   color: ${color("foreground")};
   font-size: 1.4rem;
   line-height: 2rem;
   width: 100%;
+`
+
+const RetryButton = styled(Button)`
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.5rem 0.8rem;
+  height: auto;
+`
+
+const cursorBlink = keyframes`
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+`
+
+const StreamingCursor = styled.span`
+  display: inline-block;
+  width: 2px;
+  height: 1.4em;
+  background: ${color("foreground")};
+  margin-left: 2px;
+  margin-right: auto;
+  vertical-align: text-bottom;
+  animation: ${cursorBlink} 1s infinite;
+`
+
+const MessagesEnd = styled.div`
+  min-height: 1px;
+  width: 100%;
+  background: transparent;
 `
 
 const DiffContainer = styled(Box)`
@@ -396,7 +423,6 @@ const ExpandButton = styled(IconButton)`
 
 const DiffEditorWrapper = styled.div`
   position: relative;
-  height: 300px;
   width: 100%;
 `
 
@@ -428,12 +454,12 @@ const AcceptButton = styled(Button)`
 const RejectButton = styled(Button)`
   background: ${color("background")};
   color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+  border: 1px solid transparent;
   width: 10rem;
 
   &:hover:not(:disabled) {
     background: ${color("selection")};
-    border-color: ${({ theme }) => theme.color.pinkDarker};
+    border-color: transparent;
   }
 `
 
@@ -452,6 +478,7 @@ type ChatMessagesProps = {
   ) => Promise<void>
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
+  onRetry?: (userMessageId: string, assistantMessageId: string) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -463,6 +490,7 @@ type ChatMessagesProps = {
   isOperationInProgress?: boolean
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
   editorSQL?: string
+  isStreaming: boolean
 }
 
 const getOperationBadgeInfo = (
@@ -516,12 +544,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onRunQuery,
   onOpenInEditor,
   onApplyToEditor,
+  onRetry,
   running,
   aiSuggestionRequest,
   queryNotifications,
   queryStartOffset = 0,
   isOperationInProgress,
   editorSQL,
+  isStreaming,
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -605,9 +635,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     [messages],
   )
 
+  const streamingContentLength = useMemo(() => {
+    if (!isStreaming) return 0
+    const lastMessage = messages[messages.length - 1]
+    return lastMessage?.content?.length ?? 0
+  }, [messages, isStreaming])
+
   useEffect(() => {
     handleScrollNeeded()
-  }, [visibleMessagesCount])
+  }, [visibleMessagesCount, streamingContentLength])
 
   const visibleMessages: Array<{
     message: ConversationMessage
@@ -697,8 +733,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <LiteEditor
                       value={sql}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
                       }
                     />
                   </InlineSQLEditor>
@@ -740,8 +779,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <LiteEditor
                       value={sql}
                       maxHeight={216}
-                      onOpenInEditor={(value: string) =>
-                        onOpenInEditor({ type: "code", value }, isCurrentQuery)
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
                       }
                     />
                   </InlineSQLEditor>
@@ -796,6 +838,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             hasVisibleUserMessageAfter(originalIndex)
 
           const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
+          const isMessageStreaming = isStreaming && isLastVisibleMessage
           const showButtons =
             hasSQLChange &&
             !isAccepted &&
@@ -842,8 +885,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           )
           const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
 
-          const operationHistory = message.operationHistory
+          const operationHistory = message.operationHistory?.filter(
+            (op) => op.type !== AIOperationStatus.Aborted,
+          )
           const hasError = !!message.error
+          const showRetry =
+            hasError &&
+            !isStreaming &&
+            !isOperationInProgress &&
+            isLastVisibleMessage
 
           const isLiveOperation =
             originalIndex === lastAssistantMessageIndex &&
@@ -861,27 +911,17 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               {hasOperationHistory && (
                 <>
                   <Divider />
-                  <OperationHistoryContainer
-                    $trimBottom={hasError || !message.content}
-                  >
-                    <AssistantModes
+                  <OperationHistoryContainer $trimBottom={!message.content}>
+                    <AssistantModesCompact
                       operationHistory={operationHistory}
                       status={status}
                       isLive={isLiveOperation}
                       onScrollNeeded={handleScrollNeeded}
+                      collapsed={!!message.content || !!message.error}
+                      responseStart={message.responseStart}
                     />
                   </OperationHistoryContainer>
                 </>
-              )}
-              {hasError && (
-                <ErrorContainer data-hook="chat-message-error">
-                  <CloseCircle
-                    size={16}
-                    color={theme.color.red}
-                    style={{ flexShrink: 0 }}
-                  />
-                  {message.error}
-                </ErrorContainer>
               )}
 
               {message.content && (
@@ -904,7 +944,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       messageId={message.id}
                       onOpenInEditor={onOpenInEditor}
                     />
-                    {hasSQLChange && (
+                    {isMessageStreaming && (
+                      <StreamingCursor data-hook="streaming-cursor" />
+                    )}
+                    {hasSQLChange && !isMessageStreaming && (
                       <DiffContainer data-hook="inline-diff-container">
                         <DiffHeader $isExpanded={isExpanded}>
                           <DiffHeaderLeft>
@@ -1021,16 +1064,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 original={previousSQLForDiff}
                                 modified={currentSQLForDiff}
                                 maxHeight={300}
-                                onOpenInEditor={(
-                                  original: string,
-                                  modified: string,
-                                ) =>
+                                onOpenInEditor={() =>
                                   onOpenInEditor({
                                     type: "diff",
-                                    original,
-                                    modified,
+                                    original: previousSQLForDiff ?? "",
+                                    modified: currentSQLForDiff ?? "",
                                   })
                                 }
+                                handleScrollNeeded={handleScrollNeeded}
                               />
                             </DiffEditorWrapper>
                             {showButtons && (
@@ -1060,11 +1101,39 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   </ExplanationContent>
                 </>
               )}
+              {hasError && (
+                <ErrorContainer data-hook="chat-message-error">
+                  <CloseCircle
+                    size={16}
+                    color={theme.color.red}
+                    style={{ flexShrink: 0 }}
+                  />
+                  {message.error}
+                  {showRetry && onRetry && (
+                    <RetryButton
+                      size="sm"
+                      skin="secondary"
+                      prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
+                      onClick={() => {
+                        const userMessageIndex = messages
+                          .slice(0, originalIndex)
+                          .findLastIndex((m) => m.role === "user")
+                        if (userMessageIndex >= 0) {
+                          onRetry(messages[userMessageIndex].id, message.id)
+                        }
+                      }}
+                      data-hook="retry-button"
+                    >
+                      Retry
+                    </RetryButton>
+                  )}
+                </ErrorContainer>
+              )}
             </ExplanationBox>
           )
         }
       })}
-      <div ref={messagesEndRef} />
+      <MessagesEnd ref={messagesEndRef} data-hook="messages-end" />
     </MessagesContainer>
   )
 }

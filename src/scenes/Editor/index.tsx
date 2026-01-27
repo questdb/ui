@@ -147,11 +147,11 @@ const KeyContainer = styled(Box).attrs({ alignItems: "center", gap: "0.3rem" })`
 const RejectButton = styled(Button)`
   background: ${color("background")};
   color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
   flex: 1;
+  border: 1px solid transparent;
   &:hover:not(:disabled) {
+    border-color: transparent;
     background: ${color("selection")};
-    border-color: ${({ theme }) => theme.color.pinkDarker};
   }
   width: 13.5rem;
 `
@@ -341,6 +341,8 @@ const Editor = ({
                       (activeBuffer.previewContent as { modified: string })
                         .modified
                     }
+                    keepCurrentOriginalModel
+                    keepCurrentModifiedModel
                     language={QuestDBLanguageName}
                     theme="dracula"
                     options={{
