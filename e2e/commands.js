@@ -44,6 +44,11 @@ before(() => {
     if (err.message.includes("ResizeObserver loop")) {
       return false
     }
+    // Monaco editor's word highlighter throws "Canceled" errors during rapid tab switching
+    // when restoreViewState cancels pending async operations - this is harmless
+    if (err.message.includes("Canceled")) {
+      return false
+    }
   })
 
   indexedDB.deleteDatabase("web-console")

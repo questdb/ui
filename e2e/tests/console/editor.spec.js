@@ -888,6 +888,16 @@ describe("editor tabs", () => {
     })
     cy.getEditorHitbox().click()
     cy.getEditorTabByTitle("New updated name").should("be.visible")
+
+    cy.getEditorTabByTitle("New updated name").realHover()
+    cy.getEditorTabByTitle("New updated name").within(() => {
+      cy.get(".chrome-tab-edit").should("be.visible").click()
+      cy.get(".chrome-tab-rename")
+        .should("be.visible")
+        .clear()
+        .type("Renamed via button{enter}")
+    })
+    cy.getEditorTabByTitle("Renamed via button").should("be.visible")
   })
 
   it("should drag tabs", () => {
@@ -1375,5 +1385,54 @@ describe("abortion on new query execution", () => {
     cy.getByDataHook("success-notification").should("contain", "select 1")
     cy.clickLine(2)
     cy.getByDataHook("success-notification").should("contain", "select 2")
+  })
+})
+
+describe("import/export tabs", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth()
+    cy.getEditorTabs().should("be.visible")
+  })
+
+  it("should show error toast when importing invalid file", () => {
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/invalid-tabs-export.json",
+      { force: true },
+    )
+
+    cy.get(".toast-error-container")
+      .should("be.visible")
+      .should("contain", "Invalid file format")
+      .should("contain", "Item [0]: label must be a string")
+  })
+
+  it("should import tabs successfully with active and archived tabs", () => {
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/valid-tabs-export.json",
+      { force: true },
+    )
+
+    cy.get(".toast-success-container")
+      .should("be.visible")
+      .should("contain", "Imported 3 tabs successfully")
+      .click()
+
+    cy.getEditorTabByTitle("Imported Tab 1").should("be.visible")
+    cy.getEditorTabByTitle("Imported Tab 2").should("be.visible")
+
+    cy.getByDataHook("editor-tabs-history-button").click()
+    cy.getByDataHook("editor-tabs-history").should("be.visible")
+    cy.getByDataHook("editor-tabs-history-item").should(
+      "contain",
+      "Archived Import",
+    )
   })
 })

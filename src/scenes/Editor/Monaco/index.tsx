@@ -247,6 +247,7 @@ const EditorWrapper = styled.div`
   flex: 1;
   overflow: hidden;
   position: relative;
+  padding: 8px 0 0 0;
 `
 
 const getDefaultLineNumbersMinChars = (canUseAI: boolean) => {
@@ -2067,6 +2068,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               },
               stickyScroll: {
                 enabled: false,
+              },
+              scrollbar: {
+                useShadows: false,
               },
               selectOnLineNumbers: false,
               scrollBeyondLastLine: false,

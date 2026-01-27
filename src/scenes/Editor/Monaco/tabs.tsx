@@ -4,6 +4,14 @@ import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor } from "../../../providers"
 import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
 import {
+  DotsThreeVerticalIcon,
+  DownloadSimpleIcon,
+  UploadSimpleIcon,
+} from "@phosphor-icons/react"
+import { toast } from "../../../components/Toast"
+import { db } from "../../../store/db"
+import { validateBufferSchema, sanitizeBuffer } from "./importTabs"
+import {
   Box,
   Button,
   DropdownMenu,
@@ -50,6 +58,11 @@ const DropdownMenuContent = styled(DropdownMenu.Content)`
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
+const ArchivedBuffersList = styled.div`
+  max-height: 70vh;
+  overflow-y: auto;
+`
+
 const mapTabIconToType = (buffer: Buffer) => {
   if (buffer.metricsViewState) {
     return "assets/icon-chart.svg"
@@ -75,6 +88,83 @@ export const Tabs = () => {
   const [tabsVisible, setTabsVisible] = useState(false)
   const userLocale = useMemo(fetchUserLocale, [])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const handleExportTabs = async () => {
+    const allBuffers = await db.buffers.toArray()
+    const exportData = allBuffers
+      .filter((b) => !b.isTemporary && !b.isPreviewBuffer)
+      .map(({ id: _id, ...rest }) => rest)
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `questdb-tabs-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportTabs = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".json"
+    input.style.display = "none"
+    input.dataset.hook = "editor-tabs-import-input"
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      try {
+        const text = await file.text()
+        const data: unknown = JSON.parse(text)
+
+        const validationResult = validateBufferSchema(data)
+        if (validationResult !== true) {
+          toast.error(`Invalid file format: ${validationResult}`)
+          return
+        }
+
+        const sanitizedData = (data as Record<string, unknown>[]).map(
+          sanitizeBuffer,
+        )
+
+        await db.transaction("rw", db.buffers, async () => {
+          const maxPosition = Math.max(...buffers.map((b) => b.position), 0)
+          let activeTabCount = 0
+          for (const tab of sanitizedData) {
+            const isArchived = tab.archived === true
+            await db.buffers.add({
+              ...tab,
+              position: isArchived ? -1 : maxPosition + activeTabCount + 1,
+            })
+            if (!isArchived) {
+              activeTabCount++
+            }
+          }
+        })
+
+        toast.success(
+          `Imported ${sanitizedData.length} tab${sanitizedData.length === 1 ? "" : "s"} successfully.`,
+        )
+      } catch (err) {
+        console.error("Import error:", err)
+        if (err instanceof SyntaxError) {
+          toast.error("Failed to parse JSON file.")
+        } else if (err instanceof Error && err.name === "QuotaExceededError") {
+          toast.error("Storage quota exceeded. Please free up space.")
+        } else {
+          toast.error("Failed to import tabs.")
+        }
+      } finally {
+        input.remove()
+      }
+    }
+    document.body.appendChild(input)
+    input.click()
+  }
 
   const archivedBuffers = buffers
     .filter(
@@ -144,13 +234,6 @@ export const Tabs = () => {
       await deleteBuffer(parseInt(id))
     }
     await repositionActiveBuffers(id)
-    if (archivedBuffers.length >= 10) {
-      await Promise.all(
-        archivedBuffers
-          .slice(9)
-          .map((buffer) => deleteBuffer(buffer.id as number)),
-      )
-    }
   }
 
   const reorder = async (
@@ -209,7 +292,6 @@ export const Tabs = () => {
       data-hook={`editor-tabs${tabsDisabled ? "-disabled" : ""}`}
     >
       <ReactChromeTabs
-        limit={40}
         darkMode
         onTabClose={close}
         onTabReorder={reorder}
@@ -257,78 +339,84 @@ export const Tabs = () => {
             <HistoryButton
               skin="transparent"
               data-hook="editor-tabs-history-button"
-              prefixIcon={<History size="20px" />}
               {...(historyOpen ? { className: "active" } : {})}
             >
-              History
+              <History size="20px" />
             </HistoryButton>
           </ForwardRef>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenuContent data-hook="editor-tabs-history">
-            {archivedBuffers.length === 0 && (
+            {archivedBuffers.length === 0 ? (
               <div style={{ padding: "0 1rem" }}>
                 <Text color="gray2">History is empty</Text>
               </div>
-            )}
-            {archivedBuffers.map((buffer) => (
-              <DropdownMenu.Item
-                data-hook="editor-tabs-history-item"
-                key={buffer.id}
-                onClick={async () => {
-                  await updateBuffer(buffer.id as number, {
-                    archived: false,
-                    archivedAt: undefined,
-                    position: buffers.filter(
-                      (b) => !b.archived || b.isTemporary,
-                    ).length,
-                  })
-                  await setActiveBuffer(buffer)
-                }}
-              >
-                <Box
-                  align="flex-start"
-                  justifyContent="flex-start"
-                  gap="0.5rem"
-                  title={buffer.label}
-                >
-                  {buffer.metricsViewState ? (
-                    <LineChart size="18px" />
-                  ) : (
-                    <File size="18px" />
-                  )}
-                  <Box
-                    flexDirection="column"
-                    align="flex-start"
-                    gap="0"
-                    {...(buffer.archivedAt
-                      ? {
-                          title: format(new Date(buffer.archivedAt), "P pppp", {
-                            locale: getLocaleFromLanguage(userLocale),
-                          }),
-                        }
-                      : {})}
+            ) : (
+              <ArchivedBuffersList>
+                {archivedBuffers.map((buffer) => (
+                  <DropdownMenu.Item
+                    data-hook="editor-tabs-history-item"
+                    key={buffer.id}
+                    onClick={async () => {
+                      await updateBuffer(buffer.id as number, {
+                        archived: false,
+                        archivedAt: undefined,
+                        position: buffers.filter(
+                          (b) => !b.archived || b.isTemporary,
+                        ).length,
+                      })
+                      await setActiveBuffer(buffer)
+                    }}
                   >
-                    <Text color="foreground" ellipsis>
-                      {buffer.label.substring(0, 30)}
-                      {buffer.label.length > 30 ? "..." : ""}
-                    </Text>
-                    {buffer.archivedAt && (
-                      <Text color="gray2">
-                        {formatDistance(
-                          buffer.archivedAt,
-                          new Date().getTime(),
-                          {
-                            locale: getLocaleFromLanguage(userLocale),
-                          },
+                    <Box
+                      align="flex-start"
+                      justifyContent="flex-start"
+                      gap="0.5rem"
+                      title={buffer.label}
+                    >
+                      {buffer.metricsViewState ? (
+                        <LineChart size="18px" />
+                      ) : (
+                        <File size="18px" />
+                      )}
+                      <Box
+                        flexDirection="column"
+                        align="flex-start"
+                        gap="0"
+                        {...(buffer.archivedAt
+                          ? {
+                              title: format(
+                                new Date(buffer.archivedAt),
+                                "P pppp",
+                                {
+                                  locale: getLocaleFromLanguage(userLocale),
+                                },
+                              ),
+                            }
+                          : {})}
+                      >
+                        <Text color="foreground" ellipsis>
+                          {buffer.label.substring(0, 30)}
+                          {buffer.label.length > 30 ? "..." : ""}
+                        </Text>
+                        {buffer.archivedAt && (
+                          <Text color="gray2">
+                            {formatDistance(
+                              buffer.archivedAt,
+                              new Date().getTime(),
+                              {
+                                locale: getLocaleFromLanguage(userLocale),
+                              },
+                            )}
+                            {" ago"}
+                          </Text>
                         )}
-                        {" ago"}
-                      </Text>
-                    )}
-                  </Box>
-                </Box>
-              </DropdownMenu.Item>
-            ))}
+                      </Box>
+                    </Box>
+                  </DropdownMenu.Item>
+                ))}
+              </ArchivedBuffersList>
+            )}
             {archivedBuffers.length > 0 && (
               <>
                 <DropdownMenu.Divider />
@@ -341,6 +429,37 @@ export const Tabs = () => {
                 </DropdownMenu.Item>
               </>
             )}
+          </DropdownMenuContent>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+      <DropdownMenu.Root modal={false} onOpenChange={setMenuOpen}>
+        <DropdownMenu.Trigger asChild>
+          <ForwardRef>
+            <HistoryButton
+              skin="transparent"
+              data-hook="editor-tabs-menu-button"
+              {...(menuOpen ? { className: "active" } : {})}
+            >
+              <DotsThreeVerticalIcon size={20} weight="bold" />
+            </HistoryButton>
+          </ForwardRef>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenuContent data-hook="editor-tabs-menu">
+            <DropdownMenu.Item
+              onClick={handleImportTabs}
+              data-hook="editor-tabs-menu-import"
+            >
+              <UploadSimpleIcon size={18} />
+              <Text color="foreground">Import tabs</Text>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onClick={handleExportTabs}
+              data-hook="editor-tabs-menu-export"
+            >
+              <DownloadSimpleIcon size={18} />
+              <Text color="foreground">Export tabs</Text>
+            </DropdownMenu.Item>
           </DropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
