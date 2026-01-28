@@ -27,6 +27,7 @@ import {
 import { Drawer, Box, Text, CopyButton, Button } from "../../../components"
 import { Badge, BadgeType } from "../../../components/Badge"
 import { LiteEditor } from "../../../components/LiteEditor"
+import { hideColumnsFromTableDDL } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import { QuestContext } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
@@ -268,6 +269,11 @@ const HealthDot = styled.div<{ $severity: HealthSeverity }>`
         return theme.color.green
     }
   }};
+`
+
+const StyledCopyButton = styled(CopyButton)`
+  margin-left: auto;
+  background: transparent;
 `
 
 const IngestionStatusContainer = styled(Box).attrs({
@@ -602,6 +608,11 @@ export const TableDetailsDrawer = () => {
     return calculateHealthStatus(tableData, matViewData, trendData, isMatView)
   }, [tableData, matViewData, trendData, isMatView])
 
+  const truncatedDDL = useMemo(() => {
+    if (!ddl) return { text: "", grayedOutLines: null }
+    return hideColumnsFromTableDDL(ddl, columns)
+  }, [ddl, columns])
+
   const isIngestionActive = useMemo(() => {
     return detectIngestionActive(trendData.ingestionMetric)
   }, [trendData.ingestionMetric])
@@ -638,7 +649,7 @@ export const TableDetailsDrawer = () => {
       }}
       withCloseButton
       titleColor={
-        isMatView ? theme.color.loginBackground : theme.color.tableSelection
+        isMatView ? theme.color.loginBackground : theme.color.backgroundLighter
       }
       title={
         <TitleContainer>
@@ -646,7 +657,7 @@ export const TableDetailsDrawer = () => {
             <HealthDot $severity={healthStatus.overallSeverity} />
           )}
           <TableName ellipsis>{tableName}</TableName>
-          <CopyButton size="sm" text={tableName} iconOnly />
+          <StyledCopyButton size="sm" text={tableName} iconOnly />
         </TitleContainer>
       }
       afterTitle={
@@ -972,12 +983,14 @@ export const TableDetailsDrawer = () => {
                 <CodeIcon size="16px" weight="bold" />
 
                 <SectionTitle>DDL</SectionTitle>
+                <StyledCopyButton size="sm" text={ddl} iconOnly />
               </SectionTitleContainer>
               {ddl && (
                 <LiteEditor
-                  value={ddl}
-                  maxHeight={200}
+                  value={truncatedDDL.text}
+                  hideToolbar
                   onOpenInEditor={() => {}}
+                  grayedOutLines={truncatedDDL.grayedOutLines}
                 />
               )}
             </Section>

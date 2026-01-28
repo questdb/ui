@@ -665,15 +665,18 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         item.kind === "view"
       ) {
         const canSuspend = item.kind !== "view" // Views cannot be suspended
-        const handleOpenDetailsDrawer = () => {
-          dispatch(
-            actions.console.setTableDetailsTarget({
-              tableName: item.name,
-              isMatView: item.kind === "matview",
-            }),
-          )
-          dispatch(actions.console.setActiveSidebar("tableDetails"))
-        }
+        const handleOpenDetailsDrawer =
+          item.kind !== "view"
+            ? () => {
+                dispatch(
+                  actions.console.setTableDetailsTarget({
+                    tableName: item.name,
+                    isMatView: item.kind === "matview",
+                  }),
+                )
+                dispatch(actions.console.setActiveSidebar("tableDetails"))
+              }
+            : undefined
         return (
           <>
             <ContextMenu

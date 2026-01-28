@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react"
-import { Editor, DiffEditor } from "@monaco-editor/react"
+import { Editor, DiffEditor, type Monaco } from "@monaco-editor/react"
+import type { editor } from "monaco-editor"
 import { QuestDBLanguageName } from "../../scenes/Editor/Monaco/utils"
 import styled, { useTheme } from "styled-components"
 import { Button } from "../Button"
@@ -63,6 +64,10 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   &:hover .open-in-editor-btn {
     opacity: 1;
   }
+
+  .grayed-out-line {
+    opacity: 0.5;
+  }
 `
 
 const OpenInEditorButton = styled(Button).attrs({ skin: "transparent" })`
@@ -108,7 +113,8 @@ type BaseLiteEditorProps = {
   theme?: string
   fontSize?: number
   lineHeight?: number
-  maxHeight: number
+  maxHeight?: number
+  hideToolbar?: boolean
 }
 
 type RegularEditorProps = BaseLiteEditorProps & {
@@ -116,6 +122,7 @@ type RegularEditorProps = BaseLiteEditorProps & {
   value: string
   original?: never
   modified?: never
+  grayedOutLines?: [number, number] | null
 }
 
 type DiffEditorProps = BaseLiteEditorProps & {
@@ -174,6 +181,7 @@ type LiteEditorContentProps = Omit<BaseLiteEditorProps, "maxHeight"> &
         modified: string
         value?: never
         handleScrollNeeded: () => void
+        grayedOutLines?: never
       }
     | {
         diffEditor: false
@@ -181,10 +189,36 @@ type LiteEditorContentProps = Omit<BaseLiteEditorProps, "maxHeight"> &
         original?: never
         modified?: never
         handleScrollNeeded?: never
+        grayedOutLines?: [number, number] | null
       }
   ) & {
     setContentHeight: (contentHeight: number) => void
   }
+
+const applyGrayedOutDecorations = (
+  editor: editor.IStandaloneCodeEditor,
+  monaco: Monaco,
+  grayedOutLines: [number, number],
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const [startLine, endLine] = grayedOutLines
+
+  editor.createDecorationsCollection([
+    {
+      range: new monaco.Range(
+        startLine,
+        1,
+        endLine,
+        model.getLineMaxColumn(endLine),
+      ),
+      options: {
+        inlineClassName: "grayed-out-line",
+      },
+    },
+  ])
+}
 
 const LiteEditorContent = React.memo(
   (props: LiteEditorContentProps) => {
@@ -267,13 +301,16 @@ const LiteEditorContent = React.memo(
         language={language}
         value={value}
         theme={theme}
-        onMount={(editor) => {
+        onMount={(editor, monaco) => {
           setContentHeight(editor.getContentHeight())
           editor.onDidContentSizeChange((e) => {
             if (e.contentHeightChanged) {
               setContentHeight(e.contentHeight)
             }
           })
+          if (props.grayedOutLines) {
+            applyGrayedOutDecorations(editor, monaco, props.grayedOutLines)
+          }
         }}
         options={{
           automaticLayout: true,
@@ -312,7 +349,9 @@ const LiteEditorContent = React.memo(
       prevProps.value === nextProps.value &&
       prevProps.diffEditor === nextProps.diffEditor &&
       prevProps.original === nextProps.original &&
-      prevProps.modified === nextProps.modified
+      prevProps.modified === nextProps.modified &&
+      prevProps.grayedOutLines?.[0] === nextProps.grayedOutLines?.[0] &&
+      prevProps.grayedOutLines?.[1] === nextProps.grayedOutLines?.[1]
     )
   },
 )
@@ -323,6 +362,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   fontSize = 12,
   lineHeight = 20,
   maxHeight,
+  hideToolbar = false,
   ...props
 }) => {
   const [copied, setCopied] = useState(false)
@@ -333,8 +373,10 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const effectiveHeight = Math.min(contentHeight, maxHeight)
-  const showToolbarForRegularEditor = contentHeight > maxHeight
+  const effectiveHeight =
+    maxHeight !== undefined ? Math.min(contentHeight, maxHeight) : contentHeight
+  const showToolbarForRegularEditor =
+    !hideToolbar && maxHeight !== undefined && contentHeight > maxHeight
 
   if (props.diffEditor) {
     return (
@@ -346,11 +388,13 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           paddingBottom: 8,
         }}
       >
-        <LiteEditorToolbar
-          onOpenInEditor={props.onOpenInEditor}
-          onCopy={() => handleCopy(props.modified)}
-          copied={copied}
-        />
+        {!hideToolbar && (
+          <LiteEditorToolbar
+            onOpenInEditor={props.onOpenInEditor}
+            onCopy={() => handleCopy(props.modified)}
+            copied={copied}
+          />
+        )}
         <LiteEditorContent
           diffEditor
           original={props.original}
@@ -373,7 +417,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           onCopy={() => handleCopy(props.value ?? "")}
           copied={copied}
         />
-      ) : (
+      ) : !hideToolbar ? (
         <CopyButtonFloating
           skin="transparent"
           onClick={() => handleCopy(props.value ?? "")}
@@ -382,7 +426,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           {copied && <SuccessIcon size="1rem" />}
           <FileCopy size="1.8rem" />
         </CopyButtonFloating>
-      )}
+      ) : null}
       <LiteEditorContent
         diffEditor={false}
         value={props.value}
@@ -391,6 +435,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
         fontSize={fontSize}
         lineHeight={lineHeight}
         setContentHeight={setContentHeight}
+        grayedOutLines={props.grayedOutLines}
       />
     </EditorWrapper>
   )

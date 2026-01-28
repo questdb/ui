@@ -19,19 +19,21 @@ export const CopyButton = ({
   text,
   iconOnly,
   size = "md",
+  ...props
 }: {
   text: string
   iconOnly?: boolean
   size?: ButtonProps["size"]
-}) => {
+} & ButtonProps) => {
   const [copied, setCopied] = useState(false)
 
   return (
     <StyledButton
+      {...props}
       skin="secondary"
       size={size}
       data-hook="copy-value"
-      onClick={(e) => {
+      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
         void copyToClipboard(text)
         e.stopPropagation()
         setCopied(true)
