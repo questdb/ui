@@ -1118,7 +1118,11 @@ export const createQueryKey = (
 export const parseQueryKey = (
   queryKey: QueryKey,
 ): { queryText: string; startOffset: number; endOffset: number } => {
-  const [queryText, offsets] = queryKey.split("@")
+  const separatorIndex = queryKey.lastIndexOf("@")
+
+  const queryText = queryKey.slice(0, separatorIndex)
+  const offsets = queryKey.slice(separatorIndex + 1)
+
   const [startOffset, endOffset] = offsets.split("-")
   return {
     queryText,

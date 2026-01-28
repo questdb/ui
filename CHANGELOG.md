@@ -17,6 +17,33 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.13 - 2026.01.27
+### Added
+- ai assistant improvements [#529](https://github.com/questdb/ui/pull/529)
+- add cookbook section to AI documentation flow [#531](https://github.com/questdb/ui/pull/531)
+
+
+## 1.1.12 - 2026.01.13
+### Fixed
+- prevent scrolling suggestions and code examples from assistant [#527](https://github.com/questdb/ui/pull/527)
+- resolve news image zoom flickering on hover [#526](https://github.com/questdb/ui/pull/526)
+- render HTML entities in grid cells after XSS fix [#525](https://github.com/questdb/ui/pull/525)
+- do not move cursor if the query execution is successful [#524](https://github.com/questdb/ui/pull/524)
+
+
+## 1.1.11 - 2026.01.09
+### Fixed
+- declare statements breaking query key parsing [#522](https://github.com/questdb/ui/pull/522)
+
+
+## 1.1.10 - 2026.01.08
+### Added
+- views support [#512](https://github.com/questdb/ui/pull/512)
+
+### Fixed
+- XSS security vulnerability [#519](https://github.com/questdb/ui/pull/519)
+
+
 ## 1.1.9 - 2026.01.02
 ### Added
 - AI assistant with chat window [#507](https://github.com/questdb/ui/pull/507)

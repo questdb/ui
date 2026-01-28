@@ -6,7 +6,7 @@ import {
   PrimaryToggleButton,
 } from "../../components"
 import styled from "styled-components"
-import React, { useEffect, useState, useContext } from "react"
+import React, { useEffect, useState, useContext, useRef } from "react"
 import { QuestContext } from "../../providers"
 import { NewsItem } from "../../utils"
 import { useDispatch, useSelector } from "react-redux"
@@ -93,8 +93,11 @@ const News = () => {
   // This boolean is to animate the bell icon and display a bullet indicator
   const [hasUnreadNews, setHasUnreadNews] = useState(false)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const imageToZoom = useSelector(selectors.console.getImageToZoom)
 
-  let hoverTimeout: ReturnType<typeof setTimeout>
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const imageToZoomRef = useRef(imageToZoom)
+  imageToZoomRef.current = imageToZoom
 
   const getEnterpriseNews = async () => {
     setIsLoading(true)
@@ -248,7 +251,7 @@ const News = () => {
                         ? {
                             onMouseOver: () => {
                               if (newsItem.thumbnail) {
-                                hoverTimeout = setTimeout(() => {
+                                hoverTimeoutRef.current = setTimeout(() => {
                                   if (newsItem && newsItem.thumbnail) {
                                     dispatch(
                                       actions.console.setImageToZoom({
@@ -268,12 +271,15 @@ const News = () => {
                               }
                             },
                             onMouseOut: () => {
-                              clearTimeout(hoverTimeout)
-                              setTimeout(() => {
-                                dispatch(
-                                  actions.console.setImageToZoom(undefined),
-                                )
-                              }, 250)
+                              clearTimeout(hoverTimeoutRef.current)
+                              // Only dismiss if zoom isn't visible (overlay intercepts mouse when visible)
+                              if (!imageToZoomRef.current) {
+                                setTimeout(() => {
+                                  dispatch(
+                                    actions.console.setImageToZoom(undefined),
+                                  )
+                                }, 250)
+                              }
                             },
                           }
                         : {})}

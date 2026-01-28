@@ -6,13 +6,14 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     if: |
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.event.head_commit.message, 'release: ')
@@ -21,22 +22,15 @@ jobs:
       changelog: ${{ steps.extract-changelog.outputs.changelog }}
 
     steps:
-      - name: Debug workflow info
-        run: |
-          echo "=== Workflow Debug Info ==="
-          echo "Branch: ${{ github.ref_name }}"
-          echo "SHA: ${{ github.sha }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Using native npm publish (not JS-DevTools)"
-
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "yarn"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: yarn install --immutable

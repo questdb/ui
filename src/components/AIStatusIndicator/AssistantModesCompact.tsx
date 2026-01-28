@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
-import styled, { css } from "styled-components"
-import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
+import styled, { css, useTheme } from "styled-components"
+import { CloseCircle } from "@styled-icons/remix-fill"
 import { FileText, Table } from "@styled-icons/remix-line"
-import { ChevronDown, ChevronRight } from "@styled-icons/boxicons-solid"
+import { CheckIcon as CheckIconRaw } from "@phosphor-icons/react"
+import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
   AIOperationStatus,
@@ -11,11 +12,13 @@ import {
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
+import { buildOperationSections, type OperationSection } from "./AssistantModes"
+import { slideAnimation } from "../../components/Animation"
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.4rem;
   align-items: flex-start;
   width: 100%;
   overflow-y: auto;
@@ -24,9 +27,10 @@ const Container = styled.div`
 `
 
 const ModeHeader = styled.div<{ $expanded: boolean; $abort: boolean }>`
-  border: 1px solid ${color("selection")};
-  border-radius: 0.4rem;
   display: flex;
+  flex-shrink: 0;
+  width: 100%;
+
   ${({ $expanded }) =>
     $expanded
       ? css`
@@ -36,80 +40,119 @@ const ModeHeader = styled.div<{ $expanded: boolean; $abort: boolean }>`
       : css`
           align-items: center;
           justify-content: space-between;
-          padding: 1rem 1.2rem;
+          padding: 0.4rem;
         `}
   ${({ $abort }) =>
     $abort &&
     css`
-      border-color: ${color("red")};
+      opacity: 0.7;
     `}
-  width: 100%;
+  gap: 0.8rem;
 `
 
-const ModeHeaderTop = styled.div<{ $expanded: boolean }>`
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  ${({ $expanded }) =>
-    $expanded &&
-    css`
-      border-bottom: 1px solid ${color("selection")};
-      padding: 1rem 1.2rem;
-      width: 100%;
-    `}
-  ${({ $expanded }) =>
-    !$expanded &&
-    css`
-      flex: 1 0 0;
-      min-height: 0;
-      min-width: 0;
-    `}
-`
-
-const ModeChevron = styled.div`
-  width: 1.6rem;
-  height: 1.6rem;
+const ModeChevron = styled.div<{ $expanded?: boolean }>`
+  width: 1.4rem;
+  height: 1.4rem;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${color("foreground")};
+  color: ${color("gray2")};
+  margin-left: -0.3rem;
   cursor: pointer;
-
-  &:hover {
-    opacity: 0.8;
-  }
+  transition:
+    color 0.2s,
+    transform 0.2s;
+  transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
 `
 
-const ModeTitle = styled.div`
+const ModeTitle = styled.div<{ $isActive: boolean; $isTopLevel?: boolean }>`
   font-weight: 500;
   font-size: 1.4rem;
-  color: ${color("foreground")};
+  color: ${color("gray2")};
   text-align: center;
   margin-right: auto;
+  transition: color 0.2s;
+  flex-shrink: 0;
+
+  ${({ $isActive }) => $isActive && slideAnimation}
+  ${({ $isTopLevel }) =>
+    $isTopLevel &&
+    css`
+      color: ${color("foreground")};
+    `}
+`
+
+const ModeHeaderTop = styled.div<{
+  $expanded: boolean
+  $isExpandable?: boolean
+}>`
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  flex-shrink: 0;
+  ${({ $expanded }) =>
+    $expanded &&
+    css`
+      padding: 0.4rem;
+    `}
+  ${({ $expanded }) =>
+    !$expanded &&
+    css`
+      min-height: 0;
+      min-width: 0;
+    `}
+  ${({ $isExpandable }) =>
+    $isExpandable &&
+    css`
+      cursor: pointer;
+      user-select: none;
+      &:hover ${ModeTitle}, &:hover ${ModeChevron} {
+        color: ${color("foreground")};
+      }
+    `}
+`
+
+const ExpandableWrapper = styled.div<{ $expanded: boolean }>`
+  display: grid;
+  grid-template-rows: ${({ $expanded }) => ($expanded ? "1fr" : "0fr")};
+  transition:
+    grid-template-rows 0.1s ease-out,
+    opacity 0.3s ease-out;
+  width: 100%;
+
+  ${({ $expanded }) =>
+    !$expanded &&
+    css`
+      height: 0;
+      opacity: 0;
+    `}
+`
+
+const ExpandableContent = styled.div`
+  min-height: 0;
+  overflow: hidden;
 `
 
 const ReasoningThread = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem;
   align-items: flex-start;
-  padding: 1rem 1.2rem;
-  width: 100%;
+  padding: 0 2.8rem;
 `
 
 const ReasoningItem = styled.div`
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   align-items: center;
-  padding: 0.2rem 0.6rem;
+  padding: 0.4rem;
   padding-left: 0;
-  width: 100%;
 `
 
 const ReasoningIcon = styled.div`
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.4rem;
+  height: 1.4rem;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -119,7 +162,6 @@ const ReasoningIcon = styled.div`
 
 const ReasoningText = styled.div`
   display: flex;
-  flex: 1 0 0;
   flex-wrap: wrap;
   gap: 0.4rem;
   align-items: center;
@@ -129,28 +171,28 @@ const ReasoningText = styled.div`
 
 const ReasoningTextPart = styled.span`
   font-weight: 400;
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   color: ${color("gray2")};
 `
 
 const CodeBadge = styled.div`
-  background: #2d303e;
-  border: 1px solid #44475a;
-  border-radius: 0.6rem;
-  padding: 0.2rem 0.6rem;
+  background: ${color("background")};
+  border: 1px solid ${color("selection")};
+  border-radius: 0.4rem;
+  padding: 0 0.4rem;
   display: flex;
-  gap: 1rem;
   align-items: center;
-  position: relative;
+  justify-content: center;
+  transform: translateY(1px);
 `
 
 const CodeBadgeText = styled.span`
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
-  color: #9089fc;
+  font-size: 1.2rem;
+  color: ${color("purple")};
 `
 
-const CheckIcon = styled(CheckboxCircle)`
+const CheckIcon = styled(CheckIconRaw)`
   width: 1.6rem;
   height: 1.6rem;
   color: ${color("pink")};
@@ -162,13 +204,40 @@ const CloseCircleIcon = styled(CloseCircle)`
   flex-shrink: 0;
 `
 
-export type OperationSection = {
-  id: string
-  type: AIOperationStatus
-  active: boolean
-  operations: Array<{ type: AIOperationStatus; args?: StatusArgs }>
-  abort: boolean
-}
+const GradientCheckCircleIcon = ({ size = 20 }: { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 256 256"
+    style={{ flexShrink: 0 }}
+  >
+    <defs>
+      <linearGradient
+        id="checkCircleGradient"
+        x1="128"
+        x2="128"
+        y1="24"
+        y2="232"
+        gradientUnits="userSpaceOnUse"
+      >
+        <stop stopColor="#d14671" />
+        <stop offset="1" stopColor="#892c6c" />
+      </linearGradient>
+    </defs>
+    <path
+      fill="url(#checkCircleGradient)"
+      d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm45.66,85.66-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35a8,8,0,0,1,11.32,11.32Z"
+    />
+  </svg>
+)
+
+const CollapsedSectionsWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding-left: 2.8rem;
+`
 
 const formatDetailedStatusMessage = (
   status: AIOperationStatus,
@@ -194,57 +263,29 @@ const getIsExpandableSection = (section: OperationSection) => {
   ].includes(section.type)
 }
 
-export const buildOperationSections = (
-  operationHistory: OperationHistory,
-  currentStatus?: AIOperationStatus | null,
-  isLive?: boolean,
-): OperationSection[] => {
-  const sections: OperationSection[] = []
-  let currentSection: OperationSection | null = null
-
-  for (const op of operationHistory) {
-    const sectionType = op.type
-    if (!currentSection || currentSection.type !== sectionType) {
-      currentSection = {
-        id: `section-${sections.length}-${sectionType}`,
-        type: sectionType,
-        active: false,
-        abort: sectionType === AIOperationStatus.Aborted,
-        operations: [op],
-      }
-      sections.push(currentSection)
-    } else {
-      currentSection.operations.push(op)
-    }
-  }
-
-  const lastSection = sections[sections.length - 1]
-  if (isLive && lastSection && lastSection.type === currentStatus) {
-    lastSection.active = true
-  }
-  if (lastSection && lastSection.type === AIOperationStatus.Aborted) {
-    lastSection.active = false
-  }
-
-  return sections
-}
-
-type AssistantModesProps = {
+type AssistantModesCompactProps = {
   operationHistory: OperationHistory
   status?: AIOperationStatus | null
   isLive?: boolean
   onScrollNeeded?: () => void
+  collapsed?: boolean
+  responseStart?: number
 }
 
-export const AssistantModes: React.FC<AssistantModesProps> = ({
+export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
   operationHistory,
   status,
   isLive = false,
   onScrollNeeded,
+  collapsed = false,
+  responseStart,
 }) => {
+  const theme = useTheme()
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({})
+  const [collapsedProcessingExpanded, setCollapsedProcessingExpanded] =
+    useState(false)
   const prevSectionCountRef = useRef(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -256,16 +297,16 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
   const prevIsLiveRef = useRef(isLive)
 
   useEffect(() => {
-    // When operation completes (isLive goes from true to false), collapse all sections
     if (prevIsLiveRef.current && !isLive) {
       const allCollapsed: Record<string, boolean> = {}
       operationSections.forEach((section) => {
         allCollapsed[section.id] = true
       })
       setCollapsedSections(allCollapsed)
-    }
-    // During live operation, when a new section is added, collapse previous sections
-    else if (isLive && operationSections.length > prevSectionCountRef.current) {
+    } else if (
+      isLive &&
+      operationSections.length > prevSectionCountRef.current
+    ) {
       const newCollapsed: Record<string, boolean> = {}
       operationSections.forEach((section, index) => {
         if (index < operationSections.length - 1) {
@@ -280,57 +321,89 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
   }, [operationSections, isLive, onScrollNeeded])
 
   const handleToggleSection = (sectionId: string) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }))
+    setCollapsedSections((prev) => {
+      const section = operationSections.find((s) => s.id === sectionId)
+      const isExpandable = section ? getIsExpandableSection(section) : false
+      const sectionIndex = operationSections.findIndex(
+        (s) => s.id === sectionId,
+      )
+      const isLastSection = sectionIndex === operationSections.length - 1
+      const defaultExpanded = collapsed ? false : isLive ? isLastSection : true
+
+      if (prev[sectionId] === undefined) {
+        return {
+          ...prev,
+          [sectionId]: defaultExpanded && isExpandable,
+        }
+      }
+      return {
+        ...prev,
+        [sectionId]: !prev[sectionId],
+      }
+    })
   }
+
+  const durationText = useMemo(() => {
+    if (operationHistory.length === 0) return null
+    const firstTimestamp = operationHistory[0]?.timestamp
+    if (!firstTimestamp || !responseStart) return null
+    const durationMs = responseStart - firstTimestamp
+    if (durationMs < 0) return null
+    if (durationMs < 1000) {
+      return `${durationMs}ms`
+    }
+    const seconds = Math.round(durationMs / 1000)
+    return `${seconds}s`
+  }, [operationHistory, responseStart])
 
   if (operationHistory.length === 0) {
     return null
   }
 
-  return (
-    <Container ref={containerRef} data-hook="assistant-modes-container">
-      {operationSections.map((section, index) => {
-        const isExpandable = getIsExpandableSection(section)
-        const isLastSection = index === operationSections.length - 1
-        const defaultExpanded = isLive ? isLastSection : true
-        const isExpanded =
-          collapsedSections[section.id] === undefined
-            ? defaultExpanded && isExpandable
-            : !collapsedSections[section.id] && isExpandable
+  const sectionsContent = operationSections.map((section, index) => {
+    const isExpandable = getIsExpandableSection(section)
+    const isLastSection = index === operationSections.length - 1
+    const defaultExpanded = collapsed ? false : isLive ? isLastSection : true
+    const isExpanded =
+      collapsedSections[section.id] === undefined
+        ? defaultExpanded && isExpandable
+        : !collapsedSections[section.id] && isExpandable
 
-        return (
-          <ModeHeader
-            key={section.id}
-            $expanded={isExpanded}
-            $abort={section.abort}
-            data-hook={`assistant-mode-${section.type.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            <ModeHeaderTop $expanded={isExpanded}>
-              <ReasoningIcon>
-                {section.active ? (
-                  <CircleNotchSpinner size={16} />
-                ) : section.abort ? (
-                  <CloseCircleIcon size={16} />
-                ) : (
-                  <CheckIcon />
-                )}
-              </ReasoningIcon>
+    return (
+      <ModeHeader
+        key={section.id}
+        $expanded={isExpanded}
+        $abort={section.abort}
+      >
+        <ModeHeaderTop
+          $expanded={isExpanded}
+          $isExpandable={isExpandable}
+          data-hook={`assistant-mode-${section.type.toLowerCase().replace(/\s+/g, "-")}`}
+          role="presentation"
+          onClick={
+            isExpandable ? () => handleToggleSection(section.id) : undefined
+          }
+        >
+          <ReasoningIcon>
+            {section.active ? (
+              <CircleNotchSpinner size={14} />
+            ) : section.abort ? (
+              <CloseCircleIcon size={14} />
+            ) : (
+              <CheckIcon />
+            )}
+          </ReasoningIcon>
 
-              <ModeTitle>{section.type}</ModeTitle>
-              {isExpandable && (
-                <ModeChevron onClick={() => handleToggleSection(section.id)}>
-                  {isExpanded ? (
-                    <ChevronDown size={16} />
-                  ) : (
-                    <ChevronRight size={16} />
-                  )}
-                </ModeChevron>
-              )}
-            </ModeHeaderTop>
-            {isExpanded && (
+          <ModeTitle $isActive={section.active}>{section.type}</ModeTitle>
+          {isExpandable && (
+            <ModeChevron $expanded={isExpanded}>
+              <ChevronRight size={14} />
+            </ModeChevron>
+          )}
+        </ModeHeaderTop>
+        {isExpandable && (
+          <ExpandableWrapper $expanded={isExpanded}>
+            <ExpandableContent>
               <ReasoningThread>
                 {section.operations.map((op, idx) => {
                   const opKey = `${section.id}-${idx}-${JSON.stringify(op.args)}`
@@ -344,7 +417,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
                           <BrainIcon
-                            style={{ width: "16px", height: "16px" }}
+                            style={{ width: "14px", height: "14px" }}
                           />
                         </ReasoningIcon>
                         <ReasoningText>
@@ -364,7 +437,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                     return (
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
-                          <Table size={16} />
+                          <Table size={14} color={theme.color.gray2} />
                         </ReasoningIcon>
                         <ReasoningText>
                           <ReasoningTextPart>Investigating</ReasoningTextPart>
@@ -393,7 +466,10 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                             return (
                               <ReasoningItem key={itemKey}>
                                 <ReasoningIcon>
-                                  <FileText size={16} />
+                                  <FileText
+                                    size={14}
+                                    color={theme.color.gray2}
+                                  />
                                 </ReasoningIcon>
                                 <ReasoningText>
                                   {item.section ? (
@@ -440,7 +516,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                     return (
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
-                          <FileText size={16} />
+                          <FileText size={14} />
                         </ReasoningIcon>
                         <ReasoningText>
                           {name && docSection ? (
@@ -484,10 +560,47 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                   return null
                 })}
               </ReasoningThread>
-            )}
-          </ModeHeader>
-        )
-      })}
+            </ExpandableContent>
+          </ExpandableWrapper>
+        )}
+      </ModeHeader>
+    )
+  })
+
+  if (collapsed) {
+    return (
+      <Container ref={containerRef} data-hook="assistant-modes-container">
+        <ModeHeader $expanded={collapsedProcessingExpanded} $abort={false}>
+          <ModeHeaderTop
+            $expanded={collapsedProcessingExpanded}
+            $isExpandable
+            onClick={() => setCollapsedProcessingExpanded((prev) => !prev)}
+            data-hook="assistant-mode-processing-collapsed"
+            role="presentation"
+          >
+            <GradientCheckCircleIcon size={20} />
+            <ModeTitle $isActive={false}>
+              {durationText ? `Thought for ${durationText}` : "Thought"}
+            </ModeTitle>
+            <ModeChevron $expanded={collapsedProcessingExpanded}>
+              <ChevronRight size={14} />
+            </ModeChevron>
+          </ModeHeaderTop>
+          <ExpandableWrapper $expanded={collapsedProcessingExpanded}>
+            <ExpandableContent>
+              <CollapsedSectionsWrapper>
+                {sectionsContent}
+              </CollapsedSectionsWrapper>
+            </ExpandableContent>
+          </ExpandableWrapper>
+        </ModeHeader>
+      </Container>
+    )
+  }
+
+  return (
+    <Container ref={containerRef} data-hook="assistant-modes-container">
+      {sectionsContent}
     </Container>
   )
 }

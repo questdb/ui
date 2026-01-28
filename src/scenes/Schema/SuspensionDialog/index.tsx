@@ -11,6 +11,7 @@ import {
   Input,
   CopyButton,
 } from "../../../components"
+import { getTableKindLabel } from "../VirtualTables"
 import { Undo, CheckCircle } from "@styled-icons/boxicons-regular"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
@@ -86,7 +87,7 @@ const GENERIC_ERROR_TEXT = "Error restarting transaction"
 type Props = {
   tableName: string
   open: boolean
-  kind: "table" | "matview"
+  kind: "table" | "matview" | "view"
   onOpenChange: (open: boolean) => void
 }
 
@@ -200,8 +201,7 @@ export const SuspensionDialog = ({
           <Dialog.Title>
             <Box>
               <StyledTable size={20} $success={isSubmitted} />
-              {kind === "table" ? "Table" : "Materialized view"} is suspended:{" "}
-              {tableName}
+              {getTableKindLabel(kind)} is suspended: {tableName}
             </Box>
           </Dialog.Title>
 

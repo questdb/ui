@@ -53,6 +53,20 @@ export type MetricsViewState = {
   metrics?: Metric[]
 }
 
+export type PreviewContentDiff = {
+  type: "diff"
+  original: string
+  modified: string
+  conversationId?: string
+}
+
+export type PreviewContentCode = {
+  type: "code"
+  value: string
+}
+
+export type PreviewContent = PreviewContentDiff | PreviewContentCode
+
 export type Buffer = {
   /** auto incremented number by Dexie */
   id?: number
@@ -64,13 +78,8 @@ export type Buffer = {
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
   isTemporary?: boolean
-  isDiffBuffer?: boolean
-  diffContent?: {
-    original: string
-    modified: string
-    queryStartOffset: number
-    conversationId?: string
-  }
+  isPreviewBuffer?: boolean
+  previewContent?: PreviewContent
 }
 
 const defaultEditorViewState: editor.ICodeEditorViewState = {
@@ -116,8 +125,8 @@ export const makeBuffer = ({
   archived,
   archivedAt,
   isTemporary,
-  isDiffBuffer,
-  diffContent,
+  isPreviewBuffer,
+  previewContent,
 }: {
   label: string
   value?: string
@@ -127,24 +136,20 @@ export const makeBuffer = ({
   archived?: boolean
   archivedAt?: number
   isTemporary?: boolean
-  isDiffBuffer?: boolean
-  diffContent?: {
-    original: string
-    modified: string
-    queryStartOffset: number
-    conversationId?: string
-  }
+  isPreviewBuffer?: boolean
+  previewContent?: PreviewContent
 }): Omit<Buffer, "id"> => ({
   label,
   value: value ?? "",
-  editorViewState: metricsViewState ? undefined : editorViewState,
+  editorViewState:
+    metricsViewState || isPreviewBuffer ? undefined : editorViewState,
   metricsViewState,
   position,
   archived,
   archivedAt,
   isTemporary,
-  isDiffBuffer,
-  diffContent,
+  isPreviewBuffer,
+  previewContent,
 })
 
 export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {

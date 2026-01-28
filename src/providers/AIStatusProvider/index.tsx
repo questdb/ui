@@ -15,6 +15,7 @@ import {
   providerForModel,
   canUseAiAssistant,
 } from "../../utils/aiAssistantSettings"
+import { useAIConversation } from "../AIConversationProvider"
 
 export const useAIStatus = () => {
   const context = useContext(AIStatusContext)
@@ -39,10 +40,11 @@ const AIStatusContext = createContext<AIStatusContextType | undefined>(
 export enum AIOperationStatus {
   Processing = "Processing request",
   RetrievingTables = "Reviewing tables",
-  InvestigatingTableSchema = "Investigating table schema",
+  InvestigatingTable = "Investigating table",
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
-  ValidatingQuery = "Validating generated query",
+  ValidatingQuery = "Validating query",
+  GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
 }
@@ -51,12 +53,14 @@ export type StatusArgs = {
   conversationId?: string
   name?: string
   section?: string
+  tableOpType?: "schema" | "details"
   items?: Array<{ name: string; section?: string }>
 }
 
 export type StatusEntry = {
   type: AIOperationStatus
   args?: StatusArgs
+  timestamp: number
 }
 
 export type OperationHistory = StatusEntry[]
@@ -97,12 +101,14 @@ interface AIStatusProviderProps {
 export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   children,
 }) => {
+  const { isStreaming } = useAIConversation()
   const { aiAssistantSettings } = useLocalStorage()
   const [status, setStatusState] = useState<AIOperationStatus | null>(null)
   const [currentOperation, setCurrentOperation] = useState<OperationHistory>([])
   const [abortController, setAbortController] = useState<AbortController>(
     new AbortController(),
   )
+  const isStreamingRef = useRef(isStreaming)
   const abortControllerRef = useRef<AbortController | null>(null)
   const statusRef = useRef<AIOperationStatus | null>(null)
   const currentOperationRef = useRef<OperationHistory>([])
@@ -150,13 +156,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       onUpdate?: (history: OperationHistory) => void,
     ) => {
       if (newStatus !== null) {
-        const statusPayload = {
+        const statusPayload: StatusEntry = {
           type: newStatus,
           args: args || undefined,
+          timestamp: Date.now(),
         }
         if (
           statusRef.current === null ||
-          statusRef.current === AIOperationStatus.Aborted
+          (statusRef.current === AIOperationStatus.Aborted &&
+            newStatus !== AIOperationStatus.Aborted)
         ) {
           currentOperationRef.current = [statusPayload]
         } else {
@@ -209,6 +217,17 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   useEffect(() => {
     abortControllerRef.current = abortController
   }, [abortController])
+
+  useEffect(() => {
+    if (!isStreamingRef.current && isStreaming) {
+      setStatus(AIOperationStatus.GeneratingResponse)
+    } else if (isStreamingRef.current && !isStreaming) {
+      if (statusRef.current !== AIOperationStatus.Aborted) {
+        setStatus(null)
+      }
+    }
+    isStreamingRef.current = isStreaming
+  }, [isStreaming])
 
   useEffect(() => {
     return () => {

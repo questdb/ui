@@ -13,7 +13,7 @@ export type TokenUsage = {
 
 export type SchemaDisplayData = {
   tableName: string
-  isMatView: boolean
+  kind: "table" | "matview" | "view"
   partitionBy?: PartitionBy
   walEnabled?: boolean
   designatedTimestamp?: string
@@ -40,6 +40,7 @@ export type ConversationMessage = {
   hideFromUI?: boolean // User messages for accept/reject and compaction result are hidden
   isCompacted?: boolean // When converted to true, we include it in the history for UI, but do not send to the model anymore
   operationHistory?: OperationHistory
+  responseStart?: number
   // Predefined actions (Fix and Explain)
   displayType?: UserMessageDisplayType
   displayUserMessage?: string

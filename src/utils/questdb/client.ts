@@ -24,6 +24,7 @@ import {
   Preferences,
   Permission,
   SymbolColumnDetails,
+  View,
   ValidateQueryResult,
   ValidateQuerySuccessResult,
   ValidateQueryErrorResult,
@@ -407,10 +408,22 @@ export class Client {
     )
   }
 
+  async getTableDetails(table: string): Promise<QueryResult<Table>> {
+    return await this.query<Table>(`tables() where table_name = '${table}';`)
+  }
+
   async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
     return await this.query<{ ddl: string }>(
       `SHOW CREATE MATERIALIZED VIEW '${table}';`,
     )
+  }
+
+  async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
+    return await this.query<{ ddl: string }>(`SHOW CREATE VIEW '${viewName}';`)
+  }
+
+  async showViews(): Promise<QueryResult<View>> {
+    return await this.query<View>("views();")
   }
 
   async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {

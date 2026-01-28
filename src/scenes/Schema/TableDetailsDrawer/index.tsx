@@ -973,7 +973,13 @@ export const TableDetailsDrawer = () => {
 
                 <SectionTitle>DDL</SectionTitle>
               </SectionTitleContainer>
-              {ddl && <LiteEditor value={ddl} height="200px" />}
+              {ddl && (
+                <LiteEditor
+                  value={ddl}
+                  maxHeight={200}
+                  onOpenInEditor={() => {}}
+                />
+              )}
             </Section>
 
             {/* Columns Section */}

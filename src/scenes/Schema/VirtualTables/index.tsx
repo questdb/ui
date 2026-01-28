@@ -32,6 +32,7 @@ import {
   setSectionExpanded,
   TABLES_GROUP_KEY,
   MATVIEWS_GROUP_KEY,
+  VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { useSchema } from "../SchemaContext"
 import { QuestContext } from "../../../providers"
@@ -46,27 +47,21 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
-import {
-  explainTableSchema,
-  isAiAssistantError,
-  schemaExplanationToMarkdown,
-  type ActiveProviderSettings,
-  getExplainSchemaPrompt,
-} from "../../../utils/aiAssistant"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
   useAIStatus,
   isBlockingAIStatus,
-  type AIOperationStatus,
-  type StatusArgs,
-  type OperationHistory,
 } from "../../../providers/AIStatusProvider"
-import { providerForModel } from "../../../utils/aiAssistantSettings"
+import {
+  executeAIFlow,
+  createSchemaExplainFlowConfig,
+} from "../../../utils/executeAIFlow"
 import { AISparkle } from "../../../components/AISparkle"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
   materializedViews?: QuestDB.MaterializedView[]
+  views?: QuestDB.View[]
   filterSuspendedOnly: boolean
   state: State
   loadingError: ErrorResult | null
@@ -99,6 +94,8 @@ export type FlattenedTreeItem = {
   table?: QuestDB.Table
   column?: TreeColumn
   matViewData?: QuestDB.MaterializedView
+  viewData?: QuestDB.View
+  walTableData?: QuestDB.WalTable
   parent?: string
   isExpanded?: boolean
   isLoading?: boolean
@@ -157,6 +154,19 @@ const Loader = styled(Loader3)`
   ${spinAnimation};
 `
 
+export const getTableKindLabel = (kind: "table" | "matview" | "view") => {
+  switch (kind) {
+    case "table":
+      return "Table"
+    case "matview":
+      return "Materialized view"
+    case "view":
+      return "View"
+    default:
+      return ""
+  }
+}
+
 const Loading = () => {
   const [loaderShown, setLoaderShown] = useState(false)
   // Show the loader only for delayed fetching process
@@ -171,6 +181,7 @@ const Loading = () => {
 const VirtualTables: FC<VirtualTablesProps> = ({
   tables,
   materializedViews,
+  views,
   filterSuspendedOnly,
   state,
   loadingError,
@@ -197,6 +208,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     updateMessage,
     updateConversationName,
     persistMessages,
+    setIsStreaming,
   } = useAIConversation()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
@@ -218,7 +230,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null)
   useRetainLastFocus({ virtuosoRef, focusedIndex, setFocusedIndex, wrapperRef })
 
-  const [regularTables, matViewTables] = useMemo(() => {
+  const [regularTables, matViewTables, viewTables] = useMemo(() => {
     return tables
       .reduce(
         (acc, table: QuestDB.Table) => {
@@ -236,7 +248,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           const shownIfFilteredWithQuery = tableNameMatches || columnMatches
 
           if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
-            acc[table.matView ? 1 : 0].push({
+            // Use table_type to categorize: 'T' = table, 'M' = matview, 'V' = view
+            // Default to 'T' (table) for backward compatibility with older servers
+            const tableType =
+              (table.table_type as "T" | "M" | "V" | undefined) ?? "T"
+            const categoryIndex =
+              tableType === "M" ? 1 : tableType === "V" ? 2 : 0
+            acc[categoryIndex].push({
               ...table,
               hasColumnMatches: columnMatches,
             })
@@ -244,7 +262,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           }
           return acc
         },
-        [[], []] as (QuestDB.Table & { hasColumnMatches: boolean })[][],
+        [[], [], []] as (QuestDB.Table & { hasColumnMatches: boolean })[][],
       )
       .map((tables) =>
         tables.sort((a, b) =>
@@ -262,26 +280,36 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   const getTableSchema = async (
     tableName: string,
-    isMatView: boolean,
+    kind: "table" | "matview" | "view",
   ): Promise<string | null> => {
     try {
-      const response = isMatView
-        ? await quest.showMatViewDDL(tableName)
-        : await quest.showTableDDL(tableName)
+      const response =
+        kind === "matview"
+          ? await quest.showMatViewDDL(tableName)
+          : kind === "view"
+            ? await quest.showViewDDL(tableName)
+            : await quest.showTableDDL(tableName)
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
         return response.data[0].ddl
       }
     } catch (_error) {
-      toast.error(
-        `Cannot fetch schema for ${isMatView ? "materialized view" : "table"} '${tableName}'`,
-      )
+      const kindLabel =
+        kind === "matview"
+          ? "materialized view"
+          : kind === "view"
+            ? "view"
+            : "table"
+      toast.error(`Cannot fetch schema for ${kindLabel} '${tableName}'`)
     }
     return null
   }
 
-  const handleCopyQuery = async (tableName: string, isMatView: boolean) => {
-    const schema = await getTableSchema(tableName, isMatView)
+  const handleCopyQuery = async (
+    tableName: string,
+    kind: "table" | "matview" | "view",
+  ) => {
+    const schema = await getTableSchema(tableName, kind)
     if (schema) {
       await copyToClipboard(schema)
       toast.success("Schema copied to clipboard")
@@ -290,7 +318,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   const handleExplainSchema = async (item: FlattenedTreeItem) => {
     const tableName = item.name
-    const isMatView = item.kind === "matview"
+    const kind = item.kind as "table" | "matview" | "view"
     const tableId = item.table?.id
 
     if (!canUse) {
@@ -305,7 +333,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return
     }
 
-    const schema = await getTableSchema(tableName, isMatView)
+    const schema = await getTableSchema(tableName, kind)
     if (!schema) {
       return
     }
@@ -324,88 +352,35 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       conversation.id,
       `${tableName} schema explanation`,
     )
-    const userMessage = getExplainSchemaPrompt(tableName, schema, isMatView)
     await openChatWindow(conversation.id)
 
-    addMessage({
-      role: "user",
-      content: userMessage,
-      timestamp: Date.now(),
-      displayType: "schema_explain_request",
-      displaySchemaData: {
+    void executeAIFlow(
+      createSchemaExplainFlowConfig({
+        conversationId: conversation.id,
         tableName,
-        isMatView,
-        partitionBy: item.partitionBy,
-        walEnabled: item.walEnabled,
-        designatedTimestamp: item.designatedTimestamp,
+        schema,
+        kindLabel: getTableKindLabel(kind),
+        schemaDisplayData: {
+          tableName,
+          kind,
+          partitionBy: item.partitionBy,
+          walEnabled: item.walEnabled,
+          designatedTimestamp: item.designatedTimestamp,
+        },
+        settings: { model: currentModel, apiKey },
+        questClient: quest,
+        tables,
+        hasSchemaAccess,
+        abortSignal: abortController?.signal,
+      }),
+      {
+        addMessage,
+        updateMessage,
+        setStatus,
+        setIsStreaming,
+        persistMessages,
       },
-    })
-
-    const assistantMessageId = crypto.randomUUID()
-    addMessage({
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: Date.now(),
-      operationHistory: [],
-    })
-
-    const provider = providerForModel(currentModel)
-
-    const settings: ActiveProviderSettings = {
-      model: currentModel,
-      provider,
-      apiKey,
-    }
-
-    const handleStatusUpdate = (history: OperationHistory) => {
-      updateMessage(conversation.id, assistantMessageId, {
-        operationHistory: [...history],
-      })
-    }
-
-    const response = await explainTableSchema({
-      tableName,
-      schema,
-      isMatView,
-      settings,
-      setStatus: (status: AIOperationStatus | null, args?: StatusArgs) =>
-        setStatus(
-          status,
-          { ...(args ?? {}), conversationId: conversation.id },
-          handleStatusUpdate,
-        ),
-      abortSignal: abortController?.signal,
-    })
-
-    if (isAiAssistantError(response)) {
-      const error = response
-      updateMessage(conversation.id, assistantMessageId, {
-        error:
-          error.type !== "aborted"
-            ? error.message
-            : "Operation has been cancelled",
-      })
-      await persistMessages(conversation.id)
-      return
-    }
-
-    const result = response
-    if (!result.explanation) {
-      toast.error("No explanation received from AI Assistant", {
-        autoClose: 10000,
-      })
-      return
-    }
-
-    const markdownContent = schemaExplanationToMarkdown(result)
-    updateMessage(conversation.id, assistantMessageId, {
-      content: markdownContent,
-      explanation: markdownContent,
-      tokenUsage: result.tokenUsage,
-    })
-
-    await persistMessages(conversation.id)
+    )
   }
 
   const fetchSymbolColumnDetails = useCallback(
@@ -638,18 +613,31 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         )
       }
 
-      if (item.id === TABLES_GROUP_KEY || item.id === MATVIEWS_GROUP_KEY) {
+      if (
+        item.id === TABLES_GROUP_KEY ||
+        item.id === MATVIEWS_GROUP_KEY ||
+        item.id === VIEWS_GROUP_KEY
+      ) {
         const isTable = item.id === TABLES_GROUP_KEY
+        const isMatView = item.id === MATVIEWS_GROUP_KEY
+        const isEmpty = isTable
+          ? regularTables.length === 0
+          : isMatView
+            ? matViewTables.length === 0
+            : viewTables.length === 0
+        const hookLabel = isTable
+          ? "tables"
+          : isMatView
+            ? "materialized-views"
+            : "views"
         return (
           <SectionHeader
-            $disabled={
-              isTable ? regularTables.length === 0 : matViewTables.length === 0
-            }
+            $disabled={isEmpty}
             name={item.name}
             kind="folder"
             index={index}
             expanded={item.isExpanded}
-            data-hook={`${item.isExpanded ? "collapse" : "expand"}-${isTable ? "tables" : "materialized-views"}`}
+            data-hook={`${item.isExpanded ? "collapse" : "expand"}-${hookLabel}`}
             onExpandCollapse={() => toggleNodeExpansion(item.id)}
             id={item.id}
             navigateInTree={navigateInTree}
@@ -671,7 +659,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         )
       }
 
-      if (item.kind === "table" || item.kind === "matview") {
+      if (
+        item.kind === "table" ||
+        item.kind === "matview" ||
+        item.kind === "view"
+      ) {
+        const canSuspend = item.kind !== "view" // Views cannot be suspended
         const handleOpenDetailsDrawer = () => {
           dispatch(
             actions.console.setTableDetailsTarget({
@@ -709,10 +702,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                             `Materialized view is invalid${item.matViewData?.invalidation_reason && `: ${item.matViewData?.invalidation_reason}`}`,
                           ]
                         : []),
+                      ...(item.viewData?.view_status === "invalid"
+                        ? [
+                            `View is invalid${item.viewData?.invalidation_reason && `: ${item.viewData?.invalidation_reason}`}`,
+                          ]
+                        : []),
                       ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
-                  {item.table?.table_suspended && (
+                  {canSuspend && item.table?.table_suspended && (
                     <SuspensionDialog
                       tableName={item.name}
                       kind={item.kind}
@@ -735,7 +733,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 <MenuItem
                   data-hook="table-context-menu-copy-schema"
                   onClick={async () =>
-                    await handleCopyQuery(item.name, item.kind === "matview")
+                    await handleCopyQuery(
+                      item.name,
+                      item.kind as "table" | "matview" | "view",
+                    )
                   }
                   icon={<FileCopy size={16} />}
                 >
@@ -755,17 +756,19 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     Explain schema with AI
                   </MenuItem>
                 )}
-                <MenuItem
-                  data-hook="table-context-menu-resume-wal"
-                  onClick={() =>
-                    item.table?.table_suspended &&
-                    setTimeout(() => setOpenedSuspensionDialog(item.id))
-                  }
-                  icon={<Restart size={16} />}
-                  disabled={!item.table?.table_suspended}
-                >
-                  Resume WAL
-                </MenuItem>
+                {canSuspend && (
+                  <MenuItem
+                    data-hook="table-context-menu-resume-wal"
+                    onClick={() =>
+                      item.table?.table_suspended &&
+                      setTimeout(() => setOpenedSuspensionDialog(item.id))
+                    }
+                    icon={<Restart size={16} />}
+                    disabled={!item.table?.table_suspended}
+                  >
+                    Resume WAL
+                  </MenuItem>
+                )}
               </ContextMenuContent>
             </ContextMenu>
           </>
@@ -795,6 +798,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       flattenedItems,
       regularTables,
       matViewTables,
+      viewTables,
       toggleNodeExpansion,
       openedContextMenu,
       openedSuspensionDialog,
@@ -819,7 +823,9 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               table,
               TABLES_GROUP_KEY,
               false,
+              false,
               materializedViews,
+              views,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -848,7 +854,39 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               table,
               MATVIEWS_GROUP_KEY,
               true,
+              false,
               materializedViews,
+              views,
+              allColumns[table.table_name] ?? [],
+            )
+            if (table.hasColumnMatches) {
+              node.isExpanded = true
+              const columnsFolder = node.children.find((child) =>
+                child.id.endsWith(":columns"),
+              )
+              if (columnsFolder) {
+                columnsFolder.isExpanded = true
+              }
+            }
+            return node
+          }),
+        },
+        [VIEWS_GROUP_KEY]: {
+          id: VIEWS_GROUP_KEY,
+          kind: "folder",
+          name: `Views (${viewTables.length})`,
+          isExpanded:
+            viewTables.length === 0
+              ? false
+              : getSectionExpanded(VIEWS_GROUP_KEY),
+          children: viewTables.map((table) => {
+            const node = createTableNode(
+              table,
+              VIEWS_GROUP_KEY,
+              false,
+              true,
+              materializedViews,
+              views,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -868,7 +906,16 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       fetchedSymbolsRef.current.clear()
       setSchemaTree(newTree)
     }
-  }, [state.view, regularTables, matViewTables, materializedViews, allColumns])
+  }, [
+    state.view,
+    regularTables,
+    matViewTables,
+    viewTables,
+    materializedViews,
+    views,
+
+    allColumns,
+  ])
 
   useEffect(() => {
     symbolColumnDetailsRef.current.clear()

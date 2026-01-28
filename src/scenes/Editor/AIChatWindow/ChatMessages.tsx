@@ -1,11 +1,9 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
-import { AssistantModes } from "../../../components/AIStatusIndicator/AssistantModes"
+import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
 import { color } from "../../../utils"
 import type {
   ConversationMessage,
@@ -25,14 +23,19 @@ import {
   CodeIcon,
   KeyReturnIcon,
   ChatDotsIcon,
+  ArrowCounterClockwiseIcon,
 } from "@phosphor-icons/react"
 import { CloseCircle } from "@styled-icons/remix-fill"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { TableIcon } from "../../Schema/table-icon"
+import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
-import { useAIStatus } from "../../../providers/AIStatusProvider"
+import {
+  AIOperationStatus,
+  useAIStatus,
+} from "../../../providers/AIStatusProvider"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -61,7 +64,7 @@ const LoadingIcon = () => (
 const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
   padding: 2rem 1rem;
   overflow-y: auto;
   flex: 1 1 auto;
@@ -85,7 +88,6 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   background: ${color("loginBackground")};
   border: 1px solid rgba(25, 26, 33, 0.32);
   flex-shrink: 0;
-  overflow: visible;
 `
 
 const UserRequestBox = styled(Box)`
@@ -99,7 +101,6 @@ const UserRequestBox = styled(Box)`
   border: 1px solid rgba(25, 26, 33, 0.32);
   border-radius: 0.6rem;
   flex-shrink: 0;
-  overflow: visible;
 `
 
 const UserRequestHeader = styled(Box).attrs({
@@ -191,7 +192,6 @@ const MessageContent = styled(Text)`
   color: ${color("foreground")};
   white-space: pre-wrap;
   word-wrap: break-word;
-  overflow: visible;
 `
 
 const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
@@ -205,7 +205,6 @@ const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
   padding: 0.4rem;
   border-radius: 0.6rem;
   flex-shrink: 0;
-  overflow: visible;
 
   ${({ $hasOperationHistory }) =>
     $hasOperationHistory &&
@@ -255,7 +254,6 @@ const ExplanationContent = styled(Box)`
   flex-direction: column;
   border-radius: 0.6rem;
   padding: 0.8rem;
-  overflow: visible;
   flex-shrink: 0;
   width: 100%;
 `
@@ -264,12 +262,11 @@ const Divider = styled.div`
   width: 100%;
   height: 1px;
   background: linear-gradient(90deg, #9c274b 0%, rgba(54, 14, 26, 0) 100%);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 `
 
 const OperationHistoryContainer = styled.div<{ $trimBottom: boolean }>`
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
+  margin-bottom: 0.6rem;
   width: 100%;
   ${({ $trimBottom }) =>
     $trimBottom &&
@@ -283,127 +280,43 @@ const ErrorContainer = styled.div`
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 1rem;
-  padding: 1rem 1.2rem;
-  border-radius: 0.6rem;
+  gap: 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.8rem;
   border: 1px solid ${color("red")};
+  border-radius: 0.6rem;
   color: ${color("foreground")};
   font-size: 1.4rem;
   line-height: 2rem;
   width: 100%;
 `
 
-const MarkdownContent = styled.div`
-  margin: 0;
+const RetryButton = styled(Button)`
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.5rem 0.8rem;
+  height: auto;
+`
+
+const cursorBlink = keyframes`
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+`
+
+const StreamingCursor = styled.span`
+  display: inline-block;
+  width: 2px;
+  height: 1.4em;
+  background: ${color("foreground")};
+  margin-left: 2px;
+  margin-right: auto;
+  vertical-align: text-bottom;
+  animation: ${cursorBlink} 1s infinite;
+`
+
+const MessagesEnd = styled.div`
+  min-height: 1px;
   width: 100%;
-  font-family: ${({ theme }) => theme.font};
-  font-size: 1.4rem;
-  line-height: 2.1rem;
-  color: ${color("foreground")};
-  overflow: visible;
-  word-break: break-word;
-
-  p {
-    margin: 0 0 1rem 0;
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-
-  code {
-    background: ${color("background")};
-    border: 1px solid ${color("selection")};
-    border-radius: 0.4rem;
-    padding: 0.1rem 0.4rem;
-    font-family: ${({ theme }) => theme.fontMonospace};
-    font-size: 1.3rem;
-    color: ${color("purple")};
-    white-space: pre-wrap;
-  }
-
-  strong {
-    font-weight: 600;
-    color: ${color("foreground")};
-  }
-
-  em {
-    font-style: italic;
-  }
-
-  ul,
-  ol {
-    margin: 0.5rem 0;
-    padding-left: 2rem;
-  }
-
-  li {
-    margin-bottom: 0.3rem;
-  }
-
-  a {
-    color: ${({ theme }) => theme.color.cyan};
-    text-decoration: none;
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-
-  h1,
-  h2,
-  h3,
-  h4 {
-    margin: 1rem 0 0.5rem 0;
-    font-weight: 600;
-  }
-
-  h1 {
-    font-size: 1.8rem;
-  }
-  h2 {
-    font-size: 1.6rem;
-  }
-  h3 {
-    font-size: 1.5rem;
-  }
-  h4 {
-    font-size: 1.4rem;
-  }
-
-  blockquote {
-    border-left: 3px solid ${color("selection")};
-    margin: 1rem 0;
-    padding-left: 1rem;
-    color: ${color("gray2")};
-  }
-
-  .table-wrapper {
-    overflow-x: auto;
-    margin: 1rem 0;
-  }
-
-  table {
-    border-collapse: collapse;
-    min-width: max-content;
-    border-radius: 0.8rem;
-  }
-
-  th,
-  td {
-    padding: 0.6rem 0.8rem;
-    border: 1px solid ${color("selection")};
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  th {
-    background: ${color("backgroundDarker")};
-    font-weight: 600;
-  }
-
-  td:last-child {
-    white-space: normal;
-    min-width: 200px;
-  }
+  background: transparent;
 `
 
 const DiffContainer = styled(Box)`
@@ -510,7 +423,6 @@ const ExpandButton = styled(IconButton)`
 
 const DiffEditorWrapper = styled.div`
   position: relative;
-  height: 300px;
   width: 100%;
 `
 
@@ -524,11 +436,6 @@ const ButtonBar = styled(Box)`
   background: ${color("backgroundDarker")};
   border: 1px solid ${color("selection")};
   border-radius: 0.4rem;
-`
-
-const CodeBlockWrapper = styled.div`
-  margin: 1rem 0;
-  width: 100%;
 `
 
 const AcceptButton = styled(Button)`
@@ -547,23 +454,31 @@ const AcceptButton = styled(Button)`
 const RejectButton = styled(Button)`
   background: ${color("background")};
   color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+  border: 1px solid transparent;
   width: 10rem;
 
   &:hover:not(:disabled) {
     background: ${color("selection")};
-    border-color: ${({ theme }) => theme.color.pinkDarker};
+    border-color: transparent;
   }
 `
+
+export type OpenInEditorContent =
+  | { type: "diff"; original: string; modified: string }
+  | { type: "code"; value: string }
 
 type ChatMessagesProps = {
   messages: ConversationMessage[]
   onAcceptChange?: (messageId: string) => void
   onRejectChange?: (messageId: string) => void
   onRunQuery?: (sql: string) => void
-  onExpandDiff?: (original: string, modified: string) => void
+  onOpenInEditor: (
+    content: OpenInEditorContent,
+    existingQuery?: boolean,
+  ) => Promise<void>
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
+  onRetry?: (userMessageId: string, assistantMessageId: string) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -575,6 +490,7 @@ type ChatMessagesProps = {
   isOperationInProgress?: boolean
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
   editorSQL?: string
+  isStreaming: boolean
 }
 
 const getOperationBadgeInfo = (
@@ -626,14 +542,16 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onAcceptChange,
   onRejectChange,
   onRunQuery,
-  onExpandDiff,
+  onOpenInEditor,
   onApplyToEditor,
+  onRetry,
   running,
   aiSuggestionRequest,
   queryNotifications,
   queryStartOffset = 0,
   isOperationInProgress,
   editorSQL,
+  isStreaming,
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -717,9 +635,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     [messages],
   )
 
+  const streamingContentLength = useMemo(() => {
+    if (!isStreaming) return 0
+    const lastMessage = messages[messages.length - 1]
+    return lastMessage?.content?.length ?? 0
+  }, [messages, isStreaming])
+
   useEffect(() => {
     handleScrollNeeded()
-  }, [visibleMessagesCount])
+  }, [visibleMessagesCount, streamingContentLength])
 
   const visibleMessages: Array<{
     message: ConversationMessage
@@ -762,6 +686,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     >
       {visibleMessages.map(({ message, originalIndex }) => {
         const key = `${message.id}`
+        const isCurrentQuery =
+          normalizeQueryText(message.sql || "") ===
+          normalizeQueryText(editorSQL || "")
+
         if (message.role === "user") {
           // Check if this is a special request type with inline SQL display
           const displayType = message.displayType
@@ -788,7 +716,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <UserRequestContent>
                   <SchemaNameDisplay>
                     <TableIcon
-                      isMaterializedView={schemaData.isMatView}
+                      kind={schemaData.kind}
                       partitionBy={schemaData.partitionBy}
                       walEnabled={schemaData.walEnabled}
                       designatedTimestamp={schemaData.designatedTimestamp}
@@ -799,15 +727,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               )
             } else if (sql) {
               // fix_request and explain_request show SQL editor
-              const lineCount = sql.split("\n").length
-              const editorHeight = Math.min(lineCount * 20 + 16, 200)
               content = (
                 <UserRequestContent>
-                  <InlineSQLEditor
-                    style={{ height: editorHeight }}
-                    data-hook="user-request-sql-editor"
-                  >
-                    <LiteEditor value={sql} />
+                  <InlineSQLEditor data-hook="user-request-sql-editor">
+                    <LiteEditor
+                      value={sql}
+                      maxHeight={216}
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
+                      }
+                    />
                   </InlineSQLEditor>
                 </UserRequestContent>
               )
@@ -836,8 +768,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           // Special handling for ask_request: show user's question above SQL
           if (displayType === "ask_request" && sql) {
             const userQuestion = message.displayUserMessage || message.content
-            const lineCount = sql.split("\n").length
-            const editorHeight = Math.min(lineCount * 20 + 16, 200)
 
             return (
               <UserRequestBox key={key} data-hook="chat-message-user">
@@ -845,11 +775,17 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   <MessageContent>{userQuestion}</MessageContent>
                 </UserRequestHeader>
                 <UserRequestContent>
-                  <InlineSQLEditor
-                    style={{ height: editorHeight }}
-                    data-hook="user-request-sql-editor"
-                  >
-                    <LiteEditor value={sql} />
+                  <InlineSQLEditor data-hook="user-request-sql-editor">
+                    <LiteEditor
+                      value={sql}
+                      maxHeight={216}
+                      onOpenInEditor={() =>
+                        onOpenInEditor(
+                          { type: "code", value: sql },
+                          isCurrentQuery,
+                        )
+                      }
+                    />
                   </InlineSQLEditor>
                 </UserRequestContent>
               </UserRequestBox>
@@ -902,6 +838,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             hasVisibleUserMessageAfter(originalIndex)
 
           const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
+          const isMessageStreaming = isStreaming && isLastVisibleMessage
           const showButtons =
             hasSQLChange &&
             !isAccepted &&
@@ -948,8 +885,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           )
           const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
 
-          const operationHistory = message.operationHistory
+          const operationHistory = message.operationHistory?.filter(
+            (op) => op.type !== AIOperationStatus.Aborted,
+          )
           const hasError = !!message.error
+          const showRetry =
+            hasError &&
+            !isStreaming &&
+            !isOperationInProgress &&
+            isLastVisibleMessage
 
           const isLiveOperation =
             originalIndex === lastAssistantMessageIndex &&
@@ -967,27 +911,17 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               {hasOperationHistory && (
                 <>
                   <Divider />
-                  <OperationHistoryContainer
-                    $trimBottom={hasError || !message.content}
-                  >
-                    <AssistantModes
+                  <OperationHistoryContainer $trimBottom={!message.content}>
+                    <AssistantModesCompact
                       operationHistory={operationHistory}
                       status={status}
                       isLive={isLiveOperation}
                       onScrollNeeded={handleScrollNeeded}
+                      collapsed={!!message.content || !!message.error}
+                      responseStart={message.responseStart}
                     />
                   </OperationHistoryContainer>
                 </>
-              )}
-              {hasError && (
-                <ErrorContainer data-hook="chat-message-error">
-                  <CloseCircle
-                    size={16}
-                    color={theme.color.red}
-                    style={{ flexShrink: 0 }}
-                  />
-                  {message.error}
-                </ErrorContainer>
               )}
 
               {message.content && (
@@ -1005,83 +939,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     )}
                   </AssistantHeader>
                   <ExplanationContent>
-                    <MarkdownContent>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({
-                            children,
-                            href,
-                            ...props
-                          }: React.ComponentProps<"a">) => (
-                            <a
-                              {...(typeof href === "string" &&
-                              href.startsWith("http")
-                                ? {
-                                    target: "_blank",
-                                    rel: "noopener noreferrer",
-                                  }
-                                : {})}
-                              href={href}
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
-                          table: ({
-                            children,
-                            ...props
-                          }: React.ComponentProps<"table">) => (
-                            <div className="table-wrapper">
-                              <table {...props}>{children}</table>
-                            </div>
-                          ),
-                          // Render pre as fragment since code blocks are handled by code component
-                          pre: ({ children }: React.ComponentProps<"pre">) => (
-                            <>{children}</>
-                          ),
-                          code: ({
-                            children,
-                            className,
-                          }: React.ComponentProps<"code">) => {
-                            // Check if this is a code block (has language class) or inline code
-                            const isCodeBlock =
-                              typeof className === "string" &&
-                              className.includes("language-")
-                            if (isCodeBlock) {
-                              // Extract text content from children (can be string or array)
-                              const codeContent = (
-                                Array.isArray(children)
-                                  ? children.join("")
-                                  : typeof children === "string"
-                                    ? children
-                                    : ""
-                              ).replace(/\n$/, "")
-                              const lineCount = codeContent.split("\n").length
-                              // LiteEditor has 8px padding top and bottom (16px total)
-                              const editorHeight = Math.min(
-                                lineCount * 20 + 16,
-                                316,
-                              )
-                              return (
-                                <CodeBlockWrapper
-                                  key={`${message.id}-${codeContent}`}
-                                  style={{ height: editorHeight }}
-                                  data-hook="chat-message-code-block"
-                                >
-                                  <LiteEditor value={codeContent} />
-                                </CodeBlockWrapper>
-                              )
-                            }
-                            // Inline code - render as default
-                            return <code>{children}</code>
-                          },
-                        }}
-                      >
-                        {explanation}
-                      </ReactMarkdown>
-                    </MarkdownContent>
-                    {hasSQLChange && (
+                    <AssistantMarkdown
+                      content={explanation}
+                      messageId={message.id}
+                      onOpenInEditor={onOpenInEditor}
+                    />
+                    {isMessageStreaming && (
+                      <StreamingCursor data-hook="streaming-cursor" />
+                    )}
+                    {hasSQLChange && !isMessageStreaming && (
                       <DiffContainer data-hook="inline-diff-container">
                         <DiffHeader $isExpanded={isExpanded}>
                           <DiffHeaderLeft>
@@ -1146,8 +1012,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                               !(
                                 originalIndex === latestDiffIndex && isAccepted
                               ) &&
-                              normalizeQueryText(message.sql || "") !==
-                                normalizeQueryText(editorSQL || "") && (
+                              !isCurrentQuery && (
                                 <IconButton
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -1198,16 +1063,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                 diffEditor
                                 original={previousSQLForDiff}
                                 modified={currentSQLForDiff}
-                                noBorder
-                                onExpandDiff={
-                                  onExpandDiff
-                                    ? () =>
-                                        onExpandDiff(
-                                          message.previousSQL || "",
-                                          message.sql || "",
-                                        )
-                                    : undefined
+                                maxHeight={300}
+                                onOpenInEditor={() =>
+                                  onOpenInEditor({
+                                    type: "diff",
+                                    original: previousSQLForDiff ?? "",
+                                    modified: currentSQLForDiff ?? "",
+                                  })
                                 }
+                                handleScrollNeeded={handleScrollNeeded}
                               />
                             </DiffEditorWrapper>
                             {showButtons && (
@@ -1237,11 +1101,39 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   </ExplanationContent>
                 </>
               )}
+              {hasError && (
+                <ErrorContainer data-hook="chat-message-error">
+                  <CloseCircle
+                    size={16}
+                    color={theme.color.red}
+                    style={{ flexShrink: 0 }}
+                  />
+                  {message.error}
+                  {showRetry && onRetry && (
+                    <RetryButton
+                      size="sm"
+                      skin="secondary"
+                      prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
+                      onClick={() => {
+                        const userMessageIndex = messages
+                          .slice(0, originalIndex)
+                          .findLastIndex((m) => m.role === "user")
+                        if (userMessageIndex >= 0) {
+                          onRetry(messages[userMessageIndex].id, message.id)
+                        }
+                      }}
+                      data-hook="retry-button"
+                    >
+                      Retry
+                    </RetryButton>
+                  )}
+                </ErrorContainer>
+              )}
             </ExplanationBox>
           )
         }
       })}
-      <div ref={messagesEndRef} />
+      <MessagesEnd ref={messagesEndRef} data-hook="messages-end" />
     </MessagesContainer>
   )
 }

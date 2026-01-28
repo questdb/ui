@@ -23,7 +23,7 @@ import {
 } from "../../scenes/Editor/Monaco/utils"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/aiAssistant"
-import type { Buffer } from "../../store/buffers"
+import type { Buffer, PreviewContent } from "../../store/buffers"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
@@ -40,11 +40,21 @@ import { useLiveQuery } from "dexie-react-hooks"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
-export type DiffBufferContent = {
+export type PreviewBufferContentDiff = {
+  type: "diff"
   original: string
   modified: string
   conversationId?: ConversationId
 }
+
+export type PreviewBufferContentCode = {
+  type: "code"
+  value: string
+}
+
+export type PreviewBufferContent =
+  | PreviewBufferContentDiff
+  | PreviewBufferContentCode
 
 export type ApplyAISQLChangeOptions = {
   newSQL: string
@@ -89,15 +99,13 @@ export type EditorContext = {
   temporaryBufferId: number | null
   queryParamProcessedRef: MutableRefObject<boolean>
   isNavigatingFromSearchRef: MutableRefObject<boolean>
-  // Global diff buffer management
-  showDiffBuffer: (content: DiffBufferContent) => Promise<void>
-  closeDiffBufferForConversation: (
-    conversationId: ConversationId,
-  ) => Promise<void>
+  showPreviewBuffer: (content: PreviewBufferContent) => Promise<void>
+  closePreviewBuffer: () => Promise<void>
   // Apply AI SQL change to editor
   applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
   executionRefs: MutableRefObject<ExecutionRefs>
   cleanupExecutionRefs: (bufferId: number) => void
+  highlightQuery: (queryKey: QueryKey, bufferId: number) => Promise<boolean>
 }
 
 const defaultValues = {
@@ -120,11 +128,12 @@ const defaultValues = {
   temporaryBufferId: null,
   queryParamProcessedRef: { current: false },
   isNavigatingFromSearchRef: { current: false },
-  showDiffBuffer: () => Promise.resolve(),
-  closeDiffBufferForConversation: () => Promise.resolve(),
+  showPreviewBuffer: () => Promise.resolve(),
+  closePreviewBuffer: () => Promise.resolve(),
   applyAISQLChange: () => ({ success: false }),
   executionRefs: { current: {} },
   cleanupExecutionRefs: () => undefined,
+  highlightQuery: () => Promise.resolve(false),
 }
 
 const EditorContext = createContext<EditorContext>(defaultValues)
@@ -168,6 +177,230 @@ export const EditorProvider: React.FC = ({ children }) => {
     delete executionRefs.current[bufferId.toString()]
   }, [])
 
+  const setActiveBuffer = useCallback(
+    async (
+      buffer: Buffer,
+      options?: { focus?: boolean; fromSearch?: boolean },
+    ) => {
+      try {
+        const currentActiveBufferId = (await bufferStore.getActiveId())?.value
+
+        if (currentActiveBufferId) {
+          if (buffer.id === currentActiveBufferId) {
+            setActiveBufferState(buffer)
+            return
+          }
+        }
+
+        await bufferStore.setActiveId(buffer.id as number)
+        setActiveBufferState(buffer)
+
+        if (options?.fromSearch) {
+          isNavigatingFromSearchRef.current = true
+        }
+
+        if (editorRef.current && monacoRef.current) {
+          const currentModel = editorRef.current.getModel()
+          if (currentModel) {
+            currentModel.dispose()
+          }
+
+          const model = monacoRef.current.editor.createModel(
+            buffer.value,
+            QuestDBLanguageName,
+          )
+          editorRef.current.setModel(model)
+          clearModelMarkers(monacoRef.current, editorRef.current)
+
+          if (buffer.editorViewState) {
+            editorRef.current.restoreViewState(buffer.editorViewState)
+          }
+
+          if (options?.focus !== false) {
+            editorRef.current.focus()
+          }
+        }
+      } catch (e) {
+        console.warn("Error setting active buffer:", e)
+      }
+    },
+    [],
+  )
+
+  const highlightQuery = useCallback(
+    async (queryKey: QueryKey, bufferId: number): Promise<boolean> => {
+      const buffer = await bufferStore.getById(bufferId)
+      if (!buffer || buffer.archived) {
+        return false
+      }
+
+      const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
+      const contentAtOffset = buffer.value.slice(startOffset, endOffset)
+      if (normalizeQueryText(contentAtOffset) !== queryText) {
+        return false
+      }
+
+      const targetBuffer = buffers?.find((b) => b.id === bufferId)
+      if (targetBuffer && activeBuffer.id !== bufferId) {
+        await setActiveBuffer(targetBuffer)
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+
+      if (!editorRef.current) {
+        return false
+      }
+      const model = editorRef.current.getModel()
+      if (!model) {
+        return false
+      }
+
+      const startPosition = model.getPositionAt(startOffset)
+      const endPosition = model.getPositionAt(endOffset)
+
+      editorRef.current.revealPositionNearTop(startPosition)
+      editorRef.current.setPosition(startPosition)
+
+      const decorationIds = model.deltaDecorations(
+        [],
+        [
+          {
+            range: {
+              startLineNumber: startPosition.lineNumber,
+              startColumn: startPosition.column,
+              endLineNumber: endPosition.lineNumber,
+              endColumn: endPosition.column,
+            },
+            options: {
+              isWholeLine: false,
+              className: "aiQueryHighlight",
+            },
+          },
+        ],
+      )
+
+      editorRef.current.focus()
+
+      setTimeout(() => {
+        if (!model.isDisposed()) {
+          model.deltaDecorations(decorationIds, [])
+        }
+      }, 1000)
+
+      return true
+    },
+    [buffers, activeBuffer.id, setActiveBuffer],
+  )
+
+  const addBuffer: EditorContext["addBuffer"] = useCallback(
+    async (newBuffer, { shouldSelectAll = false } = {}) => {
+      const fallback = makeFallbackBuffer(
+        newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+      )
+
+      const currentDefaultTabNumbers = (
+        await db.buffers
+          .filter((buffer) =>
+            buffer.label.startsWith(fallback.label) &&
+            newBuffer?.metricsViewState
+              ? buffer.metricsViewState !== undefined
+              : true,
+          )
+          .toArray()
+      )
+        .map((buffer) =>
+          buffer.label.slice(fallback.label.length + /* whitespace */ 1),
+        )
+        .filter(Boolean)
+        .map((n) => parseInt(n, 10))
+        .sort()
+
+      const nextNumber = () => {
+        for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
+          const next = i + 1
+          if (!currentDefaultTabNumbers.includes(next)) {
+            return next
+          }
+        }
+      }
+
+      const position = buffers
+        ? buffers.filter((b) => !b.archived && !b.isTemporary).length
+        : 0
+
+      const buffer = makeBuffer({
+        ...newBuffer,
+        label: newBuffer?.label ?? `${fallback.label} ${nextNumber()}`,
+        position,
+      })
+      const id = await db.buffers.add(buffer)
+
+      await setActiveBuffer(buffer, { focus: true })
+
+      // Select all text if requested (model is already created by setActiveBuffer)
+      if (shouldSelectAll && editorRef.current) {
+        const model = editorRef.current.getModel()
+        if (model) {
+          editorRef.current.setSelection(model.getFullModelRange())
+        }
+      }
+
+      return { id, ...buffer }
+    },
+    [buffers, setActiveBuffer],
+  )
+
+  const showPreviewBuffer: EditorContext["showPreviewBuffer"] = useCallback(
+    async (content) => {
+      const existingPreviewBuffer = buffers?.find(
+        (b) => b.isPreviewBuffer && !b.archived,
+      )
+
+      const previewContent: PreviewContent =
+        content.type === "diff"
+          ? {
+              type: "diff",
+              original: content.original,
+              modified: content.modified,
+              conversationId: content.conversationId,
+            }
+          : {
+              type: "code",
+              value: content.value,
+            }
+
+      const label = content.type === "diff" ? "AI Suggestion" : "Preview"
+
+      if (existingPreviewBuffer && existingPreviewBuffer.id) {
+        // Update existing preview buffer
+        await bufferStore.update(existingPreviewBuffer.id, {
+          previewContent,
+          label,
+        })
+        // Switch to it
+        const updatedBuffer = {
+          ...existingPreviewBuffer,
+          previewContent,
+          label,
+        }
+        await setActiveBuffer(updatedBuffer)
+      } else {
+        // Create new preview buffer
+        const position = buffers
+          ? buffers.filter((b) => !b.archived && !b.isTemporary).length
+          : 0
+        await addBuffer({
+          label,
+          value: "",
+          isPreviewBuffer: true,
+          position,
+          previewContent,
+        })
+        // addBuffer already switches to it
+      }
+    },
+    [buffers, setActiveBuffer, addBuffer],
+  )
+
   // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
     if (!ranOnce.current && buffers && activeBufferId) {
@@ -183,109 +416,6 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   if (!buffers || !activeBufferId || activeBuffer === fallbackBuffer) {
     return null
-  }
-
-  const setActiveBuffer = async (
-    buffer: Buffer,
-    options?: { focus?: boolean; fromSearch?: boolean },
-  ) => {
-    try {
-      const currentActiveBufferId = (await bufferStore.getActiveId())?.value
-
-      if (currentActiveBufferId) {
-        if (buffer.id === currentActiveBufferId) {
-          setActiveBufferState(buffer)
-          return
-        }
-      }
-
-      await bufferStore.setActiveId(buffer.id as number)
-      setActiveBufferState(buffer)
-
-      if (options?.fromSearch) {
-        isNavigatingFromSearchRef.current = true
-      }
-
-      if (editorRef.current && monacoRef.current) {
-        const currentModel = editorRef.current.getModel()
-        if (currentModel) {
-          currentModel.dispose()
-        }
-
-        const model = monacoRef.current.editor.createModel(
-          buffer.value,
-          QuestDBLanguageName,
-        )
-        editorRef.current.setModel(model)
-        clearModelMarkers(monacoRef.current, editorRef.current)
-
-        if (buffer.editorViewState) {
-          editorRef.current.restoreViewState(buffer.editorViewState)
-        }
-
-        if (options?.focus !== false) {
-          editorRef.current.focus()
-        }
-      }
-    } catch (e) {
-      console.warn("Error setting active buffer:", e)
-    }
-  }
-
-  const addBuffer: EditorContext["addBuffer"] = async (
-    newBuffer,
-    { shouldSelectAll = false } = {},
-  ) => {
-    const fallbackBuffer = makeFallbackBuffer(
-      newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
-    )
-
-    const currentDefaultTabNumbers = (
-      await db.buffers
-        .filter((buffer) =>
-          buffer.label.startsWith(fallbackBuffer.label) &&
-          newBuffer?.metricsViewState
-            ? buffer.metricsViewState !== undefined
-            : true,
-        )
-        .toArray()
-    )
-      .map((buffer) =>
-        buffer.label.slice(fallbackBuffer.label.length + /* whitespace */ 1),
-      )
-      .filter(Boolean)
-      .map((n) => parseInt(n, 10))
-      .sort()
-
-    const nextNumber = () => {
-      for (let i = 0; i <= currentDefaultTabNumbers.length; i++) {
-        const nextNumber = i + 1
-        if (!currentDefaultTabNumbers.includes(nextNumber)) {
-          return nextNumber
-        }
-      }
-    }
-
-    const position = buffers.filter((b) => !b.archived && !b.isTemporary).length
-
-    const buffer = makeBuffer({
-      ...newBuffer,
-      label: newBuffer?.label ?? `${fallbackBuffer.label} ${nextNumber()}`,
-      position,
-    })
-    const id = await db.buffers.add(buffer)
-
-    await setActiveBuffer(buffer, { focus: true })
-
-    // Select all text if requested (model is already created by setActiveBuffer)
-    if (shouldSelectAll && editorRef.current) {
-      const model = editorRef.current.getModel()
-      if (model) {
-        editorRef.current.setSelection(model.getFullModelRange())
-      }
-    }
-
-    return { id, ...buffer }
   }
 
   const updateBuffer: EditorContext["updateBuffer"] = async (
@@ -423,65 +553,12 @@ export const EditorProvider: React.FC = ({ children }) => {
       })
     }
 
-  const showDiffBuffer: EditorContext["showDiffBuffer"] = async (content) => {
-    const existingDiffBuffer = buffers.find(
-      (b) => b.isDiffBuffer && !b.archived,
-    )
-
-    if (existingDiffBuffer && existingDiffBuffer.id) {
-      // Update existing diff buffer
-      await bufferStore.update(existingDiffBuffer.id, {
-        diffContent: {
-          original: content.original,
-          modified: content.modified,
-          conversationId: content.conversationId,
-          queryStartOffset: 0,
-        },
-      })
-      // Switch to it
-      const updatedBuffer = {
-        ...existingDiffBuffer,
-        diffContent: {
-          original: content.original,
-          modified: content.modified,
-          conversationId: content.conversationId,
-          queryStartOffset: 0,
-        },
-      }
-      await setActiveBuffer(updatedBuffer)
-    } else {
-      // Create new diff buffer
-      const position = buffers.filter(
-        (b) => !b.archived && !b.isTemporary,
-      ).length
-      await addBuffer({
-        label: "AI Suggestion",
-        value: "",
-        isDiffBuffer: true,
-        position,
-        diffContent: {
-          original: content.original,
-          modified: content.modified,
-          conversationId: content.conversationId,
-          queryStartOffset: 0,
-        },
-      })
-      // addBuffer already switches to it
+  const closePreviewBuffer: EditorContext["closePreviewBuffer"] = async () => {
+    const previewBuffer = buffers.find((b) => b.isPreviewBuffer && !b.archived)
+    if (previewBuffer && previewBuffer.id) {
+      await deleteBuffer(previewBuffer.id, true)
     }
   }
-
-  const closeDiffBufferForConversation: EditorContext["closeDiffBufferForConversation"] =
-    async (conversationId) => {
-      const diffBuffer = buffers.find(
-        (b) =>
-          b.isDiffBuffer &&
-          !b.archived &&
-          b.diffContent?.conversationId === conversationId,
-      )
-      if (diffBuffer && diffBuffer.id) {
-        await deleteBuffer(diffBuffer.id, true)
-      }
-    }
 
   const applyAISQLChange: EditorContext["applyAISQLChange"] = (options) => {
     const { newSQL, queryKey } = options
@@ -571,7 +648,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     const actualQueryStartOffset = isAppend
       ? finalQueryStartOffset + 1
       : finalQueryStartOffset
-    const normalizedQuery = normalizeQueryText(newSQL)
+    const normalizedQuery = normalizeQueryText(sqlWithSemicolon)
     const actualQueryEndOffset = actualQueryStartOffset + normalizedQuery.length
 
     const finalStartPosition = finalModel.getPositionAt(actualQueryStartOffset)
@@ -604,7 +681,9 @@ export const EditorProvider: React.FC = ({ children }) => {
     editorRef.current.focus()
 
     setTimeout(() => {
-      finalModel.deltaDecorations(decorationId, [])
+      if (!finalModel.isDisposed()) {
+        finalModel.deltaDecorations(decorationId, [])
+      }
     }, 1000)
 
     // Return the final query key for caller to update conversation state
@@ -649,11 +728,12 @@ export const EditorProvider: React.FC = ({ children }) => {
         temporaryBufferId,
         queryParamProcessedRef,
         isNavigatingFromSearchRef,
-        showDiffBuffer,
-        closeDiffBufferForConversation,
+        showPreviewBuffer,
+        closePreviewBuffer,
         applyAISQLChange,
         executionRefs,
         cleanupExecutionRefs,
+        highlightQuery,
         editorReadyTrigger: (editor) => {
           if (!activeBuffer.isTemporary && !isNavigatingFromSearchRef.current) {
             editor.focus()

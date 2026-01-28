@@ -444,6 +444,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         endColumn: endPosition.column,
       })
     } else {
+      const queryInCursor = getQueryFromCursor(editor)
+      if (
+        queryInCursor &&
+        createQueryKeyFromRequest(editor, queryInCursor) ===
+          createQueryKeyFromRequest(editor, query)
+      ) {
+        return
+      }
       editor.setPosition({
         lineNumber: query.row + 1,
         column: query.column,
@@ -895,7 +903,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }, 50)
     })
 
-    editor.onDidChangeModelContent((e) => {
+    editor.onDidChangeModelContent(async (e) => {
       const model = editor.getModel()
       if (!model) return
 
@@ -1051,7 +1059,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           0,
         )
         if (totalDelta !== 0) {
-          shiftedQueryKeys = shiftQueryKeysForBufferRef.current(
+          shiftedQueryKeys = await shiftQueryKeysForBufferRef.current(
             activeBufferId,
             earliestChangeOffset,
             totalDelta,
@@ -2055,6 +2063,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               renderLineHighlight: "gutter",
               useShadowDOM: false,
               minimap: {
+                enabled: false,
+              },
+              stickyScroll: {
                 enabled: false,
               },
               selectOnLineNumbers: false,

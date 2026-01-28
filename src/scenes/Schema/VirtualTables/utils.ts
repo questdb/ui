@@ -131,24 +131,33 @@ export const createTableNode = (
   table: QuestDB.Table,
   parentId: string,
   isMatView: boolean = false,
+  isView: boolean = false,
   materializedViews: QuestDB.MaterializedView[] | undefined,
+  views: QuestDB.View[] | undefined,
   tableColumns: InformationSchemaColumn[],
 ): TreeNode => {
   const tableId = `${parentId}:${table.table_name}`
   const matViewData = isMatView
     ? materializedViews?.find((mv) => mv.view_name === table.table_name)
     : undefined
+  const viewData = isView
+    ? views?.find((v) => v.view_name === table.table_name)
+    : undefined
 
   const columnsId = `${tableId}:columns`
   const baseTablesId = `${tableId}:baseTables`
   const storageDetailsId = `${tableId}:storageDetails`
 
+  // Determine the kind
+  const kind = isMatView ? "matview" : isView ? "view" : "table"
+
   const tableNode: TreeNode = {
     id: tableId,
-    kind: isMatView ? "matview" : "table",
+    kind,
     name: table.table_name,
     table,
     matViewData,
+    viewData,
     parent: parentId,
     isExpanded: getSectionExpanded(tableId),
     partitionBy: table.partitionBy,
@@ -164,14 +173,19 @@ export const createTableNode = (
         isExpanded: getSectionExpanded(columnsId),
         children: createColumnNodes(table, columnsId, tableColumns),
       },
-      {
-        id: storageDetailsId,
-        kind: "folder",
-        name: "Storage details",
-        parent: tableId,
-        isExpanded: getSectionExpanded(storageDetailsId),
-        children: createStorageDetailsNodes(table, storageDetailsId),
-      },
+      // Only show storage details for tables and materialized views (not for regular views)
+      ...(!isView
+        ? [
+            {
+              id: storageDetailsId,
+              kind: "folder" as const,
+              name: "Storage details",
+              parent: tableId,
+              isExpanded: getSectionExpanded(storageDetailsId),
+              children: createStorageDetailsNodes(table, storageDetailsId),
+            },
+          ]
+        : []),
     ],
   }
 
