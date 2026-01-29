@@ -1,13 +1,13 @@
 import React from "react"
 import styled from "styled-components"
-import { XSquare, ArrowSquareOut } from "@phosphor-icons/react"
+import { XSquareIcon, ArrowSquareOutIcon } from "@phosphor-icons/react"
 import { Text, Button } from "../../../components"
-import { AISparkle } from "../../../components/AISparkle"
+import { SchemaAIButton } from "./SchemaAIButton"
 
 type Props = {
   title: string
   description?: string
-  onAskAI?: () => void
+  onAskAI: () => void
   docsUrl?: string
   showResumeButton?: boolean
   onResume?: () => void
@@ -101,7 +101,7 @@ export const ErrorBanner = ({
       <ContentSection>
         <TitleRow>
           <IconWrapper>
-            <XSquare size={20} weight="fill" />
+            <XSquareIcon size={20} weight="fill" />
           </IconWrapper>
           <RedText size="lg" weight={600}>
             {title}
@@ -115,17 +115,11 @@ export const ErrorBanner = ({
             Resume WAL
           </ResumeButton>
         )}
-        <Button
-          skin="gradient"
-          prefixIcon={<AISparkle size={14} variant="hollow" />}
-          onClick={onAskAI}
-        >
-          Ask AI
-        </Button>
+        <SchemaAIButton onClick={onAskAI}>Ask AI</SchemaAIButton>
         {docsUrl && (
           <DocsLink href={docsUrl} target="_blank" rel="noopener noreferrer">
             View explanation in docs
-            <ArrowSquareOut size={14} />
+            <ArrowSquareOutIcon size={14} />
           </DocsLink>
         )}
       </ActionsSection>

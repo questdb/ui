@@ -23,6 +23,7 @@ import {
   SectionTitleContainer,
   CaretIcon,
 } from "./shared-styles"
+import { SchemaAIButton } from "./SchemaAIButton"
 
 export interface DetailsTabProps {
   tableData: Table
@@ -35,6 +36,7 @@ export interface DetailsTabProps {
   columnsExpanded: boolean
   onColumnsExpandedChange: (expanded: boolean) => void
   onNavigateToBaseTable: () => void
+  onExplainWithAI: () => void
 }
 
 const ColumnNameBox = styled(Box)`
@@ -132,6 +134,13 @@ const StyledCopyButton = styled(CopyButton)`
   background: transparent;
 `
 
+const ButtonsContainer = styled(Box).attrs({
+  gap: "1rem",
+  align: "center",
+})`
+  margin-left: auto;
+`
+
 export const DetailsTab = ({
   tableData,
   matViewData,
@@ -143,6 +152,7 @@ export const DetailsTab = ({
   columnsExpanded,
   onColumnsExpandedChange,
   onNavigateToBaseTable,
+  onExplainWithAI,
 }: DetailsTabProps) => {
   const theme = useTheme()
   const baseTableExists =
@@ -178,7 +188,12 @@ export const DetailsTab = ({
         <SectionTitleContainer>
           <CodeIcon size="16px" weight="bold" />
           <SectionTitle>DDL</SectionTitle>
-          <StyledCopyButton size="sm" text={ddl} iconOnly />
+          <ButtonsContainer>
+            <SchemaAIButton onClick={onExplainWithAI}>
+              Explain with AI
+            </SchemaAIButton>
+            <StyledCopyButton text={ddl} iconOnly />
+          </ButtonsContainer>
         </SectionTitleContainer>
         {ddl && (
           <LiteEditor

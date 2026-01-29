@@ -10,7 +10,7 @@ import {
   TrendDownIcon,
 } from "@phosphor-icons/react"
 import { SquareWithShadow } from "./HealthStatusLabel"
-import { Box, Text, Tooltip } from "../../../components"
+import { Box, CopyButton, Text, Tooltip } from "../../../components"
 import type { Table, MaterializedView } from "../../../utils/questdb/types"
 import {
   formatRelativeTimestamp,
@@ -48,6 +48,7 @@ export interface MonitoringTabProps {
   walExpanded: boolean
   onWalExpandedChange: (expanded: boolean) => void
   onOpenSuspensionDialog: () => void
+  onAskAI: () => void
 }
 
 const RowCountIndicatorInner = styled.div<{ $isMatView?: boolean }>`
@@ -209,6 +210,14 @@ const DisabledOverlay = styled.div<{ $disabled: boolean }>`
   transition: opacity 150ms ease;
 `
 
+const StyledCopyButton = styled(CopyButton).attrs({
+  iconOnly: true,
+  size: "sm",
+})`
+  margin-left: auto;
+  background: transparent;
+`
+
 const getSeverityColor = (
   theme: { color: Record<string, string> },
   severity: HealthSeverity | undefined,
@@ -347,8 +356,12 @@ export const MonitoringTab = ({
   walExpanded,
   onWalExpandedChange,
   onOpenSuspensionDialog,
+  onAskAI,
 }: MonitoringTabProps) => {
   const theme = useTheme()
+  const lastWriteTimestamp = tableData.table_last_write_timestamp
+    ? new Date(tableData.table_last_write_timestamp).toISOString()
+    : null
 
   return (
     <>
@@ -372,6 +385,7 @@ export const MonitoringTab = ({
                     ? () => onOpenSuspensionDialog()
                     : undefined
                 }
+                onAskAI={onAskAI}
                 docsUrl={ISSUE_DOCS_URLS[issue.id]}
               />
             ))}
@@ -386,15 +400,17 @@ export const MonitoringTab = ({
             {formatRowCount(tableData.table_row_count)}
           </RowCountBold>
           rows
-          {tableData.table_last_write_timestamp && (
+          {lastWriteTimestamp && (
             <Box gap="0.5rem" color="gray2">
               <Text color="gray2">{"(updated "}</Text>
               <Tooltip
-                content={new Date(
-                  tableData.table_last_write_timestamp,
-                ).toISOString()}
+                content={
+                  <Box gap="1rem" align="center">
+                    {lastWriteTimestamp}
+                    <StyledCopyButton text={lastWriteTimestamp} />
+                  </Box>
+                }
                 placement="bottom"
-                copyTooltip
               >
                 <TimestampUnderline>
                   {formatRelativeTimestamp(
@@ -533,7 +549,9 @@ export const MonitoringTab = ({
                       Deduped Rows
                     </Text>
                     <Text color="foreground" weight={500}>
-                      {formatRowCount(tableData.dedup_row_count_since_start)}
+                      {formatRowCount(
+                        tableData.wal_dedup_row_count_since_start,
+                      )}
                     </Text>
                   </ConfigItem>
                   <ConfigItemWithHealth
@@ -600,7 +618,7 @@ export const MonitoringTab = ({
 
       {performanceWarnings.length > 0 && (
         <Section>
-          <PerformanceAlerts warnings={performanceWarnings} />
+          <PerformanceAlerts warnings={performanceWarnings} onAskAI={onAskAI} />
         </Section>
       )}
     </>

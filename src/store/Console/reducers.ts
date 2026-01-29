@@ -30,6 +30,7 @@ export const initialState: ConsoleStateShape = {
   activeBottomPanel: "zeroState",
   imageToZoom: undefined,
   tableDetailsTarget: null,
+  previousSidebar: null,
 }
 
 const _console = (
@@ -69,6 +70,13 @@ const _console = (
       return {
         ...state,
         tableDetailsTarget: action.payload,
+      }
+    }
+
+    case ConsoleAT.SET_PREVIOUS_SIDEBAR: {
+      return {
+        ...state,
+        previousSidebar: action.payload,
       }
     }
 

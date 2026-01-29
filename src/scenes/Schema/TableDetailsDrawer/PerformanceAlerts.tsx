@@ -1,18 +1,18 @@
 import React, { useState } from "react"
 import styled from "styled-components"
 import {
-  Warning,
-  ArrowSquareOut,
-  CaretRight,
-  BellSimpleRinging,
+  WarningIcon,
+  ArrowSquareOutIcon,
+  CaretRightIcon,
+  BellSimpleRingingIcon,
 } from "@phosphor-icons/react"
-import { Text, Button } from "../../../components"
-import { AISparkle } from "../../../components/AISparkle"
+import { Text } from "../../../components"
 import { type HealthIssue, ISSUE_DOCS_URLS } from "./healthCheck"
+import { SchemaAIButton } from "./SchemaAIButton"
 
 type Props = {
   warnings: HealthIssue[]
-  onAskAI?: (warning: HealthIssue) => void
+  onAskAI: (warning: HealthIssue) => void
   defaultExpanded?: boolean
 }
 
@@ -35,14 +35,14 @@ const SectionHeader = styled.button`
   width: 100%;
 `
 
-const CaretIcon = styled(CaretRight)<{ $expanded: boolean }>`
+const CaretIcon = styled(CaretRightIcon)<{ $expanded: boolean }>`
   color: ${({ theme }) => theme.color.foreground};
   transition: transform 150ms ease;
   transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
   flex-shrink: 0;
 `
 
-const BellIcon = styled(BellSimpleRinging)`
+const BellIcon = styled(BellSimpleRingingIcon)`
   color: ${({ theme }) => theme.color.foreground};
   flex-shrink: 0;
 `
@@ -162,14 +162,7 @@ const DocsLink = styled.a`
   }
 `
 
-const AskAIButton = styled(Button).attrs({
-  skin: "gradient",
-})`
-  padding: 0 0.625rem;
-  gap: 0.5rem;
-`
-
-const WarningIconStyled = styled(Warning)`
+const WarningIconStyled = styled(WarningIcon)`
   color: ${({ theme }) => theme.color.orange};
   flex-shrink: 0;
 `
@@ -284,15 +277,12 @@ export const PerformanceAlerts = ({
                           rel="noopener noreferrer"
                         >
                           View explanation in docs
-                          <ArrowSquareOut size={14} />
+                          <ArrowSquareOutIcon size={14} />
                         </DocsLink>
                       )}
-                      <AskAIButton
-                        prefixIcon={<AISparkle size={14} variant="hollow" />}
-                        onClick={() => onAskAI?.(warning)}
-                      >
+                      <SchemaAIButton onClick={() => onAskAI(warning)}>
                         Ask AI
-                      </AskAIButton>
+                      </SchemaAIButton>
                     </ActionsRow>
                   </AlertBody>
                 </AlertContent>

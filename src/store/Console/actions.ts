@@ -28,6 +28,7 @@ import {
   Sidebar,
   BottomPanel,
   TableDetailsTarget,
+  PreviousSidebar,
 } from "./types"
 
 const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
@@ -54,10 +55,16 @@ const setTableDetailsTarget = (target: TableDetailsTarget): ConsoleAction => ({
   type: ConsoleAT.SET_TABLE_DETAILS_TARGET,
 })
 
+const setPreviousSidebar = (previous: PreviousSidebar): ConsoleAction => ({
+  payload: previous,
+  type: ConsoleAT.SET_PREVIOUS_SIDEBAR,
+})
+
 export default {
   toggleSideMenu,
   setActiveSidebar,
   setActiveBottomPanel,
   setImageToZoom,
   setTableDetailsTarget,
+  setPreviousSidebar,
 }

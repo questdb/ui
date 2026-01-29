@@ -41,6 +41,7 @@ type BaseFlowConfig = {
   tables?: Array<Table>
   hasSchemaAccess: boolean
   abortSignal?: AbortSignal
+  useLastMessage?: boolean
 }
 
 type ChatFlowConfig = BaseFlowConfig & {
@@ -106,14 +107,17 @@ export type AIFlowCallbacks = {
     name: string,
     isGeneratedByAI?: boolean,
   ) => Promise<void>
-  replaceConversationMessages?: (
-    conversationId: string,
-    messages: ConversationMessage[],
-  ) => void
+  replaceConversationMessages?: (messages: ConversationMessage[]) => void
+  getLastRoundMessages?: (conversationId: ConversationId) => Promise<{
+    lastUserMessage?: ConversationMessage
+    lastAssistantMessage?: ConversationMessage
+  }>
 }
 
 export type AIFlowResult = {
   success: boolean
+  cached?: boolean
+  cachedMessageId?: string
   error?: string
   sql?: string
   explanation?: string
@@ -218,7 +222,7 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
   }
 
   if (compactedHistory && callbacks.replaceConversationMessages) {
-    callbacks.replaceConversationMessages(conversationId, compactedHistory)
+    callbacks.replaceConversationMessages(compactedHistory)
   }
 
   switch (type) {
@@ -363,9 +367,27 @@ export async function executeAIFlow(
     tables,
     hasSchemaAccess,
     abortSignal,
+    useLastMessage,
   } = config
 
   const userMsg = buildUserMessage(config)
+
+  if (useLastMessage && callbacks.getLastRoundMessages) {
+    const { lastUserMessage, lastAssistantMessage } =
+      await callbacks.getLastRoundMessages(conversationId)
+
+    if (
+      lastUserMessage?.content === userMsg.content &&
+      lastAssistantMessage &&
+      !lastAssistantMessage.error
+    ) {
+      return {
+        success: true,
+        cached: true,
+        cachedMessageId: lastUserMessage.id,
+      }
+    }
+  }
 
   callbacks.addMessage({
     role: "user",

@@ -88,7 +88,6 @@ export const StyledClose = styled(Button).attrs({
   "aria-label": "Close",
   skin: "transparent",
 })`
-  margin-right: 0.5rem;
   cursor: pointer;
   color: ${({ theme }) => theme.color.foreground};
   padding: 0.6rem;

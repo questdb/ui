@@ -491,6 +491,10 @@ type ChatMessagesProps = {
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
   editorSQL?: string
   isStreaming: boolean
+  isLoadingMessages?: boolean
+  // Message ID to scroll to (for cache hits)
+  scrollToMessageId?: string | null
+  onScrollToMessageComplete?: () => void
 }
 
 const getOperationBadgeInfo = (
@@ -552,10 +556,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   isOperationInProgress,
   editorSQL,
   isStreaming,
+  isLoadingMessages,
+  scrollToMessageId,
+  onScrollToMessageComplete,
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const { status } = useAIStatus()
   const [scrolled, setScrolled] = useState(false)
   const userScrolledRef = useRef(false)
@@ -644,6 +652,17 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   useEffect(() => {
     handleScrollNeeded()
   }, [visibleMessagesCount, streamingContentLength])
+
+  useEffect(() => {
+    if (!scrollToMessageId || isLoadingMessages) return
+
+    const messageEl = messageRefs.current.get(scrollToMessageId)
+    if (messageEl) {
+      messageEl.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+
+    onScrollToMessageComplete?.()
+  }, [scrollToMessageId, isLoadingMessages, onScrollToMessageComplete])
 
   const visibleMessages: Array<{
     message: ConversationMessage
@@ -746,7 +765,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             }
 
             return (
-              <UserRequestBox key={key} data-hook="chat-message-user">
+              <UserRequestBox
+                key={key}
+                data-hook="chat-message-user"
+                ref={(el) => {
+                  if (el) messageRefs.current.set(message.id, el)
+                }}
+              >
                 <OperationBadge>
                   <BadgeIconContainer>
                     <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
@@ -770,7 +795,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             const userQuestion = message.displayUserMessage || message.content
 
             return (
-              <UserRequestBox key={key} data-hook="chat-message-user">
+              <UserRequestBox
+                key={key}
+                data-hook="chat-message-user"
+                ref={(el) => {
+                  if (el) messageRefs.current.set(message.id, el)
+                }}
+              >
                 <UserRequestHeader>
                   <MessageContent>{userQuestion}</MessageContent>
                 </UserRequestHeader>
@@ -794,7 +825,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
           // Default: plain text message
           return (
-            <MessageBubble key={key} data-hook="chat-message-user">
+            <MessageBubble
+              key={key}
+              data-hook="chat-message-user"
+              ref={(el) => {
+                if (el) messageRefs.current.set(message.id, el)
+              }}
+            >
               <MessageContent>{message.content}</MessageContent>
             </MessageBubble>
           )
@@ -907,6 +944,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               key={key}
               $hasOperationHistory={hasOperationHistory}
               data-hook="chat-message-assistant"
+              ref={(el) => {
+                if (el) messageRefs.current.set(message.id, el)
+              }}
             >
               {hasOperationHistory && (
                 <>

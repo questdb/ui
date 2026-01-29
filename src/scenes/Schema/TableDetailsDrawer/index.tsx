@@ -27,7 +27,7 @@ import {
 } from "./healthCheck"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { useAdaptivePoll } from "../../../hooks"
+import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
 
@@ -163,6 +163,7 @@ const HeaderBackButton = styled.button`
   border-radius: 0.4rem;
   color: ${({ theme }) => theme.color.gray2};
   font-weight: 500;
+  font-size: 1.4rem;
 
   &:hover {
     background: transparent !important;
@@ -231,6 +232,36 @@ export const TableDetailsDrawer = () => {
       }),
     )
   }, [dispatch, navigatedFrom])
+
+  const handleNavigateToAIChat = useCallback(() => {
+    dispatch(
+      actions.console.setPreviousSidebar({
+        type: "tableDetails",
+        tableDetailsTarget: target,
+      }),
+    )
+    dispatch(actions.console.setActiveSidebar("aiChat"))
+  }, [dispatch, target])
+
+  const { handleExplainSchema } = useAIQuickActions()
+
+  const handleExplainWithAI = useCallback(() => {
+    if (tableData?.id == null) return
+    void handleExplainSchema(
+      tableData.id,
+      tableName,
+      isMatView ? "matview" : "table",
+      {
+        partitionBy: tableData.partitionBy,
+        walEnabled: tableData.walEnabled,
+        designatedTimestamp: tableData.designatedTimestamp,
+      },
+      {
+        type: "tableDetails",
+        tableDetailsTarget: target,
+      },
+    )
+  }, [handleExplainSchema, tableData, tableName, isMatView, target])
 
   const fetchTableData = useCallback(async () => {
     try {
@@ -504,12 +535,14 @@ export const TableDetailsDrawer = () => {
           {navigatedFrom && (
             <HeaderBackButton onClick={handleNavigateBack}>
               <ArrowLeftIcon size={14} weight="bold" />
-              <span>Back</span>
+              Back
             </HeaderBackButton>
           )}
-          {healthStatus && (
-            <HealthStatusLabel severity={healthStatus.overallSeverity} />
-          )}
+
+          <HealthStatusLabel
+            severity={healthStatus?.overallSeverity ?? "healthy"}
+          />
+
           <TableName ellipsis>{tableName}</TableName>
           <StyledCopyButton size="sm" text={tableName} iconOnly />
         </TitleContainer>
@@ -575,6 +608,7 @@ export const TableDetailsDrawer = () => {
                 walExpanded={walExpanded}
                 onWalExpandedChange={setWalExpanded}
                 onOpenSuspensionDialog={() => setSuspensionDialogOpen(true)}
+                onAskAI={handleNavigateToAIChat}
               />
             )}
 
@@ -590,6 +624,7 @@ export const TableDetailsDrawer = () => {
                 columnsExpanded={columnsExpanded}
                 onColumnsExpandedChange={setColumnsExpanded}
                 onNavigateToBaseTable={handleNavigateToBaseTable}
+                onExplainWithAI={handleExplainWithAI}
               />
             )}
 

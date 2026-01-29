@@ -206,7 +206,7 @@ export type Table = {
   wal_txn: number | null
   wal_tx_count: number | null
   wal_max_timestamp: string | null
-  dedup_row_count_since_start: number | null
+  wal_dedup_row_count_since_start: number | null
   table_write_amp_count: number | null
   table_write_amp_p50: number | null
   table_write_amp_p90: number | null

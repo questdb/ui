@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Button, ButtonProps } from "../../components"
+import { Button, type ButtonProps } from "../Button"
 import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { copyToClipboard } from "../../utils/copyToClipboard"

@@ -47,16 +47,12 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
-import {
-  executeAIFlow,
-  createSchemaExplainFlowConfig,
-} from "../../../utils/executeAIFlow"
 import { AISparkle } from "../../../components/AISparkle"
+import { useAIQuickActions } from "../../../hooks"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
@@ -191,25 +187,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const allColumns = useSelector(selectors.query.getColumns)
   const {
     status: aiStatus,
-    setStatus,
-    abortController,
     canUse,
-    hasSchemaAccess,
-    currentModel,
-    apiKey,
     isConfigured,
+    hasSchemaAccess,
   } = useAIStatus()
 
-  const {
-    findConversationByTableId,
-    createConversation,
-    openChatWindow,
-    addMessage,
-    updateMessage,
-    updateConversationName,
-    persistMessages,
-    setIsStreaming,
-  } = useAIConversation()
+  const { handleExplainSchema } = useAIQuickActions()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -314,73 +297,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       await copyToClipboard(schema)
       toast.success("Schema copied to clipboard")
     }
-  }
-
-  const handleExplainSchema = async (item: FlattenedTreeItem) => {
-    const tableName = item.name
-    const kind = item.kind as "table" | "matview" | "view"
-    const tableId = item.table?.id
-
-    if (!canUse) {
-      toast.error(
-        "AI Assistant is not enabled. Please configure your API key in settings.",
-      )
-      return
-    }
-
-    if (tableId == null) {
-      toast.error("Cannot find table ID")
-      return
-    }
-
-    const schema = await getTableSchema(tableName, kind)
-    if (!schema) {
-      return
-    }
-
-    const existingConversation = findConversationByTableId(tableId)
-    if (existingConversation) {
-      void openChatWindow(existingConversation.id)
-      return
-    }
-
-    const conversation = await createConversation({
-      tableId,
-    })
-
-    void updateConversationName(
-      conversation.id,
-      `${tableName} schema explanation`,
-    )
-    await openChatWindow(conversation.id)
-
-    void executeAIFlow(
-      createSchemaExplainFlowConfig({
-        conversationId: conversation.id,
-        tableName,
-        schema,
-        kindLabel: getTableKindLabel(kind),
-        schemaDisplayData: {
-          tableName,
-          kind,
-          partitionBy: item.partitionBy,
-          walEnabled: item.walEnabled,
-          designatedTimestamp: item.designatedTimestamp,
-        },
-        settings: { model: currentModel, apiKey },
-        questClient: quest,
-        tables,
-        hasSchemaAccess,
-        abortSignal: abortController?.signal,
-      }),
-      {
-        addMessage,
-        updateMessage,
-        setStatus,
-        setIsStreaming,
-        persistMessages,
-      },
-    )
   }
 
   const fetchSymbolColumnDetails = useCallback(
@@ -748,7 +664,22 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 {isConfigured && (
                   <MenuItem
                     data-hook="table-context-menu-explain-schema"
-                    onClick={async () => await handleExplainSchema(item)}
+                    onClick={async () => {
+                      if (item.table?.id == null) {
+                        toast.error("Cannot find table ID")
+                        return
+                      }
+                      await handleExplainSchema(
+                        item.table.id,
+                        item.name,
+                        item.kind as "table" | "matview" | "view",
+                        {
+                          partitionBy: item.partitionBy,
+                          walEnabled: item.walEnabled,
+                          designatedTimestamp: item.designatedTimestamp,
+                        },
+                      )
+                    }}
                     icon={<AISparkle size={16} variant="filled" inverted />}
                     disabled={
                       !canUse ||

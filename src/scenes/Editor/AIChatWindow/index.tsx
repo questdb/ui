@@ -15,6 +15,7 @@ import {
   PlusIcon,
   XIcon,
   ClockCounterClockwiseIcon,
+  ArrowLeftIcon,
 } from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
@@ -66,7 +67,7 @@ const Container = styled.div`
 
 const Header = styled.div`
   height: 46px;
-  padding: 0 1.5rem;
+  padding: 0 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -111,6 +112,25 @@ const HeaderRight = styled.div`
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+`
+
+const HeaderBackButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: 0.4rem;
+  color: ${color("gray2")};
+  font-weight: 500;
+  font-size: 1.4rem;
+
+  &:hover {
+    background: transparent !important;
+    color: ${color("foreground")};
+  }
 `
 
 const ChatWindowContent = styled.div`
@@ -197,6 +217,7 @@ const ChatPanel = styled(Box)`
 const AIChatWindow: React.FC = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const previousSidebar = useSelector(selectors.console.getPreviousSidebar)
   const { quest } = useContext(QuestContext)
   const {
     editorRef,
@@ -212,6 +233,8 @@ const AIChatWindow: React.FC = () => {
     isLoadingMessages,
     isStreaming,
     setIsStreaming,
+    scrollToMessageId,
+    setScrollToMessageId,
     closeChatWindow,
     openBlankChatWindow,
     openHistoryView,
@@ -356,6 +379,22 @@ const AIChatWindow: React.FC = () => {
     return "AI Assistant"
   }, [conversation, isHistoryOpen])
 
+  const handleNavigateBack = useCallback(() => {
+    if (!previousSidebar) return
+    if (
+      previousSidebar.type === "tableDetails" &&
+      previousSidebar.tableDetailsTarget
+    ) {
+      dispatch(
+        actions.console.setTableDetailsTarget(
+          previousSidebar.tableDetailsTarget,
+        ),
+      )
+    }
+    dispatch(actions.console.setActiveSidebar(previousSidebar.type))
+    dispatch(actions.console.setPreviousSidebar(null))
+  }, [dispatch, previousSidebar])
+
   const handleHistoryToggle = useCallback(() => {
     if (isHistoryOpen) {
       void closeHistoryView()
@@ -467,6 +506,10 @@ const AIChatWindow: React.FC = () => {
     }
     return await highlightQuery(conversation.queryKey, conversation.bufferId)
   }, [conversation?.queryKey, conversation?.bufferId, highlightQuery])
+
+  const handleScrollToMessageComplete = useCallback(() => {
+    setScrollToMessageId(null)
+  }, [setScrollToMessageId])
 
   const handleOpenInEditor = useCallback(
     async (
@@ -720,6 +763,12 @@ const AIChatWindow: React.FC = () => {
     <Container data-hook="ai-chat-window">
       <Header>
         <HeaderLeft>
+          {previousSidebar && (
+            <HeaderBackButton onClick={handleNavigateBack}>
+              <ArrowLeftIcon size={14} weight="bold" />
+              Back
+            </HeaderBackButton>
+          )}
           <AISparkle size={20} variant="filled" />
           <HeaderTitle data-hook="chat-window-title">{headerTitle}</HeaderTitle>
         </HeaderLeft>
@@ -779,6 +828,9 @@ const AIChatWindow: React.FC = () => {
                 isOperationInProgress={isBlockingAIStatus(aiStatus)}
                 editorSQL={queryInfo.queryText}
                 isStreaming={isStreaming}
+                isLoadingMessages={isLoadingMessages}
+                scrollToMessageId={scrollToMessageId}
+                onScrollToMessageComplete={handleScrollToMessageComplete}
               />
             ) : currentSQL && currentSQL.trim() ? (
               <InitialQueryContainer>

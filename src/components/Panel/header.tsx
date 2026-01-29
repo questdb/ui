@@ -36,7 +36,6 @@ export const Root = styled.div<{ shadow?: boolean; $titleColor?: string }>`
   padding: 0 1rem;
   align-items: center;
   background: ${({ $titleColor }) => $titleColor ?? color("backgroundLighter")};
-  border-top: 1px solid transparent;
   z-index: 5;
 
   ${({ shadow }) =>

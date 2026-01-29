@@ -28,13 +28,11 @@ import * as RadixTooltip from "@radix-ui/react-tooltip"
 import type { Placement } from "@popperjs/core"
 
 import { Text } from "../Text"
-import { CopyButton } from "../CopyButton"
 import { color } from "../../utils"
 
 type Props = {
   content: React.ReactNode | null
   placement?: Placement
-  copyTooltip?: boolean
   delay?: number
   children: React.ReactNode
 }
@@ -138,16 +136,6 @@ const TooltipContent = styled(RadixTooltip.Content)`
   }
 `
 
-const ContentWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-`
-
-const StyledCopyButton = styled(CopyButton)`
-  background: transparent;
-`
-
 const mapPlacementToSide = (
   placement: Placement,
 ): "top" | "right" | "bottom" | "left" => {
@@ -169,7 +157,6 @@ const mapPlacementToAlign = (
 export const Tooltip = ({
   content,
   placement = "bottom",
-  copyTooltip = false,
   delay = 200,
   children,
 }: Props): JSX.Element => {
@@ -184,15 +171,8 @@ export const Tooltip = ({
             align={mapPlacementToAlign(placement)}
             sideOffset={0}
           >
-            <Text color="foreground">
-              {copyTooltip && typeof content === "string" ? (
-                <ContentWrapper>
-                  {content}
-                  <StyledCopyButton text={content} size="sm" iconOnly />
-                </ContentWrapper>
-              ) : (
-                content
-              )}
+            <Text color="foreground" data-hook="tooltip">
+              {content}
             </Text>
             <RadixTooltip.Arrow asChild width={14} height={7}>
               <ArrowWithBorder />

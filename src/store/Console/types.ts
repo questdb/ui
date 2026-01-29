@@ -33,6 +33,11 @@ export type TableDetailsTarget = {
   }
 } | null
 
+export type PreviousSidebar = {
+  type: Exclude<Sidebar, undefined>
+  tableDetailsTarget?: TableDetailsTarget
+} | null
+
 export type BottomPanel = "result" | "zeroState" | "import"
 
 export type ImageToZoom = {
@@ -48,6 +53,7 @@ export type ConsoleStateShape = Readonly<{
   activeBottomPanel: BottomPanel
   imageToZoom: ImageToZoom | undefined
   tableDetailsTarget: TableDetailsTarget
+  previousSidebar: PreviousSidebar
 }>
 
 export enum ConsoleAT {
@@ -56,6 +62,7 @@ export enum ConsoleAT {
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
   SET_IMAGE_TO_ZOOM = "CONSOLE/SET_IMAGE_TO_ZOOM",
   SET_TABLE_DETAILS_TARGET = "CONSOLE/SET_TABLE_DETAILS_TARGET",
+  SET_PREVIOUS_SIDEBAR = "CONSOLE/SET_PREVIOUS_SIDEBAR",
 }
 
 type ToggleSideMenuAction = Readonly<{
@@ -82,9 +89,15 @@ type setTableDetailsTargetAction = Readonly<{
   type: ConsoleAT.SET_TABLE_DETAILS_TARGET
 }>
 
+type setPreviousSidebarAction = Readonly<{
+  payload: PreviousSidebar
+  type: ConsoleAT.SET_PREVIOUS_SIDEBAR
+}>
+
 export type ConsoleAction =
   | ToggleSideMenuAction
   | setActiveSidebarAction
   | setActiveBottomPanelAction
   | setImageToZoomAction
   | setTableDetailsTargetAction
+  | setPreviousSidebarAction

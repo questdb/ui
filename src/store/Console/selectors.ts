@@ -27,6 +27,7 @@ import {
   BottomPanel,
   ImageToZoom,
   TableDetailsTarget,
+  PreviousSidebar,
 } from "types"
 
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
@@ -46,10 +47,14 @@ const getTableDetailsTarget: (store: StoreShape) => TableDetailsTarget = (
   store,
 ) => store.console.tableDetailsTarget
 
+const getPreviousSidebar: (store: StoreShape) => PreviousSidebar = (store) =>
+  store.console.previousSidebar
+
 export default {
   getSideMenuOpened,
   getActiveSidebar,
   getActiveBottomPanel,
   getImageToZoom,
   getTableDetailsTarget,
+  getPreviousSidebar,
 }
