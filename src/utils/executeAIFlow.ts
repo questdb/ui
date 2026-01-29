@@ -13,18 +13,15 @@ import type {
 import { AIOperationStatus } from "../providers/AIStatusProvider"
 import {
   continueConversation,
-  explainTableSchema,
   createModelToolsClient,
   createStreamingCallback,
   isAiAssistantError,
   generateChatTitle,
-  schemaExplanationToMarkdown,
   getExplainSchemaPrompt,
   type ActiveProviderSettings,
   type GeneratedSQL,
   type AiAssistantExplanation,
   type AiAssistantAPIError,
-  type TableSchemaExplanation,
   type AIOperation,
 } from "./aiAssistant"
 import { providerForModel, MODEL_OPTIONS } from "./aiAssistantSettings"
@@ -192,11 +189,7 @@ function formatErrorMessage(error: AiAssistantAPIError): string {
 
 type ProcessResultConfig = {
   type: AIFlowConfig["type"]
-  response:
-    | GeneratedSQL
-    | AiAssistantExplanation
-    | TableSchemaExplanation
-    | AiAssistantAPIError
+  response: GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError
   conversationId: string
   assistantMessageId: string
   callbacks: AIFlowCallbacks
@@ -256,7 +249,7 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     }
 
     case "schema_explain": {
-      const result = response as TableSchemaExplanation
+      const result = response as AiAssistantExplanation
       if (!result.explanation) {
         callbacks.updateMessage(conversationId, assistantMessageId, {
           error: "No explanation received from AI Assistant",
@@ -264,13 +257,12 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
         return { success: false, error: "No explanation received" }
       }
 
-      const markdownContent = schemaExplanationToMarkdown(result)
       callbacks.updateMessage(conversationId, assistantMessageId, {
-        content: markdownContent,
-        explanation: markdownContent,
+        content: result.explanation,
+        explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })
-      return { success: true, explanation: markdownContent }
+      return { success: true, explanation: result.explanation }
     }
   }
 }
@@ -454,64 +446,48 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
-  const streamingCallback =
-    config.type !== "schema_explain"
-      ? createStreamingCallback({
-          conversationId,
-          assistantMessageId,
-          updateMessage: callbacks.updateMessage,
-          setIsStreaming: callbacks.setIsStreaming,
-        })
-      : undefined
+  const streamingCallback = createStreamingCallback({
+    conversationId,
+    assistantMessageId,
+    updateMessage: callbacks.updateMessage,
+    setIsStreaming: callbacks.setIsStreaming,
+  })
 
   try {
-    let response:
-      | GeneratedSQL
-      | AiAssistantExplanation
-      | TableSchemaExplanation
-      | AiAssistantAPIError
-    let compactedHistory: ConversationMessage[] | undefined
+    const operation: AIOperation =
+      config.type === "chat"
+        ? "followup"
+        : config.type === "schema_explain"
+          ? "schema_explain"
+          : config.type
+    const conversationHistory =
+      config.type === "chat" ? config.conversationHistory : []
+    const currentSQL =
+      config.type === "chat"
+        ? config.currentSQL
+        : config.type === "schema_explain"
+          ? undefined
+          : config.queryText
 
-    if (config.type === "schema_explain") {
-      response = await explainTableSchema({
-        tableName: config.tableName,
-        schema: config.schema,
-        kindLabel: config.kindLabel,
-        settings: providerSettings,
-        setStatus: setStatusWithHistory,
-        abortSignal,
-      })
-    } else {
-      const operation: AIOperation =
-        config.type === "chat" ? "followup" : config.type
-      const conversationHistory =
-        config.type === "chat" ? config.conversationHistory : []
-      const currentSQL =
-        config.type === "chat" ? config.currentSQL : config.queryText
-
-      const result = await continueConversation({
-        userMessage: userMsg.content,
-        conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
-        currentSQL,
-        settings: providerSettings,
-        modelToolsClient,
-        setStatus: setStatusWithHistory,
-        abortSignal,
-        operation,
-        streaming: streamingCallback,
-      })
-
-      response = result
-      compactedHistory = result.compactedConversationHistory
-    }
+    const result = await continueConversation({
+      userMessage: userMsg.content,
+      conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
+      currentSQL,
+      settings: providerSettings,
+      modelToolsClient,
+      setStatus: setStatusWithHistory,
+      abortSignal,
+      operation,
+      streaming: streamingCallback,
+    })
 
     return processResult({
       type: config.type,
-      response,
+      response: result,
       conversationId,
       assistantMessageId,
       callbacks,
-      compactedHistory,
+      compactedHistory: result.compactedConversationHistory,
     })
   } finally {
     streamingCallback?.cleanup?.()

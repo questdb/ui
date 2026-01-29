@@ -46,44 +46,6 @@ export type AiAssistantValidateQueryResult =
   | { valid: true }
   | { valid: false; error: string; position: number }
 
-export interface TableSchemaExplanation {
-  explanation: string
-  columns: Array<{
-    name: string
-    description: string
-    data_type: string
-  }>
-  storage_details: string[]
-  tokenUsage?: TokenUsage
-}
-
-export const schemaExplanationToMarkdown = (
-  explanation: TableSchemaExplanation,
-): string => {
-  let md = ""
-
-  md += `${explanation.explanation}\n\n`
-
-  if (explanation.columns.length > 0) {
-    md += `## Columns\n\n`
-    md += `| Column | Type | Description |\n`
-    md += `|--------|------|-------------|\n`
-    for (const col of explanation.columns) {
-      md += `| ${col.name} | \`${col.data_type}\` | ${col.description} |\n`
-    }
-    md += `\n`
-  }
-
-  if (explanation.storage_details.length > 0) {
-    md += `## Storage Details\n\n`
-    for (const detail of explanation.storage_details) {
-      md += `- ${detail}\n`
-    }
-  }
-
-  return md
-}
-
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
@@ -149,39 +111,6 @@ const FixSQLFormat: ResponseTextConfig = {
         explanation: { type: "string" },
       },
       required: ["explanation", "sql"],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-}
-
-const ExplainTableSchemaFormat: ResponseTextConfig = {
-  format: {
-    type: "json_schema" as const,
-    name: "explain_table_schema_format",
-    schema: {
-      type: "object",
-      properties: {
-        explanation: { type: "string" },
-        columns: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" },
-              data_type: { type: "string" },
-            },
-            required: ["name", "description", "data_type"],
-            additionalProperties: false,
-          },
-        },
-        storage_details: {
-          type: ["array", "null"],
-          items: { type: "string" },
-        },
-      },
-      required: ["explanation", "columns", "storage_details"],
       additionalProperties: false,
     },
     strict: true,
@@ -611,7 +540,7 @@ export const getExplainSchemaPrompt = (
   schema: string,
   kindLabel: string,
 ) => `You are a SQL expert assistant specializing in QuestDB, a high-performance time-series database.
-Briefly explain the following ${kindLabel} schema in detail. Include:
+Explain the following ${kindLabel} schema. Include:
 - The purpose of the ${kindLabel}
 - What each column represents and its data type
 - Any important properties like WAL enablement, partitioning strategy, designated timestamps
@@ -624,10 +553,22 @@ Schema:
 ${schema}
 \`\`\`
 
-Provide a short explanation that helps developers understand how to use this ${kindLabel}.
+**IMPORTANT: Format your response in markdown exactly as follows:**
 
-Return a JSON string with the following structure:
-{ "explanation": "The purpose of the table/materialized view/view", "columns": [ { "name": "Column Name", "description": "Column Description", "data_type": "Data Type" } ], "storage_details": ["Storage detail 1", "Storage detail 2"] | "null" for views }`
+1. Start with a brief paragraph explaining the purpose and general characteristics of this ${kindLabel}.
+
+2. Add a "## Columns" section with a markdown table:
+| Column | Type | Description |
+|--------|------|-------------|
+| column_name | \`data_type\` | Brief description |
+
+3. If this is a table or materialized view (not a view), add a "## Storage Details" section with bullet points about:
+- WAL enablement
+- Partitioning strategy
+- Designated timestamp column
+- Any other storage considerations
+
+For views, skip the Storage Details section.`
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
@@ -1477,141 +1418,6 @@ const executeAnthropicFlow = async <T>({
   }
 }
 
-export const explainTableSchema = async ({
-  tableName,
-  schema,
-  kindLabel,
-  settings,
-  setStatus,
-  abortSignal,
-}: {
-  tableName: string
-  schema: string
-  kindLabel: string
-  settings: ActiveProviderSettings
-  setStatus: StatusCallback
-  abortSignal?: AbortSignal
-}): Promise<TableSchemaExplanation | AiAssistantAPIError> => {
-  if (!settings.apiKey || !settings.model) {
-    return {
-      type: "invalid_key",
-      message: "API key is missing",
-    }
-  }
-  if (!tableName || !schema) {
-    return {
-      type: "unknown",
-      message: "Cannot find schema for the table",
-    }
-  }
-
-  await handleRateLimit()
-  setStatus(AIOperationStatus.Processing)
-
-  return tryWithRetries(
-    async () => {
-      const clients = createProviderClients(settings)
-
-      if (clients.provider === "openai") {
-        const prompt = getExplainSchemaPrompt(tableName, schema, kindLabel)
-
-        const formattingOutput = await clients.openai.responses.parse(
-          {
-            ...getModelProps(settings.model),
-            instructions: getExplainSchemaPrompt(tableName, schema, kindLabel),
-            input: [{ role: "user", content: prompt }],
-            text: ExplainTableSchemaFormat,
-          },
-          { signal: abortSignal },
-        )
-
-        const formatted =
-          formattingOutput.output_parsed as TableSchemaExplanation | null
-        setStatus(null)
-        if (!formatted) {
-          return {
-            type: "unknown",
-            message: "Failed to parse assistant response.",
-          } as AiAssistantAPIError
-        }
-        const openAIUsage = formattingOutput.usage
-        return {
-          explanation: formatted.explanation || "",
-          columns: formatted.columns || [],
-          storage_details: formatted.storage_details || [],
-          tokenUsage: openAIUsage
-            ? {
-                inputTokens: openAIUsage.input_tokens,
-                outputTokens: openAIUsage.output_tokens,
-              }
-            : undefined,
-        }
-      }
-
-      const anthropic = clients.anthropic
-      const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
-        model: getModelProps(settings.model).model,
-        messages: [
-          {
-            role: "user" as const,
-            content: getExplainSchemaPrompt(tableName, schema, kindLabel),
-          },
-        ],
-        temperature: 0.3,
-      }
-      const schemaFormat = ExplainTableSchemaFormat.format as {
-        type: string
-        schema?: object
-      }
-      // @ts-expect-error - output_format is a new field not yet in the type definitions
-      messageParams.output_format = {
-        type: "json_schema",
-        schema: schemaFormat.schema,
-      }
-
-      const message = await createAnthropicMessage(
-        anthropic,
-        messageParams,
-        abortSignal,
-      )
-
-      const textBlock = message.content.find((block) => block.type === "text")
-      if (!textBlock || !("text" in textBlock)) {
-        setStatus(null)
-        return {
-          type: "unknown",
-          message: "No text response received from assistant.",
-        } as AiAssistantAPIError
-      }
-
-      try {
-        const json = JSON.parse(textBlock.text) as TableSchemaExplanation
-        setStatus(null)
-        const anthropicUsage = message.usage
-        return {
-          explanation: json.explanation || "",
-          columns: json.columns || [],
-          storage_details: json.storage_details || [],
-          tokenUsage: anthropicUsage
-            ? {
-                inputTokens: anthropicUsage.input_tokens,
-                outputTokens: anthropicUsage.output_tokens,
-              }
-            : undefined,
-        }
-      } catch (error) {
-        setStatus(null)
-        return {
-          type: "unknown",
-          message: "Failed to parse assistant response.",
-        } as AiAssistantAPIError
-      }
-    },
-    setStatus,
-    abortSignal,
-  )
-}
-
 class RefusalError extends Error {
   constructor(message: string) {
     super(message)
@@ -2028,7 +1834,7 @@ Return a JSON object with the following structure: { "title": "Your title here" 
   }
 }
 
-export type AIOperation = "explain" | "fix" | "followup"
+export type AIOperation = "explain" | "fix" | "followup" | "schema_explain"
 
 export const continueConversation = async ({
   userMessage,
@@ -2075,6 +1881,7 @@ export const continueConversation = async ({
     explain: ExplainFormat,
     fix: FixSQLFormat,
     followup: ConversationResponseFormat,
+    schema_explain: ExplainFormat,
   }[operation]
 
   return tryWithRetries(
