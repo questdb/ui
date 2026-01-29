@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Button, ButtonProps } from "../../components"
 import { FileCopy } from "@styled-icons/remix-line"
@@ -26,6 +26,15 @@ export const CopyButton = ({
   size?: ButtonProps["size"]
 } & ButtonProps) => {
   const [copied, setCopied] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   return (
     <StyledButton
@@ -37,7 +46,7 @@ export const CopyButton = ({
         void copyToClipboard(text)
         e.stopPropagation()
         setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        timeoutRef.current = setTimeout(() => setCopied(false), 2000)
       }}
       {...(!iconOnly && {
         prefixIcon: <FileCopy size={size === "sm" ? "12px" : "16px"} />,

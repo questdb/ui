@@ -8,6 +8,8 @@ type Props = {
   align?: React.CSSProperties["alignItems"]
   justifyContent?: React.CSSProperties["justifyContent"]
   alignSelf?: React.CSSProperties["alignSelf"]
+  background?: React.CSSProperties["background"]
+  padding?: React.CSSProperties["padding"]
 }
 
 export const Box = styled.div.attrs<Props, Props>((props) => ({
@@ -17,6 +19,8 @@ export const Box = styled.div.attrs<Props, Props>((props) => ({
   align: props.align || "center",
   justifyContent: props.justifyContent || "flex-start",
   alignSelf: props.alignSelf || "",
+  background: props.background || "",
+  padding: props.padding || "0",
 }))`
   display: flex;
   flex-direction: ${({ flexDirection }) => flexDirection};
@@ -25,4 +29,6 @@ export const Box = styled.div.attrs<Props, Props>((props) => ({
   align-items: ${({ align }) => align};
   justify-content: ${({ justifyContent }) => justifyContent};
   align-self: ${({ alignSelf }) => alignSelf};
+  background: ${({ background }) => background};
+  padding: ${({ padding }) => padding};
 `

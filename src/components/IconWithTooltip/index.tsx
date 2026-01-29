@@ -1,20 +1,14 @@
 import React, { ReactNode } from "react"
-import { PopperHover, TextAlign, Tooltip, Placement } from "../"
+import { Tooltip, Placement } from "../"
 
 type Props = {
   icon: ReactNode
   tooltip: ReactNode
   placement: Placement
-  textAlign?: TextAlign
 }
 
-export const IconWithTooltip = ({
-  icon,
-  tooltip,
-  placement,
-  textAlign,
-}: Props) => (
-  <PopperHover placement={placement} trigger={icon}>
-    <Tooltip textAlign={textAlign}>{tooltip}</Tooltip>
-  </PopperHover>
+export const IconWithTooltip = ({ icon, tooltip, placement }: Props) => (
+  <Tooltip placement={placement} content={tooltip}>
+    {icon}
+  </Tooltip>
 )

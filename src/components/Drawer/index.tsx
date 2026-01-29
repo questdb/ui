@@ -136,6 +136,7 @@ export const Drawer = ({
           </ForwardRef>
         )}
         <DrawerContent
+          aria-describedby={undefined}
           mode={mode}
           width={width}
           {...(onDismiss && {

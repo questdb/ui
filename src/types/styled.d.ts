@@ -43,6 +43,7 @@ export type ColorShape = {
   midnight: string
   red: string
   redDark: string
+  redSecondary: string
   loginBackground: string
   orangeDark: string
   orange: string

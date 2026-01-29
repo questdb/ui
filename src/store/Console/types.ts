@@ -27,6 +27,10 @@ export type Sidebar = "news" | "create" | "aiChat" | "tableDetails" | undefined
 export type TableDetailsTarget = {
   tableName: string
   isMatView: boolean
+  navigatedFrom?: {
+    tableName: string
+    isMatView: boolean
+  }
 } | null
 
 export type BottomPanel = "result" | "zeroState" | "import"

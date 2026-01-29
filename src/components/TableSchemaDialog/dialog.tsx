@@ -8,7 +8,6 @@ import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
-import { PopperHover } from "../PopperHover"
 import { Tooltip } from "../Tooltip"
 import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
@@ -260,25 +259,19 @@ export const Dialog = ({
                     <Form.Item
                       name="partitionBy"
                       label={
-                        <PopperHover
-                          trigger={
-                            <Box
-                              align="center"
-                              justifyContent="center"
-                              gap="0.5rem"
-                            >
-                              <InfoCircle size="14" />
-                              <span>Partition by</span>
-                            </Box>
-                          }
+                        <Tooltip
                           placement="bottom"
+                          content="Splits data into smaller chunks by intervals of time in order to improve the performance and scalability of the database system."
                         >
-                          <Tooltip>
-                            Splits data into smaller chunks by intervals of time
-                            in order to improve the performance and scalability
-                            of the database system.
-                          </Tooltip>
-                        </PopperHover>
+                          <Box
+                            align="center"
+                            justifyContent="center"
+                            gap="0.5rem"
+                          >
+                            <InfoCircle size="14" />
+                            <span>Partition by</span>
+                          </Box>
+                        </Tooltip>
                       }
                     >
                       <Form.Select
@@ -296,33 +289,33 @@ export const Dialog = ({
                       <Form.Item
                         name="walEnabled"
                         label={
-                          <PopperHover
-                            trigger={
-                              <Box
-                                align="center"
-                                justifyContent="center"
-                                gap="0.5rem"
-                              >
-                                <InfoCircle size="14" />
-                                <span>WAL</span>
-                              </Box>
-                            }
+                          <Tooltip
                             placement="bottom"
+                            content={
+                              <>
+                                WAL (Write-Ahead Log) allows concurrent data
+                                ingestion and modifications via multiple
+                                interfaces as well as table schema changes.
+                                {currentValues.partitionBy === "NONE" && (
+                                  <>
+                                    <br />
+                                    <br />
+                                    To enable WAL, set `Partition by` to a value
+                                    other than NONE.
+                                  </>
+                                )}
+                              </>
+                            }
                           >
-                            <Tooltip>
-                              WAL (Write-Ahead Log) allows concurrent data
-                              ingestion and modifications via multiple
-                              interfaces as well as table schema changes.
-                              {currentValues.partitionBy === "NONE" && (
-                                <>
-                                  <br />
-                                  <br />
-                                  To enable WAL, set `Partition by` to a value
-                                  other than NONE.
-                                </>
-                              )}
-                            </Tooltip>
-                          </PopperHover>
+                            <Box
+                              align="center"
+                              justifyContent="center"
+                              gap="0.5rem"
+                            >
+                              <InfoCircle size="14" />
+                              <span>WAL</span>
+                            </Box>
+                          </Tooltip>
                         }
                       >
                         <Form.Select

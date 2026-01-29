@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useState } from "react"
 import { useDispatch } from "react-redux"
 import styled from "styled-components"
-import { PopperHover } from "../../components"
+import { Tooltip } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
@@ -11,7 +11,6 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
-import { Tooltip } from "../../components"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
 import { Database2, Grid, PieChart, FileSearch } from "@styled-icons/remix-line"
@@ -181,56 +180,49 @@ const Console = () => {
                 <Top>
                   <Sidebar align="top">
                     {!sm && (
-                      <PopperHover
+                      <Tooltip
                         placement="right"
-                        trigger={
-                          <Navigation
-                            data-hook="tables-panel-button"
-                            direction="left"
-                            onClick={() => {
-                              if (isDataSourcesPanelOpen) {
-                                updateLeftPanelState({
-                                  type: null,
-                                  width: leftPanelState.width,
-                                })
-                              } else {
-                                updateLeftPanelState({
-                                  type: LeftPanelType.DATASOURCES,
-                                  width: leftPanelState.width,
-                                })
-                              }
-                            }}
-                            selected={isDataSourcesPanelOpen}
-                          >
-                            <Database2 size={BUTTON_ICON_SIZE} />
-                          </Navigation>
-                        }
+                        content={`${isDataSourcesPanelOpen ? "Hide" : "Show"} data sources`}
                       >
-                        <Tooltip>
-                          {isDataSourcesPanelOpen ? "Hide" : "Show"} data
-                          sources
-                        </Tooltip>
-                      </PopperHover>
-                    )}
-                    <PopperHover
-                      placement="right"
-                      trigger={
                         <Navigation
-                          data-hook="search-panel-button"
+                          data-hook="tables-panel-button"
                           direction="left"
-                          onClick={() => setSearchPanelOpen(!isSearchPanelOpen)}
-                          selected={isSearchPanelOpen}
+                          onClick={() => {
+                            if (isDataSourcesPanelOpen) {
+                              updateLeftPanelState({
+                                type: null,
+                                width: leftPanelState.width,
+                              })
+                            } else {
+                              updateLeftPanelState({
+                                type: LeftPanelType.DATASOURCES,
+                                width: leftPanelState.width,
+                              })
+                            }
+                          }}
+                          selected={isDataSourcesPanelOpen}
                         >
-                          <FileSearch size={BUTTON_ICON_SIZE} />
+                          <Database2 size={BUTTON_ICON_SIZE} />
                         </Navigation>
+                      </Tooltip>
+                    )}
+                    <Tooltip
+                      placement="right"
+                      content={
+                        isSearchPanelOpen
+                          ? "Hide search in tabs"
+                          : "Search in tabs"
                       }
                     >
-                      <Tooltip>
-                        {isSearchPanelOpen
-                          ? "Hide search in tabs"
-                          : "Search in tabs"}
-                      </Tooltip>
-                    </PopperHover>
+                      <Navigation
+                        data-hook="search-panel-button"
+                        direction="left"
+                        onClick={() => setSearchPanelOpen(!isSearchPanelOpen)}
+                        selected={isSearchPanelOpen}
+                      >
+                        <FileSearch size={BUTTON_ICON_SIZE} />
+                      </Navigation>
+                    </Tooltip>
                   </Sidebar>
                   <Allotment
                     ref={horizontalSplitterRef}
@@ -249,7 +241,7 @@ const Console = () => {
                       visible={
                         (isDataSourcesPanelOpen || isSearchPanelOpen) && !sm
                       }
-                      minSize={250}
+                      minSize={320}
                     >
                       <Schema open={isDataSourcesPanelOpen} />
                       <SearchPanel
@@ -269,58 +261,52 @@ const Console = () => {
                   <Sidebar align="bottom">
                     {result &&
                       viewModes.map(({ icon, mode, tooltipText }) => (
-                        <PopperHover
+                        <Tooltip
                           key={mode}
                           placement="right"
-                          trigger={
-                            <Navigation
-                              data-hook={`${mode}-panel-button`}
-                              direction="left"
-                              onClick={() => {
-                                dispatch(
-                                  actions.console.setActiveBottomPanel(
-                                    "result",
-                                  ),
-                                )
-                                setResultViewMode(mode)
-                              }}
-                              selected={
-                                activeBottomPanel === "result" &&
-                                resultViewMode === mode
-                              }
-                            >
-                              {icon}
-                            </Navigation>
-                          }
+                          content={tooltipText}
                         >
-                          <Tooltip>{tooltipText}</Tooltip>
-                        </PopperHover>
-                      ))}
-                    <PopperHover
-                      placement="right"
-                      trigger={
-                        <PrimaryToggleButton
-                          readOnly={consoleConfig.readOnly}
-                          {...(!consoleConfig.readOnly && {
-                            onClick: () => {
+                          <Navigation
+                            data-hook={`${mode}-panel-button`}
+                            direction="left"
+                            onClick={() => {
                               dispatch(
-                                actions.console.setActiveBottomPanel("import"),
+                                actions.console.setActiveBottomPanel("result"),
                               )
-                            },
-                          })}
-                          selected={activeBottomPanel === "import"}
-                          data-hook="import-panel-button"
-                        >
-                          <ImportIcon size={BUTTON_ICON_SIZE} />
-                        </PrimaryToggleButton>
+                              setResultViewMode(mode)
+                            }}
+                            selected={
+                              activeBottomPanel === "result" &&
+                              resultViewMode === mode
+                            }
+                          >
+                            {icon}
+                          </Navigation>
+                        </Tooltip>
+                      ))}
+                    <Tooltip
+                      placement="right"
+                      content={
+                        consoleConfig.readOnly
+                          ? "To use this feature, turn off read-only mode in the configuration file"
+                          : "Import files from CSV"
                       }
                     >
-                      <Tooltip>
-                        {consoleConfig.readOnly
-                          ? "To use this feature, turn off read-only mode in the configuration file"
-                          : "Import files from CSV"}
-                      </Tooltip>
-                    </PopperHover>
+                      <PrimaryToggleButton
+                        readOnly={consoleConfig.readOnly}
+                        {...(!consoleConfig.readOnly && {
+                          onClick: () => {
+                            dispatch(
+                              actions.console.setActiveBottomPanel("import"),
+                            )
+                          },
+                        })}
+                        selected={activeBottomPanel === "import"}
+                        data-hook="import-panel-button"
+                      >
+                        <ImportIcon size={BUTTON_ICON_SIZE} />
+                      </PrimaryToggleButton>
+                    </Tooltip>
                   </Sidebar>
                   <Tab ref={resultRef}>
                     {result && <Result viewMode={resultViewMode} />}

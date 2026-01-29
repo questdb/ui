@@ -50,7 +50,6 @@ import {
 import { color } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
-import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
 import {
@@ -584,16 +583,10 @@ const Row = ({
 
           {errors && errors.length > 0 && (
             <TableActions>
-              <PopperHover
+              <Tooltip
                 placement="top"
-                trigger={
-                  <ErrorIconWrapper data-hook="schema-row-error-icon">
-                    <ErrorIcon size="18px" />
-                  </ErrorIconWrapper>
-                }
-              >
-                <Tooltip>
-                  {errors.length > 1 ? (
+                content={
+                  errors.length > 1 ? (
                     errors.map((error) => (
                       <ErrorItem key={error}>
                         <ErrorIconWrapper>
@@ -604,14 +597,18 @@ const Row = ({
                     ))
                   ) : (
                     <Text color="foreground">{errors[0]}</Text>
-                  )}
-                </Tooltip>
-              </PopperHover>
+                  )
+                }
+              >
+                <ErrorIconWrapper data-hook="schema-row-error-icon">
+                  <ErrorIcon size="18px" />
+                </ErrorIconWrapper>
+              </Tooltip>
             </TableActions>
           )}
         </FlexRow>
       </Box>
-      {onOpenDetailsDrawer && (
+      {!selectOpen && onOpenDetailsDrawer && (
         <DetailsDrawerButton
           skin="secondary"
           size="sm"

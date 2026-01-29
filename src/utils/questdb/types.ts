@@ -198,6 +198,7 @@ export type Table = {
   o3MaxLag: number
   table_suspended: boolean
   table_row_count: number | null
+  table_last_write_timestamp: string | null
   table_max_timestamp: string | null
   table_txn: number | null
   table_memory_pressure_level: number | null

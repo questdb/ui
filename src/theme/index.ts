@@ -44,6 +44,7 @@ const color: ColorShape = {
   comment: "#6272a4",
   red: "#ff5555",
   redDark: "#5a1d1d",
+  redSecondary: "rgba(220, 40, 40, 0.72)",
   loginBackground: "#1D070E",
   orangeDark: "#ff7f2a",
   orange: "#ffb86c",

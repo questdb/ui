@@ -1,7 +1,6 @@
 import React, { FC } from "react"
 import styled from "styled-components"
 import { Table } from "@styled-icons/remix-line"
-import { PopperHover } from "../../components/PopperHover"
 import { Tooltip } from "../../components/Tooltip"
 import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
@@ -134,43 +133,43 @@ export const TableIcon: FC<TableIconProps> = ({
 
   if (kind === "matview") {
     return (
-      <PopperHover
-        trigger={
-          <Root $size={size} data-hook="table-icon">
-            <MaterializedViewIcon size={size} />
-          </Root>
+      <Tooltip
+        content={
+          <>
+            {partitionText}, {timestampText}.
+          </>
         }
         delay={1000}
         placement="bottom"
       >
-        <Tooltip>
-          {partitionText}, {timestampText}.
-        </Tooltip>
-      </PopperHover>
+        <Root $size={size} data-hook="table-icon">
+          <MaterializedViewIcon size={size} />
+        </Root>
+      </Tooltip>
     )
   }
 
   return (
-    <PopperHover
-      trigger={
-        <Root $size={size} data-hook="table-icon">
-          {!walEnabled && <Asterisk>*</Asterisk>}
-          {isPartitioned ? (
-            <Table size={size} />
-          ) : (
-            <NonPartitionedTableIcon size={size} />
-          )}
-        </Root>
+    <Tooltip
+      content={
+        <>
+          {fullHeader}
+          <br />
+          <br />
+          {description}
+        </>
       }
       delay={1000}
       placement="bottom"
     >
-      <Tooltip>
-        {fullHeader}
-        <br />
-        <br />
-        {description}
-      </Tooltip>
-    </PopperHover>
+      <Root $size={size} data-hook="table-icon">
+        {!walEnabled && <Asterisk>*</Asterisk>}
+        {isPartitioned ? (
+          <Table size={size} />
+        ) : (
+          <NonPartitionedTableIcon size={size} />
+        )}
+      </Root>
+    </Tooltip>
   )
 }

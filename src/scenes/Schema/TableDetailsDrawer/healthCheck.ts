@@ -1,5 +1,18 @@
 import type { Table, MaterializedView } from "../../../utils/questdb/types"
 
+const DOCS_BASE_URL = "https://questdb.com/docs/operations/monitoring-alerting"
+
+export const ISSUE_DOCS_URLS: Record<string, string> = {
+  R1: `${DOCS_BASE_URL}/#detect-suspended-tables`, // WAL suspended
+  R2: `${DOCS_BASE_URL}/#detect-invalid-materialized-views`, // MatView invalid
+  R3: `${DOCS_BASE_URL}/#detect-memory-pressure`, // Memory backoff (level 2)
+  Y1: `${DOCS_BASE_URL}/#detect-transaction-lag-and-pending-rows`, // Transaction lag increasing
+  Y2: `${DOCS_BASE_URL}/#detect-transaction-lag-and-pending-rows`, // Pending rows increasing
+  Y3: `${DOCS_BASE_URL}/#detect-small-transactions`, // Small transactions
+  Y4: `${DOCS_BASE_URL}/#detect-high-write-amplification`, // High write amplification
+  Y5: `${DOCS_BASE_URL}/#detect-memory-pressure`, // Reduced parallelism (level 1)
+}
+
 export type HealthSeverity = "critical" | "warning" | "healthy" | "recovering"
 
 export type TrendDirection = "increasing" | "decreasing" | "stable"
@@ -9,6 +22,7 @@ export type HealthIssue = {
   severity: HealthSeverity
   field: string
   message: string
+  currentValue?: string
 }
 
 export type TrendIndicator = {
@@ -109,7 +123,7 @@ export function calculateHealthStatus(
       id: "R1",
       severity: "critical",
       field: "walStatus",
-      message: "WAL suspended - ingestion blocked",
+      message: "WAL suspended",
     })
   }
 
@@ -163,6 +177,17 @@ export function calculateHealthStatus(
             ? "WAL lag growing"
             : "WAL catching up",
       })
+
+      // Y1: Transaction lag increasing
+      if (txLagDirection === "increasing") {
+        issues.push({
+          id: "Y1",
+          severity: "warning",
+          field: "transactionLag",
+          message: "Transaction lag increasing",
+          currentValue: `${currentLag} txns`,
+        })
+      }
     }
 
     if (currentPending > 0 && pendingDirection !== "stable") {
@@ -175,6 +200,17 @@ export function calculateHealthStatus(
             ? "Pending rows accumulating"
             : "Pending rows clearing",
       })
+
+      // Y2: Pending rows increasing
+      if (pendingDirection === "increasing") {
+        issues.push({
+          id: "Y2",
+          severity: "warning",
+          field: "pendingRows",
+          message: "Pending rows accumulating",
+          currentValue: `${currentPending.toLocaleString()} rows`,
+        })
+      }
     }
 
     // Y3: Small Transactions (p90 < 100 rows, but > 0 to exclude empty tables)
@@ -188,6 +224,7 @@ export function calculateHealthStatus(
         severity: "warning",
         field: "txSizeP90",
         message: "Small transactions - consider batching",
+        currentValue: `${tableData.wal_tx_size_p90} rows`,
       })
     }
 
@@ -201,6 +238,7 @@ export function calculateHealthStatus(
         severity: "warning",
         field: "writeAmp",
         message: "High write amplification (O3 overhead)",
+        currentValue: `${tableData.table_write_amp_p50.toFixed(2)}x`,
       })
     }
 
@@ -211,6 +249,7 @@ export function calculateHealthStatus(
         severity: "warning",
         field: "memoryPressure",
         message: "Reduced parallelism mode",
+        currentValue: "Level 1",
       })
     }
   }

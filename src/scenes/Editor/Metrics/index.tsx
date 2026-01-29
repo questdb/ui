@@ -377,7 +377,7 @@ export const Metrics = () => {
                   </ForwardRef>
                 }
                 tooltip="Time duration"
-                placement="bottom"
+                placement="top"
               />
               <IconWithTooltip
                 icon={
@@ -413,7 +413,6 @@ export const Metrics = () => {
                   </>
                 }
                 placement="bottom"
-                textAlign="center"
               />
             </Box>
           </Toolbar>

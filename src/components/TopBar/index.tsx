@@ -3,9 +3,6 @@ import styled from "styled-components"
 import Menu from "../../scenes/Editor/Menu"
 import { Box } from "../../components"
 import { Toolbar } from "./toolbar"
-import { BackButton } from "./back-button"
-import { useLiveQuery } from "dexie-react-hooks"
-import { db } from "../../store/db"
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -17,29 +14,8 @@ const Root = styled(Box).attrs({
 `
 
 export const TopBar = () => {
-  const editorSettings = useLiveQuery(
-    async () => ({
-      returnTo:
-        (await db.editor_settings.where("key").equals("returnTo").first())
-          ?.value ?? "",
-
-      returnToLabel:
-        (await db.editor_settings.where("key").equals("returnToLabel").first())
-          ?.value ?? "",
-    }),
-    [],
-  )
-
   return (
     <Root>
-      {editorSettings?.returnTo && (
-        <BackButton
-          label={editorSettings?.returnToLabel}
-          onClick={() => {
-            window.location.href = editorSettings.returnTo as string
-          }}
-        />
-      )}
       <Toolbar />
       <Menu />
     </Root>

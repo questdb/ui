@@ -6,27 +6,10 @@ import React, {
   useMemo,
 } from "react"
 import { useSelector, useDispatch } from "react-redux"
-import styled, { css, useTheme, keyframes } from "styled-components"
+import styled, { css, useTheme } from "styled-components"
 import { selectors, actions } from "../../../store"
-import {
-  CaretRightIcon,
-  CheckCircleIcon,
-  PauseCircleIcon,
-  XCircleIcon,
-  CodeIcon,
-  TextColumnsIcon,
-  RowsIcon,
-  ClockCounterClockwiseIcon,
-  WarningIcon,
-  RowsPlusBottomIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
-  InfoIcon,
-  CircleIcon,
-} from "@phosphor-icons/react"
-import { Drawer, Box, Text, CopyButton, Button } from "../../../components"
-import { Badge, BadgeType } from "../../../components/Badge"
-import { LiteEditor } from "../../../components/LiteEditor"
+import { ArrowLeftIcon, XSquareIcon, WarningIcon } from "@phosphor-icons/react"
+import { Drawer, Box, Text, CopyButton, Dialog } from "../../../components"
 import { hideColumnsFromTableDDL } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import { QuestContext } from "../../../providers"
@@ -37,35 +20,27 @@ import type {
   MaterializedView,
 } from "../../../utils/questdb/types"
 import {
-  formatRelativeTimestamp,
-  formatMemoryPressure,
-  formatRowCount,
-  formatTTL,
-} from "./utils"
-import { ColumnIcon } from "../Row"
-import { Tooltip, PopperHover } from "../../../components"
-import {
   calculateHealthStatus,
   detectIngestionActive,
   MAX_TREND_SAMPLES,
   type TrendData,
-  type HealthSeverity,
-  type HealthIssue,
-  type TrendIndicator,
 } from "./healthCheck"
+import { HealthStatusLabel } from "./HealthStatusLabel"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { Restart } from "@styled-icons/remix-line"
 import { useAdaptivePoll } from "../../../hooks"
+import { MonitoringTab } from "./MonitoringTab"
+import { DetailsTab } from "./DetailsTab"
 
 const TableName = styled(Text).attrs({
   color: "foreground",
-  weight: 600,
+  code: true,
 })`
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 1.6rem;
+  font-weight: 400;
 `
 
 const TypeBadge = styled.span`
@@ -83,158 +58,6 @@ const TypeBadge = styled.span`
   justify-content: center;
 `
 
-const Section = styled(Box).attrs<{ $first?: boolean }>({
-  flexDirection: "column",
-  gap: "2rem",
-  align: "stretch",
-})<{ $first?: boolean }>`
-  padding: 2rem 1.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.backgroundLighter};
-  width: 100%;
-  ${({ $first }) =>
-    $first &&
-    css`
-      border-top: 1px solid ${({ theme }) => theme.color.backgroundLighter};
-    `}
-`
-
-const TopSection = styled(Box).attrs({
-  flexDirection: "column",
-  align: "stretch",
-})`
-  padding: 1rem;
-  border: 0;
-  width: 100%;
-`
-
-const SectionTitleContainer = styled(Box).attrs({
-  gap: "0.5rem",
-  align: "center",
-})`
-  width: 100%;
-`
-
-const SectionTitle = styled(Text).attrs({
-  color: "foreground",
-  size: "lg",
-  weight: 600,
-})`
-  svg {
-    flex-shrink: 0;
-  }
-`
-
-const StatusBadge = styled(Badge)`
-  padding: 0.3rem 0.6rem;
-  height: auto;
-  font-size: 1.3rem;
-  margin-left: 1rem;
-`
-
-const SectionTitleClickable = styled(SectionTitle)`
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  user-select: none;
-`
-
-const CaretIcon = styled(CaretRightIcon)<{ $expanded?: boolean }>`
-  transition: transform 150ms ease;
-  transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
-`
-
-const MetricsGrid = styled.div`
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.1rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
-`
-
-const MetricCard = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.3rem",
-  align: "flex-start",
-  justifyContent: "space-between",
-})`
-  padding: 1rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
-`
-
-const TopMetricsCard = styled(MetricCard)`
-  background: transparent;
-  padding: 1rem 0.5rem;
-`
-
-const MetricLabel = styled(Text).attrs({
-  color: "gray2",
-  size: "sm",
-})`
-  letter-spacing: 0.03em;
-`
-
-const MetricValue = styled(Text).attrs({
-  color: "foreground",
-  size: "md",
-})`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
-const TwoColumnGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  padding: 0 1rem;
-`
-
-const ConfigItem = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.3rem",
-  align: "flex-start",
-})`
-  min-width: 0;
-  overflow: hidden;
-`
-
-const RateText = styled(Text)`
-  transform: translateY(1px);
-`
-
-const ColumnNameBox = styled(Box)`
-  min-width: 0;
-  flex: 1;
-`
-
-const ColumnType = styled(Text).attrs({
-  color: "gray2",
-  size: "sm",
-})`
-  flex-shrink: 0;
-  margin-left: 1rem;
-`
-
-const SchemaRow = styled(Box).attrs({
-  justifyContent: "space-between",
-  align: "center",
-})`
-  max-width: 100%;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &:hover {
-    background: ${({ theme }) => theme.color.backgroundLighter};
-  }
-`
-
 const LoadingContainer = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
@@ -243,32 +66,15 @@ const LoadingContainer = styled(Box).attrs({
   height: 100%;
 `
 
-const TitleContainer = styled(Box).attrs({
-  gap: "1rem",
-  align: "center",
-})`
+const TitleContainer = styled(Dialog.Title).attrs({})`
+  display: flex;
+  padding: 0;
+  border: 0;
+  gap: 1rem;
+  align-items: center;
   max-width: 100%;
   overflow: hidden;
   margin-right: 1rem;
-`
-
-const HealthDot = styled.div<{ $severity: HealthSeverity }>`
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: ${({ theme, $severity }) => {
-    switch ($severity) {
-      case "critical":
-        return theme.color.red
-      case "warning":
-        return theme.color.orange
-      case "recovering":
-        return theme.color.green
-      default:
-        return theme.color.green
-    }
-  }};
 `
 
 const StyledCopyButton = styled(CopyButton)`
@@ -276,148 +82,93 @@ const StyledCopyButton = styled(CopyButton)`
   background: transparent;
 `
 
-const IngestionStatusContainer = styled(Box).attrs({
-  flexDirection: "row",
-  gap: "1.5rem",
-  align: "center",
-  justifyContent: "space-between",
-})`
-  border-radius: 4px;
+type TabType = "monitoring" | "details"
+
+const TabsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   width: 100%;
+  padding-top: 0.375rem;
 `
 
-const IngestionIndicator = styled(Box).attrs({
-  gap: "0.5rem",
-  align: "center",
-})`
-  margin-left: auto;
-  flex-shrink: 0;
+const TabsNav = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0 1.5rem;
 `
 
-const pulseColor = keyframes`
-  0%, 100% {
-    opacity: 0.2;
-  }
-  50% {
-    opacity: 1;
-  }
+const TabsSeparator = styled.div`
+  width: 100%;
+  height: 0.1rem;
+  background: ${({ theme }) => theme.color.backgroundLighter};
 `
 
-const PulsingCircle = styled(CircleIcon)`
-  animation: ${pulseColor} 1.5s ease-in-out infinite;
-  color: ${({ theme }) => theme.color.green};
+const Tab = styled.button<{ $active: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid
+    ${({ theme, $active }) => ($active ? theme.color.pink : "transparent")};
+  color: ${({ theme, $active }) =>
+    $active ? theme.color.foreground : theme.color.gray2};
+  font-size: ${({ theme }) => theme.fontSize.lg};
+  font-weight: ${({ $active }) => ($active ? 600 : 400)};
+  cursor: pointer;
+  transition: all 150ms ease;
+
+  &:hover {
+    color: ${({ theme }) => theme.color.foreground};
+  }
+
+  ${({ $active }) =>
+    !$active &&
+    css`
+      &:hover {
+        border-bottom: 2px solid ${({ theme }) => theme.color.background};
+      }
+    `}
 `
 
-const getSeverityColor = (
-  theme: { color: Record<string, string> },
-  severity: HealthSeverity | undefined,
-): string => {
-  switch (severity) {
-    case "critical":
-      return theme.color.red
-    case "warning":
-      return theme.color.orange
-    case "recovering":
-      return theme.color.green
-    default:
-      return theme.color.foreground
+const TabBadge = styled.span<{ $type: "warning" | "error" }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  height: 1.8rem;
+  padding: 0 0.6rem;
+  border-radius: 10px;
+  font-size: 1.2rem;
+  background: ${({ theme, $type }) =>
+    $type === "error" ? `${theme.color.red}30` : `${theme.color.orange}30`};
+  color: ${({ theme, $type }) =>
+    $type === "error" ? theme.color.red : theme.color.orange};
+  border: 1px solid
+    ${({ theme, $type }) =>
+      $type === "error" ? theme.color.red : theme.color.orange};
+`
+
+const HeaderBackButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: 0.4rem;
+  color: ${({ theme }) => theme.color.gray2};
+  font-weight: 500;
+
+  &:hover {
+    background: transparent !important;
+    color: ${({ theme }) => theme.color.foreground};
   }
-}
-
-const getSeverityTextColor = (
-  severity: HealthSeverity | undefined,
-): "foreground" | "red" | "orange" | "green" | "gray2" => {
-  switch (severity) {
-    case "critical":
-      return "red"
-    case "warning":
-      return "orange"
-    case "recovering":
-      return "green"
-    default:
-      return "gray2"
-  }
-}
-
-const formatRate = (rate: number, field: string): string => {
-  const absRate = Math.abs(rate)
-  const unit = field === "transactionLag" ? "transactions/s" : "rows/s"
-
-  if (absRate >= 1_000_000_000_000) {
-    return `${(absRate / 1_000_000_000_000).toFixed(1)}T ${unit}`
-  }
-  if (absRate >= 1_000_000_000) {
-    return `${(absRate / 1_000_000_000).toFixed(1)}B ${unit}`
-  }
-  if (absRate >= 1_000_000) {
-    return `${(absRate / 1_000_000).toFixed(1)}M ${unit}`
-  }
-  if (absRate >= 1_000) {
-    return `${(absRate / 1_000).toFixed(1)}K ${unit}`
-  }
-  return `${Math.round(absRate)} ${unit}`
-}
-
-const ConfigItemWithHealth = ({
-  label,
-  value,
-  issue,
-  trend,
-}: {
-  label: string
-  value: React.ReactNode
-  issue?: HealthIssue
-  trend?: TrendIndicator
-}) => {
-  const theme = useTheme()
-  const trendColor =
-    trend?.direction === "increasing" ? theme.color.orange : theme.color.green
-  const TrendArrow =
-    trend?.direction === "increasing" ? ArrowUpIcon : ArrowDownIcon
-
-  const labelColor = issue ? getSeverityTextColor(issue.severity) : "gray2"
-  const valueColor = issue ? getSeverityTextColor(issue.severity) : "foreground"
-  const iconColor = issue ? getSeverityColor(theme, issue.severity) : undefined
-
-  const content = (
-    <ConfigItem>
-      <Box gap="0.5rem" align="center">
-        <Text color={labelColor} size="sm">
-          {label}
-        </Text>
-        {issue && <WarningIcon size={12} weight="fill" color={iconColor} />}
-      </Box>
-      <Box gap="1rem" align="center">
-        <Text color={valueColor} weight={500}>
-          {value}
-        </Text>
-        {trend && (
-          <Box gap="0.2rem" align="center">
-            <TrendArrow size={14} weight="bold" color={trendColor} />
-            <RateText
-              color={trend.direction === "increasing" ? "orange" : "green"}
-              size="xs"
-            >
-              {trend.rate > 0 ? "+" : "-"}
-              {formatRate(trend.rate, trend.field)}
-            </RateText>
-          </Box>
-        )}
-      </Box>
-    </ConfigItem>
-  )
-
-  const tooltipMessage = issue?.message ?? trend?.message
-  if (tooltipMessage) {
-    return (
-      <PopperHover placement="left-start" trigger={content}>
-        <Tooltip>{tooltipMessage}</Tooltip>
-      </PopperHover>
-    )
-  }
-
-  return content
-}
+`
 
 export const TableDetailsDrawer = () => {
   const dispatch = useDispatch()
@@ -432,6 +183,8 @@ export const TableDetailsDrawer = () => {
     dispatch(actions.console.setActiveSidebar(undefined))
   }
 
+  const navigatedFrom = target !== null ? target.navigatedFrom : undefined
+
   const { quest } = useContext(QuestContext)
   const theme = useTheme()
   const [tableData, setTableData] = useState<Table | null>(null)
@@ -440,14 +193,44 @@ export const TableDetailsDrawer = () => {
   const [ddl, setDdl] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [columnsExpanded, setColumnsExpanded] = useState(false)
-  const [walExpanded, setWalExpanded] = useState(false)
+  const [walExpanded, setWalExpanded] = useState(true)
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false)
   const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabType>("monitoring")
   const [trendData, setTrendData] = useState<TrendData>({
     walPendingRowCount: [],
     transactionLag: [],
     ingestionMetric: [],
   })
+  const [baseTableStatus, setBaseTableStatus] = useState<
+    "Dropped" | "Suspended" | "Valid" | null
+  >(null)
+  const baseTableExists =
+    baseTableStatus === "Valid" || baseTableStatus === "Suspended"
+
+  const handleNavigateToBaseTable = useCallback(() => {
+    if (!matViewData?.base_table_name || !baseTableExists) return
+    dispatch(
+      actions.console.setTableDetailsTarget({
+        tableName: matViewData.base_table_name,
+        isMatView: false,
+        navigatedFrom: {
+          tableName,
+          isMatView: true,
+        },
+      }),
+    )
+  }, [dispatch, matViewData?.base_table_name, tableName, baseTableExists])
+
+  const handleNavigateBack = useCallback(() => {
+    if (!navigatedFrom) return
+    dispatch(
+      actions.console.setTableDetailsTarget({
+        tableName: navigatedFrom.tableName,
+        isMatView: navigatedFrom.isMatView,
+      }),
+    )
+  }, [dispatch, navigatedFrom])
 
   const fetchTableData = useCallback(async () => {
     try {
@@ -507,6 +290,33 @@ export const TableDetailsDrawer = () => {
     }
   }, [quest, tableName, isMatView])
 
+  const checkBaseTableStatus = useCallback(async () => {
+    if (!isMatView || !matViewData?.base_table_name) {
+      setBaseTableStatus(null)
+      return
+    }
+    try {
+      const escapedName = matViewData.base_table_name.replace(/'/g, "''")
+      const response = await quest.query<Table>(
+        `tables() WHERE table_name = '${escapedName}'`,
+      )
+      const baseTableExists =
+        response.type === QuestDB.Type.DQL && response.data.length > 0
+      const suspended = baseTableExists
+        ? response.data[0]?.table_suspended
+        : false
+      const status = baseTableExists
+        ? suspended
+          ? "Suspended"
+          : "Valid"
+        : "Dropped"
+      setBaseTableStatus(status)
+    } catch (error) {
+      console.error("Failed to check base table existence:", error)
+      setBaseTableStatus(null)
+    }
+  }, [quest, isMatView, matViewData?.base_table_name])
+
   const fetchAllData = useCallback(async () => {
     setLoading(true)
     await Promise.all([
@@ -525,25 +335,35 @@ export const TableDetailsDrawer = () => {
       setColumns([])
       setDdl("")
       setColumnsExpanded(false)
-      setWalExpanded(false)
+      setWalExpanded(true)
       setHasAutoExpanded(false)
+      setActiveTab("monitoring")
       setTrendData({
         walPendingRowCount: [],
         transactionLag: [],
         ingestionMetric: [],
       })
+      setBaseTableStatus(null)
       void fetchAllData()
     } else {
       setColumnsExpanded(false)
-      setWalExpanded(false)
+      setWalExpanded(true)
       setHasAutoExpanded(false)
+      setActiveTab("monitoring")
       setTrendData({
         walPendingRowCount: [],
         transactionLag: [],
         ingestionMetric: [],
       })
+      setBaseTableStatus(null)
     }
   }, [isOpen, tableName, fetchAllData])
+
+  useEffect(() => {
+    if (matViewData?.base_table_name) {
+      void checkBaseTableStatus()
+    }
+  }, [matViewData?.base_table_name, checkBaseTableStatus])
 
   useAdaptivePoll({
     fetchFn: fetchTableData,
@@ -631,6 +451,34 @@ export const TableDetailsDrawer = () => {
     return hasWarning || hasIncreasingTrend
   }, [healthStatus])
 
+  const monitoringIssuesCounts = useMemo(() => {
+    if (!healthStatus) return { warnings: 0, errors: 0 }
+    const errors = healthStatus.issues.filter(
+      (i) => i.severity === "critical",
+    ).length
+    const warnings = healthStatus.issues.filter(
+      (i) => i.severity === "warning",
+    ).length
+    return { warnings, errors }
+  }, [healthStatus])
+
+  const criticalIssues = useMemo(() => {
+    if (!healthStatus) return []
+    return healthStatus.issues.filter((i) => i.severity === "critical")
+  }, [healthStatus])
+
+  const performanceWarnings = useMemo(() => {
+    if (!healthStatus) return []
+    return healthStatus.issues.filter((i) => i.severity === "warning")
+  }, [healthStatus])
+
+  const isIngestionDisabled = useMemo(() => {
+    // Disable ingestion section when WAL is suspended or matview is invalid
+    const walSuspended = tableData?.walEnabled && tableData?.table_suspended
+    const matViewInvalid = isMatView && matViewData?.view_status === "invalid"
+    return walSuspended || matViewInvalid
+  }, [tableData, isMatView, matViewData])
+
   useEffect(() => {
     if (hasIngestionWarning && !hasAutoExpanded && !walExpanded) {
       setWalExpanded(true)
@@ -653,8 +501,14 @@ export const TableDetailsDrawer = () => {
       }
       title={
         <TitleContainer>
+          {navigatedFrom && (
+            <HeaderBackButton onClick={handleNavigateBack}>
+              <ArrowLeftIcon size={14} weight="bold" />
+              <span>Back</span>
+            </HeaderBackButton>
+          )}
           {healthStatus && (
-            <HealthDot $severity={healthStatus.overallSeverity} />
+            <HealthStatusLabel severity={healthStatus.overallSeverity} />
           )}
           <TableName ellipsis>{tableName}</TableName>
           <StyledCopyButton size="sm" text={tableName} iconOnly />
@@ -676,364 +530,69 @@ export const TableDetailsDrawer = () => {
           </LoadingContainer>
         ) : tableData ? (
           <>
-            {/* Top Section */}
-            <TopSection>
-              <TwoColumnGrid>
-                <TopMetricsCard>
-                  <Box gap="0.5rem" align="center">
-                    <RowsIcon size="16px" weight="bold" />
-                    <Text size="md" color="foreground" weight={600}>
-                      Rows
-                    </Text>
-                  </Box>
-                  <Text color="foreground" size="lg">
-                    {formatRowCount(tableData.table_row_count)}
-                  </Text>
-                </TopMetricsCard>
-
-                {isMatView && matViewData ? (
-                  <TopMetricsCard>
-                    <Box gap="0.5rem" align="center">
-                      <ClockCounterClockwiseIcon size="16px" weight="bold" />
-                      <Text size="md" color="foreground" weight={600}>
-                        Last Refresh
-                      </Text>
-                    </Box>
-                    <Text color="foreground" size="lg">
-                      {formatRelativeTimestamp(
-                        matViewData.last_refresh_finish_timestamp,
-                      )}
-                    </Text>
-                  </TopMetricsCard>
-                ) : (
-                  <TopMetricsCard>
-                    <Box gap="0.5rem" align="center">
-                      <ClockCounterClockwiseIcon size="16px" weight="bold" />
-                      <Text size="md" color="foreground" weight={600}>
-                        Last Update
-                      </Text>
-                    </Box>
-                    <Text color="foreground" size="lg">
-                      {formatRelativeTimestamp(tableData.table_max_timestamp)}
-                    </Text>
-                  </TopMetricsCard>
-                )}
-              </TwoColumnGrid>
-            </TopSection>
-
-            <Section $first>
-              <SectionTitleContainer>
-                <InfoIcon size="16px" weight="bold" />
-                <SectionTitle>Details</SectionTitle>
-              </SectionTitleContainer>
-              <MetricsGrid>
-                {isMatView && matViewData && (
-                  <>
-                    <MetricCard>
-                      <Box gap="0" align="center">
-                        <MetricLabel>View Status</MetricLabel>
-                        {matViewData.view_status === "invalid" && (
-                          <StatusBadge
-                            type={BadgeType.ERROR}
-                            icon={<XCircleIcon weight="fill" size="14px" />}
-                          >
-                            Invalid
-                          </StatusBadge>
-                        )}
-                      </Box>
-                      <Box gap="0.5rem" align="center">
-                        {matViewData.view_status === "valid" ? (
-                          <>
-                            <CheckCircleIcon
-                              size={16}
-                              weight="fill"
-                              color={theme.color.green}
-                            />
-                            <Text color="green">Valid</Text>
-                          </>
-                        ) : matViewData.view_status === "refreshing" ? (
-                          <MetricValue>Refreshing</MetricValue>
-                        ) : matViewData.invalidation_reason ? (
-                          <Text color="red">
-                            {matViewData.invalidation_reason}
-                          </Text>
-                        ) : null}
-                      </Box>
-                    </MetricCard>
-
-                    <MetricCard>
-                      <MetricLabel>Refresh Type</MetricLabel>
-                      <MetricValue>
-                        {matViewData.refresh_type.charAt(0).toUpperCase() +
-                          matViewData.refresh_type.slice(1).toLowerCase()}
-                      </MetricValue>
-                    </MetricCard>
-                  </>
-                )}
-                <MetricCard>
-                  <MetricLabel>TTL</MetricLabel>
-                  <MetricValue>
-                    {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
-                  </MetricValue>
-                </MetricCard>
-                <MetricCard>
-                  <MetricLabel>Deduplication</MetricLabel>
-                  <MetricValue>
-                    {tableData.dedup ? "Enabled" : "Disabled"}
-                  </MetricValue>
-                </MetricCard>
-              </MetricsGrid>
-              <TwoColumnGrid>
-                {isMatView && matViewData && (
-                  <ConfigItem>
-                    <Text color="gray2" size="sm">
-                      Base Table
-                    </Text>
-                    <Text color="foreground" weight={500}>
-                      {matViewData.base_table_name}
-                    </Text>
-                  </ConfigItem>
-                )}
-                <ConfigItem>
-                  <Text color="gray2" size="sm">
-                    Partitioning
-                  </Text>
-                  <Text color="foreground" weight={500}>
-                    {tableData.partitionBy === "NONE"
-                      ? "None"
-                      : `${tableData.partitionBy.charAt(0).toUpperCase() + tableData.partitionBy.slice(1).toLowerCase()}`}
-                  </Text>
-                </ConfigItem>
-              </TwoColumnGrid>
-            </Section>
-
-            {/* Ingestion Section */}
-            <Section>
-              {/* WAL enabled and NOT suspended - expandable with metrics */}
-              {tableData.walEnabled && !tableData.table_suspended && (
-                <>
-                  <SectionTitleClickable
-                    onClick={() => setWalExpanded(!walExpanded)}
-                  >
-                    <SectionTitleContainer>
-                      <CaretIcon
-                        size={14}
-                        weight="bold"
-                        $expanded={walExpanded}
-                      />
-                      <RowsPlusBottomIcon size="16px" />
-                      <SectionTitle>Ingestion</SectionTitle>
-                      {hasIngestionWarning && (
-                        <WarningIcon
-                          size={16}
-                          weight="fill"
-                          color={theme.color.orange}
-                          style={{ marginLeft: "0.5rem" }}
-                        />
-                      )}
-                      {isIngestionActive && (
-                        <IngestionIndicator>
-                          <PulsingCircle size={10} weight="fill" />
-                          <Text color="gray2" size="sm" weight={400}>
-                            Ingesting...
-                          </Text>
-                        </IngestionIndicator>
-                      )}
-                    </SectionTitleContainer>
-                  </SectionTitleClickable>
-                  {walExpanded && (
-                    <TwoColumnGrid>
-                      <ConfigItemWithHealth
-                        label="Pending Rows"
-                        value={formatRowCount(tableData.wal_pending_row_count)}
-                        issue={healthStatus?.fieldIssues.get("pendingRows")}
-                        trend={healthStatus?.trendIndicators.get("pendingRows")}
-                      />
-                      <ConfigItemWithHealth
-                        label="Transaction Lag"
-                        value={
-                          tableData.wal_txn !== null ||
-                          tableData.table_txn !== null
-                            ? `${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0)} txn${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0) === 1 ? "" : "s"}`
-                            : "N/A"
-                        }
-                        issue={healthStatus?.fieldIssues.get("transactionLag")}
-                        trend={healthStatus?.trendIndicators.get(
-                          "transactionLag",
-                        )}
-                      />
-                      <ConfigItem>
-                        <Text color="gray2" size="sm">
-                          WAL Transaction Number
-                        </Text>
-                        <Text color="foreground" weight={500}>
-                          {tableData.wal_txn !== null
-                            ? tableData.wal_txn.toLocaleString()
-                            : "N/A"}
-                        </Text>
-                      </ConfigItem>
-                      <ConfigItemWithHealth
-                        label="Memory Pressure"
-                        value={formatMemoryPressure(
-                          tableData.table_memory_pressure_level,
-                        )}
-                        issue={healthStatus?.fieldIssues.get("memoryPressure")}
-                      />
-                      <ConfigItem>
-                        <Text color="gray2" size="sm">
-                          Deduped Rows
-                        </Text>
-                        <Text color="foreground" weight={500}>
-                          {formatRowCount(
-                            tableData.dedup_row_count_since_start,
-                          )}
-                        </Text>
-                      </ConfigItem>
-                      <ConfigItemWithHealth
-                        label="Transaction Size (p90)"
-                        value={
-                          tableData.wal_tx_size_p90 !== null
-                            ? `${tableData.wal_tx_size_p90.toLocaleString()} rows`
-                            : "N/A"
-                        }
-                        issue={healthStatus?.fieldIssues.get("txSizeP90")}
-                      />
-                      <ConfigItemWithHealth
-                        label="Write Amplification (p50)"
-                        value={
-                          tableData.table_write_amp_p50 !== null
-                            ? `${tableData.table_write_amp_p50.toFixed(2)}x`
-                            : "N/A"
-                        }
-                        issue={healthStatus?.fieldIssues.get("writeAmp")}
-                      />
-                      <ConfigItemWithHealth
-                        label="Merge Rate (p99)"
-                        value={
-                          tableData.table_merge_rate_p99 !== null
-                            ? `${tableData.table_merge_rate_p99.toLocaleString()} rows/s`
-                            : "N/A"
-                        }
-                        issue={healthStatus?.fieldIssues.get("mergeRate")}
-                      />
-                    </TwoColumnGrid>
+            <TabsContainer>
+              <TabsNav>
+                <Tab
+                  $active={activeTab === "monitoring"}
+                  onClick={() => setActiveTab("monitoring")}
+                >
+                  Monitoring
+                  {monitoringIssuesCounts.errors > 0 && (
+                    <TabBadge $type="error">
+                      <XSquareIcon size={12} weight="fill" />
+                      {monitoringIssuesCounts.errors}
+                    </TabBadge>
                   )}
-                </>
-              )}
-
-              {/* WAL enabled but SUSPENDED - not expandable, show status + resume button */}
-              {tableData.walEnabled && tableData.table_suspended && (
-                <>
-                  <SectionTitleContainer>
-                    <RowsPlusBottomIcon size="16px" />
-                    <SectionTitle>Ingestion</SectionTitle>
-                  </SectionTitleContainer>
-                  <IngestionStatusContainer>
-                    <Box gap="0.5rem" align="center">
-                      <PauseCircleIcon
-                        size={16}
-                        weight="fill"
-                        color={theme.color.red}
-                      />
-                      <Text color="red">Write-Ahead Log suspended</Text>
-                    </Box>
-                    <Button
-                      skin="secondary"
-                      prefixIcon={<Restart size={14} />}
-                      onClick={() => setSuspensionDialogOpen(true)}
-                    >
-                      Resume WAL
-                    </Button>
-                  </IngestionStatusContainer>
-                </>
-              )}
-
-              {/* WAL disabled - not expandable, just show status */}
-              {!tableData.walEnabled && (
-                <>
-                  <SectionTitleContainer>
-                    <RowsPlusBottomIcon size="16px" />
-                    <SectionTitle>Ingestion</SectionTitle>
-                    {isIngestionActive && (
-                      <IngestionIndicator>
-                        <PulsingCircle size={10} weight="fill" />
-                        <Text color="gray2" size="sm" weight={400}>
-                          Ingesting...
-                        </Text>
-                      </IngestionIndicator>
+                  {monitoringIssuesCounts.errors === 0 &&
+                    monitoringIssuesCounts.warnings > 0 && (
+                      <TabBadge $type="warning">
+                        <WarningIcon size={12} weight="fill" />
+                        {monitoringIssuesCounts.warnings}
+                      </TabBadge>
                     )}
-                  </SectionTitleContainer>
-                  <IngestionStatusContainer>
-                    <Box gap="0.5rem" align="center">
-                      <XCircleIcon
-                        size={16}
-                        weight="fill"
-                        color={theme.color.gray2}
-                      />
-                      <Text color="gray2">Write-Ahead Log is disabled</Text>
-                    </Box>
-                  </IngestionStatusContainer>
-                </>
-              )}
-            </Section>
+                </Tab>
+                <Tab
+                  $active={activeTab === "details"}
+                  onClick={() => setActiveTab("details")}
+                >
+                  Details
+                </Tab>
+              </TabsNav>
+              <TabsSeparator />
+            </TabsContainer>
 
-            {/* DDL Section */}
-            <Section>
-              <SectionTitleContainer>
-                <CodeIcon size="16px" weight="bold" />
+            {activeTab === "monitoring" && (
+              <MonitoringTab
+                tableData={tableData}
+                matViewData={matViewData}
+                isMatView={isMatView}
+                healthStatus={healthStatus}
+                criticalIssues={criticalIssues}
+                performanceWarnings={performanceWarnings}
+                isIngestionActive={isIngestionActive}
+                isIngestionDisabled={!!isIngestionDisabled}
+                baseTableStatus={baseTableStatus}
+                walExpanded={walExpanded}
+                onWalExpandedChange={setWalExpanded}
+                onOpenSuspensionDialog={() => setSuspensionDialogOpen(true)}
+              />
+            )}
 
-                <SectionTitle>DDL</SectionTitle>
-                <StyledCopyButton size="sm" text={ddl} iconOnly />
-              </SectionTitleContainer>
-              {ddl && (
-                <LiteEditor
-                  value={truncatedDDL.text}
-                  hideToolbar
-                  onOpenInEditor={() => {}}
-                  grayedOutLines={truncatedDDL.grayedOutLines}
-                />
-              )}
-            </Section>
+            {activeTab === "details" && (
+              <DetailsTab
+                tableData={tableData}
+                matViewData={matViewData}
+                columns={columns}
+                ddl={ddl}
+                isMatView={isMatView}
+                truncatedDDL={truncatedDDL}
+                baseTableStatus={baseTableStatus}
+                columnsExpanded={columnsExpanded}
+                onColumnsExpandedChange={setColumnsExpanded}
+                onNavigateToBaseTable={handleNavigateToBaseTable}
+              />
+            )}
 
-            {/* Columns Section */}
-            <Section>
-              <SectionTitleClickable
-                onClick={() => setColumnsExpanded(!columnsExpanded)}
-              >
-                <SectionTitleContainer>
-                  <CaretIcon
-                    size={14}
-                    weight="bold"
-                    $expanded={columnsExpanded}
-                  />
-                  <TextColumnsIcon
-                    size="16px"
-                    weight="bold"
-                    style={{ transform: "translateY(1px)" }}
-                  />
-
-                  <SectionTitle>Columns ({columns.length})</SectionTitle>
-                </SectionTitleContainer>
-              </SectionTitleClickable>
-              {columnsExpanded && (
-                <Box gap="0" flexDirection="column" align="stretch">
-                  {columns.map((col) => (
-                    <SchemaRow key={col.column}>
-                      <ColumnNameBox gap="0.5rem" align="center">
-                        <ColumnIcon
-                          isDesignatedTimestamp={col.designated}
-                          type={col.type}
-                        />
-                        <Text color="foreground" ellipsis>
-                          {col.column}
-                        </Text>
-                      </ColumnNameBox>
-                      <ColumnType>{col.type}</ColumnType>
-                    </SchemaRow>
-                  ))}
-                </Box>
-              )}
-            </Section>
             <SuspensionDialog
               tableName={tableName}
               kind={isMatView ? "matview" : "table"}
