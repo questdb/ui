@@ -371,6 +371,8 @@ const AIChatWindow: React.FC = () => {
           return "Explain query"
         case "ask_request":
           return "Ask AI"
+        case "health_issue_request":
+          return "Health issue analysis"
         default:
           return "AI Assistant"
       }

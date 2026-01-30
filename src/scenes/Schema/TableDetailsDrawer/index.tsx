@@ -24,6 +24,7 @@ import {
   detectIngestionActive,
   MAX_TREND_SAMPLES,
   type TrendData,
+  type HealthIssue,
 } from "./healthCheck"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { SuspensionDialog } from "../SuspensionDialog"
@@ -233,17 +234,7 @@ export const TableDetailsDrawer = () => {
     )
   }, [dispatch, navigatedFrom])
 
-  const handleNavigateToAIChat = useCallback(() => {
-    dispatch(
-      actions.console.setPreviousSidebar({
-        type: "tableDetails",
-        tableDetailsTarget: target,
-      }),
-    )
-    dispatch(actions.console.setActiveSidebar("aiChat"))
-  }, [dispatch, target])
-
-  const { handleExplainSchema } = useAIQuickActions()
+  const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
 
   const handleExplainWithAI = useCallback(() => {
     if (tableData?.id == null) return
@@ -262,6 +253,25 @@ export const TableDetailsDrawer = () => {
       },
     )
   }, [handleExplainSchema, tableData, tableName, isMatView, target])
+
+  const handleAskAIForIssue = useCallback(
+    (issue: HealthIssue) => {
+      if (tableData?.id == null) return
+
+      let samples = undefined
+      if (issue.field === "transactionLag") {
+        samples = trendData.transactionLag
+      } else if (issue.field === "pendingRows") {
+        samples = trendData.walPendingRowCount
+      }
+
+      void handleAskAIForHealthIssue(tableData.id, tableName, issue, samples, {
+        type: "tableDetails",
+        tableDetailsTarget: target,
+      })
+    },
+    [handleAskAIForHealthIssue, tableData, tableName, trendData, target],
+  )
 
   const fetchTableData = useCallback(async () => {
     try {
@@ -608,7 +618,7 @@ export const TableDetailsDrawer = () => {
                 walExpanded={walExpanded}
                 onWalExpandedChange={setWalExpanded}
                 onOpenSuspensionDialog={() => setSuspensionDialogOpen(true)}
-                onAskAI={handleNavigateToAIChat}
+                onAskAI={handleAskAIForIssue}
               />
             )}
 

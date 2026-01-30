@@ -7,10 +7,16 @@ import { useAIStatus } from "../providers/AIStatusProvider"
 import {
   executeAIFlow,
   createSchemaExplainFlowConfig,
+  createHealthIssueFlowConfig,
 } from "../utils/executeAIFlow"
+import { getSpecificDocumentation } from "../utils/questdbDocsRetrieval"
+import type {
+  HealthIssue,
+  TimestampedSample,
+} from "../scenes/Schema/TableDetailsDrawer/healthCheck"
 import * as QuestDB from "../utils/questdb"
 import { selectors } from "../store"
-import type { PartitionBy } from "../utils/questdb/types"
+import type { PartitionBy, QueryResult, Table } from "../utils/questdb/types"
 import type { PreviousSidebar } from "../store/Console/types"
 
 type SchemaDisplayData = {
@@ -99,6 +105,10 @@ export const useAIQuickActions = () => {
       )
       return
     }
+    if (!hasSchemaAccess) {
+      toast.error("Schema access is not granted to this model.")
+      return
+    }
 
     const schema = await getTableSchema(name, kind)
     if (!schema) {
@@ -178,8 +188,134 @@ export const useAIQuickActions = () => {
     )
   }
 
+  const handleAskAIForHealthIssue = async (
+    tableId: number,
+    tableName: string,
+    issue: HealthIssue,
+    trendSamples?: TimestampedSample[],
+    previousSidebar?: PreviousSidebar,
+  ) => {
+    if (!canUse) {
+      toast.error(
+        "AI Assistant is not enabled. Please configure your API key in settings.",
+      )
+      return
+    }
+    if (!hasSchemaAccess) {
+      toast.error("Schema access is not granted to this model.")
+      return
+    }
+
+    let tableDetailsResponse: QueryResult<Table> | undefined
+    try {
+      tableDetailsResponse = await quest.getTableDetails(tableName)
+    } catch (_error) {
+      console.error(`Cannot fetch details for table '${tableName}'`)
+    }
+    if (
+      !tableDetailsResponse ||
+      tableDetailsResponse.type !== QuestDB.Type.DQL ||
+      !tableDetailsResponse.data[0]
+    ) {
+      toast.error(`Cannot fetch details for table '${tableName}'`)
+      return
+    }
+    const tableDetails = JSON.stringify(tableDetailsResponse.data[0], null, 2)
+
+    let monitoringDocs: string
+    try {
+      monitoringDocs = await getSpecificDocumentation("monitoring", [
+        "Monitoring and alerting - Detect table health issues",
+      ])
+    } catch (_error) {
+      monitoringDocs = "Documentation unavailable"
+    }
+
+    const existingConversation = findConversationByTableId(tableId)
+
+    if (existingConversation) {
+      await openChatWindow(existingConversation.id, { previousSidebar })
+
+      const result = await executeAIFlow(
+        createHealthIssueFlowConfig({
+          conversationId: existingConversation.id,
+          tableName,
+          issue: {
+            id: issue.id,
+            field: issue.field,
+            message: issue.message,
+            currentValue: issue.currentValue,
+            severity: issue.severity as "critical" | "warning",
+          },
+          tableDetails,
+          monitoringDocs,
+          trendSamples,
+          settings: { model: currentModel, apiKey },
+          questClient: quest,
+          tables,
+          hasSchemaAccess,
+          abortSignal: abortController?.signal,
+          useLastMessage: true,
+        }),
+        {
+          addMessage,
+          updateMessage,
+          setStatus,
+          setIsStreaming,
+          persistMessages,
+          getLastRoundMessages,
+        },
+      )
+
+      if (result.cached && result.cachedMessageId) {
+        setScrollToMessageId(result.cachedMessageId)
+      }
+      return
+    }
+
+    const conversation = await createConversation({
+      tableId,
+    })
+
+    void updateConversationName(
+      conversation.id,
+      `${tableName}: ${issue.message}`,
+    )
+    await openChatWindow(conversation.id, { previousSidebar })
+
+    void executeAIFlow(
+      createHealthIssueFlowConfig({
+        conversationId: conversation.id,
+        tableName,
+        issue: {
+          id: issue.id,
+          field: issue.field,
+          message: issue.message,
+          currentValue: issue.currentValue,
+          severity: issue.severity as "critical" | "warning",
+        },
+        tableDetails,
+        monitoringDocs,
+        trendSamples,
+        settings: { model: currentModel, apiKey },
+        questClient: quest,
+        tables,
+        hasSchemaAccess,
+        abortSignal: abortController?.signal,
+      }),
+      {
+        addMessage,
+        updateMessage,
+        setStatus,
+        setIsStreaming,
+        persistMessages,
+      },
+    )
+  }
+
   return {
     handleExplainSchema,
+    handleAskAIForHealthIssue,
     canUse,
   }
 }

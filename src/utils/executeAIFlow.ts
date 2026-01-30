@@ -5,6 +5,7 @@ import type {
   ConversationMessage,
   UserMessageDisplayType,
   SchemaDisplayData,
+  HealthIssueDisplayData,
 } from "../providers/AIConversationProvider/types"
 import type {
   OperationHistory,
@@ -18,6 +19,7 @@ import {
   isAiAssistantError,
   generateChatTitle,
   getExplainSchemaPrompt,
+  getHealthIssuePrompt,
   type ActiveProviderSettings,
   type GeneratedSQL,
   type AiAssistantExplanation,
@@ -69,11 +71,27 @@ type SchemaExplainFlowConfig = BaseFlowConfig & {
   schemaDisplayData: SchemaDisplayData
 }
 
+type HealthIssueFlowConfig = BaseFlowConfig & {
+  type: "health_issue"
+  tableName: string
+  issue: {
+    id: string
+    field: string
+    message: string
+    currentValue?: string
+    severity: "critical" | "warning"
+  }
+  tableDetails: string
+  monitoringDocs: string
+  trendSamples?: Array<{ value: number; timestamp: number }>
+}
+
 export type AIFlowConfig =
   | ChatFlowConfig
   | ExplainFlowConfig
   | FixFlowConfig
   | SchemaExplainFlowConfig
+  | HealthIssueFlowConfig
 
 type AIFlowUserMessage = {
   content: string
@@ -81,6 +99,7 @@ type AIFlowUserMessage = {
   sql?: string
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData
+  displayHealthIssueData?: HealthIssueDisplayData
 }
 
 export type AIFlowCallbacks = {
@@ -171,6 +190,23 @@ function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
         displayType: "schema_explain_request",
         displaySchemaData: config.schemaDisplayData,
       }
+
+    case "health_issue":
+      return {
+        content: getHealthIssuePrompt({
+          tableName: config.tableName,
+          issue: config.issue,
+          tableDetails: config.tableDetails,
+          monitoringDocs: config.monitoringDocs,
+          trendSamples: config.trendSamples,
+        }),
+        displayType: "health_issue_request",
+        displayHealthIssueData: {
+          tableName: config.tableName,
+          issueMessage: config.issue.message,
+          severity: config.issue.severity,
+        },
+      }
   }
 }
 
@@ -220,7 +256,8 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
 
   switch (type) {
     case "chat":
-    case "fix": {
+    case "fix":
+    case "health_issue": {
       const result = response as GeneratedSQL
       return processSQLResult(
         result,
@@ -272,7 +309,7 @@ function processSQLResult(
   conversationId: string,
   assistantMessageId: string,
   callbacks: AIFlowCallbacks,
-  type: "chat" | "fix",
+  type: "chat" | "fix" | "health_issue",
 ): AIFlowResult {
   const hasSQLInResult = result.sql && result.sql.trim() !== ""
 
@@ -393,6 +430,9 @@ export async function executeAIFlow(
     ...(userMsg.displaySchemaData && {
       displaySchemaData: userMsg.displaySchemaData,
     }),
+    ...(userMsg.displayHealthIssueData && {
+      displayHealthIssueData: userMsg.displayHealthIssueData,
+    }),
   })
 
   const assistantMessageId = crypto.randomUUID()
@@ -459,13 +499,15 @@ export async function executeAIFlow(
         ? "followup"
         : config.type === "schema_explain"
           ? "schema_explain"
-          : config.type
+          : config.type === "health_issue"
+            ? "health_issue"
+            : config.type
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
     const currentSQL =
       config.type === "chat"
         ? config.currentSQL
-        : config.type === "schema_explain"
+        : config.type === "schema_explain" || config.type === "health_issue"
           ? undefined
           : config.queryText
 
@@ -518,4 +560,10 @@ export function createSchemaExplainFlowConfig(
   params: Omit<SchemaExplainFlowConfig, "type">,
 ): SchemaExplainFlowConfig {
   return { type: "schema_explain", ...params }
+}
+
+export function createHealthIssueFlowConfig(
+  params: Omit<HealthIssueFlowConfig, "type">,
+): HealthIssueFlowConfig {
+  return { type: "health_issue", ...params }
 }

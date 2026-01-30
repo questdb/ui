@@ -570,6 +570,69 @@ ${schema}
 
 For views, skip the Storage Details section.`
 
+export type HealthIssuePromptData = {
+  tableName: string
+  issue: {
+    id: string
+    field: string
+    message: string
+    currentValue?: string
+  }
+  tableDetails: string
+  monitoringDocs: string
+  trendSamples?: Array<{ value: number; timestamp: number }>
+}
+
+export const getHealthIssuePrompt = (data: HealthIssuePromptData): string => {
+  const { tableName, issue, tableDetails, monitoringDocs, trendSamples } = data
+
+  let trendSection = ""
+  if (trendSamples && trendSamples.length > 0) {
+    const recentSamples = trendSamples.slice(-30)
+    trendSection = `
+
+### Trend Data (Recent Samples)
+| Timestamp | Value |
+|-----------|-------|
+${recentSamples.map((s) => `| ${new Date(s.timestamp).toISOString()} | ${s.value.toLocaleString()} |`).join("\n")}
+`
+  }
+
+  return `You are a QuestDB expert assistant helping diagnose and resolve table health issues.
+
+A user is viewing the health monitoring panel for their table and has asked for help with a detected issue.
+
+## Table: ${tableName}
+
+## Health Issue Detected
+- **Issue ID**: ${issue.id}
+- **Field**: ${issue.field}
+- **Message**: ${issue.message}
+${issue.currentValue ? `- **Current Value**: ${issue.currentValue}` : ""}${trendSection}
+
+## Table Details (from tables() function)
+\`\`\`json
+${tableDetails}
+\`\`\`
+
+## QuestDB Monitoring Documentation
+${monitoringDocs}
+
+---
+
+**Your Task:**
+1. Explain what this health issue means in the context of this specific table
+2. Analyze the table details to identify potential root causes
+3. Provide specific, actionable recommendations to resolve or mitigate the issue
+4. If there is a clear SQL command that can help fix the issue (like \`ALTER TABLE ... RESUME WAL\`), include it in the "sql" field of your response. **Only provide SQL if it directly addresses the root cause** - do not provide SQL just to inspect the problem.
+
+**IMPORTANT: Be concise and thorough, format your response in markdown with clear sections:**
+- Use ## headings for main sections
+- Use bullet points for lists
+- Use \`code\` for configuration values and SQL
+`
+}
+
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
 
@@ -1834,7 +1897,12 @@ Return a JSON object with the following structure: { "title": "Your title here" 
   }
 }
 
-export type AIOperation = "explain" | "fix" | "followup" | "schema_explain"
+export type AIOperation =
+  | "explain"
+  | "fix"
+  | "followup"
+  | "schema_explain"
+  | "health_issue"
 
 export const continueConversation = async ({
   userMessage,
@@ -1882,6 +1950,7 @@ export const continueConversation = async ({
     fix: FixSQLFormat,
     followup: ConversationResponseFormat,
     schema_explain: ExplainFormat,
+    health_issue: ConversationResponseFormat,
   }[operation]
 
   return tryWithRetries(

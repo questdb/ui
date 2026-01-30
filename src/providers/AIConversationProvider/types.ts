@@ -19,11 +19,18 @@ export type SchemaDisplayData = {
   designatedTimestamp?: string
 }
 
+export type HealthIssueDisplayData = {
+  tableName: string
+  issueMessage: string
+  severity: "critical" | "warning"
+}
+
 export type UserMessageDisplayType =
   | "fix_request"
   | "explain_request"
   | "ask_request"
   | "schema_explain_request"
+  | "health_issue_request"
 
 export type ConversationMessage = {
   id: string
@@ -45,6 +52,7 @@ export type ConversationMessage = {
   displayType?: UserMessageDisplayType
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData
+  displayHealthIssueData?: HealthIssueDisplayData
 }
 
 export type AIConversation = {

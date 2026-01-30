@@ -48,7 +48,7 @@ export interface MonitoringTabProps {
   walExpanded: boolean
   onWalExpandedChange: (expanded: boolean) => void
   onOpenSuspensionDialog: () => void
-  onAskAI: () => void
+  onAskAI: (issue: HealthIssue) => void
 }
 
 const RowCountIndicatorInner = styled.div<{ $isMatView?: boolean }>`
@@ -385,7 +385,7 @@ export const MonitoringTab = ({
                     ? () => onOpenSuspensionDialog()
                     : undefined
                 }
-                onAskAI={onAskAI}
+                onAskAI={() => onAskAI(issue)}
                 docsUrl={ISSUE_DOCS_URLS[issue.id]}
               />
             ))}
@@ -618,7 +618,10 @@ export const MonitoringTab = ({
 
       {performanceWarnings.length > 0 && (
         <Section>
-          <PerformanceAlerts warnings={performanceWarnings} onAskAI={onAskAI} />
+          <PerformanceAlerts
+            warnings={performanceWarnings}
+            onAskAI={(warning) => onAskAI(warning)}
+          />
         </Section>
       )}
     </>
