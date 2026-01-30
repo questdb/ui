@@ -38,7 +38,6 @@ export const CopyButton = ({
 
   return (
     <StyledButton
-      {...props}
       skin="secondary"
       size={size}
       data-hook="copy-value"
@@ -51,6 +50,7 @@ export const CopyButton = ({
       {...(!iconOnly && {
         prefixIcon: <FileCopy size={size === "sm" ? "12px" : "16px"} />,
       })}
+      {...props}
     >
       {copied && (
         <StyledCheckboxCircle size={size === "sm" ? "10px" : "14px"} />

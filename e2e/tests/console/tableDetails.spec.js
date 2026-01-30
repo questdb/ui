@@ -1,0 +1,748 @@
+/// <reference types="cypress" />
+
+const {
+  PROVIDERS,
+  getOpenAIConfiguredSettings,
+  createFinalResponseData,
+  createResponse,
+  createChatTitleResponse,
+  isTitleRequest,
+} = require("../../utils/aiAssistant")
+
+const TEST_TABLE = "btc_trades"
+const TEST_TABLE_NO_WAL = "btc_trades_no_wal"
+const TEST_MATVIEW = "btc_trades_mv"
+
+function interceptTablesQuery(modifications) {
+  cy.intercept(
+    {
+      method: "GET",
+      pathname: "/exec",
+      query: { query: /tables\(\)/ },
+    },
+    (req) => {
+      req.continue((res) => {
+        if (res.body?.dataset?.length > 0) {
+          for (const [fieldName, value] of Object.entries(modifications)) {
+            const fieldIndex = res.body.columns.findIndex(
+              (c) => c.name === fieldName,
+            )
+            if (fieldIndex !== -1) {
+              const tableNameIndex = res.body.columns.findIndex(
+                (c) => c.name === "table_name",
+              )
+              for (let i = 0; i < res.body.dataset.length; i++) {
+                if (res.body.dataset[i][tableNameIndex] === TEST_TABLE) {
+                  res.body.dataset[i][fieldIndex] = value
+                }
+              }
+            }
+          }
+        }
+        return res
+      })
+    },
+  ).as("tablesQuery")
+}
+
+function interceptMatViewsQuery(modifications) {
+  cy.intercept(
+    {
+      method: "GET",
+      pathname: "/exec",
+      query: { query: /materialized_views\(\)/ },
+    },
+    (req) => {
+      req.continue((res) => {
+        if (res.body?.dataset?.length > 0) {
+          for (const [fieldName, value] of Object.entries(modifications)) {
+            const fieldIndex = res.body.columns.findIndex(
+              (c) => c.name === fieldName,
+            )
+            if (fieldIndex !== -1) {
+              for (let i = 0; i < res.body.dataset.length; i++) {
+                res.body.dataset[i][fieldIndex] = value
+              }
+            }
+          }
+        }
+        return res
+      })
+    },
+  ).as("matviewsQuery")
+}
+
+function interceptAIRequest(responseText = "Test AI response", sql = null) {
+  const responseData = createFinalResponseData("openai", responseText, sql)
+
+  cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+    if (isTitleRequest("openai", req.body)) {
+      req.reply(createChatTitleResponse("openai", "Test Chat"))
+      return
+    }
+    req.reply(
+      createResponse("openai", responseData, { streaming: true, delay: 100 }),
+    )
+  }).as("openaiRequest")
+}
+
+describe("TableDetailsDrawer", () => {
+  beforeEach(() => {
+    cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+      throw new Error(
+        `Unhandled OpenAI request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
+      )
+    }).as("unhandledOpenAI")
+
+    cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+      throw new Error(
+        `Unhandled Anthropic request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
+      )
+    }).as("unhandledAnthropic")
+  })
+
+  describe("view state", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.expandTables()
+    })
+
+    it("should show correct type badge and copy button for table", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-type-badge").should("contain", "Table")
+      cy.getByDataHook("table-details-copy-name").should("be.visible")
+      cy.getByDataHook("table-details-copy-name").click()
+      if (Cypress.isBrowser("electron")) {
+        cy.window()
+          .its("navigator.clipboard")
+          .invoke("readText")
+          .should("contain", TEST_TABLE)
+      }
+    })
+
+    it("should show Monitoring tab by default and switch to Details tab when clicked", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-tab-monitoring")
+        .should("be.visible")
+        .should("have.attr", "data-active", "true")
+
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-tab-details").should(
+        "have.attr",
+        "data-active",
+        "true",
+      )
+      cy.getByDataHook("table-details-tab-monitoring").should(
+        "have.attr",
+        "data-active",
+        "false",
+      )
+      cy.getByDataHook("table-details-ddl-section").should("be.visible")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("healthy table state", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.expandTables()
+    })
+
+    it("should show healthy state", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "healthy")
+      cy.getByDataHook("table-details-error-banner").should("not.exist")
+      cy.getByDataHook("table-details-performance-alerts").should("not.exist")
+
+      cy.getByDataHook("table-details-row-count-value")
+        .should("be.visible")
+        .should("have.text", "0")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("critical health issues - WAL suspended (R1)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show critical health status for suspended WAL", () => {
+      interceptTablesQuery({ table_suspended: true })
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "critical")
+
+      cy.getByDataHook("table-details-tab-error-badge").should("be.visible")
+
+      cy.getByDataHook("table-details-resume-wal-button").should("be.visible")
+      cy.getByDataHook("table-details-error-ask-ai")
+        .should("be.visible")
+        .should("be.disabled")
+      cy.getByDataHook("table-details-error-docs-link")
+        .should("be.visible")
+        .should("have.attr", "href")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("critical health issues - memory backoff (R3)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show critical health status for memory backoff", () => {
+      interceptTablesQuery({ table_memory_pressure_level: 2 })
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "critical")
+
+      cy.getByDataHook("table-details-error-banner").should("be.visible")
+      cy.getByDataHook("table-details-error-title").should(
+        "contain",
+        "Memory backoff",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("warning health issues - small transactions (Y3)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show warning health status", () => {
+      interceptTablesQuery({ wal_tx_size_p90: 50 })
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "warning")
+      cy.getByDataHook("table-details-tab-warning-badge").should("be.visible")
+      cy.getByDataHook("table-details-performance-alerts").should("be.visible")
+      cy.getByDataHook("table-details-alert-item")
+        .should("be.visible")
+        .should("contain", "Small transactions")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("warning health issues - high write amplification (Y4)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show high write amplification warning", () => {
+      interceptTablesQuery({ table_write_amp_p50: 3.5 })
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "warning")
+      cy.getByDataHook("table-details-performance-alerts").should("be.visible")
+      cy.getByDataHook("table-details-alert-item").should(
+        "contain",
+        "High write amplification",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("warning health issues - high memory pressure (Y5)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show high memory pressure warning for level 1", () => {
+      interceptTablesQuery({ table_memory_pressure_level: 1 })
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "warning")
+      cy.getByDataHook("table-details-performance-alerts").should("be.visible")
+      cy.getByDataHook("table-details-alert-item").should(
+        "contain",
+        "High memory pressure",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("ingestion - WAL disabled", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE_NO_WAL)
+      cy.refreshSchema()
+    })
+
+    it("should show WAL disabled indicator for non-WAL table", () => {
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE_NO_WAL)
+
+      cy.getByDataHook("table-details-wal-disabled").should("be.visible")
+      cy.getByDataHook("table-details-ingestion-content").should("not.exist")
+      cy.getByDataHook("table-details-ingestion-toggle").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE_NO_WAL)
+    })
+  })
+
+  describe("ingestion - pending rows increasing (Y2)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show warning state when pending rows trend is increasing", () => {
+      let callCount = 0
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /tables\(\)/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            if (res.body?.dataset?.length > 0) {
+              const tableNameIndex = res.body.columns.findIndex(
+                (c) => c.name === "table_name",
+              )
+              const pendingRowsIndex = res.body.columns.findIndex(
+                (c) => c.name === "wal_pending_row_count",
+              )
+              for (let i = 0; i < res.body.dataset.length; i++) {
+                if (res.body.dataset[i][tableNameIndex] === TEST_TABLE) {
+                  res.body.dataset[i][pendingRowsIndex] = 1000 + callCount * 500
+                  callCount++
+                }
+              }
+            }
+            return res
+          })
+        },
+      ).as("tablesQueryTrend")
+
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.wait(3000)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "warning")
+      cy.getByDataHook("table-details-tab-warning-badge").should("be.visible")
+      cy.getByDataHook("table-details-pending-rows-trend")
+        .should("be.visible")
+        .should("have.attr", "data-trend", "increasing")
+      cy.getByDataHook("table-details-performance-alerts").should("be.visible")
+      cy.getByDataHook("table-details-alert-item").should(
+        "contain",
+        "Pending rows",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("ingestion - transaction lag decreasing", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should show healthy state with decreasing trend when lag is recovering", () => {
+      let callCount = 0
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /tables\(\)/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            if (res.body?.dataset?.length > 0) {
+              const tableNameIndex = res.body.columns.findIndex(
+                (c) => c.name === "table_name",
+              )
+              const walTxnIndex = res.body.columns.findIndex(
+                (c) => c.name === "wal_txn",
+              )
+              const tableTxnIndex = res.body.columns.findIndex(
+                (c) => c.name === "table_txn",
+              )
+              for (let i = 0; i < res.body.dataset.length; i++) {
+                if (res.body.dataset[i][tableNameIndex] === TEST_TABLE) {
+                  // Simulate decreasing lag: wal_txn stays at 100, table_txn catches up
+                  res.body.dataset[i][walTxnIndex] = 100
+                  res.body.dataset[i][tableTxnIndex] = Math.min(
+                    90 + callCount * 2,
+                    99,
+                  )
+                  callCount++
+                }
+              }
+            }
+            return res
+          })
+        },
+      ).as("tablesQueryTrend")
+
+      cy.expandTables()
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.wait(3000)
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "healthy")
+      cy.getByDataHook("table-details-transaction-lag-trend")
+        .should("be.visible")
+        .should("have.attr", "data-trend", "decreasing")
+      cy.getByDataHook("table-details-performance-alerts").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("expandable sections", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.expandTables()
+    })
+
+    describe("ingestion section", () => {
+      it("should show WAL details when WAL is enabled", () => {
+        cy.openDetailsDrawer(TEST_TABLE)
+
+        cy.getByDataHook("table-details-ingestion-content").should("be.visible")
+        cy.getByDataHook("table-details-pending-rows-trend").should(
+          "be.visible",
+        )
+        cy.getByDataHook("table-details-transaction-lag-trend").should(
+          "be.visible",
+        )
+        cy.getByDataHook("table-details-wal-disabled").should("not.exist")
+      })
+    })
+
+    describe("columns section", () => {
+      it("should be collapsed by default", () => {
+        cy.openDetailsDrawer(TEST_TABLE)
+        cy.getByDataHook("table-details-tab-details").click()
+
+        cy.getByDataHook("table-details-columns-content").should("not.exist")
+      })
+
+      it("should expand when clicking toggle", () => {
+        cy.openDetailsDrawer(TEST_TABLE)
+        cy.getByDataHook("table-details-tab-details").click()
+
+        cy.getByDataHook("table-details-columns-toggle").click()
+        cy.getByDataHook("table-details-columns-content").should("be.visible")
+      })
+
+      it("should show columns when expanded", () => {
+        cy.openDetailsDrawer(TEST_TABLE)
+        cy.getByDataHook("table-details-tab-details").click()
+        cy.getByDataHook("table-details-columns-toggle").click()
+
+        cy.getByDataHook("table-details-column-row").should(
+          "have.length.at.least",
+          1,
+        )
+      })
+
+      it("should collapse when clicking toggle again", () => {
+        cy.openDetailsDrawer(TEST_TABLE)
+        cy.getByDataHook("table-details-tab-details").click()
+        cy.getByDataHook("table-details-columns-toggle").click()
+
+        cy.getByDataHook("table-details-columns-toggle").click()
+        cy.getByDataHook("table-details-columns-content").should("not.exist")
+      })
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("copy functionality", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.expandTables()
+    })
+
+    it("should have copy table name button in header", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-copy-name").should("be.visible")
+    })
+
+    it("should have copy DDL button in DDL section", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-copy-ddl").should("be.visible")
+    })
+
+    if (Cypress.isBrowser("electron")) {
+      it("should copy table name when clicking copy button in header", () => {
+        cy.openDetailsDrawer(TEST_TABLE)
+
+        cy.getByDataHook("table-details-copy-name").click()
+        cy.window()
+          .its("navigator.clipboard")
+          .invoke("readText")
+          .should("contain", TEST_TABLE)
+      })
+    }
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("materialized view specific", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createMaterializedView(TEST_MATVIEW)
+      cy.refreshSchema()
+      cy.getByDataHook("schema-folder-title")
+        .contains("Materialized views")
+        .should("exist")
+    })
+
+    it("should show matview type badge and view status", () => {
+      cy.expandMatViews()
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+
+      cy.getByDataHook("table-details-type-badge").should(
+        "contain",
+        "Materialized View",
+      )
+      cy.getByDataHook("table-details-view-status").should("be.visible")
+      cy.getByDataHook("table-details-base-table-status").should("be.visible")
+    })
+
+    it("should navigate to base table and back", () => {
+      cy.expandMatViews()
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-base-table-section").should("be.visible")
+      cy.getByDataHook("table-details-base-table-link").should("be.visible")
+
+      cy.getByDataHook("table-details-base-table-link").click()
+
+      cy.getByDataHook("table-details-type-badge").should("contain", "Table")
+      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-back-button").should("be.visible")
+
+      cy.getByDataHook("table-details-back-button").click()
+
+      cy.getByDataHook("table-details-type-badge").should(
+        "contain",
+        "Materialized View",
+      )
+      cy.getByDataHook("table-details-name").should("contain", TEST_MATVIEW)
+      cy.getByDataHook("table-details-back-button").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropMaterializedView(TEST_MATVIEW)
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("materialized view invalid state (R2)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createMaterializedView(TEST_MATVIEW)
+      cy.refreshSchema()
+      cy.getByDataHook("schema-folder-title")
+        .contains("Materialized views")
+        .should("exist")
+    })
+
+    it("should show critical health status for invalid matview", () => {
+      interceptMatViewsQuery({
+        view_status: "invalid",
+        invalidation_reason: "Base table structure changed",
+      })
+      cy.expandMatViews()
+      cy.getByDataHook("schema-matview-title").should("contain", TEST_MATVIEW)
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "critical")
+      cy.getByDataHook("table-details-error-banner").should("be.visible")
+      cy.getByDataHook("table-details-error-title").should("contain", "invalid")
+      cy.getByDataHook("table-details-resume-wal-button").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropMaterializedView(TEST_MATVIEW)
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("AI interactions", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+      cy.expandTables()
+    })
+
+    it("should trigger AI chat when clicking Ask AI on error banner", () => {
+      const aiResponse = "Here is how to resolve your WAL suspension issue..."
+      interceptTablesQuery({ table_suspended: true })
+      interceptAIRequest(aiResponse)
+
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-error-ask-ai").click()
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.waitForAIResponse("@openaiRequest")
+
+      cy.getByDataHook("chat-message-user")
+        .should("be.visible")
+        .should("contain", "WAL suspended")
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", aiResponse)
+    })
+
+    it("should show Explain with AI button in DDL section", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-explain-ai").should("be.visible")
+    })
+
+    it("should trigger AI chat when clicking Ask AI on performance alert", () => {
+      const aiResponse =
+        "Small transactions can be batched for better performance..."
+      interceptTablesQuery({ wal_tx_size_p90: 50 })
+      interceptAIRequest(aiResponse)
+
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-warning-ask-ai").first().click()
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.waitForAIResponse("@openaiRequest")
+
+      cy.getByDataHook("chat-message-user")
+        .should("be.visible")
+        .should("contain", "Small transactions")
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", aiResponse)
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+})

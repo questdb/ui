@@ -543,7 +543,10 @@ export const TableDetailsDrawer = () => {
       title={
         <TitleContainer>
           {navigatedFrom && (
-            <HeaderBackButton onClick={handleNavigateBack}>
+            <HeaderBackButton
+              onClick={handleNavigateBack}
+              data-hook="table-details-back-button"
+            >
               <ArrowLeftIcon size={14} weight="bold" />
               Back
             </HeaderBackButton>
@@ -553,19 +556,28 @@ export const TableDetailsDrawer = () => {
             severity={healthStatus?.overallSeverity ?? "healthy"}
           />
 
-          <TableName ellipsis>{tableName}</TableName>
-          <StyledCopyButton size="sm" text={tableName} iconOnly />
+          <TableName ellipsis data-hook="table-details-name">
+            {tableName}
+          </TableName>
+          <StyledCopyButton
+            size="sm"
+            text={tableName}
+            iconOnly
+            data-hook="table-details-copy-name"
+          />
         </TitleContainer>
       }
       afterTitle={
-        <TypeBadge>{isMatView ? "Materialized View" : "Table"}</TypeBadge>
+        <TypeBadge data-hook="table-details-type-badge">
+          {isMatView ? "Materialized View" : "Table"}
+        </TypeBadge>
       }
       onDismiss={handleClose}
       trigger={<span />}
     >
-      <Drawer.ContentWrapper mode="side">
+      <Drawer.ContentWrapper mode="side" data-hook="table-details-drawer">
         {loading ? (
-          <LoadingContainer>
+          <LoadingContainer data-hook="table-details-loading">
             <CircleNotchSpinner size={24} />
             <Text color="gray2" size="md">
               Loading table details...
@@ -578,17 +590,25 @@ export const TableDetailsDrawer = () => {
                 <Tab
                   $active={activeTab === "monitoring"}
                   onClick={() => setActiveTab("monitoring")}
+                  data-hook="table-details-tab-monitoring"
+                  data-active={activeTab === "monitoring"}
                 >
                   Monitoring
                   {monitoringIssuesCounts.errors > 0 && (
-                    <TabBadge $type="error">
+                    <TabBadge
+                      $type="error"
+                      data-hook="table-details-tab-error-badge"
+                    >
                       <XSquareIcon size={12} weight="fill" />
                       {monitoringIssuesCounts.errors}
                     </TabBadge>
                   )}
                   {monitoringIssuesCounts.errors === 0 &&
                     monitoringIssuesCounts.warnings > 0 && (
-                      <TabBadge $type="warning">
+                      <TabBadge
+                        $type="warning"
+                        data-hook="table-details-tab-warning-badge"
+                      >
                         <WarningIcon size={12} weight="fill" />
                         {monitoringIssuesCounts.warnings}
                       </TabBadge>
@@ -597,6 +617,8 @@ export const TableDetailsDrawer = () => {
                 <Tab
                   $active={activeTab === "details"}
                   onClick={() => setActiveTab("details")}
+                  data-hook="table-details-tab-details"
+                  data-active={activeTab === "details"}
                 >
                   Details
                 </Tab>
@@ -646,7 +668,7 @@ export const TableDetailsDrawer = () => {
             />
           </>
         ) : (
-          <LoadingContainer>
+          <LoadingContainer data-hook="table-details-not-found">
             <Text color="gray2">Table not found</Text>
           </LoadingContainer>
         )}

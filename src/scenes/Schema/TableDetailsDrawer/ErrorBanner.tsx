@@ -97,13 +97,13 @@ export const ErrorBanner = ({
   onResume,
 }: Props) => {
   return (
-    <BannerContainer>
+    <BannerContainer data-hook="table-details-error-banner">
       <ContentSection>
         <TitleRow>
           <IconWrapper>
             <XSquareIcon size={20} weight="fill" />
           </IconWrapper>
-          <RedText size="lg" weight={600}>
+          <RedText size="lg" weight={600} data-hook="table-details-error-title">
             {title}
           </RedText>
         </TitleRow>
@@ -111,13 +111,27 @@ export const ErrorBanner = ({
       </ContentSection>
       <ActionsSection>
         {showResumeButton && onResume && (
-          <ResumeButton skin="gradient" onClick={onResume}>
+          <ResumeButton
+            skin="gradient"
+            onClick={onResume}
+            data-hook="table-details-resume-wal-button"
+          >
             Resume WAL
           </ResumeButton>
         )}
-        <SchemaAIButton onClick={onAskAI}>Ask AI</SchemaAIButton>
+        <SchemaAIButton
+          onClick={onAskAI}
+          data-hook="table-details-error-ask-ai"
+        >
+          Ask AI
+        </SchemaAIButton>
         {docsUrl && (
-          <DocsLink href={docsUrl} target="_blank" rel="noopener noreferrer">
+          <DocsLink
+            href={docsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-hook="table-details-error-docs-link"
+          >
             View explanation in docs
             <ArrowSquareOutIcon size={14} />
           </DocsLink>

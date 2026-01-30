@@ -228,8 +228,11 @@ export const PerformanceAlerts = ({
   if (warnings.length === 0) return null
 
   return (
-    <SectionContainer>
-      <SectionHeader onClick={() => setExpanded(!expanded)}>
+    <SectionContainer data-hook="table-details-performance-alerts">
+      <SectionHeader
+        onClick={() => setExpanded(!expanded)}
+        data-hook="table-details-performance-alerts-toggle"
+      >
         <CaretIcon size={14} weight="bold" $expanded={expanded} />
         <BellIcon size={16} weight="bold" />
         <SectionTitle>Performance Alerts</SectionTitle>
@@ -241,7 +244,7 @@ export const PerformanceAlerts = ({
             const details = getAlertDetails(warning)
 
             return (
-              <AlertItem key={warning.id}>
+              <AlertItem key={warning.id} data-hook="table-details-alert-item">
                 <OrangeBorder />
                 <AlertContent>
                   <AlertHeaderRow>
@@ -274,12 +277,16 @@ export const PerformanceAlerts = ({
                           href={ISSUE_DOCS_URLS[warning.id]}
                           target="_blank"
                           rel="noopener noreferrer"
+                          data-hook="table-details-warning-docs-link"
                         >
                           View explanation in docs
                           <ArrowSquareOutIcon size={14} />
                         </DocsLink>
                       )}
-                      <SchemaAIButton onClick={() => onAskAI(warning)}>
+                      <SchemaAIButton
+                        onClick={() => onAskAI(warning)}
+                        data-hook="table-details-warning-ask-ai"
+                      >
                         Ask AI
                       </SchemaAIButton>
                     </ActionsRow>

@@ -282,12 +282,14 @@ const ConfigItemWithHealth = ({
   issue,
   showTrend,
   trend,
+  dataHook,
 }: {
   label: string
   value: React.ReactNode
   issue?: HealthIssue
   showTrend?: boolean
   trend?: TrendIndicator
+  dataHook?: string
 }) => {
   const theme = useTheme()
   const trendAssets = showTrend
@@ -299,6 +301,8 @@ const ConfigItemWithHealth = ({
   const trendValue = (
     <TrendValueBox
       $background={showTrend ? trendAssets?.background : undefined}
+      data-hook={dataHook}
+      data-trend={trend?.direction}
     >
       <TrendValueText $color={trendAssets?.color}>{value}</TrendValueText>
       {showTrend && trend && (
@@ -393,8 +397,11 @@ export const MonitoringTab = ({
 
       {/* Row Count Indicator */}
       <Section $squishBottom>
-        <RowCountIndicatorInner $isMatView={isMatView}>
-          <RowCountBold>
+        <RowCountIndicatorInner
+          $isMatView={isMatView}
+          data-hook="table-details-row-count"
+        >
+          <RowCountBold data-hook="table-details-row-count-value">
             {formatRowCount(tableData.table_row_count)}
           </RowCountBold>
           rows
@@ -425,7 +432,7 @@ export const MonitoringTab = ({
       {isMatView && matViewData && (
         <Section $squishTop>
           <MetricsGrid $isMatView={isMatView}>
-            <MetricCard>
+            <MetricCard data-hook="table-details-view-status">
               <MetricLabel>View Status</MetricLabel>
               <Box gap="0.5rem" align="center">
                 {matViewData.view_status === "valid" ? (
@@ -452,7 +459,7 @@ export const MonitoringTab = ({
               </Box>
             </MetricCard>
 
-            <MetricCard>
+            <MetricCard data-hook="table-details-base-table-status">
               <MetricLabel>Base Table Status</MetricLabel>
               <MetricValue>
                 <Box gap="0.5rem" align="center">
@@ -466,17 +473,17 @@ export const MonitoringTab = ({
                       <Text color="green">Valid</Text>
                     </>
                   )}
-                  {baseTableStatus === "Suspended" ||
-                    (baseTableStatus === "Dropped" && (
-                      <>
-                        <XSquareIcon
-                          size={16}
-                          weight="fill"
-                          color={theme.color.red}
-                        />
-                        <Text color="red">{baseTableStatus}</Text>
-                      </>
-                    ))}
+                  {(baseTableStatus === "Suspended" ||
+                    baseTableStatus === "Dropped") && (
+                    <>
+                      <XSquareIcon
+                        size={16}
+                        weight="fill"
+                        color={theme.color.red}
+                      />
+                      <Text color="red">{baseTableStatus}</Text>
+                    </>
+                  )}
                 </Box>
               </MetricValue>
             </MetricCard>
@@ -489,13 +496,14 @@ export const MonitoringTab = ({
           <>
             <SectionTitleClickable
               onClick={() => onWalExpandedChange(!walExpanded)}
+              data-hook="table-details-ingestion-toggle"
             >
               <SectionTitleContainer>
                 <CaretIcon size={14} weight="bold" $expanded={walExpanded} />
                 <RowsPlusBottomIcon size="16px" />
                 <SectionTitle>Ingestion</SectionTitle>
                 {isIngestionActive && (
-                  <IngestionIndicator>
+                  <IngestionIndicator data-hook="table-details-ingestion-active">
                     <PulsingSquare />
                     <Text color="gray2" size="sm" weight={400}>
                       Ingesting...
@@ -506,13 +514,14 @@ export const MonitoringTab = ({
             </SectionTitleClickable>
             {walExpanded && (
               <DisabledOverlay $disabled={isIngestionDisabled}>
-                <TwoColumnGrid>
+                <TwoColumnGrid data-hook="table-details-ingestion-content">
                   <ConfigItemWithHealth
                     label="Pending Rows"
                     value={formatRowCount(tableData.wal_pending_row_count)}
                     issue={healthStatus?.fieldIssues.get("pendingRows")}
                     showTrend
                     trend={healthStatus?.trendIndicators.get("pendingRows")}
+                    dataHook="table-details-pending-rows-trend"
                   />
                   <ConfigItemWithHealth
                     label="Transaction Lag"
@@ -524,6 +533,7 @@ export const MonitoringTab = ({
                     issue={healthStatus?.fieldIssues.get("transactionLag")}
                     showTrend
                     trend={healthStatus?.trendIndicators.get("transactionLag")}
+                    dataHook="table-details-transaction-lag-trend"
                   />
                   <ConfigItem>
                     <Text color="gray2" size="sm">
@@ -600,7 +610,7 @@ export const MonitoringTab = ({
                 </IngestionIndicator>
               )}
             </SectionTitleContainer>
-            <IngestionStatusContainer>
+            <IngestionStatusContainer data-hook="table-details-wal-disabled">
               <Box gap="0.5rem" align="center">
                 <XCircleIcon
                   size={16}

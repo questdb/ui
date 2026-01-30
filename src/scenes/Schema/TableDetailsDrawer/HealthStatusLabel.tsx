@@ -97,7 +97,11 @@ const StatusSquare = styled(Square)<{ $severity: HealthSeverity }>`
 
 export const HealthStatusLabel = ({ severity }: Props) => {
   return (
-    <LabelContainer $severity={severity}>
+    <LabelContainer
+      $severity={severity}
+      data-hook="table-details-health-status"
+      data-severity={severity}
+    >
       <StatusSquare $severity={severity} />
     </LabelContainer>
   )

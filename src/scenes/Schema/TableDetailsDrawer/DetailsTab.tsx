@@ -159,13 +159,15 @@ export const DetailsTab = ({
   return (
     <>
       {isMatView && matViewData && (
-        <HorizontalSection>
+        <HorizontalSection data-hook="table-details-base-table-section">
           <Text color="gray2" size="sm" lineHeight="1.7">
             Base Table
           </Text>
           <BaseTableLinkButton
             $disabled={baseTableExists === false}
             onClick={onNavigateToBaseTable}
+            data-hook="table-details-base-table-link"
+            data-disabled={baseTableExists === false}
           >
             <Text color={baseTableExists ? "foreground" : "gray2"}>
               {matViewData.base_table_name}
@@ -182,15 +184,22 @@ export const DetailsTab = ({
       )}
 
       {/* DDL Section */}
-      <Section>
+      <Section data-hook="table-details-ddl-section">
         <SectionTitleContainer>
           <CodeIcon size="16px" weight="bold" />
           <SectionTitle>DDL</SectionTitle>
           <ButtonsContainer>
-            <SchemaAIButton onClick={onExplainWithAI}>
+            <SchemaAIButton
+              onClick={onExplainWithAI}
+              data-hook="table-details-explain-ai"
+            >
               Explain with AI
             </SchemaAIButton>
-            <StyledCopyButton text={ddl} iconOnly />
+            <StyledCopyButton
+              text={ddl}
+              iconOnly
+              data-hook="table-details-copy-ddl"
+            />
           </ButtonsContainer>
         </SectionTitleContainer>
         {ddl && (
@@ -207,6 +216,7 @@ export const DetailsTab = ({
       <Section>
         <SectionTitleClickable
           onClick={() => onColumnsExpandedChange(!columnsExpanded)}
+          data-hook="table-details-columns-toggle"
         >
           <SectionTitleContainer>
             <CaretIcon size={14} weight="bold" $expanded={columnsExpanded} />
@@ -219,9 +229,14 @@ export const DetailsTab = ({
           </SectionTitleContainer>
         </SectionTitleClickable>
         {columnsExpanded && (
-          <Box gap="0" flexDirection="column" align="stretch">
+          <Box
+            gap="0"
+            flexDirection="column"
+            align="stretch"
+            data-hook="table-details-columns-content"
+          >
             {columns.map((col) => (
-              <SchemaRow key={col.column}>
+              <SchemaRow key={col.column} data-hook="table-details-column-row">
                 <ColumnNameBox gap="0.5rem" align="center">
                   <ColumnIcon
                     isDesignatedTimestamp={col.designated}
@@ -239,7 +254,7 @@ export const DetailsTab = ({
       </Section>
 
       {/* Details Section - layout differs by type */}
-      <Section>
+      <Section data-hook="table-details-details-section">
         <SectionTitleContainer>
           <InfoIcon size="16px" weight="bold" />
           <SectionTitle>Details</SectionTitle>

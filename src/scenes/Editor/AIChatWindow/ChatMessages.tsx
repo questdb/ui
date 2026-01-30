@@ -772,7 +772,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const sql = message.sql
 
           // Render badge/title/description types
-          if (displayType) {
+          if (displayType && displayType !== "ask_request") {
             const badgeInfo = getOperationBadgeInfo(displayType)
 
             // Determine content to render below badge/description
