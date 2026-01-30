@@ -115,9 +115,7 @@ const MetricCard = styled(Box).attrs<{ $background?: string }>({
 const MetricLabel = styled(Text).attrs({
   color: "gray2",
   size: "sm",
-})`
-  letter-spacing: 0.03em;
-`
+})``
 
 const MetricValue = styled(Text).attrs({
   color: "foreground",

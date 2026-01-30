@@ -37,7 +37,7 @@ const SectionHeader = styled.button`
 
 const CaretIcon = styled(CaretRightIcon)<{ $expanded: boolean }>`
   color: ${({ theme }) => theme.color.foreground};
-  transition: transform 150ms ease;
+  transition: transform 0.2 ease;
   transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
   flex-shrink: 0;
 `
@@ -71,7 +71,7 @@ const AlertItem = styled.div`
 `
 
 const OrangeBorder = styled.div`
-  width: 0.125rem;
+  width: 0.2rem;
   flex-shrink: 0;
   align-self: stretch;
   background: ${({ theme }) => theme.color.orange};
@@ -83,7 +83,7 @@ const AlertContent = styled.div`
   align-items: stretch;
   flex: 1;
   min-width: 0;
-  gap: 0.125rem;
+  gap: 0.2rem;
 `
 
 const AlertHeaderRow = styled.div`
@@ -125,10 +125,10 @@ const MetricBox = styled.div`
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 0.1875rem;
+  gap: 0.3rem;
   flex: 1;
   min-width: 0;
-  padding: 0.625rem;
+  padding: 1rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
@@ -150,7 +150,6 @@ const DocsLink = styled.a`
   font-size: ${({ theme }) => theme.fontSize.sm};
   font-weight: 600;
   padding: 0;
-  letter-spacing: 0.01em;
   text-decoration: none;
 
   &:hover {

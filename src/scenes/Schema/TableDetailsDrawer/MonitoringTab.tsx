@@ -76,7 +76,7 @@ const RowCountBold = styled.span`
 const TimestampUnderline = styled.span`
   text-decoration: underline;
   text-decoration-style: dotted;
-  text-underline-offset: 0.1875rem;
+  text-underline-offset: 0.1rem;
   color: ${({ theme }) => theme.color.gray2};
 `
 
@@ -109,9 +109,7 @@ const MetricCard = styled(Box).attrs<{ $background?: string }>({
 const MetricLabel = styled(Text).attrs({
   color: "gray2",
   size: "sm",
-})`
-  letter-spacing: 0.03em;
-`
+})``
 
 const MetricValue = styled(Text).attrs({
   color: "foreground",
