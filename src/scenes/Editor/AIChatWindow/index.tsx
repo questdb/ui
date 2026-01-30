@@ -766,7 +766,10 @@ const AIChatWindow: React.FC = () => {
       <Header>
         <HeaderLeft>
           {previousSidebar && (
-            <HeaderBackButton onClick={handleNavigateBack}>
+            <HeaderBackButton
+              onClick={handleNavigateBack}
+              data-hook="ai-chat-window-back-button"
+            >
               <ArrowLeftIcon size={14} weight="bold" />
               Back
             </HeaderBackButton>

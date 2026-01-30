@@ -3,9 +3,11 @@ import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 
 export function formatRelativeTimestamp(timestamp: string | null): string {
   if (!timestamp) return "Never"
+  const date = new Date(timestamp)
+  if (isNaN(date.getTime()) || date.getTime() === 0) return "Never"
   const userLocale = fetchUserLocale()
   const locale = getLocaleFromLanguage(userLocale)
-  return formatDistance(new Date(timestamp), new Date(), {
+  return formatDistance(date, new Date(), {
     locale,
     addSuffix: true,
   })

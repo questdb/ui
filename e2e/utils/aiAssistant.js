@@ -9,7 +9,7 @@ const PROVIDERS = {
   },
 }
 
-function getOpenAIConfiguredSettings() {
+function getOpenAIConfiguredSettings(schemaAccess = true) {
   return {
     "ai.assistant.settings": JSON.stringify({
       selectedModel: "gpt-5-mini",
@@ -17,14 +17,14 @@ function getOpenAIConfiguredSettings() {
         openai: {
           apiKey: "test-openai-key",
           enabledModels: ["gpt-5-mini", "gpt-5"],
-          grantSchemaAccess: true,
+          grantSchemaAccess: schemaAccess,
         },
       },
     }),
   }
 }
 
-function getAnthropicConfiguredSettings() {
+function getAnthropicConfiguredSettings(schemaAccess = true) {
   return {
     "ai.assistant.settings": JSON.stringify({
       selectedModel: "claude-sonnet-4-5",
@@ -32,7 +32,7 @@ function getAnthropicConfiguredSettings() {
         anthropic: {
           apiKey: "test-anthropic-key",
           enabledModels: ["claude-sonnet-4-5", "claude-opus-4-5"],
-          grantSchemaAccess: true,
+          grantSchemaAccess: schemaAccess,
         },
       },
     }),

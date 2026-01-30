@@ -682,6 +682,97 @@ describe("TableDetailsDrawer", () => {
     })
   })
 
+  describe("AI interactions disabled", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    it("should disable AI interactions when AI is disabled", () => {
+      interceptTablesQuery({ table_suspended: true, table_write_amp_p50: 10 })
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
+      cy.getByDataHook("table-details-error-ask-ai").realHover()
+      cy.wait(300)
+      cy.getByDataHook("tooltip").should(
+        "contain",
+        "AI Assistant is not configured",
+      )
+
+      cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
+      cy.getByDataHook("table-details-warning-ask-ai").realHover()
+      cy.wait(300)
+      cy.getByDataHook("tooltip").should(
+        "contain",
+        "AI Assistant is not configured",
+      )
+
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.getByDataHook("table-details-explain-ai").should("be.disabled")
+      cy.getByDataHook("table-details-explain-ai").realHover()
+      cy.wait(300)
+      cy.getByDataHook("tooltip").should(
+        "contain",
+        "AI Assistant is not configured",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("AI interactions disabled - schema access not granted", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings(false))
+      cy.expandTables()
+    })
+
+    it("should disable AI interactions when schema access is not granted", () => {
+      interceptTablesQuery({ table_suspended: true, table_write_amp_p50: 10 })
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
+      cy.getByDataHook("table-details-error-ask-ai").realHover()
+      cy.wait(300)
+      cy.getByDataHook("tooltip").should(
+        "contain",
+        "Schema access is not granted to this model",
+      )
+
+      cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
+      cy.getByDataHook("table-details-warning-ask-ai").realHover()
+      cy.wait(300)
+      cy.getByDataHook("tooltip").should(
+        "contain",
+        "Schema access is not granted to this model",
+      )
+
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.getByDataHook("table-details-explain-ai").should("be.disabled")
+      cy.getByDataHook("table-details-explain-ai").realHover()
+      cy.wait(300)
+      cy.getByDataHook("tooltip").should(
+        "contain",
+        "Schema access is not granted to this model",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
   describe("AI interactions", () => {
     before(() => {
       cy.loadConsoleWithAuth()
@@ -711,13 +802,32 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("chat-message-assistant")
         .should("be.visible")
         .should("contain", aiResponse)
+      cy.getByDataHook("ai-chat-window-back-button").should("be.visible")
+      cy.getByDataHook("ai-chat-window-back-button").click()
+      cy.getByDataHook("table-details-name")
+        .should("be.visible")
+        .should("contain", TEST_TABLE)
     })
 
     it("should show Explain with AI button in DDL section", () => {
+      interceptAIRequest("This is an explanation of the table schema...")
       cy.openDetailsDrawer(TEST_TABLE)
       cy.getByDataHook("table-details-tab-details").click()
 
       cy.getByDataHook("table-details-explain-ai").should("be.visible")
+      cy.getByDataHook("table-details-explain-ai").click()
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+
+      cy.waitForAIResponse("@openaiRequest")
+
+      cy.getByDataHook("chat-message-assistant")
+        .should("be.visible")
+        .should("contain", "This is an explanation of the table schema...")
+      cy.getByDataHook("ai-chat-window-back-button").should("be.visible")
+      cy.getByDataHook("ai-chat-window-back-button").click()
+      cy.getByDataHook("table-details-name")
+        .should("be.visible")
+        .should("contain", TEST_TABLE)
     })
 
     it("should trigger AI chat when clicking Ask AI on performance alert", () => {
@@ -738,6 +848,11 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("chat-message-assistant")
         .should("be.visible")
         .should("contain", aiResponse)
+      cy.getByDataHook("ai-chat-window-back-button").should("be.visible")
+      cy.getByDataHook("ai-chat-window-back-button").click()
+      cy.getByDataHook("table-details-name")
+        .should("be.visible")
+        .should("contain", TEST_TABLE)
     })
 
     after(() => {
