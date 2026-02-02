@@ -623,10 +623,3 @@ Cypress.Commands.add("waitForAIResponse", (alias) => {
   cy.wait(alias)
   cy.waitForStreamingComplete()
 })
-
-Cypress.Commands.add("verifyDDLCopied", (tableName) => {
-  cy.window()
-    .its("navigator.clipboard")
-    .invoke("readText")
-    .should("contain", tableSchemas[tableName])
-})

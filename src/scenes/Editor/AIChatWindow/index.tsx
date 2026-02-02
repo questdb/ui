@@ -446,11 +446,32 @@ const AIChatWindow: React.FC = () => {
   )
 
   const handleContextClick = useCallback(async () => {
-    if (!conversation?.queryKey || !conversation?.bufferId) {
-      return false
+    if (conversation?.queryKey && conversation?.bufferId) {
+      return await highlightQuery(conversation.queryKey, conversation.bufferId)
     }
-    return await highlightQuery(conversation.queryKey, conversation.bufferId)
-  }, [conversation?.queryKey, conversation?.bufferId, highlightQuery])
+    if (conversation?.tableId) {
+      const table = tables.find((t) => t.id === conversation.tableId)
+      if (table) {
+        dispatch(
+          actions.console.pushSidebarHistory({
+            type: "tableDetails",
+            payload: {
+              tableName: table.table_name,
+              isMatView: table.table_type === "M",
+            },
+          }),
+        )
+        return true
+      }
+    }
+    return false
+  }, [
+    conversation?.queryKey,
+    conversation?.bufferId,
+    conversation?.tableId,
+    highlightQuery,
+    tables,
+  ])
 
   const handleScrollToMessageComplete = useCallback(() => {
     setScrollToMessageId(null)

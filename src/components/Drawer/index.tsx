@@ -221,7 +221,9 @@ export const Drawer = ({
           })}
         >
           <RadixDialog.Title asChild>
-            <span style={{ display: "none" }}>{title}</span>
+            <span style={{ display: "none" }}>
+              {typeof title === "string" ? title : "Drawer"}
+            </span>
           </RadixDialog.Title>
           {(title || withCloseButton) && (
             <Panel.Header

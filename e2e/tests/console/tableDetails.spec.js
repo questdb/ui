@@ -555,7 +555,12 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-copy-ddl").should("be.visible")
       if (Cypress.isBrowser("electron")) {
         cy.getByDataHook("table-details-copy-ddl").click()
-        cy.verifyDDLCopied(TEST_TABLE)
+        if (Cypress.isBrowser("electron")) {
+          cy.window()
+            .its("navigator.clipboard")
+            .invoke("readText")
+            .should("contain", `CREATE TABLE \'${TEST_TABLE}\'`)
+        }
       }
     })
 

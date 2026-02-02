@@ -923,8 +923,8 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").should("have.length", 0)
       cy.contains("No chats match your search").should("be.visible")
 
-      // When - Clear search with Escape key
-      cy.getByDataHook("chat-history-search").type("{esc}")
+      // When - Clear search with clear button
+      cy.getByDataHook("chat-history-search-clear").click()
       cy.getByDataHook("chat-history-search").should("have.value", "")
       cy.getByDataHook("chat-history-item").should("have.length", 3)
     })
