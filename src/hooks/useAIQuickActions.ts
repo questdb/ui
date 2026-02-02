@@ -17,7 +17,6 @@ import type {
 import * as QuestDB from "../utils/questdb"
 import { selectors } from "../store"
 import type { PartitionBy, QueryResult, Table } from "../utils/questdb/types"
-import type { PreviousSidebar } from "../store/Console/types"
 
 type SchemaDisplayData = {
   tableName: string
@@ -97,7 +96,6 @@ export const useAIQuickActions = () => {
     name: string,
     kind: "table" | "matview" | "view",
     schemaDisplayData?: Omit<SchemaDisplayData, "tableName" | "kind">,
-    previousSidebar?: PreviousSidebar,
   ) => {
     if (!canUse) {
       toast.error(
@@ -118,7 +116,7 @@ export const useAIQuickActions = () => {
     const existingConversation = findConversationByTableId(id)
 
     if (existingConversation) {
-      await openChatWindow(existingConversation.id, { previousSidebar })
+      await openChatWindow(existingConversation.id)
 
       const result = await executeAIFlow(
         createSchemaExplainFlowConfig({
@@ -159,7 +157,7 @@ export const useAIQuickActions = () => {
     })
 
     void updateConversationName(conversation.id, `${name} schema explanation`)
-    await openChatWindow(conversation.id, { previousSidebar })
+    await openChatWindow(conversation.id)
 
     void executeAIFlow(
       createSchemaExplainFlowConfig({
@@ -193,7 +191,6 @@ export const useAIQuickActions = () => {
     tableName: string,
     issue: HealthIssue,
     trendSamples?: TimestampedSample[],
-    previousSidebar?: PreviousSidebar,
   ) => {
     if (!canUse) {
       toast.error(
@@ -234,7 +231,7 @@ export const useAIQuickActions = () => {
     const existingConversation = findConversationByTableId(tableId)
 
     if (existingConversation) {
-      await openChatWindow(existingConversation.id, { previousSidebar })
+      await openChatWindow(existingConversation.id)
 
       const result = await executeAIFlow(
         createHealthIssueFlowConfig({
@@ -281,7 +278,7 @@ export const useAIQuickActions = () => {
       conversation.id,
       `${tableName}: ${issue.message}`,
     )
-    await openChatWindow(conversation.id, { previousSidebar })
+    await openChatWindow(conversation.id)
 
     void executeAIFlow(
       createHealthIssueFlowConfig({

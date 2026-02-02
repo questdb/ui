@@ -172,7 +172,7 @@ const News = () => {
   }, [newsOpened, enterpriseNews])
 
   useEffect(() => {
-    setNewsOpened(activeSidebar === "news")
+    setNewsOpened(activeSidebar?.type === "news")
   }, [activeSidebar])
 
   return (
@@ -182,13 +182,15 @@ const News = () => {
       withCloseButton
       open={newsOpened}
       onOpenChange={(newsOpened) => {
-        dispatch(
-          actions.console.setActiveSidebar(newsOpened ? "news" : undefined),
-        )
+        if (newsOpened) {
+          dispatch(actions.console.pushSidebarHistory({ type: "news" }))
+        } else {
+          dispatch(actions.console.closeSidebar())
+        }
       }}
       onDismiss={() => {
         setNewsOpened(false)
-        dispatch(actions.console.setActiveSidebar(undefined))
+        dispatch(actions.console.closeSidebar())
       }}
       trigger={
         <IconWithTooltip

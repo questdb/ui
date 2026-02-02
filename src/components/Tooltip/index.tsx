@@ -171,7 +171,7 @@ export const Tooltip = ({
             align={mapPlacementToAlign(placement)}
             sideOffset={0}
           >
-            <Text color="foreground" data-hook="tooltip">
+            <Text color="offWhite2" data-hook="tooltip">
               {content}
             </Text>
             <RadixTooltip.Arrow asChild width={14} height={7}>

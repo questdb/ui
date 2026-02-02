@@ -8,7 +8,7 @@ import React, {
 import { useSelector, useDispatch } from "react-redux"
 import styled, { css, useTheme } from "styled-components"
 import { selectors, actions } from "../../../store"
-import { ArrowLeftIcon, XSquareIcon, WarningIcon } from "@phosphor-icons/react"
+import { XSquareIcon, WarningIcon } from "@phosphor-icons/react"
 import { Drawer, Box, Text, CopyButton, Dialog } from "../../../components"
 import { hideColumnsFromTableDDL } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
@@ -153,25 +153,6 @@ const TabBadge = styled.span<{ $type: "warning" | "error" }>`
       $type === "error" ? theme.color.red : theme.color.orange};
 `
 
-const HeaderBackButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0.4rem;
-  border-radius: 0.4rem;
-  color: ${({ theme }) => theme.color.gray2};
-  font-weight: 500;
-  font-size: 1.4rem;
-
-  &:hover {
-    background: transparent !important;
-    color: ${({ theme }) => theme.color.foreground};
-  }
-`
-
 export const TableDetailsDrawer = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
@@ -179,13 +160,11 @@ export const TableDetailsDrawer = () => {
 
   const tableName = target?.tableName ?? ""
   const isMatView = target?.isMatView ?? false
-  const isOpen = activeSidebar === "tableDetails" && target !== null
+  const isOpen = activeSidebar?.type === "tableDetails" && target !== null
 
   const handleClose = () => {
-    dispatch(actions.console.setActiveSidebar(undefined))
+    dispatch(actions.console.closeSidebar())
   }
-
-  const navigatedFrom = target !== null ? target.navigatedFrom : undefined
 
   const { quest } = useContext(QuestContext)
   const theme = useTheme()
@@ -213,26 +192,15 @@ export const TableDetailsDrawer = () => {
   const handleNavigateToBaseTable = useCallback(() => {
     if (!matViewData?.base_table_name || !baseTableExists) return
     dispatch(
-      actions.console.setTableDetailsTarget({
-        tableName: matViewData.base_table_name,
-        isMatView: false,
-        navigatedFrom: {
-          tableName,
-          isMatView: true,
+      actions.console.pushSidebarHistory({
+        type: "tableDetails",
+        payload: {
+          tableName: matViewData.base_table_name,
+          isMatView: false,
         },
       }),
     )
-  }, [dispatch, matViewData?.base_table_name, tableName, baseTableExists])
-
-  const handleNavigateBack = useCallback(() => {
-    if (!navigatedFrom) return
-    dispatch(
-      actions.console.setTableDetailsTarget({
-        tableName: navigatedFrom.tableName,
-        isMatView: navigatedFrom.isMatView,
-      }),
-    )
-  }, [dispatch, navigatedFrom])
+  }, [dispatch, matViewData?.base_table_name, baseTableExists])
 
   const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
 
@@ -247,12 +215,8 @@ export const TableDetailsDrawer = () => {
         walEnabled: tableData.walEnabled,
         designatedTimestamp: tableData.designatedTimestamp,
       },
-      {
-        type: "tableDetails",
-        tableDetailsTarget: target,
-      },
     )
-  }, [handleExplainSchema, tableData, tableName, isMatView, target])
+  }, [handleExplainSchema, tableData, tableName, isMatView])
 
   const handleAskAIForIssue = useCallback(
     (issue: HealthIssue) => {
@@ -265,12 +229,9 @@ export const TableDetailsDrawer = () => {
         samples = trendData.walPendingRowCount
       }
 
-      void handleAskAIForHealthIssue(tableData.id, tableName, issue, samples, {
-        type: "tableDetails",
-        tableDetailsTarget: target,
-      })
+      void handleAskAIForHealthIssue(tableData.id, tableName, issue, samples)
     },
-    [handleAskAIForHealthIssue, tableData, tableName, trendData, target],
+    [handleAskAIForHealthIssue, tableData, tableName, trendData],
   )
 
   const fetchTableData = useCallback(async () => {
@@ -285,7 +246,7 @@ export const TableDetailsDrawer = () => {
         response.type === QuestDB.Type.DQL &&
         response.data.length === 0
       ) {
-        dispatch(actions.console.setActiveSidebar(undefined))
+        dispatch(actions.console.closeSidebar())
       }
     } catch (error) {
       console.error("Failed to fetch table data:", error)
@@ -542,16 +503,6 @@ export const TableDetailsDrawer = () => {
       }
       title={
         <TitleContainer>
-          {navigatedFrom && (
-            <HeaderBackButton
-              onClick={handleNavigateBack}
-              data-hook="table-details-back-button"
-            >
-              <ArrowLeftIcon size={14} weight="bold" />
-              Back
-            </HeaderBackButton>
-          )}
-
           <HealthStatusLabel
             severity={healthStatus?.overallSeverity ?? "healthy"}
           />

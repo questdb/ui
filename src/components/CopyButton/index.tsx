@@ -41,6 +41,7 @@ export const CopyButton = ({
       skin="secondary"
       size={size}
       data-hook="copy-value"
+      title="Copy to clipboard"
       onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
         void copyToClipboard(text)
         e.stopPropagation()

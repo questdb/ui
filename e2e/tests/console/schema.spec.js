@@ -466,15 +466,14 @@ describe("questdb schema in read-only mode", () => {
     cy.loadConsoleWithAuth()
   })
 
-  it("should disable Create Table action in read-only mode", () => {
-    cy.getByDataHook("create-table-panel-button").realHover()
+  it("should disable import CSV action in read-only mode", () => {
+    cy.getByDataHook("import-panel-button").realHover()
     cy.wait(300)
     cy.getByDataHook("tooltip").should(
       "contain",
       "To use this feature, turn off read-only mode in the configuration file",
     )
 
-    cy.getByDataHook("create-table-panel-button").click()
     cy.getByDataHook("create-table-panel").should("not.exist")
   })
 })

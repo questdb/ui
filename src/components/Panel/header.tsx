@@ -33,6 +33,7 @@ export const Root = styled.div<{ shadow?: boolean; $titleColor?: string }>`
   display: flex;
   justify-content: space-between;
   height: 4.6rem;
+  min-height: 4.6rem;
   padding: 0 1rem;
   align-items: center;
   background: ${({ $titleColor }) => $titleColor ?? color("backgroundLighter")};

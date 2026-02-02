@@ -86,7 +86,7 @@ const SuccessIcon = styled(CheckboxCircle)`
 
 const ButtonsContainer = styled.div`
   position: absolute;
-  top: 0.8rem;
+  top: 1rem;
   right: 1.2rem;
   display: flex;
   align-items: center;
@@ -114,7 +114,7 @@ type BaseLiteEditorProps = {
   fontSize?: number
   lineHeight?: number
   maxHeight?: number
-  hideToolbar?: boolean
+  compactToolbar?: boolean
 }
 
 type RegularEditorProps = BaseLiteEditorProps & {
@@ -141,10 +141,12 @@ const LiteEditorToolbar = ({
   onOpenInEditor,
   onCopy,
   copied,
+  compact = false,
 }: {
   onOpenInEditor: () => void
   onCopy: () => void
   copied: boolean
+  compact?: boolean
 }) => {
   const appTheme = useTheme()
   return (
@@ -155,20 +157,22 @@ const LiteEditorToolbar = ({
         title="Open in editor"
         data-hook="ai-open-in-editor-button"
       >
-        Open in editor
+        {!compact && "Open in editor"}
         <SquareSplitHorizontalIcon
           size="1.8rem"
           color={appTheme.color.offWhite}
         />
       </OpenInEditorButton>
-      <CopyButtonBase
-        skin="transparent"
-        onClick={onCopy}
-        title="Copy to clipboard"
-      >
-        {copied && <SuccessIcon size="1rem" />}
-        <FileCopy size="1.8rem" />
-      </CopyButtonBase>
+      {!compact && (
+        <CopyButtonBase
+          skin="transparent"
+          onClick={onCopy}
+          title="Copy to clipboard"
+        >
+          {copied && <SuccessIcon size="1rem" />}
+          <FileCopy size="1.8rem" />
+        </CopyButtonBase>
+      )}
     </ButtonsContainer>
   )
 }
@@ -362,7 +366,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   fontSize = 12,
   lineHeight = 20,
   maxHeight,
-  hideToolbar = false,
+  compactToolbar = false,
   ...props
 }) => {
   const [copied, setCopied] = useState(false)
@@ -376,7 +380,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   const effectiveHeight =
     maxHeight !== undefined ? Math.min(contentHeight, maxHeight) : contentHeight
   const showToolbarForRegularEditor =
-    !hideToolbar && maxHeight !== undefined && contentHeight > maxHeight
+    maxHeight !== undefined && contentHeight > maxHeight
 
   if (props.diffEditor) {
     return (
@@ -388,13 +392,11 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           paddingBottom: 8,
         }}
       >
-        {!hideToolbar && (
-          <LiteEditorToolbar
-            onOpenInEditor={props.onOpenInEditor}
-            onCopy={() => handleCopy(props.modified)}
-            copied={copied}
-          />
-        )}
+        <LiteEditorToolbar
+          onOpenInEditor={props.onOpenInEditor}
+          onCopy={() => handleCopy(props.modified)}
+          copied={copied}
+        />
         <LiteEditorContent
           diffEditor
           original={props.original}
@@ -411,13 +413,14 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   }
   return (
     <EditorWrapper style={{ height: effectiveHeight }}>
-      {showToolbarForRegularEditor ? (
+      {showToolbarForRegularEditor || compactToolbar ? (
         <LiteEditorToolbar
           onOpenInEditor={props.onOpenInEditor}
           onCopy={() => handleCopy(props.value ?? "")}
           copied={copied}
+          compact={compactToolbar}
         />
-      ) : !hideToolbar ? (
+      ) : (
         <CopyButtonFloating
           skin="transparent"
           onClick={() => handleCopy(props.value ?? "")}
@@ -426,7 +429,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           {copied && <SuccessIcon size="1rem" />}
           <FileCopy size="1.8rem" />
         </CopyButtonFloating>
-      ) : null}
+      )}
       <LiteEditorContent
         diffEditor={false}
         value={props.value}

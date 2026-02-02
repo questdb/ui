@@ -42,6 +42,7 @@ type BaseButtonProps = {
   disabledTooltip?: string
   fontSize?: FontSize
   onClick?: (event: MouseEvent) => void
+  onDoubleClick?: (event: MouseEvent) => void
   size?: Size
   fullWidth?: boolean
   type?: Type

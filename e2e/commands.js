@@ -526,9 +526,10 @@ Cypress.Commands.add("expandViews", () => {
 Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
   const titleHook =
     kind === "matview" ? "schema-matview-title" : "schema-table-title"
-  cy.getByDataHook(titleHook).contains(name).realHover()
-  cy.getByDataHook("table-menu-button").filter(":visible").first().click()
+  cy.getByDataHook(titleHook).contains(name).click()
+  cy.realPress("Enter")
   cy.getByDataHook("table-details-drawer").should("be.visible")
+  cy.getByDataHook("table-details-name").should("contain", name)
 })
 
 Cypress.Commands.add("getEditorTabs", () => {
@@ -621,4 +622,11 @@ Cypress.Commands.add("waitForStreamingComplete", (timeout = 10000) => {
 Cypress.Commands.add("waitForAIResponse", (alias) => {
   cy.wait(alias)
   cy.waitForStreamingComplete()
+})
+
+Cypress.Commands.add("verifyDDLCopied", (tableName) => {
+  cy.window()
+    .its("navigator.clipboard")
+    .invoke("readText")
+    .should("contain", tableSchemas[tableName])
 })

@@ -21,7 +21,6 @@ import type {
   ConversationId,
   AIConversation,
 } from "./types"
-import type { PreviousSidebar } from "../../store/Console/types"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
   normalizeQueryText,
@@ -81,7 +80,7 @@ type AIConversationContextType = {
 
   openChatWindow: (
     conversationId: ConversationId,
-    options?: { loadMessages?: boolean; previousSidebar?: PreviousSidebar },
+    options?: { loadMessages?: boolean },
   ) => Promise<void>
   openOrCreateBlankChatWindow: () => Promise<void>
   openBlankChatWindow: () => Promise<void>
@@ -553,10 +552,9 @@ export const AIConversationProvider: React.FC<{
   const openChatWindow = useCallback(
     async (
       conversationId: ConversationId,
-      options?: { loadMessages?: boolean; previousSidebar?: PreviousSidebar },
+      options?: { loadMessages?: boolean },
     ) => {
       const loadMessages = options?.loadMessages ?? true
-      const previousSidebar = options?.previousSidebar
 
       if (isOpeningChatWindowRef.current) return
       isOpeningChatWindowRef.current = true
@@ -574,7 +572,7 @@ export const AIConversationProvider: React.FC<{
         } else if (
           prevId === conversationId &&
           !chatWindowState.isHistoryOpen &&
-          activeSidebar === "aiChat"
+          activeSidebar?.type === "aiChat"
         ) {
           return
         }
@@ -598,10 +596,7 @@ export const AIConversationProvider: React.FC<{
           previousConversationId: null,
           activeConversationId: conversationId,
         }))
-        if (previousSidebar) {
-          dispatch(actions.console.setPreviousSidebar(previousSidebar))
-        }
-        dispatch(actions.console.setActiveSidebar("aiChat"))
+        dispatch(actions.console.pushSidebarHistory({ type: "aiChat" }))
       } finally {
         isOpeningChatWindowRef.current = false
       }
@@ -616,7 +611,7 @@ export const AIConversationProvider: React.FC<{
   )
 
   const closeChatWindow = useCallback(() => {
-    dispatch(actions.console.setActiveSidebar(undefined))
+    dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
       if (activeConversationMessages.length === 0) {
         void aiConversationStore.deleteConversation(
@@ -637,7 +632,7 @@ export const AIConversationProvider: React.FC<{
       )
       if (existing) {
         if (activeConversationId === existing.id) {
-          if (activeSidebar === "aiChat") {
+          if (activeSidebar?.type === "aiChat") {
             closeChatWindow()
             return
           }

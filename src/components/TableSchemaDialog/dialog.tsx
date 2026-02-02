@@ -13,8 +13,6 @@ import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-import { useDispatch } from "react-redux"
-import { actions } from "../../store"
 import { Panel } from "../../components/Panel"
 import { Actions } from "./actions"
 
@@ -94,7 +92,6 @@ export const Dialog = ({
   const [currentValues, setCurrentValues] =
     useState<SchemaFormValues>(formDefaults)
   const [lastFocusedIndex, setLastFocusedIndex] = useState<number | undefined>()
-  const dispatch = useDispatch()
 
   const resetToDefaults = () => {
     setDefaults({
@@ -114,7 +111,6 @@ export const Dialog = ({
   const handleDismiss = () => {
     resetToDefaults()
     onOpenChange(undefined)
-    dispatch(actions.console.setActiveSidebar(undefined))
   }
 
   const validationSchema = Joi.object({
@@ -209,13 +205,6 @@ export const Dialog = ({
         )
       }
       onDismiss={handleDismiss}
-      onOpenChange={(isOpen) => {
-        if (isOpen && action === "add") {
-          dispatch(
-            actions.console.setActiveSidebar(isOpen ? "create" : undefined),
-          )
-        }
-      }}
     >
       <StyledContentWrapper
         mode={action === "add" ? "side" : "modal"}
@@ -227,7 +216,6 @@ export const Dialog = ({
           onSubmit={(values) => {
             onSchemaChange(values)
             onOpenChange(undefined)
-            dispatch(actions.console.setActiveSidebar(undefined))
           }}
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}
           validationSchema={validationSchema}

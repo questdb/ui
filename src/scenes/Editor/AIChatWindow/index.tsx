@@ -7,7 +7,7 @@ import React, {
 } from "react"
 import type { MutableRefObject } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box } from "../../../components"
+import { Button, Box, Drawer } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { FixQueryButton } from "../../../components/FixQueryButton"
@@ -15,7 +15,6 @@ import {
   PlusIcon,
   XIcon,
   ClockCounterClockwiseIcon,
-  ArrowLeftIcon,
 } from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
@@ -54,26 +53,6 @@ import { RunningType } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { CircleNotchSpinner } from "../Monaco/icons"
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  background: ${color("chatBackground")};
-  border-left: 0.2rem ${color("backgroundDarker")} solid;
-`
-
-const Header = styled.div`
-  height: 46px;
-  padding: 0 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: ${color("backgroundLighter")};
-  flex-shrink: 0;
-`
 
 const HeaderLeft = styled.div`
   display: flex;
@@ -114,28 +93,9 @@ const HeaderRight = styled.div`
   flex-shrink: 0;
 `
 
-const HeaderBackButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0.4rem;
-  border-radius: 0.4rem;
-  color: ${color("gray2")};
-  font-weight: 500;
-  font-size: 1.4rem;
-
-  &:hover {
-    background: transparent !important;
-    color: ${color("foreground")};
-  }
-`
-
 const ChatWindowContent = styled.div`
   display: flex;
-  height: calc(100% - 46px);
+  height: 100%;
   width: 100%;
   overflow: hidden;
 `
@@ -217,7 +177,6 @@ const ChatPanel = styled(Box)`
 const AIChatWindow: React.FC = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const previousSidebar = useSelector(selectors.console.getPreviousSidebar)
   const { quest } = useContext(QuestContext)
   const {
     editorRef,
@@ -380,22 +339,6 @@ const AIChatWindow: React.FC = () => {
 
     return "AI Assistant"
   }, [conversation, isHistoryOpen])
-
-  const handleNavigateBack = useCallback(() => {
-    if (!previousSidebar) return
-    if (
-      previousSidebar.type === "tableDetails" &&
-      previousSidebar.tableDetailsTarget
-    ) {
-      dispatch(
-        actions.console.setTableDetailsTarget(
-          previousSidebar.tableDetailsTarget,
-        ),
-      )
-    }
-    dispatch(actions.console.setActiveSidebar(previousSidebar.type))
-    dispatch(actions.console.setPreviousSidebar(null))
-  }, [dispatch, previousSidebar])
 
   const handleHistoryToggle = useCallback(() => {
     if (isHistoryOpen) {
@@ -757,26 +700,27 @@ const AIChatWindow: React.FC = () => {
     }
   }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
 
-  if (activeSidebar !== "aiChat" || (!conversation && !isHistoryOpen)) {
+  if (activeSidebar?.type !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }
 
   return (
-    <Container data-hook="ai-chat-window">
-      <Header>
+    <Drawer
+      mode="side"
+      data-hook="ai-chat-window"
+      open={activeSidebar?.type === "aiChat"}
+      onOpenChange={(open) => {
+        if (!open) closeChatWindow()
+      }}
+      onDismiss={closeChatWindow}
+      trigger={<span />}
+      title={
         <HeaderLeft>
-          {previousSidebar && (
-            <HeaderBackButton
-              onClick={handleNavigateBack}
-              data-hook="ai-chat-window-back-button"
-            >
-              <ArrowLeftIcon size={14} weight="bold" />
-              Back
-            </HeaderBackButton>
-          )}
           <AISparkle size={20} variant="filled" />
           <HeaderTitle data-hook="chat-window-title">{headerTitle}</HeaderTitle>
         </HeaderLeft>
+      }
+      afterTitle={
         <HeaderRight>
           <HeaderButton
             onClick={openBlankChatWindow}
@@ -803,7 +747,8 @@ const AIChatWindow: React.FC = () => {
             <XIcon size={16} weight="bold" />
           </HeaderButton>
         </HeaderRight>
-      </Header>
+      }
+    >
       <ChatWindowContent>
         {isLoadingMessages ? (
           <ChatPanel>
@@ -892,7 +837,7 @@ const AIChatWindow: React.FC = () => {
           </ChatPanel>
         )}
       </ChatWindowContent>
-    </Container>
+    </Drawer>
   )
 }
 

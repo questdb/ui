@@ -65,6 +65,7 @@ const color: ColorShape = {
   tableSelection: "#043c5c",
   graphLegend: "#6e7078",
   offWhite: "#bdbdbd",
+  offWhite2: "#d1d5db",
 }
 
 const fontSize: FontSizeShape = {

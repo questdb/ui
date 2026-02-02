@@ -185,6 +185,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
   const allColumns = useSelector(selectors.query.getColumns)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const tableDetailsTarget = useSelector(
+    selectors.console.getTableDetailsTarget,
+  )
   const {
     status: aiStatus,
     canUse,
@@ -584,13 +588,23 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         const handleOpenDetailsDrawer =
           item.kind !== "view"
             ? () => {
+                if (
+                  activeSidebar?.type === "tableDetails" &&
+                  tableDetailsTarget?.tableName === item.name
+                ) {
+                  dispatch(actions.console.closeSidebar())
+                  return
+                }
                 dispatch(
-                  actions.console.setTableDetailsTarget({
-                    tableName: item.name,
-                    isMatView: item.kind === "matview",
+                  actions.console.pushSidebarHistory({
+                    type: "tableDetails",
+                    payload: {
+                      tableName: item.name,
+                      isMatView: item.kind === "matview",
+                    },
                   }),
                 )
-                dispatch(actions.console.setActiveSidebar("tableDetails"))
+                setTimeout(() => setFocusedIndex(index))
               }
             : undefined
         return (
@@ -729,6 +743,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return null
     },
     [
+      activeSidebar,
+      tableDetailsTarget,
       flattenedItems,
       regularTables,
       matViewTables,

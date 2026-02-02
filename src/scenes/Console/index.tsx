@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useDispatch } from "react-redux"
 import styled from "styled-components"
 import { Tooltip } from "../../components"
@@ -26,19 +26,6 @@ import { SearchPanel } from "../Search"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
 import { color } from "../../utils/styled"
 import { AIStatusIndicator } from "../../components/AIStatusIndicator"
-import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
-
-const AIChatWindow = lazy(() => import("../Editor/AIChatWindow"))
-import { AIChatErrorBoundary } from "../Editor/AIChatWindow/AIChatErrorBoundary"
-
-const LoaderContainer = styled.div`
-  display: flex;
-  align-items: center;
-  background: ${color("chatBackground")};
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-`
 
 const Root = styled.div`
   display: flex;
@@ -77,14 +64,9 @@ const Tab = styled.div`
   overflow: auto;
 `
 
-const Drawer = styled.div<{ $aiChat: boolean }>`
+const SidePanelRight = styled.div`
   background: ${color("chatBackground")};
   height: 100%;
-  ${({ $aiChat }) =>
-    $aiChat &&
-    `
-    display: none;
-  `}
 `
 
 const viewModes: {
@@ -160,7 +142,7 @@ const Console = () => {
       <Allotment
         onDragEnd={(sizes) => {
           // sizes[1] is the AI chat panel width when it's open
-          if (activeSidebar !== undefined && sizes[1] !== undefined) {
+          if (activeSidebar !== null && sizes[1] !== undefined) {
             updateAiChatPanelWidth(sizes[1])
           }
         }}
@@ -225,6 +207,7 @@ const Console = () => {
                     </Tooltip>
                   </Sidebar>
                   <Allotment
+                    proportionalLayout={false}
                     ref={horizontalSplitterRef}
                     onDragEnd={(sizes) => {
                       if (sizes[0] !== 0) {
@@ -328,20 +311,7 @@ const Console = () => {
           preferredSize={aiChatPanelWidth}
           visible={!!activeSidebar}
         >
-          <Drawer id="side-panel-right" $aiChat={activeSidebar === "aiChat"} />
-          {activeSidebar === "aiChat" && (
-            <AIChatErrorBoundary>
-              <Suspense
-                fallback={
-                  <LoaderContainer>
-                    <CircleNotchSpinner size={24} />
-                  </LoaderContainer>
-                }
-              >
-                <AIChatWindow />
-              </Suspense>
-            </AIChatErrorBoundary>
-          )}
+          <SidePanelRight id="side-panel-right" />
         </Allotment.Pane>
       </Allotment>
     </Root>

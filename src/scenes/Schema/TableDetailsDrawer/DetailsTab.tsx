@@ -24,6 +24,7 @@ import {
   CaretIcon,
 } from "./shared-styles"
 import { SchemaAIButton } from "./SchemaAIButton"
+import { useEditor } from "../../../providers"
 
 export interface DetailsTabProps {
   tableData: Table
@@ -132,6 +133,18 @@ const StyledCopyButton = styled(CopyButton)`
   background: transparent;
 `
 
+const ColumnCopyButton = styled(CopyButton)`
+  visibility: hidden;
+  background: transparent;
+  padding: 0.3rem;
+
+  ${SchemaRow}:hover & {
+    visibility: visible;
+  }
+
+  margin-right: 0.5rem;
+`
+
 const ButtonsContainer = styled(Box).attrs({
   gap: "1rem",
   align: "center",
@@ -152,6 +165,7 @@ export const DetailsTab = ({
   onNavigateToBaseTable,
   onExplainWithAI,
 }: DetailsTabProps) => {
+  const { showPreviewBuffer } = useEditor()
   const theme = useTheme()
   const baseTableExists =
     baseTableStatus === "Valid" || baseTableStatus === "Suspended"
@@ -205,8 +219,13 @@ export const DetailsTab = ({
         {ddl && (
           <LiteEditor
             value={truncatedDDL.text}
-            hideToolbar
-            onOpenInEditor={() => {}}
+            compactToolbar
+            onOpenInEditor={async () => {
+              await showPreviewBuffer({
+                type: "code",
+                value: ddl,
+              })
+            }}
             grayedOutLines={truncatedDDL.grayedOutLines}
           />
         )}
@@ -245,6 +264,12 @@ export const DetailsTab = ({
                   <Text color="foreground" ellipsis>
                     {col.column}
                   </Text>
+                  <ColumnCopyButton
+                    size="sm"
+                    text={col.column}
+                    iconOnly
+                    data-hook="table-details-copy-column-name"
+                  />
                 </ColumnNameBox>
                 <ColumnType>{col.type}</ColumnType>
               </SchemaRow>

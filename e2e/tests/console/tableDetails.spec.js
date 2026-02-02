@@ -113,20 +113,6 @@ describe("TableDetailsDrawer", () => {
       cy.expandTables()
     })
 
-    it("should show correct type badge and copy button for table", () => {
-      cy.openDetailsDrawer(TEST_TABLE)
-
-      cy.getByDataHook("table-details-type-badge").should("contain", "Table")
-      cy.getByDataHook("table-details-copy-name").should("be.visible")
-      cy.getByDataHook("table-details-copy-name").click()
-      if (Cypress.isBrowser("electron")) {
-        cy.window()
-          .its("navigator.clipboard")
-          .invoke("readText")
-          .should("contain", TEST_TABLE)
-      }
-    })
-
     it("should show Monitoring tab by default and switch to Details tab when clicked", () => {
       cy.openDetailsDrawer(TEST_TABLE)
 
@@ -562,17 +548,15 @@ describe("TableDetailsDrawer", () => {
       cy.expandTables()
     })
 
-    it("should have copy table name button in header", () => {
-      cy.openDetailsDrawer(TEST_TABLE)
-
-      cy.getByDataHook("table-details-copy-name").should("be.visible")
-    })
-
     it("should have copy DDL button in DDL section", () => {
       cy.openDetailsDrawer(TEST_TABLE)
       cy.getByDataHook("table-details-tab-details").click()
 
       cy.getByDataHook("table-details-copy-ddl").should("be.visible")
+      if (Cypress.isBrowser("electron")) {
+        cy.getByDataHook("table-details-copy-ddl").click()
+        cy.verifyDDLCopied(TEST_TABLE)
+      }
     })
 
     if (Cypress.isBrowser("electron")) {
@@ -598,14 +582,15 @@ describe("TableDetailsDrawer", () => {
       cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createMaterializedView(TEST_MATVIEW)
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
       cy.refreshSchema()
-      cy.getByDataHook("schema-folder-title")
-        .contains("Materialized views")
-        .should("exist")
+      cy.expandMatViews()
     })
 
     it("should show matview type badge and view status", () => {
-      cy.expandMatViews()
       cy.openDetailsDrawer(TEST_MATVIEW, "matview")
 
       cy.getByDataHook("table-details-type-badge").should(
@@ -617,7 +602,6 @@ describe("TableDetailsDrawer", () => {
     })
 
     it("should navigate to base table and back", () => {
-      cy.expandMatViews()
       cy.openDetailsDrawer(TEST_MATVIEW, "matview")
       cy.getByDataHook("table-details-tab-details").click()
 
@@ -628,16 +612,16 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-type-badge").should("contain", "Table")
       cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
-      cy.getByDataHook("table-details-back-button").should("be.visible")
+      cy.getByDataHook("sidebar-back-button").should("not.be.disabled")
 
-      cy.getByDataHook("table-details-back-button").click()
+      cy.getByDataHook("sidebar-back-button").click()
 
       cy.getByDataHook("table-details-type-badge").should(
         "contain",
         "Materialized View",
       )
       cy.getByDataHook("table-details-name").should("contain", TEST_MATVIEW)
-      cy.getByDataHook("table-details-back-button").should("not.exist")
+      cy.getByDataHook("sidebar-back-button").should("be.disabled")
     })
 
     after(() => {
@@ -802,8 +786,8 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("chat-message-assistant")
         .should("be.visible")
         .should("contain", aiResponse)
-      cy.getByDataHook("ai-chat-window-back-button").should("be.visible")
-      cy.getByDataHook("ai-chat-window-back-button").click()
+      cy.getByDataHook("sidebar-back-button").should("be.visible")
+      cy.getByDataHook("sidebar-back-button").click()
       cy.getByDataHook("table-details-name")
         .should("be.visible")
         .should("contain", TEST_TABLE)
@@ -823,8 +807,8 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("chat-message-assistant")
         .should("be.visible")
         .should("contain", "This is an explanation of the table schema...")
-      cy.getByDataHook("ai-chat-window-back-button").should("be.visible")
-      cy.getByDataHook("ai-chat-window-back-button").click()
+      cy.getByDataHook("sidebar-back-button").should("be.visible")
+      cy.getByDataHook("sidebar-back-button").click()
       cy.getByDataHook("table-details-name")
         .should("be.visible")
         .should("contain", TEST_TABLE)
@@ -848,8 +832,8 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("chat-message-assistant")
         .should("be.visible")
         .should("contain", aiResponse)
-      cy.getByDataHook("ai-chat-window-back-button").should("be.visible")
-      cy.getByDataHook("ai-chat-window-back-button").click()
+      cy.getByDataHook("sidebar-back-button").should("be.visible")
+      cy.getByDataHook("sidebar-back-button").click()
       cy.getByDataHook("table-details-name")
         .should("be.visible")
         .should("contain", TEST_TABLE)
@@ -858,6 +842,176 @@ describe("TableDetailsDrawer", () => {
     after(() => {
       cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("sidebar navigation history", () => {
+    const TEST_TABLE_2 = "test_trades"
+
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createTable(TEST_TABLE_2)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+      cy.expandTables()
+    })
+
+    it("toggle button visibility: hidden initially, visible after opening, stays visible after close, reopens latest", () => {
+      // Given
+      cy.getByDataHook("table-details-toggle-button").should("not.exist")
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      // Then
+      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-toggle-button").should("be.visible")
+
+      // When
+      cy.getByDataHook("sidebar-close-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("not.exist")
+      cy.getByDataHook("table-details-toggle-button").should("be.visible")
+
+      // When
+      cy.getByDataHook("table-details-toggle-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+    })
+
+    it("cross-panel navigation: navigate between table details, AI chat, and news using back/forward buttons", () => {
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("sidebar-back-button").should("not.exist")
+
+      // When
+      cy.getByDataHook("ai-chat-button").click()
+
+      // Then
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("sidebar-back-button")
+        .should("be.visible")
+        .should("not.be.disabled")
+      cy.getByDataHook("sidebar-forward-button")
+        .should("be.visible")
+        .should("be.disabled")
+
+      // When
+      cy.getByDataHook("news-panel-button").click()
+
+      // Then
+      cy.get('[data-state="open"]').should("exist")
+      cy.getByDataHook("sidebar-back-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("sidebar-back-button").click()
+
+      // Then
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("sidebar-back-button").should("not.be.disabled")
+      cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("sidebar-back-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("sidebar-back-button").should("be.disabled")
+      cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("sidebar-forward-button").click()
+
+      // Then
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+
+      // When
+      cy.getByDataHook("sidebar-forward-button").click()
+
+      // Then
+      cy.get('[data-state="open"]').should("exist")
+      cy.getByDataHook("sidebar-forward-button").should("be.disabled")
+    })
+
+    it("history truncation: navigating to new panel truncates forward history (browser behavior)", () => {
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("news-panel-button").click()
+
+      // Then
+      cy.get('[data-state="open"]').should("exist")
+
+      // When
+      cy.getByDataHook("sidebar-back-button").click()
+      cy.getByDataHook("sidebar-back-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+      cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("ai-chat-button").click()
+
+      // Then
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("sidebar-forward-button").should("be.disabled")
+      cy.getByDataHook("sidebar-back-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("sidebar-back-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+    })
+
+    it("close preserves history: closing sidebar does not affect history stack", () => {
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("sidebar-back-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+      cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("sidebar-close-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("not.exist")
+
+      // When
+      cy.getByDataHook("table-details-toggle-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-drawer").should("be.visible")
+      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
+
+      // When
+      cy.getByDataHook("sidebar-forward-button").click()
+
+      // Then
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+      cy.dropTable(TEST_TABLE_2)
     })
   })
 })

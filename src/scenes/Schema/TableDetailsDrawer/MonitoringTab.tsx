@@ -8,6 +8,10 @@ import {
   XSquareIcon,
   TrendUpIcon,
   TrendDownIcon,
+  InfoIcon,
+  ArrowUpRightIcon,
+  ArrowDownRightIcon,
+  ArrowRightIcon,
 } from "@phosphor-icons/react"
 import { SquareWithShadow } from "./HealthStatusLabel"
 import { Box, CopyButton, Text, Tooltip } from "../../../components"
@@ -232,6 +236,59 @@ const getSeverityColor = (
   }
 }
 
+export const HELPER_TEXT = {
+  pendingRows: (
+    <>
+      <Text color="offWhite2">
+        Rows waiting in WAL to be written to table storage. Unbounded growth
+        risks disk full or OOM errors, causing table suspension.
+      </Text>
+      <br />
+      <br />
+      <Box gap="0.5rem" align="center">
+        <ArrowUpRightIcon size={16} color="#d1d5db" />
+        <Text color="offWhite2">
+          Increasing = Writer can&apos;t keep up with ingestion rate
+        </Text>
+      </Box>
+      <Box gap="0.5rem" align="center">
+        <ArrowDownRightIcon size={16} color="#d1d5db" />
+        <Text color="offWhite2">Decreasing = Backlog is clearing</Text>
+      </Box>
+      <Box gap="0.5rem" align="center">
+        <ArrowRightIcon size={16} color="#d1d5db" />
+        <Text color="offWhite2">
+          Stable = Writer is keeping pace with ingestion
+        </Text>
+      </Box>
+    </>
+  ),
+  transactionLag: (
+    <>
+      <Text color="offWhite2">
+        Transactions committed to WAL but not yet applied to table storage. Data
+        in pending transactions is not visible to queries.
+      </Text>
+      <br />
+      <br />
+      <Box gap="0.5rem" align="center">
+        <ArrowUpRightIcon size={16} color="#d1d5db" />
+        <Text color="offWhite2">Increasing = Ingestion exceeds apply rate</Text>
+      </Box>
+      <Box gap="0.5rem" align="center">
+        <ArrowDownRightIcon size={16} color="#d1d5db" />
+        <Text color="offWhite2">Decreasing = Backlog is clearing</Text>
+      </Box>
+      <Box gap="0.5rem" align="center">
+        <ArrowRightIcon size={16} color="#d1d5db" />
+        <Text color="offWhite2">
+          Stable = Apply rate is keeping pace with ingestion
+        </Text>
+      </Box>
+    </>
+  ),
+}
+
 const getTrendAssets = (
   theme: { color: Record<string, string> },
   direction?: TrendDirection,
@@ -278,6 +335,7 @@ const formatRate = (rate: number, field: string): string => {
 
 const ConfigItemWithHealth = ({
   label,
+  helperText,
   value,
   issue,
   showTrend,
@@ -285,6 +343,7 @@ const ConfigItemWithHealth = ({
   dataHook,
 }: {
   label: string
+  helperText?: React.ReactNode
   value: React.ReactNode
   issue?: HealthIssue
   showTrend?: boolean
@@ -326,6 +385,11 @@ const ConfigItemWithHealth = ({
         <Text color="gray2" size="sm">
           {label}
         </Text>
+        {helperText && (
+          <Tooltip content={helperText}>
+            <InfoIcon size={12} color={theme.color.foreground} />
+          </Tooltip>
+        )}
         {issue && <WarningIcon size={12} weight="fill" color={iconColor} />}
       </Box>
       {showTrend ? (
@@ -517,6 +581,7 @@ export const MonitoringTab = ({
                 <TwoColumnGrid data-hook="table-details-ingestion-content">
                   <ConfigItemWithHealth
                     label="Pending Rows"
+                    helperText={HELPER_TEXT.pendingRows}
                     value={formatRowCount(tableData.wal_pending_row_count)}
                     issue={healthStatus?.fieldIssues.get("pendingRows")}
                     showTrend
@@ -525,6 +590,7 @@ export const MonitoringTab = ({
                   />
                   <ConfigItemWithHealth
                     label="Transaction Lag"
+                    helperText={HELPER_TEXT.transactionLag}
                     value={
                       tableData.wal_txn !== null || tableData.table_txn !== null
                         ? `${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0)} txn${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0) === 1 ? "" : "s"}`

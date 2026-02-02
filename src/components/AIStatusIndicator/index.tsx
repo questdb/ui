@@ -366,7 +366,7 @@ export const AIStatusIndicator: React.FC = () => {
     if (statusRef.current === null && status !== null) {
       setIsClosed(false)
     }
-    if (status === null && activeSidebar === "aiChat") {
+    if (status === null && activeSidebar?.type === "aiChat") {
       clearOperation()
     }
     statusRef.current = status
@@ -376,7 +376,7 @@ export const AIStatusIndicator: React.FC = () => {
     !currentOperation ||
     currentOperation.length === 0 ||
     isClosed ||
-    activeSidebar === "aiChat"
+    activeSidebar?.type === "aiChat"
   ) {
     return null
   }

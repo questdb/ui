@@ -1,6 +1,8 @@
 import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
+import { useSelector, useDispatch } from "react-redux"
+import { selectors, actions } from "../../store"
 import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
@@ -8,10 +10,11 @@ import { ForwardRef, Overlay } from "../../components"
 import { Button } from "../Button"
 import { ContentWrapper } from "./content-wrapper"
 import { Panel } from "../../components/Panel"
-import { XIcon } from "@phosphor-icons/react"
+import { XIcon, ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react"
 
 type DrawerProps = {
   mode?: "modal" | "side"
+  "data-hook"?: string
   children: React.ReactNode
   title?: React.ReactNode
   titleColor?: string
@@ -100,6 +103,25 @@ export const AfterTitleContainer = styled.div`
   margin-left: auto;
 `
 
+const NavigationButtons = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+`
+
+const NavButton = styled(Button)`
+  padding: 0.4rem;
+`
+
+const TitleWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+`
+
 export const Drawer = ({
   mode = "modal",
   children,
@@ -114,7 +136,53 @@ export const Drawer = ({
   withCloseButton,
   closeOnOverlayClick = true,
   closeOnEscape = true,
+  "data-hook": dataHook,
 }: DrawerProps) => {
+  const dispatch = useDispatch()
+  const canGoBack = useSelector(selectors.console.canGoBackInSidebar)
+  const canGoForward = useSelector(selectors.console.canGoForwardInSidebar)
+
+  const handleNavigateBack = () => {
+    dispatch(actions.console.goBackInSidebar())
+  }
+
+  const handleNavigateForward = () => {
+    dispatch(actions.console.goForwardInSidebar())
+  }
+
+  const showNavigation = mode === "side" && (canGoBack || canGoForward)
+
+  const titleWithNavigation =
+    mode === "side" ? (
+      <TitleWrapper>
+        {showNavigation && (
+          <NavigationButtons>
+            <NavButton
+              skin="transparent"
+              title="Go back"
+              disabled={!canGoBack}
+              onClick={handleNavigateBack}
+              data-hook="sidebar-back-button"
+            >
+              <ArrowLeftIcon size={16} weight="bold" />
+            </NavButton>
+            <NavButton
+              skin="transparent"
+              title="Go forward"
+              disabled={!canGoForward}
+              onClick={handleNavigateForward}
+              data-hook="sidebar-forward-button"
+            >
+              <ArrowRightIcon size={16} weight="bold" />
+            </NavButton>
+          </NavigationButtons>
+        )}
+        {title}
+      </TitleWrapper>
+    ) : (
+      title
+    )
+
   return (
     <RadixDialog.Root
       onOpenChange={onOpenChange}
@@ -136,6 +204,7 @@ export const Drawer = ({
         )}
         <DrawerContent
           aria-describedby={undefined}
+          data-hook={dataHook}
           mode={mode}
           width={width}
           {...(onDismiss && {
@@ -144,20 +213,29 @@ export const Drawer = ({
           })}
           {...(mode === "side" && {
             onInteractOutside: (e) => e.preventDefault(),
-            onEscapeKeyDown: (e) => e.preventDefault(),
+            onEscapeKeyDown:
+              closeOnEscape && onDismiss
+                ? onDismiss
+                : (e) => e.preventDefault(),
             onPointerDownOutside: (e) => e.preventDefault(),
           })}
         >
+          <RadixDialog.Title asChild>
+            <span style={{ display: "none" }}>{title}</span>
+          </RadixDialog.Title>
           {(title || withCloseButton) && (
             <Panel.Header
-              title={title}
+              title={titleWithNavigation}
               afterTitle={afterTitle}
               titleColor={titleColor}
               {...(withCloseButton && {
                 afterTitle: (
                   <AfterTitleContainer>
                     {afterTitle}
-                    <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>
+                    <StyledClose
+                      {...(onDismiss ? { onClick: onDismiss } : {})}
+                      data-hook="sidebar-close-button"
+                    >
                       <XIcon size={16} weight="bold" />
                     </StyledClose>
                   </AfterTitleContainer>

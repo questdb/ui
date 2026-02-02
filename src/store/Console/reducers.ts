@@ -24,13 +24,15 @@
 
 import { ConsoleAction, ConsoleAT, ConsoleStateShape } from "./types"
 
+const MAX_HISTORY_SIZE = 20
+
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
-  activeSidebar: undefined,
   activeBottomPanel: "zeroState",
   imageToZoom: undefined,
-  tableDetailsTarget: null,
-  previousSidebar: null,
+  sidebarHistory: [],
+  sidebarHistoryPosition: -1,
+  sidebarVisible: false,
 }
 
 const _console = (
@@ -42,13 +44,6 @@ const _console = (
       return {
         ...state,
         sideMenuOpened: !state.sideMenuOpened,
-      }
-    }
-
-    case ConsoleAT.SET_ACTIVE_SIDEBAR: {
-      return {
-        ...state,
-        activeSidebar: action.payload,
       }
     }
 
@@ -66,17 +61,74 @@ const _console = (
       }
     }
 
-    case ConsoleAT.SET_TABLE_DETAILS_TARGET: {
+    case ConsoleAT.PUSH_SIDEBAR_HISTORY: {
+      const newSidebar = action.payload
+      const { sidebarHistory, sidebarHistoryPosition, sidebarVisible } = state
+
+      const current =
+        sidebarHistoryPosition >= 0
+          ? sidebarHistory[sidebarHistoryPosition]
+          : null
+      const areSidebarsEqual =
+        JSON.stringify(current) === JSON.stringify(newSidebar)
+
+      if (areSidebarsEqual && sidebarVisible) {
+        return state
+      }
+
+      if (areSidebarsEqual && !sidebarVisible) {
+        return {
+          ...state,
+          sidebarVisible: true,
+        }
+      }
+
+      const truncatedHistory = sidebarHistory.slice(
+        0,
+        sidebarHistoryPosition + 1,
+      )
+
+      const newHistory = [...truncatedHistory, newSidebar].slice(
+        -MAX_HISTORY_SIZE,
+      )
+
       return {
         ...state,
-        tableDetailsTarget: action.payload,
+        sidebarHistory: newHistory,
+        sidebarHistoryPosition: newHistory.length - 1,
+        sidebarVisible: true,
       }
     }
 
-    case ConsoleAT.SET_PREVIOUS_SIDEBAR: {
+    case ConsoleAT.GO_BACK_IN_SIDEBAR: {
+      if (state.sidebarHistoryPosition <= 0) return state
       return {
         ...state,
-        previousSidebar: action.payload,
+        sidebarHistoryPosition: state.sidebarHistoryPosition - 1,
+      }
+    }
+
+    case ConsoleAT.GO_FORWARD_IN_SIDEBAR: {
+      if (state.sidebarHistoryPosition >= state.sidebarHistory.length - 1)
+        return state
+      return {
+        ...state,
+        sidebarHistoryPosition: state.sidebarHistoryPosition + 1,
+      }
+    }
+
+    case ConsoleAT.CLOSE_SIDEBAR: {
+      return {
+        ...state,
+        sidebarVisible: false,
+      }
+    }
+
+    case ConsoleAT.OPEN_SIDEBAR: {
+      if (state.sidebarHistoryPosition < 0) return state
+      return {
+        ...state,
+        sidebarVisible: true,
       }
     }
 

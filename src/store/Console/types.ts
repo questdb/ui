@@ -22,20 +22,16 @@
  *
  ******************************************************************************/
 
-export type Sidebar = "news" | "create" | "aiChat" | "tableDetails" | undefined
-
 export type TableDetailsTarget = {
   tableName: string
   isMatView: boolean
-  navigatedFrom?: {
-    tableName: string
-    isMatView: boolean
-  }
 } | null
 
-export type PreviousSidebar = {
-  type: Exclude<Sidebar, undefined>
-  tableDetailsTarget?: TableDetailsTarget
+export type SidebarType = "news" | "aiChat" | "tableDetails"
+
+export type Sidebar = {
+  type: SidebarType
+  payload?: TableDetailsTarget
 } | null
 
 export type BottomPanel = "result" | "zeroState" | "import"
@@ -49,55 +45,65 @@ export type ImageToZoom = {
 
 export type ConsoleStateShape = Readonly<{
   sideMenuOpened: boolean
-  activeSidebar: Sidebar
   activeBottomPanel: BottomPanel
   imageToZoom: ImageToZoom | undefined
-  tableDetailsTarget: TableDetailsTarget
-  previousSidebar: PreviousSidebar
+  sidebarHistory: Sidebar[]
+  sidebarHistoryPosition: number
+  sidebarVisible: boolean
 }>
 
 export enum ConsoleAT {
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
-  SET_ACTIVE_SIDEBAR = "CONSOLE/SET_ACTIVE_SIDEBAR",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
   SET_IMAGE_TO_ZOOM = "CONSOLE/SET_IMAGE_TO_ZOOM",
-  SET_TABLE_DETAILS_TARGET = "CONSOLE/SET_TABLE_DETAILS_TARGET",
-  SET_PREVIOUS_SIDEBAR = "CONSOLE/SET_PREVIOUS_SIDEBAR",
+  PUSH_SIDEBAR_HISTORY = "CONSOLE/PUSH_SIDEBAR_HISTORY",
+  GO_BACK_IN_SIDEBAR = "CONSOLE/GO_BACK_IN_SIDEBAR",
+  GO_FORWARD_IN_SIDEBAR = "CONSOLE/GO_FORWARD_IN_SIDEBAR",
+  CLOSE_SIDEBAR = "CONSOLE/CLOSE_SIDEBAR",
+  OPEN_SIDEBAR = "CONSOLE/OPEN_SIDEBAR",
 }
 
 type ToggleSideMenuAction = Readonly<{
   type: ConsoleAT.TOGGLE_SIDE_MENU
 }>
 
-type setActiveSidebarAction = Readonly<{
-  payload: Sidebar
-  type: ConsoleAT.SET_ACTIVE_SIDEBAR
-}>
-
-type setActiveBottomPanelAction = Readonly<{
+type SetActiveBottomPanelAction = Readonly<{
   payload: BottomPanel
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL
 }>
 
-type setImageToZoomAction = Readonly<{
+type SetImageToZoomAction = Readonly<{
   payload?: ImageToZoom
   type: ConsoleAT.SET_IMAGE_TO_ZOOM
 }>
 
-type setTableDetailsTargetAction = Readonly<{
-  payload: TableDetailsTarget
-  type: ConsoleAT.SET_TABLE_DETAILS_TARGET
+type PushSidebarHistoryAction = Readonly<{
+  payload: Sidebar
+  type: ConsoleAT.PUSH_SIDEBAR_HISTORY
 }>
 
-type setPreviousSidebarAction = Readonly<{
-  payload: PreviousSidebar
-  type: ConsoleAT.SET_PREVIOUS_SIDEBAR
+type GoBackInSidebarAction = Readonly<{
+  type: ConsoleAT.GO_BACK_IN_SIDEBAR
+}>
+
+type GoForwardInSidebarAction = Readonly<{
+  type: ConsoleAT.GO_FORWARD_IN_SIDEBAR
+}>
+
+type CloseSidebarAction = Readonly<{
+  type: ConsoleAT.CLOSE_SIDEBAR
+}>
+
+type OpenSidebarAction = Readonly<{
+  type: ConsoleAT.OPEN_SIDEBAR
 }>
 
 export type ConsoleAction =
   | ToggleSideMenuAction
-  | setActiveSidebarAction
-  | setActiveBottomPanelAction
-  | setImageToZoomAction
-  | setTableDetailsTargetAction
-  | setPreviousSidebarAction
+  | SetActiveBottomPanelAction
+  | SetImageToZoomAction
+  | PushSidebarHistoryAction
+  | GoBackInSidebarAction
+  | GoForwardInSidebarAction
+  | CloseSidebarAction
+  | OpenSidebarAction

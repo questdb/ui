@@ -1,5 +1,6 @@
 import React, { SVGProps } from "react"
 import styled from "styled-components"
+import { Tooltip } from "../../../components"
 import type { HealthSeverity } from "./healthCheck"
 
 type Props = {
@@ -97,12 +98,22 @@ const StatusSquare = styled(Square)<{ $severity: HealthSeverity }>`
 
 export const HealthStatusLabel = ({ severity }: Props) => {
   return (
-    <LabelContainer
-      $severity={severity}
-      data-hook="table-details-health-status"
-      data-severity={severity}
+    <Tooltip
+      content={
+        severity === "critical"
+          ? "Error"
+          : severity === "warning"
+            ? "Warning"
+            : "Healthy"
+      }
     >
-      <StatusSquare $severity={severity} />
-    </LabelContainer>
+      <LabelContainer
+        $severity={severity}
+        data-hook="table-details-health-status"
+        data-severity={severity}
+      >
+        <StatusSquare $severity={severity} />
+      </LabelContainer>
+    </Tooltip>
   )
 }

@@ -27,14 +27,7 @@ import {
   ImageToZoom,
   Sidebar,
   BottomPanel,
-  TableDetailsTarget,
-  PreviousSidebar,
 } from "./types"
-
-const setActiveSidebar = (panel: Sidebar): ConsoleAction => ({
-  payload: panel,
-  type: ConsoleAT.SET_ACTIVE_SIDEBAR,
-})
 
 const setActiveBottomPanel = (panel: BottomPanel): ConsoleAction => ({
   payload: panel,
@@ -50,21 +43,34 @@ const toggleSideMenu = (): ConsoleAction => ({
   type: ConsoleAT.TOGGLE_SIDE_MENU,
 })
 
-const setTableDetailsTarget = (target: TableDetailsTarget): ConsoleAction => ({
-  payload: target,
-  type: ConsoleAT.SET_TABLE_DETAILS_TARGET,
+const pushSidebarHistory = (sidebar: Sidebar): ConsoleAction => ({
+  payload: sidebar,
+  type: ConsoleAT.PUSH_SIDEBAR_HISTORY,
 })
 
-const setPreviousSidebar = (previous: PreviousSidebar): ConsoleAction => ({
-  payload: previous,
-  type: ConsoleAT.SET_PREVIOUS_SIDEBAR,
+const goBackInSidebar = (): ConsoleAction => ({
+  type: ConsoleAT.GO_BACK_IN_SIDEBAR,
+})
+
+const goForwardInSidebar = (): ConsoleAction => ({
+  type: ConsoleAT.GO_FORWARD_IN_SIDEBAR,
+})
+
+const closeSidebar = (): ConsoleAction => ({
+  type: ConsoleAT.CLOSE_SIDEBAR,
+})
+
+const openSidebar = (): ConsoleAction => ({
+  type: ConsoleAT.OPEN_SIDEBAR,
 })
 
 export default {
   toggleSideMenu,
-  setActiveSidebar,
   setActiveBottomPanel,
   setImageToZoom,
-  setTableDetailsTarget,
-  setPreviousSidebar,
+  pushSidebarHistory,
+  goBackInSidebar,
+  goForwardInSidebar,
+  closeSidebar,
+  openSidebar,
 }

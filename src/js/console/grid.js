@@ -23,6 +23,7 @@
  ******************************************************************************/
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { unescapeHtml } from "../../utils/escapeHtml"
+import { toast } from "../../components"
 
 const hashString = (str) => {
   let hash = 0
@@ -1778,6 +1779,7 @@ export function grid(rootElement, _paginationFn, id) {
       }
 
       copyToClipboard(valueToCopy).then(undefined)
+      toast.success("Copied to clipboard", { autoClose: 2000 })
 
       activeCellPulseClearTimer = setTimeout(() => {
         removeClass(focusedCell, "qg-c-active-pulse")

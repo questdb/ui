@@ -27,14 +27,27 @@ import {
   BottomPanel,
   ImageToZoom,
   TableDetailsTarget,
-  PreviousSidebar,
 } from "types"
 
 const getSideMenuOpened: (store: StoreShape) => boolean = (store) =>
   store.console.sideMenuOpened
 
-const getActiveSidebar: (store: StoreShape) => Sidebar = (store) =>
-  store.console.activeSidebar
+const getActiveSidebar: (store: StoreShape) => Sidebar = (store) => {
+  const { sidebarHistory, sidebarHistoryPosition, sidebarVisible } =
+    store.console
+
+  if (!sidebarVisible) {
+    return null
+  }
+
+  if (
+    sidebarHistoryPosition < 0 ||
+    sidebarHistoryPosition >= sidebarHistory.length
+  ) {
+    return null
+  }
+  return sidebarHistory[sidebarHistoryPosition]
+}
 
 const getActiveBottomPanel: (store: StoreShape) => BottomPanel = (store) =>
   store.console.activeBottomPanel
@@ -45,10 +58,33 @@ const getImageToZoom: (store: StoreShape) => ImageToZoom | undefined = (
 
 const getTableDetailsTarget: (store: StoreShape) => TableDetailsTarget = (
   store,
-) => store.console.tableDetailsTarget
+) => {
+  const { sidebarHistory, sidebarHistoryPosition } = store.console
 
-const getPreviousSidebar: (store: StoreShape) => PreviousSidebar = (store) =>
-  store.console.previousSidebar
+  if (
+    sidebarHistoryPosition >= 0 &&
+    sidebarHistoryPosition < sidebarHistory.length
+  ) {
+    const current = sidebarHistory[sidebarHistoryPosition]
+    if (current?.type === "tableDetails" && current.payload) {
+      return current.payload
+    }
+  }
+
+  for (let i = sidebarHistory.length - 1; i >= 0; i--) {
+    const entry = sidebarHistory[i]
+    if (entry?.type === "tableDetails" && entry.payload) {
+      return entry.payload
+    }
+  }
+  return null
+}
+
+const canGoBackInSidebar: (store: StoreShape) => boolean = (store) =>
+  store.console.sidebarHistoryPosition > 0
+
+const canGoForwardInSidebar: (store: StoreShape) => boolean = (store) =>
+  store.console.sidebarHistoryPosition < store.console.sidebarHistory.length - 1
 
 export default {
   getSideMenuOpened,
@@ -56,5 +92,6 @@ export default {
   getActiveBottomPanel,
   getImageToZoom,
   getTableDetailsTarget,
-  getPreviousSidebar,
+  canGoBackInSidebar,
+  canGoForwardInSidebar,
 }
