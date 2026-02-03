@@ -1,0 +1,14 @@
+[
+  {
+    "label": "Imported Tab 1",
+    "value": "SELECT 1;",
+    "position": 0,
+    "editorViewState": {}
+  },
+  {
+    "label": "Imported Tab 2",
+    "value": "SELECT 2;",
+    "position": 1,
+    "editorViewState": {}
+  }
+]

@@ -1435,4 +1435,80 @@ describe("import/export tabs", () => {
       "Archived Import",
     )
   })
+
+  it("should show import summary dialog when importing duplicate tabs", () => {
+    // First import the tabs
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/valid-tabs-export.json",
+      { force: true },
+    )
+    cy.get(".toast-success-container").should("be.visible").click()
+
+    // Now try to import the same tabs again (duplicates)
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/duplicate-tabs-export.json",
+      { force: true },
+    )
+
+    // Should show the import summary dialog
+    cy.getByDataHook("import-summary-dialog").should("be.visible")
+    cy.getByDataHook("import-summary-dialog").should("contain", "0 tab")
+    cy.getByDataHook("import-summary-dialog").should(
+      "contain",
+      "2 tabs skipped",
+    )
+    cy.getByDataHook("import-summary-skipped-list").should("be.visible")
+    cy.getByDataHook("import-summary-skipped-item").should("have.length", 2)
+    cy.getByDataHook("import-summary-skipped-item")
+      .first()
+      .should("contain", "Duplicate")
+
+    // Close the dialog
+    cy.getByDataHook("import-summary-close").click()
+    cy.getByDataHook("import-summary-dialog").should("not.exist")
+  })
+
+  it("should show import summary dialog with mixed results", () => {
+    // First import only one tab
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/duplicate-tabs-export.json",
+      { force: true },
+    )
+    cy.get(".toast-success-container").should("be.visible").click()
+
+    // Now import mixed tabs (one duplicate, one new)
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/mixed-tabs-export.json",
+      { force: true },
+    )
+
+    // Should show the import summary dialog with mixed results
+    cy.getByDataHook("import-summary-dialog").should("be.visible")
+    cy.getByDataHook("import-summary-dialog").should(
+      "contain",
+      "1 tab imported",
+    )
+    cy.getByDataHook("import-summary-dialog").should("contain", "1 tab skipped")
+    cy.getByDataHook("import-summary-skipped-item").should("have.length", 1)
+    cy.getByDataHook("import-summary-skipped-item").should(
+      "contain",
+      "Imported Tab 1",
+    )
+
+    // Close and verify new tab was added
+    cy.getByDataHook("import-summary-close").click()
+    cy.getEditorTabByTitle("Brand New Tab").should("be.visible")
+  })
 })

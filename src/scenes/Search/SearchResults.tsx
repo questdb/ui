@@ -2,9 +2,8 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import styled from "styled-components"
 import type { SearchMatch } from "../../utils/textSearch"
 import { useEditor } from "../../providers"
-import { InsertChart } from "@styled-icons/material"
 import { ChevronRight, ChevronDown } from "@styled-icons/boxicons-solid"
-import { FileText } from "@styled-icons/remix-line"
+import { FileTextIcon, ChartLineIcon } from "@phosphor-icons/react"
 import { Text } from "../../components"
 import {
   VirtualizedTree,
@@ -497,7 +496,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
               {isExpanded ? <ChevronDown /> : <ChevronRight />}
             </ChevronIcon>
             <FileIcon aria-hidden="true">
-              {item.isMetricsMatch ? <InsertChart /> : <FileText />}
+              {item.isMetricsMatch ? <ChartLineIcon /> : <FileTextIcon />}
             </FileIcon>
             <ItemText $isArchived={item.isArchived}>
               {item.titleMatch
@@ -532,7 +531,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
               data-hook="search-result-title-match-icon"
               aria-hidden="true"
             >
-              {item.isMetricsMatch ? <InsertChart /> : <FileText />}
+              {item.isMetricsMatch ? <ChartLineIcon /> : <FileTextIcon />}
             </FileIcon>
             <ItemText
               $isArchived={item.match.isArchived}

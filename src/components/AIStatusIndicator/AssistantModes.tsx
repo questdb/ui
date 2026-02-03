@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import styled, { css } from "styled-components"
 import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
-import { FileText, Table } from "@styled-icons/remix-line"
+import { Table } from "@styled-icons/remix-line"
+import { FileTextIcon } from "@phosphor-icons/react"
 import { ChevronDown, ChevronRight } from "@styled-icons/boxicons-solid"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
@@ -393,7 +394,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                             return (
                               <ReasoningItem key={itemKey}>
                                 <ReasoningIcon>
-                                  <FileText size={16} />
+                                  <FileTextIcon size={16} />
                                 </ReasoningIcon>
                                 <ReasoningText>
                                   {item.section ? (
@@ -440,7 +441,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                     return (
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
-                          <FileText size={16} />
+                          <FileTextIcon size={16} />
                         </ReasoningIcon>
                         <ReasoningText>
                           {name && docSection ? (

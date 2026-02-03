@@ -10,7 +10,12 @@ import {
 } from "@phosphor-icons/react"
 import { toast } from "../../../components/Toast"
 import { db } from "../../../store/db"
-import { validateBufferSchema, sanitizeBuffer } from "./importTabs"
+import {
+  validateBufferSchema,
+  sanitizeBuffer,
+  findDuplicates,
+} from "./importTabs"
+import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import {
   Box,
   Button,
@@ -89,6 +94,9 @@ export const Tabs = () => {
   const userLocale = useMemo(fetchUserLocale, [])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [importSummaryOpen, setImportSummaryOpen] = useState(false)
+  const [importedCount, setImportedCount] = useState(0)
+  const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
 
   const handleExportTabs = async () => {
     const allBuffers = await db.buffers.toArray()
@@ -117,6 +125,15 @@ export const Tabs = () => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
 
+      const MAX_FILE_SIZE_MB = 500
+      const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast.error(
+          `File size exceeds ${MAX_FILE_SIZE_MB}MB limit. Please split your tabs into smaller files.`,
+        )
+        return
+      }
+
       try {
         const text = await file.text()
         const data: unknown = JSON.parse(text)
@@ -131,10 +148,42 @@ export const Tabs = () => {
           sanitizeBuffer,
         )
 
+        let importedCount = 0
+        const skipped: SkippedTab[] = []
+
         await db.transaction("rw", db.buffers, async () => {
-          const maxPosition = Math.max(...buffers.map((b) => b.position), 0)
+          const existingBuffers = await db.buffers.toArray()
+
+          const duplicateIndices = findDuplicates(
+            existingBuffers,
+            sanitizedData,
+          )
+
+          // Collect skipped tab information
+          duplicateIndices.forEach((index) => {
+            skipped.push({
+              label: sanitizedData[index].label,
+              reason: "Duplicate",
+              isMetricsTab: !!sanitizedData[index].metricsViewState,
+            })
+          })
+
+          const newTabs = sanitizedData.filter(
+            (_, index) => !duplicateIndices.has(index),
+          )
+          importedCount = newTabs.length
+
+          if (newTabs.length === 0) {
+            return
+          }
+
+          const maxPosition = Math.max(
+            ...existingBuffers.map((b) => b.position),
+            0,
+          )
           let activeTabCount = 0
-          for (const tab of sanitizedData) {
+
+          for (const tab of newTabs) {
             const isArchived = tab.archived === true
             await db.buffers.add({
               ...tab,
@@ -146,9 +195,18 @@ export const Tabs = () => {
           }
         })
 
-        toast.success(
-          `Imported ${sanitizedData.length} tab${sanitizedData.length === 1 ? "" : "s"} successfully.`,
-        )
+        // Show dialog only if there are skipped tabs, otherwise show toast
+        if (skipped.length > 0) {
+          setImportedCount(importedCount)
+          setSkippedTabs(skipped)
+          setImportSummaryOpen(true)
+        } else if (importedCount > 0) {
+          toast.success(
+            `Imported ${importedCount} tab${importedCount === 1 ? "" : "s"} successfully.`,
+          )
+        } else {
+          toast.info("All tabs already exist. Nothing imported.")
+        }
       } catch (err) {
         console.error("Import error:", err)
         if (err instanceof SyntaxError) {
@@ -463,6 +521,12 @@ export const Tabs = () => {
           </DropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+      <ImportSummaryDialog
+        open={importSummaryOpen}
+        onOpenChange={setImportSummaryOpen}
+        importedCount={importedCount}
+        skippedTabs={skippedTabs}
+      />
     </Root>
   )
 }

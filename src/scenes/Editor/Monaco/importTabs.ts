@@ -11,6 +11,7 @@ import {
   RefreshRate,
 } from "../Metrics/utils"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
+import { hashString } from "../../../utils"
 
 type ValidationResult = true | string
 
@@ -84,7 +85,6 @@ const validateBufferItem = (item: unknown, index: number): ValidationResult => {
     return `Item [${index}]: must be an object`
   const obj = item as Record<string, unknown>
 
-  // Check for prototype pollution attempts
   for (const key of Object.keys(obj)) {
     if (DANGEROUS_KEYS.has(key)) {
       return `Item [${index}]: contains forbidden key "${key}"`
@@ -114,9 +114,6 @@ const validateBufferItem = (item: unknown, index: number): ValidationResult => {
   return true
 }
 
-/**
- * Sanitize a single metric object - only copy validated fields
- */
 const sanitizeMetric = (item: Record<string, unknown>): Metric => {
   const color =
     typeof item.color === "string" && HEX_COLOR_REGEX.test(item.color)
@@ -135,9 +132,6 @@ const sanitizeMetric = (item: Record<string, unknown>): Metric => {
   return metric
 }
 
-/**
- * Sanitize metricsViewState - only copy validated fields
- */
 const sanitizeMetricsViewState = (
   item: Record<string, unknown>,
 ): MetricsViewState => {
@@ -167,10 +161,6 @@ const sanitizeMetricsViewState = (
   return state
 }
 
-/**
- * Sanitize a buffer item - only copy validated fields to prevent injection
- * of unexpected properties. This is a security measure.
- */
 export const sanitizeBuffer = (
   item: Record<string, unknown>,
 ): Omit<Buffer, "id"> => {
@@ -183,25 +173,19 @@ export const sanitizeBuffer = (
   }
 
   if (hasMetricsViewState) {
-    // Sanitize metricsViewState - only copy validated fields
     sanitized.metricsViewState = sanitizeMetricsViewState(
       item.metricsViewState as Record<string, unknown>,
     )
   } else {
-    // Always use default editorViewState for security
     sanitized.editorViewState = defaultEditorViewState
   }
 
-  // Only copy specific optional fields with type checking
   if (item.archived === true) {
     sanitized.archived = true
   }
   if (typeof item.archivedAt === "number") {
     sanitized.archivedAt = item.archivedAt
   }
-  // Note: isTemporary, isPreviewBuffer, and previewContent are intentionally
-  // NOT imported as they are internal state fields that should not come from
-  // external sources
 
   return sanitized
 }
@@ -216,4 +200,51 @@ export const validateBufferSchema = (data: unknown): ValidationResult => {
   }
 
   return true
+}
+
+export const createBufferContentKey = (
+  buffer: Pick<Buffer, "label" | "value" | "metricsViewState">,
+): string => {
+  const content = buffer.metricsViewState
+    ? JSON.stringify(buffer.metricsViewState)
+    : buffer.value
+  return `${buffer.label}|${content}`
+}
+
+export const hashBufferContent = (
+  buffer: Pick<Buffer, "label" | "value" | "metricsViewState">,
+): string => {
+  return hashString(createBufferContentKey(buffer))
+}
+
+export const findDuplicates = (
+  existingBuffers: Buffer[],
+  importedBuffers: Omit<Buffer, "id">[],
+): Set<number> => {
+  const existingByHash = new Map<string, Buffer[]>()
+  for (const buffer of existingBuffers) {
+    const hash = hashBufferContent(buffer)
+    const list = existingByHash.get(hash) || []
+    list.push(buffer)
+    existingByHash.set(hash, list)
+  }
+
+  const duplicateIndices = new Set<number>()
+  for (let i = 0; i < importedBuffers.length; i++) {
+    const imported = importedBuffers[i]
+    const hash = hashBufferContent(imported)
+    const candidates = existingByHash.get(hash)
+
+    if (candidates) {
+      const importedKey = createBufferContentKey(imported)
+      const isDuplicate = candidates.some(
+        (existing) => createBufferContentKey(existing) === importedKey,
+      )
+      if (isDuplicate) {
+        duplicateIndices.add(i)
+      }
+    }
+  }
+
+  return duplicateIndices
 }
