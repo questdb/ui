@@ -17,6 +17,12 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.1.13 - 2026.01.27
+### Added
+- ai assistant improvements [#529](https://github.com/questdb/ui/pull/529)
+- add cookbook section to AI documentation flow [#531](https://github.com/questdb/ui/pull/531)
+
+
 ## 1.1.12 - 2026.01.13
 ### Fixed
 - prevent scrolling suggestions and code examples from assistant [#527](https://github.com/questdb/ui/pull/527)

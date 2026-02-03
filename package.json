@@ -1,6 +1,6 @@
 {
   "name": "@questdb/web-console",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "packageManager": "yarn@4.1.1",
   "license": "Apache-2.0",
   "description": "QuestDB Web Console",
@@ -39,7 +39,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@phosphor-icons/react": "^2.1.10",
     "@popperjs/core": "2.4.2",
-    "@questdb/sql-grammar": "1.4.1",
+    "@questdb/sql-grammar": "1.4.2",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "^1.1.15",
