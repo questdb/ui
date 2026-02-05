@@ -1,8 +1,1 @@
-[
-  {
-    "label": 123,
-    "value": "SELECT 1;",
-    "position": 0,
-    "editorViewState": {}
-  }
-]
+{"formatName":"dexie","formatVersion":1,"data":{"databaseName":"web-console","databaseVersion":5,"tables":[{"name":"buffers","schema":"++id,label,position,archived,archivedAt","rowCount":1}],"data":[{"tableName":"buffers","inbound":true,"rows":[{"label":123,"value":"SELECT 1;","position":0,"editorViewState":{},"id":1}]}]}}

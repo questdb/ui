@@ -1406,8 +1406,9 @@ describe("import/export tabs", () => {
 
     cy.get(".toast-error-container")
       .should("be.visible")
-      .should("contain", "Invalid file format")
-      .should("contain", "Item [0]: label must be a string")
+      .should("contain", "Failed to import tabs")
+      .should("contain", "(id: 1)")
+      .should("contain", "label must be a string")
   })
 
   it("should import tabs successfully with active and archived tabs", () => {
@@ -1422,7 +1423,7 @@ describe("import/export tabs", () => {
 
     cy.get(".toast-success-container")
       .should("be.visible")
-      .should("contain", "Imported 3 tabs successfully")
+      .should("contain", "Imported 2 tabs successfully")
       .click()
 
     cy.getEditorTabByTitle("Imported Tab 1").should("be.visible")
@@ -1510,5 +1511,61 @@ describe("import/export tabs", () => {
     // Close and verify new tab was added
     cy.getByDataHook("import-summary-close").click()
     cy.getEditorTabByTitle("Brand New Tab").should("be.visible")
+  })
+
+  it("should show error toast when importing non-dexie format", () => {
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/not-dexie-format.json",
+      { force: true },
+    )
+
+    cy.get(".toast-error-container")
+      .should("be.visible")
+      .should("contain", "Invalid file format")
+  })
+
+  it("should show 'closed' badge for duplicates of archived tabs in import summary", () => {
+    // First import tabs that include active ones
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/valid-tabs-export.json",
+      { force: true },
+    )
+    cy.get(".toast-success-container").should("be.visible").click()
+
+    // Close one of the imported tabs to archive it
+    cy.getEditorTabByTitle("Imported Tab 1").within(() => {
+      cy.get(".chrome-tab-close").click()
+    })
+    cy.getEditorTabByTitle("Imported Tab 1").should("not.exist")
+
+    // Now import the same tabs again — archived duplicate should show "closed" badge
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu").should("be.visible")
+    cy.getByDataHook("editor-tabs-menu-import").click()
+    cy.getByDataHook("editor-tabs-import-input").selectFile(
+      "e2e/fixtures/valid-tabs-export.json",
+      { force: true },
+    )
+
+    cy.getByDataHook("import-summary-dialog").should("be.visible")
+    // "Imported Tab 1" is now archived — its skipped entry should have "closed" badge
+    cy.getByDataHook("import-summary-skipped-item")
+      .contains("Imported Tab 1")
+      .parent()
+      .should("contain", "closed")
+    // "Imported Tab 2" is still active — no "closed" badge
+    cy.getByDataHook("import-summary-skipped-item")
+      .contains("Imported Tab 2")
+      .parent()
+      .should("not.contain", "closed")
+
+    cy.getByDataHook("import-summary-close").click()
   })
 })

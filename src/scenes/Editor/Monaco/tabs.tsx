@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
-import { useEditor } from "../../../providers"
+import { useEditor, MAX_TABS } from "../../../providers"
 import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
 import {
   DotsThreeVerticalIcon,
@@ -11,10 +11,12 @@ import {
 import { toast } from "../../../components/Toast"
 import { db } from "../../../store/db"
 import {
-  validateBufferSchema,
+  validateBufferItem,
   sanitizeBuffer,
-  findDuplicates,
+  createBufferContentKey,
 } from "./importTabs"
+import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
+import { exportDB, importInto, peakImportFile } from "dexie-export-import"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import {
   Box,
@@ -99,20 +101,30 @@ export const Tabs = () => {
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
 
   const handleExportTabs = async () => {
-    const allBuffers = await db.buffers.toArray()
-    const exportData = allBuffers
-      .filter((b) => !b.isTemporary && !b.isPreviewBuffer)
-      .map(({ id: _id, ...rest }) => rest)
+    try {
+      const skipTables = db.tables
+        .map((t) => t.name)
+        .filter((name) => name !== "buffers")
+      const blob = await exportDB(db, {
+        skipTables,
+        filter: (table, value) => {
+          const buffer = value as Buffer
+          return !buffer.isTemporary && !buffer.isPreviewBuffer
+        },
+      })
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `questdb-tabs-${Date.now()}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `questdb-tabs-${new Date().toISOString().replace(/[:.]/g, "-")}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("Export error:", err)
+      toast.error(
+        `Failed to export tabs: ${err instanceof Error ? err.message : "Unknown error"}`,
+      )
+    }
   }
 
   const handleImportTabs = () => {
@@ -125,75 +137,148 @@ export const Tabs = () => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
 
-      const MAX_FILE_SIZE_MB = 500
-      const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        toast.error(
-          `File size exceeds ${MAX_FILE_SIZE_MB}MB limit. Please split your tabs into smaller files.`,
-        )
-        return
-      }
-
       try {
-        const text = await file.text()
-        const data: unknown = JSON.parse(text)
+        const blob = new Blob([await file.arrayBuffer()])
 
-        const validationResult = validateBufferSchema(data)
-        if (validationResult !== true) {
-          toast.error(`Invalid file format: ${validationResult}`)
+        let importVersion: number
+        try {
+          const { formatName, data } = await peakImportFile(blob)
+
+          if (formatName !== "dexie") {
+            toast.error(
+              `Invalid file format: Expected Dexie export but got "${formatName || "unknown"}"`,
+            )
+            return
+          }
+
+          if (!data || typeof data.databaseVersion !== "number") {
+            toast.error(
+              "Invalid file format: Missing or invalid database version information",
+            )
+            return
+          }
+
+          importVersion = data.databaseVersion
+
+          const buffersTable = data.tables?.find(
+            (t: { name: string }) => t.name === "buffers",
+          )
+          const importTabCount = buffersTable?.rowCount ?? 0
+          const existingTabCount = await db.buffers.count()
+
+          if (existingTabCount + importTabCount > MAX_TABS) {
+            toast.error(
+              `Cannot import: importing ${importTabCount} tab${importTabCount === 1 ? "" : "s"} would exceed the ${MAX_TABS} tab limit (${existingTabCount} existing). Please clear history before importing.`,
+            )
+            return
+          }
+        } catch (err) {
+          console.error("Failed to peak import file:", err)
+          toast.error(
+            `Failed to read file metadata: ${err instanceof Error ? err.message : "Unknown error"}`,
+          )
           return
         }
 
-        const sanitizedData = (data as Record<string, unknown>[]).map(
-          sanitizeBuffer,
+        const currentVersion = getCurrentDbVersion()
+
+        const existingBuffers = await db.buffers.toArray()
+        const existingContentKeys = new Map<string, boolean>(
+          existingBuffers.map((b) => [
+            createBufferContentKey(b),
+            b.archived === true,
+          ]),
+        )
+        const maxPosition = Math.max(
+          ...existingBuffers.map((b) => b.position),
+          0,
         )
 
         let importedCount = 0
         const skipped: SkippedTab[] = []
+        const idsToDelete: number[] = []
 
-        await db.transaction("rw", db.buffers, async () => {
-          const existingBuffers = await db.buffers.toArray()
-
-          const duplicateIndices = findDuplicates(
-            existingBuffers,
-            sanitizedData,
-          )
-
-          // Collect skipped tab information
-          duplicateIndices.forEach((index) => {
-            skipped.push({
-              label: sanitizedData[index].label,
-              reason: "Duplicate",
-              isMetricsTab: !!sanitizedData[index].metricsViewState,
-            })
-          })
-
-          const newTabs = sanitizedData.filter(
-            (_, index) => !duplicateIndices.has(index),
-          )
-          importedCount = newTabs.length
-
-          if (newTabs.length === 0) {
-            return
-          }
-
-          const maxPosition = Math.max(
-            ...existingBuffers.map((b) => b.position),
-            0,
-          )
-          let activeTabCount = 0
-
-          for (const tab of newTabs) {
-            const isArchived = tab.archived === true
-            await db.buffers.add({
-              ...tab,
-              position: isArchived ? -1 : maxPosition + activeTabCount + 1,
-            })
-            if (!isArchived) {
-              activeTabCount++
+        await importInto(db, blob, {
+          acceptVersionDiff: true,
+          acceptMissingTables: true,
+          filter: (table, value) => {
+            if (table !== "buffers") return false
+            const buffer = value as Buffer
+            return !buffer.isTemporary && !buffer.isPreviewBuffer
+          },
+          transform: (table, value: Record<string, unknown>, key?: unknown) => {
+            if (table !== "buffers") {
+              return { value, key }
             }
-          }
+
+            const buffer = value as Buffer
+
+            // Migrate if importing from an older version
+            let migratedValue: Buffer = buffer
+            if (importVersion < currentVersion) {
+              migratedValue = migrateBuffer(
+                buffer,
+                importVersion,
+                currentVersion,
+              )
+            }
+
+            // Validate against current schema
+            const validationResult = validateBufferItem(
+              migratedValue as Record<string, unknown>,
+            )
+            if (validationResult !== true) {
+              const tabId = buffer.id !== undefined ? ` (id: ${buffer.id})` : ""
+              throw new Error(
+                `Validation failed for tab "${migratedValue.label}"${tabId}: ${validationResult}`,
+              )
+            }
+
+            const sanitized = sanitizeBuffer(
+              migratedValue as Record<string, unknown>,
+            )
+
+            // Duplicate detection on post-migration, post-sanitization data
+            const contentKey = createBufferContentKey(sanitized)
+            if (existingContentKeys.has(contentKey)) {
+              skipped.push({
+                label: sanitized.label,
+                reason: "Duplicate",
+                isMetricsTab: !!sanitized.metricsViewState,
+                isExistingArchived: existingContentKeys.get(contentKey),
+              })
+              // transform cannot skip rows; mark for post-import deletion.
+              // Use position -1 to avoid interfering with existing tab order
+              // during the brief window before bulkDelete runs.
+              return {
+                value: { ...sanitized, position: -1, _markedForDeletion: true },
+              }
+            }
+            existingContentKeys.set(contentKey, sanitized.archived === true)
+
+            const isArchived = sanitized.archived === true
+            sanitized.position = isArchived
+              ? -1
+              : maxPosition + importedCount + 1
+
+            if (!isArchived) {
+              importedCount++
+            }
+
+            return { value: sanitized }
+          },
         })
+
+        const allBuffersAfterImport = await db.buffers.toArray()
+        for (const b of allBuffersAfterImport) {
+          const record = b as Record<string, unknown>
+          if (record._markedForDeletion && b.id !== undefined) {
+            idsToDelete.push(b.id)
+          }
+        }
+        if (idsToDelete.length > 0) {
+          await db.buffers.bulkDelete(idsToDelete)
+        }
 
         // Show dialog only if there are skipped tabs, otherwise show toast
         if (skipped.length > 0) {
@@ -209,12 +294,14 @@ export const Tabs = () => {
         }
       } catch (err) {
         console.error("Import error:", err)
-        if (err instanceof SyntaxError) {
-          toast.error("Failed to parse JSON file.")
-        } else if (err instanceof Error && err.name === "QuotaExceededError") {
-          toast.error("Storage quota exceeded. Please free up space.")
+        if (err instanceof Error) {
+          if (err.name === "QuotaExceededError") {
+            toast.error("Storage quota exceeded. Please free up space.")
+          } else {
+            toast.error(`Failed to import tabs: ${err.message}`)
+          }
         } else {
-          toast.error("Failed to import tabs.")
+          toast.error("Failed to import tabs: Unknown error")
         }
       } finally {
         input.remove()
@@ -351,13 +438,20 @@ export const Tabs = () => {
     >
       <ReactChromeTabs
         darkMode
+        limit={
+          MAX_TABS - buffers.filter((b) => b.archived && !b.isTemporary).length
+        }
         onTabClose={close}
         onTabReorder={reorder}
         onTabActive={active}
         onTabRename={rename}
         onNewTab={addBuffer}
         tabs={buffers
-          .filter((buffer) => !buffer.archived || buffer.isTemporary)
+          .filter(
+            (buffer) =>
+              !(buffer as Record<string, unknown>)._markedForDeletion &&
+              (!buffer.archived || buffer.isTemporary),
+          )
           .sort((a, b) => {
             if (a.isTemporary) {
               return 1

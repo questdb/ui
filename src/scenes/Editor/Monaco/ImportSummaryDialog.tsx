@@ -20,6 +20,7 @@ export type SkippedTab = {
   label: string
   reason: string
   isMetricsTab?: boolean
+  isExistingArchived?: boolean
 }
 
 type Props = {
@@ -72,6 +73,15 @@ const StatItem = styled(Box).attrs({
   align: "center",
   gap: "0.5rem",
 })``
+
+const BufferStatus = styled.span`
+  color: ${({ theme }) => theme.color.gray2};
+  font-size: 1rem;
+  margin-left: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  background: ${({ theme }) => theme.color.selection};
+  border-radius: 0.2rem;
+`
 
 export const ImportSummaryDialog = ({
   open,
@@ -136,6 +146,9 @@ export const ImportSummaryDialog = ({
                     <FileTextIcon size={18} color={theme.color.foreground} />
                   )}
                   <TabLabel title={tab.label}>{tab.label}</TabLabel>
+                  {tab.isExistingArchived && (
+                    <BufferStatus>closed</BufferStatus>
+                  )}
                   <Text color="orange" size="sm">
                     {tab.reason}
                   </Text>

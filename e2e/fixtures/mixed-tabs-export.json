@@ -1,14 +1,1 @@
-[
-  {
-    "label": "Imported Tab 1",
-    "value": "SELECT 1;",
-    "position": 0,
-    "editorViewState": {}
-  },
-  {
-    "label": "Brand New Tab",
-    "value": "SELECT 'new';",
-    "position": 1,
-    "editorViewState": {}
-  }
-]
+{"formatName":"dexie","formatVersion":1,"data":{"databaseName":"web-console","databaseVersion":5,"tables":[{"name":"buffers","schema":"++id,label,position,archived,archivedAt","rowCount":2}],"data":[{"tableName":"buffers","inbound":true,"rows":[{"label":"Imported Tab 1","value":"SELECT 1;","position":0,"editorViewState":{},"id":1},{"label":"Brand New Tab","value":"SELECT 'new';","position":1,"editorViewState":{},"id":2}]}]}}

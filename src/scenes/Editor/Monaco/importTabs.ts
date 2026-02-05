@@ -11,7 +11,6 @@ import {
   RefreshRate,
 } from "../Metrics/utils"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
-import { hashString } from "../../../utils"
 
 type ValidationResult = true | string
 
@@ -80,35 +79,31 @@ const validateMetricsViewState = (item: unknown): ValidationResult => {
   return true
 }
 
-const validateBufferItem = (item: unknown, index: number): ValidationResult => {
-  if (typeof item !== "object" || item === null)
-    return `Item [${index}]: must be an object`
+export const validateBufferItem = (item: unknown): ValidationResult => {
+  if (typeof item !== "object" || item === null) return "must be an object"
   const obj = item as Record<string, unknown>
 
   for (const key of Object.keys(obj)) {
     if (DANGEROUS_KEYS.has(key)) {
-      return `Item [${index}]: contains forbidden key "${key}"`
+      return `contains forbidden key "${key}"`
     }
   }
 
-  if (typeof obj.label !== "string")
-    return `Item [${index}]: label must be a string`
-  if (typeof obj.value !== "string")
-    return `Item [${index}]: value must be a string`
+  if (typeof obj.label !== "string") return "label must be a string"
+  if (typeof obj.value !== "string") return "value must be a string"
   const lineCount = obj.value.split("\n").length
   if (lineCount > LINE_NUMBER_HARD_LIMIT)
-    return `Item [${index}]: exceeds line limit (line count > ${LINE_NUMBER_HARD_LIMIT})`
-  if (typeof obj.position !== "number")
-    return `Item [${index}]: position must be a number`
+    return `exceeds line limit (line count > ${LINE_NUMBER_HARD_LIMIT})`
+  if (typeof obj.position !== "number") return "position must be a number"
 
   const hasEditorViewState = obj.editorViewState !== undefined
   const hasMetricsViewState = obj.metricsViewState !== undefined
   if (!hasEditorViewState && !hasMetricsViewState)
-    return `Item [${index}]: must have editorViewState or metricsViewState`
+    return "must have editorViewState or metricsViewState"
 
   if (hasMetricsViewState) {
     const result = validateMetricsViewState(obj.metricsViewState)
-    if (result !== true) return `Item [${index}]: ${result}`
+    if (result !== true) return result
   }
 
   return true
@@ -195,8 +190,8 @@ export const validateBufferSchema = (data: unknown): ValidationResult => {
   if (data.length === 0) return "File contains no tabs"
 
   for (let i = 0; i < data.length; i++) {
-    const result = validateBufferItem(data[i], i)
-    if (result !== true) return result
+    const result = validateBufferItem(data[i])
+    if (result !== true) return `Item [${i}]: ${result}`
   }
 
   return true
@@ -209,42 +204,4 @@ export const createBufferContentKey = (
     ? JSON.stringify(buffer.metricsViewState)
     : buffer.value
   return `${buffer.label}|${content}`
-}
-
-export const hashBufferContent = (
-  buffer: Pick<Buffer, "label" | "value" | "metricsViewState">,
-): string => {
-  return hashString(createBufferContentKey(buffer))
-}
-
-export const findDuplicates = (
-  existingBuffers: Buffer[],
-  importedBuffers: Omit<Buffer, "id">[],
-): Set<number> => {
-  const existingByHash = new Map<string, Buffer[]>()
-  for (const buffer of existingBuffers) {
-    const hash = hashBufferContent(buffer)
-    const list = existingByHash.get(hash) || []
-    list.push(buffer)
-    existingByHash.set(hash, list)
-  }
-
-  const duplicateIndices = new Set<number>()
-  for (let i = 0; i < importedBuffers.length; i++) {
-    const imported = importedBuffers[i]
-    const hash = hashBufferContent(imported)
-    const candidates = existingByHash.get(hash)
-
-    if (candidates) {
-      const importedKey = createBufferContentKey(imported)
-      const isDuplicate = candidates.some(
-        (existing) => createBufferContentKey(existing) === importedKey,
-      )
-      if (isDuplicate) {
-        duplicateIndices.add(i)
-      }
-    }
-  }
-
-  return duplicateIndices
 }

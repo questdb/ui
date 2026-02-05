@@ -764,6 +764,7 @@ export const AIConversationProvider: React.FC<{
       const newBuffer = await addBuffer({
         value: sqlWithSemicolon,
       })
+      if (!newBuffer) return
 
       await new Promise((resolve) => setTimeout(resolve, 200))
 
