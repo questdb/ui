@@ -14,7 +14,7 @@ export function formatRelativeTimestamp(timestamp: string | null): string {
 }
 
 export function formatMemoryPressure(level: number | null): string {
-  if (level === null) return "N/A"
+  if (level == null) return "N/A"
   switch (level) {
     case 0:
       return "None"
@@ -28,7 +28,7 @@ export function formatMemoryPressure(level: number | null): string {
 }
 
 export function formatRowCount(count: number | string | null): string {
-  if (count === null) return "0"
+  if (count == null) return "0"
   return typeof count === "number"
     ? count.toLocaleString()
     : Number(count).toLocaleString()

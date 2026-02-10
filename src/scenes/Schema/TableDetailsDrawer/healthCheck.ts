@@ -215,7 +215,7 @@ export function calculateHealthStatus(
 
     // Y3: Small Transactions (p90 < 100 rows, but > 0 to exclude empty tables)
     if (
-      tableData.wal_tx_size_p90 !== null &&
+      tableData.wal_tx_size_p90 != null &&
       tableData.wal_tx_size_p90 > 0 &&
       tableData.wal_tx_size_p90 < 100
     ) {
@@ -230,7 +230,7 @@ export function calculateHealthStatus(
 
     // Y4: High Write Amplification (p50 > 2.0 means significant O3 merge overhead)
     if (
-      tableData.table_write_amp_p50 !== null &&
+      tableData.table_write_amp_p50 != null &&
       tableData.table_write_amp_p50 > 2.0
     ) {
       issues.push({

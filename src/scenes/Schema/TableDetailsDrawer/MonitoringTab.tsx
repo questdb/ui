@@ -425,9 +425,12 @@ export const MonitoringTab = ({
   onAskAI,
 }: MonitoringTabProps) => {
   const theme = useTheme()
-  const lastWriteTimestamp = tableData.table_last_write_timestamp
-    ? new Date(tableData.table_last_write_timestamp).toISOString()
-    : null
+  const lastWriteTimestamp = (() => {
+    if (!tableData.table_last_write_timestamp) return null
+    const date = new Date(tableData.table_last_write_timestamp)
+    if (isNaN(date.getTime()) || date.getTime() === 0) return null
+    return date.toISOString()
+  })()
 
   return (
     <>
@@ -592,7 +595,7 @@ export const MonitoringTab = ({
                     label="Transaction Lag"
                     helperText={HELPER_TEXT.transactionLag}
                     value={
-                      tableData.wal_txn !== null || tableData.table_txn !== null
+                      tableData.wal_txn != null || tableData.table_txn != null
                         ? `${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0)} txn${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0) === 1 ? "" : "s"}`
                         : "N/A"
                     }
@@ -606,7 +609,7 @@ export const MonitoringTab = ({
                       WAL Transaction Number
                     </Text>
                     <Text color="foreground" weight={500}>
-                      {tableData.wal_txn !== null
+                      {tableData.wal_txn != null
                         ? tableData.wal_txn.toLocaleString()
                         : "N/A"}
                     </Text>
@@ -631,7 +634,7 @@ export const MonitoringTab = ({
                   <ConfigItemWithHealth
                     label="Transaction Size (p90)"
                     value={
-                      tableData.wal_tx_size_p90 !== null
+                      tableData.wal_tx_size_p90 != null
                         ? `${tableData.wal_tx_size_p90.toLocaleString()} rows`
                         : "N/A"
                     }
@@ -640,7 +643,7 @@ export const MonitoringTab = ({
                   <ConfigItemWithHealth
                     label="Write Amplification (p50)"
                     value={
-                      tableData.table_write_amp_p50 !== null
+                      tableData.table_write_amp_p50 != null
                         ? `${tableData.table_write_amp_p50.toFixed(2)}x`
                         : "N/A"
                     }
@@ -649,7 +652,7 @@ export const MonitoringTab = ({
                   <ConfigItemWithHealth
                     label="Merge Rate (p99)"
                     value={
-                      tableData.table_merge_rate_p99 !== null
+                      tableData.table_merge_rate_p99 != null
                         ? `${tableData.table_merge_rate_p99.toLocaleString()} rows/s`
                         : "N/A"
                     }

@@ -37,7 +37,7 @@ const SectionHeader = styled.button`
 
 const CaretIcon = styled(CaretRightIcon)<{ $expanded: boolean }>`
   color: ${({ theme }) => theme.color.foreground};
-  transition: transform 0.2 ease;
+  transition: transform 0.2s ease;
   transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
   flex-shrink: 0;
 `

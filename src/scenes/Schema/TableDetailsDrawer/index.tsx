@@ -339,7 +339,6 @@ export const TableDetailsDrawer = () => {
       setColumnsExpanded(false)
       setWalExpanded(true)
       setHasAutoExpanded(false)
-      setActiveTab("monitoring")
       setTrendData({
         walPendingRowCount: [],
         transactionLag: [],
@@ -351,7 +350,6 @@ export const TableDetailsDrawer = () => {
       setColumnsExpanded(false)
       setWalExpanded(true)
       setHasAutoExpanded(false)
-      setActiveTab("monitoring")
       setTrendData({
         walPendingRowCount: [],
         transactionLag: [],

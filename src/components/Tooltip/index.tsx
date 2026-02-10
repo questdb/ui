@@ -154,32 +154,32 @@ const mapPlacementToAlign = (
   return "center"
 }
 
+export const TooltipProvider = RadixTooltip.Provider
+
 export const Tooltip = ({
   content,
   placement = "bottom",
-  delay = 200,
+  delay,
   children,
 }: Props): JSX.Element => {
   if (!content) return <>{children}</>
   return (
-    <RadixTooltip.Provider delayDuration={delay}>
-      <RadixTooltip.Root>
-        <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
-        <RadixTooltip.Portal>
-          <TooltipContent
-            side={mapPlacementToSide(placement)}
-            align={mapPlacementToAlign(placement)}
-            sideOffset={0}
-          >
-            <Text color="offWhite2" data-hook="tooltip">
-              {content}
-            </Text>
-            <RadixTooltip.Arrow asChild width={14} height={7}>
-              <ArrowWithBorder />
-            </RadixTooltip.Arrow>
-          </TooltipContent>
-        </RadixTooltip.Portal>
-      </RadixTooltip.Root>
-    </RadixTooltip.Provider>
+    <RadixTooltip.Root delayDuration={delay}>
+      <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
+      <RadixTooltip.Portal>
+        <TooltipContent
+          side={mapPlacementToSide(placement)}
+          align={mapPlacementToAlign(placement)}
+          sideOffset={0}
+        >
+          <Text color="offWhite2" data-hook="tooltip">
+            {content}
+          </Text>
+          <RadixTooltip.Arrow asChild width={14} height={7}>
+            <ArrowWithBorder />
+          </RadixTooltip.Arrow>
+        </TooltipContent>
+      </RadixTooltip.Portal>
+    </RadixTooltip.Root>
   )
 }
