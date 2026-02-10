@@ -678,6 +678,11 @@ describe("TableDetailsDrawer", () => {
       cy.refreshSchema()
     })
 
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.expandTables()
+    })
+
     it("should disable AI interactions when AI is disabled", () => {
       interceptTablesQuery({ table_suspended: true, table_write_amp_p50: 10 })
       cy.openDetailsDrawer(TEST_TABLE)
