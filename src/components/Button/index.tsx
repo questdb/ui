@@ -95,7 +95,11 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
     )
 
     if (disabled && disabledTooltip) {
-      return <Tooltip content={disabledTooltip}>{button}</Tooltip>
+      return (
+        <Tooltip content={disabledTooltip}>
+          <span style={{ display: "inline-flex" }}>{button}</span>
+        </Tooltip>
+      )
     }
 
     return button
