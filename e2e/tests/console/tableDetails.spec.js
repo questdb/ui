@@ -689,28 +689,31 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
       cy.getByDataHook("table-details-error-ask-ai").realHover()
-      cy.wait(300)
+      cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
         "AI Assistant is not configured",
       )
+      cy.realPress("Escape")
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
       cy.getByDataHook("table-details-warning-ask-ai").realHover()
-      cy.wait(300)
+      cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
         "AI Assistant is not configured",
       )
+      cy.realPress("Escape")
 
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
       cy.getByDataHook("table-details-explain-ai").realHover()
-      cy.wait(300)
+      cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
         "AI Assistant is not configured",
       )
+      cy.realPress("Escape")
     })
 
     after(() => {
@@ -737,28 +740,30 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
       cy.getByDataHook("table-details-error-ask-ai").realHover()
-      cy.wait(300)
+      cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
         "Schema access is not granted to this model",
       )
+      cy.realPress("Escape")
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
       cy.getByDataHook("table-details-warning-ask-ai").realHover()
-      cy.wait(300)
+      cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
         "Schema access is not granted to this model",
       )
-
+      cy.realPress("Escape")
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
       cy.getByDataHook("table-details-explain-ai").realHover()
-      cy.wait(300)
+      cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
         "Schema access is not granted to this model",
       )
+      cy.realPress("Escape")
     })
 
     after(() => {
