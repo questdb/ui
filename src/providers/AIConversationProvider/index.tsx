@@ -45,6 +45,8 @@ type AIConversationContextType = {
   isLoadingMessages: boolean
   isStreaming: boolean
   setIsStreaming: (streaming: boolean) => void
+  scrollToMessageId: string | null
+  setScrollToMessageId: (messageId: string | null) => void
 
   getConversationMeta: (
     id: ConversationId,
@@ -76,7 +78,10 @@ type AIConversationContextType = {
     delta: number,
   ) => Promise<boolean>
 
-  openChatWindow: (conversationId: ConversationId) => Promise<void>
+  openChatWindow: (
+    conversationId: ConversationId,
+    options?: { loadMessages?: boolean },
+  ) => Promise<void>
   openOrCreateBlankChatWindow: () => Promise<void>
   openBlankChatWindow: () => Promise<void>
   closeChatWindow: () => void
@@ -93,10 +98,7 @@ type AIConversationContextType = {
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
-  replaceConversationMessages: (
-    conversationId: ConversationId,
-    newMessages: Array<ConversationMessage>,
-  ) => void
+  replaceConversationMessages: (newMessages: Array<ConversationMessage>) => void
   updateConversationName: (
     conversationId: ConversationId,
     name: string,
@@ -109,6 +111,10 @@ type AIConversationContextType = {
     messageId: string,
   ) => Promise<void>
   persistMessages: (conversationId: ConversationId) => Promise<void>
+  getLastRoundMessages: (conversationId: ConversationId) => Promise<{
+    lastUserMessage?: ConversationMessage
+    lastAssistantMessage?: ConversationMessage
+  }>
 }
 
 const AIConversationContext = createContext<
@@ -167,6 +173,9 @@ export const AIConversationProvider: React.FC<{
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(
+    null,
+  )
 
   const [chatWindowState, setChatWindowState] = useState<ChatWindowState>({
     activeConversationId: null,
@@ -196,6 +205,26 @@ export const AIConversationProvider: React.FC<{
         await aiConversationStore.updateMeta(conversationId, {
           updatedAt: Date.now(),
         })
+      }
+    },
+    [],
+  )
+
+  const getLastRoundMessages = useCallback(
+    async (
+      conversationId: ConversationId,
+    ): Promise<{
+      lastUserMessage?: ConversationMessage
+      lastAssistantMessage?: ConversationMessage
+    }> => {
+      const messages = await aiConversationStore.getMessages(conversationId)
+      return {
+        lastUserMessage: messages
+          .filter((m) => m.role === "user" && !m.hideFromUI)
+          .at(-1),
+        lastAssistantMessage: messages
+          .filter((m) => m.role === "assistant" && !m.hideFromUI)
+          .at(-1),
       }
     },
     [],
@@ -435,10 +464,7 @@ export const AIConversationProvider: React.FC<{
   )
 
   const replaceConversationMessages = useCallback(
-    (
-      _conversationId: ConversationId,
-      newMessages: Array<ConversationMessage>,
-    ) => {
+    (newMessages: Array<ConversationMessage>) => {
       setActiveConversationMessages((prev) => {
         const conversationMessages = [...prev]
         let lastReplaceIndex = -1
@@ -524,7 +550,12 @@ export const AIConversationProvider: React.FC<{
   )
 
   const openChatWindow = useCallback(
-    async (conversationId: ConversationId, loadMessages: boolean = true) => {
+    async (
+      conversationId: ConversationId,
+      options?: { loadMessages?: boolean },
+    ) => {
+      const loadMessages = options?.loadMessages ?? true
+
       if (isOpeningChatWindowRef.current) return
       isOpeningChatWindowRef.current = true
 
@@ -541,7 +572,7 @@ export const AIConversationProvider: React.FC<{
         } else if (
           prevId === conversationId &&
           !chatWindowState.isHistoryOpen &&
-          activeSidebar === "aiChat"
+          activeSidebar?.type === "aiChat"
         ) {
           return
         }
@@ -565,7 +596,7 @@ export const AIConversationProvider: React.FC<{
           previousConversationId: null,
           activeConversationId: conversationId,
         }))
-        dispatch(actions.console.setActiveSidebar("aiChat"))
+        dispatch(actions.console.pushSidebarHistory({ type: "aiChat" }))
       } finally {
         isOpeningChatWindowRef.current = false
       }
@@ -580,7 +611,7 @@ export const AIConversationProvider: React.FC<{
   )
 
   const closeChatWindow = useCallback(() => {
-    dispatch(actions.console.setActiveSidebar(undefined))
+    dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
       if (activeConversationMessages.length === 0) {
         void aiConversationStore.deleteConversation(
@@ -601,7 +632,7 @@ export const AIConversationProvider: React.FC<{
       )
       if (existing) {
         if (activeConversationId === existing.id) {
-          if (activeSidebar === "aiChat") {
+          if (activeSidebar?.type === "aiChat") {
             closeChatWindow()
             return
           }
@@ -654,7 +685,7 @@ export const AIConversationProvider: React.FC<{
 
   const openBlankChatWindow = useCallback(async () => {
     const blankConversation = await createConversation({})
-    await openChatWindow(blankConversation.id, false)
+    await openChatWindow(blankConversation.id, { loadMessages: false })
   }, [createConversation, openChatWindow])
 
   const openHistoryView = useCallback(() => {
@@ -953,6 +984,8 @@ export const AIConversationProvider: React.FC<{
         isLoadingMessages,
         isStreaming,
         setIsStreaming,
+        scrollToMessageId,
+        setScrollToMessageId,
         getConversationMeta,
         findConversationByQuery,
         findConversationByTableId,
@@ -975,6 +1008,7 @@ export const AIConversationProvider: React.FC<{
         acceptSuggestion,
         rejectSuggestion,
         persistMessages,
+        getLastRoundMessages,
       }}
     >
       {children}

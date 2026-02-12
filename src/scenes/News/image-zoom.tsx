@@ -61,14 +61,14 @@ export const ImageZoom = () => {
   }, [imageToZoom])
 
   useEffect(() => {
-    if (activeSidebar === "news") {
+    if (activeSidebar?.type === "news") {
       document.addEventListener("keydown", handleEsc)
     } else {
       document.removeEventListener("keydown", handleEsc)
     }
   }, [activeSidebar])
 
-  if (activeSidebar !== "news") {
+  if (activeSidebar?.type !== "news") {
     return null
   }
 

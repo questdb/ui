@@ -466,14 +466,14 @@ describe("questdb schema in read-only mode", () => {
     cy.loadConsoleWithAuth()
   })
 
-  it("should disable Create Table action in read-only mode", () => {
-    cy.getByDataHook("create-table-panel-button").trigger("mouseover")
+  it("should disable import CSV action in read-only mode", () => {
+    cy.getByDataHook("import-panel-button").realHover()
+    cy.wait(300)
     cy.getByDataHook("tooltip").should(
       "contain",
       "To use this feature, turn off read-only mode in the configuration file",
     )
 
-    cy.getByDataHook("create-table-panel-button").click()
     cy.getByDataHook("create-table-panel").should("not.exist")
   })
 })
@@ -521,7 +521,8 @@ describe("views", () => {
     cy.refreshSchema()
     cy.expandViews()
     cy.getByDataHook("schema-view-title").should("contain", "btc_trades_view")
-    cy.getByDataHook("schema-row-error-icon").trigger("mouseover")
+    cy.getByDataHook("schema-row-error-icon").realHover()
+    cy.wait(300)
     cy.getByDataHook("tooltip")
       .contains("View is invalid: table does not exist [table=btc_trades]")
       .should("be.visible")
@@ -671,8 +672,8 @@ describe("materialized views", () => {
     )
     cy.refreshSchema()
     cy.expandMatViews()
-    cy.getByDataHook("schema-row-error-icon").trigger("mouseover")
-
+    cy.getByDataHook("schema-row-error-icon").realHover()
+    cy.wait(300)
     cy.getByDataHook("tooltip").should(
       "contain",
       "Materialized view is invalid: this is an invalidation reason",

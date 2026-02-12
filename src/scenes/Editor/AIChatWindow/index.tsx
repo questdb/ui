@@ -7,7 +7,7 @@ import React, {
 } from "react"
 import type { MutableRefObject } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box } from "../../../components"
+import { Button, Box, Drawer } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { FixQueryButton } from "../../../components/FixQueryButton"
@@ -54,26 +54,6 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { CircleNotchSpinner } from "../Monaco/icons"
 
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  background: ${color("chatBackground")};
-  border-left: 0.2rem ${color("backgroundDarker")} solid;
-`
-
-const Header = styled.div`
-  height: 46px;
-  padding: 0 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: ${color("backgroundLighter")};
-  flex-shrink: 0;
-`
-
 const HeaderLeft = styled.div`
   display: flex;
   align-items: center;
@@ -115,7 +95,7 @@ const HeaderRight = styled.div`
 
 const ChatWindowContent = styled.div`
   display: flex;
-  height: calc(100% - 46px);
+  height: 100%;
   width: 100%;
   overflow: hidden;
 `
@@ -212,6 +192,8 @@ const AIChatWindow: React.FC = () => {
     isLoadingMessages,
     isStreaming,
     setIsStreaming,
+    scrollToMessageId,
+    setScrollToMessageId,
     closeChatWindow,
     openBlankChatWindow,
     openHistoryView,
@@ -348,6 +330,8 @@ const AIChatWindow: React.FC = () => {
           return "Explain query"
         case "ask_request":
           return "Ask AI"
+        case "health_issue_request":
+          return "Health issue analysis"
         default:
           return "AI Assistant"
       }
@@ -462,11 +446,36 @@ const AIChatWindow: React.FC = () => {
   )
 
   const handleContextClick = useCallback(async () => {
-    if (!conversation?.queryKey || !conversation?.bufferId) {
-      return false
+    if (conversation?.queryKey && conversation?.bufferId) {
+      return await highlightQuery(conversation.queryKey, conversation.bufferId)
     }
-    return await highlightQuery(conversation.queryKey, conversation.bufferId)
-  }, [conversation?.queryKey, conversation?.bufferId, highlightQuery])
+    if (conversation?.tableId) {
+      const table = tables.find((t) => t.id === conversation.tableId)
+      if (table) {
+        dispatch(
+          actions.console.pushSidebarHistory({
+            type: "tableDetails",
+            payload: {
+              tableName: table.table_name,
+              isMatView: table.table_type === "M",
+            },
+          }),
+        )
+        return true
+      }
+    }
+    return false
+  }, [
+    conversation?.queryKey,
+    conversation?.bufferId,
+    conversation?.tableId,
+    highlightQuery,
+    tables,
+  ])
+
+  const handleScrollToMessageComplete = useCallback(() => {
+    setScrollToMessageId(null)
+  }, [setScrollToMessageId])
 
   const handleOpenInEditor = useCallback(
     async (
@@ -712,17 +721,27 @@ const AIChatWindow: React.FC = () => {
     }
   }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
 
-  if (activeSidebar !== "aiChat" || (!conversation && !isHistoryOpen)) {
+  if (activeSidebar?.type !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }
 
   return (
-    <Container data-hook="ai-chat-window">
-      <Header>
+    <Drawer
+      mode="side"
+      data-hook="ai-chat-window"
+      open={activeSidebar?.type === "aiChat"}
+      onOpenChange={(open) => {
+        if (!open) closeChatWindow()
+      }}
+      onDismiss={closeChatWindow}
+      trigger={<span />}
+      title={
         <HeaderLeft>
           <AISparkle size={20} variant="filled" />
           <HeaderTitle data-hook="chat-window-title">{headerTitle}</HeaderTitle>
         </HeaderLeft>
+      }
+      afterTitle={
         <HeaderRight>
           <HeaderButton
             onClick={openBlankChatWindow}
@@ -749,7 +768,8 @@ const AIChatWindow: React.FC = () => {
             <XIcon size={16} weight="bold" />
           </HeaderButton>
         </HeaderRight>
-      </Header>
+      }
+    >
       <ChatWindowContent>
         {isLoadingMessages ? (
           <ChatPanel>
@@ -779,6 +799,9 @@ const AIChatWindow: React.FC = () => {
                 isOperationInProgress={isBlockingAIStatus(aiStatus)}
                 editorSQL={queryInfo.queryText}
                 isStreaming={isStreaming}
+                isLoadingMessages={isLoadingMessages}
+                scrollToMessageId={scrollToMessageId}
+                onScrollToMessageComplete={handleScrollToMessageComplete}
               />
             ) : currentSQL && currentSQL.trim() ? (
               <InitialQueryContainer>
@@ -835,7 +858,7 @@ const AIChatWindow: React.FC = () => {
           </ChatPanel>
         )}
       </ChatWindowContent>
-    </Container>
+    </Drawer>
   )
 }
 

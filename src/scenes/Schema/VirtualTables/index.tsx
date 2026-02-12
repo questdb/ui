@@ -10,6 +10,7 @@ import React, {
 import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
 import { Loader3, FileCopy, Restart } from "@styled-icons/remix-line"
+import { InfoIcon } from "@phosphor-icons/react"
 import { spinAnimation, toast } from "../../../components"
 import { color, ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
@@ -36,8 +37,8 @@ import {
 import { useSchema } from "../SchemaContext"
 import { QuestContext } from "../../../providers"
 import { PartitionBy, SymbolColumnDetails } from "../../../utils/questdb/types"
-import { useSelector } from "react-redux"
-import { selectors } from "../../../store"
+import { useSelector, useDispatch } from "react-redux"
+import { selectors, actions } from "../../../store"
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -46,20 +47,15 @@ import {
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { SuspensionDialog } from "../SuspensionDialog"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
 import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
-import {
-  executeAIFlow,
-  createSchemaExplainFlowConfig,
-} from "../../../utils/executeAIFlow"
 import { AISparkle } from "../../../components/AISparkle"
+import { useAIQuickActions } from "../../../hooks"
 
 type VirtualTablesProps = {
   tables: QuestDB.Table[]
-  walTables?: QuestDB.WalTable[]
   materializedViews?: QuestDB.MaterializedView[]
   views?: QuestDB.View[]
   filterSuspendedOnly: boolean
@@ -134,6 +130,7 @@ const SectionHeader = styled(Row)<{ $disabled: boolean }>`
 `
 
 const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
+  padding-right: 3rem;
   ${({ $contextMenuOpen, theme }) =>
     $contextMenuOpen &&
     `
@@ -179,7 +176,6 @@ const Loading = () => {
 
 const VirtualTables: FC<VirtualTablesProps> = ({
   tables,
-  walTables,
   materializedViews,
   views,
   filterSuspendedOnly,
@@ -189,27 +185,18 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const { query, focusedIndex, setFocusedIndex } = useSchema()
   const { quest } = useContext(QuestContext)
   const allColumns = useSelector(selectors.query.getColumns)
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const tableDetailsTarget = useSelector(
+    selectors.console.getTableDetailsTarget,
+  )
   const {
     status: aiStatus,
-    setStatus,
-    abortController,
     canUse,
-    hasSchemaAccess,
-    currentModel,
-    apiKey,
     isConfigured,
+    hasSchemaAccess,
   } = useAIStatus()
 
-  const {
-    findConversationByTableId,
-    createConversation,
-    openChatWindow,
-    addMessage,
-    updateMessage,
-    updateConversationName,
-    persistMessages,
-    setIsStreaming,
-  } = useAIConversation()
+  const { handleExplainSchema } = useAIQuickActions()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -218,6 +205,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const [openedSuspensionDialog, setOpenedSuspensionDialog] = useState<
     string | null
   >(null)
+  const dispatch = useDispatch()
 
   const symbolColumnDetailsRef = useRef<Map<string, SymbolColumnDetails>>(
     new Map(),
@@ -242,8 +230,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               col.column_name.toLowerCase().includes(normalizedQuery),
             )
           const shownIfFilteredSuspendedOnly = filterSuspendedOnly
-            ? table.walEnabled &&
-              walTables?.find((t) => t.name === table.table_name)?.suspended
+            ? table.walEnabled && table.table_suspended
             : true
           const shownIfFilteredWithQuery = tableNameMatches || columnMatches
 
@@ -269,7 +256,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()),
         ),
       )
-  }, [tables, query, filterSuspendedOnly, walTables, allColumns])
+  }, [tables, query, filterSuspendedOnly, allColumns])
 
   const flattenedItems = useMemo(() => {
     return Object.values(schemaTree).reduce((acc, node) => {
@@ -314,73 +301,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       await copyToClipboard(schema)
       toast.success("Schema copied to clipboard")
     }
-  }
-
-  const handleExplainSchema = async (item: FlattenedTreeItem) => {
-    const tableName = item.name
-    const kind = item.kind as "table" | "matview" | "view"
-    const tableId = item.table?.id
-
-    if (!canUse) {
-      toast.error(
-        "AI Assistant is not enabled. Please configure your API key in settings.",
-      )
-      return
-    }
-
-    if (tableId == null) {
-      toast.error("Cannot find table ID")
-      return
-    }
-
-    const schema = await getTableSchema(tableName, kind)
-    if (!schema) {
-      return
-    }
-
-    const existingConversation = findConversationByTableId(tableId)
-    if (existingConversation) {
-      void openChatWindow(existingConversation.id)
-      return
-    }
-
-    const conversation = await createConversation({
-      tableId,
-    })
-
-    void updateConversationName(
-      conversation.id,
-      `${tableName} schema explanation`,
-    )
-    await openChatWindow(conversation.id)
-
-    void executeAIFlow(
-      createSchemaExplainFlowConfig({
-        conversationId: conversation.id,
-        tableName,
-        schema,
-        kindLabel: getTableKindLabel(kind),
-        schemaDisplayData: {
-          tableName,
-          kind,
-          partitionBy: item.partitionBy,
-          walEnabled: item.walEnabled,
-          designatedTimestamp: item.designatedTimestamp,
-        },
-        settings: { model: currentModel, apiKey },
-        questClient: quest,
-        tables,
-        hasSchemaAccess,
-        abortSignal: abortController?.signal,
-      }),
-      {
-        addMessage,
-        updateMessage,
-        setStatus,
-        setIsStreaming,
-        persistMessages,
-      },
-    )
   }
 
   const fetchSymbolColumnDetails = useCallback(
@@ -665,6 +585,28 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         item.kind === "view"
       ) {
         const canSuspend = item.kind !== "view" // Views cannot be suspended
+        const handleOpenDetailsDrawer =
+          item.kind !== "view"
+            ? () => {
+                if (
+                  activeSidebar?.type === "tableDetails" &&
+                  tableDetailsTarget?.tableName === item.name
+                ) {
+                  dispatch(actions.console.closeSidebar())
+                  return
+                }
+                dispatch(
+                  actions.console.pushSidebarHistory({
+                    type: "tableDetails",
+                    payload: {
+                      tableName: item.name,
+                      isMatView: item.kind === "matview",
+                    },
+                  }),
+                )
+                setTimeout(() => setFocusedIndex(index))
+              }
+            : undefined
         return (
           <>
             <ContextMenu
@@ -681,6 +623,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     index={index}
                     expanded={item.isExpanded}
                     onExpandCollapse={() => toggleNodeExpansion(item.id)}
+                    onOpenDetailsDrawer={handleOpenDetailsDrawer}
                     navigateInTree={navigateInTree}
                     partitionBy={item.partitionBy}
                     walEnabled={item.walEnabled}
@@ -697,12 +640,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                             `View is invalid${item.viewData?.invalidation_reason && `: ${item.viewData?.invalidation_reason}`}`,
                           ]
                         : []),
-                      ...(item.walTableData?.suspended ? [`Suspended`] : []),
+                      ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
-                  {canSuspend && item.walTableData?.suspended && (
+                  {canSuspend && item.table?.table_suspended && (
                     <SuspensionDialog
-                      walTableData={item.walTableData}
+                      tableName={item.name}
                       kind={item.kind}
                       open={openedSuspensionDialog === item.id}
                       onOpenChange={(isOpen) => {
@@ -713,6 +656,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 </>
               </ContextMenuTrigger>
               <ContextMenuContent>
+                <MenuItem
+                  data-hook="table-context-menu-view-details"
+                  onClick={handleOpenDetailsDrawer}
+                  icon={<InfoIcon size={16} />}
+                >
+                  View details
+                </MenuItem>
                 <MenuItem
                   data-hook="table-context-menu-copy-schema"
                   onClick={async () =>
@@ -728,7 +678,22 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 {isConfigured && (
                   <MenuItem
                     data-hook="table-context-menu-explain-schema"
-                    onClick={async () => await handleExplainSchema(item)}
+                    onClick={async () => {
+                      if (item.table?.id == null) {
+                        toast.error("Cannot find table ID")
+                        return
+                      }
+                      await handleExplainSchema(
+                        item.table.id,
+                        item.name,
+                        item.kind as "table" | "matview" | "view",
+                        {
+                          partitionBy: item.partitionBy,
+                          walEnabled: item.walEnabled,
+                          designatedTimestamp: item.designatedTimestamp,
+                        },
+                      )
+                    }}
                     icon={<AISparkle size={16} variant="filled" inverted />}
                     disabled={
                       !canUse ||
@@ -743,11 +708,11 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                   <MenuItem
                     data-hook="table-context-menu-resume-wal"
                     onClick={() =>
-                      item.walTableData?.suspended &&
+                      item.table?.table_suspended &&
                       setTimeout(() => setOpenedSuspensionDialog(item.id))
                     }
                     icon={<Restart size={16} />}
-                    disabled={!item.walTableData?.suspended}
+                    disabled={!item.table?.table_suspended}
                   >
                     Resume WAL
                   </MenuItem>
@@ -778,6 +743,8 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       return null
     },
     [
+      activeSidebar,
+      tableDetailsTarget,
       flattenedItems,
       regularTables,
       matViewTables,
@@ -809,7 +776,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               false,
               materializedViews,
               views,
-              walTables,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -841,7 +807,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               false,
               materializedViews,
               views,
-              walTables,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -872,7 +837,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
               true,
               materializedViews,
               views,
-              walTables,
               allColumns[table.table_name] ?? [],
             )
             if (table.hasColumnMatches) {
@@ -899,7 +863,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     viewTables,
     materializedViews,
     views,
-    walTables,
+
     allColumns,
   ])
 
@@ -921,21 +885,19 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   }
 
   return (
-    <>
-      <div ref={wrapperRef} style={{ height: "100%" }}>
-        <Virtuoso
-          totalCount={flattenedItems.length}
-          ref={virtuosoRef}
-          data-hook="schema-tree"
-          rangeChanged={(newRange) => {
-            rangeRef.current = newRange
-          }}
-          data={flattenedItems}
-          itemContent={(index) => renderRow(index)}
-          style={{ height: "100%" }}
-        />
-      </div>
-    </>
+    <div ref={wrapperRef} style={{ height: "100%" }}>
+      <Virtuoso
+        totalCount={flattenedItems.length}
+        ref={virtuosoRef}
+        data-hook="schema-tree"
+        rangeChanged={(newRange) => {
+          rangeRef.current = newRange
+        }}
+        data={flattenedItems}
+        itemContent={(index) => renderRow(index)}
+        style={{ height: "100%" }}
+      />
+    </div>
   )
 }
 

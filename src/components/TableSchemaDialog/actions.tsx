@@ -3,7 +3,6 @@ import { Button } from "../Button"
 import { Box } from "../Box"
 import { DeleteBin2, Table as TableIcon } from "@styled-icons/remix-line"
 import { Form } from "../Form"
-import { PopperHover } from "../PopperHover"
 import { Tooltip } from "../Tooltip"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import type { Action, SchemaColumn } from "./types"
@@ -43,90 +42,85 @@ export const Actions = ({
     <Box gap="1rem">
       {!isEditLocked && (
         <React.Fragment>
-          <PopperHover
-            trigger={
-              <Button
-                disabled={
-                  watchSchemaColumns.length === 0 ||
-                  lastFocusedIndex === undefined
-                }
-                skin="secondary"
-                type="button"
-                onClick={() => {
-                  setValue(
-                    "schemaColumns",
-                    watchSchemaColumns.filter(
-                      (_: SchemaColumn, i: number) => i !== lastFocusedIndex,
-                    ),
-                  )
-                  onAdded(undefined)
-                }}
-              >
-                <DeleteBin2 size="18px" />
-              </Button>
-            }
+          <Tooltip
             placement="bottom"
-          >
-            <Tooltip>
-              {lastFocusedIndex !== undefined &&
-                `Remove column ${lastFocusedIndex + 1}`}
-            </Tooltip>
-          </PopperHover>
-          <PopperHover
-            trigger={
-              <Button
-                disabled={
-                  watchSchemaColumns.length === 0 ||
-                  lastFocusedIndex === undefined
-                }
-                skin="secondary"
-                type="button"
-                onClick={() => {
-                  const index =
-                    lastFocusedIndex !== undefined
-                      ? lastFocusedIndex
-                      : watchSchemaColumns.length
-                  insert(index, newEntry)
-                  onAdded(index)
-                }}
-              >
-                <InsertRowTop size="20px" />
-              </Button>
+            content={
+              lastFocusedIndex !== undefined
+                ? `Remove column ${lastFocusedIndex + 1}`
+                : null
             }
-            placement="bottom"
           >
-            <Tooltip>
-              {lastFocusedIndex !== undefined
+            <Button
+              disabled={
+                watchSchemaColumns.length === 0 ||
+                lastFocusedIndex === undefined
+              }
+              skin="secondary"
+              type="button"
+              onClick={() => {
+                setValue(
+                  "schemaColumns",
+                  watchSchemaColumns.filter(
+                    (_: SchemaColumn, i: number) => i !== lastFocusedIndex,
+                  ),
+                )
+                onAdded(undefined)
+              }}
+            >
+              <DeleteBin2 size="18px" />
+            </Button>
+          </Tooltip>
+          <Tooltip
+            placement="bottom"
+            content={
+              lastFocusedIndex !== undefined
                 ? `Insert column above ${lastFocusedIndex + 1}`
-                : `Insert column`}
-            </Tooltip>
-          </PopperHover>
-
-          <PopperHover
-            trigger={
-              <Button
-                skin="secondary"
-                type="button"
-                onClick={() => {
-                  const index =
-                    lastFocusedIndex !== undefined
-                      ? lastFocusedIndex + 1
-                      : watchSchemaColumns.length
-                  insert(index, newEntry)
-                  onAdded(index)
-                }}
-              >
-                <InsertRowBottom size="20px" />
-              </Button>
+                : `Insert column`
             }
-            placement="bottom"
           >
-            <Tooltip>
-              {lastFocusedIndex !== undefined
+            <Button
+              disabled={
+                watchSchemaColumns.length === 0 ||
+                lastFocusedIndex === undefined
+              }
+              skin="secondary"
+              type="button"
+              onClick={() => {
+                const index =
+                  lastFocusedIndex !== undefined
+                    ? lastFocusedIndex
+                    : watchSchemaColumns.length
+                insert(index, newEntry)
+                onAdded(index)
+              }}
+            >
+              <InsertRowTop size="20px" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip
+            placement="bottom"
+            content={
+              lastFocusedIndex !== undefined
                 ? `Insert column below ${lastFocusedIndex + 1}`
-                : `Insert column`}
-            </Tooltip>
-          </PopperHover>
+                : `Insert column`
+            }
+          >
+            <Button
+              skin="secondary"
+              type="button"
+              onClick={() => {
+                const index =
+                  lastFocusedIndex !== undefined
+                    ? lastFocusedIndex + 1
+                    : watchSchemaColumns.length
+                insert(index, newEntry)
+                onAdded(index)
+              }}
+            >
+              <InsertRowBottom size="20px" />
+            </Button>
+          </Tooltip>
         </React.Fragment>
       )}
       <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">

@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { Close } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { Box, Button, PopperHover, Tooltip, Input } from "../../../components"
+import { Box, Button, Tooltip, Input } from "../../../components"
 import { useSchema } from "../SchemaContext"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
@@ -114,21 +114,16 @@ export const Toolbar = ({
       </Filter>
       {suspendedTablesCount > 0 && (
         <Error suspendedTablesCount={suspendedTablesCount}>
-          <PopperHover
-            placement="bottom"
-            trigger={
-              <StyledButton
-                skin="transparent"
-                onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
-                prefixIcon={<ErrorIcon size="18px" />}
-                data-hook="schema-filter-suspended-button"
-              >
-                <span>{suspendedTablesCount}</span>
-              </StyledButton>
-            }
-          >
-            <Tooltip>Show suspended tables</Tooltip>
-          </PopperHover>
+          <Tooltip placement="bottom" content="Show suspended tables">
+            <StyledButton
+              skin="transparent"
+              onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
+              prefixIcon={<ErrorIcon size="18px" />}
+              data-hook="schema-filter-suspended-button"
+            >
+              {suspendedTablesCount}
+            </StyledButton>
+          </Tooltip>
         </Error>
       )}
     </Root>

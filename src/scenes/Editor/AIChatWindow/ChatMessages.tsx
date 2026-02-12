@@ -1,4 +1,11 @@
-import React, { useEffect, useRef, useMemo, useState, useCallback } from "react"
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useMemo,
+  useState,
+  useCallback,
+} from "react"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { Box, Text, Button } from "../../../components"
@@ -24,6 +31,12 @@ import {
   KeyReturnIcon,
   ChatDotsIcon,
   ArrowCounterClockwiseIcon,
+  HammerIcon,
+  FileSqlIcon,
+  GradientIcon,
+  StethoscopeIcon,
+  XSquareIcon,
+  WarningIcon,
 } from "@phosphor-icons/react"
 import { CloseCircle } from "@styled-icons/remix-fill"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
@@ -148,9 +161,18 @@ const BadgeIconContainer = styled(Box).attrs({
   flex-shrink: 0;
 `
 
-const BadgeIcon = styled.img`
-  width: 1.8rem;
-  height: 1.8rem;
+const BadgeIconWrapper = styled.div`
+  width: 2.4rem;
+  height: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.color.pink};
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
 `
 
 const BadgeTitle = styled(Text)`
@@ -161,6 +183,8 @@ const BadgeTitle = styled(Text)`
 `
 
 const BadgeDescriptionContainer = styled(Box)`
+  align-items: flex-start;
+  flex-direction: column;
   padding: 0.8rem;
   width: 100%;
 `
@@ -169,6 +193,20 @@ const BadgeDescriptionText = styled(Text)`
   font-size: 1.4rem;
   line-height: 2.1rem;
   color: ${color("foreground")};
+`
+
+const BadgeDescriptionIssueText = styled(Text)<{
+  $severity?: "critical" | "warning"
+}>`
+  font-size: 1.4rem;
+  line-height: 2.1rem;
+  font-weight: 600;
+`
+
+const IssueMessageRow = styled(Box)`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `
 
 const SchemaNameDisplay = styled(Box)`
@@ -491,31 +529,43 @@ type ChatMessagesProps = {
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
   editorSQL?: string
   isStreaming: boolean
+  isLoadingMessages?: boolean
+  // Message ID to scroll to (for cache hits)
+  scrollToMessageId?: string | null
+  onScrollToMessageComplete: () => void
 }
 
 const getOperationBadgeInfo = (
   displayType: UserMessageDisplayType,
-): { icon: string; title: string; description?: string } | null => {
+): { icon: React.ReactNode; title: string; description?: string } | null => {
   switch (displayType) {
     case "fix_request":
       return {
-        icon: "/assets/icon-fix-queries.svg",
+        icon: <HammerIcon size={24} />,
         title: "Fix Query",
         description:
           "Help me debug and fix the error with the attached SQL query",
       }
     case "explain_request":
       return {
-        icon: "/assets/icon-explain-queries.svg",
+        icon: <FileSqlIcon size={24} />,
         title: "Explain Query",
         description: "Explain this query in detail",
       }
     case "schema_explain_request": {
       return {
-        icon: "/assets/icon-explain-schema.svg",
+        icon: <GradientIcon size={24} />,
         title: "Explain Schema",
         description:
           "Provide an overview, detailed column descriptions and storage details.",
+      }
+    }
+    case "health_issue_request": {
+      return {
+        icon: <StethoscopeIcon size={24} />,
+        title: "Health Issue Analysis",
+        description:
+          "Analyze table health issue and provide steps for resolution:",
       }
     }
     default:
@@ -552,22 +602,27 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   isOperationInProgress,
   editorSQL,
   isStreaming,
+  isLoadingMessages,
+  scrollToMessageId,
+  onScrollToMessageComplete,
 }) => {
   const theme = useTheme()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const { status } = useAIStatus()
   const [scrolled, setScrolled] = useState(false)
   const userScrolledRef = useRef(false)
 
   const handleScrollNeeded = useCallback(() => {
     if (scrolled && userScrolledRef.current) return
+    if (scrollToMessageId) return
     const behavior = scrolled ? "smooth" : "instant"
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior })
       setScrolled(true)
     })
-  }, [scrolled])
+  }, [scrolled, scrollToMessageId])
 
   useEffect(() => {
     const container = messagesContainerRef.current
@@ -645,6 +700,26 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     handleScrollNeeded()
   }, [visibleMessagesCount, streamingContentLength])
 
+  useLayoutEffect(() => {
+    if (!scrollToMessageId || isLoadingMessages) return
+
+    const messageEl = messageRefs.current.get(scrollToMessageId)
+    if (messageEl) {
+      const timeoutId = setTimeout(() => {
+        messageEl.scrollIntoView({ behavior: "smooth", block: "start" })
+        setScrolled(true)
+        onScrollToMessageComplete()
+      }, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [scrollToMessageId, isLoadingMessages, onScrollToMessageComplete])
+
+  useEffect(() => {
+    return () => {
+      onScrollToMessageComplete()
+    }
+  }, [])
+
   const visibleMessages: Array<{
     message: ConversationMessage
     originalIndex: number
@@ -689,6 +764,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
         const isCurrentQuery =
           normalizeQueryText(message.sql || "") ===
           normalizeQueryText(editorSQL || "")
+        const severity = message.displayHealthIssueData?.severity
 
         if (message.role === "user") {
           // Check if this is a special request type with inline SQL display
@@ -696,12 +772,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const sql = message.sql
 
           // Render badge/title/description types
-          if (
-            displayType &&
-            (displayType === "fix_request" ||
-              displayType === "explain_request" ||
-              displayType === "schema_explain_request")
-          ) {
+          if (displayType && displayType !== "ask_request") {
             const badgeInfo = getOperationBadgeInfo(displayType)
 
             // Determine content to render below badge/description
@@ -722,6 +793,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       designatedTimestamp={schemaData.designatedTimestamp}
                     />
                     <SchemaName>{schemaData.tableName}</SchemaName>
+                  </SchemaNameDisplay>
+                </UserRequestContent>
+              )
+            } else if (
+              displayType === "health_issue_request" &&
+              message.displayHealthIssueData
+            ) {
+              const healthData = message.displayHealthIssueData
+              content = (
+                <UserRequestContent>
+                  <SchemaNameDisplay>
+                    <TableIcon kind="table" />
+                    <SchemaName>{healthData.tableName}</SchemaName>
                   </SchemaNameDisplay>
                 </UserRequestContent>
               )
@@ -746,10 +830,16 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             }
 
             return (
-              <UserRequestBox key={key} data-hook="chat-message-user">
+              <UserRequestBox
+                key={key}
+                data-hook="chat-message-user"
+                ref={(el) => {
+                  if (el) messageRefs.current.set(message.id, el)
+                }}
+              >
                 <OperationBadge>
                   <BadgeIconContainer>
-                    <BadgeIcon src={badgeInfo?.icon} alt={badgeInfo?.title} />
+                    <BadgeIconWrapper>{badgeInfo?.icon}</BadgeIconWrapper>
                   </BadgeIconContainer>
                   <BadgeTitle>{badgeInfo?.title}</BadgeTitle>
                 </OperationBadge>
@@ -758,6 +848,29 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <BadgeDescriptionText>
                       {badgeInfo.description}
                     </BadgeDescriptionText>
+                    {displayType === "health_issue_request" &&
+                      message.displayHealthIssueData?.issueMessage && (
+                        <IssueMessageRow>
+                          {severity === "critical" ? (
+                            <XSquareIcon
+                              size={14}
+                              weight="fill"
+                              color={theme.color.red}
+                            />
+                          ) : (
+                            <WarningIcon
+                              size={14}
+                              weight="fill"
+                              color={theme.color.orange}
+                            />
+                          )}
+                          <BadgeDescriptionIssueText
+                            color={severity === "critical" ? "red" : "orange"}
+                          >
+                            {message.displayHealthIssueData.issueMessage}
+                          </BadgeDescriptionIssueText>
+                        </IssueMessageRow>
+                      )}
                   </BadgeDescriptionContainer>
                 )}
                 {content}
@@ -770,7 +883,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             const userQuestion = message.displayUserMessage || message.content
 
             return (
-              <UserRequestBox key={key} data-hook="chat-message-user">
+              <UserRequestBox
+                key={key}
+                data-hook="chat-message-user"
+                ref={(el) => {
+                  if (el) messageRefs.current.set(message.id, el)
+                }}
+              >
                 <UserRequestHeader>
                   <MessageContent>{userQuestion}</MessageContent>
                 </UserRequestHeader>
@@ -794,7 +913,13 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
           // Default: plain text message
           return (
-            <MessageBubble key={key} data-hook="chat-message-user">
+            <MessageBubble
+              key={key}
+              data-hook="chat-message-user"
+              ref={(el) => {
+                if (el) messageRefs.current.set(message.id, el)
+              }}
+            >
               <MessageContent>{message.content}</MessageContent>
             </MessageBubble>
           )
@@ -907,6 +1032,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               key={key}
               $hasOperationHistory={hasOperationHistory}
               data-hook="chat-message-assistant"
+              ref={(el) => {
+                if (el) messageRefs.current.set(message.id, el)
+              }}
             >
               {hasOperationHistory && (
                 <>

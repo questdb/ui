@@ -5,7 +5,6 @@ import {
   Box,
   Button,
   Heading,
-  PopperHover,
   Select,
   Table,
   Text,
@@ -137,9 +136,9 @@ export const FilesToUpload = ({
             <FiletypeCsv size="46px" />
             <Box gap="1rem" align="flex-4tart" flexDirection="column">
               {data.fileObject.name.length > 20 && (
-                <PopperHover placement="top" trigger={file}>
-                  <Tooltip>{data.fileObject.name}</Tooltip>
-                </PopperHover>
+                <Tooltip placement="top" content={data.fileObject.name}>
+                  {file}
+                </Tooltip>
               )}
               {data.fileObject.name.length <= 20 && file}
               <Box gap="1rem" align="center">
@@ -210,21 +209,19 @@ export const FilesToUpload = ({
   if (ownedByList && ownedByList.length > 0) {
     columns.push({
       header: (
-        <PopperHover
+        <Tooltip
           placement="top"
-          trigger={
-            <Box
-              align="center"
-              gap="0.5rem"
-              data-hook="import-table-column-owner"
-            >
-              Table owner
-              <Information size="16px" />
-            </Box>
-          }
+          content="Required for external (non-database) users."
         >
-          <Tooltip>Required for external (non-database) users.</Tooltip>
-        </PopperHover>
+          <Box
+            align="center"
+            gap="0.5rem"
+            data-hook="import-table-column-owner"
+          >
+            Table owner
+            <Information size="16px" />
+          </Box>
+        </Tooltip>
       ),
       align: "center",
       width: "150px",
@@ -249,24 +246,19 @@ export const FilesToUpload = ({
   columns.push(
     {
       header: (
-        <PopperHover
+        <Tooltip
           placement="top"
-          trigger={
-            <Box
-              align="center"
-              gap="0.5rem"
-              data-hook="import-table-column-schema"
-            >
-              Schema
-              <Information size="16px" />
-            </Box>
-          }
+          content="Optional. By default, QuestDB will infer schema from the CSV file structure"
         >
-          <Tooltip>
-            Optional. By default, QuestDB will infer schema from the CSV file
-            structure
-          </Tooltip>
-        </PopperHover>
+          <Box
+            align="center"
+            gap="0.5rem"
+            data-hook="import-table-column-schema"
+          >
+            Schema
+            <Information size="16px" />
+          </Box>
+        </Tooltip>
       ),
 
       align: "center",
@@ -304,23 +296,23 @@ export const FilesToUpload = ({
     },
     {
       header: (
-        <PopperHover
+        <Tooltip
           placement="top"
-          trigger={
-            <Box align="center" gap="0.5rem">
-              Write mode
-              <Information size="16px" />
-            </Box>
+          content={
+            <>
+              <strong>Append</strong>: data will be appended to the set.
+              <br />
+              <strong>Overwrite</strong>: any existing data or structure will be
+              overwritten. Required for partitioning and timestamp related
+              changes.
+            </>
           }
         >
-          <Tooltip>
-            <strong>Append</strong>: data will be appended to the set.
-            <br />
-            <strong>Overwrite</strong>: any existing data or structure will be
-            overwritten. Required for partitioning and timestamp related
-            changes.
-          </Tooltip>
-        </PopperHover>
+          <Box align="center" gap="0.5rem">
+            Write mode
+            <Information size="16px" />
+          </Box>
+        </Tooltip>
       ),
       align: "center",
       width: "150px",

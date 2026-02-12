@@ -49,6 +49,7 @@ export type TextProps = Readonly<{
   weight?: number
   margin?: string
   padding?: string
+  lineHeight?: string
 }>
 
 const defaultProps: Readonly<{
@@ -76,6 +77,7 @@ export const textStyles = css<TextProps>`
   ${({ margin }) => margin && `margin: ${margin}`};
   ${({ padding }) => padding && `padding: ${padding}`};
   ${({ ellipsis }) => ellipsis && ellipsisStyles};
+  ${({ lineHeight }) => lineHeight && `line-height: ${lineHeight}`};
 `
 
 const TextStyled = styled.label<TextProps>`

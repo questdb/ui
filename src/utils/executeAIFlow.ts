@@ -5,6 +5,7 @@ import type {
   ConversationMessage,
   UserMessageDisplayType,
   SchemaDisplayData,
+  HealthIssueDisplayData,
 } from "../providers/AIConversationProvider/types"
 import type {
   OperationHistory,
@@ -13,18 +14,16 @@ import type {
 import { AIOperationStatus } from "../providers/AIStatusProvider"
 import {
   continueConversation,
-  explainTableSchema,
   createModelToolsClient,
   createStreamingCallback,
   isAiAssistantError,
   generateChatTitle,
-  schemaExplanationToMarkdown,
   getExplainSchemaPrompt,
+  getHealthIssuePrompt,
   type ActiveProviderSettings,
   type GeneratedSQL,
   type AiAssistantExplanation,
   type AiAssistantAPIError,
-  type TableSchemaExplanation,
   type AIOperation,
 } from "./aiAssistant"
 import { providerForModel, MODEL_OPTIONS } from "./aiAssistantSettings"
@@ -41,6 +40,7 @@ type BaseFlowConfig = {
   tables?: Array<Table>
   hasSchemaAccess: boolean
   abortSignal?: AbortSignal
+  useLastMessage?: boolean
 }
 
 type ChatFlowConfig = BaseFlowConfig & {
@@ -71,11 +71,27 @@ type SchemaExplainFlowConfig = BaseFlowConfig & {
   schemaDisplayData: SchemaDisplayData
 }
 
+type HealthIssueFlowConfig = BaseFlowConfig & {
+  type: "health_issue"
+  tableName: string
+  issue: {
+    id: string
+    field: string
+    message: string
+    currentValue?: string
+    severity: "critical" | "warning"
+  }
+  tableDetails: string
+  monitoringDocs: string
+  trendSamples?: Array<{ value: number; timestamp: number }>
+}
+
 export type AIFlowConfig =
   | ChatFlowConfig
   | ExplainFlowConfig
   | FixFlowConfig
   | SchemaExplainFlowConfig
+  | HealthIssueFlowConfig
 
 type AIFlowUserMessage = {
   content: string
@@ -83,6 +99,7 @@ type AIFlowUserMessage = {
   sql?: string
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData
+  displayHealthIssueData?: HealthIssueDisplayData
 }
 
 export type AIFlowCallbacks = {
@@ -106,14 +123,17 @@ export type AIFlowCallbacks = {
     name: string,
     isGeneratedByAI?: boolean,
   ) => Promise<void>
-  replaceConversationMessages?: (
-    conversationId: string,
-    messages: ConversationMessage[],
-  ) => void
+  replaceConversationMessages?: (messages: ConversationMessage[]) => void
+  getLastRoundMessages?: (conversationId: ConversationId) => Promise<{
+    lastUserMessage?: ConversationMessage
+    lastAssistantMessage?: ConversationMessage
+  }>
 }
 
 export type AIFlowResult = {
   success: boolean
+  cached?: boolean
+  cachedMessageId?: string
   error?: string
   sql?: string
   explanation?: string
@@ -170,6 +190,23 @@ function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
         displayType: "schema_explain_request",
         displaySchemaData: config.schemaDisplayData,
       }
+
+    case "health_issue":
+      return {
+        content: getHealthIssuePrompt({
+          tableName: config.tableName,
+          issue: config.issue,
+          tableDetails: config.tableDetails,
+          monitoringDocs: config.monitoringDocs,
+          trendSamples: config.trendSamples,
+        }),
+        displayType: "health_issue_request",
+        displayHealthIssueData: {
+          tableName: config.tableName,
+          issueMessage: config.issue.message,
+          severity: config.issue.severity,
+        },
+      }
   }
 }
 
@@ -188,11 +225,7 @@ function formatErrorMessage(error: AiAssistantAPIError): string {
 
 type ProcessResultConfig = {
   type: AIFlowConfig["type"]
-  response:
-    | GeneratedSQL
-    | AiAssistantExplanation
-    | TableSchemaExplanation
-    | AiAssistantAPIError
+  response: GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError
   conversationId: string
   assistantMessageId: string
   callbacks: AIFlowCallbacks
@@ -218,12 +251,13 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
   }
 
   if (compactedHistory && callbacks.replaceConversationMessages) {
-    callbacks.replaceConversationMessages(conversationId, compactedHistory)
+    callbacks.replaceConversationMessages(compactedHistory)
   }
 
   switch (type) {
     case "chat":
-    case "fix": {
+    case "fix":
+    case "health_issue": {
       const result = response as GeneratedSQL
       return processSQLResult(
         result,
@@ -252,7 +286,7 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     }
 
     case "schema_explain": {
-      const result = response as TableSchemaExplanation
+      const result = response as AiAssistantExplanation
       if (!result.explanation) {
         callbacks.updateMessage(conversationId, assistantMessageId, {
           error: "No explanation received from AI Assistant",
@@ -260,13 +294,12 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
         return { success: false, error: "No explanation received" }
       }
 
-      const markdownContent = schemaExplanationToMarkdown(result)
       callbacks.updateMessage(conversationId, assistantMessageId, {
-        content: markdownContent,
-        explanation: markdownContent,
+        content: result.explanation,
+        explanation: result.explanation,
         tokenUsage: result.tokenUsage,
       })
-      return { success: true, explanation: markdownContent }
+      return { success: true, explanation: result.explanation }
     }
   }
 }
@@ -276,7 +309,7 @@ function processSQLResult(
   conversationId: string,
   assistantMessageId: string,
   callbacks: AIFlowCallbacks,
-  type: "chat" | "fix",
+  type: "chat" | "fix" | "health_issue",
 ): AIFlowResult {
   const hasSQLInResult = result.sql && result.sql.trim() !== ""
 
@@ -363,9 +396,27 @@ export async function executeAIFlow(
     tables,
     hasSchemaAccess,
     abortSignal,
+    useLastMessage,
   } = config
 
   const userMsg = buildUserMessage(config)
+
+  if (useLastMessage && callbacks.getLastRoundMessages) {
+    const { lastUserMessage, lastAssistantMessage } =
+      await callbacks.getLastRoundMessages(conversationId)
+
+    if (
+      lastUserMessage?.content === userMsg.content &&
+      lastAssistantMessage &&
+      !lastAssistantMessage.error
+    ) {
+      return {
+        success: true,
+        cached: true,
+        cachedMessageId: lastUserMessage.id,
+      }
+    }
+  }
 
   callbacks.addMessage({
     role: "user",
@@ -378,6 +429,9 @@ export async function executeAIFlow(
     }),
     ...(userMsg.displaySchemaData && {
       displaySchemaData: userMsg.displaySchemaData,
+    }),
+    ...(userMsg.displayHealthIssueData && {
+      displayHealthIssueData: userMsg.displayHealthIssueData,
     }),
   })
 
@@ -432,64 +486,50 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
-  const streamingCallback =
-    config.type !== "schema_explain"
-      ? createStreamingCallback({
-          conversationId,
-          assistantMessageId,
-          updateMessage: callbacks.updateMessage,
-          setIsStreaming: callbacks.setIsStreaming,
-        })
-      : undefined
+  const streamingCallback = createStreamingCallback({
+    conversationId,
+    assistantMessageId,
+    updateMessage: callbacks.updateMessage,
+    setIsStreaming: callbacks.setIsStreaming,
+  })
 
   try {
-    let response:
-      | GeneratedSQL
-      | AiAssistantExplanation
-      | TableSchemaExplanation
-      | AiAssistantAPIError
-    let compactedHistory: ConversationMessage[] | undefined
+    const operation: AIOperation =
+      config.type === "chat"
+        ? "followup"
+        : config.type === "schema_explain"
+          ? "schema_explain"
+          : config.type === "health_issue"
+            ? "health_issue"
+            : config.type
+    const conversationHistory =
+      config.type === "chat" ? config.conversationHistory : []
+    const currentSQL =
+      config.type === "chat"
+        ? config.currentSQL
+        : config.type === "schema_explain" || config.type === "health_issue"
+          ? undefined
+          : config.queryText
 
-    if (config.type === "schema_explain") {
-      response = await explainTableSchema({
-        tableName: config.tableName,
-        schema: config.schema,
-        kindLabel: config.kindLabel,
-        settings: providerSettings,
-        setStatus: setStatusWithHistory,
-        abortSignal,
-      })
-    } else {
-      const operation: AIOperation =
-        config.type === "chat" ? "followup" : config.type
-      const conversationHistory =
-        config.type === "chat" ? config.conversationHistory : []
-      const currentSQL =
-        config.type === "chat" ? config.currentSQL : config.queryText
-
-      const result = await continueConversation({
-        userMessage: userMsg.content,
-        conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
-        currentSQL,
-        settings: providerSettings,
-        modelToolsClient,
-        setStatus: setStatusWithHistory,
-        abortSignal,
-        operation,
-        streaming: streamingCallback,
-      })
-
-      response = result
-      compactedHistory = result.compactedConversationHistory
-    }
+    const result = await continueConversation({
+      userMessage: userMsg.content,
+      conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
+      currentSQL,
+      settings: providerSettings,
+      modelToolsClient,
+      setStatus: setStatusWithHistory,
+      abortSignal,
+      operation,
+      streaming: streamingCallback,
+    })
 
     return processResult({
       type: config.type,
-      response,
+      response: result,
       conversationId,
       assistantMessageId,
       callbacks,
-      compactedHistory,
+      compactedHistory: result.compactedConversationHistory,
     })
   } finally {
     streamingCallback?.cleanup?.()
@@ -520,4 +560,10 @@ export function createSchemaExplainFlowConfig(
   params: Omit<SchemaExplainFlowConfig, "type">,
 ): SchemaExplainFlowConfig {
   return { type: "schema_explain", ...params }
+}
+
+export function createHealthIssueFlowConfig(
+  params: Omit<HealthIssueFlowConfig, "type">,
+): HealthIssueFlowConfig {
+  return { type: "health_issue", ...params }
 }

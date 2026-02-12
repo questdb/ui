@@ -1,6 +1,7 @@
 import React, { MouseEvent, ReactNode } from "react"
 import styled, { css } from "styled-components"
 import type { DefaultTheme } from "styled-components"
+import { Tooltip } from "../Tooltip"
 import type { FontSize } from "../../types"
 import type { Skin } from "./skin"
 import { makeSkin } from "./skin"
@@ -38,8 +39,10 @@ type BaseButtonProps = {
   children?: ReactNode
   className?: string
   disabled?: boolean
+  disabledTooltip?: string
   fontSize?: FontSize
   onClick?: (event: MouseEvent) => void
+  onDoubleClick?: (event: MouseEvent) => void
   size?: Size
   fullWidth?: boolean
   type?: Type
@@ -75,9 +78,9 @@ const Prefix = styled.div<{ disabled?: boolean }>`
 `
 
 export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
-  ({ as, children, prefixIcon, disabled, ...props }, ref) => {
+  ({ as, children, prefixIcon, disabled, disabledTooltip, ...props }, ref) => {
     const type = as === "button" ? { type: "button" } : {}
-    return (
+    const button = (
       <StyledButton
         ref={ref}
         as={as ?? "button"}
@@ -90,6 +93,16 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
         {children}
       </StyledButton>
     )
+
+    if (disabled && disabledTooltip) {
+      return (
+        <Tooltip content={disabledTooltip}>
+          <span style={{ display: "inline-flex" }}>{button}</span>
+        </Tooltip>
+      )
+    }
+
+    return button
   },
 )
 
@@ -152,7 +165,7 @@ const StyledButton = styled.button<ButtonProps>`
 
       &:disabled {
         border: ${getBorderWidth(props)} solid ${props.theme.color.gray1};
-        background: ${props.theme.color.selection};
+        background: ${props.theme.color.backgroundLighter};
         color: ${props.theme.color.gray1};
       }
     `}
