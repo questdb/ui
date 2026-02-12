@@ -2,6 +2,8 @@
 
 const {
   PROVIDERS,
+  getOpenAIConfiguredSettings,
+  getAnthropicConfiguredSettings,
   createToolCallFlow,
   createMultiTurnFlow,
   createResponse,
@@ -207,36 +209,6 @@ function interceptTokenValidation(provider, success) {
         },
       }).as("anthropicValidation")
     }
-  }
-}
-
-function getOpenAIConfiguredSettings() {
-  return {
-    "ai.assistant.settings": JSON.stringify({
-      selectedModel: "gpt-5-mini",
-      providers: {
-        openai: {
-          apiKey: "test-openai-key",
-          enabledModels: ["gpt-5-mini", "gpt-5"],
-          grantSchemaAccess: true,
-        },
-      },
-    }),
-  }
-}
-
-function getAnthropicConfiguredSettings() {
-  return {
-    "ai.assistant.settings": JSON.stringify({
-      selectedModel: "claude-sonnet-4-5",
-      providers: {
-        anthropic: {
-          apiKey: "test-anthropic-key",
-          enabledModels: ["claude-sonnet-4-5", "claude-opus-4-5"],
-          grantSchemaAccess: true,
-        },
-      },
-    }),
   }
 }
 
@@ -951,8 +923,8 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-item").should("have.length", 0)
       cy.contains("No chats match your search").should("be.visible")
 
-      // When - Clear search with Escape key
-      cy.getByDataHook("chat-history-search").type("{esc}")
+      // When - Clear search with clear button
+      cy.getByDataHook("chat-history-search-clear").click()
       cy.getByDataHook("chat-history-search").should("have.value", "")
       cy.getByDataHook("chat-history-item").should("have.length", 3)
     })
@@ -1412,28 +1384,6 @@ describe("ai assistant", () => {
       const validSchemaResponse = createOpenAIExplainSchemaResponse({
         explanation:
           "The test_trades table stores trading data with symbol identification, price values, and timestamps.",
-        columns: [
-          {
-            name: "symbol",
-            description: "Stock ticker symbol identifier",
-            data_type: "SYMBOL",
-          },
-          {
-            name: "price",
-            description: "Trade execution price",
-            data_type: "DOUBLE",
-          },
-          {
-            name: "ts",
-            description: "Timestamp of the trade",
-            data_type: "TIMESTAMP",
-          },
-        ],
-        storage_details: [
-          "WAL enabled for durability",
-          "Partitioned by DAY",
-          "Designated timestamp: ts",
-        ],
       })
       interceptAIRequestWithResponse(
         "openai",
@@ -1465,45 +1415,6 @@ describe("ai assistant", () => {
         "contain",
         "The test_trades table stores trading data",
       )
-
-      // Verify Columns section header and table content
-      cy.getByDataHook("chat-message-assistant").should("contain", "Columns")
-      cy.getByDataHook("chat-message-assistant").should("contain", "symbol")
-      cy.getByDataHook("chat-message-assistant").should("contain", "SYMBOL")
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "Stock ticker symbol identifier",
-      )
-      cy.getByDataHook("chat-message-assistant").should("contain", "price")
-      cy.getByDataHook("chat-message-assistant").should("contain", "DOUBLE")
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "Trade execution price",
-      )
-      cy.getByDataHook("chat-message-assistant").should("contain", "ts")
-      cy.getByDataHook("chat-message-assistant").should("contain", "TIMESTAMP")
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "Timestamp of the trade",
-      )
-
-      // Verify Storage Details section
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "Storage Details",
-      )
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "WAL enabled for durability",
-      )
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "Partitioned by DAY",
-      )
-      cy.getByDataHook("chat-message-assistant").should(
-        "contain",
-        "Designated timestamp: ts",
-      )
     })
 
     it("should show error when schema explanation fails to parse", () => {
@@ -1534,7 +1445,7 @@ describe("ai assistant", () => {
       // Then - Should display error message
       cy.getByDataHook("chat-message-error")
         .should("be.visible")
-        .should("contain", "An unexpected error occurred. Please try again.")
+        .should("contain", "Failed to parse assistant response.")
     })
   })
 

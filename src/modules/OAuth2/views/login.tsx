@@ -203,8 +203,8 @@ const ErrorContainer = styled.div`
   gap: 1.5rem;
   padding: 1.2rem 2.4rem 1.2rem 1.8rem;
   border-radius: 0.8rem;
-  border: 1.5px solid rgba(220, 40, 40, 0.72);
-  border-left: 6px solid rgba(220, 40, 40, 0.72);
+  border: 1.5px solid ${({ theme }) => theme.color.redSecondary};
+  border-left: 6px solid ${({ theme }) => theme.color.redSecondary};
 `
 
 const RedirectErrorContainer = styled(ErrorContainer)`

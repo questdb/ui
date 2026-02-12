@@ -38,6 +38,7 @@ import {
   createGlobalFadeTransition,
   TransitionDuration,
   ToastContainer,
+  TooltipProvider,
 } from "./components"
 import { ScreenSizeProvider } from "./hooks"
 import { rootEpic, rootReducer } from "./store"
@@ -72,25 +73,27 @@ const FadeSlow = createGlobalFadeTransition(
 
 ReactDOM.render(
   <ThemeProvider theme={theme}>
-    <ScreenSizeProvider>
-      <Provider store={store}>
-        <SettingsProvider>
-          <PosthogProviderWrapper>
-            <AuthProvider>
-              <QuestProvider>
-                <GlobalStyle />
-                {ReactDOM.createPortal(<ToastContainer />, document.body)}
-                <LocalStorageProvider>
-                  <FadeSlow />
-                  <FadeReg />
-                  <Layout />
-                </LocalStorageProvider>
-              </QuestProvider>
-            </AuthProvider>
-          </PosthogProviderWrapper>
-        </SettingsProvider>
-      </Provider>
-    </ScreenSizeProvider>
+    <TooltipProvider delayDuration={200}>
+      <ScreenSizeProvider>
+        <Provider store={store}>
+          <SettingsProvider>
+            <PosthogProviderWrapper>
+              <AuthProvider>
+                <QuestProvider>
+                  <GlobalStyle />
+                  {ReactDOM.createPortal(<ToastContainer />, document.body)}
+                  <LocalStorageProvider>
+                    <FadeSlow />
+                    <FadeReg />
+                    <Layout />
+                  </LocalStorageProvider>
+                </QuestProvider>
+              </AuthProvider>
+            </PosthogProviderWrapper>
+          </SettingsProvider>
+        </Provider>
+      </ScreenSizeProvider>
+    </TooltipProvider>
   </ThemeProvider>,
   document.getElementById("root"),
 )

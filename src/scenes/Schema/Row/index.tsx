@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
-import styled from "styled-components"
+import styled, { useTheme, keyframes, css } from "styled-components"
 import { SortDown, Bracket, InfoCircle } from "@styled-icons/boxicons-regular"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
@@ -40,11 +40,17 @@ import {
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
-import { Box, Text, IconWithTooltip, spinAnimation } from "../../../components"
-import { color } from "../../../utils"
+import {
+  Box,
+  Text,
+  IconWithTooltip,
+  spinAnimation,
+  Button,
+  toast,
+} from "../../../components"
+import { color, copyToClipboard } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
-import { PopperHover } from "../../../components/PopperHover"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
 import {
@@ -53,6 +59,8 @@ import {
   VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
+import { InfoIcon } from "@phosphor-icons/react"
+import { theme } from "../../../theme"
 
 export type TreeNodeKind =
   | "column"
@@ -71,6 +79,7 @@ type Props = Readonly<{
   designatedTimestamp?: string
   expanded?: boolean
   onExpandCollapse: () => void | Promise<void>
+  onOpenDetailsDrawer?: () => void
   navigateInTree: (options: TreeNavigationOptions) => void
   "data-hook"?: string
   partitionBy?: QuestDB.PartitionBy
@@ -80,6 +89,15 @@ type Props = Readonly<{
   errors?: string[]
   value?: string | React.ReactNode
 }>
+
+const copyPulse = keyframes`
+  0% {
+    box-shadow: ${theme.color.cyan} 0 0 0 1px;
+  }
+  75% {
+    box-shadow: #f1fa8c00 0 0 0 16px;
+  }
+`
 
 const Type = styled(Text)`
   align-items: center;
@@ -94,16 +112,17 @@ const Title = styled(Text)`
 `
 
 const Wrapper = styled.div<{
+  $viewDetailsButton?: boolean
   $level?: number
   $selectOpen?: boolean
   $focused?: boolean
+  $isPulsing?: boolean
 }>`
   position: relative;
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0;
   user-select: none;
-  border: 1px solid transparent;
   border-radius: 0.4rem;
   min-width: fit-content;
   width: 100%;
@@ -117,13 +136,57 @@ const Wrapper = styled.div<{
     padding-left: ${$level * 1.5 + 1}rem;
   `}
 
+  &:hover {
+    background: ${({ theme }) => theme.color.tableSelection}4D;
+    .table-menu-button {
+      opacity: 1;
+    }
+  }
+
   ${({ $focused, theme }) =>
     $focused &&
     `
     outline: none;
     background: ${theme.color.tableSelection};
-    border: 1px solid ${theme.color.cyan};
+    box-shadow: inset 0 0 0 1px ${theme.color.cyan};
+    .table-menu-button {
+      opacity: 1;
+    }
+
+    &:hover {
+      background: ${theme.color.tableSelection};
+    }
   `}
+
+  ${({ $viewDetailsButton }) =>
+    $viewDetailsButton &&
+    `
+    padding-right: 3rem;
+  `}
+
+  ${({ $isPulsing }) =>
+    $isPulsing &&
+    css`
+      animation: ${copyPulse} 1000ms 0.1s;
+    `}
+`
+
+const DetailsDrawerButton = styled(Button)`
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  padding: 0.5rem;
+  background: transparent;
+  border: 0;
+
+  &:hover {
+    background: transparent !important;
+    svg {
+      filter: brightness(1.2);
+    }
+  }
 `
 
 const StyledTitle = styled(Title)`
@@ -290,7 +353,7 @@ const getIcon = (type: string) => {
   return <IconWrapper icon={iconConfig?.icon ?? DotIcon} type={type} />
 }
 
-const ColumnIcon = ({
+export const ColumnIcon = ({
   isDesignatedTimestamp,
   type,
 }: {
@@ -323,6 +386,7 @@ const Row = ({
   partitionBy,
   walEnabled,
   onExpandCollapse,
+  onOpenDetailsDrawer,
   navigateInTree,
   "data-hook": dataHook,
   isLoading,
@@ -332,6 +396,7 @@ const Row = ({
   id,
   index,
 }: Props) => {
+  const theme = useTheme()
   const {
     query,
     selectOpen,
@@ -341,7 +406,9 @@ const Row = ({
     setFocusedIndex,
   } = useSchema()
   const [showLoader, setShowLoader] = useState(false)
+  const [isPulsing, setIsPulsing] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const isExpandable =
     ["folder", "table", "matview", "view"].includes(kind) ||
@@ -394,6 +461,10 @@ const Row = ({
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
+      if (pulseTimeoutRef.current) {
+        clearTimeout(pulseTimeoutRef.current)
+        pulseTimeoutRef.current = null
+      }
     }
   }, [isLoading])
 
@@ -409,9 +480,11 @@ const Row = ({
 
   return (
     <Wrapper
+      $viewDetailsButton={!!onOpenDetailsDrawer}
       $level={id ? id.split(":").length - 2 : 0}
       $selectOpen={selectOpen}
       $focused={focusedIndex === index}
+      $isPulsing={isPulsing}
       ref={wrapperRef}
       data-hook={dataHook ?? "schema-row"}
       data-kind={kind}
@@ -419,6 +492,7 @@ const Row = ({
       data-expanded={expanded}
       data-index={index}
       data-id={id}
+      data-focused={focusedIndex === index}
       className={className}
       // eslint-disable-next-line jsx-a11y/tabindex-no-positive
       tabIndex={100}
@@ -438,12 +512,33 @@ const Row = ({
         e.preventDefault()
 
         if (
+          (e.metaKey || e.ctrlKey) &&
+          (e.key === "c" || e.key === "C") &&
+          (isTableKind || kind === "column")
+        ) {
+          void copyToClipboard(name)
+          toast.success("Copied to clipboard", { autoClose: 2000 })
+
+          if (pulseTimeoutRef.current) {
+            clearTimeout(pulseTimeoutRef.current)
+          }
+          setIsPulsing(true)
+          pulseTimeoutRef.current = setTimeout(() => {
+            setIsPulsing(false)
+          }, 1000)
+        }
+
+        if (
           isExpandable &&
-          (e.key === "Enter" ||
+          (e.key === " " ||
             (e.key === "ArrowRight" && !expanded) ||
             (e.key === "ArrowLeft" && expanded))
         ) {
           handleExpandCollapse()
+        }
+
+        if (e.key === "Enter") {
+          onOpenDetailsDrawer?.()
         }
 
         const shouldGoToParent =
@@ -544,16 +639,10 @@ const Row = ({
 
           {errors && errors.length > 0 && (
             <TableActions>
-              <PopperHover
+              <Tooltip
                 placement="top"
-                trigger={
-                  <ErrorIconWrapper data-hook="schema-row-error-icon">
-                    <ErrorIcon size="18px" />
-                  </ErrorIconWrapper>
-                }
-              >
-                <Tooltip>
-                  {errors.length > 1 ? (
+                content={
+                  errors.length > 1 ? (
                     errors.map((error) => (
                       <ErrorItem key={error}>
                         <ErrorIconWrapper>
@@ -564,13 +653,29 @@ const Row = ({
                     ))
                   ) : (
                     <Text color="foreground">{errors[0]}</Text>
-                  )}
-                </Tooltip>
-              </PopperHover>
+                  )
+                }
+              >
+                <ErrorIconWrapper data-hook="schema-row-error-icon">
+                  <ErrorIcon size="18px" />
+                </ErrorIconWrapper>
+              </Tooltip>
             </TableActions>
           )}
         </FlexRow>
       </Box>
+      {!selectOpen && onOpenDetailsDrawer && (
+        <DetailsDrawerButton
+          skin="secondary"
+          size="sm"
+          className="table-menu-button"
+          data-hook="table-menu-button"
+          onClick={onOpenDetailsDrawer}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <InfoIcon size={18} color={theme.color.cyan} />
+        </DetailsDrawerButton>
+      )}
     </Wrapper>
   )
 }

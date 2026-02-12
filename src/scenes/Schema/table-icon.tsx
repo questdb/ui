@@ -1,7 +1,6 @@
 import React, { FC } from "react"
 import styled from "styled-components"
 import { Table } from "@styled-icons/remix-line"
-import { PopperHover } from "../../components/PopperHover"
 import { Tooltip } from "../../components/Tooltip"
 import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
@@ -11,16 +10,16 @@ type TableIconProps = {
   walEnabled?: boolean
   partitionBy?: QuestDB.PartitionBy
   designatedTimestamp?: string
+  size?: string
 }
 
-const WIDTH = "1.4rem"
-const HEIGHT = "1.4rem"
+const DEFAULT_SIZE = "14px"
 
-const Root = styled.div`
+const Root = styled.div<{ $size: string }>`
   display: flex;
   align-items: center;
-  width: ${WIDTH};
-  height: ${HEIGHT};
+  width: ${({ $size }) => $size};
+  height: ${({ $size }) => $size};
   position: relative;
   flex-shrink: 0;
   svg {
@@ -37,11 +36,15 @@ const Asterisk = styled.span`
   color: ${color("orange")};
 `
 
-const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
+const NonPartitionedTableIcon = ({
+  size = DEFAULT_SIZE,
+}: {
+  size?: string
+}) => (
   <svg
     viewBox="0 0 24 24"
-    height={height}
-    width={width}
+    height={size}
+    width={size}
     fill="currentColor"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -53,11 +56,15 @@ const NonPartitionedTableIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
+export const MaterializedViewIcon = ({
+  size = DEFAULT_SIZE,
+}: {
+  size?: string
+}) => (
   <svg
     viewBox="0 0 28 28"
-    height={height}
-    width={width}
+    height={size}
+    width={size}
     xmlns="http://www.w3.org/2000/svg"
   >
     <g
@@ -78,7 +85,13 @@ export const MaterializedViewIcon = ({ height = "14px", width = "14px" }) => (
   </svg>
 )
 
-export const ViewIcon = ({ height = "14px", width = "14px" }) => (
+export const ViewIcon = ({
+  height,
+  width,
+}: {
+  height: string
+  width: string
+}) => (
   <svg
     viewBox="0 0 24 24"
     height={height}
@@ -95,6 +108,7 @@ export const TableIcon: FC<TableIconProps> = ({
   walEnabled,
   partitionBy,
   designatedTimestamp,
+  size = DEFAULT_SIZE,
 }) => {
   const isPartitioned = partitionBy && partitionBy !== "NONE"
   const partitionText = isPartitioned
@@ -111,51 +125,51 @@ export const TableIcon: FC<TableIconProps> = ({
 
   if (kind === "view") {
     return (
-      <Root data-hook="table-icon">
-        <ViewIcon height="14px" width="14px" />
+      <Root $size={size} data-hook="table-icon">
+        <ViewIcon height={size} width={size} />
       </Root>
     )
   }
 
   if (kind === "matview") {
     return (
-      <PopperHover
-        trigger={
-          <Root data-hook="table-icon">
-            <MaterializedViewIcon height="14px" width="14px" />
-          </Root>
+      <Tooltip
+        content={
+          <>
+            {partitionText}, {timestampText}.
+          </>
         }
         delay={1000}
         placement="bottom"
       >
-        <Tooltip>
-          {partitionText}, {timestampText}.
-        </Tooltip>
-      </PopperHover>
+        <Root $size={size} data-hook="table-icon">
+          <MaterializedViewIcon size={size} />
+        </Root>
+      </Tooltip>
     )
   }
 
   return (
-    <PopperHover
-      trigger={
-        <Root data-hook="table-icon">
-          {!walEnabled && <Asterisk>*</Asterisk>}
-          {isPartitioned ? (
-            <Table size="14px" />
-          ) : (
-            <NonPartitionedTableIcon height="14px" />
-          )}
-        </Root>
+    <Tooltip
+      content={
+        <>
+          {fullHeader}
+          <br />
+          <br />
+          {description}
+        </>
       }
       delay={1000}
       placement="bottom"
     >
-      <Tooltip>
-        {fullHeader}
-        <br />
-        <br />
-        {description}
-      </Tooltip>
-    </PopperHover>
+      <Root $size={size} data-hook="table-icon">
+        {!walEnabled && <Asterisk>*</Asterisk>}
+        {isPartitioned ? (
+          <Table size={size} />
+        ) : (
+          <NonPartitionedTableIcon size={size} />
+        )}
+      </Root>
+    </Tooltip>
   )
 }

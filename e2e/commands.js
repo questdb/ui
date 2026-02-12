@@ -25,6 +25,8 @@ const tableSchemas = {
     "CREATE TABLE IF NOT EXISTS 'contains_magicword' (ts TIMESTAMP, magicword VARCHAR) timestamp (ts) PARTITION BY DAY;",
   contains_simpleword:
     "CREATE TABLE IF NOT EXISTS 'contains_simpleword' (timestamp TIMESTAMP, simpleword VARCHAR) timestamp (timestamp) PARTITION BY DAY;",
+  btc_trades_no_wal:
+    "CREATE TABLE IF NOT EXISTS 'btc_trades_no_wal' (symbol SYMBOL capacity 256 CACHE, side SYMBOL capacity 256 CACHE, price DOUBLE, amount DOUBLE, timestamp TIMESTAMP) timestamp (timestamp) PARTITION BY DAY BYPASS WAL;",
 }
 
 const materializedViewSchemas = {
@@ -519,6 +521,15 @@ Cypress.Commands.add("expandViews", () => {
       cy.get('[data-hook="expand-views"]').dblclick({ force: true })
     }
   })
+})
+
+Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
+  const titleHook =
+    kind === "matview" ? "schema-matview-title" : "schema-table-title"
+  cy.getByDataHook(titleHook).contains(name).click()
+  cy.realPress("Enter")
+  cy.getByDataHook("table-details-drawer").should("be.visible")
+  cy.getByDataHook("table-details-name").should("contain", name)
 })
 
 Cypress.Commands.add("getEditorTabs", () => {

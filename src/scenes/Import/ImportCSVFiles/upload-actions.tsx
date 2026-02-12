@@ -1,6 +1,6 @@
 import React, { useState } from "react"
 import { ProcessedFile } from "./types"
-import { Box, Button, PopperHover, Tooltip } from "../../../components"
+import { Box, Button, Tooltip } from "../../../components"
 import { Close, Upload2 } from "@styled-icons/remix-line"
 import { UploadSettingsDialog } from "./upload-settings-dialog"
 import { UploadModeSettings } from "../../../utils"
@@ -36,22 +36,17 @@ export const UploadActions = ({
       >
         {file.isUploading ? "Uploading..." : "Upload"}
       </Button>
-      <PopperHover
-        placement="top"
-        trigger={
-          <Button
-            disabled={file.isUploading}
-            skin="secondary"
-            onClick={() => {
-              onRemove(file.id)
-            }}
-          >
-            <Close size="18px" />
-          </Button>
-        }
-      >
-        <Tooltip>Remove file from queue</Tooltip>
-      </PopperHover>
+      <Tooltip placement="top" content="Remove file from queue">
+        <Button
+          disabled={file.isUploading}
+          skin="secondary"
+          onClick={() => {
+            onRemove(file.id)
+          }}
+        >
+          <Close size="18px" />
+        </Button>
+      </Tooltip>
     </Box>
   )
 }

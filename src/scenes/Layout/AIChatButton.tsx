@@ -26,7 +26,7 @@ export const AIChatButton = () => {
   }
 
   const handleClick = () => {
-    if (activeSidebar === "aiChat") {
+    if (activeSidebar?.type === "aiChat") {
       closeChatWindow()
     } else {
       void openOrCreateBlankChatWindow()
@@ -35,7 +35,7 @@ export const AIChatButton = () => {
 
   return (
     <ChatButton
-      selected={activeSidebar === "aiChat"}
+      selected={activeSidebar?.type === "aiChat"}
       onClick={handleClick}
       data-hook="ai-chat-button"
     >

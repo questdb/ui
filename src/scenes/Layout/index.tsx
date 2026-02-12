@@ -30,7 +30,6 @@ import SideMenu from "../SideMenu"
 import { Sidebar } from "../../components/Sidebar"
 import { TopBar } from "../../components/TopBar"
 import News from "../../scenes/News"
-import { CreateTableDialog } from "../../components/CreateTableDialog"
 import {
   EditorProvider,
   SearchProvider,
@@ -40,6 +39,9 @@ import { Help } from "./help"
 import { Warnings } from "./warning"
 import { ImageZoom } from "../News/image-zoom"
 import { AIChatButton } from "./AIChatButton"
+import { TableDetailsButton } from "./TableDetailsButton"
+import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
+import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 
 import "allotment/dist/style.css"
 
@@ -112,10 +114,12 @@ const Layout = () => {
 
               <Sidebar align="top">
                 <Help />
+                <TableDetailsButton />
                 <AIChatButton />
                 <News />
-                <CreateTableDialog />
               </Sidebar>
+              <TableDetailsDrawer />
+              <AIChatWindowLazy />
             </Root>
 
             <SideMenu />

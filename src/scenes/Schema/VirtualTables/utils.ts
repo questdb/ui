@@ -134,7 +134,6 @@ export const createTableNode = (
   isView: boolean = false,
   materializedViews: QuestDB.MaterializedView[] | undefined,
   views: QuestDB.View[] | undefined,
-  walTables: QuestDB.WalTable[] | undefined,
   tableColumns: InformationSchemaColumn[],
 ): TreeNode => {
   const tableId = `${parentId}:${table.table_name}`
@@ -144,7 +143,6 @@ export const createTableNode = (
   const viewData = isView
     ? views?.find((v) => v.view_name === table.table_name)
     : undefined
-  const walTableData = walTables?.find((wt) => wt.name === table.table_name)
 
   const columnsId = `${tableId}:columns`
   const baseTablesId = `${tableId}:baseTables`
@@ -165,7 +163,6 @@ export const createTableNode = (
     partitionBy: table.partitionBy,
     walEnabled: table.walEnabled,
     designatedTimestamp: table.designatedTimestamp,
-    walTableData,
     children: [
       {
         id: columnsId,
