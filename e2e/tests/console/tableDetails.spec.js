@@ -694,7 +694,10 @@ describe("TableDetailsDrawer", () => {
         "contain",
         "AI Assistant is not configured",
       )
-      cy.realPress("Escape")
+      // Workaround - tooltip grace area causes problems in the test when quickly switching multiple triggers.
+      // Move mouse away from trigger for 200ms
+      cy.getByDataHook("table-details-tab-monitoring").realHover()
+      cy.wait(200)
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
       cy.getByDataHook("table-details-warning-ask-ai").realHover()
@@ -743,7 +746,10 @@ describe("TableDetailsDrawer", () => {
         "contain",
         "Schema access is not granted to this model",
       )
-      cy.realPress("Escape")
+      // Workaround - tooltip grace area causes problems in the test when quickly switching multiple triggers.
+      // Move mouse away from trigger for 200ms
+      cy.getByDataHook("table-details-tab-monitoring").realHover()
+      cy.wait(200)
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
       cy.getByDataHook("table-details-warning-ask-ai").realHover()
