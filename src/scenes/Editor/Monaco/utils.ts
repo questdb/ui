@@ -25,6 +25,7 @@ import type { editor, IPosition, IRange } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
+import { parse } from "@questdb/sql-parser"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -152,7 +153,388 @@ export const getQueriesToRun = (
   return requests.filter(Boolean) as Request[]
 }
 
-export const getQueriesFromPosition = (
+// =============================================================================
+// Parser-based query identification
+// =============================================================================
+
+type CSTNode = {
+  children?: Record<string, CSTNode[]>
+  image?: string
+  startOffset?: number
+  endOffset?: number
+  startLine?: number
+  endLine?: number
+  startColumn?: number
+  endColumn?: number
+}
+
+type StatementBoundary = {
+  startOffset: number
+  endOffset: number
+  startLine: number
+  endLine: number
+  startColumn: number
+  endColumn: number
+}
+
+/**
+ * Find the first (leftmost) token in a CST node by depth-first traversal.
+ */
+const findFirstToken = (node: CSTNode): CSTNode | null => {
+  if (!node || typeof node !== "object") return null
+  if (node.image !== undefined && node.startOffset !== undefined) return node
+  if (node.children) {
+    let earliest: CSTNode | null = null
+    for (const key of Object.keys(node.children)) {
+      const children = node.children[key]
+      if (Array.isArray(children)) {
+        for (const child of children) {
+          const token = findFirstToken(child)
+          if (
+            token &&
+            (earliest === null || token.startOffset! < earliest.startOffset!)
+          ) {
+            earliest = token
+          }
+        }
+      }
+    }
+    return earliest
+  }
+  return null
+}
+
+/**
+ * Find the last (rightmost) token in a CST node by depth-first traversal.
+ */
+const findLastToken = (node: CSTNode): CSTNode | null => {
+  if (!node || typeof node !== "object") return null
+  if (node.image !== undefined && node.endOffset !== undefined) return node
+  if (node.children) {
+    let latest: CSTNode | null = null
+    for (const key of Object.keys(node.children)) {
+      const children = node.children[key]
+      if (Array.isArray(children)) {
+        for (const child of children) {
+          const token = findLastToken(child)
+          if (
+            token &&
+            (latest === null || token.endOffset! > latest.endOffset!)
+          ) {
+            latest = token
+          }
+        }
+      }
+    }
+    return latest
+  }
+  return null
+}
+
+/**
+ * Convert text positions (offsets) to row/column for SqlTextItem.
+ * Row is 0-based, column is 1-based.
+ */
+const offsetToRowCol = (
+  text: string,
+  offset: number,
+): { row: number; col: number } => {
+  let row = 0
+  let lastNewline = -1
+  for (let i = 0; i < offset && i < text.length; i++) {
+    if (text[i] === "\n") {
+      row++
+      lastNewline = i
+    }
+  }
+  const col = offset - lastNewline // 1-based since lastNewline starts at -1
+  return { row, col }
+}
+
+/**
+ * Extract statement boundaries from a parse result (with recovery enabled).
+ *
+ * The parser uses Chevrotain's error recovery (`recoveryEnabled: true`),
+ * which means it can produce a partial CST even when some statements have
+ * syntax errors. Failed statements are marked with `recoveredNode: true`.
+ *
+ * This function:
+ * 1. Extracts boundaries from each CST statement node
+ * 2. Merges consecutive recovered (error) nodes into a single statement
+ * 3. Extends recovered regions to cover any tokens skipped during re-sync
+ */
+const extractStatements = (
+  text: string,
+  result: ReturnType<typeof parse>,
+): StatementBoundary[] => {
+  const stmts: (CSTNode & { recoveredNode?: boolean })[] =
+    (result.cst as CSTNode)?.children?.statement ?? []
+
+  if (stmts.length === 0) return []
+
+  // Extract raw boundaries with recovery flag
+  const raw = stmts
+    .map((stmt) => {
+      const first = findFirstToken(stmt)
+      const last = findLastToken(stmt)
+      if (first && last) {
+        return {
+          startOffset: first.startOffset!,
+          endOffset: last.endOffset ?? last.startOffset!,
+          startLine: first.startLine!,
+          endLine: last.endLine!,
+          startColumn: first.startColumn!,
+          endColumn: last.endColumn!,
+          recovered: !!stmt.recoveredNode,
+        }
+      }
+      return null
+    })
+    .filter((s): s is StatementBoundary & { recovered: boolean } => s !== null)
+
+  if (raw.length === 0) return []
+
+  // Merge consecutive recovered nodes and fill gaps to next clean statement
+  const merged: StatementBoundary[] = []
+  let i = 0
+  while (i < raw.length) {
+    if (!raw[i].recovered) {
+      merged.push(raw[i])
+      i++
+    } else {
+      // Merge consecutive recovered nodes
+      const startOffset = raw[i].startOffset
+      let endOffset = raw[i].endOffset
+      const startLine = raw[i].startLine
+      const startColumn = raw[i].startColumn
+      let endLine = raw[i].endLine
+      let endColumn = raw[i].endColumn
+
+      while (i + 1 < raw.length && raw[i + 1].recovered) {
+        i++
+        endOffset = Math.max(endOffset, raw[i].endOffset)
+        if (
+          raw[i].endLine > endLine ||
+          (raw[i].endLine === endLine && raw[i].endColumn > endColumn)
+        ) {
+          endLine = raw[i].endLine
+          endColumn = raw[i].endColumn
+        }
+      }
+
+      // Extend to cover gap before next clean statement
+      if (i + 1 < raw.length) {
+        const gapEnd = raw[i + 1].startOffset - 1
+        if (gapEnd > endOffset) {
+          // Trim trailing whitespace from the gap
+          let trimEnd = gapEnd
+          while (trimEnd > endOffset && /\s/.test(text[trimEnd])) {
+            trimEnd--
+          }
+          if (trimEnd > endOffset) {
+            endOffset = trimEnd
+            const endPos = offsetToRowCol(text, endOffset)
+            endLine = endPos.row + 1 // 1-based for StatementBoundary
+            endColumn = endPos.col
+          }
+        }
+      }
+
+      merged.push({
+        startOffset,
+        endOffset,
+        startLine,
+        endLine,
+        startColumn,
+        endColumn,
+      })
+      i++
+    }
+  }
+
+  return merged
+}
+
+/**
+ * Get all statement boundaries from text using the parser with error recovery.
+ *
+ * The parser uses Chevrotain's built-in error recovery, which means:
+ * - Valid SQL: statements are extracted directly from the CST
+ * - Invalid SQL: the parser recovers by skipping bad tokens and continues,
+ *   producing a partial CST with `recoveredNode` markers
+ *
+ * No hardcoded keyword lists or manual splitting heuristics needed.
+ */
+let _boundariesCache: { text: string; result: StatementBoundary[] } | null =
+  null
+
+let _parseRange: { startOffset: number; endOffset: number } | null = null
+
+export const setParseRange = (startOffset: number, endOffset: number) => {
+  _parseRange = { startOffset, endOffset }
+}
+
+const getStatementBoundariesForRange = (
+  text: string,
+  startOffset: number,
+  endOffset: number,
+): StatementBoundary[] => {
+  const substring = text.substring(startOffset, endOffset)
+  if (!substring.trim()) return []
+
+  const atDocStart = startOffset === 0
+  const atDocEnd = endOffset >= text.length
+
+  const raw = extractStatements(substring, parse(substring))
+
+  // Shift offsets to be document-relative and drop recovered edge statements
+  const shifted: StatementBoundary[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i]
+    const touchesStart = b.startOffset === 0
+    const touchesEnd = b.endOffset >= substring.length - 1
+
+    // Drop statements that touch a cut edge (not at document boundary)
+    // and are the first/last statement — these are likely truncated
+    if (touchesStart && !atDocStart && i === 0) {
+      continue
+    }
+    if (touchesEnd && !atDocEnd && i === raw.length - 1) {
+      continue
+    }
+
+    shifted.push({
+      startOffset: b.startOffset + startOffset,
+      endOffset: b.endOffset + startOffset,
+      startLine: b.startLine,
+      endLine: b.endLine,
+      startColumn: b.startColumn,
+      endColumn: b.endColumn,
+    })
+  }
+
+  return shifted
+}
+
+const getStatementBoundaries = (text: string): StatementBoundary[] => {
+  if (!text.trim()) return []
+
+  // Viewport-scoped parsing
+  if (_parseRange) {
+    const result = getStatementBoundariesForRange(
+      text,
+      _parseRange.startOffset,
+      _parseRange.endOffset,
+    )
+
+    return result
+  }
+
+  // Full parse (fallback when no viewport is set)
+  if (_boundariesCache && _boundariesCache.text === text) {
+    return _boundariesCache.result
+  }
+  const result = extractStatements(text, parse(text))
+  _boundariesCache = { text, result }
+  return result
+}
+
+/**
+ * Pure function to identify queries in text using the parser.
+ * Returns the same format as the legacy getQueriesFromPosition.
+ *
+ * @param text - The full editor text
+ * @param position - Cursor position (0-based row, 1-based column)
+ * @param start - Optional start position to filter from (0-based row, 1-based column)
+ */
+export const _getQueriesFromText = (
+  text: string,
+  position: { row: number; column: number },
+  start?: { row: number; column: number },
+): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
+  if (!text || !stripSQLComments(text)) {
+    return { sqlTextStack: [], nextSql: null }
+  }
+
+  // Get all statement boundaries from the parser
+  const boundaries = getStatementBoundaries(text)
+
+  // Convert cursor position to offset
+  const lines = text.split("\n")
+  let cursorOffset = 0
+  for (let i = 0; i < position.row && i < lines.length; i++) {
+    cursorOffset += lines[i].length + 1 // +1 for \n
+  }
+  if (position.row < lines.length) {
+    cursorOffset += position.column - 1 // column is 1-based
+  }
+
+  // Convert start position to offset (if provided)
+  let startOffset = 0
+  if (start) {
+    for (let i = 0; i < start.row && i < lines.length; i++) {
+      startOffset += lines[i].length + 1
+    }
+    if (start.row < lines.length) {
+      startOffset += start.column - 1
+    }
+  }
+
+  // Convert boundaries to SqlTextItems, filtering by start position
+  const items: SqlTextItem[] = boundaries
+    .filter((b) => b.endOffset >= startOffset)
+    .map((b) => {
+      const startPos = offsetToRowCol(text, b.startOffset)
+      const endPos = offsetToRowCol(text, b.endOffset)
+      return {
+        row: startPos.row,
+        col: startPos.col,
+        position: b.startOffset,
+        endRow: endPos.row,
+        endCol: endPos.col,
+        limit: b.endOffset + 1, // limit is exclusive (for text.substring)
+      }
+    })
+    .filter(
+      (item) =>
+        item.row !== item.endRow ||
+        item.col !== item.endCol ||
+        item.limit >= item.position + 1,
+    )
+
+  // Split into sqlTextStack (before cursor) and nextSql (at/after cursor).
+  //
+  // The semantics match the legacy function:
+  // - Queries whose end is strictly before the cursor go into sqlTextStack
+  // - The first query that the cursor is within or on goes into nextSql
+  // - If the cursor is past all queries, the last query becomes nextSql
+  //
+  // "Cursor is within a query" means: item.position <= cursorOffset < item.limit
+  // (position is inclusive start offset, limit is exclusive end offset)
+
+  // Find the index of the query the cursor is on or the first one after it
+  let nextSqlIndex = -1
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    // Cursor is before or within this query (item hasn't ended before cursor)
+    if (cursorOffset < item.limit) {
+      nextSqlIndex = i
+      break
+    }
+  }
+
+  // If no query contains/follows cursor, the last query is nextSql
+  if (nextSqlIndex === -1 && items.length > 0) {
+    nextSqlIndex = items.length - 1
+  }
+
+  const sqlTextStack = nextSqlIndex > 0 ? items.slice(0, nextSqlIndex) : []
+  const nextSql = nextSqlIndex >= 0 ? items[nextSqlIndex] : null
+
+  return { sqlTextStack, nextSql }
+}
+
+export const _legacy_getQueriesFromPosition = (
   editor: IStandaloneCodeEditor,
   editorPosition: IPosition,
   startPosition?: IPosition,
@@ -417,6 +799,29 @@ export const getQueriesFromPosition = (
       : null
 
   return { sqlTextStack: filteredSqlTextStack, nextSql: filteredNextSql }
+}
+
+export const getQueriesFromPosition = (
+  editor: IStandaloneCodeEditor,
+  editorPosition: IPosition,
+  startPosition?: IPosition,
+): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+
+  if (!text || !stripSQLComments(text)) {
+    return { sqlTextStack: [], nextSql: null }
+  }
+
+  const position = {
+    row: editorPosition.lineNumber - 1,
+    column: editorPosition.column,
+  }
+
+  const start = startPosition
+    ? { row: startPosition.lineNumber - 1, column: startPosition.column }
+    : undefined
+
+  return _getQueriesFromText(text, position, start)
 }
 
 export const getQueryFromCursor = (
@@ -1167,18 +1572,18 @@ export const validateQueryAtOffset = (
   const totalLength = model.getValueLength()
   if (offset < 0 || offset >= totalLength) return false
 
-  const offsetPosition = model.getPositionAt(offset)
+  const normalizedQuery = normalizeQueryText(queryText)
+  const startPos = model.getPositionAt(offset)
+  const endOffset = Math.min(offset + normalizedQuery.length, totalLength)
+  const endPos = model.getPositionAt(endOffset)
+  const textAtOffset = model.getValueInRange({
+    startLineNumber: startPos.lineNumber,
+    startColumn: startPos.column,
+    endLineNumber: endPos.lineNumber,
+    endColumn: endPos.column,
+  })
 
-  const queryInEditor = getQueriesInRange(
-    editor,
-    offsetPosition,
-    offsetPosition,
-  )[0]
-  if (!queryInEditor) return false
-
-  return (
-    normalizeQueryText(queryInEditor.query) === normalizeQueryText(queryText)
-  )
+  return normalizeQueryText(textAtOffset) === normalizedQuery
 }
 
 export const createQueryKeyFromRequest = (

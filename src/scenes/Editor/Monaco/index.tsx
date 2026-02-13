@@ -70,6 +70,7 @@ import {
   getQueryStartOffset,
   getQueriesToRun,
   getQueriesStartingFromLine,
+  setParseRange,
 } from "./utils"
 import { toast } from "../../../components/Toast"
 import ButtonBar from "../ButtonBar"
@@ -363,6 +364,26 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
     currentBufferValueRef.current = value
     void updateBuffer(activeBuffer.id as number, { value })
+  }
+
+  const updateParseRange = () => {
+    const editorInstance = editorRef.current
+    const model = editorInstance?.getModel()
+    if (!editorInstance || !model) return
+
+    const visibleRanges = editorInstance.getVisibleRanges()
+    if (visibleRanges.length > 0) {
+      const totalLines = model.getLineCount()
+      const startLine = Math.max(1, visibleRanges[0].startLineNumber - 150)
+      const endLine = Math.min(totalLines, visibleRanges[0].endLineNumber + 150)
+      setParseRange(
+        model.getOffsetAt({ lineNumber: startLine, column: 1 }),
+        model.getOffsetAt({
+          lineNumber: endLine,
+          column: model.getLineMaxColumn(endLine),
+        }),
+      )
+    }
   }
 
   // Set the initial line number width in chars based on the number of lines in the active buffer
@@ -680,7 +701,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       queries = getAllQueries(editor)
     } else {
       const totalLines = model.getLineCount()
-      const bufferSize = 500
+      const bufferSize = 150
 
       const startLine = Math.max(1, visibleLines.startLine - bufferSize)
       const endLine = Math.min(totalLines, visibleLines.endLine + bufferSize)
@@ -907,6 +928,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const model = editor.getModel()
       if (!model) return
 
+      updateParseRange()
+
       const lineCount = model.getLineCount()
       if (lineCount) {
         setLineNumbersMinChars(
@@ -1121,6 +1144,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           visibleLinesRef.current = newVisibleLines
 
           if (startLineDiff > 100 || endLineDiff > 100) {
+            updateParseRange()
             if (monacoRef.current && editorRef.current) {
               applyGlyphsAndLineMarkings(
                 monacoRef.current,
@@ -1167,6 +1191,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         endLine: firstRange.endLineNumber,
       }
     }
+
+    // Set initial parse range for viewport-scoped parsing
+    updateParseRange()
 
     // Initial decoration setup
     applyGlyphsAndLineMarkings(monaco, editor)

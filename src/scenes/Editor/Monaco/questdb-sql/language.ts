@@ -1,6 +1,11 @@
-import { operators } from "./operators"
 import type { languages } from "monaco-editor"
-import { constants, dataTypes, functions, keywords } from "@questdb/sql-grammar"
+import {
+  constants,
+  dataTypes,
+  functions,
+  keywords,
+  operators,
+} from "@questdb/sql-parser"
 import { escapeRegExpCharacters } from "../../../../utils/textSearch"
 
 const functionPattern = new RegExp(
