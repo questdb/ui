@@ -62,21 +62,23 @@ const convertToSchemaInfo = (
 const toCompletionItem = (
   suggestion: Suggestion,
   range: languages.CompletionItem["range"],
-): languages.CompletionItem => ({
-  label:
-    suggestion.detail != null || suggestion.description != null
-      ? {
-          label: suggestion.label,
-          detail: suggestion.detail,
-          description: suggestion.description,
-        }
-      : suggestion.label,
-  kind: KIND_MAP[suggestion.kind],
-  insertText: suggestion.insertText,
-  filterText: suggestion.filterText,
-  sortText: PRIORITY_MAP[suggestion.priority],
-  range,
-})
+): languages.CompletionItem => {
+  return {
+    label:
+      suggestion.detail != null || suggestion.description != null
+        ? {
+            label: suggestion.label,
+            detail: suggestion.detail,
+            description: suggestion.description,
+          }
+        : suggestion.label,
+    kind: KIND_MAP[suggestion.kind],
+    insertText: suggestion.insertText,
+    filterText: suggestion.filterText,
+    sortText: PRIORITY_MAP[suggestion.priority],
+    range,
+  }
+}
 
 export const createSchemaCompletionProvider = (
   editor: editor.IStandaloneCodeEditor,
@@ -136,14 +138,25 @@ export const createSchemaCompletionProvider = (
           // don't replace it — insert after it instead.
           const isOperatorWord =
             word.word.length > 0 && !/[a-zA-Z0-9_]/.test(word.word[0])
+
+          // When the word contains a dot (qualified reference like "t." or "t.col"),
+          // only replace after the last dot. The prefix before the dot is the
+          // table/alias qualifier and should be kept. Without this, Monaco filters
+          // suggestions against "t." and nothing matches.
+          const dotIndex = word.word.lastIndexOf(".")
+          const startColumn = isOperatorWord
+            ? position.column
+            : dotIndex >= 0
+              ? word.startColumn + dotIndex + 1
+              : word.startColumn
+
           const range = {
             startLineNumber: position.lineNumber,
             endLineNumber: position.lineNumber,
-            startColumn: isOperatorWord ? position.column : word.startColumn,
+            startColumn,
             endColumn: word.endColumn,
           }
 
-          // Convert parser suggestions to Monaco completion items
           return {
             suggestions: suggestions.map((s) => toCompletionItem(s, range)),
           }

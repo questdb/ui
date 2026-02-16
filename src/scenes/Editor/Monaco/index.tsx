@@ -50,7 +50,9 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { Request } from "./utils"
 import {
   appendQuery,
+  applyValidationMarkers,
   clearModelMarkers,
+  clearValidationMarkers,
   findMatches,
   getErrorRange,
   getQueryFromCursor,
@@ -66,6 +68,7 @@ import {
   parseQueryKey,
   createQueryKeyFromRequest,
   validateQueryAtOffset,
+  validateQueryJIT,
   setErrorMarkerForQuery,
   getQueryStartOffset,
   getQueriesToRun,
@@ -341,6 +344,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   })
   const scrollTimeoutRef = useRef<number | null>(null)
   const notificationTimeoutRef = useRef<number | null>(null)
+  const validationTimeoutRef = useRef<number | null>(null)
   const targetPositionRef = useRef<{
     lineNumber: number
     column: number
@@ -1071,6 +1075,24 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       contentJustChangedRef.current = false
       notificationUpdates.forEach((update) => update())
+
+      // JIT validation (debounced)
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+      }
+      validationTimeoutRef.current = window.setTimeout(() => {
+        if (monacoRef.current && editorRef.current) {
+          const currentBufferId = activeBufferRef.current.id as number
+          validateQueryJIT(
+            monacoRef.current,
+            editorRef.current,
+            currentBufferId,
+            () => executionRefs.current[currentBufferId.toString()] || {},
+            (q) => quest.validateQuery(q),
+          )
+        }
+        validationTimeoutRef.current = null
+      }, 300)
     })
 
     editor.onDidChangeModel(() => {
@@ -1209,6 +1231,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
       | null = null
     dispatch(actions.query.setResult(undefined))
+
+    // Clear JIT validation markers and cache — execution result takes over.
+    // Also cancels any in-flight validation for this buffer.
+    if (monacoRef.current) {
+      clearValidationMarkers(monacoRef.current, editor, activeBufferId)
+    }
+    if (validationTimeoutRef.current) {
+      window.clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
 
     dispatch(
       actions.query.setActiveNotification({
@@ -1956,6 +1988,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       clearModelMarkers(monacoRef.current, editorRef.current)
 
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+
+      // Restore cached validation markers for this buffer
+      applyValidationMarkers(
+        monacoRef.current,
+        editorRef.current,
+        activeBuffer.id as number,
+      )
     }
   }, [activeBuffer])
 
@@ -2028,6 +2067,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       if (notificationTimeoutRef.current) {
         window.clearTimeout(notificationTimeoutRef.current)
+      }
+
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
       }
 
       glyphWidgetsRef.current.forEach((widget) => {

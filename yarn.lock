@@ -2493,10 +2493,10 @@ __metadata:
 
 "@questdb/sql-parser@file:../questdb-sql-parser::locator=%40questdb%2Fweb-console%40workspace%3A.":
   version: 0.1.0
-  resolution: "@questdb/sql-parser@file:../questdb-sql-parser#../questdb-sql-parser::hash=daedc3&locator=%40questdb%2Fweb-console%40workspace%3A."
+  resolution: "@questdb/sql-parser@file:../questdb-sql-parser#../questdb-sql-parser::hash=0bd86a&locator=%40questdb%2Fweb-console%40workspace%3A."
   dependencies:
     chevrotain: "npm:^11.1.1"
-  checksum: 10/c0b40e1582d016b33822aa715022668515fccb457cafed694490b39b23653b2f1d484cb6f72f1ff8d5c84d98a059acb85d79866de335e59d20487edbded57950
+  checksum: 10/2fb160065ce9c8b4d5c6cc787945684e6a783304e10012121285c16a1d831ce2ac7eba5c6000533a772ef1b737abd38a6caf446d9a9f6430c91dbf3e23e53887
   languageName: node
   linkType: hard
 

@@ -25,6 +25,7 @@ import type { editor, IPosition, IRange } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
+import type { ValidateQueryResult } from "../../../utils/questdb"
 import { parse } from "@questdb/sql-parser"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
@@ -1384,6 +1385,124 @@ export const setErrorMarkerForQuery = (
   }
 
   monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
+}
+
+const ValidationOwner = "questdb-validation"
+
+// Per-buffer validation state, persists across tab switches
+const validationRefs: Record<
+  string,
+  { markers: editor.IMarkerData[]; queryText: string; version: number }
+> = {}
+
+export const clearValidationMarkers = (
+  monaco: Monaco,
+  editor: IStandaloneCodeEditor,
+  bufferId?: number,
+) => {
+  const model = editor.getModel()
+  if (model) {
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+  }
+  if (bufferId !== undefined) {
+    delete validationRefs[bufferId.toString()]
+  }
+}
+
+export const applyValidationMarkers = (
+  monaco: Monaco,
+  editor: IStandaloneCodeEditor,
+  bufferId: number,
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const cached = validationRefs[bufferId.toString()]
+  if (cached) {
+    monaco.editor.setModelMarkers(model, ValidationOwner, cached.markers)
+  }
+}
+
+export const validateQueryJIT = (
+  monaco: Monaco,
+  editor: IStandaloneCodeEditor,
+  bufferId: number,
+  getBufferExecutions: () => Record<QueryKey, unknown>,
+  validateQuery: (query: string) => Promise<ValidateQueryResult>,
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const bufferKey = bufferId.toString()
+  const queryAtCursor = getQueryFromCursor(editor, bufferId)
+
+  if (!queryAtCursor) {
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+    delete validationRefs[bufferKey]
+    return
+  }
+
+  const queryText = normalizeQueryText(queryAtCursor.query)
+  const version = model.getVersionId()
+
+  // Skip if already validated this exact query+version
+  const cached = validationRefs[bufferKey]
+  if (cached && cached.queryText === queryText && cached.version === version) {
+    return
+  }
+
+  // Skip if execution result already exists for this query
+  const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
+  const bufferExecutions = getBufferExecutions()
+  if (bufferExecutions[queryKey]) {
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+    delete validationRefs[bufferKey]
+    return
+  }
+
+  validateQuery(queryText)
+    .then((result: ValidateQueryResult) => {
+      const currentModel = editor.getModel()
+      if (!currentModel || currentModel.getVersionId() !== version) return
+
+      // Query was executed while validation was in flight — skip
+      if (getBufferExecutions()[queryKey]) return
+
+      if ("error" in result) {
+        const errorRange = getErrorRange(editor, queryAtCursor, result.position)
+        const markers: editor.IMarkerData[] = []
+
+        if (errorRange) {
+          markers.push({
+            message: result.error,
+            severity: monaco.MarkerSeverity.Error,
+            startLineNumber: errorRange.startLineNumber,
+            endLineNumber: errorRange.endLineNumber,
+            startColumn: errorRange.startColumn,
+            endColumn: errorRange.endColumn,
+          })
+        } else {
+          const errorPos = toTextPosition(queryAtCursor, result.position)
+          markers.push({
+            message: result.error,
+            severity: monaco.MarkerSeverity.Error,
+            startLineNumber: errorPos.lineNumber,
+            endLineNumber: errorPos.lineNumber,
+            startColumn: errorPos.column,
+            endColumn: errorPos.column,
+          })
+        }
+
+        validationRefs[bufferKey] = { markers, queryText, version }
+        monaco.editor.setModelMarkers(currentModel, ValidationOwner, markers)
+      } else {
+        delete validationRefs[bufferKey]
+        monaco.editor.setModelMarkers(currentModel, ValidationOwner, [])
+      }
+    })
+    .catch(() => {
+      // Network error — silently ignore
+    })
 }
 
 // Creates a QueryKey for schema explanation conversations
