@@ -1,8 +1,38 @@
 import { describe, it, expect } from "vitest"
-import { _getQueriesFromText } from "./utils"
+import { getQueriesFromModel } from "./utils"
 
 /**
- * Helper to extract query text strings from _getQueriesFromText result.
+ * Minimal mock of Monaco's ITextModel for testing getQueriesFromModel
+ * without a real Monaco editor instance.
+ */
+const createMockModel = (text: string) => {
+  // Build line-start offsets: lineStarts[i] = offset of first char of line i
+  const lineStarts = [0]
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") lineStarts.push(i + 1)
+  }
+
+  return {
+    getValue: () => text,
+    getOffsetAt: (pos: { lineNumber: number; column: number }) => {
+      const lineIndex = Math.min(pos.lineNumber - 1, lineStarts.length - 1)
+      return lineStarts[lineIndex] + (pos.column - 1)
+    },
+    getPositionAt: (offset: number) => {
+      let lo = 0
+      let hi = lineStarts.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (lineStarts[mid] <= offset) lo = mid
+        else hi = mid - 1
+      }
+      return { lineNumber: lo + 1, column: offset - lineStarts[lo] + 1 }
+    },
+  } as Parameters<typeof getQueriesFromModel>[0]
+}
+
+/**
+ * Helper to extract query text strings from getQueriesFromModel result.
  */
 const getQueries = (
   text: string,
@@ -11,8 +41,9 @@ const getQueries = (
   startRow?: number,
   startCol?: number,
 ) => {
-  const result = _getQueriesFromText(
-    text,
+  const model = createMockModel(text)
+  const result = getQueriesFromModel(
+    model,
     { row: cursorRow, column: cursorCol },
     startRow !== undefined && startCol !== undefined
       ? { row: startRow, column: startCol }
@@ -31,7 +62,7 @@ const getQueries = (
   }
 }
 
-describe("_getQueriesFromText", () => {
+describe("getQueriesFromModel", () => {
   describe("basic query identification without semicolons", () => {
     it("should identify two queries without semicolons", () => {
       const text = "SELECT 1\nSELECT 2"
@@ -399,10 +430,8 @@ ORDER BY
   describe("position correctness", () => {
     it("should have correct row/col for multi-line queries", () => {
       const text = "SELECT 1\nSELECT 2"
-      const result = _getQueriesFromText(text, {
-        row: 1,
-        column: 9,
-      })
+      const model = createMockModel(text)
+      const result = getQueriesFromModel(model, { row: 1, column: 9 })
 
       // First query (in stack): row 0, col 1
       if (result.sqlTextStack.length > 0) {
@@ -421,10 +450,8 @@ ORDER BY
 
     it("should have correct endRow/endCol", () => {
       const text = "SELECT 1\nSELECT 2"
-      const result = _getQueriesFromText(text, {
-        row: 1,
-        column: 9,
-      })
+      const model = createMockModel(text)
+      const result = getQueriesFromModel(model, { row: 1, column: 9 })
 
       if (result.sqlTextStack.length > 0) {
         const first = result.sqlTextStack[0]

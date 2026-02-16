@@ -70,7 +70,6 @@ import {
   getQueryStartOffset,
   getQueriesToRun,
   getQueriesStartingFromLine,
-  setParseRange,
 } from "./utils"
 import { toast } from "../../../components/Toast"
 import ButtonBar from "../ButtonBar"
@@ -366,26 +365,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     void updateBuffer(activeBuffer.id as number, { value })
   }
 
-  const updateParseRange = () => {
-    const editorInstance = editorRef.current
-    const model = editorInstance?.getModel()
-    if (!editorInstance || !model) return
-
-    const visibleRanges = editorInstance.getVisibleRanges()
-    if (visibleRanges.length > 0) {
-      const totalLines = model.getLineCount()
-      const startLine = Math.max(1, visibleRanges[0].startLineNumber - 150)
-      const endLine = Math.min(totalLines, visibleRanges[0].endLineNumber + 150)
-      setParseRange(
-        model.getOffsetAt({ lineNumber: startLine, column: 1 }),
-        model.getOffsetAt({
-          lineNumber: endLine,
-          column: model.getLineMaxColumn(endLine),
-        }),
-      )
-    }
-  }
-
   // Set the initial line number width in chars based on the number of lines in the active buffer
   const [lineNumbersMinChars, setLineNumbersMinChars] = useState(
     (canUseAI ? 7 : 5) +
@@ -465,7 +444,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         endColumn: endPosition.column,
       })
     } else {
-      const queryInCursor = getQueryFromCursor(editor)
+      const queryInCursor = getQueryFromCursor(
+        editor,
+        activeBufferRef.current.id as number,
+      )
       if (
         queryInCursor &&
         createQueryKeyFromRequest(editor, queryInCursor) ===
@@ -566,7 +548,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
 
     if (
-      !validateQueryAtOffset(editor, pending.queryText, pending.startOffset)
+      !validateQueryAtOffset(
+        editor,
+        pending.queryText,
+        pending.startOffset,
+        activeBufferRef.current.id as number,
+      )
     ) {
       return
     }
@@ -605,8 +592,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       return
     }
 
-    const queryAtCursor = getQueryFromCursor(editor)
     const activeBufferId = activeBufferRef.current.id as number
+    const queryAtCursor = getQueryFromCursor(editor, activeBufferId)
 
     const lineMarkingDecorations: editor.IModelDeltaDecoration[] = []
     const bufferExecutions =
@@ -693,15 +680,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (!editorValue || !model) {
       return
     }
+
+    const activeBufferId = activeBufferRef.current.id as number
     let queries: Request[] = []
 
     const visibleLines = visibleLinesRef.current
 
     if (!visibleLines) {
-      queries = getAllQueries(editor)
+      queries = getAllQueries(editor, activeBufferId)
     } else {
       const totalLines = model.getLineCount()
-      const bufferSize = 150
+      const bufferSize = 500
 
       const startLine = Math.max(1, visibleLines.startLine - bufferSize)
       const endLine = Math.min(totalLines, visibleLines.endLine + bufferSize)
@@ -712,10 +701,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         column: editor.getModel()?.getLineMaxColumn(endLine) ?? 1,
       }
 
-      queries = getQueriesInRange(editor, startPosition, endPosition)
+      queries = getQueriesInRange(
+        editor,
+        startPosition,
+        endPosition,
+        activeBufferId,
+      )
     }
-
-    const activeBufferId = activeBufferRef.current.id as number
 
     const allQueryOffsets: { startOffset: number; endOffset: number }[] = []
     const newGlyphWidgetIds = new Map<string, editor.IGlyphMarginWidget>()
@@ -913,6 +905,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         const queriesToRun = getQueriesToRun(
           editor,
           queryOffsetsRef.current ?? [],
+          activeBufferRef.current.id as number,
         )
         queriesToRunRef.current = queriesToRun
         dispatch(actions.query.setQueriesToRun(queriesToRun))
@@ -927,8 +920,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editor.onDidChangeModelContent(async (e) => {
       const model = editor.getModel()
       if (!model) return
-
-      updateParseRange()
 
       const lineCount = model.getLineCount()
       if (lineCount) {
@@ -951,8 +942,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           newKey: QueryKey
           data: ExecutionInfo
         }> = []
-        const keysToRemove: QueryKey[] = []
-
         Object.keys(bufferExecutions).forEach((key) => {
           const queryKey = key as QueryKey
           const { queryText, startOffset, endOffset } =
@@ -970,36 +959,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           }
 
           const newOffset = startOffset + effectiveOffsetDelta
-          if (validateQueryAtOffset(editor, queryText, newOffset)) {
-            const selection = bufferExecutions[queryKey].selection
-            const shiftedSelection = selection
-              ? {
-                  startOffset: selection.startOffset + effectiveOffsetDelta,
-                  endOffset: selection.endOffset + effectiveOffsetDelta,
-                }
-              : undefined
-            keysToUpdate.push({
-              oldKey: queryKey,
-              newKey: createQueryKey(queryText, newOffset),
-              data: {
-                ...bufferExecutions[queryKey],
-                startOffset: newOffset,
-                endOffset: endOffset + effectiveOffsetDelta,
-                selection: shiftedSelection,
-              },
-            })
-          } else {
-            keysToRemove.push(queryKey)
-            notificationUpdates.push(() =>
-              dispatch(
-                actions.query.removeNotification(queryKey, activeBufferId),
-              ),
-            )
-          }
-        })
-
-        keysToRemove.forEach((key) => {
-          delete bufferExecutions[key]
+          const selection = bufferExecutions[queryKey].selection
+          const shiftedSelection = selection
+            ? {
+                startOffset: selection.startOffset + effectiveOffsetDelta,
+                endOffset: selection.endOffset + effectiveOffsetDelta,
+              }
+            : undefined
+          keysToUpdate.push({
+            oldKey: queryKey,
+            newKey: createQueryKey(queryText, newOffset),
+            data: {
+              ...bufferExecutions[queryKey],
+              startOffset: newOffset,
+              endOffset: endOffset + effectiveOffsetDelta,
+              selection: shiftedSelection,
+            },
+          })
         })
 
         keysToUpdate.forEach(({ oldKey, newKey, data }) => {
@@ -1046,25 +1022,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const newOffset = startOffset + effectiveOffsetDelta
-
-        if (validateQueryAtOffset(editor, queryText, newOffset)) {
-          const newKey = createQueryKey(queryText, newOffset)
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.updateNotificationKey(
-                queryKey,
-                newKey,
-                activeBufferId,
-              ),
+        const newKey = createQueryKey(queryText, newOffset)
+        notificationUpdates.push(() =>
+          dispatch(
+            actions.query.updateNotificationKey(
+              queryKey,
+              newKey,
+              activeBufferId,
             ),
-          )
-        } else {
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.removeNotification(queryKey, activeBufferId),
-            ),
-          )
-        }
+          ),
+        )
       })
 
       if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
@@ -1097,6 +1064,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const queriesToRun = getQueriesToRun(
         editor,
         queryOffsetsRef.current ?? [],
+        activeBufferId,
       )
       queriesToRunRef.current = queriesToRun
       dispatch(actions.query.setQueriesToRun(queriesToRun))
@@ -1107,9 +1075,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     editor.onDidChangeModel(() => {
       glyphWidgetsRef.current.forEach((widget) => {
-        editor.removeGlyphMarginWidget(widget)
+        editorRef.current?.removeGlyphMarginWidget(widget)
       })
       glyphWidgetsRef.current.clear()
+      const lineCount = editorRef.current?.getModel()?.getLineCount()
+      if (lineCount) {
+        setLineNumbersMinChars(
+          getDefaultLineNumbersMinChars(canUseAIRef.current) +
+            (lineCount.toString().length - 1),
+        )
+      }
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
           applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -1144,7 +1119,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           visibleLinesRef.current = newVisibleLines
 
           if (startLineDiff > 100 || endLineDiff > 100) {
-            updateParseRange()
             if (monacoRef.current && editorRef.current) {
               applyGlyphsAndLineMarkings(
                 monacoRef.current,
@@ -1192,12 +1166,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     }
 
-    // Set initial parse range for viewport-scoped parsing
-    updateParseRange()
-
     // Initial decoration setup
     applyGlyphsAndLineMarkings(monaco, editor)
-    const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
+    const queriesToRun = getQueriesToRun(
+      editor,
+      queryOffsetsRef.current ?? [],
+      activeBufferRef.current.id as number,
+    )
     queriesToRunRef.current = queriesToRun
     dispatch(actions.query.setQueriesToRun(queriesToRun))
 
@@ -1450,7 +1425,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     isRunningScriptRef.current = true
     setTabsDisabled(true)
-    const queries = queriesToRun ?? getAllQueries(editor)
+    const queries = queriesToRun ?? getAllQueries(editor, activeBufferId)
     const individualQueryResults: Array<IndividualQueryResult> = []
 
     editor.updateOptions({ readOnly: true })
@@ -1668,7 +1643,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                 editorRef.current,
                 aiSuggestionRequestRef.current,
               )
-            : getQueryRequestFromEditor(editorRef.current)
+            : getQueryRequestFromEditor(
+                editorRef.current,
+                activeBufferRef.current.id as number,
+              )
 
       const isRunningExplain = running === RunningType.EXPLAIN
       const isAISuggestion =
