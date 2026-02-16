@@ -1,8 +1,9 @@
 import React from "react"
 import styled from "styled-components"
-import { bezierTransition, Text, Box, Heading } from "../../components"
+import { bezierTransition, Text, Heading } from "../../components"
 import { actions } from "../../store"
 import { useDispatch } from "react-redux"
+import { useSettings } from "../../providers"
 
 const Items = styled.div`
   display: grid;
@@ -17,20 +18,22 @@ const StyledHeading = styled(Heading)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const Actions = styled.div`
-  display: grid;
+const Action = styled.button`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  outline: none;
   gap: 2rem;
-  grid-template-columns: repeat(2, 1fr);
-`
-
-const Action = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
   padding: 2rem;
   border-radius: ${({ theme }) => theme.borderRadius};
   background: #2c2e3d;
   cursor: pointer;
+  color: ${({ theme }) => theme.color.foreground};
 
   &,
-  &:hover {
+  &:hover:not([disabled]) {
     ${bezierTransition};
   }
 
@@ -38,49 +41,40 @@ const Action = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
     opacity: 0.8;
   }
 
-  &:hover {
+  &:hover:not([disabled]) {
     background: #3f4252;
 
     > * {
       opacity: 1;
     }
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 `
 
 export const Start = () => {
   const dispatch = useDispatch()
-
+  const { consoleConfig } = useSettings()
   return (
     <Items>
       <StyledHeading level={3}>
         Enter a query and press <Text color="green">Run</Text> to view results.
       </StyledHeading>
-      <Actions>
-        <Action
-          onClick={() =>
-            dispatch(actions.console.setActiveBottomPanel("import"))
-          }
-        >
-          <img
-            alt="File upload icon"
-            width="60"
-            height="80"
-            src="assets/upload.svg"
-          />
-          <Heading level={5}>Import CSV</Heading>
-        </Action>
-        <Action
-          onClick={() => dispatch(actions.console.setActiveSidebar("create"))}
-        >
-          <img
-            alt="Create table icon"
-            width="60"
-            height="80"
-            src="assets/create-table.svg"
-          />
-          <Heading level={5}>Create table</Heading>
-        </Action>
-      </Actions>
+      <Action
+        disabled={consoleConfig.readOnly}
+        onClick={() => dispatch(actions.console.setActiveBottomPanel("import"))}
+      >
+        <img
+          alt="File upload icon"
+          width="60"
+          height="80"
+          src="assets/upload.svg"
+        />
+        <Heading level={5}>Import CSV</Heading>
+      </Action>
     </Items>
   )
 }

@@ -12,7 +12,6 @@ import { StoreKey } from "../../utils/localStorage/types"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
-import { PopperHover } from "../PopperHover"
 import { Tooltip } from "../Tooltip"
 
 const ExpandUpDown = () => (
@@ -190,24 +189,16 @@ export const ModelDropdown = () => {
   if (!displayModel) {
     return (
       <DropdownTrigger disabled>
-        <PopperHover
-          trigger={<ErrorIcon size="16" />}
+        <Tooltip
           placement="bottom"
-          modifiers={[
-            {
-              name: "offset",
-              options: {
-                offset: [0, 8],
-              },
-            },
-          ]}
-        >
-          <Tooltip>
+          content={
             <Text size="sm" color="foreground" margin="0">
               You can enable models in the AI Assistant settings
             </Text>
-          </Tooltip>
-        </PopperHover>
+          }
+        >
+          <ErrorIcon size="16" />
+        </Tooltip>
         <Text size="sm" color="foreground" margin="0">
           No models enabled
         </Text>

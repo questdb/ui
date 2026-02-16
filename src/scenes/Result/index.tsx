@@ -40,7 +40,6 @@ import {
   Button,
   PaneContent,
   PaneWrapper,
-  PopperHover,
   PopperToggle,
   PrimaryToggleButton,
   Text,
@@ -367,14 +366,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           )}
           {viewMode === "grid" &&
             gridActions.map((action) => (
-              <PopperHover
+              <Tooltip
                 key={action.tooltipText}
                 delay={350}
                 placement="bottom"
-                trigger={action.trigger}
+                content={action.tooltipText}
               >
-                <Tooltip>{action.tooltipText}</Tooltip>
-              </PopperHover>
+                {action.trigger}
+              </Tooltip>
             ))}
 
           <DownloadButton

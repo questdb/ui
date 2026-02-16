@@ -43,6 +43,7 @@ export type ColorShape = {
   midnight: string
   red: string
   redDark: string
+  redSecondary: string
   loginBackground: string
   orangeDark: string
   orange: string
@@ -63,6 +64,7 @@ export type ColorShape = {
   tableSelection: string
   graphLegend: string
   offWhite: string
+  offWhite2: string
 }
 
 export type FontSizeShape = {

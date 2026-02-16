@@ -7,7 +7,7 @@ import React, {
   useMemo,
 } from "react"
 import { useSelector } from "react-redux"
-import styled, { css } from "styled-components"
+import styled from "styled-components"
 import { Box } from "../../../components"
 import { Text } from "../../../components/Text"
 import { color } from "../../../utils"
@@ -97,7 +97,7 @@ const ContextBadgeContainer = styled.div`
   background: ${color("backgroundDarker")};
 `
 
-const ContextBadge = styled.div<{ $type: "sql" | "table" }>`
+const ContextBadge = styled.div`
   display: flex;
   padding: 0.3rem 0.6rem;
   align-items: center;
@@ -109,17 +109,12 @@ const ContextBadge = styled.div<{ $type: "sql" | "table" }>`
   color: ${color("gray2")};
   font-size: 1.3rem;
   user-select: none;
+  cursor: pointer;
 
-  ${({ $type }) =>
-    $type === "sql" &&
-    css`
-      cursor: pointer;
-
-      &:hover {
-        border: 1px solid ${color("offWhite")};
-        color: ${color("offWhite")};
-      }
-    `}
+  &:hover {
+    border: 1px solid ${color("offWhite")};
+    color: ${color("offWhite")};
+  }
 `
 
 const ContextBadgeIcon = styled.div`
@@ -304,12 +299,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       // Shift+Enter -> allow default behavior (new line)
     }
 
-    const handleContextClickInternal = () => {
-      if (!tableData) {
-        onContextClick()
-      }
-    }
-
     const handleStop = () => {
       abortOperation()
     }
@@ -340,8 +329,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <ContextBadgeContainer>
                 <ContextBadge
                   role="presentation"
-                  onClick={handleContextClickInternal}
-                  $type={tableData ? "table" : "sql"}
+                  onClick={onContextClick}
                   data-hook="chat-context-badge"
                 >
                   <ContextBadgeIcon>

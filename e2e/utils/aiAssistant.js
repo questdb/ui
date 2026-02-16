@@ -9,6 +9,36 @@ const PROVIDERS = {
   },
 }
 
+function getOpenAIConfiguredSettings(schemaAccess = true) {
+  return {
+    "ai.assistant.settings": JSON.stringify({
+      selectedModel: "gpt-5-mini",
+      providers: {
+        openai: {
+          apiKey: "test-openai-key",
+          enabledModels: ["gpt-5-mini", "gpt-5"],
+          grantSchemaAccess: schemaAccess,
+        },
+      },
+    }),
+  }
+}
+
+function getAnthropicConfiguredSettings(schemaAccess = true) {
+  return {
+    "ai.assistant.settings": JSON.stringify({
+      selectedModel: "claude-sonnet-4-5",
+      providers: {
+        anthropic: {
+          apiKey: "test-anthropic-key",
+          enabledModels: ["claude-sonnet-4-5", "claude-opus-4-5"],
+          grantSchemaAccess: schemaAccess,
+        },
+      },
+    }),
+  }
+}
+
 function createFinalResponseData(provider, explanation, sql = null) {
   const responseContent = { explanation, sql }
 
@@ -742,6 +772,8 @@ function createMultiTurnFlow(config) {
 
 module.exports = {
   PROVIDERS,
+  getOpenAIConfiguredSettings,
+  getAnthropicConfiguredSettings,
   createFinalResponseData,
   createResponse,
   createFinalResponse,

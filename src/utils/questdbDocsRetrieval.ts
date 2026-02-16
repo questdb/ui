@@ -5,6 +5,7 @@ export type DocCategory =
   | "concepts"
   | "schema"
   | "cookbook"
+  | "monitoring"
 
 export type ParsedDocItem = {
   name: string

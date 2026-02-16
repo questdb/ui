@@ -4,6 +4,13 @@ import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
 import { Close } from "@styled-icons/remix-line"
+import {
+  RowsPlusBottomIcon,
+  StethoscopeIcon,
+  GradientIcon,
+  HammerIcon,
+  FileSqlIcon,
+} from "@phosphor-icons/react"
 import { Button } from "../Button"
 import { Text } from "../Text"
 import { Box } from "../Box"
@@ -139,7 +146,10 @@ const IconContainer = styled(Box).attrs({
   flex-shrink: 0;
 `
 
-const ModeIcon = styled.img`
+const ModeIconWrapper = styled(Box).attrs({
+  align: "center",
+  justifyContent: "center",
+})`
   width: 2.4rem;
   height: 2.4rem;
   color: ${({ theme }) => theme.color.pink};
@@ -359,10 +369,9 @@ export const AIAssistantPromo = ({
               <AssistantModes>
                 <AssistantMode>
                   <IconContainer>
-                    <ModeIcon
-                      src="/assets/icon-generate-queries.svg"
-                      alt="Generate Queries"
-                    />
+                    <ModeIconWrapper>
+                      <RowsPlusBottomIcon size={24} />
+                    </ModeIconWrapper>
                   </IconContainer>
                   <ModeContent>
                     <ModeTitleRow>
@@ -376,10 +385,9 @@ export const AIAssistantPromo = ({
                 </AssistantMode>
                 <AssistantMode>
                   <IconContainer>
-                    <ModeIcon
-                      src="/assets/icon-explain-queries.svg"
-                      alt="Explain Queries"
-                    />
+                    <ModeIconWrapper>
+                      <FileSqlIcon size={24} />
+                    </ModeIconWrapper>
                   </IconContainer>
                   <ModeContent>
                     <ModeTitleRow>
@@ -393,10 +401,9 @@ export const AIAssistantPromo = ({
 
                 <AssistantMode>
                   <IconContainer>
-                    <ModeIcon
-                      src="/assets/icon-fix-queries.svg"
-                      alt="Fix Queries"
-                    />
+                    <ModeIconWrapper>
+                      <HammerIcon size={24} />
+                    </ModeIconWrapper>
                   </IconContainer>
                   <ModeContent>
                     <ModeTitle>Fix Queries</ModeTitle>
@@ -408,15 +415,29 @@ export const AIAssistantPromo = ({
 
                 <AssistantMode>
                   <IconContainer>
-                    <ModeIcon
-                      src="/assets/icon-explain-schema.svg"
-                      alt="Explain Schema"
-                    />
+                    <ModeIconWrapper>
+                      <GradientIcon size={24} />
+                    </ModeIconWrapper>
                   </IconContainer>
                   <ModeContent>
                     <ModeTitle>Explain Schema</ModeTitle>
                     <ModeDescription>
                       Detailed overview and structure of tables.
+                    </ModeDescription>
+                  </ModeContent>
+                </AssistantMode>
+
+                <AssistantMode>
+                  <IconContainer>
+                    <ModeIconWrapper>
+                      <StethoscopeIcon size={24} />
+                    </ModeIconWrapper>
+                  </IconContainer>
+                  <ModeContent>
+                    <ModeTitle>Analyze Health Issues</ModeTitle>
+                    <ModeDescription>
+                      Diagnose and resolve table health issues with AI-powered
+                      recommendations.
                     </ModeDescription>
                   </ModeContent>
                 </AssistantMode>

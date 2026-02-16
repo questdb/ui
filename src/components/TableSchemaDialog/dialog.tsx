@@ -8,14 +8,11 @@ import { InfoCircle } from "@styled-icons/boxicons-regular"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
-import { PopperHover } from "../PopperHover"
 import { Tooltip } from "../Tooltip"
 import { Action, SchemaColumn, SchemaFormValues } from "./types"
 import Joi from "joi"
 import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
-import { useDispatch } from "react-redux"
-import { actions } from "../../store"
 import { Panel } from "../../components/Panel"
 import { Actions } from "./actions"
 
@@ -95,7 +92,6 @@ export const Dialog = ({
   const [currentValues, setCurrentValues] =
     useState<SchemaFormValues>(formDefaults)
   const [lastFocusedIndex, setLastFocusedIndex] = useState<number | undefined>()
-  const dispatch = useDispatch()
 
   const resetToDefaults = () => {
     setDefaults({
@@ -115,7 +111,6 @@ export const Dialog = ({
   const handleDismiss = () => {
     resetToDefaults()
     onOpenChange(undefined)
-    dispatch(actions.console.setActiveSidebar(undefined))
   }
 
   const validationSchema = Joi.object({
@@ -210,13 +205,6 @@ export const Dialog = ({
         )
       }
       onDismiss={handleDismiss}
-      onOpenChange={(isOpen) => {
-        if (isOpen && action === "add") {
-          dispatch(
-            actions.console.setActiveSidebar(isOpen ? "create" : undefined),
-          )
-        }
-      }}
     >
       <StyledContentWrapper
         mode={action === "add" ? "side" : "modal"}
@@ -228,7 +216,6 @@ export const Dialog = ({
           onSubmit={(values) => {
             onSchemaChange(values)
             onOpenChange(undefined)
-            dispatch(actions.console.setActiveSidebar(undefined))
           }}
           onChange={(values) => setCurrentValues(values as SchemaFormValues)}
           validationSchema={validationSchema}
@@ -260,25 +247,19 @@ export const Dialog = ({
                     <Form.Item
                       name="partitionBy"
                       label={
-                        <PopperHover
-                          trigger={
-                            <Box
-                              align="center"
-                              justifyContent="center"
-                              gap="0.5rem"
-                            >
-                              <InfoCircle size="14" />
-                              <span>Partition by</span>
-                            </Box>
-                          }
+                        <Tooltip
                           placement="bottom"
+                          content="Splits data into smaller chunks by intervals of time in order to improve the performance and scalability of the database system."
                         >
-                          <Tooltip>
-                            Splits data into smaller chunks by intervals of time
-                            in order to improve the performance and scalability
-                            of the database system.
-                          </Tooltip>
-                        </PopperHover>
+                          <Box
+                            align="center"
+                            justifyContent="center"
+                            gap="0.5rem"
+                          >
+                            <InfoCircle size="14" />
+                            <span>Partition by</span>
+                          </Box>
+                        </Tooltip>
                       }
                     >
                       <Form.Select
@@ -296,33 +277,33 @@ export const Dialog = ({
                       <Form.Item
                         name="walEnabled"
                         label={
-                          <PopperHover
-                            trigger={
-                              <Box
-                                align="center"
-                                justifyContent="center"
-                                gap="0.5rem"
-                              >
-                                <InfoCircle size="14" />
-                                <span>WAL</span>
-                              </Box>
-                            }
+                          <Tooltip
                             placement="bottom"
+                            content={
+                              <>
+                                WAL (Write-Ahead Log) allows concurrent data
+                                ingestion and modifications via multiple
+                                interfaces as well as table schema changes.
+                                {currentValues.partitionBy === "NONE" && (
+                                  <>
+                                    <br />
+                                    <br />
+                                    To enable WAL, set `Partition by` to a value
+                                    other than NONE.
+                                  </>
+                                )}
+                              </>
+                            }
                           >
-                            <Tooltip>
-                              WAL (Write-Ahead Log) allows concurrent data
-                              ingestion and modifications via multiple
-                              interfaces as well as table schema changes.
-                              {currentValues.partitionBy === "NONE" && (
-                                <>
-                                  <br />
-                                  <br />
-                                  To enable WAL, set `Partition by` to a value
-                                  other than NONE.
-                                </>
-                              )}
-                            </Tooltip>
-                          </PopperHover>
+                            <Box
+                              align="center"
+                              justifyContent="center"
+                              gap="0.5rem"
+                            >
+                              <InfoCircle size="14" />
+                              <span>WAL</span>
+                            </Box>
+                          </Tooltip>
                         }
                       >
                         <Form.Select
