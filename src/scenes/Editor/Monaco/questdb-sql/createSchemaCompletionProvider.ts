@@ -77,6 +77,9 @@ const toCompletionItem = (
     filterText: suggestion.filterText,
     sortText: PRIORITY_MAP[suggestion.priority],
     range,
+    ...(suggestion.kind === SuggestionKind.Table && {
+      commitCharacters: ["."],
+    }),
   }
 }
 
