@@ -274,7 +274,7 @@ const Dracula: editor.IStandaloneThemeData = {
     "editor.snippetFinalTabstopHighlightBorder": "#50fa7b",
     "editor.snippetTabstopHighlightBackground": mainBackground,
     "editor.snippetTabstopHighlightBorder": "#6272a4",
-    "editor.wordHighlightBackground": "#8be9fd50",
+    "editor.wordHighlightBackground": "#44475ab3",
     "editor.wordHighlightStrongBackground": "#50fa7b50",
     "editorBracketHighlight.foreground1": "#f8f8f2",
     "editorBracketHighlight.foreground2": "#ff79c6",
