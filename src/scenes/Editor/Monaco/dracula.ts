@@ -11,7 +11,7 @@ const Dracula: editor.IStandaloneThemeData = {
       token: "",
     },
     {
-      foreground: "6272a4",
+      foreground: "8290ba",
       token: "comment",
     },
     {
