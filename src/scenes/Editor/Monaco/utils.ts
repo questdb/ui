@@ -602,7 +602,7 @@ export const getQueriesStartingFromLine = (
         startLineNumber: startPosition.lineNumber,
         startColumn: startPosition.column,
         endLineNumber: endPosition.lineNumber,
-        endColumn: endPosition.column + 1,
+        endColumn: endPosition.column,
       })
 
       queries.push({
