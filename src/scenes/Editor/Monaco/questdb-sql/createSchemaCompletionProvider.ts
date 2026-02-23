@@ -143,7 +143,7 @@ export const createSchemaCompletionProvider = (
 
   const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n .":'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":'.split(""),
 
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
@@ -201,11 +201,14 @@ export const createSchemaCompletionProvider = (
 
       const relativeCursorOffset = cursorOffset - queryStartOffset
 
-      // Get suggestions from the parser-based provider
-      const suggestions = autocompleteProvider.getSuggestions(
-        query,
-        relativeCursorOffset,
-      )
+      // Get suggestions from the parser-based provider.
+      // Filter out punctuation-only suggestions (e.g. "(", ")", ";") —
+      // the parser may suggest structural tokens as the next expected symbol,
+      // but autocompleting them causes issues (e.g. accepting "(" via Enter
+      // when the user just wants a newline).
+      const suggestions = autocompleteProvider
+        .getSuggestions(query, relativeCursorOffset)
+        .filter((s) => /[a-zA-Z0-9_]/.test(s.insertText))
 
       // When the "word" at cursor is an operator (e.g. :: from type cast),
       // don't replace it — insert after it instead.
