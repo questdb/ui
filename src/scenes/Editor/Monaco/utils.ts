@@ -26,10 +26,8 @@ import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
 import type { ValidateQueryResult } from "../../../utils/questdb"
-import { parse } from "@questdb/sql-parser"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
-type ITextModel = editor.ITextModel
 
 export const QuestDBLanguageName: string = "questdb-sql"
 
@@ -80,7 +78,6 @@ export const getSelectedText = (
 export const getQueriesToRun = (
   editor: IStandaloneCodeEditor,
   queryOffsets: { startOffset: number; endOffset: number }[],
-  bufferId?: number,
 ): Request[] => {
   const model = editor.getModel()
   if (!model) return []
@@ -88,7 +85,7 @@ export const getQueriesToRun = (
   const selection = editor.getSelection()
   const selectedText = selection ? model.getValueInRange(selection) : undefined
   if (!selection || !selectedText) {
-    const queryInCursor = getQueryFromCursor(editor, bufferId)
+    const queryInCursor = getQueryFromCursor(editor)
     if (queryInCursor) {
       return [queryInCursor]
     }
@@ -119,7 +116,6 @@ export const getQueriesToRun = (
     editor,
     model.getPositionAt(firstQueryOffsets.startOffset),
     model.getPositionAt(lastQueryOffsets.endOffset),
-    bufferId,
   )
   const requests = queries.map((query) => {
     const clampedSelection = clampRange(model, selection, {
@@ -157,362 +153,14 @@ export const getQueriesToRun = (
   return requests.filter(Boolean) as Request[]
 }
 
-type CSTNode = {
-  children?: Record<string, CSTNode[]>
-  image?: string
-  startOffset?: number
-  endOffset?: number
-  startLine?: number
-  endLine?: number
-  startColumn?: number
-  endColumn?: number
-}
-
-type StatementBoundary = {
-  startOffset: number
-  endOffset: number
-}
-
-let _boundariesCache: {
-  bufferId: number
-  version: number
-  rangeKey: string
-  boundaries: StatementBoundary[]
-} | null = null
-
-const getTokenBoundaries = (
-  node: CSTNode,
-): { first: CSTNode | null; last: CSTNode | null } => {
-  if (!node || typeof node !== "object") return { first: null, last: null }
-  if (node.image !== undefined && node.startOffset !== undefined) {
-    return { first: node, last: node }
-  }
-  if (node.children) {
-    let earliest: CSTNode | null = null
-    let latest: CSTNode | null = null
-    for (const key of Object.keys(node.children)) {
-      const children = node.children[key]
-      if (Array.isArray(children)) {
-        for (const child of children) {
-          const { first, last } = getTokenBoundaries(child)
-          if (
-            first &&
-            (earliest === null || first.startOffset! < earliest.startOffset!)
-          ) {
-            earliest = first
-          }
-          if (
-            last &&
-            (latest === null || last.endOffset! > latest.endOffset!)
-          ) {
-            latest = last
-          }
-        }
-      }
-    }
-    return { first: earliest, last: latest }
-  }
-  return { first: null, last: null }
-}
-
-/**
- * Extract statement boundaries from a parse result (with recovery enabled).
- *
- * The parser uses Chevrotain's error recovery (`recoveryEnabled: true`),
- * which means it can produce a partial CST even when some statements have
- * syntax errors. Failed statements are marked with `recoveredNode: true`.
- *
- * This function:
- * 1. Extracts boundaries from each CST statement node
- * 2. Merges consecutive recovered (error) nodes into a single statement
- * 3. Extends recovered regions to cover any tokens skipped during re-sync
- */
-const extractStatements = (
-  text: string,
-  result: ReturnType<typeof parse>,
-): StatementBoundary[] => {
-  const stmts: (CSTNode & { recoveredNode?: boolean })[] =
-    (result.cst as CSTNode)?.children?.statement ?? []
-
-  if (stmts.length === 0) return []
-
-  // Extract raw boundaries with recovery flag
-  const raw = stmts
-    .map((stmt) => {
-      const { first, last } = getTokenBoundaries(stmt)
-      if (first && last) {
-        return {
-          startOffset: first.startOffset!,
-          endOffset: last.endOffset ?? last.startOffset!,
-          recovered: !!stmt.recoveredNode,
-        }
-      }
-      return null
-    })
-    .filter(
-      (
-        s,
-      ): s is { startOffset: number; endOffset: number; recovered: boolean } =>
-        s !== null,
-    )
-
-  if (raw.length === 0) return []
-
-  // Merge consecutive recovered nodes and fill gaps to next clean statement
-  const merged: StatementBoundary[] = []
-  let i = 0
-  while (i < raw.length) {
-    if (!raw[i].recovered) {
-      merged.push(raw[i])
-      i++
-    } else {
-      // Merge consecutive recovered nodes
-      const startOffset = raw[i].startOffset
-      let endOffset = raw[i].endOffset
-
-      while (i + 1 < raw.length && raw[i + 1].recovered) {
-        i++
-        endOffset = Math.max(endOffset, raw[i].endOffset)
-      }
-
-      // Extend to cover gap before next clean statement
-      if (i + 1 < raw.length) {
-        const gapEnd = raw[i + 1].startOffset - 1
-        if (gapEnd > endOffset) {
-          // Trim trailing whitespace from the gap
-          let trimEnd = gapEnd
-          while (trimEnd > endOffset && /\s/.test(text[trimEnd])) {
-            trimEnd--
-          }
-          if (trimEnd > endOffset) {
-            endOffset = trimEnd
-          }
-        }
-      }
-
-      merged.push({ startOffset, endOffset })
-      i++
-    }
-  }
-
-  return merged
-}
-
-/**
- * Get all statement boundaries from text using the parser with error recovery.
- *
- * The parser uses Chevrotain's built-in error recovery, which means:
- * - Valid SQL: statements are extracted directly from the CST
- * - Invalid SQL: the parser recovers by skipping bad tokens and continues,
- *   producing a partial CST with `recoveredNode` markers
- *
- * No hardcoded keyword lists or manual splitting heuristics needed.
- */
-type ParseRange = { startOffset: number; endOffset: number }
-
-export const computeParseRange = (
-  editor: IStandaloneCodeEditor,
-): ParseRange | null => {
-  const model = editor.getModel()
-  if (!model) return null
-
-  const visibleRanges = editor.getVisibleRanges()
-  if (visibleRanges.length === 0) return null
-
-  const totalLines = model.getLineCount()
-  const startLine = Math.max(1, visibleRanges[0].startLineNumber - 500)
-  const endLine = Math.min(totalLines, visibleRanges[0].endLineNumber + 500)
-  return {
-    startOffset: model.getOffsetAt({ lineNumber: startLine, column: 1 }),
-    endOffset: model.getOffsetAt({
-      lineNumber: endLine,
-      column: model.getLineMaxColumn(endLine),
-    }),
-  }
-}
-
-const getStatementBoundariesForRange = (
-  text: string,
-  startOffset: number,
-  endOffset: number,
-): StatementBoundary[] => {
-  const substring = text.substring(startOffset, endOffset)
-  if (!substring.trim()) return []
-
-  const atDocStart = startOffset === 0
-  const atDocEnd = endOffset >= text.length
-
-  const raw = extractStatements(substring, parse(substring))
-
-  // Shift offsets to be document-relative and drop recovered edge statements
-  const shifted: StatementBoundary[] = []
-  for (let i = 0; i < raw.length; i++) {
-    const b = raw[i]
-    const touchesStart = b.startOffset === 0
-    const touchesEnd = b.endOffset >= substring.length - 1
-
-    // Drop statements that touch a cut edge (not at document boundary)
-    // and are the first/last statement — these are likely truncated
-    if (touchesStart && !atDocStart && i === 0) {
-      continue
-    }
-    if (touchesEnd && !atDocEnd && i === raw.length - 1) {
-      continue
-    }
-
-    shifted.push({
-      startOffset: b.startOffset + startOffset,
-      endOffset: b.endOffset + startOffset,
-    })
-  }
-
-  return shifted
-}
-
-const getStatementBoundaries = (
-  text: string,
-  parseRange?: ParseRange | null,
-  modelVersion?: number,
-  bufferId?: number,
-): StatementBoundary[] => {
-  if (!text.trim()) return []
-
-  const rangeKey = parseRange
-    ? `${parseRange.startOffset}-${parseRange.endOffset}`
-    : "full"
-
-  if (
-    modelVersion !== undefined &&
-    bufferId !== undefined &&
-    _boundariesCache &&
-    _boundariesCache.bufferId === bufferId &&
-    _boundariesCache.version === modelVersion &&
-    _boundariesCache.rangeKey === rangeKey
-  ) {
-    return _boundariesCache.boundaries
-  }
-
-  // Viewport-scoped parsing
-  let boundaries: StatementBoundary[]
-  if (parseRange) {
-    boundaries = getStatementBoundariesForRange(
-      text,
-      parseRange.startOffset,
-      parseRange.endOffset,
-    )
-  } else {
-    // Full parse (fallback when no viewport is set)
-    boundaries = extractStatements(text, parse(text))
-  }
-
-  if (modelVersion !== undefined && bufferId !== undefined) {
-    _boundariesCache = { bufferId, version: modelVersion, rangeKey, boundaries }
-  }
-
-  return boundaries
-}
-
-/**
- * Identify queries in text using the parser, splitting them relative to a cursor position.
- *
- * @param model - Monaco text model (used for offset↔position conversions)
- * @param position - Cursor position (0-based row, 1-based column)
- * @param start - Optional start position to filter from (0-based row, 1-based column)
- */
-export const getQueriesFromModel = (
-  model: ITextModel,
-  position: { row: number; column: number },
-  start?: { row: number; column: number },
-  parseRange?: ParseRange | null,
-  bufferId?: number,
-): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
-  const text = model.getValue()
-  if (!text.trim()) {
-    return { sqlTextStack: [], nextSql: null }
-  }
-
-  // Get all statement boundaries from the parser (cached by model version + buffer id)
-  const boundaries = getStatementBoundaries(
-    text,
-    parseRange,
-    model.getVersionId(),
-    bufferId,
-  )
-
-  if (boundaries.length === 0) {
-    return { sqlTextStack: [], nextSql: null }
-  }
-
-  // Convert cursor position to offset (row is 0-based, lineNumber is 1-based)
-  const cursorOffset = model.getOffsetAt({
-    lineNumber: position.row + 1,
-    column: position.column,
-  })
-
-  // Convert start position to offset (if provided)
-  let startOffset = 0
-  if (start) {
-    startOffset = model.getOffsetAt({
-      lineNumber: start.row + 1,
-      column: start.column,
-    })
-  }
-
-  // Convert boundaries to SqlTextItems, filtering by start position
-  const items: SqlTextItem[] = boundaries
-    .filter((b) => b.endOffset >= startOffset)
-    .map((b) => {
-      const startPos = model.getPositionAt(b.startOffset)
-      const endPos = model.getPositionAt(b.endOffset)
-      return {
-        row: startPos.lineNumber - 1,
-        col: startPos.column,
-        position: b.startOffset,
-        endRow: endPos.lineNumber - 1,
-        endCol: endPos.column,
-        limit: b.endOffset + 1, // limit is exclusive (for text.substring)
-      }
-    })
-    .filter(
-      (item) =>
-        item.row !== item.endRow ||
-        item.col !== item.endCol ||
-        item.limit >= item.position + 1,
-    )
-
-  // Split into sqlTextStack (before cursor) and nextSql (at/after cursor).
-  //
-  // - Queries whose end is strictly before the cursor go into sqlTextStack
-  // - The first query that the cursor is within or on goes into nextSql
-  // - If the cursor is past all queries, the last query becomes nextSql
-
-  let nextSqlIndex = -1
-  for (let i = 0; i < items.length; i++) {
-    if (cursorOffset < items[i].limit) {
-      nextSqlIndex = i
-      break
-    }
-  }
-
-  // If no query contains/follows cursor, the last query is nextSql
-  if (nextSqlIndex === -1 && items.length > 0) {
-    nextSqlIndex = items.length - 1
-  }
-
-  const sqlTextStack = nextSqlIndex > 0 ? items.slice(0, nextSqlIndex) : []
-  const nextSql = nextSqlIndex >= 0 ? items[nextSqlIndex] : null
-
-  return { sqlTextStack, nextSql }
-}
-
 export const getQueriesFromPosition = (
   editor: IStandaloneCodeEditor,
   editorPosition: IPosition,
   startPosition?: IPosition,
-  bufferId?: number,
 ): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
-  const model = editor.getModel()
-  if (!model) {
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+
+  if (!text || !stripSQLComments(text)) {
     return { sqlTextStack: [], nextSql: null }
   }
 
@@ -521,36 +169,292 @@ export const getQueriesFromPosition = (
     column: editorPosition.column,
   }
 
+  // Calculate starting position - default to beginning if not provided
   const start = startPosition
-    ? { row: startPosition.lineNumber - 1, column: startPosition.column }
-    : undefined
+    ? {
+        row: startPosition.lineNumber - 1,
+        column: startPosition.column,
+      }
+    : { row: 0, column: 1 }
 
-  return getQueriesFromModel(
-    model,
-    position,
-    start,
-    computeParseRange(editor),
-    bufferId,
-  )
+  // Convert start position to character index
+  let startCharIndex = 0
+  if (startPosition) {
+    const lines = text.split("\n")
+    const maxRow = Math.min(start.row, lines.length - 1)
+    for (let i = 0; i < maxRow; i++) {
+      if (lines[i] !== undefined) {
+        startCharIndex += lines[i].length + 1 // +1 for newline character
+      }
+    }
+    if (lines[maxRow] !== undefined) {
+      startCharIndex += Math.min(start.column - 1, lines[maxRow].length)
+    }
+  }
+
+  let row = start.row
+  let column = start.column
+  const sqlTextStack = []
+  let startRow = start.row
+  let startCol = start.column
+  let startPos = startCharIndex - 1
+  let nextSql = null
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let singleLineCommentStack: number[] = []
+  let multiLineCommentStack: number[] = []
+  let inSingleLineComment = false
+  let inMultiLineComment = false
+
+  while (
+    startCharIndex < text.length &&
+    (text[startCharIndex] === "\n" || text[startCharIndex] === " ")
+  ) {
+    if (text[startCharIndex] === "\n") {
+      row++
+      startRow++
+      column = 1
+      startCol = 1
+    } else {
+      column++
+      startCol++
+    }
+    startCharIndex++
+  }
+  startPos = startCharIndex
+
+  let i = startCharIndex
+  for (; i < text.length; i++) {
+    if (nextSql !== null) {
+      break
+    }
+
+    const char = text[i]
+
+    switch (char) {
+      case ";": {
+        if (
+          inSingleQuote ||
+          inDoubleQuote ||
+          inSingleLineComment ||
+          inMultiLineComment
+        ) {
+          column++
+          break
+        }
+
+        if (
+          row < position.row ||
+          (row === position.row && column < position.column)
+        ) {
+          sqlTextStack.push({
+            row: startRow,
+            col: startCol,
+            position: startPos,
+            endRow: row,
+            endCol: column,
+            limit: i,
+          })
+          startRow = row
+          startCol = column + 1
+          startPos = i + 1
+          column++
+        } else {
+          nextSql = {
+            row: startRow,
+            col: startCol,
+            position: startPos,
+            endRow: row,
+            endCol: column,
+            limit: i,
+          }
+        }
+        break
+      }
+
+      case " ":
+      case "\t": {
+        if (startPos === i) {
+          startRow = row
+          startCol = column + 1
+          startPos = i + 1
+        }
+
+        column++
+        break
+      }
+
+      case "\n": {
+        if (inSingleLineComment) {
+          inSingleLineComment = false
+          if (startPos === i - 1) {
+            startPos = i
+            startRow = row
+            startCol = column
+          }
+        }
+        row++
+        column = 1
+        if (startPos === i) {
+          startRow = row
+          startCol = column
+          startPos = i + 1
+        }
+        break
+      }
+
+      case "'": {
+        if (!inMultiLineComment && !inSingleLineComment && !inDoubleQuote) {
+          inSingleQuote = !inSingleQuote
+        }
+        column++
+        break
+      }
+
+      case '"': {
+        if (!inMultiLineComment && !inSingleLineComment && !inSingleQuote) {
+          inDoubleQuote = !inDoubleQuote
+        }
+        column++
+        break
+      }
+
+      case "-": {
+        if (!inMultiLineComment && !inSingleQuote && !inDoubleQuote) {
+          singleLineCommentStack.push(i)
+          if (singleLineCommentStack.length === 2) {
+            if (singleLineCommentStack[0] + 1 === singleLineCommentStack[1]) {
+              if (startPos === i - 1) {
+                startPos = i
+                startRow = row
+                startCol = column
+              }
+              singleLineCommentStack = []
+              inSingleLineComment = true
+            } else {
+              singleLineCommentStack.shift()
+            }
+          }
+        }
+        column++
+        break
+      }
+
+      case "/": {
+        if (
+          !inMultiLineComment &&
+          !inSingleLineComment &&
+          !inSingleQuote &&
+          !inDoubleQuote
+        ) {
+          if (multiLineCommentStack.length === 0) {
+            multiLineCommentStack.push(i)
+          } else {
+            multiLineCommentStack = [i]
+          }
+        }
+        if (inMultiLineComment) {
+          if (
+            multiLineCommentStack.length === 1 &&
+            multiLineCommentStack[0] + 1 === i
+          ) {
+            if (startPos === i - 1) {
+              startPos = i + 1
+              startRow = row
+              startCol = column + 1
+            }
+            multiLineCommentStack = []
+            inMultiLineComment = false
+          }
+        }
+        column++
+        break
+      }
+
+      case "*": {
+        if (
+          !inMultiLineComment &&
+          !inSingleLineComment &&
+          !inSingleQuote &&
+          !inDoubleQuote
+        ) {
+          if (
+            multiLineCommentStack.length === 1 &&
+            multiLineCommentStack[0] + 1 === i
+          ) {
+            if (startPos === i - 1) {
+              startPos = i
+              startRow = row
+              startCol = column
+            }
+            multiLineCommentStack = []
+            inMultiLineComment = true
+          } else if (multiLineCommentStack.length > 0) {
+            multiLineCommentStack = []
+          }
+        }
+        if (inMultiLineComment) {
+          multiLineCommentStack = [i]
+        }
+        column++
+        break
+      }
+
+      default: {
+        column++
+        break
+      }
+    }
+    if ((inSingleLineComment || inMultiLineComment) && startPos === i - 1) {
+      startPos = i
+      startRow = row
+      startCol = column
+    }
+  }
+
+  // lastStackItem is the last query that is completed before the current cursor position.
+  // nextSql is the next query that is not completed before the current cursor position, or started after the current cursor position.
+  if (!nextSql) {
+    const sqlText =
+      startPos === -1
+        ? text.substring(startCharIndex)
+        : text.substring(startPos)
+    if (sqlText.length > 0) {
+      nextSql = {
+        row: startRow,
+        col: startCol,
+        position: startPos === -1 ? startCharIndex : startPos,
+        endRow: row,
+        endCol: column,
+        limit: i,
+      }
+    }
+  }
+
+  const filteredSqlTextStack = sqlTextStack.filter((item) => {
+    return item.row !== item.endRow || item.col !== item.endCol
+  })
+
+  const filteredNextSql =
+    nextSql &&
+    (nextSql.row !== nextSql.endRow || nextSql.col !== nextSql.endCol)
+      ? nextSql
+      : null
+
+  return { sqlTextStack: filteredSqlTextStack, nextSql: filteredNextSql }
 }
 
 export const getQueryFromCursor = (
   editor: IStandaloneCodeEditor,
-  bufferId?: number,
 ): Request | undefined => {
   const position = editor.getPosition()
   const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
 
-  if (!text.trim() || !position) {
+  if (!text || !stripSQLComments(text) || !position) {
     return
   }
 
-  const { sqlTextStack, nextSql } = getQueriesFromPosition(
-    editor,
-    position,
-    undefined,
-    bufferId,
-  )
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
 
   const normalizedCurrentRow = position.lineNumber - 1
   const lastStackItem =
@@ -594,9 +498,9 @@ export const getQueryFromCursor = (
       endColumn: nextSql!.endCol,
     }
   } else if (isInLastStackItemRowRange && isInNextSqlRowRange) {
-    const nextSqlStartCol = nextSql!.col
+    const lastStackItemEndCol = lastStackItem!.endCol
     const normalizedCurrentCol = position.column
-    if (normalizedCurrentCol >= nextSqlStartCol) {
+    if (normalizedCurrentCol > lastStackItemEndCol) {
       return {
         query: text.substring(nextSql!.position, nextSql!.limit),
         row: nextSql!.row,
@@ -615,26 +519,15 @@ export const getQueryFromCursor = (
   }
 }
 
-export const getAllQueries = (
-  editor: IStandaloneCodeEditor,
-  bufferId?: number,
-): Request[] => {
-  const model = editor.getModel()
+export const getAllQueries = (editor: IStandaloneCodeEditor): Request[] => {
   const position = getLastPosition(editor)
   const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
 
-  if (!model || !text.trim() || !position) {
+  if (!text || !stripSQLComments(text) || !position) {
     return []
   }
 
-  // Full document parse — no viewport scoping
-  const { sqlTextStack, nextSql } = getQueriesFromModel(
-    model,
-    { row: position.lineNumber - 1, column: position.column },
-    undefined,
-    null,
-    bufferId,
-  )
+  const { sqlTextStack, nextSql } = getQueriesFromPosition(editor, position)
   const stackQueries = sqlTextStack.map((item) => ({
     query: text.substring(item.position, item.limit),
     row: item.row,
@@ -658,10 +551,9 @@ export const getQueriesInRange = (
   editor: IStandaloneCodeEditor,
   startPosition: IPosition,
   endPosition: IPosition,
-  bufferId?: number,
 ): Request[] => {
   const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
-  if (!text.trim() || !startPosition || !endPosition) {
+  if (!text || !stripSQLComments(text) || !startPosition || !endPosition) {
     return []
   }
 
@@ -669,7 +561,6 @@ export const getQueriesInRange = (
     editor,
     endPosition,
     startPosition,
-    bufferId,
   )
 
   const stackQueries = sqlTextStack.map((item) => ({
@@ -729,7 +620,6 @@ export const getQueriesStartingFromLine = (
 
 export const getQueryFromSelection = (
   editor: IStandaloneCodeEditor,
-  bufferId?: number,
 ): Request | undefined => {
   const model = editor.getModel()
   if (!model) return
@@ -754,7 +644,7 @@ export const getQueryFromSelection = (
         startColumn: startPos.column,
         endColumn: endPos.column,
       })
-      const parentQuery = getQueryFromCursor(editor, bufferId)
+      const parentQuery = getQueryFromCursor(editor)
       if (parentQuery) {
         return {
           ...parentQuery,
@@ -771,7 +661,6 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
-  bufferId?: number,
 ): Request | undefined => {
   let request: Request | undefined
   const selectedText = getSelectedText(editor)
@@ -780,9 +669,9 @@ export const getQueryRequestFromEditor = (
     : undefined
 
   if (strippedNormalizedSelectedText) {
-    request = getQueryFromSelection(editor, bufferId)
+    request = getQueryFromSelection(editor)
   } else {
-    request = getQueryFromCursor(editor, bufferId)
+    request = getQueryFromCursor(editor)
   }
 
   if (!request) return
@@ -1296,7 +1185,6 @@ export const validateQueryAtOffset = (
   editor: IStandaloneCodeEditor,
   queryText: string,
   offset: number,
-  bufferId?: number,
 ): boolean => {
   const model = editor.getModel()
   if (!model) return false
@@ -1310,7 +1198,6 @@ export const validateQueryAtOffset = (
     editor,
     offsetPosition,
     offsetPosition,
-    bufferId,
   )[0]
   if (!queryInEditor) return false
 
@@ -1389,11 +1276,12 @@ export const setErrorMarkerForQuery = (
 
 const ValidationOwner = "questdb-validation"
 
-// Per-buffer validation state, persists across tab switches
 const validationRefs: Record<
   string,
   { markers: editor.IMarkerData[]; queryText: string; version: number }
 > = {}
+
+const validationControllers: Record<string, AbortController> = {}
 
 export const clearValidationMarkers = (
   monaco: Monaco,
@@ -1405,7 +1293,10 @@ export const clearValidationMarkers = (
     monaco.editor.setModelMarkers(model, ValidationOwner, [])
   }
   if (bufferId !== undefined) {
-    delete validationRefs[bufferId.toString()]
+    const bufferKey = bufferId.toString()
+    delete validationRefs[bufferKey]
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
   }
 }
 
@@ -1428,15 +1319,20 @@ export const validateQueryJIT = (
   editor: IStandaloneCodeEditor,
   bufferId: number,
   getBufferExecutions: () => Record<QueryKey, unknown>,
-  validateQuery: (query: string) => Promise<ValidateQueryResult>,
+  validateQuery: (
+    query: string,
+    signal: AbortSignal,
+  ) => Promise<ValidateQueryResult>,
 ) => {
   const model = editor.getModel()
   if (!model) return
 
   const bufferKey = bufferId.toString()
-  const queryAtCursor = getQueryFromCursor(editor, bufferId)
+  const queryAtCursor = getQueryFromCursor(editor)
 
   if (!queryAtCursor) {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
     monaco.editor.setModelMarkers(model, ValidationOwner, [])
     delete validationRefs[bufferKey]
     return
@@ -1455,13 +1351,24 @@ export const validateQueryJIT = (
   const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
   const bufferExecutions = getBufferExecutions()
   if (bufferExecutions[queryKey]) {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
     monaco.editor.setModelMarkers(model, ValidationOwner, [])
     delete validationRefs[bufferKey]
     return
   }
 
-  validateQuery(queryText)
+  // Abort any previous in-flight validation for this buffer
+  validationControllers[bufferKey]?.abort()
+  const controller = new AbortController()
+  validationControllers[bufferKey] = controller
+
+  validateQuery(queryText, controller.signal)
     .then((result: ValidateQueryResult) => {
+      if (validationControllers[bufferKey] === controller) {
+        delete validationControllers[bufferKey]
+      }
+
       const currentModel = editor.getModel()
       if (!currentModel || currentModel.getVersionId() !== version) return
 
@@ -1501,7 +1408,10 @@ export const validateQueryJIT = (
       }
     })
     .catch(() => {
-      // Network error — silently ignore
+      // Abort or network error — silently ignore
+      if (validationControllers[bufferKey] === controller) {
+        delete validationControllers[bufferKey]
+      }
     })
 }
 

@@ -1,11 +1,11 @@
 import { Table, InformationSchemaColumn } from "../../../../utils"
 import type { editor, languages } from "monaco-editor"
 import { CompletionItemKind, CompletionItemPriority } from "./types"
-import { findMatches, getQueryFromCursor } from "../utils"
 import {
   createAutocompleteProvider,
   SuggestionKind,
   SuggestionPriority,
+  tokenize,
   type SchemaInfo,
   type Suggestion,
 } from "@questdb/sql-parser"
@@ -77,10 +77,45 @@ const toCompletionItem = (
     filterText: suggestion.filterText,
     sortText: PRIORITY_MAP[suggestion.priority],
     range,
-    ...(suggestion.kind === SuggestionKind.Table && {
-      commitCharacters: ["."],
-    }),
   }
+}
+
+/**
+ * Check if cursor is inside a line comment (--) or block comment.
+ * The parser already handles string literals via its own guard,
+ * but comments are invisible to the lexer (Lexer.SKIPPED).
+ */
+function isCursorInComment(text: string, cursorOffset: number): boolean {
+  let i = 0
+  const end = Math.min(cursorOffset, text.length)
+  while (i < end) {
+    const ch = text[i]
+    const next = text[i + 1]
+    // Line comment: -- until end of line
+    if (ch === "-" && next === "-") {
+      i += 2
+      while (i < end && text[i] !== "\n") i++
+      if (i >= cursorOffset) return true
+      continue
+    }
+    // Block comment: /* until */
+    if (ch === "/" && next === "*") {
+      i += 2
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
+      if (i >= cursorOffset) return true
+      i += 2 // skip */
+      continue
+    }
+    // Skip over string literals so quotes inside comments don't confuse us
+    if (ch === "'") {
+      i++
+      while (i < text.length && text[i] !== "'") i++
+      i++ // skip closing quote
+      continue
+    }
+    i++
+  }
+  return false
 }
 
 export const createSchemaCompletionProvider = (
@@ -98,75 +133,87 @@ export const createSchemaCompletionProvider = (
 
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
+      const cursorOffset = model.getOffsetAt(position)
+      const fullText = model.getValue()
 
-      // Get text value in the current line
-      const textInLine = model.getValueInRange({
-        startLineNumber: position.lineNumber,
-        startColumn: 1,
-        endLineNumber: position.lineNumber,
-        endColumn: position.column,
-      })
-
-      const isWhitespaceOnly = /^\s*$/.test(textInLine)
-      const isLineComment = /(-- |--|\/\/ |\/\/)$/gim.test(textInLine)
-
-      if (isWhitespaceOnly || isLineComment) {
+      // Suppress suggestions inside comments (the parser handles strings itself)
+      if (isCursorInComment(fullText, cursorOffset)) {
         return null
       }
 
-      const queryAtCursor = getQueryFromCursor(editor)
+      // Extract the current SQL statement for autocomplete by finding the
+      // nearest semicolon before the cursor. This is more robust than using
+      // the parser's statement splitting (getQueryFromCursor), which can
+      // break incomplete SQL into separate statements — e.g., "select * F"
+      // gets split into "select *" and "F", losing context for autocomplete.
+      const tokens = tokenize(fullText).tokens
 
-      if (queryAtCursor) {
-        const matches = findMatches(model, queryAtCursor.query)
-        if (matches.length > 0) {
-          const cursorMatch = matches.find(
-            (m) => m.range.startLineNumber === queryAtCursor.row + 1,
-          )
-
-          // Calculate cursor offset within the current query
-          const queryStartOffset = model.getOffsetAt({
-            lineNumber: cursorMatch?.range.startLineNumber ?? 1,
-            column: cursorMatch?.range.startColumn ?? 1,
-          })
-          const cursorOffset = model.getOffsetAt(position)
-          const relativeCursorOffset = cursorOffset - queryStartOffset
-
-          // Get suggestions from the parser-based provider
-          const suggestions = autocompleteProvider.getSuggestions(
-            queryAtCursor.query,
-            relativeCursorOffset,
-          )
-
-          // When the "word" at cursor is an operator (e.g. :: from type cast),
-          // don't replace it — insert after it instead.
-          const isOperatorWord =
-            word.word.length > 0 && !/[a-zA-Z0-9_]/.test(word.word[0])
-
-          // When the word contains a dot (qualified reference like "t." or "t.col"),
-          // only replace after the last dot. The prefix before the dot is the
-          // table/alias qualifier and should be kept. Without this, Monaco filters
-          // suggestions against "t." and nothing matches.
-          const dotIndex = word.word.lastIndexOf(".")
-          const startColumn = isOperatorWord
-            ? position.column
-            : dotIndex >= 0
-              ? word.startColumn + dotIndex + 1
-              : word.startColumn
-
-          const range = {
-            startLineNumber: position.lineNumber,
-            endLineNumber: position.lineNumber,
-            startColumn,
-            endColumn: word.endColumn,
-          }
-
-          return {
-            suggestions: suggestions.map((s) => toCompletionItem(s, range)),
+      let queryStartOffset = 0
+      let queryEndOffset = fullText.length
+      for (const token of tokens) {
+        const tokenEnd = token.endOffset ?? token.startOffset
+        if (token.tokenType.name === "Semicolon") {
+          if (tokenEnd < cursorOffset) {
+            queryStartOffset = tokenEnd + 1
+          } else if (
+            token.startOffset >= cursorOffset &&
+            queryEndOffset === fullText.length
+          ) {
+            queryEndOffset = token.startOffset
           }
         }
       }
 
-      return null
+      // If there are no tokens between the query start and the cursor,
+      // the cursor is in dead space (whitespace/comments between statements).
+      // Don't suggest anything.
+      const hasTokensBeforeCursor = tokens.some(
+        (t) =>
+          t.startOffset >= queryStartOffset && t.startOffset < cursorOffset,
+      )
+      if (!hasTokensBeforeCursor) {
+        return null
+      }
+
+      // Pass the full statement (including text after cursor) so the parser
+      // can detect when the cursor is inside a string literal or comment.
+      const query = fullText.substring(queryStartOffset, queryEndOffset)
+
+      const relativeCursorOffset = cursorOffset - queryStartOffset
+
+      // Get suggestions from the parser-based provider
+      const suggestions = autocompleteProvider.getSuggestions(
+        query,
+        relativeCursorOffset,
+      )
+
+      // When the "word" at cursor is an operator (e.g. :: from type cast),
+      // don't replace it — insert after it instead.
+      const isOperatorWord =
+        word.word.length > 0 && !/[a-zA-Z0-9_]/.test(word.word[0])
+
+      // When the word contains a dot (qualified reference like "t." or "t.col"),
+      // only replace after the last dot. The prefix before the dot is the
+      // table/alias qualifier and should be kept. Without this, Monaco filters
+      // suggestions against "t." and nothing matches.
+      const dotIndex = word.word.lastIndexOf(".")
+      const startColumn = isOperatorWord
+        ? position.column
+        : dotIndex >= 0
+          ? word.startColumn + dotIndex + 1
+          : word.startColumn
+
+      const range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn,
+        endColumn: word.endColumn,
+      }
+
+      return {
+        incomplete: true,
+        suggestions: suggestions.map((s) => toCompletionItem(s, range)),
+      }
     },
   }
 
