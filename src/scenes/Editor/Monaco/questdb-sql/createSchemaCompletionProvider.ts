@@ -59,21 +59,35 @@ const convertToSchemaInfo = (
  * For columns, uses CompletionItemLabel to show table names inline
  * and data type on the right side.
  */
+const UPPERCASE_KINDS = new Set([
+  SuggestionKind.Keyword,
+  SuggestionKind.Operator,
+  SuggestionKind.DataType,
+])
+
 const toCompletionItem = (
   suggestion: Suggestion,
   range: languages.CompletionItem["range"],
 ): languages.CompletionItem => {
+  const shouldUppercase = UPPERCASE_KINDS.has(suggestion.kind)
+  const label = shouldUppercase
+    ? suggestion.label.toUpperCase()
+    : suggestion.label
+  const insertText = shouldUppercase
+    ? suggestion.insertText.toUpperCase()
+    : suggestion.insertText
+
   return {
     label:
       suggestion.detail != null || suggestion.description != null
         ? {
-            label: suggestion.label,
+            label,
             detail: suggestion.detail,
             description: suggestion.description,
           }
-        : suggestion.label,
+        : label,
     kind: KIND_MAP[suggestion.kind],
-    insertText: suggestion.insertText,
+    insertText,
     filterText: suggestion.filterText,
     sortText: PRIORITY_MAP[suggestion.priority],
     range,
@@ -138,6 +152,12 @@ export const createSchemaCompletionProvider = (
 
       // Suppress suggestions inside comments (the parser handles strings itself)
       if (isCursorInComment(fullText, cursorOffset)) {
+        return null
+      }
+
+      const charBeforeCursor =
+        cursorOffset > 0 ? fullText[cursorOffset - 1] : ""
+      if (charBeforeCursor === "(") {
         return null
       }
 

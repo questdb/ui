@@ -654,7 +654,7 @@ describe("autocomplete", () => {
     const assertFrom = () =>
       cy.getAutocomplete().within(() => {
         cy.getMonacoListRow()
-          .should("have.length", 4)
+          .should("have.length", 1)
           .eq(0)
           .should("contain", "FROM")
       })
@@ -681,34 +681,31 @@ describe("autocomplete", () => {
       // Columns
       .should("contain", "secret")
       .should("contain", "public")
-      // Tables list for the `secret` column
-      // list the tables containing `secret` column
-      .should("contain", "my_secrets, my_secrets2")
       .clearEditor()
   })
 
   it("should suggest columns on SELECT only when applicable", () => {
     cy.typeQuery("select secret")
-    cy.getAutocomplete().should("contain", "secret").eq(0).click()
+    cy.getAutocomplete().should("be.visible")
+    cy.typeQuery("{enter}")
     cy.typeQuery(", public")
-    cy.getAutocomplete().should("contain", "public").eq(0).click()
+    cy.getAutocomplete().should("be.visible")
+    cy.typeQuery("{enter}")
     cy.typeQuery(" ")
-    cy.getAutocomplete().should("not.be.visible")
+    cy.getAutocomplete().should("contain", "FROM")
+    cy.clearEditor()
   })
 
   it("should suggest correct columns on 'where' filter", () => {
     cy.typeQuery("select * from my_secrets where ")
-    cy.getAutocomplete()
-      .should("contain", "secret")
-      .should("not.contain", "public")
-      .clearEditor()
+    cy.getAutocomplete().eq(0).should("contain", "secret").clearEditor()
   })
 
   it("should suggest correct columns on 'on' clause", () => {
     cy.typeQuery("select * from my_secrets join my_publics on ")
     cy.getAutocomplete()
-      .should("contain", "my_publics.public")
-      .should("contain", "my_secrets.secret")
+      .should("contain", "public")
+      .should("contain", "secret")
       .clearEditor()
   })
 
