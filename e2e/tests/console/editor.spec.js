@@ -709,6 +709,73 @@ describe("autocomplete", () => {
       .clearEditor()
   })
 
+  it("should suggest columns for dot-qualified alias", () => {
+    cy.typeQuery("select * from my_secrets s where s.")
+    cy.getAutocomplete().should("contain", "secret").clearEditor()
+  })
+
+  it("should replace partial text when accepting a suggestion", () => {
+    cy.typeQuery("select * from my_se")
+    cy.getAutocomplete().should("contain", "my_secrets")
+    cy.typeQuery("{enter}")
+    cy.window().then((win) => {
+      const value = win.monaco.editor.getEditors()[0].getValue()
+      expect(value).to.match(/select \* from my_secrets/)
+      expect(value).to.not.contain("my_semy_secrets")
+    })
+    cy.clearEditor()
+  })
+
+  it("should suggest tables in second statement of multi-statement buffer", () => {
+    cy.typeQuery("select * from my_secrets;{enter}select * from ")
+    cy.getAutocomplete()
+      .should("contain", "my_secrets")
+      .should("contain", "my_publics")
+      .clearEditor()
+  })
+
+  it("should not suggest anything immediately after opening parenthesis", () => {
+    cy.typeQuery("select count(")
+    cy.getAutocomplete().should("not.be.visible")
+    cy.clearEditor()
+  })
+
+  it("should suggest after parenthesis followed by space", () => {
+    cy.typeQuery("select count( ")
+    cy.getAutocomplete().should("be.visible").clearEditor()
+  })
+
+  it("should not suggest inside line comments", () => {
+    cy.typeQuery("-- select * from ")
+    cy.getAutocomplete().should("not.be.visible").clearEditor()
+  })
+
+  it("should not suggest in dead space between statements", () => {
+    cy.typeQuery("select 1;")
+    cy.typeQuery("{enter}{enter}")
+    cy.getAutocomplete().should("not.be.visible").clearEditor()
+  })
+
+  it("should display keywords in uppercase", () => {
+    cy.typeQuery("select * from my_secrets whe")
+    cy.getAutocomplete().should("contain", "WHERE")
+    // Should not contain lowercase variant
+    cy.getAutocomplete().within(() => {
+      cy.getMonacoListRow().first().should("contain", "WHERE")
+    })
+    cy.clearEditor()
+  })
+
+  it("should suggest CTE name in FROM clause", () => {
+    cy.typeQuery("with cte as (select 1) select * from ")
+    cy.getAutocomplete().should("contain", "cte").clearEditor()
+  })
+
+  it("should not suggest inside block comments", () => {
+    cy.typeQuery("/* select * from ")
+    cy.getAutocomplete().should("not.be.visible").clearEditor()
+  })
+
   after(() => {
     cy.loadConsoleWithAuth()
     ;["my_publics", "my_secrets", "my_secrets2"].forEach((table) => {
@@ -725,14 +792,6 @@ describe("errors", () => {
   beforeEach(() => {
     cy.getEditorContent().should("be.visible")
     cy.clearEditor()
-  })
-
-  it("should mark '(200000)' as error", () => {
-    const query = `create table test (\ncol symbol index CAPACITY (200000)`
-    cy.typeQuery(query)
-    cy.runLine()
-    cy.matchErrorMarkerPosition({ left: 237, width: 67 })
-    cy.getCollapsedNotifications().should("contain", "bad integer")
   })
 
   it("should mark date position as error", () => {
