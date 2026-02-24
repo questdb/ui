@@ -2233,10 +2233,14 @@ Syntax: \`avg(column)\`
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 1)
 
-      cy.getByDataHook("message-action-accept").should("be.visible")
+      cy.getByDataHook("inline-diff-container")
+        .eq(0)
+        .getByDataHook("message-action-accept")
+        .should("be.visible")
       cy.getByDataHook("chat-context-badge").should("not.exist")
 
       // Turn 1: User sends "select 2" without accepting/rejecting turn 0
+      cy.getByDataHook("messages-end").scrollIntoView()
       cy.getByDataHook("chat-input-textarea").type("select 2")
       cy.getByDataHook("chat-send-button").click()
 
@@ -2248,7 +2252,12 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("inline-diff-container").should("have.length", 2)
 
       // Accept turn 1's suggestion (SELECT 2)
-      cy.getByDataHook("message-action-accept").click()
+      cy.getByDataHook("messages-end").scrollIntoView()
+      cy.getByDataHook("inline-diff-container")
+        .eq(1)
+        .getByDataHook("message-action-accept")
+        .should("be.visible")
+        .click()
       cy.getByDataHook("inline-diff-container")
         .contains("Accepted")
         .should("be.visible")
@@ -2257,6 +2266,7 @@ Syntax: \`avg(column)\`
       cy.get(".aiQueryHighlight").should("exist")
 
       // Turn 2: User sends "select 3" - should see "User accepted" message
+      cy.getByDataHook("messages-end").scrollIntoView()
       cy.getByDataHook("chat-input-textarea").type("select 3", { force: true })
       cy.getByDataHook("chat-send-button").click()
 
@@ -2275,6 +2285,7 @@ Syntax: \`avg(column)\`
         .should("exist")
 
       // Turn 3: User sends "select 4"
+      cy.getByDataHook("messages-end").scrollIntoView()
       cy.getByDataHook("chat-input-textarea").type("select 4", { force: true })
       cy.getByDataHook("chat-send-button").click()
 
@@ -2286,10 +2297,16 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("inline-diff-container").should("have.length", 4)
 
       // Reject turn 3's suggestion (SELECT 4)
-      cy.getByDataHook("message-action-reject").click()
+      cy.getByDataHook("messages-end").scrollIntoView()
+      cy.getByDataHook("inline-diff-container")
+        .eq(3)
+        .getByDataHook("message-action-reject")
+        .should("be.visible")
+        .click()
       cy.getByDataHook("diff-status-rejected").should("contain", "Rejected")
 
       // Turn 4: User sends "select 5" - should see "User rejected" message
+      cy.getByDataHook("messages-end").scrollIntoView()
       cy.getByDataHook("chat-input-textarea").type("select 5", { force: true })
       cy.getByDataHook("chat-send-button").click()
 
@@ -2301,7 +2318,12 @@ Syntax: \`avg(column)\`
       })
       cy.getByDataHook("inline-diff-container").should("have.length", 5)
       // Accept turn 4's suggestion (SELECT 5)
-      cy.getByDataHook("message-action-accept").click()
+      cy.getByDataHook("messages-end").scrollIntoView()
+      cy.getByDataHook("inline-diff-container")
+        .eq(4)
+        .getByDataHook("message-action-accept")
+        .should("be.visible")
+        .click()
       cy.getByDataHook("inline-diff-container")
         .eq(4)
         .contains("Accepted")
@@ -2309,6 +2331,7 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("chat-context-badge").should("contain", "SELECT 5")
 
       // Turn 5: Final turn - should see "User accepted" for SELECT 5
+      cy.getByDataHook("messages-end").scrollIntoView()
       cy.getByDataHook("chat-input-textarea").type("select 6", { force: true })
       cy.getByDataHook("chat-send-button").click()
 
