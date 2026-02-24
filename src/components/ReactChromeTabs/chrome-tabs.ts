@@ -24,30 +24,17 @@
 
 import Draggabilly from "draggabilly"
 
-const TAB_CONTENT_MARGIN = 10
-const TAB_CONTENT_OVERLAP_DISTANCE = 1
-
-const TAB_CONTENT_MIN_WIDTH = 24
+const TAB_CONTENT_MIN_WIDTH = 150
 const TAB_CONTENT_MAX_WIDTH = 240
-
-const TAB_SIZE_SMALL = 84
-const TAB_SIZE_SMALLER = 60
-const TAB_SIZE_MINI = 48
 const NEW_TAB_BUTTON_AREA = 90
 
-const newTabButtonTemplate = `
-    <div class="new-tab-button-wrapper">
-      <button class="new-tab-button" data-hook="new-tab-button">✚</button>
-    </div>
-  `
-
 const closest = (value: number, array: number[]) => {
-  let closest = Infinity
+  let closestDist = Infinity
   let closestIndex = -1
 
   array.forEach((v, i) => {
-    if (Math.abs(value - v) < closest) {
-      closest = Math.abs(value - v)
+    if (Math.abs(value - v) < closestDist) {
+      closestDist = Math.abs(value - v)
       closestIndex = i
     }
   })
@@ -55,17 +42,22 @@ const closest = (value: number, array: number[]) => {
   return closestIndex
 }
 
+const newTabButtonTemplate = `
+    <div class="new-tab-button-wrapper">
+      <button class="new-tab-button" data-hook="new-tab-button">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"></path></svg>
+      </button>
+    </div>
+  `
+
 const tabTemplate = `
       <div class="chrome-tab">
-        <div class="chrome-tab-dividers"></div>
-        <div class="chrome-tab-background">
-          <svg xmlns="http://www.w3.org/2000/svg"><defs><symbol id="chrome-tab-geometry-left" viewBox="0 0 214 36"><path d="M17 0h197v36H0v-2c4.5 0 9-3.5 9-8V8c0-4.5 3.5-8 8-8z"/></symbol><symbol id="chrome-tab-geometry-right" viewBox="0 0 214 36"><use xlink:href="#chrome-tab-geometry-left"/></symbol><clipPath id="crop"><rect class="mask" width="100%" height="100%" x="0"/></clipPath></defs><svg width="52%" height="100%"><use xlink:href="#chrome-tab-geometry-left" width="214" height="36" class="chrome-tab-geometry"/></svg><g transform="scale(-1, 1)"><svg width="52%" height="100%" x="-100%" y="0"><use xlink:href="#chrome-tab-geometry-right" width="214" height="36" class="chrome-tab-geometry"/></svg></g></svg>
-        </div>
         <div class="chrome-tab-content">
           <div class="chrome-tab-favicon"></div>
           <div class="chrome-tab-title"></div>
           <input class="chrome-tab-rename" type="text" />
           <div class="chrome-tab-drag-handle"></div>
+          <div class="chrome-tab-edit"></div>
           <div class="chrome-tab-close"></div>
         </div>
       </div>
@@ -116,11 +108,33 @@ class ChromeTabs {
   draggabillies: Draggabilly[]
   isDragging: boolean
   draggabillyDragging: Draggabilly | null
+  initialScrollDone: boolean
+  autoScrollInterval: number | null
+  autoScrollSpeed: number
+  dragPlaceholder: HTMLElement | null
+  dragState: {
+    tabEl: HTMLElement | null
+    originIndex: number
+    currentIndex: number
+    startScrollLeft: number
+    pointerX: number
+  }
 
   constructor() {
     this.draggabillies = []
     this.isDragging = false
     this.draggabillyDragging = null
+    this.initialScrollDone = false
+    this.autoScrollInterval = null
+    this.autoScrollSpeed = 0
+    this.dragPlaceholder = null
+    this.dragState = {
+      tabEl: null,
+      originIndex: -1,
+      currentIndex: -1,
+      startScrollLeft: 0,
+      pointerX: 0,
+    }
   }
 
   init(el: HTMLElement, limit?: number) {
@@ -131,7 +145,6 @@ class ChromeTabs {
     this.el.setAttribute("data-chrome-tabs-instance-id", this.instanceId + "")
     instanceId += 1
 
-    this.setupCustomProperties()
     this.setupStyleEl()
     this.setupEvents()
     this.layoutTabs()
@@ -141,10 +154,6 @@ class ChromeTabs {
 
   emit(eventName: string, data: Record<string, unknown>) {
     this.el.dispatchEvent(new CustomEvent(eventName, { detail: data }))
-  }
-
-  setupCustomProperties() {
-    this.el.style.setProperty("--tab-content-margin", `${TAB_CONTENT_MARGIN}px`)
   }
 
   setupStyleEl() {
@@ -165,9 +174,14 @@ class ChromeTabs {
 
     resizeObserver.observe(this.el)
 
+    this.tabContentEl.addEventListener("scroll", () => {
+      this.updateOverflowShadows()
+    })
+
     this.el.addEventListener("click", ({ target }) => {
       if (target instanceof Element) {
-        if (target.classList.contains("new-tab-button")) {
+        const newTabButton = target.closest(".new-tab-button")
+        if (newTabButton) {
           this.emit("newTab", {})
           this.setupNewTabButton()
         }
@@ -175,6 +189,8 @@ class ChromeTabs {
     })
 
     this.tabEls.forEach((tabEl) => this.setTabCloseEventListener(tabEl))
+
+    this.tabEls.forEach((tabEl) => this.setTabEditEventListener(tabEl))
 
     this.tabEls.forEach((tabEl) => this.setTabRenameConfirmEventListener(tabEl))
 
@@ -213,29 +229,19 @@ class ChromeTabs {
     return this.el.querySelector<HTMLElement>(".chrome-tabs-content")!
   }
 
-  get tabContentWidths() {
+  get tabWidths() {
     const numberOfTabs = this.tabEls.length
-    const tabsContentWidth = this.el.clientWidth - NEW_TAB_BUTTON_AREA
-    const tabsCumulativeOverlappedWidth =
-      (numberOfTabs - 1) * TAB_CONTENT_OVERLAP_DISTANCE
-    const targetWidth =
-      (tabsContentWidth -
-        2 * TAB_CONTENT_MARGIN +
-        tabsCumulativeOverlappedWidth) /
-      numberOfTabs
+    const availableWidth = this.el.clientWidth - NEW_TAB_BUTTON_AREA
+    const targetWidth = availableWidth / numberOfTabs
     const clampedTargetWidth = Math.max(
       TAB_CONTENT_MIN_WIDTH,
       Math.min(TAB_CONTENT_MAX_WIDTH, targetWidth),
     )
     const flooredClampedTargetWidth = Math.floor(clampedTargetWidth)
-    const totalTabsWidthUsingTarget =
-      flooredClampedTargetWidth * numberOfTabs +
-      2 * TAB_CONTENT_MARGIN -
-      tabsCumulativeOverlappedWidth
+    const totalTabsWidthUsingTarget = flooredClampedTargetWidth * numberOfTabs
     const totalExtraWidthDueToFlooring =
-      tabsContentWidth - totalTabsWidthUsingTarget
+      availableWidth - totalTabsWidthUsingTarget
 
-    // TODO - Support tabs with different widths / e.g. "pinned" tabs
     const widths = []
     let extraWidthRemaining = totalExtraWidthDueToFlooring
     for (let i = 0; i < numberOfTabs; i += 1) {
@@ -251,46 +257,24 @@ class ChromeTabs {
     return widths
   }
 
-  get tabContentPositions() {
+  get tabPositions() {
     const positions: number[] = []
-    const tabContentWidths = this.tabContentWidths
+    const tabWidths = this.tabWidths
 
-    let position = TAB_CONTENT_MARGIN
-    tabContentWidths.forEach((width, i) => {
-      const offset = i * TAB_CONTENT_OVERLAP_DISTANCE
-      positions.push(position - offset)
+    let position = 0
+    tabWidths.forEach((width) => {
+      positions.push(position)
       position += width
     })
 
     return positions
   }
 
-  get tabPositions() {
-    const positions: number[] = []
-
-    this.tabContentPositions.forEach((contentPosition) => {
-      positions.push(contentPosition - TAB_CONTENT_MARGIN)
-    })
-
-    return positions
-  }
-
   layoutTabs() {
-    const tabContentWidths = this.tabContentWidths
+    const tabWidths = this.tabWidths
 
     this.tabEls.forEach((tabEl, i) => {
-      const contentWidth = tabContentWidths[i]
-      const width = contentWidth + 2 * TAB_CONTENT_MARGIN
-
-      tabEl.style.width = width + "px"
-      tabEl.removeAttribute("is-small")
-      tabEl.removeAttribute("is-smaller")
-      tabEl.removeAttribute("is-mini")
-
-      if (contentWidth < TAB_SIZE_SMALL) tabEl.setAttribute("is-small", "")
-      if (contentWidth < TAB_SIZE_SMALLER) tabEl.setAttribute("is-smaller", "")
-      if (contentWidth < TAB_SIZE_MINI) tabEl.setAttribute("is-mini", "")
-
+      tabEl.style.width = tabWidths[i] + "px"
       const closeEl = tabEl.querySelector<HTMLElement>(".chrome-tab-close")
       if (closeEl) {
         closeEl.style.display = this.tabEls.length > 1 ? "block" : "none"
@@ -300,32 +284,40 @@ class ChromeTabs {
     let styleHTML = ""
     this.tabPositions.forEach((position, i) => {
       styleHTML += `
-            .chrome-tabs[data-chrome-tabs-instance-id="${
-              this.instanceId
-            }"] .chrome-tab:nth-child(${i + 1}) {
-              transform: translate3d(${position}px, 0, 0)
-            }
-          `
+          .chrome-tabs[data-chrome-tabs-instance-id="${
+            this.instanceId
+          }"] .chrome-tab:nth-child(${i + 1}) {
+            transform: translate3d(${position}px, 0, 0)
+          }
+        `
     })
     this.styleEl.innerHTML = styleHTML
 
-    const tabsLen = this.tabEls.length
-    if (
-      this.el.offsetWidth - this.tabContentEl.offsetWidth >
-        NEW_TAB_BUTTON_AREA + TAB_CONTENT_MARGIN / 2 ||
-      tabsLen < 5
-    ) {
-      this.tabContentEl.style.width = `${
-        (this.tabEls[0] ? this.tabEls[0].offsetWidth * tabsLen : 0) -
-        (tabsLen > 0
-          ? tabsLen * TAB_CONTENT_MARGIN * 2 -
-            TAB_CONTENT_MIN_WIDTH +
-            TAB_CONTENT_MARGIN
-          : 0)
-      }px`
-      this.tabContentEl.nextElementSibling!.classList.remove("overflow-shadow")
-    } else
-      this.tabContentEl.nextElementSibling!.classList.add("overflow-shadow")
+    const totalTabsWidth = tabWidths.reduce((sum, w) => sum + w, 0)
+    this.tabContentEl.style.width = `${totalTabsWidth}px`
+
+    this.updateOverflowShadows()
+  }
+
+  updateOverflowShadows() {
+    const container = this.tabContentEl
+    const scrollLeft = container.scrollLeft
+    const scrollWidth = container.scrollWidth
+    const clientWidth = container.clientWidth
+
+    const hasOverflowLeft = scrollLeft > 0
+    const hasOverflowRight = scrollLeft + clientWidth < scrollWidth - 1 // -1 for rounding tolerance
+
+    const parentRect = this.el.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    const rightOffset = Math.max(0, parentRect.right - containerRect.right)
+    this.el.style.setProperty(
+      "--overflow-shadow-right-offset",
+      `${rightOffset}px`,
+    )
+
+    this.el.setAttribute("data-overflow-left", hasOverflowLeft.toString())
+    this.el.setAttribute("data-overflow-right", hasOverflowRight.toString())
   }
 
   createNewTabEl() {
@@ -342,7 +334,7 @@ class ChromeTabs {
     tabEl.oncontextmenu = (event) => {
       this.emit("contextmenu", { tabEl, event })
     }
-    if (animate) {
+    if (animate && this.initialScrollDone) {
       tabEl.classList.add("chrome-tab-was-just-added")
       setTimeout(() => tabEl.classList.remove("chrome-tab-was-just-added"), 500)
     }
@@ -350,6 +342,7 @@ class ChromeTabs {
     tabProperties = Object.assign({}, defaultTapProperties, tabProperties)
     this.tabContentEl.appendChild(tabEl)
     this.setTabCloseEventListener(tabEl)
+    this.setTabEditEventListener(tabEl)
     this.setTabRenameConfirmEventListener(tabEl)
     this.updateTab(tabEl, tabProperties)
     this.emit("tabAdd", { tabEl })
@@ -369,6 +362,16 @@ class ChromeTabs {
     tabEl
       .querySelector(".chrome-tab-close")!
       .addEventListener("click", closeTabEvent)
+  }
+
+  setTabEditEventListener(tabEl: HTMLElement) {
+    const editTabEvent = (_: Event) => {
+      _.stopImmediatePropagation()
+      this.showRenameTab(tabEl)
+    }
+    tabEl
+      .querySelector(".chrome-tab-edit")!
+      .addEventListener("click", editTabEvent)
   }
 
   setTabRenameConfirmEventListener(tabEl: HTMLElement) {
@@ -398,6 +401,46 @@ class ChromeTabs {
     if (activeTabEl) activeTabEl.removeAttribute("active")
     tabEl.setAttribute("active", "")
     this.emit("activeTabChange", { tabEl })
+    if (this.initialScrollDone) {
+      setTimeout(() => this.scrollTabIntoView(tabEl))
+    }
+  }
+
+  scrollTabIntoView(tabEl: HTMLElement) {
+    const container = this.tabContentEl
+    const tabIndex = this.tabEls.indexOf(tabEl)
+    if (tabIndex === -1) return
+
+    const tabRect = tabEl.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+
+    const tabLeft = tabRect.left - containerRect.left + container.scrollLeft
+    const tabRight = tabLeft + tabRect.width
+
+    const containerScrollLeft = container.scrollLeft
+    const containerVisibleWidth = containerRect.width
+    const containerVisibleRight = containerScrollLeft + containerVisibleWidth
+
+    if (tabLeft < containerScrollLeft) {
+      container.scrollTo({
+        left: tabLeft,
+      })
+    } else if (tabRight > containerVisibleRight) {
+      container.scrollTo({
+        left: tabRight - containerVisibleWidth,
+      })
+    }
+  }
+
+  completeInitialSetup() {
+    if (this.initialScrollDone) return
+
+    this.initialScrollDone = true
+    const activeTab = this.activeTabEl as HTMLElement | null
+    if (activeTab) {
+      this.scrollTabIntoView(activeTab)
+    }
+    this.el.classList.add("chrome-tabs-ready")
   }
 
   removeTab(tabEl: HTMLElement) {
@@ -458,7 +501,17 @@ class ChromeTabs {
     }
   }
 
+  isTabRenameable(tabEl: HTMLElement) {
+    return (
+      !tabEl.classList.contains("temporary-tab") &&
+      !tabEl.classList.contains("preview-tab")
+    )
+  }
+
   showRenameTab(tabEl: HTMLElement) {
+    if (!this.isTabRenameable(tabEl)) {
+      return
+    }
     tabEl.setAttribute("is-renaming", "")
     tabEl.setAttribute("data-tab-title", tabEl.textContent?.trim() || "")
     const titleEl = tabEl.querySelector(".chrome-tab-title") as HTMLDivElement
@@ -466,9 +519,11 @@ class ChromeTabs {
       ".chrome-tab-rename",
     ) as HTMLInputElement
     const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
+    const editEl = tabEl.querySelector(".chrome-tab-edit") as HTMLDivElement
     titleEl.style.display = "none"
     inputEl.style.display = "block"
     closeEl.style.display = "none"
+    editEl.style.display = "none"
     inputEl.focus()
     inputEl.select()
   }
@@ -484,9 +539,11 @@ class ChromeTabs {
       titleEl.textContent = tabEl.getAttribute("data-tab-title") || ""
     }
     const closeEl = tabEl.querySelector(".chrome-tab-close") as HTMLDivElement
+    const editEl = tabEl.querySelector(".chrome-tab-edit") as HTMLDivElement
     titleEl.style.display = "block"
     inputEl.style.display = "none"
     closeEl.style.display = this.tabEls.length > 1 ? "block" : "none"
+    editEl.style.display = ""
   }
 
   toggleRenameTab(tabEl: HTMLElement) {
@@ -504,12 +561,101 @@ class ChromeTabs {
     )
   }
 
+  createDragPlaceholder(tabWidth: number) {
+    if (this.dragPlaceholder) return
+
+    this.dragPlaceholder = document.createElement("div")
+    this.dragPlaceholder.style.width = `${tabWidth}px`
+    this.dragPlaceholder.style.height = "1px"
+    this.dragPlaceholder.style.visibility = "hidden"
+    this.dragPlaceholder.style.pointerEvents = "none"
+    this.dragPlaceholder.style.position = "absolute"
+    // Position it at the end of the tab content to maintain scrollWidth
+    const totalWidth =
+      this.tabPositions[this.tabPositions.length - 1] + tabWidth
+    this.dragPlaceholder.style.left = `${totalWidth - tabWidth}px`
+    this.dragPlaceholder.classList.add("chrome-tab-drag-placeholder")
+
+    this.tabContentEl.appendChild(this.dragPlaceholder)
+  }
+
+  removeDragPlaceholder() {
+    if (this.dragPlaceholder) {
+      this.dragPlaceholder.remove()
+      this.dragPlaceholder = null
+    }
+  }
+
+  startAutoScroll() {
+    if (this.autoScrollInterval) return
+
+    this.autoScrollInterval = window.setInterval(() => {
+      if (this.autoScrollSpeed === 0 || !this.isDragging) return
+
+      const container = this.tabContentEl
+      const newScrollLeft = container.scrollLeft + this.autoScrollSpeed
+      const maxScroll = container.scrollWidth - container.clientWidth
+
+      container.scrollLeft = Math.max(0, Math.min(maxScroll, newScrollLeft))
+      this.updateOverflowShadows()
+
+      if (this.dragState.tabEl) {
+        this.updateDraggedTabPosition()
+      }
+    }, 16) // ~60fps
+  }
+
+  stopAutoScroll() {
+    if (this.autoScrollInterval) {
+      clearInterval(this.autoScrollInterval)
+      this.autoScrollInterval = null
+    }
+    this.autoScrollSpeed = 0
+  }
+
+  updateDraggedTabPosition() {
+    const { tabEl, pointerX } = this.dragState
+    if (!tabEl) return
+
+    const container = this.tabContentEl
+    const containerRect = container.getBoundingClientRect()
+    const tabWidth = tabEl.offsetWidth
+
+    // Calculate absolute position in the scrollable content based on pointer position
+    const relativePointerX = pointerX - containerRect.left
+    const absoluteX = relativePointerX + container.scrollLeft - tabWidth / 2
+
+    // Clamp to valid range
+    const maxPosition = container.scrollWidth - tabWidth
+    const clampedPosition = Math.max(0, Math.min(maxPosition, absoluteX))
+
+    // For fixed positioning, we need screen coordinates
+    // Visual X in container = clampedPosition - scrollLeft
+    // Screen X = containerRect.left + visualX
+    const visualX = clampedPosition - container.scrollLeft
+    const screenX = containerRect.left + visualX
+
+    // Update tab position using fixed positioning (left/top instead of transform)
+    tabEl.style.left = `${screenX}px`
+    tabEl.style.top = `${containerRect.top}px`
+    tabEl.style.transform = "none"
+
+    // Check for reorder
+    const destIndex = closest(clampedPosition, this.tabPositions)
+
+    if (destIndex !== this.dragState.currentIndex && destIndex !== -1) {
+      this.animateTabMove(tabEl, this.dragState.currentIndex, destIndex)
+      this.dragState.currentIndex = destIndex
+    }
+  }
+
   setupDraggabilly() {
     const tabEls = this.tabEls
 
     if (this.isDragging && this.draggabillyDragging) {
       this.isDragging = false
       this.el.classList.remove("chrome-tabs-is-sorting")
+      this.removeDragPlaceholder()
       const draggabilly = this.draggabillyDragging as unknown as {
         element: HTMLElement
         dragEnd: () => void
@@ -527,6 +673,8 @@ class ChromeTabs {
     }
 
     this.draggabillies.forEach((d) => d.destroy())
+    this.draggabillies = []
+
     if (tabEls.find((el) => el.classList.contains("temporary-tab"))) {
       return
     }
@@ -535,10 +683,9 @@ class ChromeTabs {
       const draggabilly = new Draggabilly(tabEl, {
         axis: "x",
         handle: ".chrome-tab-drag-handle",
-        containment: this.tabContentEl,
+        containment: false,
       })
 
-      let dragStartTabPositionX: number = 0
       let lastClickX: number
       let lastClickY: number
       let lastTimeStamp: number = 0
@@ -567,63 +714,137 @@ class ChromeTabs {
           lastTimeStamp = timeStamp
         }
         this.emit("tabClick", { tabEl })
-        // this.setCurrentTab(tabEl);
       })
 
-      draggabilly.on("dragStart", () => {
+      draggabilly.on("dragStart", (_event, pointer) => {
         this.isDragging = true
         this.draggabillyDragging = draggabilly
+
+        const originIndex = this.tabEls.indexOf(tabEl)
+        const tabWidth = tabEl.offsetWidth
+
+        this.createDragPlaceholder(tabWidth)
+
         tabEl.classList.add("chrome-tab-is-dragging")
         this.el.classList.add("chrome-tabs-is-sorting")
-        const currentTabIndex = this.tabEls.indexOf(tabEl)
-        dragStartTabPositionX = this.tabPositions[currentTabIndex] ?? 0
+
+        this.dragState = {
+          tabEl,
+          originIndex,
+          currentIndex: originIndex,
+          startScrollLeft: this.tabContentEl.scrollLeft,
+          pointerX: pointer.clientX,
+        }
+
+        // Disable Draggabilly's positioning - we'll handle it ourselves
+        // @ts-expect-error - accessing internal property
+        draggabilly.positionDrag = () => {}
+
+        // Set initial position immediately
+        this.updateDraggedTabPosition()
+
         this.emit("dragStart", {})
       })
 
       draggabilly.on("dragEnd", () => {
         this.isDragging = false
-        const finalTranslateX = parseFloat(tabEl.style.left)
-        tabEl.style.transform = `translate3d(0, 0, 0)`
+        this.stopAutoScroll()
+
+        const { originIndex } = this.dragState
+
+        this.dragState = {
+          tabEl: null,
+          originIndex: -1,
+          currentIndex: -1,
+          startScrollLeft: 0,
+          pointerX: 0,
+        }
+
+        tabEl.style.position = ""
+        tabEl.style.left = ""
+        tabEl.style.top = ""
+
+        const finalIndex = this.tabEls.indexOf(tabEl)
+        const finalPosition = this.tabPositions[finalIndex]
+
+        tabEl.style.transform = `translate3d(${finalPosition}px, 0, 0)`
+
+        // Emit reorder BEFORE dragEnd so React component can process it first
+        // Use finalIndex (actual DOM position) rather than currentIndex for accuracy
+        if (originIndex !== finalIndex) {
+          this.emit("tabReorder", {
+            tabEl,
+            originIndex,
+            destinationIndex: finalIndex,
+          })
+        }
+
         this.emit("dragEnd", {})
 
-        // Animate dragged tab back into its place
         requestAnimationFrame(() => {
-          tabEl.style.left = "0"
-          tabEl.style.transform = `translate3d(${finalTranslateX}px, 0, 0)`
+          tabEl.classList.remove("chrome-tab-is-dragging")
+          this.el.classList.remove("chrome-tabs-is-sorting")
+          tabEl.classList.add("chrome-tab-was-just-dragged")
+
+          this.removeDragPlaceholder()
 
           requestAnimationFrame(() => {
-            tabEl.classList.remove("chrome-tab-is-dragging")
-            this.el.classList.remove("chrome-tabs-is-sorting")
-
-            tabEl.classList.add("chrome-tab-was-just-dragged")
-
-            requestAnimationFrame(() => {
-              tabEl.style.transform = ""
-
-              this.layoutTabs()
-              this.setupDraggabilly()
-            })
+            tabEl.style.transform = ""
+            this.layoutTabs()
+            this.setupDraggabilly()
+            this.scrollTabIntoView(tabEl)
           })
         })
       })
 
-      draggabilly.on("dragMove", (event, pointer, moveVector) => {
-        // Current index be computed within the event since it can change during the dragMove
-        const tabEls = this.tabEls
-        const currentIndex = tabEls.indexOf(tabEl)
+      draggabilly.on("dragMove", (_event, pointer) => {
+        const container = this.tabContentEl
+        const containerRect = container.getBoundingClientRect()
+        const tabWidth = tabEl.offsetWidth
 
-        const currentTabPositionX = dragStartTabPositionX + moveVector.x
-        const destinationIndexTarget = closest(
-          currentTabPositionX,
-          this.tabPositions,
-        )
-        const destinationIndex = Math.max(
-          0,
-          Math.min(tabEls.length, destinationIndexTarget),
-        )
+        // Store pointer position for auto-scroll updates
+        this.dragState.pointerX = pointer.clientX
 
-        if (currentIndex !== destinationIndex) {
-          this.animateTabMove(tabEl, currentIndex, destinationIndex)
+        // Calculate absolute position in the scrollable content
+        const relativePointerX = pointer.clientX - containerRect.left
+        const absoluteX = relativePointerX + container.scrollLeft - tabWidth / 2
+
+        const maxPosition = container.scrollWidth - tabWidth
+        const clampedPosition = Math.max(0, Math.min(maxPosition, absoluteX))
+
+        const visualX = clampedPosition - container.scrollLeft
+        const screenX = containerRect.left + visualX
+
+        tabEl.style.left = `${screenX}px`
+        tabEl.style.top = `${containerRect.top}px`
+        tabEl.style.transform = "none"
+
+        const destIndex = closest(clampedPosition, this.tabPositions)
+
+        if (destIndex !== this.dragState.currentIndex && destIndex !== -1) {
+          this.animateTabMove(tabEl, this.dragState.currentIndex, destIndex)
+          this.dragState.currentIndex = destIndex
+        }
+
+        const edgeThreshold = 50
+        const maxScrollSpeed = 10
+
+        const distanceFromLeft = pointer.clientX - containerRect.left
+        const distanceFromRight = containerRect.right - pointer.clientX
+
+        if (distanceFromLeft < edgeThreshold && container.scrollLeft > 0) {
+          const intensity = 1 - distanceFromLeft / edgeThreshold
+          this.autoScrollSpeed = -maxScrollSpeed * intensity
+          this.startAutoScroll()
+        } else if (
+          distanceFromRight < edgeThreshold &&
+          container.scrollLeft < container.scrollWidth - container.clientWidth
+        ) {
+          const intensity = 1 - distanceFromRight / edgeThreshold
+          this.autoScrollSpeed = maxScrollSpeed * intensity
+          this.startAutoScroll()
+        } else {
+          this.autoScrollSpeed = 0
         }
       })
     })
@@ -639,7 +860,6 @@ class ChromeTabs {
     } else {
       tabEl.parentNode!.insertBefore(tabEl, this.tabEls[destinationIndex + 1])
     }
-    this.emit("tabReorder", { tabEl, originIndex, destinationIndex })
     this.layoutTabs()
   }
 

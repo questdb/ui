@@ -74,7 +74,14 @@ export function Tabs({
     }
   }, [onTabReorder])
 
-  const { ChromeTabs, addTab, activeTab, removeTab, updateTab } = useChromeTabs(
+  const {
+    ChromeTabs,
+    addTab,
+    activeTab,
+    removeTab,
+    updateTab,
+    completeInitialSetup,
+  } = useChromeTabs(
     {
       onTabClose,
       onTabActive,
@@ -108,6 +115,7 @@ export function Tabs({
           activeTab(tab.id)
         }
       })
+      setTimeout(() => completeInitialSetup())
     }
     tabsRef.current = tabs
   }, [tabs])

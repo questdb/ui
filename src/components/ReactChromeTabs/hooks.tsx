@@ -22,13 +22,7 @@
  *
  ******************************************************************************/
 
-import React, {
-  CSSProperties,
-  forwardRef,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react"
+import React, { forwardRef, useCallback, useEffect, useRef } from "react"
 import ChromeTabsClz, {
   TabProperties,
   TabEventDetail,
@@ -42,7 +36,6 @@ export type Listeners = {
   onTabClose?: (tabId: string) => void
   onTabReorder?: (tabId: string, fromIdex: number, toIndex: number) => void
   onTabRename?: (tabId: string, title: string) => void
-  onDragBegin?: () => void
   onDragEnd?: () => void
   onContextMenu?: (tabId: string, event: MouseEvent) => void
   onNewTab?: () => void
@@ -60,13 +53,7 @@ const ChromeTabsWrapper = forwardRef<
     classList.push(props.className)
   }
   return (
-    <div
-      ref={ref}
-      className={classList.join(" ")}
-      style={
-        { "--tab-content-margin": "9px", paddingBottom: "3px" } as CSSProperties
-      }
-    >
+    <div ref={ref} className={classList.join(" ")}>
       <div className="chrome-tabs-content" />
     </div>
   )
@@ -142,17 +129,6 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
   }, [listeners.onTabClose])
 
   useEffect(() => {
-    const listener = () => {
-      listeners.onDragBegin?.()
-    }
-    const ele = chromeTabsRef.current?.el
-    ele?.addEventListener("dragBegin", listener)
-    return () => {
-      ele?.removeEventListener("dragBegin", listener)
-    }
-  }, [listeners.onDragBegin])
-
-  useEffect(() => {
     const ele = chromeTabsRef.current?.el
     const listener = (event: Event) => {
       const { detail } = event as CustomEvent<TabContextMenuEventDetail>
@@ -226,6 +202,10 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
     }
   }, [])
 
+  const completeInitialSetup = useCallback(() => {
+    chromeTabsRef.current?.completeInitialSetup()
+  }, [])
+
   const ChromeTabs = useCallback(function ChromeTabs(props: {
     className?: string
     darkMode?: boolean
@@ -239,5 +219,6 @@ export function useChromeTabs(listeners: Listeners, limit?: number) {
     updateTab,
     removeTab,
     activeTab,
+    completeInitialSetup,
   }
 }

@@ -67,6 +67,10 @@ export type PreviewContentCode = {
 
 export type PreviewContent = PreviewContentDiff | PreviewContentCode
 
+/**
+ * Buffer schema - used for tab persistence.
+ * Import validation: See validateBufferSchema()
+ */
 export type Buffer = {
   /** auto incremented number by Dexie */
   id?: number
@@ -82,7 +86,7 @@ export type Buffer = {
   previewContent?: PreviewContent
 }
 
-const defaultEditorViewState: editor.ICodeEditorViewState = {
+export const defaultEditorViewState: editor.ICodeEditorViewState = {
   cursorState: [
     {
       inSelectionMode: false,
