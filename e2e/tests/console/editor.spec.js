@@ -1544,6 +1544,7 @@ describe("import/export tabs", () => {
       cy.get(".chrome-tab-close").click()
     })
     cy.getEditorTabByTitle("Imported Tab 1").should("not.exist")
+    cy.getEditor().find("textarea").should("be.focused")
 
     // Now import the same tabs again — archived duplicate should show "closed" badge
     cy.getByDataHook("editor-tabs-menu-button").click()
