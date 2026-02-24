@@ -12,12 +12,12 @@ export const DropdownMenu = {
 
   Content: styled(RadixDropdownMenu.Content)`
     display: grid;
-    gap: 0.5rem;
+    gap: 0.2rem;
     min-width: 22rem;
     background: ${({ theme }) => theme.color.backgroundLighter};
     border-radius: ${({ theme }) => theme.borderRadius};
     box-shadow: 0 5px 5px 0 ${({ theme }) => theme.color.black40};
-    padding: 1rem 0;
+    padding: 0.5rem 0;
   `,
 
   Arrow: styled(RadixDropdownMenu.Arrow)`
