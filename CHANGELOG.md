@@ -17,6 +17,15 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.2.0 - 2026.02.25
+### Added
+- table details drawer [#517](https://github.com/questdb/ui/pull/517)
+- import/export tabs [#533](https://github.com/questdb/ui/pull/533)
+
+### Fixed
+- increase highlight contrast for comments [#537](https://github.com/questdb/ui/pull/537)
+
+
 ## 1.1.13 - 2026.01.27
 ### Added
 - ai assistant improvements [#529](https://github.com/questdb/ui/pull/529)
