@@ -361,6 +361,9 @@ const Editor = ({
                       lineHeight: 24,
                       folding: false,
                       wordWrap: "on",
+                      stickyScroll: {
+                        enabled: false,
+                      },
                     }}
                   />
                 </DiffEditorContainer>

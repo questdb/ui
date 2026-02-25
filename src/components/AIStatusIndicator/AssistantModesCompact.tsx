@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import styled, { css, useTheme } from "styled-components"
 import { CloseCircle } from "@styled-icons/remix-fill"
-import { FileText, Table } from "@styled-icons/remix-line"
-import { CheckIcon as CheckIconRaw } from "@phosphor-icons/react"
+import { Table } from "@styled-icons/remix-line"
+import { CheckIcon as CheckIconRaw, FileTextIcon } from "@phosphor-icons/react"
 import { ChevronRight } from "@styled-icons/boxicons-solid"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
@@ -466,7 +466,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
                             return (
                               <ReasoningItem key={itemKey}>
                                 <ReasoningIcon>
-                                  <FileText
+                                  <FileTextIcon
                                     size={14}
                                     color={theme.color.gray2}
                                   />
@@ -516,7 +516,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
                     return (
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
-                          <FileText size={14} />
+                          <FileTextIcon size={14} />
                         </ReasoningIcon>
                         <ReasoningText>
                           {name && docSection ? (

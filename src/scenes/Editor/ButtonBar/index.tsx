@@ -31,6 +31,10 @@ const ButtonBarWrapper = styled.div<{
     gap: 1rem;
     align-items: center;
   `}
+
+  @media (max-width: 768px) {
+    display: none;
+  }
 `
 
 const ButtonGroup = styled.div`

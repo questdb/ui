@@ -87,6 +87,16 @@ export class Storage extends Dexie {
         .filter((buffer) => buffer.isDiffBuffer === true)
         .delete(),
     )
+    // ──────────────────────────────────────────────────────────────────
+    // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)
+    // If you add a new version here that changes the "buffers" table:
+    //   1. Add a matching migration step in src/store/migrations.ts
+    //   2. If needed, update validateBufferItem() in src/scenes/Editor/Monaco/importTabs.ts
+    //      if the new field needs validation on import
+    //   3. If needed, update sanitizeBuffer() in importTabs.ts if the field should
+    //      be stripped or defaulted during import
+    // ──────────────────────────────────────────────────────────────────
+
     // add initial buffer on db creation
     // this is only called once, when DB is not available yet
     this.on("populate", async () => {

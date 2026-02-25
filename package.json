@@ -66,6 +66,7 @@
     "core-js": "^3.22.8",
     "date-fns": "4.1.0",
     "dexie": "^4.0.11",
+    "dexie-export-import": "^4.1.4",
     "dexie-react-hooks": "^4.2.0",
     "dotenv": "^10.0.0",
     "draggabilly": "^3.0.0",

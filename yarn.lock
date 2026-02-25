@@ -2567,6 +2567,7 @@ __metadata:
     cypress-real-events: "npm:^1.13.0"
     date-fns: "npm:4.1.0"
     dexie: "npm:^4.0.11"
+    dexie-export-import: "npm:^4.1.4"
     dexie-react-hooks: "npm:^4.2.0"
     dotenv: "npm:^10.0.0"
     draggabilly: "npm:^3.0.0"
@@ -5829,6 +5830,15 @@ __metadata:
   version: 1.1.0
   resolution: "detect-node-es@npm:1.1.0"
   checksum: 10/e46307d7264644975b71c104b9f028ed1d3d34b83a15b8a22373640ce5ea630e5640b1078b8ea15f202b54641da71e4aa7597093bd4b91f113db520a26a37449
+  languageName: node
+  linkType: hard
+
+"dexie-export-import@npm:^4.1.4":
+  version: 4.1.4
+  resolution: "dexie-export-import@npm:4.1.4"
+  peerDependencies:
+    dexie: ^2.0.4 || ^3.0.0 || ^4.0.1
+  checksum: 10/3a842c2a108fcb56490f5ca715a6bf7aef76f7f1f6e99248b6884b9de65e477063ffb0556fe7ffe2655e40dfe62ec71a959b350edfc6bf8ace46374d48aa78a9
   languageName: node
   linkType: hard
 

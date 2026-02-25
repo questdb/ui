@@ -32,11 +32,14 @@ import {
   makeBuffer,
   makeFallbackBuffer,
 } from "../../store/buffers"
+import { toast } from "../../components/Toast"
 import { db } from "../../store/db"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 
 import { useLiveQuery } from "dexie-react-hooks"
+
+export const MAX_TABS = 100
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -83,7 +86,7 @@ export type EditorContext = {
   addBuffer: (
     buffer?: Partial<Buffer>,
     options?: { shouldSelectAll?: boolean },
-  ) => Promise<Buffer>
+  ) => Promise<Buffer | undefined>
   deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
   updateBuffer: (
@@ -293,6 +296,13 @@ export const EditorProvider: React.FC = ({ children }) => {
 
   const addBuffer: EditorContext["addBuffer"] = useCallback(
     async (newBuffer, { shouldSelectAll = false } = {}) => {
+      if (buffers && buffers.length >= MAX_TABS) {
+        toast.error(
+          `Tab limit reached (${MAX_TABS}). Please clear history to free up space.`,
+        )
+        return undefined
+      }
+
       const fallback = makeFallbackBuffer(
         newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
       )
