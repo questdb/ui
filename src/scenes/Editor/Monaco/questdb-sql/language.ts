@@ -126,7 +126,7 @@ export const language: languages.IMonarchLanguage = {
       ],
     ],
     numbers: [
-      [/[+-]?\d+[utsmhdwmy]\b/i, "number"], // sampling rate/ horizons
+      [/[+-]?\d+[utsmhdwyn]\b/i, "number"], // sampling rate/ horizons
       [/([+-]?\d+\.\d+[eE]?[+-]?\d+)/, "number"], // floating point number
       [/0[xX][0-9a-fA-F]*/, "number"], // hex integers
       [/[+-]?\d+((_)?\d+)*[Ll]?/, "number"], // integers

@@ -2110,6 +2110,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               scrollBeyondLastLine: false,
               tabSize: 2,
               lineNumbersMinChars,
+              wordBasedSuggestions: "off",
             }}
             theme="dracula"
           />

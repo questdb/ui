@@ -87,10 +87,14 @@ const toCompletionItem = (
           }
         : label,
     kind: KIND_MAP[suggestion.kind],
-    insertText,
+    insertText: insertText + " ",
     filterText: suggestion.filterText,
     sortText: PRIORITY_MAP[suggestion.priority],
     range,
+    command: {
+      id: "editor.action.triggerSuggest",
+      title: "Re-trigger suggestions",
+    },
   }
 }
 
@@ -233,9 +237,21 @@ export const createSchemaCompletionProvider = (
         endColumn: word.endColumn,
       }
 
+      // Filter out suggestions that exactly match the word already typed,
+      // e.g. don't suggest "FROM" when cursor is right after "FROM".
+      const currentWord = isOperatorWord
+        ? ""
+        : dotIndex >= 0
+          ? word.word.substring(dotIndex + 1)
+          : word.word
+
+      const filtered = suggestions.filter(
+        (s) => s.insertText.toUpperCase() !== currentWord.toUpperCase(),
+      )
+
       return {
         incomplete: true,
-        suggestions: suggestions.map((s) => toCompletionItem(s, range)),
+        suggestions: filtered.map((s) => toCompletionItem(s, range)),
       }
     },
   }
