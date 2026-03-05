@@ -25,7 +25,7 @@ import {
   type AIOperation,
 } from "./aiAssistant"
 import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
-import { providerForModel, MODEL_OPTIONS } from "./aiAssistantSettings"
+import { providerForModel, MODEL_OPTIONS } from "./ai"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 

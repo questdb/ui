@@ -1,5 +1,5 @@
 import type { ConversationMessage } from "../providers/AIConversationProvider/types"
-import { MODEL_OPTIONS } from "./aiAssistantSettings"
+import { MODEL_OPTIONS } from "./ai"
 import type { AIProvider } from "./ai"
 
 type CompactionResultSuccess = {

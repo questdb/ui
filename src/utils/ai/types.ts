@@ -4,7 +4,7 @@ import type {
   StatusCallback,
   StreamingCallback,
 } from "../aiAssistant"
-import type { Provider } from "../aiAssistantSettings"
+import type { Provider } from "./settings"
 
 export interface ToolDefinition {
   name: string

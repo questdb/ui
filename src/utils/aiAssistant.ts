@@ -1,6 +1,6 @@
 import { Client } from "./questdb/client"
 import { Type, Table } from "./questdb/types"
-import type { Provider } from "./aiAssistantSettings"
+import type { Provider } from "./ai"
 import { formatSql } from "./formatSql"
 import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import type {

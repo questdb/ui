@@ -14,7 +14,7 @@ import {
   hasSchemaAccess,
   providerForModel,
   canUseAiAssistant,
-} from "../../utils/aiAssistantSettings"
+} from "../../utils/ai"
 import { useAIConversation } from "../AIConversationProvider"
 
 export const useAIStatus = () => {

@@ -1,7 +1,7 @@
 import type { AIProvider } from "./types"
 import { createOpenAIProvider } from "./openaiProvider"
 import { createAnthropicProvider } from "./anthropicProvider"
-import type { Provider } from "../aiAssistantSettings"
+import type { Provider } from "./settings"
 
 export function createProvider(
   providerId: Provider,

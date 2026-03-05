@@ -24,7 +24,7 @@ import {
   type ModelOption,
   type Provider,
   getNextModel,
-} from "../../utils/aiAssistantSettings"
+} from "../../utils/ai"
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"

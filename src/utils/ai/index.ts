@@ -27,3 +27,15 @@ export {
   getHealthIssuePrompt,
 } from "./prompts"
 export type { HealthIssuePromptData } from "./prompts"
+export {
+  MODEL_OPTIONS,
+  providerForModel,
+  getModelProps,
+  getAllProviders,
+  getSelectedModel,
+  getNextModel,
+  isAiAssistantConfigured,
+  canUseAiAssistant,
+  hasSchemaAccess,
+} from "./settings"
+export type { Provider, ModelOption } from "./settings"

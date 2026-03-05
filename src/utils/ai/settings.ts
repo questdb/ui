@@ -1,4 +1,4 @@
-import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
+import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 
 type ReasoningEffort = "high" | "medium" | "low"
 

@@ -11,7 +11,7 @@ import type {
   TokenUsage,
 } from "../aiAssistant"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
-import { getModelProps } from "../aiAssistantSettings"
+import { getModelProps } from "./settings"
 import type {
   AIProvider,
   FlowConfig,

@@ -11,11 +11,7 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
-import {
-  MODEL_OPTIONS,
-  type ModelOption,
-  type Provider,
-} from "../../utils/aiAssistantSettings"
+import { MODEL_OPTIONS, type ModelOption, type Provider } from "../../utils/ai"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
