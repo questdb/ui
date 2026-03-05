@@ -799,7 +799,7 @@ export const ConfigurationModal = ({
       )?.value ?? modelsByProvider[selectedProvider][0].value
 
     try {
-      const result = await testApiKey(apiKey, testModel)
+      const result = await testApiKey(apiKey, testModel, selectedProvider)
       if (!result.valid) {
         const errorMsg = result.error || "Invalid API key"
         setError(errorMsg)

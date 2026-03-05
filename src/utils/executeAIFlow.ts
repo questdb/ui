@@ -18,14 +18,13 @@ import {
   createStreamingCallback,
   isAiAssistantError,
   generateChatTitle,
-  getExplainSchemaPrompt,
-  getHealthIssuePrompt,
   type ActiveProviderSettings,
   type GeneratedSQL,
   type AiAssistantExplanation,
   type AiAssistantAPIError,
   type AIOperation,
 } from "./aiAssistant"
+import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
 import { providerForModel, MODEL_OPTIONS } from "./aiAssistantSettings"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"

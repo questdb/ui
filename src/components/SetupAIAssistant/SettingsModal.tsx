@@ -628,7 +628,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         providerModels.find((m) => m.isTestModel) ?? providerModels[0]
       ).value
       try {
-        const result = await testApiKey(apiKey, testModel)
+        const result = await testApiKey(apiKey, testModel, provider)
         if (!result.valid) {
           setValidationState((prev) => ({ ...prev, [provider]: "error" }))
           setValidationErrors((prev) => ({

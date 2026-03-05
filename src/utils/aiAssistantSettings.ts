@@ -1,5 +1,6 @@
-import { ReasoningEffort } from "openai/resources/shared"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
+
+type ReasoningEffort = "high" | "medium" | "low"
 
 export type Provider = "anthropic" | "openai"
 

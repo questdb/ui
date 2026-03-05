@@ -1,16 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk"
-import OpenAI from "openai"
 import type { ConversationMessage } from "../providers/AIConversationProvider/types"
-import {
-  countTokens,
-  COMPACTION_THRESHOLDS,
-  type ConversationMessage as TokenConversationMessage,
-} from "./tokenCounting"
-import {
-  type Provider,
-  MODEL_OPTIONS,
-  getModelProps,
-} from "./aiAssistantSettings"
+import { MODEL_OPTIONS } from "./aiAssistantSettings"
+import type { AIProvider } from "./ai"
 
 type CompactionResultSuccess = {
   compactedMessage: string
@@ -73,7 +63,7 @@ ${summary}
 
 function toTokenMessages(
   messages: [...ConversationMessage[], Omit<ConversationMessage, "id">],
-): TokenConversationMessage[] {
+): Array<{ role: "user" | "assistant"; content: string }> {
   return messages
     .filter((m) => m.content && m.content.trim() !== "")
     .map((m) => ({
@@ -84,12 +74,10 @@ function toTokenMessages(
 
 async function generateSummary(
   middleMessages: ConversationMessage[],
-  provider: Provider,
-  anthropicClient?: Anthropic,
-  openaiClient?: OpenAI,
+  aiProvider: AIProvider,
 ): Promise<string> {
   const testModel = MODEL_OPTIONS.find(
-    (m) => m.provider === provider && m.isTestModel,
+    (m) => m.provider === aiProvider.id && m.isTestModel,
   )
   if (!testModel) {
     throw new Error("No test model found for provider")
@@ -101,41 +89,22 @@ async function generateSummary(
 
   const userMessage = `Please summarize the following conversation:\n\n${conversationText}`
 
-  if (provider === "anthropic" && anthropicClient) {
-    const response = await anthropicClient.messages.create({
-      ...getModelProps(testModel.value),
-      max_tokens: 8192,
-      messages: [{ role: "user", content: userMessage }],
-      system: SUMMARIZATION_PROMPT,
-    })
-
-    const textBlock = response.content.find((block) => block.type === "text")
-    return textBlock?.type === "text" ? textBlock.text : ""
-  } else if (provider === "openai" && openaiClient) {
-    const response = await openaiClient.responses.create({
-      ...getModelProps(testModel.value),
-      instructions: SUMMARIZATION_PROMPT,
-      input: userMessage,
-    })
-
-    return response.output_text || ""
-  }
-
-  throw new Error("No valid client provided for summarization")
+  return aiProvider.generateSummary({
+    model: testModel.value,
+    systemPrompt: SUMMARIZATION_PROMPT,
+    userMessage,
+  })
 }
 
 export async function compactConversationIfNeeded(
   conversationHistory: ConversationMessage[],
-  provider: Provider,
+  aiProvider: AIProvider,
   systemPrompt: string,
   userMessage: string,
   setStatusCompacting: () => void,
-  options: {
-    anthropicClient?: Anthropic
-    openaiClient?: OpenAI
-    model?: string
-  } = {},
+  options: { model?: string } = {},
 ): Promise<CompactionResult> {
+  const compactionThreshold = aiProvider.contextWindow - 50_000
   const messages = [
     ...conversationHistory,
     {
@@ -144,33 +113,31 @@ export async function compactConversationIfNeeded(
       timestamp: Date.now(),
     } as Omit<ConversationMessage, "id">,
   ] as [...ConversationMessage[], Omit<ConversationMessage, "id">]
+
   const totalChars =
     systemPrompt.length + messages.reduce((sum, m) => sum + m.content.length, 0)
-  if (totalChars < COMPACTION_THRESHOLDS[provider]) {
+
+  if (totalChars < compactionThreshold) {
     return { wasCompacted: false }
   }
 
   const tokenMessages = toTokenMessages(messages)
-  const estimatedTokens = await countTokens(
-    provider,
-    tokenMessages,
-    systemPrompt,
-    {
-      anthropicClient: options.anthropicClient,
-      model: options.model,
-    },
-  )
 
-  if (estimatedTokens === -1) {
+  let estimatedTokens: number
+  try {
+    estimatedTokens = await aiProvider.countTokens({
+      messages: tokenMessages,
+      systemPrompt,
+      model: options.model ?? "",
+    })
+  } catch {
     console.error(
       "Failed to estimate tokens for conversation, using full messages list.",
     )
-    return {
-      wasCompacted: false,
-    }
+    return { wasCompacted: false }
   }
 
-  if (estimatedTokens <= COMPACTION_THRESHOLDS[provider]) {
+  if (estimatedTokens <= compactionThreshold) {
     return { wasCompacted: false }
   }
 
@@ -184,9 +151,8 @@ export async function compactConversationIfNeeded(
 
   const result = await compactConversationInternal(
     conversationHistory,
-    provider,
+    aiProvider,
     setStatusCompacting,
-    options,
   )
 
   if (!result.wasCompacted) {
@@ -202,13 +168,8 @@ export async function compactConversationIfNeeded(
 
 async function compactConversationInternal(
   messages: ConversationMessage[],
-  provider: Provider,
+  aiProvider: AIProvider,
   setStatusCompacting: () => void,
-  options: {
-    anthropicClient?: Anthropic
-    openaiClient?: OpenAI
-    model?: string
-  } = {},
 ): Promise<CompactionResult> {
   if (messages.length === 0) {
     return { wasCompacted: false }
@@ -217,12 +178,7 @@ async function compactConversationInternal(
   setStatusCompacting()
 
   try {
-    const summary = await generateSummary(
-      messages,
-      provider,
-      options.anthropicClient,
-      options.openaiClient,
-    )
+    const summary = await generateSummary(messages, aiProvider)
 
     return {
       compactedMessage: buildContinuationPrompt(summary),
