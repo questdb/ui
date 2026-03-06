@@ -1,13 +1,21 @@
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 
-type ReasoningEffort = "high" | "medium" | "low"
+export type ProviderType = "anthropic" | "openai" | "openai-chat-completions"
 
-export type Provider = "anthropic" | "openai"
+export type ProviderId = "anthropic" | "openai"
+
+/** @deprecated Use ProviderId instead */
+export type Provider = ProviderId
+
+export const PROVIDER_TYPE: Record<ProviderId, ProviderType> = {
+  anthropic: "anthropic",
+  openai: "openai",
+}
 
 export type ModelOption = {
   label: string
   value: string
-  provider: Provider
+  provider: ProviderId
   isSlow?: boolean
   isTestModel?: boolean
   default?: boolean
@@ -16,22 +24,22 @@ export type ModelOption = {
 
 export const MODEL_OPTIONS: ModelOption[] = [
   {
-    label: "Claude Sonnet 4.5",
-    value: "claude-sonnet-4-5",
-    provider: "anthropic",
-    default: true,
-    defaultEnabled: true,
-  },
-  {
-    label: "Claude Opus 4.5",
-    value: "claude-opus-4-5",
+    label: "Claude Opus 4.6",
+    value: "claude-opus-4-6",
     provider: "anthropic",
     isSlow: true,
     defaultEnabled: true,
   },
   {
-    label: "Claude Sonnet 4",
-    value: "claude-sonnet-4",
+    label: "Claude Sonnet 4.6",
+    value: "claude-sonnet-4-6",
+    provider: "anthropic",
+    default: true,
+    defaultEnabled: true,
+  },
+  {
+    label: "Claude Sonnet 4.5",
+    value: "claude-sonnet-4-5",
     provider: "anthropic",
   },
   {
@@ -41,50 +49,52 @@ export const MODEL_OPTIONS: ModelOption[] = [
     isTestModel: true,
   },
   {
-    label: "GPT-5.1 (High Reasoning)",
-    value: "gpt-5.1@reasoning=high",
+    label: "GPT-5.4 (High Reasoning)",
+    value: "gpt-5.4@reasoning=high",
     provider: "openai",
-    isSlow: true,
   },
   {
-    label: "GPT-5.1 (Medium Reasoning)",
-    value: "gpt-5.1@reasoning=medium",
+    label: "GPT-5.4 (Medium Reasoning)",
+    value: "gpt-5.4@reasoning=medium",
     provider: "openai",
-    isSlow: true,
     defaultEnabled: true,
   },
   {
-    label: "GPT-5.1 (No Reasoning)",
-    value: "gpt-5.1",
+    label: "GPT-5.4 (Low Reasoning)",
+    value: "gpt-5.4@reasoning=low",
     provider: "openai",
     defaultEnabled: true,
-    isTestModel: true,
-  },
-  {
-    label: "GPT-5",
-    value: "gpt-5",
-    provider: "openai",
-    defaultEnabled: true,
+    default: true,
   },
   {
     label: "GPT-5 mini",
     value: "gpt-5-mini",
     provider: "openai",
-    default: true,
     defaultEnabled: true,
+  },
+  {
+    label: "GPT-5 nano",
+    value: "gpt-5-nano",
+    provider: "openai",
+    defaultEnabled: true,
+    isTestModel: true,
   },
 ]
 
-export const providerForModel = (model: ModelOption["value"]): Provider => {
-  return MODEL_OPTIONS.find((m) => m.value === model)!.provider
+export type ReasoningEffort = "high" | "medium" | "low"
+
+export type ModelProps = {
+  model: string
+  reasoningEffort?: ReasoningEffort
 }
 
-export const getModelProps = (
+export const providerForModel = (
   model: ModelOption["value"],
-): {
-  model: string
-  reasoning?: { effort: ReasoningEffort }
-} => {
+): ProviderId | null => {
+  return MODEL_OPTIONS.find((m) => m.value === model)?.provider ?? null
+}
+
+export const getModelProps = (model: ModelOption["value"]): ModelProps => {
   const modelOption = MODEL_OPTIONS.find((m) => m.value === model)
   if (!modelOption) {
     return { model }
@@ -99,15 +109,15 @@ export const getModelProps = (
     if (paramName === "reasoning" && paramValue) {
       return {
         model: modelName,
-        reasoning: { effort: paramValue as ReasoningEffort },
+        reasoningEffort: paramValue as ReasoningEffort,
       }
     }
   }
   return { model: modelName }
 }
 
-export const getAllProviders = (): Provider[] => {
-  const providers = new Set<Provider>()
+export const getAllProviders = (): ProviderId[] => {
+  const providers = new Set<ProviderId>()
   MODEL_OPTIONS.forEach((model) => {
     providers.add(model.provider)
   })
@@ -117,26 +127,45 @@ export const getAllProviders = (): Provider[] => {
 export const getSelectedModel = (
   settings: AiAssistantSettings,
 ): string | null => {
+  const enabledModels = getAllEnabledModels(settings)
   const selectedModel = settings.selectedModel
   if (
     selectedModel &&
     typeof selectedModel === "string" &&
-    MODEL_OPTIONS.find((m) => m.value === selectedModel)
+    enabledModels.includes(selectedModel)
   ) {
     return selectedModel
   }
 
-  return MODEL_OPTIONS.find((m) => m.default)?.value ?? null
+  // Fall back to first enabled default model, then first enabled model
+  return (
+    enabledModels.find(
+      (id) => MODEL_OPTIONS.find((m) => m.value === id)?.default,
+    ) ??
+    enabledModels[0] ??
+    null
+  )
+}
+
+const getAllEnabledModels = (settings: AiAssistantSettings): string[] => {
+  const models: string[] = []
+  for (const provider of getAllProviders()) {
+    const providerModels = settings.providers?.[provider]?.enabledModels
+    if (providerModels) {
+      models.push(...providerModels)
+    }
+  }
+  return models
 }
 
 export const getNextModel = (
   currentModel: string | undefined,
-  enabledModels: Record<Provider, string[]>,
+  enabledModels: Record<ProviderId, string[]>,
 ): string | null => {
   let nextModel: string | null | undefined = currentModel
 
   const modelProvider = currentModel ? providerForModel(currentModel) : null
-  if (modelProvider && enabledModels[modelProvider].length > 0) {
+  if (modelProvider && enabledModels[modelProvider]?.length > 0) {
     // Current model is still enabled, so we can use it
     if (currentModel && enabledModels[modelProvider].includes(currentModel)) {
       return currentModel
@@ -173,6 +202,40 @@ export const isAiAssistantConfigured = (
 
 export const canUseAiAssistant = (settings: AiAssistantSettings): boolean => {
   return isAiAssistantConfigured(settings) && !!settings.selectedModel
+}
+
+/**
+ * Reconciles persisted AI assistant settings against the current MODEL_OPTIONS.
+ * Removes model IDs not present in MODEL_OPTIONS from enabledModels.
+ *
+ * Pure function — does not write to localStorage.
+ * Idempotent: applying it multiple times produces the same result.
+ */
+export const reconcileSettings = (
+  settings: AiAssistantSettings,
+): AiAssistantSettings => {
+  const validModelIds = new Set(MODEL_OPTIONS.map((m) => m.value))
+  const result = {
+    ...settings,
+    providers: { ...settings.providers },
+  }
+
+  for (const providerKey of Object.keys(result.providers) as ProviderId[]) {
+    const providerSettings = result.providers[providerKey]
+    if (!providerSettings?.enabledModels) continue
+
+    const models = providerSettings.enabledModels.filter((id) =>
+      validModelIds.has(id),
+    )
+    result.providers[providerKey] = {
+      ...providerSettings,
+      enabledModels: models,
+    }
+  }
+
+  result.selectedModel = getSelectedModel(result) ?? undefined
+
+  return result
 }
 
 export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {

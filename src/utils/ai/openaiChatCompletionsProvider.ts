@@ -1,8 +1,8 @@
 import OpenAI from "openai"
 import type {
-  ResponseOutputItem,
-  ResponseTextConfig,
-} from "openai/resources/responses/responses"
+  ChatCompletionMessageParam,
+  ChatCompletionMessageToolCall,
+} from "openai/resources/chat/completions"
 import type {
   AiAssistantAPIError,
   ModelToolsClient,
@@ -29,12 +29,10 @@ import {
 } from "./shared"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 
-function toResponseTextConfig(
-  format: ResponseFormatSchema,
-): ResponseTextConfig {
+function toResponseFormat(format: ResponseFormatSchema) {
   return {
-    format: {
-      type: "json_schema" as const,
+    type: "json_schema" as const,
+    json_schema: {
       name: format.name,
       schema: format.schema,
       strict: format.strict,
@@ -42,70 +40,104 @@ function toResponseTextConfig(
   }
 }
 
-function toOpenAIFunctions(tools: ToolDefinition[]): OpenAI.Responses.Tool[] {
+function toOpenAITools(
+  tools: ToolDefinition[],
+): OpenAI.Chat.Completions.ChatCompletionTool[] {
   return tools.map((t) => ({
     type: "function" as const,
-    name: t.name,
-    description: t.description,
-    parameters: { ...t.inputSchema, additionalProperties: false },
-    strict: true,
-  })) as OpenAI.Responses.Tool[]
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: { ...t.inputSchema, additionalProperties: false },
+      strict: true,
+    },
+  }))
 }
 
-async function createOpenAIResponseStreaming(
+interface RequestResult {
+  content: string
+  toolCalls: { id: string; name: string; arguments: unknown }[]
+  promptTokens: number
+  completionTokens: number
+  assistantMessage: ChatCompletionMessageParam
+}
+
+async function createChatCompletionStreaming(
   openai: OpenAI,
-  params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
   streamCallback: StreamingCallback,
   abortSignal?: AbortSignal,
-): Promise<OpenAI.Responses.Response> {
+): Promise<{
+  content: string
+  refusal: string | null
+  finishReason: string | null
+  toolCalls: ChatCompletionMessageToolCall[]
+  usage: { prompt_tokens: number; completion_tokens: number } | null
+}> {
   let accumulatedText = ""
+  let accumulatedRefusal = ""
   let lastExplanation = ""
-  let finalResponse: OpenAI.Responses.Response | null = null
+  let finishReason: string | null = null
+  const toolCallAccumulator: Map<
+    number,
+    { id: string; name: string; arguments: string }
+  > = new Map()
+  let usage: { prompt_tokens: number; completion_tokens: number } | null = null
 
   try {
-    const stream = await openai.responses.create({
+    const stream = await openai.chat.completions.create({
       ...params,
       stream: true,
-    } as OpenAI.Responses.ResponseCreateParamsStreaming)
+      stream_options: { include_usage: true },
+    })
 
-    for await (const event of stream) {
+    for await (const chunk of stream) {
       if (abortSignal?.aborted) {
         throw new StreamingError("Operation aborted", "interrupted")
       }
 
-      if (event.type === "error") {
-        const errorEvent = event as { error?: { message?: string } }
-        throw new StreamingError(
-          errorEvent.error?.message || "Stream error occurred",
-          "failed",
-          event,
-        )
-      }
+      const choice = chunk.choices?.[0]
 
-      if (event.type === "response.failed") {
-        const failedEvent = event as {
-          response?: { error?: { message?: string } }
-        }
-        throw new StreamingError(
-          failedEvent.response?.error?.message ||
-            "Provider failed to return a response",
-          "failed",
-          event,
-        )
-      }
-
-      if (event.type === "response.output_text.delta") {
-        accumulatedText += event.delta
+      if (choice?.delta?.content) {
+        accumulatedText += choice.delta.content
         const explanation = extractPartialExplanation(accumulatedText)
         if (explanation !== lastExplanation) {
-          const chunk = explanation.slice(lastExplanation.length)
+          const delta = explanation.slice(lastExplanation.length)
           lastExplanation = explanation
-          streamCallback.onTextChunk(chunk, explanation)
+          streamCallback.onTextChunk(delta, explanation)
         }
       }
 
-      if (event.type === "response.completed") {
-        finalResponse = event.response
+      if (choice?.delta?.refusal) {
+        accumulatedRefusal += choice.delta.refusal
+      }
+
+      if (choice?.finish_reason) {
+        finishReason = choice.finish_reason
+      }
+
+      if (choice?.delta?.tool_calls) {
+        for (const tc of choice.delta.tool_calls) {
+          const existing = toolCallAccumulator.get(tc.index)
+          if (existing) {
+            if (tc.id) existing.id = tc.id
+            if (tc.function?.name) existing.name = tc.function.name
+            existing.arguments += tc.function?.arguments ?? ""
+          } else {
+            toolCallAccumulator.set(tc.index, {
+              id: tc.id ?? "",
+              name: tc.function?.name ?? "",
+              arguments: tc.function?.arguments ?? "",
+            })
+          }
+        }
+      }
+
+      if (chunk.usage) {
+        usage = {
+          prompt_tokens: chunk.usage.prompt_tokens,
+          completion_tokens: chunk.usage.completion_tokens,
+        }
       }
     }
   } catch (error) {
@@ -122,85 +154,124 @@ async function createOpenAIResponseStreaming(
     )
   }
 
-  if (!finalResponse) {
-    throw new StreamingError("Provider failed to return a response", "failed")
-  }
+  const toolCalls: ChatCompletionMessageToolCall[] = Array.from(
+    toolCallAccumulator.values(),
+  ).map((tc) => ({
+    id: tc.id,
+    type: "function" as const,
+    function: { name: tc.name, arguments: tc.arguments },
+  }))
 
-  return finalResponse
+  return {
+    content: accumulatedText,
+    refusal: accumulatedRefusal || null,
+    finishReason,
+    toolCalls,
+    usage,
+  }
 }
 
-function extractOpenAIToolCalls(
-  response: OpenAI.Responses.Response,
-): { id?: string; name: string; arguments: unknown; call_id: string }[] {
-  const calls = []
-  for (const item of response.output) {
-    if (item?.type === "function_call") {
-      const args =
-        typeof item.arguments === "string"
-          ? safeJsonParse(item.arguments)
-          : item.arguments || {}
-      calls.push({
-        id: item.id,
-        name: item.name,
-        arguments: args,
-        call_id: item.call_id,
-      })
-    }
-  }
-  return calls
+function extractToolCallsFromMessage(
+  toolCalls: ChatCompletionMessageToolCall[],
+): { id: string; name: string; arguments: unknown }[] {
+  return toolCalls
+    .filter((tc) => tc.type === "function")
+    .map((tc) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: safeJsonParse(tc.function.arguments),
+    }))
 }
 
-function getOpenAIText(response: OpenAI.Responses.Response): {
-  type: "refusal" | "text"
-  message: string
-} {
-  const out = response.output || []
-  if (
-    out.find(
-      (item: ResponseOutputItem) =>
-        item.type === "message" &&
-        item.content.some((c) => c.type === "refusal"),
+function buildAssistantMessage(
+  content: string | null,
+  toolCalls: ChatCompletionMessageToolCall[],
+): ChatCompletionMessageParam {
+  return {
+    role: "assistant" as const,
+    content,
+    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+  }
+}
+
+async function executeRequest(
+  openai: OpenAI,
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  streaming?: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<RequestResult> {
+  if (streaming) {
+    const accumulated = await createChatCompletionStreaming(
+      openai,
+      params,
+      streaming,
+      abortSignal,
     )
-  ) {
+
+    if (accumulated.refusal) {
+      throw new RefusalError(accumulated.refusal)
+    }
+    if (accumulated.finishReason === "length") {
+      throw new MaxTokensError(
+        "Response truncated: the model ran out of tokens.",
+      )
+    }
+
     return {
-      type: "refusal",
-      message: "The model refused to generate a response for this request.",
+      content: accumulated.content,
+      toolCalls: extractToolCallsFromMessage(accumulated.toolCalls),
+      promptTokens: accumulated.usage?.prompt_tokens ?? 0,
+      completionTokens: accumulated.usage?.completion_tokens ?? 0,
+      assistantMessage: buildAssistantMessage(
+        accumulated.content || null,
+        accumulated.toolCalls,
+      ),
     }
   }
 
-  for (const item of out) {
-    if (item.type === "message" && item.content) {
-      for (const content of item.content) {
-        if (content.type === "output_text" && "text" in content) {
-          return { type: "text", message: content.text }
-        }
-      }
-    }
+  const response = await openai.chat.completions.create(params)
+  const message = response.choices[0]?.message
+
+  if (message?.refusal) {
+    throw new RefusalError(message.refusal)
+  }
+  if (response.choices[0]?.finish_reason === "length") {
+    throw new MaxTokensError("Response truncated: the model ran out of tokens.")
   }
 
-  return { type: "text", message: "" }
+  const rawToolCalls = message?.tool_calls ?? []
+
+  return {
+    content: message?.content ?? "",
+    toolCalls: extractToolCallsFromMessage(rawToolCalls),
+    promptTokens: response.usage?.prompt_tokens ?? 0,
+    completionTokens: response.usage?.completion_tokens ?? 0,
+    assistantMessage: buildAssistantMessage(
+      message?.content ?? null,
+      rawToolCalls.filter(
+        (tc): tc is Extract<typeof tc, { type: "function" }> =>
+          tc.type === "function",
+      ),
+    ),
+  }
 }
 
 let tiktokenEncoder: Tiktoken | null = null
 
-function toResponsesAPIProps(model: string): {
+function toChatCompletionsAPIProps(model: string): {
   model: string
-  reasoning?: OpenAI.Reasoning
+  reasoning_effort?: OpenAI.ReasoningEffort
 } {
   const props = getModelProps(model)
   return {
     model: props.model,
     ...(props.reasoningEffort
-      ? {
-          reasoning: {
-            effort: props.reasoningEffort as OpenAI.ReasoningEffort,
-          },
-        }
+      ? { reasoning_effort: props.reasoningEffort as OpenAI.ReasoningEffort }
       : {}),
   }
 }
 
-export function createOpenAIProvider(
+export function createOpenAIChatCompletionsProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
 ): AIProvider {
@@ -232,49 +303,45 @@ export function createOpenAIProvider(
       abortSignal?: AbortSignal
       streaming?: StreamingCallback
     }): Promise<T | AiAssistantAPIError> {
-      let input: OpenAI.Responses.ResponseInput = []
+      const messages: ChatCompletionMessageParam[] = [
+        { role: "system", content: config.systemInstructions },
+      ]
+
       if (config.conversationHistory && config.conversationHistory.length > 0) {
         const validMessages = config.conversationHistory.filter(
           (msg) => msg.content && msg.content.trim() !== "",
         )
         for (const msg of validMessages) {
-          input.push({
-            role: msg.role,
-            content: msg.content,
-          })
+          messages.push({ role: msg.role, content: msg.content })
         }
       }
 
-      input.push({
-        role: "user",
-        content: config.initialUserContent,
-      })
+      messages.push({ role: "user", content: config.initialUserContent })
 
-      const openaiTools = toOpenAIFunctions(tools)
-
+      const openaiTools = toOpenAITools(tools)
       let totalInputTokens = 0
       let totalOutputTokens = 0
+      let lastPromptTokens = 0
 
-      const requestParams = {
-        ...toResponsesAPIProps(model),
-        instructions: config.systemInstructions,
-        input,
+      const baseParams = {
+        ...toChatCompletionsAPIProps(model),
         tools: openaiTools,
-        text: toResponseTextConfig(config.responseFormat),
-      } as OpenAI.Responses.ResponseCreateParamsNonStreaming
+        response_format: toResponseFormat(config.responseFormat),
+      }
 
-      let lastResponse = streaming
-        ? await createOpenAIResponseStreaming(
-            openai,
-            requestParams,
-            streaming,
-            abortSignal,
-          )
-        : await openai.responses.create(requestParams)
-      input = [...input, ...lastResponse.output]
-
-      totalInputTokens += lastResponse.usage?.input_tokens ?? 0
-      totalOutputTokens += lastResponse.usage?.output_tokens ?? 0
+      let result = await executeRequest(
+        openai,
+        {
+          ...baseParams,
+          messages,
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+        streaming,
+        abortSignal,
+      )
+      totalInputTokens += result.promptTokens
+      totalOutputTokens += result.completionTokens
+      lastPromptTokens = result.promptTokens
+      messages.push(result.assistantMessage)
 
       while (true) {
         if (abortSignal?.aborted) {
@@ -284,55 +351,46 @@ export function createOpenAIProvider(
           } as AiAssistantAPIError
         }
 
-        const toolCalls = extractOpenAIToolCalls(lastResponse)
-        if (!toolCalls.length) break
-        const tool_outputs: OpenAI.Responses.ResponseFunctionToolCallOutputItem[] =
-          []
-        for (const tc of toolCalls) {
+        if (!result.toolCalls.length) break
+
+        for (const tc of result.toolCalls) {
           const exec = await executeTool(
             tc.name,
             tc.arguments,
             modelToolsClient,
             setStatus,
           )
-          tool_outputs.push({
-            type: "function_call_output",
-            call_id: tc.call_id,
-            output: exec.content,
-          } as OpenAI.Responses.ResponseFunctionToolCallOutputItem)
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: exec.content,
+          })
         }
-        input = [...input, ...tool_outputs]
 
         if (
-          (lastResponse.usage?.input_tokens ?? 0) >= contextWindow - 50_000 &&
-          tool_outputs.length > 0
+          lastPromptTokens >= contextWindow - 50_000 &&
+          result.toolCalls.length > 0
         ) {
-          input.push({
+          messages.push({
             role: "user" as const,
             content:
               "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**",
           })
         }
-        const loopRequestParams = {
-          ...toResponsesAPIProps(model),
-          instructions: config.systemInstructions,
-          input,
-          tools: openaiTools,
-          text: toResponseTextConfig(config.responseFormat),
-        } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
-        lastResponse = streaming
-          ? await createOpenAIResponseStreaming(
-              openai,
-              loopRequestParams,
-              streaming,
-              abortSignal,
-            )
-          : await openai.responses.create(loopRequestParams)
-        input = [...input, ...lastResponse.output]
-
-        totalInputTokens += lastResponse.usage?.input_tokens ?? 0
-        totalOutputTokens += lastResponse.usage?.output_tokens ?? 0
+        result = await executeRequest(
+          openai,
+          {
+            ...baseParams,
+            messages,
+          } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+          streaming,
+          abortSignal,
+        )
+        totalInputTokens += result.promptTokens
+        totalOutputTokens += result.completionTokens
+        lastPromptTokens = result.promptTokens
+        messages.push(result.assistantMessage)
       }
 
       if (abortSignal?.aborted) {
@@ -342,18 +400,8 @@ export function createOpenAIProvider(
         } as AiAssistantAPIError
       }
 
-      const text = getOpenAIText(lastResponse)
-      if (text.type === "refusal") {
-        return {
-          type: "unknown",
-          message: text.message,
-        } as AiAssistantAPIError
-      }
-
-      const rawOutput = text.message
-
       try {
-        const json = JSON.parse(rawOutput) as T
+        const json = JSON.parse(result.content) as T
         setStatus(null)
 
         const resultWithTokens = {
@@ -386,13 +434,14 @@ export function createOpenAIProvider(
 
     async generateTitle({ model, prompt, responseFormat }) {
       try {
-        const response = await openai.responses.create({
-          ...toResponsesAPIProps(model),
-          input: [{ role: "user", content: prompt }],
-          text: toResponseTextConfig(responseFormat),
-          max_output_tokens: 100,
+        const response = await openai.chat.completions.create({
+          ...toChatCompletionsAPIProps(model),
+          messages: [{ role: "user", content: prompt }],
+          response_format: toResponseFormat(responseFormat),
+          max_completion_tokens: 100,
         })
-        const parsed = JSON.parse(response.output_text) as { title: string }
+        const content = response.choices[0]?.message?.content || ""
+        const parsed = JSON.parse(content) as { title: string }
         return parsed.title || null
       } catch {
         return null
@@ -400,12 +449,14 @@ export function createOpenAIProvider(
     },
 
     async generateSummary({ model, systemPrompt, userMessage }) {
-      const response = await openai.responses.create({
-        ...toResponsesAPIProps(model),
-        instructions: systemPrompt,
-        input: userMessage,
+      const response = await openai.chat.completions.create({
+        ...toChatCompletionsAPIProps(model),
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
       })
-      return response.output_text || ""
+      return response.choices[0]?.message?.content || ""
     },
 
     async testConnection({ apiKey: testApiKey, model }) {
@@ -414,10 +465,10 @@ export function createOpenAIProvider(
           apiKey: testApiKey,
           dangerouslyAllowBrowser: true,
         })
-        await testClient.responses.create({
-          model: getModelProps(model).model, // testConnection only needs model name
-          input: [{ role: "user", content: "ping" }],
-          max_output_tokens: 16,
+        await testClient.chat.completions.create({
+          model: getModelProps(model).model,
+          messages: [{ role: "user", content: "ping" }],
+          max_completion_tokens: 16,
         })
         return { valid: true }
       } catch (error: unknown) {

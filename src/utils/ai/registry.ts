@@ -1,18 +1,31 @@
 import type { AIProvider } from "./types"
 import { createOpenAIProvider } from "./openaiProvider"
+import { createOpenAIChatCompletionsProvider } from "./openaiChatCompletionsProvider"
 import { createAnthropicProvider } from "./anthropicProvider"
-import type { Provider } from "./settings"
+import { PROVIDER_TYPE } from "./settings"
+import type { ProviderId, ProviderType } from "./settings"
 
 export function createProvider(
-  providerId: Provider,
+  providerId: ProviderId,
   apiKey: string,
 ): AIProvider {
-  switch (providerId) {
+  const providerType = PROVIDER_TYPE[providerId]
+  return createProviderByType(providerType, providerId, apiKey)
+}
+
+export function createProviderByType(
+  providerType: ProviderType,
+  providerId: ProviderId,
+  apiKey: string,
+): AIProvider {
+  switch (providerType) {
     case "openai":
-      return createOpenAIProvider(apiKey)
+      return createOpenAIProvider(apiKey, providerId)
+    case "openai-chat-completions":
+      return createOpenAIChatCompletionsProvider(apiKey, providerId)
     case "anthropic":
-      return createAnthropicProvider(apiKey)
+      return createAnthropicProvider(apiKey, providerId)
     default:
-      throw new Error(`Unknown provider: ${providerId}`)
+      throw new Error(`Unknown provider type: ${providerType}`)
   }
 }

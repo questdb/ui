@@ -4,7 +4,7 @@ import type {
   StatusCallback,
   StreamingCallback,
 } from "../aiAssistant"
-import type { Provider } from "./settings"
+import type { ProviderId } from "./settings"
 
 export interface ToolDefinition {
   name: string
@@ -31,7 +31,7 @@ export interface FlowConfig<T> {
 }
 
 export interface AIProvider {
-  readonly id: Provider
+  readonly id: ProviderId
   readonly contextWindow: number
 
   executeFlow<T>(params: {

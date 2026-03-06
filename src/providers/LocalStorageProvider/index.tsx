@@ -33,6 +33,7 @@ import {
   LeftPanelState,
   LeftPanelType,
 } from "./types"
+import { reconcileSettings } from "../../utils/ai/settings"
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
   providers: {},
@@ -139,10 +140,14 @@ export const LocalStorageProvider = ({
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as AiAssistantSettings
-        return {
+        const reconciled = reconcileSettings({
           selectedModel: parsed.selectedModel,
           providers: parsed.providers || {},
+        })
+        if (JSON.stringify(reconciled) !== stored) {
+          setValue(StoreKey.AI_ASSISTANT_SETTINGS, JSON.stringify(reconciled))
         }
+        return reconciled
       } catch (e) {
         return defaultConfig.aiAssistantSettings
       }

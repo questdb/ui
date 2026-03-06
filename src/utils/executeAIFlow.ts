@@ -359,7 +359,8 @@ async function generateChatTitleIfNeeded(
     return
   }
 
-  const provider = providerForModel(config.settings.model)
+  const provider = providerForModel(config.settings.model)!
+
   const testModel = MODEL_OPTIONS.find(
     (m) => m.isTestModel && m.provider === provider,
   )
@@ -447,7 +448,7 @@ export async function executeAIFlow(
     eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
   }
 
-  const provider = providerForModel(settings.model)
+  const provider = providerForModel(settings.model)!
   const providerSettings: ActiveProviderSettings = {
     model: settings.model,
     provider,

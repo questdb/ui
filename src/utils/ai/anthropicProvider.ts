@@ -11,6 +11,7 @@ import type {
 } from "../aiAssistant"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getModelProps } from "./settings"
+import type { ProviderId } from "./settings"
 import type {
   AIProvider,
   FlowConfig,
@@ -301,7 +302,10 @@ async function handleToolCalls(
   }
 }
 
-export function createAnthropicProvider(apiKey: string): AIProvider {
+export function createAnthropicProvider(
+  apiKey: string,
+  providerId: ProviderId = "anthropic",
+): AIProvider {
   const anthropic = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
@@ -310,7 +314,7 @@ export function createAnthropicProvider(apiKey: string): AIProvider {
   const contextWindow = 200_000
 
   return {
-    id: "anthropic",
+    id: providerId,
     contextWindow,
 
     async executeFlow<T>({

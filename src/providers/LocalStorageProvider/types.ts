@@ -6,10 +6,7 @@ export type ProviderSettings = {
 
 export type AiAssistantSettings = {
   selectedModel?: string
-  providers: {
-    anthropic?: ProviderSettings
-    openai?: ProviderSettings
-  }
+  providers: Partial<Record<string, ProviderSettings>>
 }
 
 export type SettingsType = string | boolean | number | AiAssistantSettings

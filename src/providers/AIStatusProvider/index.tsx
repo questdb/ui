@@ -136,6 +136,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   const apiKey = useMemo(() => {
     if (!currentModel) return null
     const provider = providerForModel(currentModel)
+    if (!provider) return null
     return aiAssistantSettings.providers?.[provider]?.apiKey || null
   }, [currentModel, aiAssistantSettings])
 

@@ -38,4 +38,10 @@ export {
   canUseAiAssistant,
   hasSchemaAccess,
 } from "./settings"
-export type { Provider, ModelOption } from "./settings"
+export type {
+  ProviderId,
+  Provider,
+  ProviderType,
+  ModelOption,
+} from "./settings"
+export { PROVIDER_TYPE } from "./settings"
