@@ -546,7 +546,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   })
   const [apiKeys, setApiKeys] = useState<Record<ProviderId, string>>(() =>
     initializeProviderState(
-      (provider) => aiAssistantSettings.providers?.[provider]?.apiKey || "",
+      (provider) => getApiKey(provider, aiAssistantSettings) || "",
       "",
     ),
   )
@@ -562,17 +562,19 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const [grantSchemaAccess, setGrantSchemaAccess] = useState<
     Record<ProviderId, boolean>
   >(() =>
-    initializeProviderState(
-      (provider) =>
-        aiAssistantSettings.providers?.[provider]?.grantSchemaAccess !== false,
-      true,
-    ),
+    initializeProviderState((provider) => {
+      const custom = aiAssistantSettings.customProviders?.[provider]
+      if (custom) return custom.grantSchemaAccess !== false
+      return (
+        aiAssistantSettings.providers?.[provider]?.grantSchemaAccess !== false
+      )
+    }, true),
   )
   const [validatedApiKeys, setValidatedApiKeys] = useState<
     Record<ProviderId, boolean>
   >(() =>
     initializeProviderState(
-      (provider) => !!aiAssistantSettings.providers?.[provider]?.apiKey,
+      (provider) => !!getApiKey(provider, aiAssistantSettings),
       false,
     ),
   )
@@ -632,7 +634,12 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         providerModels.find((m) => m.isTestModel) ?? providerModels[0]
       ).value
       try {
-        const result = await testApiKey(apiKey, testModel, provider)
+        const result = await testApiKey(
+          apiKey,
+          testModel,
+          provider,
+          aiAssistantSettings,
+        )
         if (!result.valid) {
           setValidationState((prev) => ({ ...prev, [provider]: "error" }))
           setValidationErrors((prev) => ({
@@ -1029,9 +1036,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                           <Checkbox
                             id={`schema-access-${selectedProvider}`}
                             checked={
-                              selectedProvider === "openai"
-                                ? grantSchemaAccess.openai
-                                : grantSchemaAccess.anthropic
+                              grantSchemaAccess[selectedProvider] ?? false
                             }
                             onChange={(e) =>
                               handleSchemaAccessChange(

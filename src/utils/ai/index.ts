@@ -40,6 +40,8 @@ export {
   getTestModel,
   getProviderContextWindow,
   getApiKey,
+  makeCustomModelValue,
+  parseModelValue,
   isAiAssistantConfigured,
   canUseAiAssistant,
   hasSchemaAccess,

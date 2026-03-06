@@ -107,6 +107,27 @@ export type ModelProps = {
   reasoningEffort?: ReasoningEffort
 }
 
+const CUSTOM_MODEL_SEP = ":"
+
+export const makeCustomModelValue = (
+  providerId: ProviderId,
+  modelId: string,
+): string => `${providerId}${CUSTOM_MODEL_SEP}${modelId}`
+
+export const parseModelValue = (
+  value: string,
+): { customProviderId: string; rawModel: string } | { rawModel: string } => {
+  const sepIndex = value.indexOf(CUSTOM_MODEL_SEP)
+  if (sepIndex === -1) return { rawModel: value }
+  const candidateProvider = value.slice(0, sepIndex)
+  // Only treat as namespaced if the prefix is NOT a built-in provider.
+  if (BUILTIN_PROVIDERS[candidateProvider]) return { rawModel: value }
+  return {
+    customProviderId: candidateProvider,
+    rawModel: value.slice(sepIndex + 1),
+  }
+}
+
 export const getAllModelOptions = (
   settings?: AiAssistantSettings,
 ): ModelOption[] => {
@@ -116,7 +137,7 @@ export const getAllModelOptions = (
     for (const modelId of def.models) {
       customModels.push({
         label: modelId,
-        value: modelId,
+        value: makeCustomModelValue(providerId, modelId),
         provider: providerId,
       })
     }
@@ -126,16 +147,18 @@ export const getAllModelOptions = (
 
 export const providerForModel = (
   model: ModelOption["value"],
-  settings?: AiAssistantSettings,
+  _settings?: AiAssistantSettings,
 ): ProviderId | null => {
-  return (
-    getAllModelOptions(settings).find((m) => m.value === model)?.provider ??
-    null
-  )
+  // Check for namespaced custom model value (providerId:modelId)
+  const parsed = parseModelValue(model)
+  if ("customProviderId" in parsed) return parsed.customProviderId
+  // Fall back to built-in model lookup
+  return MODEL_OPTIONS.find((m) => m.value === model)?.provider ?? null
 }
 
 export const getModelProps = (model: ModelOption["value"]): ModelProps => {
-  const parts = model.split("@")
+  const { rawModel } = parseModelValue(model)
+  const parts = rawModel.split("@")
   const modelName = parts[0]
   const extraParams = parts[1]
     ?.split(",")
@@ -260,7 +283,8 @@ export const getTestModel = (
 ): string | null => {
   const custom = settings?.customProviders?.[providerId]
   if (custom) {
-    return custom.testModel ?? custom.models[0] ?? null
+    const rawModel = custom.testModel ?? custom.models[0] ?? null
+    return rawModel ? makeCustomModelValue(providerId, rawModel) : null
   }
   return (
     MODEL_OPTIONS.find((m) => m.provider === providerId && m.isTestModel)
