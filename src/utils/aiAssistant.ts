@@ -1,6 +1,6 @@
 import { Client } from "./questdb/client"
 import { Type, Table } from "./questdb/types"
-import type { Provider } from "./ai"
+import type { ProviderId } from "./ai"
 import { formatSql } from "./formatSql"
 import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import type {
@@ -22,7 +22,7 @@ import type { AIProvider } from "./ai"
 
 export type ActiveProviderSettings = {
   model: string
-  provider: Provider
+  provider: ProviderId
   apiKey: string
 }
 
@@ -304,7 +304,7 @@ const tryWithRetries = async <T>(
 export const testApiKey = async (
   apiKey: string,
   model: string,
-  providerId: Provider,
+  providerId: ProviderId,
 ): Promise<{ valid: boolean; error?: string }> => {
   const provider = createProvider(providerId, apiKey)
   return provider.testConnection({ apiKey, model })

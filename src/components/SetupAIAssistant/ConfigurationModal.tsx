@@ -11,7 +11,11 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
-import { MODEL_OPTIONS, type ModelOption, type Provider } from "../../utils/ai"
+import {
+  MODEL_OPTIONS,
+  type ModelOption,
+  type ProviderId,
+} from "../../utils/ai"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
@@ -407,22 +411,22 @@ type ConfigurationModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: Provider | null) => {
+const getProviderName = (provider: ProviderId | null) => {
   if (!provider) return ""
   return provider === "openai" ? "OpenAI" : "Anthropic"
 }
 
 type StepOneContentProps = {
-  selectedProvider: Provider | null
+  selectedProvider: ProviderId | null
   apiKey: string
   error: string | null
   providerName: string
-  onProviderSelect: (provider: Provider) => void
+  onProviderSelect: (provider: ProviderId) => void
   onApiKeyChange: (value: string) => void
 }
 
 type StepTwoContentProps = {
-  selectedProvider: Provider | null
+  selectedProvider: ProviderId | null
   enabledModels: string[]
   grantSchemaAccess: boolean
   modelsByProvider: { anthropic: ModelOption[]; openai: ModelOption[] }
@@ -567,7 +571,7 @@ const StepTwoContent = ({
   const handleClose: () => void = navigation.handleClose
   const currentProvider = selectedProvider
 
-  const getModelsForProvider = (provider: Provider) => {
+  const getModelsForProvider = (provider: ProviderId) => {
     return provider === "openai"
       ? modelsByProvider.openai
       : modelsByProvider.anthropic
@@ -696,7 +700,7 @@ export const ConfigurationModal = ({
   onOpenChange,
 }: ConfigurationModalProps) => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     null,
   )
   const providerName = useMemo(
@@ -722,7 +726,7 @@ export const ConfigurationModal = ({
     return { anthropic, openai }
   }, [])
 
-  const handleProviderSelect = useCallback((provider: Provider) => {
+  const handleProviderSelect = useCallback((provider: ProviderId) => {
     setSelectedProvider(provider)
     setError(null)
     setApiKey("")

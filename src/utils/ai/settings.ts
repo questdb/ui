@@ -4,9 +4,6 @@ export type ProviderType = "anthropic" | "openai" | "openai-chat-completions"
 
 export type ProviderId = "anthropic" | "openai"
 
-/** @deprecated Use ProviderId instead */
-export type Provider = ProviderId
-
 export const PROVIDER_TYPE: Record<ProviderId, ProviderType> = {
   anthropic: "anthropic",
   openai: "openai",

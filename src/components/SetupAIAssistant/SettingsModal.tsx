@@ -22,7 +22,7 @@ import {
   getAllProviders,
   MODEL_OPTIONS,
   type ModelOption,
-  type Provider,
+  type ProviderId,
   getNextModel,
 } from "../../utils/ai"
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
@@ -500,16 +500,18 @@ type SettingsModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: Provider) => {
+const getProviderName = (provider: ProviderId) => {
   return provider === "openai" ? "OpenAI" : "Anthropic"
 }
 
-const getModelsForProvider = (provider: Provider): ModelOption[] => {
+const getModelsForProvider = (provider: ProviderId): ModelOption[] => {
   return MODEL_OPTIONS.filter((m) => m.provider === provider)
 }
 
-const getProvidersWithApiKeys = (settings: AiAssistantSettings): Provider[] => {
-  const providers: Provider[] = []
+const getProvidersWithApiKeys = (
+  settings: AiAssistantSettings,
+): ProviderId[] => {
+  const providers: ProviderId[] = []
   const allProviders = getAllProviders()
   for (const provider of allProviders) {
     if (settings.providers?.[provider]?.apiKey) {
@@ -523,11 +525,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const initializeProviderState = useCallback(
     <T,>(
-      getValue: (provider: Provider) => T,
+      getValue: (provider: ProviderId) => T,
       defaultValue: T,
-    ): Record<Provider, T> => {
+    ): Record<ProviderId, T> => {
       const allProviders = getAllProviders()
-      const state = {} as Record<Provider, T>
+      const state = {} as Record<ProviderId, T>
       for (const provider of allProviders) {
         state[provider] = getValue(provider) ?? defaultValue
       }
@@ -536,18 +538,18 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [],
   )
 
-  const [selectedProvider, setSelectedProvider] = useState<Provider>(() => {
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(() => {
     const providersWithKeys = getProvidersWithApiKeys(aiAssistantSettings)
     return providersWithKeys[0] || getAllProviders()[0]
   })
-  const [apiKeys, setApiKeys] = useState<Record<Provider, string>>(() =>
+  const [apiKeys, setApiKeys] = useState<Record<ProviderId, string>>(() =>
     initializeProviderState(
       (provider) => aiAssistantSettings.providers?.[provider]?.apiKey || "",
       "",
     ),
   )
   const [enabledModels, setEnabledModels] = useState<
-    Record<Provider, string[]>
+    Record<ProviderId, string[]>
   >(() =>
     initializeProviderState(
       (provider) =>
@@ -556,7 +558,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     ),
   )
   const [grantSchemaAccess, setGrantSchemaAccess] = useState<
-    Record<Provider, boolean>
+    Record<ProviderId, boolean>
   >(() =>
     initializeProviderState(
       (provider) =>
@@ -565,7 +567,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     ),
   )
   const [validatedApiKeys, setValidatedApiKeys] = useState<
-    Record<Provider, boolean>
+    Record<ProviderId, boolean>
   >(() =>
     initializeProviderState(
       (provider) => !!aiAssistantSettings.providers?.[provider]?.apiKey,
@@ -573,23 +575,23 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     ),
   )
   const [validationState, setValidationState] = useState<
-    Record<Provider, "idle" | "validating" | "validated" | "error">
+    Record<ProviderId, "idle" | "validating" | "validated" | "error">
   >(() => initializeProviderState(() => "idle" as const, "idle" as const))
   const [validationErrors, setValidationErrors] = useState<
-    Record<Provider, string | null>
+    Record<ProviderId, string | null>
   >(() => initializeProviderState(() => null, null))
   const [isInputFocused, setIsInputFocused] = useState<
-    Record<Provider, boolean>
+    Record<ProviderId, boolean>
   >(() => initializeProviderState(() => false, false))
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleProviderSelect = useCallback((provider: Provider) => {
+  const handleProviderSelect = useCallback((provider: ProviderId) => {
     setSelectedProvider(provider)
     setValidationErrors((prev) => ({ ...prev, [provider]: null }))
   }, [])
 
   const handleApiKeyChange = useCallback(
-    (provider: Provider, value: string) => {
+    (provider: ProviderId, value: string) => {
       setApiKeys((prev) => ({ ...prev, [provider]: value }))
       setValidationErrors((prev) => ({ ...prev, [provider]: null }))
       // If API key changes, mark as not validated
@@ -601,7 +603,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const handleValidateApiKey = useCallback(
-    async (provider: Provider) => {
+    async (provider: ProviderId) => {
       const apiKey = apiKeys[provider]
       if (!apiKey) {
         setValidationErrors((prev) => ({
@@ -656,7 +658,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [apiKeys],
   )
 
-  const handleRemoveApiKey = useCallback((provider: Provider) => {
+  const handleRemoveApiKey = useCallback((provider: ProviderId) => {
     // Remove API key from local state only
     // Settings will be persisted when Save Settings is clicked
     setApiKeys((prev) => ({ ...prev, [provider]: "" }))
@@ -667,7 +669,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   }, [])
 
   const handleModelToggle = useCallback(
-    (provider: Provider, modelValue: string) => {
+    (provider: ProviderId, modelValue: string) => {
       setEnabledModels((prev) => {
         const current = prev[provider]
         const isEnabled = current.includes(modelValue)
@@ -683,7 +685,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const handleSchemaAccessChange = useCallback(
-    (provider: Provider, checked: boolean) => {
+    (provider: ProviderId, checked: boolean) => {
       setGrantSchemaAccess((prev) => ({ ...prev, [provider]: checked }))
     },
     [],
@@ -751,7 +753,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const allProviders = useMemo(() => getAllProviders(), [])
 
-  const renderProviderIcon = (provider: Provider, isActive: boolean) => {
+  const renderProviderIcon = (provider: ProviderId, isActive: boolean) => {
     const color = isActive ? "#f8f8f2" : "#9ca3af"
     if (provider === "openai") {
       return <OpenAIIcon width="20" height="20" color={color} />
