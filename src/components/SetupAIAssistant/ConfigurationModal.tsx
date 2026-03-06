@@ -719,7 +719,7 @@ export const ConfigurationModal = ({
       result[model.provider].push(model)
     })
     return result
-  }, [])
+  }, [aiAssistantSettings])
 
   const handleProviderSelect = useCallback((provider: ProviderId) => {
     setSelectedProvider(provider)

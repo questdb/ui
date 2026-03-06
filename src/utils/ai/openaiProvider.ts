@@ -415,6 +415,7 @@ export function createOpenAIProvider(
         const testClient = new OpenAI({
           apiKey: testApiKey,
           dangerouslyAllowBrowser: true,
+          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
         })
         await testClient.responses.create({
           model: getModelProps(model).model, // testConnection only needs model name

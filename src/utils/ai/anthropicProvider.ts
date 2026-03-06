@@ -498,6 +498,7 @@ export function createAnthropicProvider(
         const testClient = new Anthropic({
           apiKey: testApiKey,
           dangerouslyAllowBrowser: true,
+          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
         })
 
         await createAnthropicMessage(testClient, {

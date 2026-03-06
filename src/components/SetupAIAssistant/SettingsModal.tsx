@@ -716,7 +716,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       providers: updatedProviders,
     }
 
-    const nextModel = getNextModel(updatedSettings.selectedModel, enabledModels)
+    const nextModel = getNextModel(
+      updatedSettings.selectedModel,
+      enabledModels,
+      updatedSettings,
+    )
     updatedSettings.selectedModel = nextModel || undefined
 
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
@@ -745,7 +749,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const modelsForProvider = useMemo(
     () => getModelsForProvider(selectedProvider, aiAssistantSettings),
-    [selectedProvider],
+    [selectedProvider, aiAssistantSettings],
   )
 
   const enabledModelsForProvider = useMemo(

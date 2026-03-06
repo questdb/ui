@@ -466,6 +466,7 @@ export function createOpenAIChatCompletionsProvider(
         const testClient = new OpenAI({
           apiKey: testApiKey,
           dangerouslyAllowBrowser: true,
+          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
         })
         await testClient.chat.completions.create({
           model: getModelProps(model).model,

@@ -333,5 +333,8 @@ export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {
   const provider = providerForModel(selectedModel, settings)
   if (!provider) return false
 
-  return settings.providers?.[provider]?.grantSchemaAccess === true
+  return (
+    settings.providers?.[provider]?.grantSchemaAccess === true ||
+    settings.customProviders?.[provider]?.grantSchemaAccess === true
+  )
 }

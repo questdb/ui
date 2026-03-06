@@ -143,6 +143,9 @@ export const LocalStorageProvider = ({
         const reconciled = reconcileSettings({
           selectedModel: parsed.selectedModel,
           providers: parsed.providers || {},
+          ...(parsed.customProviders && {
+            customProviders: parsed.customProviders,
+          }),
         })
         if (JSON.stringify(reconciled) !== stored) {
           setValue(StoreKey.AI_ASSISTANT_SETTINGS, JSON.stringify(reconciled))

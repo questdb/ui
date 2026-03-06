@@ -12,6 +12,7 @@ export type CustomProviderDefinition = {
   contextWindow: number
   testModel?: string
   models: string[]
+  grantSchemaAccess?: boolean
 }
 
 export type AiAssistantSettings = {
