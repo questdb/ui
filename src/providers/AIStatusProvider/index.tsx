@@ -14,6 +14,7 @@ import {
   hasSchemaAccess,
   providerForModel,
   canUseAiAssistant,
+  getAllProviders,
 } from "../../utils/ai"
 import { useAIConversation } from "../AIConversationProvider"
 
@@ -142,11 +143,11 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
 
   const models = useMemo(() => {
     const allModels: string[] = []
-    const anthropicModels =
-      aiAssistantSettings.providers?.anthropic?.enabledModels || []
-    const openaiModels =
-      aiAssistantSettings.providers?.openai?.enabledModels || []
-    allModels.push(...anthropicModels, ...openaiModels)
+    for (const provider of getAllProviders()) {
+      const providerModels =
+        aiAssistantSettings.providers?.[provider]?.enabledModels || []
+      allModels.push(...providerModels)
+    }
     return allModels
   }, [aiAssistantSettings])
 

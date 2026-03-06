@@ -15,11 +15,13 @@ import {
   MODEL_OPTIONS,
   type ModelOption,
   type ProviderId,
+  getProviderName,
 } from "../../utils/ai"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
+import { Plugs as PlugsIcon } from "@phosphor-icons/react"
 import { theme } from "../../theme"
 
 const ModalContent = styled.div`
@@ -411,11 +413,6 @@ type ConfigurationModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: ProviderId | null) => {
-  if (!provider) return ""
-  return provider === "openai" ? "OpenAI" : "Anthropic"
-}
-
 type StepOneContentProps = {
   selectedProvider: ProviderId | null
   apiKey: string
@@ -429,7 +426,7 @@ type StepTwoContentProps = {
   selectedProvider: ProviderId | null
   enabledModels: string[]
   grantSchemaAccess: boolean
-  modelsByProvider: { anthropic: ModelOption[]; openai: ModelOption[] }
+  modelsByProvider: Record<string, ModelOption[]>
   onModelToggle: (modelValue: string) => void
   onSchemaAccessChange: (checked: boolean) => void
 }
@@ -504,7 +501,7 @@ const StepOneContent = ({
                   height="40"
                   color={theme.color.foreground}
                 />
-                <ProviderName>OpenAI</ProviderName>
+                <ProviderName>{getProviderName("openai")}</ProviderName>
               </ProviderCard>
               <ProviderCard
                 $selected={selectedProvider === "anthropic"}
@@ -517,7 +514,7 @@ const StepOneContent = ({
                   height="40"
                   color={theme.color.foreground}
                 />
-                <ProviderName>Anthropic</ProviderName>
+                <ProviderName>{getProviderName("anthropic")}</ProviderName>
               </ProviderCard>
             </ProviderCardsContainer>
             <ComingSoonContainer>
@@ -572,9 +569,7 @@ const StepTwoContent = ({
   const currentProvider = selectedProvider
 
   const getModelsForProvider = (provider: ProviderId) => {
-    return provider === "openai"
-      ? modelsByProvider.openai
-      : modelsByProvider.anthropic
+    return modelsByProvider[provider] || []
   }
 
   return (
@@ -600,10 +595,12 @@ const StepTwoContent = ({
               <EnableModelsHeader>
                 <EnableModelsTitle>Enable Models</EnableModelsTitle>
                 <ProviderBadge>
-                  {currentProvider === "openai" ? (
+                  {currentProvider === "anthropic" ? (
+                    <AnthropicIcon width="16" height="16" color="#fff" />
+                  ) : currentProvider === "openai" ? (
                     <OpenAIIcon width="16" height="16" color="#fff" />
                   ) : (
-                    <AnthropicIcon width="16" height="16" color="#fff" />
+                    <PlugsIcon size={16} color="#fff" />
                   )}
                   <ProviderBadgeText>
                     {getProviderName(currentProvider)}
@@ -714,16 +711,14 @@ export const ConfigurationModal = ({
   const [grantSchemaAccess, setGrantSchemaAccess] = useState<boolean>(true)
 
   const modelsByProvider = useMemo(() => {
-    const anthropic: ModelOption[] = []
-    const openai: ModelOption[] = []
+    const result: Record<string, ModelOption[]> = {}
     MODEL_OPTIONS.forEach((model) => {
-      if (model.provider === "anthropic") {
-        anthropic.push(model)
-      } else {
-        openai.push(model)
+      if (!result[model.provider]) {
+        result[model.provider] = []
       }
+      result[model.provider].push(model)
     })
-    return { anthropic, openai }
+    return result
   }, [])
 
   const handleProviderSelect = useCallback((provider: ProviderId) => {

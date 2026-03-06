@@ -12,6 +12,7 @@ import { StoreKey } from "../../utils/localStorage/types"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
+import { PlugsIcon } from "@phosphor-icons/react"
 import { Tooltip } from "../Tooltip"
 
 const ExpandUpDown = () => (
@@ -221,10 +222,12 @@ export const ModelDropdown = () => {
       ]}
       trigger={
         <DropdownTrigger data-hook="ai-settings-model-dropdown">
-          {displayModel.provider === "openai" ? (
+          {displayModel.provider === "anthropic" ? (
+            <AnthropicIcon width="16" height="16" />
+          ) : displayModel.provider === "openai" ? (
             <OpenAIIcon width="16" height="16" />
           ) : (
-            <AnthropicIcon width="16" height="16" />
+            <PlugsIcon size={16} />
           )}
           <Text size="sm" color="foreground" margin="0 auto 0 0">
             {displayModel.label}
@@ -246,10 +249,12 @@ export const ModelDropdown = () => {
               $selected={isSelected}
             >
               <ModelIconTitle>
-                {model.provider === "openai" ? (
+                {model.provider === "anthropic" ? (
+                  <AnthropicIcon width="16" height="16" color="#bbb" />
+                ) : model.provider === "openai" ? (
                   <OpenAIIcon width="16" height="16" color="#bbb" />
                 ) : (
-                  <AnthropicIcon width="16" height="16" color="#bbb" />
+                  <PlugsIcon size={16} color="#bbb" />
                 )}
                 <ModelLabel data-hook="ai-settings-model-item-label">
                   {model.label}

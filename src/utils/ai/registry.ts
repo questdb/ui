@@ -2,14 +2,14 @@ import type { AIProvider } from "./types"
 import { createOpenAIProvider } from "./openaiProvider"
 import { createOpenAIChatCompletionsProvider } from "./openaiChatCompletionsProvider"
 import { createAnthropicProvider } from "./anthropicProvider"
-import { PROVIDER_TYPE } from "./settings"
+import { PROVIDERS } from "./settings"
 import type { ProviderId, ProviderType } from "./settings"
 
 export function createProvider(
   providerId: ProviderId,
   apiKey: string,
 ): AIProvider {
-  const providerType = PROVIDER_TYPE[providerId]
+  const providerType = PROVIDERS[providerId].type
   return createProviderByType(providerType, providerId, apiKey)
 }
 

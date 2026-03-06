@@ -16,6 +16,7 @@ import { Edit } from "@styled-icons/remix-line"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
+import { PlugsIcon } from "@phosphor-icons/react"
 import { LoadingSpinner } from "../LoadingSpinner"
 import { Overlay } from "../Overlay"
 import {
@@ -24,6 +25,7 @@ import {
   type ModelOption,
   type ProviderId,
   getNextModel,
+  getProviderName,
 } from "../../utils/ai"
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 import { ForwardRef } from "../ForwardRef"
@@ -500,10 +502,6 @@ type SettingsModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: ProviderId) => {
-  return provider === "openai" ? "OpenAI" : "Anthropic"
-}
-
 const getModelsForProvider = (provider: ProviderId): ModelOption[] => {
   return MODEL_OPTIONS.filter((m) => m.provider === provider)
 }
@@ -755,10 +753,14 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const renderProviderIcon = (provider: ProviderId, isActive: boolean) => {
     const color = isActive ? "#f8f8f2" : "#9ca3af"
-    if (provider === "openai") {
-      return <OpenAIIcon width="20" height="20" color={color} />
+    switch (provider) {
+      case "openai":
+        return <OpenAIIcon width="20" height="20" color={color} />
+      case "anthropic":
+        return <AnthropicIcon width="20" height="20" color={color} />
+      default:
+        return <PlugsIcon size={20} color={color} />
     }
-    return <AnthropicIcon width="20" height="20" color={color} />
   }
 
   return (

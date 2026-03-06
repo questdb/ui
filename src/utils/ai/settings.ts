@@ -4,9 +4,19 @@ export type ProviderType = "anthropic" | "openai" | "openai-chat-completions"
 
 export type ProviderId = "anthropic" | "openai"
 
-export const PROVIDER_TYPE: Record<ProviderId, ProviderType> = {
-  anthropic: "anthropic",
-  openai: "openai",
+export type ProviderDefinition = {
+  type: ProviderType
+  name: string
+}
+
+export const PROVIDERS: Record<ProviderId, ProviderDefinition> = {
+  anthropic: { type: "anthropic", name: "Anthropic" },
+  openai: { type: "openai", name: "OpenAI" },
+}
+
+export const getProviderName = (providerId: ProviderId | null): string => {
+  if (!providerId) return ""
+  return PROVIDERS[providerId]?.name ?? providerId
 }
 
 export type ModelOption = {
@@ -99,14 +109,14 @@ export const getModelProps = (model: ModelOption["value"]): ModelProps => {
   const parts = modelOption.value.split("@")
   const modelName = parts[0]
   const extraParams = parts[1]
+    ?.split(",")
+    ?.map((p) => ({ key: p.split("=")[0], value: p.split("=")[1] }))
   if (extraParams) {
-    const params = extraParams.split("=")
-    const paramName = params[0]
-    const paramValue = params[1]
-    if (paramName === "reasoning" && paramValue) {
+    const reasoningParam = extraParams.find((p) => p.key === "reasoning")
+    if (reasoningParam && reasoningParam.value) {
       return {
         model: modelName,
-        reasoningEffort: paramValue as ReasoningEffort,
+        reasoningEffort: reasoningParam.value as ReasoningEffort,
       }
     }
   }
@@ -239,16 +249,8 @@ export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {
   const selectedModel = getSelectedModel(settings)
   if (!selectedModel) return false
 
-  const anthropicModels = settings.providers?.anthropic?.enabledModels || []
-  const openaiModels = settings.providers?.openai?.enabledModels || []
+  const provider = providerForModel(selectedModel)
+  if (!provider) return false
 
-  if (anthropicModels.includes(selectedModel)) {
-    return settings.providers?.anthropic?.grantSchemaAccess === true
-  }
-
-  if (openaiModels.includes(selectedModel)) {
-    return settings.providers?.openai?.grantSchemaAccess === true
-  }
-
-  return false
+  return settings.providers?.[provider]?.grantSchemaAccess === true
 }

@@ -29,8 +29,10 @@ export {
 export type { HealthIssuePromptData } from "./prompts"
 export {
   MODEL_OPTIONS,
+  PROVIDERS,
   providerForModel,
   getModelProps,
+  getProviderName,
   getAllProviders,
   getSelectedModel,
   getNextModel,
@@ -39,4 +41,3 @@ export {
   hasSchemaAccess,
 } from "./settings"
 export type { ProviderId, ProviderType, ModelOption } from "./settings"
-export { PROVIDER_TYPE } from "./settings"
