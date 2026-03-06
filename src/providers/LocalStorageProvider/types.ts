@@ -4,9 +4,20 @@ export type ProviderSettings = {
   grantSchemaAccess: boolean
 }
 
+export type CustomProviderDefinition = {
+  type: "anthropic" | "openai" | "openai-chat-completions"
+  name: string
+  baseURL: string
+  apiKey?: string
+  contextWindow: number
+  testModel?: string
+  models: string[]
+}
+
 export type AiAssistantSettings = {
   selectedModel?: string
   providers: Partial<Record<string, ProviderSettings>>
+  customProviders?: Record<string, CustomProviderDefinition>
 }
 
 export type SettingsType = string | boolean | number | AiAssistantSettings

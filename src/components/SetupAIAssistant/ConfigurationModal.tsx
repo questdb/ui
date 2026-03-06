@@ -12,7 +12,7 @@ import { testApiKey } from "../../utils/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
 import {
-  MODEL_OPTIONS,
+  getAllModelOptions,
   type ModelOption,
   type ProviderId,
   getProviderName,
@@ -712,7 +712,7 @@ export const ConfigurationModal = ({
 
   const modelsByProvider = useMemo(() => {
     const result: Record<string, ModelOption[]> = {}
-    MODEL_OPTIONS.forEach((model) => {
+    getAllModelOptions(aiAssistantSettings).forEach((model) => {
       if (!result[model.provider]) {
         result[model.provider] = []
       }
@@ -750,7 +750,9 @@ export const ConfigurationModal = ({
 
     const selectedModel =
       enabledModels.find(
-        (m) => MODEL_OPTIONS.find((mo) => mo.value === m)?.default,
+        (m) =>
+          getAllModelOptions(aiAssistantSettings).find((mo) => mo.value === m)
+            ?.default,
       ) ?? enabledModels[0]
 
     const newSettings = {
@@ -789,7 +791,7 @@ export const ConfigurationModal = ({
     }
 
     const testModel =
-      MODEL_OPTIONS.find(
+      getAllModelOptions(aiAssistantSettings).find(
         (m) => m.isTestModel && m.provider === selectedProvider,
       )?.value ?? modelsByProvider[selectedProvider][0].value
 
@@ -800,9 +802,9 @@ export const ConfigurationModal = ({
         setError(errorMsg)
         return errorMsg
       }
-      const defaultModels = MODEL_OPTIONS.filter(
-        (m) => m.defaultEnabled && m.provider === selectedProvider,
-      ).map((m) => m.value)
+      const defaultModels = getAllModelOptions(aiAssistantSettings)
+        .filter((m) => m.defaultEnabled && m.provider === selectedProvider)
+        .map((m) => m.value)
       if (defaultModels.length > 0) {
         setEnabledModels(defaultModels)
       }

@@ -25,7 +25,8 @@ import {
   type AIOperation,
 } from "./aiAssistant"
 import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
-import { providerForModel, MODEL_OPTIONS } from "./ai"
+import { providerForModel, getTestModel } from "./ai"
+import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 
@@ -35,6 +36,7 @@ type BaseFlowConfig = {
     model: string
     apiKey: string
   }
+  aiAssistantSettings?: AiAssistantSettings
   questClient: Client
   tables?: Array<Table>
   hasSchemaAccess: boolean
@@ -359,21 +361,23 @@ async function generateChatTitleIfNeeded(
     return
   }
 
-  const provider = providerForModel(config.settings.model)!
-
-  const testModel = MODEL_OPTIONS.find(
-    (m) => m.isTestModel && m.provider === provider,
+  const provider = providerForModel(
+    config.settings.model,
+    config.aiAssistantSettings,
   )
+  if (!provider) return
 
-  if (!testModel) return
+  const testModelValue = getTestModel(provider, config.aiAssistantSettings)
+  if (!testModelValue) return
 
   try {
     const title = await generateChatTitle({
       firstUserMessage: userMessageContent,
       settings: {
-        model: testModel.value,
+        model: testModelValue,
         provider,
         apiKey: config.settings.apiKey,
+        aiAssistantSettings: config.aiAssistantSettings,
       },
     })
 
@@ -448,11 +452,15 @@ export async function executeAIFlow(
     eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
   }
 
-  const provider = providerForModel(settings.model)!
+  const provider = providerForModel(settings.model, config.aiAssistantSettings)
+  if (!provider) {
+    throw new Error(`No provider found for model: ${settings.model}`)
+  }
   const providerSettings: ActiveProviderSettings = {
     model: settings.model,
     provider,
     apiKey: settings.apiKey,
+    aiAssistantSettings: config.aiAssistantSettings,
   }
 
   const modelToolsClient = createModelToolsClient(

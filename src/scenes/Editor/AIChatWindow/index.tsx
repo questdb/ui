@@ -215,6 +215,7 @@ const AIChatWindow: React.FC = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
+    aiAssistantSettings,
   } = useAIStatus()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
@@ -384,6 +385,7 @@ const AIChatWindow: React.FC = () => {
         conversationHistory: conversation.messages,
         isFirstMessage: !hasAssistantMessages,
         settings: { model: currentModel, apiKey },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,
@@ -560,6 +562,7 @@ const AIChatWindow: React.FC = () => {
     const settings = { model: currentModel, apiKey }
     const commonConfig = {
       settings,
+      aiAssistantSettings,
       questClient: quest,
       tables,
       hasSchemaAccess,

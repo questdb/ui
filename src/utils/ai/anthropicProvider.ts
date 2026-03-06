@@ -305,13 +305,15 @@ async function handleToolCalls(
 export function createAnthropicProvider(
   apiKey: string,
   providerId: ProviderId = "anthropic",
+  options?: { baseURL?: string; contextWindow?: number },
 ): AIProvider {
   const anthropic = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
+    ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
   })
 
-  const contextWindow = 200_000
+  const contextWindow = options?.contextWindow ?? 200_000
 
   return {
     id: providerId,

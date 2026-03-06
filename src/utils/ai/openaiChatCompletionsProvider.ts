@@ -274,13 +274,15 @@ function toChatCompletionsAPIProps(model: string): {
 export function createOpenAIChatCompletionsProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
+  options?: { baseURL?: string; contextWindow?: number },
 ): AIProvider {
   const openai = new OpenAI({
     apiKey,
     dangerouslyAllowBrowser: true,
+    ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
   })
 
-  const contextWindow = 400_000
+  const contextWindow = options?.contextWindow ?? 400_000
 
   return {
     id: providerId,
@@ -492,6 +494,16 @@ export function createOpenAIChatCompletionsProvider(
     },
 
     async countTokens({ messages, systemPrompt }) {
+      // Custom providers (non-default baseURL) use chars/3.5 estimation
+      // because the actual tokenizer is unknown and tiktoken underestimates
+      // Claude tokens by 15-25% (dangerous for compaction).
+      if (options?.baseURL) {
+        const totalChars =
+          systemPrompt.length +
+          messages.reduce((sum, m) => sum + m.content.length, 0)
+        return Math.ceil(totalChars / 3.5)
+      }
+
       if (!tiktokenEncoder) {
         const { Tiktoken } = await import("js-tiktoken/lite")
         const o200k_base = await import("js-tiktoken/ranks/o200k_base").then(

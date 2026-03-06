@@ -29,15 +29,24 @@ export {
 export type { HealthIssuePromptData } from "./prompts"
 export {
   MODEL_OPTIONS,
-  PROVIDERS,
+  BUILTIN_PROVIDERS,
   providerForModel,
   getModelProps,
   getProviderName,
   getAllProviders,
+  getAllModelOptions,
   getSelectedModel,
   getNextModel,
+  getTestModel,
+  getProviderContextWindow,
+  getApiKey,
   isAiAssistantConfigured,
   canUseAiAssistant,
   hasSchemaAccess,
 } from "./settings"
-export type { ProviderId, ProviderType, ModelOption } from "./settings"
+export type {
+  ProviderId,
+  ProviderType,
+  ModelOption,
+  CustomProviderDefinition,
+} from "./settings"

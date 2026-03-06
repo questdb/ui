@@ -21,7 +21,8 @@ import { LoadingSpinner } from "../LoadingSpinner"
 import { Overlay } from "../Overlay"
 import {
   getAllProviders,
-  MODEL_OPTIONS,
+  getAllModelOptions,
+  getApiKey,
   type ModelOption,
   type ProviderId,
   getNextModel,
@@ -502,17 +503,20 @@ type SettingsModalProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const getModelsForProvider = (provider: ProviderId): ModelOption[] => {
-  return MODEL_OPTIONS.filter((m) => m.provider === provider)
+const getModelsForProvider = (
+  provider: ProviderId,
+  settings?: AiAssistantSettings,
+): ModelOption[] => {
+  return getAllModelOptions(settings).filter((m) => m.provider === provider)
 }
 
 const getProvidersWithApiKeys = (
   settings: AiAssistantSettings,
 ): ProviderId[] => {
   const providers: ProviderId[] = []
-  const allProviders = getAllProviders()
+  const allProviders = getAllProviders(settings)
   for (const provider of allProviders) {
-    if (settings.providers?.[provider]?.apiKey) {
+    if (getApiKey(provider, settings)) {
       providers.push(provider)
     }
   }
@@ -526,7 +530,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       getValue: (provider: ProviderId) => T,
       defaultValue: T,
     ): Record<ProviderId, T> => {
-      const allProviders = getAllProviders()
+      const allProviders = getAllProviders(aiAssistantSettings)
       const state = {} as Record<ProviderId, T>
       for (const provider of allProviders) {
         state[provider] = getValue(provider) ?? defaultValue
@@ -538,7 +542,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>(() => {
     const providersWithKeys = getProvidersWithApiKeys(aiAssistantSettings)
-    return providersWithKeys[0] || getAllProviders()[0]
+    return providersWithKeys[0] || getAllProviders(aiAssistantSettings)[0]
   })
   const [apiKeys, setApiKeys] = useState<Record<ProviderId, string>>(() =>
     initializeProviderState(
@@ -614,7 +618,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       setValidationState((prev) => ({ ...prev, [provider]: "validating" }))
       setValidationErrors((prev) => ({ ...prev, [provider]: null }))
 
-      const providerModels = getModelsForProvider(provider)
+      const providerModels = getModelsForProvider(provider, aiAssistantSettings)
       if (providerModels.length === 0) {
         setValidationState((prev) => ({ ...prev, [provider]: "error" }))
         setValidationErrors((prev) => ({
@@ -636,9 +640,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
             [provider]: result.error || "Invalid API key",
           }))
         } else {
-          const defaultModels = MODEL_OPTIONS.filter(
-            (m) => m.defaultEnabled && m.provider === provider,
-          ).map((m) => m.value)
+          const defaultModels = getAllModelOptions(aiAssistantSettings)
+            .filter((m) => m.defaultEnabled && m.provider === provider)
+            .map((m) => m.value)
           if (defaultModels.length > 0) {
             setEnabledModels((prev) => ({ ...prev, [provider]: defaultModels }))
           }
@@ -691,7 +695,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleSave = useCallback(() => {
     const updatedProviders = { ...aiAssistantSettings.providers }
-    const allProviders = getAllProviders()
+    const allProviders = getAllProviders(aiAssistantSettings)
 
     for (const provider of allProviders) {
       if (validatedApiKeys[provider]) {
@@ -740,7 +744,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const maskInput = !!(currentProviderApiKey && !currentProviderIsFocused)
 
   const modelsForProvider = useMemo(
-    () => getModelsForProvider(selectedProvider),
+    () => getModelsForProvider(selectedProvider, aiAssistantSettings),
     [selectedProvider],
   )
 
@@ -749,7 +753,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [enabledModels, selectedProvider],
   )
 
-  const allProviders = useMemo(() => getAllProviders(), [])
+  const allProviders = useMemo(
+    () => getAllProviders(aiAssistantSettings),
+    [aiAssistantSettings],
+  )
 
   const renderProviderIcon = (provider: ProviderId, isActive: boolean) => {
     const color = isActive ? "#f8f8f2" : "#9ca3af"

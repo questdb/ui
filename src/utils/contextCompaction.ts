@@ -1,6 +1,7 @@
 import type { ConversationMessage } from "../providers/AIConversationProvider/types"
-import { MODEL_OPTIONS } from "./ai"
+import { getTestModel } from "./ai"
 import type { AIProvider } from "./ai"
+import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 
 type CompactionResultSuccess = {
   compactedMessage: string
@@ -75,11 +76,10 @@ function toTokenMessages(
 async function generateSummary(
   middleMessages: ConversationMessage[],
   aiProvider: AIProvider,
+  settings?: AiAssistantSettings,
 ): Promise<string> {
-  const testModel = MODEL_OPTIONS.find(
-    (m) => m.provider === aiProvider.id && m.isTestModel,
-  )
-  if (!testModel) {
+  const testModelValue = getTestModel(aiProvider.id, settings)
+  if (!testModelValue) {
     throw new Error("No test model found for provider")
   }
 
@@ -90,7 +90,7 @@ async function generateSummary(
   const userMessage = `Please summarize the following conversation:\n\n${conversationText}`
 
   return aiProvider.generateSummary({
-    model: testModel.value,
+    model: testModelValue,
     systemPrompt: SUMMARIZATION_PROMPT,
     userMessage,
   })
@@ -102,7 +102,7 @@ export async function compactConversationIfNeeded(
   systemPrompt: string,
   userMessage: string,
   setStatusCompacting: () => void,
-  options: { model?: string } = {},
+  options: { model?: string; aiAssistantSettings?: AiAssistantSettings } = {},
 ): Promise<CompactionResult> {
   const compactionThreshold = aiProvider.contextWindow - 50_000
   const messages = [
@@ -153,6 +153,7 @@ export async function compactConversationIfNeeded(
     conversationHistory,
     aiProvider,
     setStatusCompacting,
+    options.aiAssistantSettings,
   )
 
   if (!result.wasCompacted) {
@@ -170,6 +171,7 @@ async function compactConversationInternal(
   messages: ConversationMessage[],
   aiProvider: AIProvider,
   setStatusCompacting: () => void,
+  settings?: AiAssistantSettings,
 ): Promise<CompactionResult> {
   if (messages.length === 0) {
     return { wasCompacted: false }
@@ -178,7 +180,7 @@ async function compactConversationInternal(
   setStatusCompacting()
 
   try {
-    const summary = await generateSummary(messages, aiProvider)
+    const summary = await generateSummary(messages, aiProvider, settings)
 
     return {
       compactedMessage: buildContinuationPrompt(summary),

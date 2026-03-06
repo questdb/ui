@@ -15,7 +15,7 @@ import { color } from "../../utils"
 import { slideAnimation } from "../Animation"
 import { AISparkle } from "../AISparkle"
 import { pinkLinearGradientHorizontal } from "../../theme"
-import { MODEL_OPTIONS } from "../../utils/ai"
+import { getAllModelOptions } from "../../utils/ai"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Button } from "../../components/Button"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
@@ -310,6 +310,7 @@ export const AIStatusIndicator: React.FC = () => {
     currentModel,
     abortOperation,
     clearOperation,
+    aiAssistantSettings,
   } = useAIStatus()
   const { chatWindowState, openChatWindow } = useAIConversation()
   const [expanded, setExpanded] = useState(false)
@@ -320,8 +321,10 @@ export const AIStatusIndicator: React.FC = () => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const statusRef = useRef<AIOperationStatus | null>(null)
   const hasExtendedThinking = useMemo(() => {
-    return MODEL_OPTIONS.find((model) => model.value === currentModel)?.isSlow
-  }, [currentModel])
+    return getAllModelOptions(aiAssistantSettings).find(
+      (model) => model.value === currentModel,
+    )?.isSlow
+  }, [currentModel, aiAssistantSettings])
 
   const operationSections = useMemo(
     () => buildOperationSections(currentOperation, status, true),

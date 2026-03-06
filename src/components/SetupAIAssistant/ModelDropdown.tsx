@@ -6,7 +6,7 @@ import { PopperToggle } from "../PopperToggle"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { MODEL_OPTIONS } from "../../utils/ai"
+import { getAllModelOptions } from "../../utils/ai"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { OpenAIIcon } from "./OpenAIIcon"
@@ -165,10 +165,10 @@ export const ModelDropdown = () => {
   const [dropdownActive, setDropdownActive] = useState(false)
 
   const enabledModels = useMemo(() => {
-    return MODEL_OPTIONS.filter((model) =>
+    return getAllModelOptions(aiAssistantSettings).filter((model) =>
       enabledModelValues.includes(model.value),
     )
-  }, [enabledModelValues])
+  }, [enabledModelValues, aiAssistantSettings])
 
   const handleModelSelect = (modelValue: string) => {
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {

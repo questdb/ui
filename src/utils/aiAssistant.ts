@@ -1,6 +1,7 @@
 import { Client } from "./questdb/client"
 import { Type, Table } from "./questdb/types"
 import type { ProviderId } from "./ai"
+import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { formatSql } from "./formatSql"
 import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import type {
@@ -24,6 +25,7 @@ export type ActiveProviderSettings = {
   model: string
   provider: ProviderId
   apiKey: string
+  aiAssistantSettings?: AiAssistantSettings
 }
 
 export interface AiAssistantAPIError {
@@ -305,8 +307,9 @@ export const testApiKey = async (
   apiKey: string,
   model: string,
   providerId: ProviderId,
+  settings?: AiAssistantSettings,
 ): Promise<{ valid: boolean; error?: string }> => {
-  const provider = createProvider(providerId, apiKey)
+  const provider = createProvider(providerId, apiKey, settings)
   return provider.testConnection({ apiKey, model })
 }
 
@@ -322,7 +325,11 @@ export const generateChatTitle = async ({
   }
 
   try {
-    const provider = createProvider(settings.provider, settings.apiKey)
+    const provider = createProvider(
+      settings.provider,
+      settings.apiKey,
+      settings.aiAssistantSettings,
+    )
 
     const prompt = `Generate a concise chat title (max 30 characters) for this conversation with QuestDB AI Assistant. The title should capture the main topic or intent.
 
@@ -398,7 +405,11 @@ export const continueConversation = async ({
     health_issue: ConversationResponseFormat,
   }[operation]
 
-  const provider = createProvider(settings.provider, settings.apiKey)
+  const provider = createProvider(
+    settings.provider,
+    settings.apiKey,
+    settings.aiAssistantSettings,
+  )
 
   return tryWithRetries(
     async () => {
@@ -416,7 +427,10 @@ export const continueConversation = async ({
           systemPrompt,
           userMessage,
           () => setStatus(AIOperationStatus.Compacting),
-          { model: settings.model },
+          {
+            model: settings.model,
+            aiAssistantSettings: settings.aiAssistantSettings,
+          },
         )
 
         if ("error" in compactionResult) {

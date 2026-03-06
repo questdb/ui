@@ -203,13 +203,15 @@ function toResponsesAPIProps(model: string): {
 export function createOpenAIProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
+  options?: { baseURL?: string; contextWindow?: number },
 ): AIProvider {
   const openai = new OpenAI({
     apiKey,
     dangerouslyAllowBrowser: true,
+    ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
   })
 
-  const contextWindow = 400_000
+  const contextWindow = options?.contextWindow ?? 400_000
 
   return {
     id: providerId,
