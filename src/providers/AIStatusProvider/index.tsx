@@ -14,7 +14,7 @@ import {
   hasSchemaAccess,
   providerForModel,
   canUseAiAssistant,
-  getAllProviders,
+  getAllEnabledModels,
   getApiKey,
 } from "../../utils/ai"
 import type { AiAssistantSettings } from "../LocalStorageProvider/types"
@@ -144,15 +144,10 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     return getApiKey(provider, aiAssistantSettings)
   }, [currentModel, aiAssistantSettings])
 
-  const models = useMemo(() => {
-    const allModels: string[] = []
-    for (const provider of getAllProviders(aiAssistantSettings)) {
-      const providerModels =
-        aiAssistantSettings.providers?.[provider]?.enabledModels || []
-      allModels.push(...providerModels)
-    }
-    return allModels
-  }, [aiAssistantSettings])
+  const models = useMemo(
+    () => getAllEnabledModels(aiAssistantSettings),
+    [aiAssistantSettings],
+  )
 
   const setStatus = useCallback(
     (

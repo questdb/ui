@@ -701,8 +701,8 @@ export const ConfigurationModal = ({
     null,
   )
   const providerName = useMemo(
-    () => getProviderName(selectedProvider),
-    [selectedProvider],
+    () => getProviderName(selectedProvider, aiAssistantSettings),
+    [selectedProvider, aiAssistantSettings],
   )
   const [apiKey, setApiKey] = useState<string>("")
   const [error, setError] = useState<string | null>(null)

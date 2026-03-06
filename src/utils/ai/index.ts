@@ -35,6 +35,7 @@ export {
   getProviderName,
   getAllProviders,
   getAllModelOptions,
+  getAllEnabledModels,
   getSelectedModel,
   getNextModel,
   getTestModel,

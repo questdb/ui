@@ -38,6 +38,10 @@ function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
   }))
 }
 
+function toAnthropicModel(model: string): string {
+  return getModelProps(model).model
+}
+
 function toAnthropicOutputConfig(format: ResponseFormatSchema): OutputConfig {
   return {
     format: {
@@ -357,8 +361,10 @@ export function createAnthropicProvider(
       const anthropicTools = toAnthropicTools(tools)
       const outputConfig = toAnthropicOutputConfig(config.responseFormat)
 
+      const resolvedModel = toAnthropicModel(model)
+
       const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
-        model,
+        model: resolvedModel,
         system: config.systemInstructions,
         tools: anthropicTools,
         messages: initialMessages,
@@ -386,7 +392,7 @@ export function createAnthropicProvider(
           anthropic,
           modelToolsClient,
           initialMessages,
-          model,
+          resolvedModel,
           config.systemInstructions,
           setStatus,
           outputConfig,
@@ -462,7 +468,7 @@ export function createAnthropicProvider(
     async generateTitle({ model, prompt, responseFormat }) {
       try {
         const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
-          model,
+          model: toAnthropicModel(model),
           messages: [{ role: "user", content: prompt }],
           max_tokens: 100,
           temperature: 0.3,
@@ -502,7 +508,7 @@ export function createAnthropicProvider(
         })
 
         await createAnthropicMessage(testClient, {
-          model,
+          model: toAnthropicModel(model),
           messages: [{ role: "user", content: "ping" }],
         })
         return { valid: true }
@@ -539,7 +545,7 @@ export function createAnthropicProvider(
       }))
 
       const response = await anthropic.messages.countTokens({
-        model,
+        model: toAnthropicModel(model),
         system: systemPrompt,
         messages: anthropicMessages,
       })

@@ -718,9 +718,28 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       }
     }
 
+    // Sync API keys into customProviders so getApiKey() stays consistent
+    const updatedCustomProviders = aiAssistantSettings.customProviders
+      ? { ...aiAssistantSettings.customProviders }
+      : undefined
+    if (updatedCustomProviders) {
+      for (const provider of allProviders) {
+        if (updatedCustomProviders[provider]) {
+          updatedCustomProviders[provider] = {
+            ...updatedCustomProviders[provider],
+            apiKey: validatedApiKeys[provider] ? apiKeys[provider] : undefined,
+            grantSchemaAccess: grantSchemaAccess[provider],
+          }
+        }
+      }
+    }
+
     const updatedSettings: AiAssistantSettings = {
       ...aiAssistantSettings,
       providers: updatedProviders,
+      ...(updatedCustomProviders && {
+        customProviders: updatedCustomProviders,
+      }),
     }
 
     const nextModel = getNextModel(
@@ -832,7 +851,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       <ProviderTabTitle>
                         {renderProviderIcon(provider, isActive)}
                         <ProviderTabName $active={isActive}>
-                          {getProviderName(provider)}
+                          {getProviderName(provider, aiAssistantSettings)}
                         </ProviderTabName>
                       </ProviderTabTitle>
                       <StatusBadge $enabled={validatedApiKeys[provider]}>
@@ -878,7 +897,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          {getProviderName(selectedProvider)}
+                          {getProviderName(
+                            selectedProvider,
+                            aiAssistantSettings,
+                          )}
                         </APIKeyLink>
                         .
                       </Text>
@@ -896,7 +918,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         onChange={(e) => {
                           handleApiKeyChange(selectedProvider, e.target.value)
                         }}
-                        placeholder={`Enter ${getProviderName(selectedProvider)} API key`}
+                        placeholder={`Enter ${getProviderName(selectedProvider, aiAssistantSettings)} API key`}
                         $hasError={!!currentProviderError}
                         $showEditButton={maskInput}
                         readOnly={maskInput}
@@ -1051,7 +1073,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         <SchemaCheckboxContent align="flex-start">
                           <SchemaCheckboxLabel>
                             Grant schema access to{" "}
-                            {getProviderName(selectedProvider)}
+                            {getProviderName(
+                              selectedProvider,
+                              aiAssistantSettings,
+                            )}
                           </SchemaCheckboxLabel>
                           <SchemaCheckboxDescription>
                             When enabled, the AI assistant can access your

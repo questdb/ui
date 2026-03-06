@@ -214,12 +214,20 @@ export const getSelectedModel = (
   )
 }
 
-const getAllEnabledModels = (settings: AiAssistantSettings): string[] => {
+export const getAllEnabledModels = (
+  settings: AiAssistantSettings,
+): string[] => {
   const models: string[] = []
   for (const provider of getAllProviders(settings)) {
     const providerModels = settings.providers?.[provider]?.enabledModels
     if (providerModels) {
       models.push(...providerModels)
+    } else if (settings.customProviders?.[provider]) {
+      models.push(
+        ...settings.customProviders[provider].models.map((m) =>
+          makeCustomModelValue(provider, m),
+        ),
+      )
     }
   }
   return models
