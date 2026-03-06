@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages"
+import type { OutputConfig } from "@anthropic-ai/sdk/resources/messages"
 import type { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/messages"
 import type {
   AiAssistantAPIError,
@@ -36,14 +37,12 @@ function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
   }))
 }
 
-// Wraps ResponseFormatSchema into Anthropic's output_format parameter
-function toAnthropicOutputFormat(
-  format: ResponseFormatSchema,
-): { type: "json_schema"; schema: Record<string, unknown> } | undefined {
-  if (!format.schema) return undefined
+function toAnthropicOutputConfig(format: ResponseFormatSchema): OutputConfig {
   return {
-    type: "json_schema",
-    schema: format.schema,
+    format: {
+      type: "json_schema",
+      schema: format.schema,
+    },
   }
 }
 
@@ -61,9 +60,6 @@ async function createAnthropicMessage(
       max_tokens: params.max_tokens ?? 8192,
     },
     {
-      headers: {
-        "anthropic-beta": "structured-outputs-2025-11-13",
-      },
       signal,
     },
   )
@@ -99,9 +95,6 @@ async function createAnthropicMessageStreaming(
       max_tokens: params.max_tokens ?? 8192,
     },
     {
-      headers: {
-        "anthropic-beta": "structured-outputs-2025-11-13",
-      },
       signal: abortSignal,
     },
   )
@@ -198,7 +191,7 @@ async function handleToolCalls(
   model: string,
   systemPrompt: string,
   setStatus: StatusCallback,
-  outputFormat: ReturnType<typeof toAnthropicOutputFormat>,
+  outputConfig: OutputConfig,
   tools: AnthropicTool[],
   contextWindow: number,
   abortSignal?: AbortSignal,
@@ -263,11 +256,7 @@ async function handleToolCalls(
     tools,
     messages: updatedHistory,
     temperature: 0.3,
-  }
-
-  if (outputFormat) {
-    // @ts-expect-error - output_format is a new field not yet in the type definitions
-    followUpParams.output_format = outputFormat
+    output_config: outputConfig,
   }
 
   const followUpMessage = streaming
@@ -297,7 +286,7 @@ async function handleToolCalls(
       model,
       systemPrompt,
       setStatus,
-      outputFormat,
+      outputConfig,
       tools,
       contextWindow,
       abortSignal,
@@ -360,7 +349,7 @@ export function createAnthropicProvider(apiKey: string): AIProvider {
       })
 
       const anthropicTools = toAnthropicTools(tools)
-      const outputFormat = toAnthropicOutputFormat(config.responseFormat)
+      const outputConfig = toAnthropicOutputConfig(config.responseFormat)
 
       const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
         model,
@@ -368,11 +357,7 @@ export function createAnthropicProvider(apiKey: string): AIProvider {
         tools: anthropicTools,
         messages: initialMessages,
         temperature: 0.3,
-      }
-
-      if (outputFormat) {
-        // @ts-expect-error - output_format is a new field not yet in the type definitions
-        messageParams.output_format = outputFormat
+        output_config: outputConfig,
       }
 
       const message = streaming
@@ -398,7 +383,7 @@ export function createAnthropicProvider(apiKey: string): AIProvider {
           model,
           config.systemInstructions,
           setStatus,
-          outputFormat,
+          outputConfig,
           anthropicTools,
           contextWindow,
           abortSignal,
@@ -475,13 +460,8 @@ export function createAnthropicProvider(apiKey: string): AIProvider {
           messages: [{ role: "user", content: prompt }],
           max_tokens: 100,
           temperature: 0.3,
+          output_config: toAnthropicOutputConfig(responseFormat),
         }
-        const outputFormat = toAnthropicOutputFormat(responseFormat)
-        if (outputFormat) {
-          // @ts-expect-error - output_format is a new field not yet in the type definitions
-          messageParams.output_format = outputFormat
-        }
-
         const message = await createAnthropicMessage(anthropic, messageParams)
 
         const textBlock = message.content.find((block) => block.type === "text")
