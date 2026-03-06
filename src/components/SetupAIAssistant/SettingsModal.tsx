@@ -563,11 +563,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     Record<ProviderId, boolean>
   >(() =>
     initializeProviderState((provider) => {
+      const providerSettings = aiAssistantSettings.providers?.[provider]
+      if (providerSettings) return providerSettings.grantSchemaAccess !== false
       const custom = aiAssistantSettings.customProviders?.[provider]
       if (custom) return custom.grantSchemaAccess !== false
-      return (
-        aiAssistantSettings.providers?.[provider]?.grantSchemaAccess !== false
-      )
+      return true
     }, true),
   )
   const [validatedApiKeys, setValidatedApiKeys] = useState<

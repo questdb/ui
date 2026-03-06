@@ -405,11 +405,22 @@ export const continueConversation = async ({
     health_issue: ConversationResponseFormat,
   }[operation]
 
-  const provider = createProvider(
-    settings.provider,
-    settings.apiKey,
-    settings.aiAssistantSettings,
-  )
+  let provider: ReturnType<typeof createProvider>
+  try {
+    provider = createProvider(
+      settings.provider,
+      settings.apiKey,
+      settings.aiAssistantSettings,
+    )
+  } catch (error) {
+    return {
+      type: "unknown",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to initialize provider",
+    }
+  }
 
   return tryWithRetries(
     async () => {

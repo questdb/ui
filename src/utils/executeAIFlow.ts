@@ -454,7 +454,13 @@ export async function executeAIFlow(
 
   const provider = providerForModel(settings.model, config.aiAssistantSettings)
   if (!provider) {
-    throw new Error(`No provider found for model: ${settings.model}`)
+    callbacks.updateMessage(conversationId, assistantMessageId, {
+      error: `No provider found for model: ${settings.model}`,
+    })
+    return {
+      success: false,
+      error: `No provider found for model: ${settings.model}`,
+    }
   }
   const providerSettings: ActiveProviderSettings = {
     model: settings.model,
