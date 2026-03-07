@@ -526,6 +526,14 @@ export function createOpenAIChatCompletionsProvider(
       return totalTokens
     },
 
+    async listModels(): Promise<string[]> {
+      const models: string[] = []
+      for await (const model of openai.models.list()) {
+        models.push(model.id)
+      }
+      return models
+    },
+
     classifyError(
       error: unknown,
       setStatus: StatusCallback,

@@ -67,6 +67,8 @@ export interface AIProvider {
     model: string
   }): Promise<number>
 
+  listModels(): Promise<string[]>
+
   classifyError(error: unknown, setStatus: StatusCallback): AiAssistantAPIError
   isNonRetryableError(error: unknown): boolean
 }
