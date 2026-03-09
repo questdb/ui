@@ -355,7 +355,8 @@ export const getApiKey = (
   const builtinKey = settings.providers?.[providerId]?.apiKey
   if (builtinKey) return builtinKey
   const custom = settings.customProviders?.[providerId]
-  return custom?.apiKey || null
+  if (custom) return custom.apiKey || ""
+  return null
 }
 
 export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {

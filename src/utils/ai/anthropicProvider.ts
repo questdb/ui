@@ -558,7 +558,7 @@ export function createAnthropicProvider(
       for await (const model of anthropic.models.list()) {
         models.push(model.id)
       }
-      return models
+      return models.sort((a, b) => a.localeCompare(b))
     },
 
     classifyError(

@@ -18,6 +18,7 @@ import {
   ALL_TOOLS,
   REFERENCE_TOOLS,
   getUnifiedPrompt,
+  BUILTIN_PROVIDERS,
 } from "./ai"
 import type { AIProvider } from "./ai"
 
@@ -320,7 +321,8 @@ export const generateChatTitle = async ({
   firstUserMessage: string
   settings: ActiveProviderSettings
 }): Promise<string | null> => {
-  if (!settings.apiKey || !settings.model) {
+  const isCustom = !BUILTIN_PROVIDERS[settings.provider]
+  if ((!isCustom && !settings.apiKey) || !settings.model) {
     return null
   }
 
@@ -382,7 +384,8 @@ export const continueConversation = async ({
     compactedConversationHistory?: Array<ConversationMessage>
   }
 > => {
-  if (!settings.apiKey || !settings.model) {
+  const isCustom = !BUILTIN_PROVIDERS[settings.provider]
+  if ((!isCustom && !settings.apiKey) || !settings.model) {
     return {
       type: "invalid_key",
       message: "API key or model is missing",

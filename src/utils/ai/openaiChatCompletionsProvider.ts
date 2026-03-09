@@ -531,7 +531,7 @@ export function createOpenAIChatCompletionsProvider(
       for await (const model of openai.models.list()) {
         models.push(model.id)
       }
-      return models
+      return models.sort((a, b) => a.localeCompare(b))
     },
 
     classifyError(
