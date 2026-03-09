@@ -10,7 +10,6 @@ export type CustomProviderDefinition = {
   baseURL: string
   apiKey?: string
   contextWindow: number
-  testModel?: string
   models: string[]
   grantSchemaAccess?: boolean
 }

@@ -289,10 +289,8 @@ export const getTestModel = (
   providerId: ProviderId,
   settings?: AiAssistantSettings,
 ): string | null => {
-  const custom = settings?.customProviders?.[providerId]
-  if (custom) {
-    const rawModel = custom.testModel ?? custom.models[0] ?? null
-    return rawModel ? makeCustomModelValue(providerId, rawModel) : null
+  if (settings?.customProviders?.[providerId]) {
+    return settings.selectedModel ?? null
   }
   return (
     MODEL_OPTIONS.find((m) => m.provider === providerId && m.isTestModel)
