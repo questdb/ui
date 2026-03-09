@@ -115,6 +115,9 @@ async function createOpenAIResponseStreaming(
     if (abortSignal?.aborted || error instanceof OpenAI.APIUserAbortError) {
       throw new StreamingError("Operation aborted", "interrupted")
     }
+    if (error instanceof OpenAI.APIError) {
+      throw error
+    }
     throw new StreamingError(
       error instanceof Error ? error.message : "Stream interrupted",
       "network",
@@ -525,17 +528,42 @@ export function createOpenAIProvider(
         }
       }
 
+      if (error instanceof OpenAI.AuthenticationError) {
+        return {
+          type: "invalid_key",
+          message: "Invalid API key. Please check your OpenAI API key.",
+          details: error.message,
+        }
+      }
+
+      if (error instanceof OpenAI.RateLimitError) {
+        return {
+          type: "rate_limit",
+          message: "Rate limit exceeded. Please try again later.",
+          details: error.message,
+        }
+      }
+
+      if (error instanceof OpenAI.APIConnectionError) {
+        return {
+          type: "network",
+          message: "Network error. Please check your internet connection.",
+          details: error.message,
+        }
+      }
+
       if (error instanceof OpenAI.APIError) {
         return {
           type: "unknown",
-          message: `OpenAI API error: ${error.message}`,
+          message: error.message,
+          details: `Status ${error.status}`,
         }
       }
 
       return {
         type: "unknown",
         message: "An unexpected error occurred. Please try again.",
-        details: error as string,
+        details: error instanceof Error ? error.message : String(error),
       }
     },
 
@@ -543,14 +571,18 @@ export function createOpenAIProvider(
       if (error instanceof StreamingError) {
         return error.errorType === "interrupted" || error.errorType === "failed"
       }
+      if (
+        error instanceof OpenAI.APIError &&
+        error.status != null &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 429
+      ) {
+        return true
+      }
       return (
         error instanceof RefusalError ||
         error instanceof MaxTokensError ||
-        error instanceof OpenAI.AuthenticationError ||
-        (error != null &&
-          typeof error === "object" &&
-          "status" in error &&
-          error.status === 429) ||
         error instanceof OpenAI.APIUserAbortError
       )
     },

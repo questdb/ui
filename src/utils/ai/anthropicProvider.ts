@@ -121,7 +121,7 @@ async function createAnthropicMessageStreaming(
         if (errorType === "overloaded_error") {
           throw new StreamingError(
             "Service is temporarily overloaded. Please try again.",
-            "failed",
+            "network",
             event,
           )
         }
@@ -148,6 +148,9 @@ async function createAnthropicMessageStreaming(
     if (abortSignal?.aborted) {
       throw new StreamingError("Operation aborted", "interrupted")
     }
+    if (error instanceof Anthropic.APIError) {
+      throw error
+    }
     throw new StreamingError(
       error instanceof Error ? error.message : "Stream interrupted",
       "network",
@@ -161,6 +164,9 @@ async function createAnthropicMessageStreaming(
   } catch (error) {
     if (abortSignal?.aborted || error instanceof Anthropic.APIUserAbortError) {
       throw new StreamingError("Operation aborted", "interrupted")
+    }
+    if (error instanceof Anthropic.APIError) {
+      throw error
     }
     throw new StreamingError(
       "Failed to get final message from the provider",
@@ -640,14 +646,15 @@ export function createAnthropicProvider(
       if (error instanceof Anthropic.APIError) {
         return {
           type: "unknown",
-          message: `Anthropic API error: ${error.message}`,
+          message: error.message,
+          details: `Status ${error.status}`,
         }
       }
 
       return {
         type: "unknown",
         message: "An unexpected error occurred. Please try again.",
-        details: error as string,
+        details: error instanceof Error ? error.message : String(error),
       }
     },
 
@@ -655,14 +662,18 @@ export function createAnthropicProvider(
       if (error instanceof StreamingError) {
         return error.errorType === "interrupted" || error.errorType === "failed"
       }
+      if (
+        error instanceof Anthropic.APIError &&
+        error.status != null &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 429
+      ) {
+        return true
+      }
       return (
         error instanceof RefusalError ||
         error instanceof MaxTokensError ||
-        error instanceof Anthropic.AuthenticationError ||
-        (error != null &&
-          typeof error === "object" &&
-          "status" in error &&
-          error.status === 429) ||
         error instanceof Anthropic.APIUserAbortError
       )
     },

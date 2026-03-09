@@ -455,7 +455,7 @@ const StepOneContent = ({
           <InputLabel>Provider Type</InputLabel>
           <StyledSelect
             name="providerType"
-            defaultValue={providerType}
+            value={providerType}
             onChange={(e) =>
               onProviderTypeChange(e.target.value as ProviderType)
             }
@@ -637,10 +637,10 @@ const StepTwoAutoContent = ({
             type="number"
             value={contextWindow}
             onChange={(e) => onContextWindowChange(Number(e.target.value))}
-            min={1}
           />
           <HelperText>
-            Maximum number of tokens the model can process.
+            Maximum number of tokens the model can process. AI assistant
+            requires a minimum of 100,000 tokens.
           </HelperText>
         </InputSection>
       </ContentSection>
@@ -754,10 +754,10 @@ const StepTwoManualContent = ({
             type="number"
             value={contextWindow}
             onChange={(e) => onContextWindowChange(Number(e.target.value))}
-            min={1}
           />
           <HelperText>
-            Maximum number of tokens the model can process.
+            Maximum number of tokens the model can process. AI assistant
+            requires a minimum of 100,000 tokens.
           </HelperText>
         </InputSection>
       </ContentSection>
@@ -843,16 +843,14 @@ export const CustomProviderModal = ({
     if (!trimmed) return
 
     if (flowPath === "auto") {
-      setSelectedModels((prev) =>
-        prev.includes(trimmed) ? prev : [...prev, trimmed],
-      )
+      if (selectedModels.includes(trimmed)) return
+      setSelectedModels((prev) => [...prev, trimmed])
     } else {
-      setManualModels((prev) =>
-        prev.includes(trimmed) ? prev : [...prev, trimmed],
-      )
+      if (manualModels.includes(trimmed)) return
+      setManualModels((prev) => [...prev, trimmed])
     }
     setManualModelInput("")
-  }, [manualModelInput, flowPath])
+  }, [manualModelInput, flowPath, selectedModels, manualModels])
 
   const handleRemoveManualModel = useCallback((model: string) => {
     setManualModels((prev) => prev.filter((m) => m !== model))
@@ -918,8 +916,10 @@ export const CustomProviderModal = ({
       if (manualModels.length === 0 && !manualModelInput.trim())
         return "Add at least one model"
     }
+    if (!contextWindow || contextWindow < 100_000)
+      return "Context window must be at least 100,000 tokens"
     return true
-  }, [flowPath, selectedModels, manualModels, manualModelInput])
+  }, [flowPath, selectedModels, manualModels, manualModelInput, contextWindow])
 
   const handleComplete = useCallback(() => {
     const providerId = generateProviderId(name)

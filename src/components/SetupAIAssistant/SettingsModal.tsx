@@ -857,6 +857,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleCustomProviderSave = useCallback(
     (providerId: string, definition: CustomProviderDefinition) => {
+      const newEnabledModels = definition.models.map((m) =>
+        makeCustomModelValue(providerId, m),
+      )
+
       setLocalCustomProviders((prev) => ({
         ...prev,
         [providerId]: definition,
@@ -875,15 +879,31 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       }))
       setEnabledModels((prev) => ({
         ...prev,
-        [providerId]: definition.models.map((m) =>
-          makeCustomModelValue(providerId, m),
-        ),
+        [providerId]: newEnabledModels,
       }))
+
+      const updatedCustomProviders = {
+        ...(aiAssistantSettings.customProviders ?? {}),
+        [providerId]: definition,
+      }
+      const updatedProviders = {
+        ...aiAssistantSettings.providers,
+        [providerId]: {
+          apiKey: definition.apiKey ?? "",
+          enabledModels: newEnabledModels,
+          grantSchemaAccess: definition.grantSchemaAccess ?? false,
+        },
+      }
+      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
+        ...aiAssistantSettings,
+        customProviders: updatedCustomProviders,
+        providers: updatedProviders,
+      })
 
       setSelectedProvider(providerId)
       setCustomProviderModalOpen(false)
     },
-    [],
+    [aiAssistantSettings, updateSettings],
   )
 
   const currentProviderValidated = validatedApiKeys[selectedProvider]
@@ -1005,7 +1025,8 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                 <ContentPanel>
                   <ContentSection>
                     <Box flexDirection="column" gap="1.2rem" align="flex-start">
-                      {isCustomProvider && !currentProviderApiKey ? (
+                      {isCustomProvider &&
+                      !localCustomProviders[selectedProvider]?.apiKey ? (
                         <>
                           <SectionTitle>API Key</SectionTitle>
                           <SectionDescription>

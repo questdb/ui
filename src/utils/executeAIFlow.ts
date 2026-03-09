@@ -212,16 +212,10 @@ function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
 }
 
 function formatErrorMessage(error: AiAssistantAPIError): string {
-  switch (error.type) {
-    case "aborted":
-      return "Operation has been cancelled"
-    case "network":
-      return "Connection interrupted. Please check your network and try again."
-    case "rate_limit":
-      return "Rate limit reached. Please wait a moment and try again."
-    default:
-      return error.message || "An unexpected error occurred"
+  if (error.type === "aborted") {
+    return "Operation has been cancelled"
   }
+  return error.message || "An unexpected error occurred"
 }
 
 type ProcessResultConfig = {
