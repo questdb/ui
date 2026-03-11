@@ -18,15 +18,15 @@ import {
   createStreamingCallback,
   isAiAssistantError,
   generateChatTitle,
-  getExplainSchemaPrompt,
-  getHealthIssuePrompt,
   type ActiveProviderSettings,
   type GeneratedSQL,
   type AiAssistantExplanation,
   type AiAssistantAPIError,
   type AIOperation,
 } from "./aiAssistant"
-import { providerForModel, MODEL_OPTIONS } from "./aiAssistantSettings"
+import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
+import { providerForModel, getTestModel } from "./ai"
+import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
 
@@ -36,6 +36,7 @@ type BaseFlowConfig = {
     model: string
     apiKey: string
   }
+  aiAssistantSettings?: AiAssistantSettings
   questClient: Client
   tables?: Array<Table>
   hasSchemaAccess: boolean
@@ -211,16 +212,10 @@ function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
 }
 
 function formatErrorMessage(error: AiAssistantAPIError): string {
-  switch (error.type) {
-    case "aborted":
-      return "Operation has been cancelled"
-    case "network":
-      return "Connection interrupted. Please check your network and try again."
-    case "rate_limit":
-      return "Rate limit reached. Please wait a moment and try again."
-    default:
-      return error.message || "An unexpected error occurred"
+  if (error.type === "aborted") {
+    return "Operation has been cancelled"
   }
+  return error.message || "An unexpected error occurred"
 }
 
 type ProcessResultConfig = {
@@ -332,7 +327,7 @@ function processSQLResult(
     }
   }
 
-  let assistantContent = result.explanation || "Response received"
+  let assistantContent = result.explanation || "No explanation received"
   if (hasSQLInResult) {
     assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
   }
@@ -360,20 +355,23 @@ async function generateChatTitleIfNeeded(
     return
   }
 
-  const provider = providerForModel(config.settings.model)
-  const testModel = MODEL_OPTIONS.find(
-    (m) => m.isTestModel && m.provider === provider,
+  const provider = providerForModel(
+    config.settings.model,
+    config.aiAssistantSettings,
   )
+  if (!provider) return
 
-  if (!testModel) return
+  const testModelValue = getTestModel(provider, config.aiAssistantSettings)
+  if (!testModelValue) return
 
   try {
     const title = await generateChatTitle({
       firstUserMessage: userMessageContent,
       settings: {
-        model: testModel.value,
+        model: testModelValue,
         provider,
         apiKey: config.settings.apiKey,
+        aiAssistantSettings: config.aiAssistantSettings,
       },
     })
 
@@ -448,11 +446,21 @@ export async function executeAIFlow(
     eventBus.publish(EventType.AI_QUERY_HIGHLIGHT, conversationId)
   }
 
-  const provider = providerForModel(settings.model)
+  const provider = providerForModel(settings.model, config.aiAssistantSettings)
+  if (!provider) {
+    callbacks.updateMessage(conversationId, assistantMessageId, {
+      error: `No provider found for model: ${settings.model}`,
+    })
+    return {
+      success: false,
+      error: `No provider found for model: ${settings.model}`,
+    }
+  }
   const providerSettings: ActiveProviderSettings = {
     model: settings.model,
     provider,
     apiKey: settings.apiKey,
+    aiAssistantSettings: config.aiAssistantSettings,
   }
 
   const modelToolsClient = createModelToolsClient(

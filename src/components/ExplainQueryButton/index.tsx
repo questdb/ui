@@ -44,6 +44,7 @@ export const ExplainQueryButton = ({
     hasSchemaAccess,
     currentModel: currentModelValue,
     apiKey: apiKeyValue,
+    aiAssistantSettings,
   } = useAIStatus()
   const {
     addMessage,
@@ -62,6 +63,7 @@ export const ExplainQueryButton = ({
         conversationId,
         queryText,
         settings: { model: currentModel, apiKey },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,
