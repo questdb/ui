@@ -26,6 +26,8 @@ import {
   safeJsonParse,
   extractPartialExplanation,
   executeTool,
+  parseCustomProviderResponse,
+  responseFormatToPromptInstruction,
 } from "./shared"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 
@@ -206,7 +208,7 @@ function toResponsesAPIProps(model: string): {
 export function createOpenAIProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
-  options?: { baseURL?: string; contextWindow?: number },
+  options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
 ): AIProvider {
   const openai = new OpenAI({
     apiKey,
@@ -215,6 +217,7 @@ export function createOpenAIProvider(
   })
 
   const contextWindow = options?.contextWindow ?? 400_000
+  const isCustom = options?.isCustom ?? false
 
   return {
     id: providerId,
@@ -260,12 +263,21 @@ export function createOpenAIProvider(
       let totalInputTokens = 0
       let totalOutputTokens = 0
 
+      const systemInstructions = isCustom
+        ? config.systemInstructions +
+          responseFormatToPromptInstruction(config.responseFormat)
+        : config.systemInstructions
+
+      const textConfig = isCustom
+        ? undefined
+        : toResponseTextConfig(config.responseFormat)
+
       const requestParams = {
         ...toResponsesAPIProps(model),
-        instructions: config.systemInstructions,
+        instructions: systemInstructions,
         input,
         tools: openaiTools,
-        text: toResponseTextConfig(config.responseFormat),
+        ...(textConfig ? { text: textConfig } : {}),
       } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
       let lastResponse = streaming
@@ -320,10 +332,10 @@ export function createOpenAIProvider(
         }
         const loopRequestParams = {
           ...toResponsesAPIProps(model),
-          instructions: config.systemInstructions,
+          instructions: systemInstructions,
           input,
           tools: openaiTools,
-          text: toResponseTextConfig(config.responseFormat),
+          ...(textConfig ? { text: textConfig } : {}),
         } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
         lastResponse = streaming
@@ -356,6 +368,26 @@ export function createOpenAIProvider(
       }
 
       const rawOutput = text.message
+
+      if (isCustom) {
+        const json = parseCustomProviderResponse<T>(
+          rawOutput,
+          (config.responseFormat.schema.required as string[]) || [],
+          (raw) => ({ explanation: raw }) as unknown as T,
+        )
+        setStatus(null)
+
+        const tokenUsage = {
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+        }
+
+        if (config.postProcess) {
+          const processed = config.postProcess(json)
+          return { ...processed, tokenUsage } as T & { tokenUsage: TokenUsage }
+        }
+        return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
+      }
 
       try {
         const json = JSON.parse(rawOutput) as T
@@ -391,13 +423,32 @@ export function createOpenAIProvider(
 
     async generateTitle({ model, prompt, responseFormat }) {
       try {
+        const userContent = isCustom
+          ? prompt + responseFormatToPromptInstruction(responseFormat)
+          : prompt
+
+        const titleTextConfig = isCustom
+          ? undefined
+          : toResponseTextConfig(responseFormat)
+
         const response = await openai.responses.create({
-          ...toResponsesAPIProps(model),
-          input: [{ role: "user", content: prompt }],
-          text: toResponseTextConfig(responseFormat),
+          model: toResponsesAPIProps(model).model,
+          input: [{ role: "user", content: userContent }],
+          ...(titleTextConfig ? { text: titleTextConfig } : {}),
           max_output_tokens: 100,
         })
-        const parsed = JSON.parse(response.output_text) as { title: string }
+        const rawText = response.output_text
+
+        if (isCustom) {
+          const parsed = parseCustomProviderResponse<{ title: string }>(
+            rawText,
+            (responseFormat.schema.required as string[]) || [],
+            (raw) => ({ title: raw.trim().slice(0, 40) }),
+          )
+          return parsed.title || null
+        }
+
+        const parsed = JSON.parse(rawText) as { title: string }
         return parsed.title || null
       } catch {
         return null

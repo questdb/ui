@@ -9,6 +9,7 @@ import type { ProviderId, ProviderType } from "./settings"
 type ProviderOptions = {
   baseURL?: string
   contextWindow?: number
+  isCustom?: boolean
 }
 
 export function createProvider(
@@ -28,6 +29,7 @@ export function createProvider(
     return createProviderByType(custom.type, providerId, apiKey, {
       baseURL: custom.baseURL,
       contextWindow: custom.contextWindow,
+      isCustom: true,
     })
   }
 

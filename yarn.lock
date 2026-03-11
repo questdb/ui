@@ -2545,6 +2545,7 @@ __metadata:
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
     js-tiktoken: "npm:^1.0.21"
+    jsonrepair: "npm:^3.13.3"
     lint-staged: "npm:^16.2.6"
     lodash.isequal: "npm:^4.5.0"
     lodash.merge: "npm:^4.6.2"
@@ -8268,6 +8269,15 @@ __metadata:
   version: 1.1.5
   resolution: "jsonpack@npm:1.1.5"
   checksum: 10/1b676c36ae2f1475cbbb46c67a0606029bd08104d65dd4575ce1b38da175abb28b5b2801fdac6cbb22a8f0224b4f97bd5734eb2065dfbe17de28ced89be17ce8
+  languageName: node
+  linkType: hard
+
+"jsonrepair@npm:^3.13.3":
+  version: 3.13.3
+  resolution: "jsonrepair@npm:3.13.3"
+  bin:
+    jsonrepair: bin/cli.js
+  checksum: 10/cd1d42516e3e03ccc44498c328f87f4ec05b24afe190becced0babf5d608e81b375e8d2040494142760556c1d6583b395073b5253626907e4df968d8cf01115c
   languageName: node
   linkType: hard
 

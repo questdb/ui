@@ -98,6 +98,8 @@ const DropdownContent = styled.div`
   min-width: 22.8rem;
   gap: 0.4rem;
   z-index: 9999;
+  max-height: 50vh;
+  overflow-y: auto;
 `
 
 const Title = styled(Text)`

@@ -168,6 +168,10 @@ const ProviderTabTitle = styled(Box).attrs({
   align: "center",
 })`
   width: 100%;
+
+  svg {
+    flex-shrink: 0;
+  }
 `
 
 const ProviderTabName = styled(Text)<{ $active: boolean }>`

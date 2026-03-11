@@ -24,6 +24,8 @@ import {
   MaxTokensError,
   extractPartialExplanation,
   executeTool,
+  parseCustomProviderResponse,
+  responseFormatToPromptInstruction,
 } from "./shared"
 
 function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
@@ -202,7 +204,7 @@ async function handleToolCalls(
   model: string,
   systemPrompt: string,
   setStatus: StatusCallback,
-  outputConfig: OutputConfig,
+  outputConfig: OutputConfig | undefined,
   tools: AnthropicTool[],
   contextWindow: number,
   abortSignal?: AbortSignal,
@@ -267,7 +269,7 @@ async function handleToolCalls(
     tools,
     messages: updatedHistory,
     temperature: 0.3,
-    output_config: outputConfig,
+    ...(outputConfig ? { output_config: outputConfig } : {}),
   }
 
   const followUpMessage = streaming
@@ -315,7 +317,7 @@ async function handleToolCalls(
 export function createAnthropicProvider(
   apiKey: string,
   providerId: ProviderId = "anthropic",
-  options?: { baseURL?: string; contextWindow?: number },
+  options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
 ): AIProvider {
   const anthropic = new Anthropic({
     apiKey,
@@ -324,6 +326,7 @@ export function createAnthropicProvider(
   })
 
   const contextWindow = options?.contextWindow ?? 200_000
+  const isCustom = options?.isCustom ?? false
 
   return {
     id: providerId,
@@ -365,17 +368,24 @@ export function createAnthropicProvider(
       })
 
       const anthropicTools = toAnthropicTools(tools)
-      const outputConfig = toAnthropicOutputConfig(config.responseFormat)
+      const outputConfig = isCustom
+        ? undefined
+        : toAnthropicOutputConfig(config.responseFormat)
+
+      const systemPrompt = isCustom
+        ? config.systemInstructions +
+          responseFormatToPromptInstruction(config.responseFormat)
+        : config.systemInstructions
 
       const resolvedModel = toAnthropicModel(model)
 
       const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
         model: resolvedModel,
-        system: config.systemInstructions,
+        system: systemPrompt,
         tools: anthropicTools,
         messages: initialMessages,
         temperature: 0.3,
-        output_config: outputConfig,
+        ...(outputConfig ? { output_config: outputConfig } : {}),
       }
 
       const message = streaming
@@ -399,7 +409,7 @@ export function createAnthropicProvider(
           modelToolsClient,
           initialMessages,
           resolvedModel,
-          config.systemInstructions,
+          systemPrompt,
           setStatus,
           outputConfig,
           anthropicTools,
@@ -439,6 +449,26 @@ export function createAnthropicProvider(
         } as AiAssistantAPIError
       }
 
+      if (isCustom) {
+        const json = parseCustomProviderResponse<T>(
+          textBlock.text,
+          (config.responseFormat.schema.required as string[]) || [],
+          (raw) => ({ explanation: raw }) as unknown as T,
+        )
+        setStatus(null)
+
+        const tokenUsage = {
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+        }
+
+        if (config.postProcess) {
+          const processed = config.postProcess(json)
+          return { ...processed, tokenUsage } as T & { tokenUsage: TokenUsage }
+        }
+        return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
+      }
+
       try {
         const json = JSON.parse(textBlock.text) as T
         setStatus(null)
@@ -473,17 +503,34 @@ export function createAnthropicProvider(
 
     async generateTitle({ model, prompt, responseFormat }) {
       try {
+        const userContent = isCustom
+          ? prompt + responseFormatToPromptInstruction(responseFormat)
+          : prompt
+
+        const titleOutputConfig = isCustom
+          ? undefined
+          : toAnthropicOutputConfig(responseFormat)
+
         const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
           model: toAnthropicModel(model),
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: userContent }],
           max_tokens: 100,
           temperature: 0.3,
-          output_config: toAnthropicOutputConfig(responseFormat),
+          ...(titleOutputConfig ? { output_config: titleOutputConfig } : {}),
         }
         const message = await createAnthropicMessage(anthropic, messageParams)
 
         const textBlock = message.content.find((block) => block.type === "text")
         if (textBlock && "text" in textBlock) {
+          if (isCustom) {
+            const parsed = parseCustomProviderResponse<{ title: string }>(
+              textBlock.text,
+              (responseFormat.schema.required as string[]) || [],
+              (raw) => ({ title: raw.trim().slice(0, 40) }),
+            )
+            return parsed.title || null
+          }
+
           const parsed = JSON.parse(textBlock.text) as { title: string }
           return parsed.title?.slice(0, 40) || null
         }

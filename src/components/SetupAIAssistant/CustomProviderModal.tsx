@@ -448,7 +448,7 @@ const StepOneContent = ({
             type="text"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
-            placeholder="e.g., My Ollama, Azure GPT"
+            placeholder="e.g., OpenRouter, Ollama"
           />
         </InputSection>
         <InputSection align="flex-start">
@@ -868,24 +868,7 @@ export const CustomProviderModal = ({
     if (existingProviderIds.includes(providerId))
       return `A provider with a similar name already exists`
 
-    // First, check that the URL is reachable with a simple fetch
-    try {
-      abortControllerRef.current?.abort()
-      abortControllerRef.current = new AbortController()
-
-      const normalizedURL = baseURL.replace(/\/+$/, "")
-      await fetch(normalizedURL, {
-        method: "GET",
-        signal: abortControllerRef.current.signal,
-      })
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        return "Connection check was cancelled"
-      }
-      return `Could not connect to ${baseURL}. Please check the URL and make sure the server is running.`
-    }
-
-    // URL is reachable — try to fetch models
+    // Try to fetch models, fallback to manual entry
     try {
       const tempProvider = createProviderByType(
         providerType,
@@ -901,9 +884,9 @@ export const CustomProviderModal = ({
         setFetchedModels(null)
         setFlowPath("manual")
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error"
-      return `Could not connect to provider: ${message}`
+    } catch {
+      setFetchedModels(null)
+      setFlowPath("manual")
     }
 
     return true

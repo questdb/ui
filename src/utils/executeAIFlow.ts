@@ -327,7 +327,7 @@ function processSQLResult(
     }
   }
 
-  let assistantContent = result.explanation || "Response received"
+  let assistantContent = result.explanation || "No explanation received"
   if (hasSQLInResult) {
     assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
   }

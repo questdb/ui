@@ -19,6 +19,8 @@ export {
   safeJsonParse,
   extractPartialExplanation,
   executeTool,
+  parseCustomProviderResponse,
+  responseFormatToPromptInstruction,
 } from "./shared"
 export {
   DOCS_INSTRUCTION,

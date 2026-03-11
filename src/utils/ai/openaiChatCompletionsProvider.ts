@@ -26,6 +26,8 @@ import {
   safeJsonParse,
   extractPartialExplanation,
   executeTool,
+  parseCustomProviderResponse,
+  responseFormatToPromptInstruction,
 } from "./shared"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 
@@ -277,7 +279,7 @@ function toChatCompletionsAPIProps(model: string): {
 export function createOpenAIChatCompletionsProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
-  options?: { baseURL?: string; contextWindow?: number },
+  options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
 ): AIProvider {
   const openai = new OpenAI({
     apiKey,
@@ -286,6 +288,7 @@ export function createOpenAIChatCompletionsProvider(
   })
 
   const contextWindow = options?.contextWindow ?? 400_000
+  const isCustom = options?.isCustom ?? false
 
   return {
     id: providerId,
@@ -308,8 +311,13 @@ export function createOpenAIChatCompletionsProvider(
       abortSignal?: AbortSignal
       streaming?: StreamingCallback
     }): Promise<T | AiAssistantAPIError> {
+      const systemContent = isCustom
+        ? config.systemInstructions +
+          responseFormatToPromptInstruction(config.responseFormat)
+        : config.systemInstructions
+
       const messages: ChatCompletionMessageParam[] = [
-        { role: "system", content: config.systemInstructions },
+        { role: "system", content: systemContent },
       ]
 
       if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -328,10 +336,14 @@ export function createOpenAIChatCompletionsProvider(
       let totalOutputTokens = 0
       let lastPromptTokens = 0
 
+      const response_format = isCustom
+        ? undefined
+        : toResponseFormat(config.responseFormat)
+
       const baseParams = {
         ...toChatCompletionsAPIProps(model),
         tools: openaiTools,
-        response_format: toResponseFormat(config.responseFormat),
+        response_format,
       }
 
       let result = await executeRequest(
@@ -405,6 +417,26 @@ export function createOpenAIChatCompletionsProvider(
         } as AiAssistantAPIError
       }
 
+      if (isCustom) {
+        const json = parseCustomProviderResponse<T>(
+          result.content,
+          (config.responseFormat.schema.required as string[]) || [],
+          (raw) => ({ explanation: raw }) as unknown as T,
+        )
+        setStatus(null)
+
+        const tokenUsage = {
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+        }
+
+        if (config.postProcess) {
+          const processed = config.postProcess(json)
+          return { ...processed, tokenUsage } as T & { tokenUsage: TokenUsage }
+        }
+        return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
+      }
+
       try {
         const json = JSON.parse(result.content) as T
         setStatus(null)
@@ -439,13 +471,31 @@ export function createOpenAIChatCompletionsProvider(
 
     async generateTitle({ model, prompt, responseFormat }) {
       try {
+        const userContent = isCustom
+          ? prompt + responseFormatToPromptInstruction(responseFormat)
+          : prompt
+
+        const response_format = isCustom
+          ? undefined
+          : toResponseFormat(responseFormat)
+
         const response = await openai.chat.completions.create({
-          ...toChatCompletionsAPIProps(model),
-          messages: [{ role: "user", content: prompt }],
-          response_format: toResponseFormat(responseFormat),
-          max_completion_tokens: 100,
+          model: toChatCompletionsAPIProps(model).model,
+          messages: [{ role: "user", content: userContent }],
+          response_format,
+          ...(isCustom ? {} : { max_completion_tokens: 100 }),
         })
         const content = response.choices[0]?.message?.content || ""
+
+        if (isCustom) {
+          const parsed = parseCustomProviderResponse<{ title: string }>(
+            content,
+            (responseFormat.schema.required as string[]) || [],
+            (raw) => ({ title: raw.trim().slice(0, 40) }),
+          )
+          return parsed.title || null
+        }
+
         const parsed = JSON.parse(content) as { title: string }
         return parsed.title || null
       } catch {
