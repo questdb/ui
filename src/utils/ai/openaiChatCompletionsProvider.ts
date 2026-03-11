@@ -658,7 +658,7 @@ export function createOpenAIChatCompletionsProvider(
       if (error instanceof OpenAI.APIConnectionError) {
         return {
           type: "network",
-          message: "Network error. Please check your internet connection.",
+          message: "Network error. Please check your connection.",
           details: error.message,
         }
       }

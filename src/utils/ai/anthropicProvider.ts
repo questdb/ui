@@ -685,7 +685,7 @@ export function createAnthropicProvider(
       if (error instanceof Anthropic.APIConnectionError) {
         return {
           type: "network",
-          message: "Network error. Please check your internet connection.",
+          message: "Network error. Please check your connection.",
           details: error.message,
         }
       }
