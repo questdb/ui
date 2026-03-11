@@ -594,11 +594,18 @@ export const MonitoringTab = ({
                   <ConfigItemWithHealth
                     label="Transaction Lag"
                     helperText={HELPER_TEXT.transactionLag}
-                    value={
-                      tableData.wal_txn != null || tableData.table_txn != null
-                        ? `${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0)} txn${(tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0) === 1 ? "" : "s"}`
-                        : "N/A"
-                    }
+                    value={(() => {
+                      if (
+                        tableData.wal_txn == null &&
+                        tableData.table_txn == null
+                      )
+                        return "N/A"
+                      const lag = Math.max(
+                        0,
+                        (tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0),
+                      )
+                      return `${lag} txn${lag === 1 ? "" : "s"}`
+                    })()}
                     issue={healthStatus?.fieldIssues.get("transactionLag")}
                     showTrend
                     trend={healthStatus?.trendIndicators.get("transactionLag")}
