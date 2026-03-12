@@ -27,6 +27,7 @@ import {
   type HealthIssue,
 } from "./healthCheck"
 import { HealthStatusLabel } from "./HealthStatusLabel"
+import { useDebouncedWarnings } from "./useDebouncedWarnings"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
@@ -397,9 +398,11 @@ export const TableDetailsDrawer = () => {
             ? [
                 ...prev.transactionLag.slice(-(MAX_TREND_SAMPLES - 1)),
                 {
-                  value:
+                  value: Math.max(
+                    0,
                     (Number(tableData.wal_txn) || 0) -
-                    (Number(tableData.table_txn) || 0),
+                      (Number(tableData.table_txn) || 0),
+                  ),
                   timestamp: now,
                 },
               ]
@@ -423,10 +426,12 @@ export const TableDetailsDrawer = () => {
     return () => clearInterval(interval)
   }, [isOpen, isMatView, fetchMatViewData])
 
-  const healthStatus = useMemo(() => {
+  const rawHealthStatus = useMemo(() => {
     if (!tableData) return null
     return calculateHealthStatus(tableData, matViewData, trendData, isMatView)
   }, [tableData, matViewData, trendData, isMatView])
+
+  const healthStatus = useDebouncedWarnings(rawHealthStatus)
 
   const truncatedDDL = useMemo(() => {
     if (!ddl) return { text: "", grayedOutLines: null }
