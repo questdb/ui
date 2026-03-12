@@ -658,10 +658,10 @@ describe("autocomplete", () => {
           .eq(0)
           .should("contain", "FROM")
       })
-    cy.typeQuery("select * from")
+    cy.typeQuery("select * fro")
     assertFrom()
     cy.clearEditor()
-    cy.typeQuery("SELECT * FROM")
+    cy.typeQuery("SELECT * FRO")
     assertFrom()
   })
 
@@ -685,13 +685,12 @@ describe("autocomplete", () => {
   })
 
   it("should suggest columns on SELECT only when applicable", () => {
-    cy.typeQuery("select secret")
+    cy.typeQuery("select secre")
     cy.getAutocomplete().should("be.visible")
     cy.typeQuery("{enter}")
-    cy.typeQuery(", public")
+    cy.typeQuery(", publi")
     cy.getAutocomplete().should("be.visible")
     cy.typeQuery("{enter}")
-    cy.typeQuery(" ")
     cy.getAutocomplete().should("contain", "FROM")
     cy.clearEditor()
   })
@@ -723,6 +722,33 @@ describe("autocomplete", () => {
       expect(value).to.match(/select \* from my_secrets/)
       expect(value).to.not.contain("my_semy_secrets")
     })
+    cy.clearEditor()
+  })
+
+  it("should suggest the new keyword after accepting a suggestion", () => {
+    cy.typeQuery("CR")
+    cy.getAutocomplete().should("contain", "CREATE")
+    cy.typeQuery("{enter}")
+    cy.typeQuery("T")
+    cy.getAutocomplete().should("contain", "TABLE")
+    cy.typeQuery("{enter}")
+    cy.getAutocomplete().should("contain", "IF")
+    cy.typeQuery("{enter}")
+    cy.getAutocomplete().should("contain", "NOT")
+    cy.typeQuery("{enter}")
+    cy.getAutocomplete().should("contain", "EXISTS")
+    cy.typeQuery("{enter}")
+    cy.clearEditor()
+  })
+
+  it("should not suggest the very same keyword when it's already typed", () => {
+    cy.typeQuery("SELECT * FROM")
+    cy.getAutocomplete().should("not.be.visible")
+
+    cy.typeQuery(`${ctrlOrCmd}i`)
+    cy.getAutocomplete()
+      .should("be.visible")
+      .should("contain", "No suggestions")
     cy.clearEditor()
   })
 
