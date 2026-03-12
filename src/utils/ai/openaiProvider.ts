@@ -30,6 +30,10 @@ import {
   responseFormatToPromptInstruction,
 } from "./shared"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
+import {
+  createHeaderFilteredFetch,
+  OPENAI_ALLOWED_HEADERS,
+} from "./fetchWithFilteredHeaders"
 
 function toResponseTextConfig(
   format: ResponseFormatSchema,
@@ -210,14 +214,19 @@ export function createOpenAIProvider(
   providerId: ProviderId = "openai",
   options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
 ): AIProvider {
+  const isCustom = options?.isCustom ?? false
   const openai = new OpenAI({
     apiKey,
     dangerouslyAllowBrowser: true,
     ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
+    ...(isCustom
+      ? {
+          fetch: createHeaderFilteredFetch(OPENAI_ALLOWED_HEADERS),
+        }
+      : {}),
   })
 
   const contextWindow = options?.contextWindow ?? 400_000
-  const isCustom = options?.isCustom ?? false
 
   return {
     id: providerId,
@@ -470,6 +479,11 @@ export function createOpenAIProvider(
           apiKey: testApiKey,
           dangerouslyAllowBrowser: true,
           ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
+          ...(isCustom
+            ? {
+                fetch: createHeaderFilteredFetch(OPENAI_ALLOWED_HEADERS),
+              }
+            : {}),
         })
         await testClient.responses.create({
           model: getModelProps(model).model, // testConnection only needs model name

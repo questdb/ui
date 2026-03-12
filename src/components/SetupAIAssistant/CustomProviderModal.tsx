@@ -874,7 +874,7 @@ export const CustomProviderModal = ({
         providerType,
         "temp",
         apiKey || "",
-        { baseURL, contextWindow },
+        { baseURL, contextWindow, isCustom: true },
       )
       const models = await tempProvider.listModels()
       if (models && models.length > 0) {

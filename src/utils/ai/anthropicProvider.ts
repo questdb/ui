@@ -27,6 +27,10 @@ import {
   parseCustomProviderResponse,
   responseFormatToPromptInstruction,
 } from "./shared"
+import {
+  createHeaderFilteredFetch,
+  ANTHROPIC_ALLOWED_HEADERS,
+} from "./fetchWithFilteredHeaders"
 
 function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
   return tools.map((t) => ({
@@ -319,14 +323,19 @@ export function createAnthropicProvider(
   providerId: ProviderId = "anthropic",
   options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
 ): AIProvider {
+  const isCustom = options?.isCustom ?? false
   const anthropic = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
     ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
+    ...(isCustom
+      ? {
+          fetch: createHeaderFilteredFetch(ANTHROPIC_ALLOWED_HEADERS),
+        }
+      : {}),
   })
 
   const contextWindow = options?.contextWindow ?? 200_000
-  const isCustom = options?.isCustom ?? false
 
   return {
     id: providerId,
@@ -558,6 +567,11 @@ export function createAnthropicProvider(
           apiKey: testApiKey,
           dangerouslyAllowBrowser: true,
           ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
+          ...(isCustom
+            ? {
+                fetch: createHeaderFilteredFetch(ANTHROPIC_ALLOWED_HEADERS),
+              }
+            : {}),
         })
 
         await createAnthropicMessage(testClient, {
