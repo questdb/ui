@@ -1,6 +1,11 @@
-import { operators } from "./operators"
 import type { languages } from "monaco-editor"
-import { constants, dataTypes, functions, keywords } from "@questdb/sql-grammar"
+import {
+  constants,
+  dataTypes,
+  functions,
+  keywords,
+  operators,
+} from "@questdb/sql-parser"
 import { escapeRegExpCharacters } from "../../../../utils/textSearch"
 
 const functionPattern = new RegExp(
@@ -121,7 +126,7 @@ export const language: languages.IMonarchLanguage = {
       ],
     ],
     numbers: [
-      [/\b(\d+)([utsmhdwmy])\b/i, "number"], // sampling rate
+      [/[+-]?\d+[utsmhdwyn]\b/i, "number"], // sampling rate/ horizons
       [/([+-]?\d+\.\d+[eE]?[+-]?\d+)/, "number"], // floating point number
       [/0[xX][0-9a-fA-F]*/, "number"], // hex integers
       [/[+-]?\d+((_)?\d+)*[Ll]?/, "number"], // integers

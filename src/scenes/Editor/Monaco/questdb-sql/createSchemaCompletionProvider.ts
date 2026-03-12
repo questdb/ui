@@ -1,175 +1,257 @@
-import { Table, uniq, InformationSchemaColumn } from "../../../../utils"
+import { Table, InformationSchemaColumn } from "../../../../utils"
 import type { editor, languages } from "monaco-editor"
-import { CompletionItemPriority } from "./types"
-import { findMatches, getQueryFromCursor } from "../utils"
-import { getTableCompletions } from "./getTableCompletions"
-import { getColumnCompletions } from "./getColumnCompletions"
-import { getLanguageCompletions } from "./getLanguageCompletions"
+import { CompletionItemKind, CompletionItemPriority } from "./types"
+import {
+  createAutocompleteProvider,
+  SuggestionKind,
+  SuggestionPriority,
+  tokenize,
+  type SchemaInfo,
+  type Suggestion,
+} from "@questdb/sql-parser"
 
-const trimQuotesFromTableName = (tableName: string) => {
-  return tableName.replace(/(^")|("$)/g, "")
+/**
+ * Map parser's SuggestionKind to Monaco's CompletionItemKind
+ */
+const KIND_MAP: Record<SuggestionKind, CompletionItemKind> = {
+  [SuggestionKind.Keyword]: CompletionItemKind.Keyword,
+  [SuggestionKind.Function]: CompletionItemKind.Function,
+  [SuggestionKind.Table]: CompletionItemKind.Class,
+  [SuggestionKind.Column]: CompletionItemKind.Field,
+  [SuggestionKind.Operator]: CompletionItemKind.Operator,
+  [SuggestionKind.DataType]: CompletionItemKind.TypeParameter,
 }
 
-const isInColumnListing = (text: string) =>
-  text.match(
-    /(?:,$|,\s$|\b(?:SELECT|UPDATE|COLUMN|ON|JOIN|BY|WHERE|DISTINCT)\s$)/gim,
-  )
+/**
+ * Map parser's SuggestionPriority to Monaco's sortText
+ */
+const PRIORITY_MAP: Record<SuggestionPriority, CompletionItemPriority> = {
+  [SuggestionPriority.High]: CompletionItemPriority.High,
+  [SuggestionPriority.Medium]: CompletionItemPriority.Medium,
+  [SuggestionPriority.MediumLow]: CompletionItemPriority.MediumLow,
+  [SuggestionPriority.Low]: CompletionItemPriority.Low,
+}
+
+/**
+ * Convert UI schema format to parser's SchemaInfo format
+ */
+const convertToSchemaInfo = (
+  tables: Table[],
+  informationSchemaColumns: Record<string, InformationSchemaColumn[]>,
+): SchemaInfo => ({
+  tables: tables.map((t) => ({
+    name: t.table_name,
+    designatedTimestamp: t.designatedTimestamp,
+  })),
+  columns: Object.fromEntries(
+    Object.entries(informationSchemaColumns).map(([tableName, cols]) => [
+      tableName.toLowerCase(),
+      cols.map((c) => ({
+        name: c.column_name,
+        type: c.data_type,
+      })),
+    ]),
+  ),
+})
+
+/**
+ * Convert parser's Suggestion to Monaco's CompletionItem.
+ * For columns, uses CompletionItemLabel to show table names inline
+ * and data type on the right side.
+ */
+const UPPERCASE_KINDS = new Set([
+  SuggestionKind.Keyword,
+  SuggestionKind.Operator,
+  SuggestionKind.DataType,
+])
+
+const toCompletionItem = (
+  suggestion: Suggestion,
+  range: languages.CompletionItem["range"],
+): languages.CompletionItem => {
+  const shouldUppercase = UPPERCASE_KINDS.has(suggestion.kind)
+  const label = shouldUppercase
+    ? suggestion.label.toUpperCase()
+    : suggestion.label
+  const insertText = shouldUppercase
+    ? suggestion.insertText.toUpperCase()
+    : suggestion.insertText
+
+  return {
+    label:
+      suggestion.detail != null || suggestion.description != null
+        ? {
+            label,
+            detail: suggestion.detail,
+            description: suggestion.description,
+          }
+        : label,
+    kind: KIND_MAP[suggestion.kind],
+    insertText: insertText + " ",
+    filterText: suggestion.filterText,
+    sortText: PRIORITY_MAP[suggestion.priority],
+    range,
+    command: {
+      id: "editor.action.triggerSuggest",
+      title: "Re-trigger suggestions",
+    },
+  }
+}
+
+/**
+ * Check if cursor is inside a line comment (--) or block comment.
+ * The parser already handles string literals via its own guard,
+ * but comments are invisible to the lexer (Lexer.SKIPPED).
+ */
+function isCursorInComment(text: string, cursorOffset: number): boolean {
+  let i = 0
+  const end = Math.min(cursorOffset, text.length)
+  while (i < end) {
+    const ch = text[i]
+    const next = text[i + 1]
+    // Line comment: -- until end of line
+    if (ch === "-" && next === "-") {
+      i += 2
+      while (i < end && text[i] !== "\n") i++
+      if (i >= cursorOffset) return true
+      continue
+    }
+    // Block comment: /* until */
+    if (ch === "/" && next === "*") {
+      i += 2
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
+      if (i >= cursorOffset) return true
+      i += 2 // skip */
+      continue
+    }
+    // Skip over string literals so quotes inside comments don't confuse us
+    if (ch === "'") {
+      i++
+      while (i < text.length && text[i] !== "'") i++
+      i++ // skip closing quote
+      continue
+    }
+    i++
+  }
+  return false
+}
 
 export const createSchemaCompletionProvider = (
   editor: editor.IStandaloneCodeEditor,
   tables: Table[] = [],
   informationSchemaColumns: Record<string, InformationSchemaColumn[]> = {},
 ) => {
+  // Convert UI schema to parser format and create provider
+  const schema = convertToSchemaInfo(tables, informationSchemaColumns)
+  const autocompleteProvider = createAutocompleteProvider(schema)
+
   const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n ."'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":'.split(""),
+
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
+      const cursorOffset = model.getOffsetAt(position)
+      const fullText = model.getValue()
 
-      const queryAtCursor = getQueryFromCursor(editor)
-
-      // get text value in the current line
-      const textInLine = model.getValueInRange({
-        startLineNumber: position.lineNumber,
-        startColumn: 1,
-        endLineNumber: position.lineNumber,
-        endColumn: position.column,
-      })
-
-      let tableContext: string[] = []
-
-      const isWhitespaceOnly = /^\s*$/.test(textInLine)
-      const isLineComment = /(-- |--|\/\/ |\/\/)$/gim.test(textInLine)
-
-      if (isWhitespaceOnly || isLineComment) {
+      // Suppress suggestions inside comments (the parser handles strings itself)
+      if (isCursorInComment(fullText, cursorOffset)) {
         return null
       }
 
-      if (queryAtCursor) {
-        const matches = findMatches(model, queryAtCursor.query)
-        if (matches.length > 0) {
-          const cursorMatch = matches.find(
-            (m) => m.range.startLineNumber === queryAtCursor.row + 1,
-          )
+      const charBeforeCursor =
+        cursorOffset > 0 ? fullText[cursorOffset - 1] : ""
+      if (charBeforeCursor === "(") {
+        return null
+      }
 
-          const fromMatch = queryAtCursor.query.match(/(?<=FROM\s)([^ )]+)/gim)
-          const joinMatch = queryAtCursor.query.match(/(JOIN)\s+([^ ]+)/i)
-          const alterTableMatch = queryAtCursor.query.match(
-            /(ALTER TABLE)\s+([^ ]+)/i,
-          )
-          if (fromMatch) {
-            tableContext = uniq(fromMatch)
-          } else if (alterTableMatch && alterTableMatch[2]) {
-            tableContext.push(alterTableMatch[2])
-          }
-          if (joinMatch && joinMatch[2]) {
-            tableContext.push(joinMatch[2])
-          }
+      // Extract the current SQL statement for autocomplete by finding the
+      // nearest semicolon before the cursor. This is more robust than using
+      // the parser's statement splitting (getQueryFromCursor), which can
+      // break incomplete SQL into separate statements — e.g., "select * F"
+      // gets split into "select *" and "F", losing context for autocomplete.
+      const tokens = tokenize(fullText).tokens
 
-          tableContext = tableContext.map(trimQuotesFromTableName)
-
-          const textUntilPosition = model.getValueInRange({
-            startLineNumber: cursorMatch?.range.startLineNumber ?? 1,
-            startColumn: cursorMatch?.range.startColumn ?? 1,
-            endLineNumber: position.lineNumber,
-            endColumn: word.startColumn,
-          })
-
-          const range = {
-            startLineNumber: position.lineNumber,
-            endLineNumber: position.lineNumber,
-            startColumn: word.startColumn,
-            endColumn: word.endColumn,
-          }
-
-          const nextChar = model.getValueInRange({
-            startLineNumber: position.lineNumber,
-            startColumn: word.endColumn,
-            endLineNumber: position.lineNumber,
-            endColumn: word.endColumn + 1,
-          })
-
-          const openQuote = textUntilPosition.substr(-1) === '"'
-          const nextCharQuote = nextChar == '"'
-
-          if (
-            /(FROM|INTO|(ALTER|BACKUP|DROP|REINDEX|RENAME|TRUNCATE|VACUUM) TABLE|JOIN|UPDATE)\s$/gim.test(
-              textUntilPosition,
-            ) ||
-            (/'$/gim.test(textUntilPosition) &&
-              !textUntilPosition.endsWith("= '"))
+      let queryStartOffset = 0
+      let queryEndOffset = fullText.length
+      for (const token of tokens) {
+        const tokenEnd = token.endOffset ?? token.startOffset
+        if (token.tokenType.name === "Semicolon") {
+          if (tokenEnd < cursorOffset) {
+            queryStartOffset = tokenEnd + 1
+          } else if (
+            token.startOffset >= cursorOffset &&
+            queryEndOffset === fullText.length
           ) {
-            return {
-              suggestions: getTableCompletions({
-                tables,
-                range,
-                priority: CompletionItemPriority.High,
-                openQuote,
-                nextCharQuote,
-              }),
-            }
-          }
-
-          if (
-            /(?:(SELECT|UPDATE).*?(?:(?:,(?:COLUMN )?)|(?:ALTER COLUMN ))?(?:WHERE )?(?: BY )?(?: ON )?(?: SET )?$|ALTER COLUMN )/gim.test(
-              textUntilPosition,
-            ) &&
-            !isWhitespaceOnly
-          ) {
-            if (tableContext.length > 0) {
-              const withTableName =
-                textUntilPosition.match(/\sON\s/gim) !== null
-              return {
-                suggestions: [
-                  ...(isInColumnListing(textUntilPosition)
-                    ? getColumnCompletions({
-                        columns: tableContext.reduce(
-                          (acc, tableName) => [
-                            ...acc,
-                            ...(informationSchemaColumns[tableName] ?? []),
-                          ],
-                          [] as InformationSchemaColumn[],
-                        ),
-                        range,
-                        withTableName,
-                        priority: CompletionItemPriority.High,
-                      })
-                    : []),
-                  ...getLanguageCompletions(range),
-                ],
-              }
-            } else if (isInColumnListing(textUntilPosition)) {
-              return {
-                suggestions: [
-                  ...getColumnCompletions({
-                    columns: Object.values(informationSchemaColumns).reduce(
-                      (acc, columns) => [...acc, ...columns],
-                      [] as InformationSchemaColumn[],
-                    ),
-                    range,
-                    withTableName: false,
-                    priority: CompletionItemPriority.High,
-                  }),
-                ],
-              }
-            }
-          }
-
-          if (word.word) {
-            return {
-              suggestions: [
-                ...getTableCompletions({
-                  tables,
-                  range,
-                  priority: CompletionItemPriority.High,
-                  openQuote,
-                  nextCharQuote,
-                }),
-                ...getLanguageCompletions(range),
-              ],
-            }
+            queryEndOffset = token.startOffset
           }
         }
+      }
+
+      // If there are no tokens between the query start and the cursor,
+      // the cursor is in dead space (whitespace/comments between statements).
+      // Don't suggest anything.
+      const hasTokensBeforeCursor = tokens.some(
+        (t) =>
+          t.startOffset >= queryStartOffset && t.startOffset < cursorOffset,
+      )
+      if (!hasTokensBeforeCursor) {
+        return null
+      }
+
+      // Pass the full statement (including text after cursor) so the parser
+      // can detect when the cursor is inside a string literal or comment.
+      const query = fullText.substring(queryStartOffset, queryEndOffset)
+
+      const relativeCursorOffset = cursorOffset - queryStartOffset
+
+      // Get suggestions from the parser-based provider.
+      // Filter out punctuation-only suggestions (e.g. "(", ")", ";") —
+      // the parser may suggest structural tokens as the next expected symbol,
+      // but autocompleting them causes issues (e.g. accepting "(" via Enter
+      // when the user just wants a newline).
+      const suggestions = autocompleteProvider
+        .getSuggestions(query, relativeCursorOffset)
+        .filter((s) => /[a-zA-Z0-9_]/.test(s.insertText))
+
+      // When the "word" at cursor is an operator (e.g. :: from type cast),
+      // don't replace it — insert after it instead.
+      const isOperatorWord =
+        word.word.length > 0 && !/[a-zA-Z0-9_]/.test(word.word[0])
+
+      // When the word contains a dot (qualified reference like "t." or "t.col"),
+      // only replace after the last dot. The prefix before the dot is the
+      // table/alias qualifier and should be kept. Without this, Monaco filters
+      // suggestions against "t." and nothing matches.
+      const dotIndex = word.word.lastIndexOf(".")
+      const startColumn = isOperatorWord
+        ? position.column
+        : dotIndex >= 0
+          ? word.startColumn + dotIndex + 1
+          : word.startColumn
+
+      const range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn,
+        endColumn: word.endColumn,
+      }
+
+      // Filter out suggestions that exactly match the word already typed,
+      // e.g. don't suggest "FROM" when cursor is right after "FROM".
+      const currentWord = isOperatorWord
+        ? ""
+        : dotIndex >= 0
+          ? word.word.substring(dotIndex + 1)
+          : word.word
+
+      const filtered = suggestions.filter(
+        (s) => s.insertText.toUpperCase() !== currentWord.toUpperCase(),
+      )
+
+      return {
+        incomplete: true,
+        suggestions: filtered.map((s) => toCompletionItem(s, range)),
       }
     },
   }

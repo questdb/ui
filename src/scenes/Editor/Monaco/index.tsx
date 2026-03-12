@@ -50,7 +50,9 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { Request } from "./utils"
 import {
   appendQuery,
+  applyValidationMarkers,
   clearModelMarkers,
+  clearValidationMarkers,
   findMatches,
   getErrorRange,
   getQueryFromCursor,
@@ -66,6 +68,7 @@ import {
   parseQueryKey,
   createQueryKeyFromRequest,
   validateQueryAtOffset,
+  validateQueryJIT,
   setErrorMarkerForQuery,
   getQueryStartOffset,
   getQueriesToRun,
@@ -342,6 +345,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   })
   const scrollTimeoutRef = useRef<number | null>(null)
   const notificationTimeoutRef = useRef<number | null>(null)
+  const validationTimeoutRef = useRef<number | null>(null)
   const targetPositionRef = useRef<{
     lineNumber: number
     column: number
@@ -929,8 +933,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           newKey: QueryKey
           data: ExecutionInfo
         }> = []
-        const keysToRemove: QueryKey[] = []
-
         Object.keys(bufferExecutions).forEach((key) => {
           const queryKey = key as QueryKey
           const { queryText, startOffset, endOffset } =
@@ -948,36 +950,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           }
 
           const newOffset = startOffset + effectiveOffsetDelta
-          if (validateQueryAtOffset(editor, queryText, newOffset)) {
-            const selection = bufferExecutions[queryKey].selection
-            const shiftedSelection = selection
-              ? {
-                  startOffset: selection.startOffset + effectiveOffsetDelta,
-                  endOffset: selection.endOffset + effectiveOffsetDelta,
-                }
-              : undefined
-            keysToUpdate.push({
-              oldKey: queryKey,
-              newKey: createQueryKey(queryText, newOffset),
-              data: {
-                ...bufferExecutions[queryKey],
-                startOffset: newOffset,
-                endOffset: endOffset + effectiveOffsetDelta,
-                selection: shiftedSelection,
-              },
-            })
-          } else {
-            keysToRemove.push(queryKey)
-            notificationUpdates.push(() =>
-              dispatch(
-                actions.query.removeNotification(queryKey, activeBufferId),
-              ),
-            )
-          }
-        })
-
-        keysToRemove.forEach((key) => {
-          delete bufferExecutions[key]
+          const selection = bufferExecutions[queryKey].selection
+          const shiftedSelection = selection
+            ? {
+                startOffset: selection.startOffset + effectiveOffsetDelta,
+                endOffset: selection.endOffset + effectiveOffsetDelta,
+              }
+            : undefined
+          keysToUpdate.push({
+            oldKey: queryKey,
+            newKey: createQueryKey(queryText, newOffset),
+            data: {
+              ...bufferExecutions[queryKey],
+              startOffset: newOffset,
+              endOffset: endOffset + effectiveOffsetDelta,
+              selection: shiftedSelection,
+            },
+          })
         })
 
         keysToUpdate.forEach(({ oldKey, newKey, data }) => {
@@ -1024,25 +1013,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const newOffset = startOffset + effectiveOffsetDelta
-
-        if (validateQueryAtOffset(editor, queryText, newOffset)) {
-          const newKey = createQueryKey(queryText, newOffset)
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.updateNotificationKey(
-                queryKey,
-                newKey,
-                activeBufferId,
-              ),
+        const newKey = createQueryKey(queryText, newOffset)
+        notificationUpdates.push(() =>
+          dispatch(
+            actions.query.updateNotificationKey(
+              queryKey,
+              newKey,
+              activeBufferId,
             ),
-          )
-        } else {
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.removeNotification(queryKey, activeBufferId),
-            ),
-          )
-        }
+          ),
+        )
       })
 
       if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
@@ -1081,13 +1061,38 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       contentJustChangedRef.current = false
       notificationUpdates.forEach((update) => update())
+
+      // JIT validation (debounced)
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+      }
+      validationTimeoutRef.current = window.setTimeout(() => {
+        if (monacoRef.current && editorRef.current) {
+          const currentBufferId = activeBufferRef.current.id as number
+          validateQueryJIT(
+            monacoRef.current,
+            editorRef.current,
+            currentBufferId,
+            () => executionRefs.current[currentBufferId.toString()] || {},
+            (q, signal) => quest.validateQuery(q, signal),
+          )
+        }
+        validationTimeoutRef.current = null
+      }, 300)
     })
 
     editor.onDidChangeModel(() => {
       glyphWidgetsRef.current.forEach((widget) => {
-        editor.removeGlyphMarginWidget(widget)
+        editorRef.current?.removeGlyphMarginWidget(widget)
       })
       glyphWidgetsRef.current.clear()
+      const lineCount = editorRef.current?.getModel()?.getLineCount()
+      if (lineCount) {
+        setLineNumbersMinChars(
+          getDefaultLineNumbersMinChars(canUseAIRef.current) +
+            (lineCount.toString().length - 1),
+        )
+      }
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
           applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -1208,6 +1213,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
       | null = null
     dispatch(actions.query.setResult(undefined))
+
+    // Clear JIT validation markers — execution result takes over.
+    if (monacoRef.current) {
+      clearValidationMarkers(monacoRef.current, editor, activeBufferId)
+    }
+    if (validationTimeoutRef.current) {
+      window.clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
 
     dispatch(
       actions.query.setActiveNotification({
@@ -1627,6 +1641,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     ) {
       if (monacoRef?.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
+        clearValidationMarkers(
+          monacoRef.current,
+          editorRef.current,
+          activeBufferRef.current.id as number,
+        )
+      }
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+        validationTimeoutRef.current = null
       }
 
       if (monacoRef?.current && editorRef?.current) {
@@ -1952,6 +1975,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       clearModelMarkers(monacoRef.current, editorRef.current)
 
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+
+      // Restore cached validation markers for this buffer
+      applyValidationMarkers(
+        monacoRef.current,
+        editorRef.current,
+        activeBuffer.id as number,
+      )
     }
   }, [activeBuffer])
 
@@ -2026,6 +2056,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         window.clearTimeout(notificationTimeoutRef.current)
       }
 
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+      }
+
       glyphWidgetsRef.current.forEach((widget) => {
         editorRef.current?.removeGlyphMarginWidget(widget)
       })
@@ -2076,6 +2110,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               scrollBeyondLastLine: false,
               tabSize: 2,
               lineNumbersMinChars,
+              wordBasedSuggestions: "off",
             }}
             theme="dracula"
           />
