@@ -336,7 +336,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
     )
     const [manualModelInput, setManualModelInput] = useState("")
     const [contextWindowInput, setContextWindowInput] = useState(() =>
-      String(initialValues?.contextWindow ?? 128_000),
+      String(initialValues?.contextWindow ?? 200_000),
     )
     const [grantSchemaAccess, setGrantSchemaAccess] = useState(
       () => initialValues?.grantSchemaAccess ?? true,
@@ -357,7 +357,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
         const config = fetchConfigRef.current
         const initModels = initialValuesRef.current?.models ?? []
         const initContextWindow =
-          initialValuesRef.current?.contextWindow ?? 128_000
+          initialValuesRef.current?.contextWindow ?? 200_000
 
         const models = await fetchProviderModels(config, initContextWindow)
 
@@ -465,7 +465,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
           const pending = manualModelInput.trim()
           const models = isAutoMode ? selectedModels : manualModels
           const hasModels = models.length > 0 || !!pending
-          if (!hasModels) return "Select at least one model"
+          if (!hasModels) return "Add at least one model"
           const trimmed = contextWindowInput.trim()
           if (!trimmed) return "Context window is required"
           const contextWindow = Number(trimmed)
@@ -502,7 +502,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
       <>
         <ContentSection align="flex-start">
           {!isAutoMode && (
-            <WarningBanner>
+            <WarningBanner data-hook="custom-provider-warning-banner">
               <WarningIcon
                 size="16px"
                 weight="bold"
@@ -524,17 +524,25 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
               >
                 <InputLabel>Select Models</InputLabel>
                 <SelectAllRow>
-                  <SelectAllLink type="button" onClick={handleSelectAll}>
+                  <SelectAllLink
+                    data-hook="custom-provider-select-all"
+                    type="button"
+                    onClick={handleSelectAll}
+                  >
                     Select All
                   </SelectAllLink>
-                  <SelectAllLink type="button" onClick={handleDeselectAll}>
+                  <SelectAllLink
+                    data-hook="custom-provider-deselect-all"
+                    type="button"
+                    onClick={handleDeselectAll}
+                  >
                     Deselect All
                   </SelectAllLink>
                 </SelectAllRow>
               </Box>
               <ModelListContainer>
                 {fetchedModels.map((model) => (
-                  <ModelRow key={model}>
+                  <ModelRow key={model} data-hook="custom-provider-model-row">
                     <Checkbox
                       checked={selectedModels.includes(model)}
                       onChange={() => handleToggleModel(model)}
@@ -555,6 +563,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
             <AddModelRow>
               <StyledInput
                 type="text"
+                data-hook="custom-provider-manual-model-input"
                 value={manualModelInput}
                 onChange={(e) => setManualModelInput(e.target.value)}
                 placeholder="e.g., llama3, gpt-4o, claude-sonnet-4-20250514"
@@ -567,6 +576,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
               />
               <AddModelButton
                 type="button"
+                data-hook="custom-provider-add-model-button"
                 onClick={handleAddManualModel}
                 disabled={!manualModelInput.trim()}
               >
@@ -580,9 +590,13 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
                   {selectedModels
                     .filter((m) => !fetchedModels.includes(m))
                     .map((model) => (
-                      <ModelChip key={model}>
+                      <ModelChip
+                        key={model}
+                        data-hook="custom-provider-model-chip"
+                      >
                         {model}
                         <ChipRemoveButton
+                          data-hook="custom-provider-remove-model"
                           type="button"
                           onClick={() => handleToggleModel(model)}
                         >
@@ -595,9 +609,10 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
             {!isAutoMode && manualModels.length > 0 && (
               <ModelChipsContainer>
                 {manualModels.map((model) => (
-                  <ModelChip key={model}>
+                  <ModelChip key={model} data-hook="custom-provider-model-chip">
                     {model}
                     <ChipRemoveButton
+                      data-hook="custom-provider-remove-model"
                       type="button"
                       onClick={() => handleRemoveManualModel(model)}
                       title={`Remove ${model}`}
@@ -615,6 +630,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
           <InputSection align="flex-start">
             <InputLabel>Context Window</InputLabel>
             <StyledInput
+              data-hook="custom-provider-context-window-input"
               type="number"
               value={contextWindowInput}
               onChange={(e) => setContextWindowInput(e.target.value)}
@@ -635,6 +651,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
                   <SchemaCheckboxInner>
                     <SchemaCheckboxWrapper>
                       <Checkbox
+                        data-hook="custom-provider-schema-access"
                         checked={grantSchemaAccess}
                         onChange={(e) => setGrantSchemaAccess(e.target.checked)}
                       />

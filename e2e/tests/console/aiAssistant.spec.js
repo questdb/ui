@@ -3240,7 +3240,7 @@ describe("custom providers", () => {
       "have.value",
       "200000",
     )
-    cy.getByDataHook("custom-provider-schema-access").should("not.be.checked")
+    cy.getByDataHook("custom-provider-schema-access").should("be.checked")
     cy.getByDataHook("custom-provider-add-model-button").should("be.disabled")
 
     cy.getByDataHook("custom-provider-manual-model-input").type(
