@@ -967,7 +967,9 @@ export const ConfigurationModal = ({
           open={customProviderModalOpen}
           onOpenChange={setCustomProviderModalOpen}
           onSave={handleCustomProviderSave}
-          existingProviderIds={getAllProviders(aiAssistantSettings)}
+          existingProviderNames={getAllProviders(aiAssistantSettings).map((p) =>
+            getProviderName(p, aiAssistantSettings),
+          )}
         />
       )}
     </>

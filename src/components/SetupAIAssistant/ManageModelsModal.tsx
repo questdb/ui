@@ -141,12 +141,14 @@ export const ManageModelsModal = ({
               {error && <ErrorText>{error}</ErrorText>}
               <FooterButton
                 skin="secondary"
+                data-hook="manage-models-cancel"
                 onClick={() => onOpenChange(false)}
               >
                 Cancel
               </FooterButton>
               <FooterButton
                 skin="primary"
+                data-hook="manage-models-save"
                 onClick={handleSave}
                 disabled={modelsLoading}
               >

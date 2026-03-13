@@ -279,20 +279,14 @@ export type CustomProviderModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSave: (providerId: string, provider: CustomProviderDefinition) => void
-  existingProviderIds: string[]
+  existingProviderNames: string[]
 }
-
-const generateProviderId = (name: string): string =>
-  name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "custom-provider"
 
 export const CustomProviderModal = ({
   open,
   onOpenChange,
   onSave,
-  existingProviderIds,
+  existingProviderNames,
 }: CustomProviderModalProps) => {
   const [name, setName] = useState("")
   const [providerType, setProviderType] = useState<ProviderType>(
@@ -309,19 +303,19 @@ export const CustomProviderModal = ({
     if (!baseURL.startsWith("http://") && !baseURL.startsWith("https://"))
       return "Base URL must start with http:// or https://"
 
-    const providerId = generateProviderId(name)
-    if (existingProviderIds.includes(providerId))
-      return "A provider with a similar name already exists"
+    const normalizedName = name.trim().toLowerCase()
+    if (existingProviderNames.some((n) => n.toLowerCase() === normalizedName))
+      return "A provider with the same name already exists"
 
     return true
-  }, [name, baseURL, existingProviderIds])
+  }, [name, baseURL, existingProviderNames])
 
   const modelsValidate = useCallback((): string | boolean => {
     return modelSettingsRef.current?.validate() ?? "Not ready"
   }, [])
 
   const handleComplete = useCallback(() => {
-    const providerId = generateProviderId(name)
+    const providerId = crypto.randomUUID()
     const values = modelSettingsRef.current?.getValues()
     if (!values) return
 
@@ -374,7 +368,7 @@ export const CustomProviderModal = ({
               ref={modelSettingsRef}
               fetchConfig={{
                 providerType,
-                providerId: generateProviderId(name),
+                providerId: "custom-provider-setup",
                 apiKey: apiKey || "",
                 baseURL,
               }}

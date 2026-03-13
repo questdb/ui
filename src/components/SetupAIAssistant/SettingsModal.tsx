@@ -1270,6 +1270,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                             modelsForProvider.length > 0) && (
                             <ManageModelsButton
                               type="button"
+                              data-hook="ai-settings-manage-models"
                               onClick={() => setManageModelsModalOpen(true)}
                             >
                               Manage models
@@ -1416,7 +1417,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           open={customProviderModalOpen}
           onOpenChange={setCustomProviderModalOpen}
           onSave={handleCustomProviderSave}
-          existingProviderIds={allProviders}
+          existingProviderNames={allProviders.map((p) =>
+            getProviderName(p, localSettings),
+          )}
         />
       )}
       {manageModelsModalOpen &&
