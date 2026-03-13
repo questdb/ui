@@ -38,6 +38,7 @@ import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { CustomProviderModal } from "./CustomProviderModal"
+import { ManageModelsModal } from "./ManageModelsModal"
 
 const ModalContent = styled.div`
   display: flex;
@@ -179,6 +180,7 @@ const ProviderTabName = styled(Text)<{ $active: boolean }>`
   font-weight: ${({ $active }) => ($active ? 600 : 400)};
   color: ${({ theme, $active }) =>
     $active ? theme.color.foreground : theme.color.gray2};
+  text-align: left;
 `
 
 const StatusBadge = styled(Box).attrs({
@@ -397,6 +399,19 @@ const EnableModelsTitle = styled(Text)`
   font-size: 1.6rem;
   font-weight: 600;
   color: ${({ theme }) => theme.color.foreground};
+`
+
+const ManageModelsButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: ${({ theme }) => theme.color.cyan};
+  font-size: 1.3rem;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
 `
 
 const SchemaAccessSection = styled(Box).attrs({
@@ -636,6 +651,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [customProviderModalOpen, setCustomProviderModalOpen] = useState(false)
+  const [manageModelsModalOpen, setManageModelsModalOpen] = useState(false)
 
   const [localCustomProviders, setLocalCustomProviders] = useState<
     Record<string, CustomProviderDefinition>
@@ -661,7 +677,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     (provider: ProviderId, value: string) => {
       setApiKeys((prev) => ({ ...prev, [provider]: value }))
       setValidationErrors((prev) => ({ ...prev, [provider]: null }))
-      // If API key changes, mark as not validated
+
       if (validatedApiKeys[provider]) {
         setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
       }
@@ -910,12 +926,86 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [aiAssistantSettings, updateSettings],
   )
 
+  const handleManageModelsSave = useCallback(
+    (providerId: string, definition: CustomProviderDefinition) => {
+      const newModelValues = definition.models.map((m) =>
+        makeCustomModelValue(providerId, m),
+      )
+
+      // Update local custom providers — only override models and contextWindow,
+      // preserve everything else (apiKey, grantSchemaAccess, etc.) from local state.
+      setLocalCustomProviders((prev) => ({
+        ...prev,
+        [providerId]: {
+          ...prev[providerId],
+          models: definition.models,
+          contextWindow: definition.contextWindow,
+        },
+      }))
+
+      // Determine which models are truly new (not in the previous model list)
+      const oldModelValues = (
+        localCustomProviders[providerId]?.models || []
+      ).map((m) => makeCustomModelValue(providerId, m))
+      const trulyNew = newModelValues.filter((m) => !oldModelValues.includes(m))
+
+      // Local state: respect unsaved checkbox toggles, add truly new as enabled
+      const localEnabled = enabledModels[providerId] || []
+      const localStillEnabled = localEnabled.filter((m: string) =>
+        newModelValues.includes(m),
+      )
+      setEnabledModels((prev) => ({
+        ...prev,
+        [providerId]: [...localStillEnabled, ...trulyNew],
+      }))
+
+      // Storage: preserve stored enabled/disabled state, only add truly new models.
+      // Unsaved toggle changes (apiKey, grantSchemaAccess, enable/disable) are not
+      // persisted here — they require "Save Settings".
+      const storedProviderSettings = aiAssistantSettings.providers?.[providerId]
+      const storedEnabled = storedProviderSettings?.enabledModels || []
+      const storedStillEnabled = storedEnabled.filter((m: string) =>
+        newModelValues.includes(m),
+      )
+      const storedCustomProvider =
+        aiAssistantSettings.customProviders?.[providerId]
+      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
+        ...aiAssistantSettings,
+        customProviders: {
+          ...(aiAssistantSettings.customProviders ?? {}),
+          ...(storedCustomProvider && {
+            [providerId]: {
+              ...storedCustomProvider,
+              models: definition.models,
+              contextWindow: definition.contextWindow,
+            },
+          }),
+        },
+        providers: {
+          ...aiAssistantSettings.providers,
+          ...(storedProviderSettings && {
+            [providerId]: {
+              ...storedProviderSettings,
+              enabledModels: [...storedStillEnabled, ...trulyNew],
+            },
+          }),
+        },
+      })
+
+      toast.success("Model preferences updated")
+    },
+    [aiAssistantSettings, enabledModels, localCustomProviders, updateSettings],
+  )
+
   const currentProviderValidated = validatedApiKeys[selectedProvider]
   const currentProviderApiKey = apiKeys[selectedProvider]
   const currentProviderValidationState = validationState[selectedProvider]
   const currentProviderError = validationErrors[selectedProvider]
   const currentProviderIsFocused = isInputFocused[selectedProvider]
   const maskInput = !!(currentProviderApiKey && !currentProviderIsFocused)
+  const noApiKeyReadonly =
+    isCustomProvider && !currentProviderApiKey && !currentProviderIsFocused
+  const showEditButton = maskInput || noApiKeyReadonly
 
   const modelsForProvider = useMemo(
     () => getModelsForProvider(selectedProvider, localSettings),
@@ -947,7 +1037,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   return (
     <>
       <RadixDialog.Root
-        open={open && !customProviderModalOpen}
+        open={open && !customProviderModalOpen && !manageModelsModalOpen}
         onOpenChange={onOpenChange}
       >
         <RadixDialog.Portal>
@@ -1030,24 +1120,16 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                 <ContentPanel>
                   <ContentSection>
                     <Box flexDirection="column" gap="1.2rem" align="flex-start">
-                      {isCustomProvider &&
-                      !localCustomProviders[selectedProvider]?.apiKey ? (
-                        <>
+                      <>
+                        <Box
+                          justifyContent="space-between"
+                          align="center"
+                          gap="1rem"
+                          style={{ width: "100%" }}
+                        >
                           <SectionTitle>API Key</SectionTitle>
-                          <SectionDescription>
-                            This provider does not have an API key.
-                          </SectionDescription>
-                        </>
-                      ) : (
-                        <>
-                          <Box
-                            justifyContent="space-between"
-                            align="center"
-                            gap="1rem"
-                            style={{ width: "100%" }}
-                          >
-                            <SectionTitle>API Key</SectionTitle>
-                            {validatedApiKeys[selectedProvider] && (
+                          {validatedApiKeys[selectedProvider] &&
+                            currentProviderApiKey && (
                               <ValidatedBadge
                                 icon={<CheckboxCircle size="13px" />}
                                 data-hook="ai-settings-validated-badge"
@@ -1055,126 +1137,147 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                                 Validated
                               </ValidatedBadge>
                             )}
-                            {!isCustomProvider && (
-                              <Text size="sm" color="gray2">
-                                Get your API key from{" "}
-                                <APIKeyLink
-                                  href={
-                                    selectedProvider === "openai"
-                                      ? "https://platform.openai.com/api-keys"
-                                      : "https://console.anthropic.com/settings/keys"
-                                  }
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {getProviderName(
-                                    selectedProvider,
-                                    localSettings,
-                                  )}
-                                </APIKeyLink>
-                                .
-                              </Text>
-                            )}
-                          </Box>
-                          <InputWrapper>
-                            <StyledInput
-                              ref={inputRef}
-                              type="text"
-                              value={
-                                maskInput
-                                  ? "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
-                                  : currentProviderApiKey
-                              }
-                              autoComplete="off"
-                              onChange={(e) => {
-                                handleApiKeyChange(
+                          {!isCustomProvider && (
+                            <Text size="sm" color="gray2">
+                              Get your API key from{" "}
+                              <APIKeyLink
+                                href={
+                                  selectedProvider === "openai"
+                                    ? "https://platform.openai.com/api-keys"
+                                    : "https://console.anthropic.com/settings/keys"
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {getProviderName(
                                   selectedProvider,
-                                  e.target.value,
-                                )
-                              }}
-                              placeholder={`Enter ${getProviderName(selectedProvider, localSettings)} API key`}
-                              $hasError={!!currentProviderError}
-                              $showEditButton={maskInput}
-                              readOnly={maskInput}
-                              onFocus={() => {
-                                setIsInputFocused((prev) => ({
-                                  ...prev,
-                                  [selectedProvider]: true,
-                                }))
-                              }}
-                              onBlur={() => {
-                                setIsInputFocused((prev) => ({
-                                  ...prev,
-                                  [selectedProvider]: false,
-                                }))
-                                if (inputRef.current) {
-                                  inputRef.current.blur()
-                                }
-                              }}
-                              onMouseDown={(e) => {
-                                if (maskInput) {
-                                  e.preventDefault()
-                                }
-                              }}
-                              tabIndex={maskInput ? -1 : 0}
-                              style={{
-                                cursor: maskInput ? "default" : "text",
-                              }}
-                              data-hook="ai-settings-api-key"
-                            />
-                            {maskInput && (
-                              <EditButton
-                                type="button"
-                                onClick={() => {
-                                  inputRef.current?.focus()
-                                }}
-                                title="Edit API key"
-                              >
-                                <Edit size="20px" />
-                              </EditButton>
-                            )}
-                          </InputWrapper>
-                          {currentProviderError && (
-                            <ErrorText>{currentProviderError}</ErrorText>
-                          )}
-                          {!currentProviderError && (
-                            <SectionDescription>
-                              Stored locally in your browser and never sent to
-                              QuestDB servers. This API key is used to
-                              authenticate your requests to the model provider.
-                            </SectionDescription>
-                          )}
-                          {!currentProviderValidated &&
-                            currentProviderApiKey && (
-                              <ValidateRemoveButton
-                                onClick={() =>
-                                  handleValidateApiKey(selectedProvider)
-                                }
-                                disabled={
-                                  currentProviderValidationState ===
-                                  "validating"
-                                }
-                                data-hook="ai-settings-test-api"
-                              >
-                                {currentProviderValidationState ===
-                                "validating" ? (
-                                  <Box gap="0.8rem" align="center">
-                                    <LoadingSpinner size="1.6rem" />
-                                    <span>Validating...</span>
-                                  </Box>
-                                ) : (
-                                  "Validate API Key"
+                                  localSettings,
                                 )}
-                              </ValidateRemoveButton>
+                              </APIKeyLink>
+                              .
+                            </Text>
+                          )}
+                        </Box>
+                        <InputWrapper>
+                          <StyledInput
+                            ref={inputRef}
+                            type="text"
+                            value={
+                              maskInput
+                                ? "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+                                : currentProviderApiKey
+                            }
+                            autoComplete="off"
+                            onChange={(e) => {
+                              handleApiKeyChange(
+                                selectedProvider,
+                                e.target.value,
+                              )
+                            }}
+                            placeholder={
+                              noApiKeyReadonly
+                                ? "This provider does not have an API key"
+                                : `Enter ${getProviderName(selectedProvider, localSettings)} API key`
+                            }
+                            $hasError={!!currentProviderError}
+                            $showEditButton={showEditButton}
+                            readOnly={maskInput || noApiKeyReadonly}
+                            onFocus={() => {
+                              setIsInputFocused((prev) => ({
+                                ...prev,
+                                [selectedProvider]: true,
+                              }))
+                            }}
+                            onBlur={() => {
+                              setIsInputFocused((prev) => ({
+                                ...prev,
+                                [selectedProvider]: false,
+                              }))
+                              if (inputRef.current) {
+                                inputRef.current.blur()
+                              }
+                            }}
+                            onMouseDown={(e) => {
+                              if (maskInput || noApiKeyReadonly) {
+                                e.preventDefault()
+                              }
+                            }}
+                            tabIndex={maskInput || noApiKeyReadonly ? -1 : 0}
+                            style={{
+                              cursor:
+                                maskInput || noApiKeyReadonly
+                                  ? "default"
+                                  : "text",
+                            }}
+                            data-hook="ai-settings-api-key"
+                          />
+                          {showEditButton && (
+                            <EditButton
+                              type="button"
+                              onClick={() => {
+                                inputRef.current?.focus()
+                              }}
+                              title="Edit API key"
+                            >
+                              <Edit size="20px" />
+                            </EditButton>
+                          )}
+                        </InputWrapper>
+                        {currentProviderError && (
+                          <ErrorText>{currentProviderError}</ErrorText>
+                        )}
+                        {!currentProviderError && (
+                          <SectionDescription>
+                            Stored locally in your browser and never sent to
+                            QuestDB servers. This API key is used to
+                            authenticate your requests to the model provider.
+                          </SectionDescription>
+                        )}
+                        {!currentProviderValidated && currentProviderApiKey && (
+                          <ValidateRemoveButton
+                            onClick={() =>
+                              handleValidateApiKey(selectedProvider)
+                            }
+                            disabled={
+                              currentProviderValidationState === "validating"
+                            }
+                            data-hook="ai-settings-test-api"
+                          >
+                            {currentProviderValidationState === "validating" ? (
+                              <Box gap="0.8rem" align="center">
+                                <LoadingSpinner size="1.6rem" />
+                                <span>Validating...</span>
+                              </Box>
+                            ) : (
+                              "Validate API Key"
                             )}
-                        </>
-                      )}
+                          </ValidateRemoveButton>
+                        )}
+                      </>
                     </Box>
                   </ContentSection>
                   <ContentSection>
                     <Box flexDirection="column" gap="1.6rem" align="flex-start">
-                      <EnableModelsTitle>Enable Models</EnableModelsTitle>
-                      {currentProviderValidated ? (
+                      <Box
+                        flexDirection="row"
+                        justifyContent="space-between"
+                        align="center"
+                        style={{ width: "100%" }}
+                      >
+                        <EnableModelsTitle>Enable Models</EnableModelsTitle>
+                        {isCustomProvider &&
+                          (currentProviderValidated ||
+                            modelsForProvider.length > 0) && (
+                            <ManageModelsButton
+                              type="button"
+                              onClick={() => setManageModelsModalOpen(true)}
+                            >
+                              Manage models
+                            </ManageModelsButton>
+                          )}
+                      </Box>
+                      {currentProviderValidated ||
+                      (isCustomProvider && modelsForProvider.length > 0) ? (
                         <ModelList>
                           {modelsForProvider.map((model) => {
                             const isEnabled = enabledModelsForProvider.includes(
@@ -1242,7 +1345,13 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                                   e.target.checked,
                                 )
                               }
-                              disabled={!currentProviderValidated}
+                              disabled={
+                                !currentProviderValidated &&
+                                !(
+                                  isCustomProvider &&
+                                  modelsForProvider.length > 0
+                                )
+                              }
                               data-hook="ai-settings-schema-access"
                             />
                           </SchemaCheckboxWrapper>
@@ -1310,6 +1419,17 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           existingProviderIds={allProviders}
         />
       )}
+      {manageModelsModalOpen &&
+        isCustomProvider &&
+        localCustomProviders[selectedProvider] && (
+          <ManageModelsModal
+            open={manageModelsModalOpen}
+            onOpenChange={setManageModelsModalOpen}
+            providerId={selectedProvider}
+            definition={localCustomProviders[selectedProvider]}
+            onSave={handleManageModelsSave}
+          />
+        )}
     </>
   )
 }
