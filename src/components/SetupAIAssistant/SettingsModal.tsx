@@ -1018,6 +1018,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                   })}
                   <AddProviderButton
                     type="button"
+                    data-hook="ai-settings-add-custom-provider"
                     onClick={() => {
                       setCustomProviderModalOpen(true)
                     }}
@@ -1270,6 +1271,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       skin="error"
                       prefixIcon={<TrashIcon size={16} />}
                       type="button"
+                      data-hook="ai-settings-remove-provider"
                       onClick={() => handleRemoveProvider(selectedProvider)}
                     >
                       {isCustomProvider ? "Remove Provider" : "Reset Provider"}

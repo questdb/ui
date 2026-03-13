@@ -516,7 +516,11 @@ const StepOneContent = ({
               />
               <ProviderName>{getProviderName("anthropic")}</ProviderName>
             </ProviderCard>
-            <AddCustomProviderCard type="button" onClick={onAddCustomProvider}>
+            <AddCustomProviderCard
+              data-hook="ai-settings-provider-custom"
+              type="button"
+              onClick={onAddCustomProvider}
+            >
               <PlusIcon size={32} weight="light" />
               <ProviderName>Custom</ProviderName>
             </AddCustomProviderCard>

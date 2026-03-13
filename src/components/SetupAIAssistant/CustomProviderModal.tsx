@@ -379,6 +379,7 @@ const SchemaAccessToggle = ({
       <SchemaCheckboxInner>
         <SchemaCheckboxWrapper>
           <Checkbox
+            data-hook="custom-provider-schema-access"
             checked={checked}
             onChange={(e) => onChange(e.target.checked)}
           />
@@ -445,6 +446,7 @@ const StepOneContent = ({
         <InputSection align="flex-start">
           <InputLabel>Provider Name</InputLabel>
           <StyledInput
+            data-hook="custom-provider-name-input"
             type="text"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
@@ -454,6 +456,7 @@ const StepOneContent = ({
         <InputSection align="flex-start">
           <InputLabel>Provider Type</InputLabel>
           <StyledSelect
+            data-hook="custom-provider-type-select"
             name="providerType"
             value={providerType}
             onChange={(e) =>
@@ -482,6 +485,7 @@ const StepOneContent = ({
         <InputSection align="flex-start">
           <InputLabel>Base URL</InputLabel>
           <StyledInput
+            data-hook="custom-provider-base-url-input"
             type="text"
             value={baseURL}
             onChange={(e) => onBaseURLChange(e.target.value)}
@@ -494,6 +498,7 @@ const StepOneContent = ({
         <InputSection align="flex-start">
           <InputLabel>API Key</InputLabel>
           <PasswordInput
+            data-hook="custom-provider-api-key-input"
             type="text"
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
@@ -566,17 +571,25 @@ const StepTwoAutoContent = ({
           >
             <InputLabel>Select Models</InputLabel>
             <SelectAllRow>
-              <SelectAllLink type="button" onClick={onSelectAll}>
+              <SelectAllLink
+                data-hook="custom-provider-select-all"
+                type="button"
+                onClick={onSelectAll}
+              >
                 Select All
               </SelectAllLink>
-              <SelectAllLink type="button" onClick={onDeselectAll}>
+              <SelectAllLink
+                data-hook="custom-provider-deselect-all"
+                type="button"
+                onClick={onDeselectAll}
+              >
                 Deselect All
               </SelectAllLink>
             </SelectAllRow>
           </Box>
           <ModelListContainer>
             {fetchedModels.map((model) => (
-              <ModelRow key={model}>
+              <ModelRow key={model} data-hook="custom-provider-model-row">
                 <Checkbox
                   checked={selectedModels.includes(model)}
                   onChange={() => onToggleModel(model)}
@@ -590,6 +603,7 @@ const StepTwoAutoContent = ({
           <HelperText>Don&apos;t see your model? Add it manually:</HelperText>
           <AddModelRow>
             <StyledInput
+              data-hook="custom-provider-manual-model-input"
               type="text"
               value={manualModelInput}
               onChange={(e) => onManualModelInputChange(e.target.value)}
@@ -602,6 +616,7 @@ const StepTwoAutoContent = ({
               }}
             />
             <AddModelButton
+              data-hook="custom-provider-add-model-button"
               type="button"
               onClick={onAddManualModel}
               disabled={!manualModelInput.trim()}
@@ -615,9 +630,10 @@ const StepTwoAutoContent = ({
               {selectedModels
                 .filter((m) => !fetchedModels.includes(m))
                 .map((model) => (
-                  <ModelChip key={model}>
+                  <ModelChip key={model} data-hook="custom-provider-model-chip">
                     {model}
                     <ChipRemoveButton
+                      data-hook="custom-provider-remove-model"
                       type="button"
                       onClick={() => onToggleModel(model)}
                     >
@@ -634,6 +650,7 @@ const StepTwoAutoContent = ({
         <InputSection align="flex-start">
           <InputLabel>Context Window</InputLabel>
           <StyledInput
+            data-hook="custom-provider-context-window-input"
             type="number"
             value={contextWindow}
             onChange={(e) => onContextWindowChange(Number(e.target.value))}
@@ -698,7 +715,7 @@ const StepTwoManualContent = ({
       </HeaderSection>
       <Separator />
       <ContentSection align="flex-start">
-        <WarningBanner>
+        <WarningBanner data-hook="custom-provider-warning-banner">
           <WarningIcon size="16px" weight="bold" color={theme.color.orange} />
           <WarningText>
             Could not fetch models automatically from this provider. Please
@@ -709,6 +726,7 @@ const StepTwoManualContent = ({
           <InputLabel>Add Models</InputLabel>
           <AddModelRow>
             <StyledInput
+              data-hook="custom-provider-manual-model-input"
               type="text"
               value={manualModelInput}
               onChange={(e) => onManualModelInputChange(e.target.value)}
@@ -721,6 +739,7 @@ const StepTwoManualContent = ({
               }}
             />
             <AddModelButton
+              data-hook="custom-provider-add-model-button"
               type="button"
               onClick={onAddManualModel}
               disabled={!manualModelInput.trim()}
@@ -731,9 +750,10 @@ const StepTwoManualContent = ({
           {manualModels.length > 0 && (
             <ModelChipsContainer>
               {manualModels.map((model) => (
-                <ModelChip key={model}>
+                <ModelChip key={model} data-hook="custom-provider-model-chip">
                   {model}
                   <ChipRemoveButton
+                    data-hook="custom-provider-remove-model"
                     type="button"
                     onClick={() => onRemoveManualModel(model)}
                     title={`Remove ${model}`}
@@ -751,6 +771,7 @@ const StepTwoManualContent = ({
         <InputSection align="flex-start">
           <InputLabel>Context Window</InputLabel>
           <StyledInput
+            data-hook="custom-provider-context-window-input"
             type="number"
             value={contextWindow}
             onChange={(e) => onContextWindowChange(Number(e.target.value))}
@@ -799,7 +820,7 @@ export const CustomProviderModal = ({
   const [baseURL, setBaseURL] = useState("")
   const [apiKey, setApiKey] = useState("")
 
-  const [contextWindow, setContextWindow] = useState(128_000)
+  const [contextWindow, setContextWindow] = useState(200_000)
   const [fetchedModels, setFetchedModels] = useState<string[] | null>(null)
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [manualModels, setManualModels] = useState<string[]>([])
