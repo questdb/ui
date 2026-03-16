@@ -260,8 +260,6 @@ const LoadingContainer = styled(Box).attrs({
   padding: 4rem 0;
 `
 
-// --- Types ---
-
 export type FetchConfig = {
   providerType: ProviderType
   providerId: string
@@ -294,8 +292,6 @@ export type ModelSettingsProps = {
   onLoadingChange?: (loading: boolean) => void
 }
 
-// --- Utility ---
-
 async function fetchProviderModels(
   config: FetchConfig,
   contextWindow: number,
@@ -313,8 +309,6 @@ async function fetchProviderModels(
     return null
   }
 }
-
-// --- Component ---
 
 export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
   (
@@ -393,8 +387,6 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
 
     const isAutoMode = fetchedModels !== null
 
-    // --- Handlers ---
-
     const handleToggleModel = useCallback((model: string) => {
       setSelectedModels((prev) =>
         prev.includes(model)
@@ -436,8 +428,6 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
     const handleRemoveManualModel = useCallback((model: string) => {
       setManualModels((prev) => prev.filter((m) => m !== model))
     }, [])
-
-    // --- Imperative handle ---
 
     useImperativeHandle(
       ref,
@@ -485,8 +475,6 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
         grantSchemaAccess,
       ],
     )
-
-    // --- Render ---
 
     if (isLoading) {
       return (
@@ -624,6 +612,10 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
               </ModelChipsContainer>
             )}
           </InputSection>
+          <HelperText>
+            AI Assistant uses tools to gather information about QuestDB and your
+            database. Make sure to select the models that support tool calling.
+          </HelperText>
         </ContentSection>
         <Separator />
         <ContentSection align="flex-start">

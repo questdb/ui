@@ -274,11 +274,8 @@ const AssistantHeader = styled(Box).attrs({
 `
 
 const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
-  font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.4rem;
-  text-transform: uppercase;
   color: ${color("foreground")};
-  line-height: 1;
 `
 
 const TokenDisplay = styled(Box).attrs({ className: "token-display" })`
@@ -1056,7 +1053,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <>
                   <AssistantHeader data-hook="assistant-header">
                     <AISparkle size={20} variant="filled" />
-                    <AssistantLabel>Assistant</AssistantLabel>
+                    <AssistantLabel>
+                      {message.model || "Assistant"}
+                    </AssistantLabel>
                     {tokenDisplay && (
                       <TokenDisplay className="token-display">
                         <GaugeIcon size="16px" color={theme.color.gray2} />

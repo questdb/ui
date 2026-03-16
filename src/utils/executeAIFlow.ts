@@ -25,7 +25,7 @@ import {
   type AIOperation,
 } from "./aiAssistant"
 import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
-import { providerForModel, getTestModel } from "./ai"
+import { providerForModel, getTestModel, getAllModelOptions } from "./ai"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
@@ -434,12 +434,17 @@ export async function executeAIFlow(
   })
 
   const assistantMessageId = crypto.randomUUID()
+  const modelLabel =
+    getAllModelOptions(config.aiAssistantSettings).find(
+      (m) => m.value === settings.model,
+    )?.label ?? settings.model
   callbacks.addMessage({
     id: assistantMessageId,
     role: "assistant",
     content: "",
     timestamp: Date.now(),
     operationHistory: [],
+    model: modelLabel,
   })
 
   if (config.type !== "schema_explain") {
