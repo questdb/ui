@@ -77,6 +77,8 @@ const toCompletionItem = (
     ? suggestion.insertText.toUpperCase()
     : suggestion.insertText
 
+  const isFunction = suggestion.kind === SuggestionKind.Function
+
   return {
     label:
       suggestion.detail != null || suggestion.description != null
@@ -87,14 +89,17 @@ const toCompletionItem = (
           }
         : label,
     kind: KIND_MAP[suggestion.kind],
-    insertText: insertText + " ",
+    insertText: isFunction ? insertText + "($0)" : insertText + " ",
+    insertTextRules: isFunction ? 4 : undefined, // CompletionItemInsertTextRule.InsertAsSnippet
     filterText: suggestion.filterText,
-    sortText: PRIORITY_MAP[suggestion.priority],
+    sortText: PRIORITY_MAP[suggestion.priority] + label.toLowerCase(),
     range,
-    command: {
-      id: "editor.action.triggerSuggest",
-      title: "Re-trigger suggestions",
-    },
+    command: isFunction
+      ? undefined
+      : {
+          id: "editor.action.triggerSuggest",
+          title: "Re-trigger suggestions",
+        },
   }
 }
 
@@ -205,14 +210,10 @@ export const createSchemaCompletionProvider = (
 
       const relativeCursorOffset = cursorOffset - queryStartOffset
 
-      // Get suggestions from the parser-based provider.
-      // Filter out punctuation-only suggestions (e.g. "(", ")", ";") —
-      // the parser may suggest structural tokens as the next expected symbol,
-      // but autocompleting them causes issues (e.g. accepting "(" via Enter
-      // when the user just wants a newline).
-      const suggestions = autocompleteProvider
-        .getSuggestions(query, relativeCursorOffset)
-        .filter((s) => /[a-zA-Z0-9_]/.test(s.insertText))
+      const suggestions = autocompleteProvider.getSuggestions(
+        query,
+        relativeCursorOffset,
+      )
 
       // When the "word" at cursor is an operator (e.g. :: from type cast),
       // don't replace it — insert after it instead.
