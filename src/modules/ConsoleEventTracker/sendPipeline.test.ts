@@ -78,6 +78,7 @@ const mockFullCycle = () => {
 let originalBackoff: typeof _internals.backoff
 
 beforeEach(async () => {
+  vi.restoreAllMocks()
   vi.resetModules()
   ;({ db } = await import("../../store/db"))
   ;({ _internals, stopPipeline } = await import("./sendPipeline"))
