@@ -1,6 +1,8 @@
 import "fake-indexeddb/auto"
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest"
 import type { MockInstance } from "vitest"
+import type { _internals as InternalsType } from "./sendPipeline"
+import type { db as DbType } from "../../store/db"
 
 // Stub browser globals before db.ts singleton is created
 vi.hoisted(() => {
@@ -35,8 +37,9 @@ vi.mock("../../consts", () => ({
   API: "https://test.questdb.io",
 }))
 
-import { db } from "../../store/db"
-import { _internals, startPipeline, stopPipeline } from "./sendPipeline"
+let _internals: typeof InternalsType
+let stopPipeline: () => void
+let db: typeof DbType
 
 let fetchSpy: MockInstance<
   [input: RequestInfo | URL, init?: RequestInit],
@@ -75,6 +78,10 @@ const mockFullCycle = () => {
 let originalBackoff: typeof _internals.backoff
 
 beforeEach(async () => {
+  vi.resetModules()
+  ;({ db } = await import("../../store/db"))
+  ;({ _internals, stopPipeline } = await import("./sendPipeline"))
+
   await db.events.clear()
   _internals.resetState()
   fetchSpy = vi
@@ -90,7 +97,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  stopPipeline()
+  stopPipeline?.()
   _internals.backoff = originalBackoff
   vi.restoreAllMocks()
 })
@@ -398,7 +405,9 @@ describe("run — max attempts", () => {
       const url =
         typeof input === "string"
           ? input
-          : ((input as Request).url ?? String(input))
+          : input instanceof URL
+            ? input.toString()
+            : input.url
       if (url.includes("console-events-config")) {
         return Promise.resolve(
           new Response(JSON.stringify({ lastUpdated: null }), {
