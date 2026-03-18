@@ -77,7 +77,9 @@ let originalBackoff: typeof _internals.backoff
 beforeEach(async () => {
   await db.events.clear()
   _internals.resetState()
-  fetchSpy = vi.spyOn(global, "fetch")
+  fetchSpy = vi
+    .spyOn(global, "fetch")
+    .mockRejectedValue(new Error("unmocked fetch"))
 
   // Replace backoff with a no-op so tests run instantly
   originalBackoff = _internals.backoff
