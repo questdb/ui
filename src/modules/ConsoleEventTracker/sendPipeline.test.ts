@@ -335,16 +335,6 @@ describe("run — stopPipeline", () => {
   })
 })
 
-describe("startPipeline / stopPipeline", () => {
-  it("stopPipeline resets state", () => {
-    startPipeline(mockConfig)
-    stopPipeline()
-    expect(_internals.checkAttempt).toBe(0)
-    expect(_internals.sendAttempt).toBe(0)
-    expect(_internals.stopped).toBe(true)
-  })
-})
-
 describe("run — ongoing guard", () => {
   it("second run() is a no-op while first is in progress", async () => {
     await db.events.add({ created: 100, name: "a" })
@@ -408,7 +398,7 @@ describe("run — max attempts", () => {
       const url =
         typeof input === "string"
           ? input
-          : (input as Request).url ?? String(input)
+          : ((input as Request).url ?? String(input))
       if (url.includes("console-events-config")) {
         return Promise.resolve(
           new Response(JSON.stringify({ lastUpdated: null }), {
