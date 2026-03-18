@@ -13,6 +13,17 @@ const BASE_DELAY = 1_000
 let config: TelemetryConfigShape | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
 
+type NavigatorUAData = {
+  platform?: string
+  brands?: Array<{ brand: string; version: string }>
+}
+
+const getNavigatorUAData = (): NavigatorUAData | undefined => {
+  if (typeof navigator === "undefined") return undefined
+  return (navigator as Navigator & { userAgentData?: NavigatorUAData })
+    .userAgentData
+}
+
 const getClientId = (): string => {
   try {
     let clientId = localStorage.getItem(StoreKey.CLIENT_ID)
@@ -49,10 +60,10 @@ const checkLatest = async (
   return { ok: true, status: response.status, cursor }
 }
 
-const getClientOs = (): string => {
-  const uaData = (navigator as any).userAgentData as
-    | { platform?: string }
-    | undefined
+const getClientOs = (): string | undefined => {
+  if (typeof navigator === "undefined") return undefined
+
+  const uaData = getNavigatorUAData()
   if (uaData?.platform) return uaData.platform
 
   const ua = navigator.userAgent
@@ -65,16 +76,16 @@ const getClientOs = (): string => {
 }
 
 const getBrowserInfo = (): {
-  browser: string
-  browser_version: string
-  client_os: string
+  browser?: string
+  browser_version?: string
+  client_os?: string
 } => {
+  if (typeof navigator === "undefined") return {}
+
   const client_os = getClientOs()
 
   // Prefer User-Agent Client Hints (Chromium-only, but more reliable)
-  const uaData = (navigator as any).userAgentData as
-    | { brands?: Array<{ brand: string; version: string }> }
-    | undefined
+  const uaData = getNavigatorUAData()
   if (uaData?.brands?.length) {
     const match = uaData.brands.find(
       (b) => b.brand !== "Chromium" && !b.brand.startsWith("Not"),
@@ -111,6 +122,7 @@ const sendEntries = async (
   if (!config) return { ok: false, status: 0 }
 
   const { browser, browser_version, client_os } = getBrowserInfo()
+  const consoleVersion = String(import.meta.env.CONSOLE_VERSION ?? "")
 
   const response = await fetch(`${API}/add-console-events`, {
     method: "POST",
@@ -119,10 +131,10 @@ const sendEntries = async (
       id: config.id,
       client_id: clientId,
       version: config.version,
-      console_version: import.meta.env.CONSOLE_VERSION,
-      client_os,
-      browser,
-      browser_version,
+      console_version: consoleVersion,
+      ...(client_os ? { client_os } : {}),
+      ...(browser ? { browser } : {}),
+      ...(browser_version ? { browser_version } : {}),
       events: entries.map((e) => ({
         name: e.name,
         ...(e.props ? { props: e.props } : {}),
@@ -136,7 +148,7 @@ const sendEntries = async (
 
 let backoff = async (attempt: number): Promise<void> => {
   if (attempt === 0) return
-  const delay = BASE_DELAY * (2 ** (attempt - 1))
+  const delay = BASE_DELAY * 2 ** (attempt - 1)
   await new Promise((r) => setTimeout(r, delay))
 }
 

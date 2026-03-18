@@ -25,6 +25,17 @@ vi.hoisted(() => {
   } as Storage
 
   globalThis.window = globalThis as unknown as Window & typeof globalThis
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+      userAgentData: {
+        platform: "macOS",
+        brands: [{ brand: "Google Chrome", version: "122" }],
+      },
+    },
+  })
   ;(globalThis as Record<string, unknown>).location = {
     href: "http://localhost/",
   }
@@ -156,6 +167,41 @@ describe("run — happy path", () => {
     await _internals.run()
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("sends events without browser metadata when navigator is unavailable", async () => {
+    await db.events.add({ created: 100, name: "query.exec" })
+
+    const originalNavigator = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "navigator",
+    )
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: undefined,
+    })
+
+    try {
+      mockFullCycle()
+      _internals.setConfig(mockConfig)
+      await _internals.run()
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+      const sendCall = fetchSpy.mock.calls[1]
+      const body = JSON.parse(sendCall[1]?.body as string) as Record<
+        string,
+        unknown
+      >
+
+      expect(body).not.toHaveProperty("client_os")
+      expect(body).not.toHaveProperty("browser")
+      expect(body).not.toHaveProperty("browser_version")
+      expect(await db.events.count()).toBe(0)
+    } finally {
+      if (originalNavigator) {
+        Object.defineProperty(globalThis, "navigator", originalNavigator)
+      }
+    }
   })
 })
 

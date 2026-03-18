@@ -43,7 +43,10 @@ export const getEntriesAfter = async (
 
 export const deleteEntriesUpTo = async (created: number): Promise<number> => {
   try {
-    const deleteCount = await db.events.where("created").belowOrEqual(created).delete()
+    const deleteCount = await db.events
+      .where("created")
+      .belowOrEqual(created)
+      .delete()
     return deleteCount
   } catch (e) {
     console.error("Failed to delete sent telemetry events", e)
