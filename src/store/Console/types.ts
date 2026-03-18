@@ -36,17 +36,9 @@ export type Sidebar = {
 
 export type BottomPanel = "result" | "zeroState" | "import"
 
-export type ImageToZoom = {
-  src: string
-  alt: string
-  width: number
-  height: number
-}
-
 export type ConsoleStateShape = Readonly<{
   sideMenuOpened: boolean
   activeBottomPanel: BottomPanel
-  imageToZoom: ImageToZoom | undefined
   sidebarHistory: Sidebar[]
   sidebarHistoryPosition: number
   sidebarVisible: boolean
@@ -55,7 +47,6 @@ export type ConsoleStateShape = Readonly<{
 export enum ConsoleAT {
   TOGGLE_SIDE_MENU = "CONSOLE/TOGGLE_SIDE_MENU",
   SET_ACTIVE_BOTTOM_PANEL = "CONSOLE/SET_ACTIVE_BOTTOM_PANEL",
-  SET_IMAGE_TO_ZOOM = "CONSOLE/SET_IMAGE_TO_ZOOM",
   PUSH_SIDEBAR_HISTORY = "CONSOLE/PUSH_SIDEBAR_HISTORY",
   GO_BACK_IN_SIDEBAR = "CONSOLE/GO_BACK_IN_SIDEBAR",
   GO_FORWARD_IN_SIDEBAR = "CONSOLE/GO_FORWARD_IN_SIDEBAR",
@@ -70,11 +61,6 @@ type ToggleSideMenuAction = Readonly<{
 type SetActiveBottomPanelAction = Readonly<{
   payload: BottomPanel
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL
-}>
-
-type SetImageToZoomAction = Readonly<{
-  payload?: ImageToZoom
-  type: ConsoleAT.SET_IMAGE_TO_ZOOM
 }>
 
 type PushSidebarHistoryAction = Readonly<{
@@ -101,7 +87,6 @@ type OpenSidebarAction = Readonly<{
 export type ConsoleAction =
   | ToggleSideMenuAction
   | SetActiveBottomPanelAction
-  | SetImageToZoomAction
   | PushSidebarHistoryAction
   | GoBackInSidebarAction
   | GoForwardInSidebarAction
