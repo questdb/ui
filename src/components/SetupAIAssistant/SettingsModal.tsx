@@ -29,6 +29,8 @@ import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/t
 import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const ModalContent = styled.div`
   display: flex;
@@ -657,6 +659,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const handleRemoveApiKey = useCallback((provider: Provider) => {
+    void trackEvent(ConsoleEvent.AI_SETTINGS_API_KEY_REMOVE)
     // Remove API key from local state only
     // Settings will be persisted when Save Settings is clicked
     setApiKeys((prev) => ({ ...prev, [provider]: "" }))
@@ -668,6 +671,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleModelToggle = useCallback(
     (provider: Provider, modelValue: string) => {
+      void trackEvent(ConsoleEvent.AI_SETTINGS_MODEL_TOGGLE)
       setEnabledModels((prev) => {
         const current = prev[provider]
         const isEnabled = current.includes(modelValue)
@@ -684,6 +688,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleSchemaAccessChange = useCallback(
     (provider: Provider, checked: boolean) => {
+      if (!checked) {
+        void trackEvent(ConsoleEvent.AI_SETTINGS_SCHEMA_ACCESS_REMOVE)
+      }
       setGrantSchemaAccess((prev) => ({ ...prev, [provider]: checked }))
     },
     [],
@@ -908,6 +915,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         <EditButton
                           type="button"
                           onClick={() => {
+                            void trackEvent(
+                              ConsoleEvent.AI_SETTINGS_API_KEY_EDIT,
+                            )
                             inputRef.current?.focus()
                           }}
                           title="Edit API key"

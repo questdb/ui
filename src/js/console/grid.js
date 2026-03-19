@@ -24,6 +24,8 @@
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { unescapeHtml } from "../../utils/escapeHtml"
 import { toast } from "../../components"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const hashString = (str) => {
   let hash = 0
@@ -1755,6 +1757,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function copyActiveCellToClipboard() {
     if (focusedCell) {
+      void trackEvent(ConsoleEvent.GRID_CELL_COPY)
       if (activeCellPulseClearTimer) {
         clearTimeout(activeCellPulseClearTimer)
       }

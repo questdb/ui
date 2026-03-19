@@ -25,6 +25,8 @@ import {
 } from "./shared-styles"
 import { SchemaAIButton } from "./SchemaAIButton"
 import { useEditor } from "../../../providers"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 export interface DetailsTabProps {
   tableData: Table
@@ -213,6 +215,9 @@ export const DetailsTab = ({
               text={ddl}
               iconOnly
               data-hook="table-details-copy-ddl"
+              onCopy={() =>
+                void trackEvent(ConsoleEvent.TABLE_DETAILS_COPY_DDL)
+              }
             />
           </ButtonsContainer>
         </SectionTitleContainer>

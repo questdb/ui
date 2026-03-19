@@ -31,6 +31,8 @@ import React, {
 } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import {
   Button,
   PaneContent,
@@ -152,6 +154,9 @@ const Notifications = ({
   }
 
   const toggleMinimized = useCallback(() => {
+    if (isMinimized) {
+      void trackEvent(ConsoleEvent.QUERY_LOG_OPEN)
+    }
     setIsMinimized(!isMinimized)
   }, [isMinimized])
 
@@ -217,7 +222,10 @@ const Notifications = ({
               <Button
                 skin="secondary"
                 disabled={bufferNotifications.length === 0}
-                onClick={() => onClearNotifications(targetBufferId)}
+                onClick={() => {
+                  void trackEvent(ConsoleEvent.QUERY_LOG_CLEAR)
+                  onClearNotifications(targetBufferId)
+                }}
               >
                 Clear query log
               </Button>

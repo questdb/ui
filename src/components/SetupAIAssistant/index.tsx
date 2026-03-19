@@ -8,6 +8,8 @@ import { ConfigurationModal } from "./ConfigurationModal"
 import { SettingsModal } from "./SettingsModal"
 import { ModelDropdown } from "./ModelDropdown"
 import { useAIStatus } from "../../providers/AIStatusProvider"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const SettingsButton = styled(Button)`
   padding: 0.6rem;
@@ -26,6 +28,7 @@ export const SetupAIAssistant = () => {
 
   const handleSettingsClick = () => {
     if (isConfigured) {
+      void trackEvent(ConsoleEvent.AI_SETTINGS_OPEN)
       setSettingsModalOpen(true)
     } else {
       if (showPromo) {
@@ -60,6 +63,7 @@ export const SetupAIAssistant = () => {
         showPromo={showPromo}
         setShowPromo={setShowPromo}
         onSetupClick={() => {
+          void trackEvent(ConsoleEvent.AI_CONFIGURATION_OPEN)
           setShowPromo(false)
           setConfigModalOpen(true)
         }}

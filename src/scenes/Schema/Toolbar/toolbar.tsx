@@ -3,6 +3,8 @@ import styled from "styled-components"
 import { Close } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
 import { Box, Button, Tooltip, Input } from "../../../components"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { useSchema } from "../SchemaContext"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 
@@ -93,6 +95,7 @@ export const Toolbar = ({
           ref={queryRef}
           name="table_filter"
           placeholder="Filter..."
+          onFocus={() => void trackEvent(ConsoleEvent.SCHEMA_FILTER)}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
             if (e.key === "Escape") {
@@ -117,7 +120,12 @@ export const Toolbar = ({
           <Tooltip placement="bottom" content="Show suspended tables">
             <StyledButton
               skin="transparent"
-              onClick={() => setFilterSuspendedOnly(!filterSuspendedOnly)}
+              onClick={() => {
+                void trackEvent(ConsoleEvent.SCHEMA_FILTER_SUSPENDED, {
+                  enabled: !filterSuspendedOnly,
+                })
+                setFilterSuspendedOnly(!filterSuspendedOnly)
+              }}
               prefixIcon={<ErrorIcon size="18px" />}
               data-hook="schema-filter-suspended-button"
             >

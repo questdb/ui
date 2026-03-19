@@ -72,6 +72,8 @@ import {
   getQueriesStartingFromLine,
 } from "./utils"
 import { toast } from "../../../components/Toast"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import {
@@ -506,6 +508,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   const handleExplainQuery = (query: Request) => {
+    void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_QUERY_PLAN)
     setDropdownOpen(false)
     runQueryAction(query, RunningType.EXPLAIN)
   }
@@ -559,6 +562,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handleAskAI = async (query?: Request) => {
     setDropdownOpen(false)
+    void trackEvent(ConsoleEvent.AI_GLYPH_CLICK)
     if (!query || !editorRef.current) return
 
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
@@ -737,6 +741,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           requestRef.current?.row + 1 === startLineNumber
 
         const handleRunClick = () => {
+          void trackEvent(ConsoleEvent.EDITOR_GLYPH_RUN)
           if (isRunningQuery) {
             toggleRunning(RunningType.NONE)
           } else {
@@ -774,6 +779,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const handleRunContextMenu = () => {
+          void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_OPEN)
           if (isBlockingAIStatusRef.current) return
           const dropdownQueries = getDropdownQueries(startLineNumber)
           if (dropdownQueries.length > 0) {
@@ -1341,6 +1347,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (running === RunningType.SCRIPT) {
       dispatch(actions.query.toggleRunning())
       return
+    }
+
+    if (runAll) {
+      void trackEvent(ConsoleEvent.EDITOR_RUN_ALL)
     }
 
     const triggerScript = () => {

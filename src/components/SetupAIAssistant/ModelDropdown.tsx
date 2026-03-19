@@ -13,6 +13,8 @@ import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
 import { Tooltip } from "../Tooltip"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const ExpandUpDown = () => (
   <svg
@@ -170,6 +172,7 @@ export const ModelDropdown = () => {
   }, [enabledModelValues])
 
   const handleModelSelect = (modelValue: string) => {
+    void trackEvent(ConsoleEvent.AI_MODEL_CHANGE)
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
       ...aiAssistantSettings,
       selectedModel: modelValue,

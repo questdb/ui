@@ -5,6 +5,8 @@ import { Search } from "@styled-icons/remix-line"
 import { Text, Button, Box, Drawer, Table } from "../../../components"
 import styled from "styled-components"
 import { UploadResultColumn } from "../../../utils"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const SearchIcon = styled(Search)`
   color: ${({ theme }) => theme.color.foreground};
@@ -103,7 +105,11 @@ export const UploadResultDialog = ({ file }: Props) => {
         </Box>
       }
       trigger={
-        <DetailsButton skin="success" prefixIcon={<Search size="14px" />}>
+        <DetailsButton
+          skin="success"
+          prefixIcon={<Search size="14px" />}
+          onClick={() => void trackEvent(ConsoleEvent.IMPORT_DETAILS_OPEN)}
+        >
           {partialErrorsCount > 0 && <NotificationCircle />}
           Details
         </DetailsButton>

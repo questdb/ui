@@ -11,6 +11,8 @@ import { Button } from "../Button"
 import { ContentWrapper } from "./content-wrapper"
 import { Panel } from "../../components/Panel"
 import { XIcon, ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 type DrawerProps = {
   mode?: "modal" | "side"
@@ -143,10 +145,12 @@ export const Drawer = ({
   const canGoForward = useSelector(selectors.console.canGoForwardInSidebar)
 
   const handleNavigateBack = () => {
+    void trackEvent(ConsoleEvent.SIDEBAR_NAVIGATE)
     dispatch(actions.console.goBackInSidebar())
   }
 
   const handleNavigateForward = () => {
+    void trackEvent(ConsoleEvent.SIDEBAR_NAVIGATE)
     dispatch(actions.console.goForwardInSidebar())
   }
 

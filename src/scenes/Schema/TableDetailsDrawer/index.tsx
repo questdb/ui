@@ -32,6 +32,8 @@ import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const TableName = styled(Text).attrs({
   color: "foreground",
@@ -206,6 +208,7 @@ export const TableDetailsDrawer = () => {
   const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
 
   const handleExplainWithAI = useCallback(() => {
+    void trackEvent(ConsoleEvent.TABLE_DETAILS_SCHEMA_EXPLAIN)
     if (tableData?.id == null) return
     void handleExplainSchema(
       tableData.id,
@@ -221,6 +224,7 @@ export const TableDetailsDrawer = () => {
 
   const handleAskAIForIssue = useCallback(
     (issue: HealthIssue) => {
+      void trackEvent(ConsoleEvent.TABLE_DETAILS_ASK_AI)
       if (tableData?.id == null) return
 
       let samples = undefined

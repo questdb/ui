@@ -21,6 +21,8 @@ import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
 import { theme } from "../../theme"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const ModalContent = styled.div`
   display: flex;
@@ -753,6 +755,10 @@ export const ConfigurationModal = ({
   const handleComplete = () => {
     if (!selectedProvider || enabledModels.length === 0) return
 
+    void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
+      type: selectedProvider,
+    })
+
     const selectedModel =
       enabledModels.find(
         (m) => MODEL_OPTIONS.find((mo) => mo.value === m)?.default,
@@ -812,6 +818,7 @@ export const ConfigurationModal = ({
         setEnabledModels(defaultModels)
       }
       setError(null)
+      void trackEvent(ConsoleEvent.AI_CONFIGURATION_VALIDATE)
       return true
     } catch (err) {
       const errorMessage =

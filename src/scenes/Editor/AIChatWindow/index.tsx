@@ -48,6 +48,8 @@ import { getTableKindLabel } from "../../Schema/VirtualTables"
 import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { useDispatch, useSelector } from "react-redux"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
@@ -366,6 +368,8 @@ const AIChatWindow: React.FC = () => {
       return
     }
 
+    void trackEvent(ConsoleEvent.AI_CHAT_SEND)
+
     const conversationId = chatWindowState.activeConversationId
 
     if (hasUnactionedDiffParam) {
@@ -405,6 +409,7 @@ const AIChatWindow: React.FC = () => {
     async (messageId: string) => {
       if (!chatWindowState.activeConversationId) return
 
+      void trackEvent(ConsoleEvent.AI_CHAT_ACCEPT)
       await acceptSuggestion({
         conversationId: chatWindowState.activeConversationId,
         messageId,
@@ -419,6 +424,7 @@ const AIChatWindow: React.FC = () => {
     async (messageId: string) => {
       if (!chatWindowState.activeConversationId) return
 
+      void trackEvent(ConsoleEvent.AI_CHAT_REJECT)
       await rejectSuggestion(chatWindowState.activeConversationId, messageId)
 
       setTimeout(() => {
@@ -446,6 +452,9 @@ const AIChatWindow: React.FC = () => {
   )
 
   const handleContextClick = useCallback(async () => {
+    void trackEvent(ConsoleEvent.AI_CONTEXT_BADGE_CLICK, {
+      type: conversation?.tableId ? "table" : "query",
+    })
     if (conversation?.queryKey && conversation?.bufferId) {
       return await highlightQuery(conversation.queryKey, conversation.bufferId)
     }

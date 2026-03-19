@@ -7,6 +7,8 @@ import {
 } from "@phosphor-icons/react"
 import { color } from "../../../utils"
 import type { ConversationMeta } from "../../../store/db"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const Container = styled.button<{ disabled?: boolean }>`
   display: flex;
@@ -173,6 +175,7 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
   const handleSave = async () => {
     const trimmedValue = editValue.trim()
     if (trimmedValue && trimmedValue !== conversation.conversationName) {
+      void trackEvent(ConsoleEvent.AI_CHAT_RENAME)
       await onRename(conversation.id, trimmedValue)
     }
     setIsEditing(false)

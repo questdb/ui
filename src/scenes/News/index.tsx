@@ -17,6 +17,8 @@ import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
 import { BUTTON_ICON_SIZE } from "../../consts"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const Loading = styled.div`
   display: grid;
@@ -192,7 +194,12 @@ const News = () => {
           icon={
             <PrimaryToggleButton
               data-hook="news-panel-button"
-              onClick={() => setNewsOpened(!newsOpened)}
+              onClick={() => {
+                if (!newsOpened) {
+                  void trackEvent(ConsoleEvent.NEWS_OPEN)
+                }
+                setNewsOpened(!newsOpened)
+              }}
               selected={newsOpened}
             >
               <UnreadItemsIcon

@@ -48,6 +48,8 @@ import {
   Button,
   toast,
 } from "../../../components"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { color, copyToClipboard } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
@@ -516,6 +518,9 @@ const Row = ({
           (e.key === "c" || e.key === "C") &&
           (isTableKind || kind === "column")
         ) {
+          void trackEvent(ConsoleEvent.SCHEMA_NAME_COPY, {
+            kind,
+          })
           void copyToClipboard(name)
           toast.success("Copied to clipboard", { autoClose: 2000 })
 

@@ -28,6 +28,8 @@ import {
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
 import type { Buffer } from "../../../store/buffers"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 type Tab = {
   id: string
@@ -101,6 +103,7 @@ export const Tabs = () => {
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
 
   const handleExportTabs = async () => {
+    void trackEvent(ConsoleEvent.TAB_EXPORT)
     try {
       const skipTables = db.tables
         .map((t) => t.name)
@@ -128,6 +131,7 @@ export const Tabs = () => {
   }
 
   const handleImportTabs = () => {
+    void trackEvent(ConsoleEvent.TAB_IMPORT)
     const input = document.createElement("input")
     input.type = "file"
     input.accept = ".json"
@@ -414,6 +418,7 @@ export const Tabs = () => {
   }
 
   const rename = async (id: string, title: string) => {
+    void trackEvent(ConsoleEvent.TAB_RENAME)
     await updateBuffer(parseInt(id), { label: title })
   }
 
@@ -485,7 +490,15 @@ export const Tabs = () => {
             } as Tab
           })}
       />
-      <DropdownMenu.Root modal={false} onOpenChange={setHistoryOpen}>
+      <DropdownMenu.Root
+        modal={false}
+        onOpenChange={(open) => {
+          if (open) {
+            void trackEvent(ConsoleEvent.TAB_HISTORY_OPEN)
+          }
+          setHistoryOpen(open)
+        }}
+      >
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
             <HistoryButton
@@ -510,6 +523,7 @@ export const Tabs = () => {
                     data-hook="editor-tabs-history-item"
                     key={buffer.id}
                     onClick={async () => {
+                      void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
                       await updateBuffer(buffer.id as number, {
                         archived: false,
                         archivedAt: undefined,
@@ -573,7 +587,10 @@ export const Tabs = () => {
               <>
                 <DropdownMenu.Divider />
                 <DropdownMenu.Item
-                  onClick={removeAllArchived}
+                  onClick={() => {
+                    void trackEvent(ConsoleEvent.TAB_HISTORY_CLEAR)
+                    void removeAllArchived()
+                  }}
                   data-hook="editor-tabs-history-clear"
                 >
                   <Trash size="18px" />
