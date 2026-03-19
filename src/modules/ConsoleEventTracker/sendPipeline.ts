@@ -1,3 +1,4 @@
+import Bowser from "bowser"
 import { API as DEFAULT_API } from "../../consts"
 
 const API: string =
@@ -12,17 +13,6 @@ const BASE_DELAY = 1_000
 
 let config: TelemetryConfigShape | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
-
-type NavigatorUAData = {
-  platform?: string
-  brands?: Array<{ brand: string; version: string }>
-}
-
-const getNavigatorUAData = (): NavigatorUAData | undefined => {
-  if (typeof navigator === "undefined") return undefined
-  return (navigator as Navigator & { userAgentData?: NavigatorUAData })
-    .userAgentData
-}
 
 const getClientId = (): string => {
   try {
@@ -60,21 +50,6 @@ const checkLatest = async (
   return { ok: true, status: response.status, cursor }
 }
 
-const getClientOs = (): string | undefined => {
-  if (typeof navigator === "undefined") return undefined
-
-  const uaData = getNavigatorUAData()
-  if (uaData?.platform) return uaData.platform
-
-  const ua = navigator.userAgent
-  if (ua.includes("Win")) return "Windows"
-  if (ua.includes("Mac")) return "macOS"
-  if (ua.includes("Linux")) return "Linux"
-  if (ua.includes("Android")) return "Android"
-  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS"
-  return "unknown"
-}
-
 const getBrowserInfo = (): {
   browser?: string
   browser_version?: string
@@ -82,37 +57,13 @@ const getBrowserInfo = (): {
 } => {
   if (typeof navigator === "undefined") return {}
 
-  const client_os = getClientOs()
+  const parsed = Bowser.parse(navigator.userAgent)
 
-  // Prefer User-Agent Client Hints (Chromium-only, but more reliable)
-  const uaData = getNavigatorUAData()
-  if (uaData?.brands?.length) {
-    const match = uaData.brands.find(
-      (b) => b.brand !== "Chromium" && !b.brand.startsWith("Not"),
-    )
-    if (match) {
-      return { browser: match.brand, browser_version: match.version, client_os }
-    }
+  return {
+    browser: parsed.browser.name,
+    browser_version: parsed.browser.version,
+    client_os: parsed.os.name,
   }
-
-  // Fallback: UA string parsing (Firefox, Safari, older browsers)
-  const ua = navigator.userAgent
-  if (ua.includes("Firefox/")) {
-    return {
-      browser: "Firefox",
-      browser_version: ua.match(/Firefox\/([\d.]+)/)?.[1] ?? "",
-      client_os,
-    }
-  }
-  if (ua.includes("Safari/") && ua.includes("Version/")) {
-    return {
-      browser: "Safari",
-      browser_version: ua.match(/Version\/([\d.]+)/)?.[1] ?? "",
-      client_os,
-    }
-  }
-
-  return { browser: "unknown", browser_version: "", client_os }
 }
 
 const sendEntries = async (
