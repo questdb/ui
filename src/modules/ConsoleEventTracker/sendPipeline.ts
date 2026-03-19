@@ -32,11 +32,8 @@ const checkLatest = async (
   id: string,
   clientId: string,
 ): Promise<{ ok: boolean; status: number; cursor: number }> => {
-  const response = await fetch(`${API}/console-events-config`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, client_id: clientId }),
-  })
+  const params = new URLSearchParams({ id, client_id: clientId })
+  const response = await fetch(`${API}/console-events-config?${params}`)
 
   if (!response.ok) {
     return { ok: false, status: response.status, cursor: 0 }
