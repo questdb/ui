@@ -743,7 +743,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         setValidationErrors((prev) => ({ ...prev, [provider]: errorMessage }))
       }
     },
-    [apiKeys],
+    [apiKeys, localSettings],
   )
 
   const handleModelToggle = useCallback(
