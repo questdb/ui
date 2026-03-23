@@ -40,6 +40,7 @@ export enum ConsoleEvent {
   AI_GLYPH_CLICK = "ai.glyph_click",
   AI_CONTEXT_BADGE_CLICK = "ai.context_badge_click",
   AI_PROVIDER_CONFIGURE = "ai.provider_configure",
+  AI_PROMO_OPEN = "ai.promo_open",
   AI_CONFIGURATION_OPEN = "ai.configuration_open",
   AI_CONFIGURATION_VALIDATE = "ai.configuration_validate",
   AI_SETTINGS_OPEN = "ai.settings_open",

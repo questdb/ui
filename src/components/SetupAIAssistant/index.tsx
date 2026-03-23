@@ -35,6 +35,7 @@ export const SetupAIAssistant = () => {
         setShowPromo(false)
         setConfigModalOpen(true)
       } else {
+        void trackEvent(ConsoleEvent.AI_PROMO_OPEN)
         setShowPromo(true)
       }
     }
