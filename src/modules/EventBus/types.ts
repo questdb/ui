@@ -1,7 +1,6 @@
 export enum EventType {
   MSG_ACTIVE_SIDEBAR = "active.panel",
   MSG_EDITOR_FOCUS = "editor.focus",
-  MSG_EDITOR_INSERT_COLUMN = "editor.insert.column",
   GRID_FOCUS = "grid.focus",
   MSG_CHART_DRAW = "chart.draw",
   MSG_QUERY_CANCEL = "query.in.cancel",

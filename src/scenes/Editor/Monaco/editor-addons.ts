@@ -163,6 +163,21 @@ export const registerEditorActions = ({
 }
 
 export const registerLanguageAddons = (monaco: Monaco) => {
+  monaco.editor.addKeybindingRules([
+    { keybinding: 0, command: "-editor.action.formatDocument" },
+    { keybinding: 0, command: "-editor.action.formatSelection" },
+    {
+      keybinding: monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+      command: "editor.action.formatDocument",
+      when: "editorTextFocus",
+    },
+    {
+      keybinding: monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+      command: "editor.action.formatSelection",
+      when: "editorTextFocus",
+    },
+  ])
+
   monaco.languages.register({ id: QuestDBLanguageName })
 
   monaco.languages.setMonarchTokensProvider(

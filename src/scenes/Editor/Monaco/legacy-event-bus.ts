@@ -29,19 +29,11 @@ import { RunningType } from "../../../store/Query/types"
 
 export const registerLegacyEventBusEvents = ({
   editor,
-  insertTextAtCursor,
   toggleRunning,
 }: {
   editor: editor.IStandaloneCodeEditor
-  insertTextAtCursor: (text: string) => void
   toggleRunning: (runningType?: RunningType) => void
 }) => {
-  eventBus.subscribe<string>(EventType.MSG_EDITOR_INSERT_COLUMN, (column) => {
-    if (column) {
-      insertTextAtCursor(column)
-    }
-  })
-
   eventBus.subscribe<{ query: string; options?: AppendQueryOptions }>(
     EventType.MSG_QUERY_FIND_N_EXEC,
     (payload) => {
@@ -69,7 +61,6 @@ export const registerLegacyEventBusEvents = ({
   })
 
   return () => {
-    eventBus.unsubscribe(EventType.MSG_EDITOR_INSERT_COLUMN)
     eventBus.unsubscribe(EventType.MSG_QUERY_FIND_N_EXEC)
     eventBus.unsubscribe(EventType.MSG_QUERY_EXEC)
     eventBus.unsubscribe(EventType.MSG_EDITOR_FOCUS)

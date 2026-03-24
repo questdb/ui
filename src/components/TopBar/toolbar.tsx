@@ -36,7 +36,7 @@ const EnvIconWrapper = styled.div<{ $background?: string }>`
 `
 
 const Root = styled(Box).attrs({ align: "center" })`
-  gap: 1.5rem;
+  gap: 0.8rem;
   padding-left: 1.5rem;
   white-space: nowrap;
   display: flex;
@@ -554,7 +554,9 @@ export const Toolbar = () => {
   return (
     <Root>
       <Box gap="0.5rem">
-        <Text color="foreground">Web Console</Text>
+        <Text color="foreground" margin="0 1rem 0 0">
+          Web Console
+        </Text>
         {settings["release.type"] === "EE" && (
           <IconWithTooltip
             icon={<EnterpriseBadge>EE</EnterpriseBadge>}
@@ -631,7 +633,7 @@ export const Toolbar = () => {
           )}
         </Badge>
       )}
-      <Box gap="0.5rem">
+      <Box gap="0.8rem">
         {settings["acl.enabled"] && currentUser && (
           <User>
             <UserIcon size="18px" />
