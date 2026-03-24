@@ -152,7 +152,7 @@ export const createSchemaCompletionProvider = (
 
   const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":'.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":('.split(""),
 
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
