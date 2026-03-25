@@ -2104,6 +2104,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       if (validationTimeoutRef.current) {
         window.clearTimeout(validationTimeoutRef.current)
+        clearValidationMarkers(
+          monacoRef.current,
+          editorRef.current,
+          activeBufferRef.current.id as number,
+        )
       }
 
       glyphWidgetsRef.current.forEach((widget) => {

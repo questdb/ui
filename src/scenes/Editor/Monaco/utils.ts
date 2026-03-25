@@ -1292,12 +1292,12 @@ export const cancelAllValidationRequests = () => {
 }
 
 export const clearValidationMarkers = (
-  monaco: Monaco,
-  editor: IStandaloneCodeEditor,
+  monaco: Monaco | null,
+  editor: IStandaloneCodeEditor | null,
   bufferId?: number,
 ) => {
-  const model = editor.getModel()
-  if (model) {
+  const model = editor?.getModel()
+  if (model && monaco) {
     monaco.editor.setModelMarkers(model, ValidationOwner, [])
   }
   if (bufferId !== undefined) {
